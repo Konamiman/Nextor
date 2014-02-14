@@ -1,0 +1,19 @@
+	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL  Version number
+;
+;
+;
+;        This file simply defines to labels which together  form  the  version
+; number  of COMMAND.COM. VERSION is the main version number, and the high and
+; low bytes of RELEASE are the 'release' (fractional) part.
+;
+;
+VERSION	EQU	2
+RELEASE	EQU	3*256+1			; Version 2.31.
+CRYEAR	EQU	1991
+;
+GLOBAL  VERSION, RELEASE, CRYEAR
+;
+;
+;
+	END

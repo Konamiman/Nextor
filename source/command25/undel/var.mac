@@ -1,0 +1,103 @@
+	title	MSX-DOS 2 UNDEL Program - Variables & Data Areas
+	.z80
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;******************************************************************************
+;
+;
+FAT_FLAGS::	db	0	;   b0   - set while reading last FAT copy
+				;b1...b7 - clear
+;
+MULT_FLAGS::	db	0	;   b0   - set if accessing FAT sector
+				;   b1   - set if FAT sector error found
+				;   b2   - set to let FAT error through
+				;   b3   - set if any FAT copy written
+				;   b4   - set if error on this retry
+				;b5...b7 - clear
+;
+;
+MEM_FULL::	db	0	;Memory full flag in "SCAN_DIR"
+;
+CC_CLUSTER::	dw	0	;Cluster number in "CLU_CHK"
+CC_SIZE::	dw	0	;Cluster count in "CLU_CHK"
+CC_DRCHK::	db	0	;"directory checked" flag in "CLU_CHK"
+;
+;
+FAT_1::		dw	0	;Address of start of 1st FAT copy
+FAT_2::		dw	0	;Address of start of 2nd FAT copy
+FILE_LIST::	dw	0	;Address of start of file list
+;
+;
+;------------------------------------------------------------------------------
+;
+		ds	256,0		;I think this will just about
+STACK::					; be enough stack!
+;
+;
+;	--------------------------------
+;
+;
+UD_IMAGE::				;Copy of disc parameters.
+		db	0		;Physical unit (not used)
+SEC_SIZE::	dw	0		;Sector size (512 always).
+SEC_CLU::	db	0		;Sectors per cluster. (Power of 2).
+RES_SECT::				;No. reserved sectors, equivalent to -
+FAT_START::	dw	0		;Start of FAT.
+FAT_COPY::	db	0		;Number of copies of FAT.
+RT_ENT::	dw	0		;Number of root directory entries.
+NUM_SECS::	dw	0		;Number of logical sectors.
+		db	0		;Media descriptor byte.
+FAT_SIZE::	db	0		;Number of sectors per FAT.
+RT_START::	dw	0		;1st root directory sector.
+DATA_START::	dw	0		;1st data sector.
+TOT_CLU::	dw	0		;Total number of clusters.
+DIRT_FLAG::	db	0		;Dirty disc flag.
+VOL_ID::	dw	0,0		;4 byte volume id.
+		ds	32-24,0		;Not used.
+;
+CLU_SHIFT::	db	0		;Will now be calculated by program.
+;
+;
+;	--------------------------------
+;
+;
+DRIVE::		db	0		;Logical drive.
+PATH_ADR::	ds	2,0		;Address of path to follow.
+FIB::		ds	64,0		;File info block area.
+;
+;
+;	--------------------------------
+;
+;
+SV_START::
+;
+DIR_START::	dw	0		;First cluster of directory
+DIR_NEXT_CLU::	dw	0		;Next directory cluster
+DIR_SECTOR::	dw	0		;Current directory sector
+DIR_S_LEFT::	db	0		;Sectors left in current dir cluster
+DIR_E_LEFT::	db	0		;Entries left in current dir sector
+DIR_ENT::	db	0		;Total entries in current sector
+DIR_ODD::	db	0		;Number entries in partial sector
+;
+SV_SIZE		equ	$-DIR_START	;Size of directory search variables
+		public	SV_SIZE
+;
+;
+;	--------------------------------
+;
+;
+ENT_BUF::	ds	11,0		;Buffer for a directory entry to
+ENT_ATTR::	ds	1,0		; make access easy and to ensure that
+ENT_DCHAR::	ds	1,0		; it will out last the sector buffer.
+		ds	9,0
+ENT_TIME::	ds	2,0
+ENT_DATE::	ds	2,0
+ENT_CLU::	ds	2,0
+ENT_SIZE::	ds	4,0
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<VAR>
+	end
+;

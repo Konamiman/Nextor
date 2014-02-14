@@ -1,0 +1,654 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	Disk Read and Write Routines
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+
+	PROC	F_RDABS
+		ld	(iy+@RW_FLAGS##),RFM_RD			;Record read/write flags &
+f_rdabs2:								; user TPA mode.
+		ld	a,l
+		ld	b,h
+		ld	hl,0
+		jr	abs_common
+
+
+	PROC	F_WRABS
+		ld	(iy+@RW_FLAGS##),0		;Record read/write flags &
+		jr	f_rdabs2			; user TPA mode.
+
+	PROC	F_RDDRV
+		ld	(iy+@RW_FLAGS##),RFM_RD	or RFM_D2	;Record read/write flags,
+								; user TPA mode, & xxDRV call.
+		jr	abs_common
+
+	PROC	F_WRDRV
+		ld	(iy+@RW_FLAGS##),RFM_D2		;Record read/write flags,
+							; user TPA mode, & xxDRV call.
+;
+;    This  routine  implements  the  absolute  sector  read  and  write  KBDOS
+; functions.  Most of the work is done by the "RW_MANY" routine.  This routine
+; flushes and invalidates buffers for the drive, sets up  the  parameters  for
+; "RW_MANY" and then calls it.  When it returns, buffers are again invalidated
+; before  returning  to the user.  All this invalidating is necessary to avoid
+; trouble with any bufferred FAT sectors.  The transfer is done to the current
+; disk transfer address.
+;
+; Entry:        A = Logical unit number (FFh=>default 0=>A: etc)
+;		B = Number of sectors to transfer
+;	    HL:DE = First logical sector number
+; Returns:      A = Error code
+;
+; NOTE: for DOS 1 calls RDABS and WRABS, entry is:
+;
+;               L = Logical unit number (FFh=>default 0=>A: etc)
+;	       DE = First logical sector number
+;		H = Number of sectors to transfer
+
+;The handling of "Not a DOS disk" errors is somewhat tricky:
+;
+;- If no valid UPB is found (not a valid FAT12/FAT16 disk), and are invoking from F_RDDRV or F_WRDRV,
+;  the error is ignored. This is handled in BUILD_UPB, to prevent the error to be thrown as soon
+;  as the invalid boot sector is parsed.
+;
+;- If valid UPB is found, but we are invoking from F_RDABS or F_WRABS and drive is not FAT12,
+;  we throw a "Not a DOS disk" error. This is handled here (abs_common), since we can't
+;  know the type of FAT until VAL_FIB has finished.
+
+abs_common:	;and	7Fh
+		ld	c,a	;C = drive number
+		ld	a,h
+		or	a
+		jr	nz,abs_common_32	;32 bit sector numbers are not supported currently
+		bit	7,l
+		jr	z,abs_common_no24	;...and neither are 24 bit sector numbers.
+abs_common_32:
+		set	7,c
+abs_common_no24:
+
+		ld	(RW_PSEC##),de		;Record first physical sector
+		ld	a,l
+		ld	(RW_EX_PSEC##),a
+		ld	hl,(DTA_ADDR##)
+		ld	(RW_DTA##),hl		;Store transfer address.
+		ld	a,h
+		add	a,b
+		jr	c,abs_rw_overf
+		add	a,b			;Return an error if transfer
+abs_rw_overf:	ld	a,.OV64K##		; would over-run the top of
+		jr	c,abs_common_end	; the 64k of RAM.
+;
+try_rw_val:	push	bc			;Remember sector count and 32 bit sector flag
+		ld	ix,FIB_1##
+		ld	b,2			;Validate the drive, without
+		res	7,c
+		inc	c			; actually checking the
+		pcall	VAL_FIB			; boot sector (B=2).
+		pop	bc			;B := sector count, C:7 set if 24 or 32 bit sector number
+		or	a
+		jr	nz,abs_common_end
+
+		;If 24 or 32 bit sector number, throw a fake "Sector not found" error.
+		;It would be a lot easier to just return the error,
+		;but error reporting mechanism must be the same
+		;whatever the requested sector number is.
+
+		bit	7,c
+		ld	e,.RNF##
+		jr	nz,abs_common_doerr
+
+		;If valid UPB found, but we are invoking from F_RDABS or F_WRABS
+		;and drive is not FAT12, throw a "Not a DOS disk" error
+
+		bit	RF_DOS2,(iy+@RW_FLAGS##)
+		jr	nz,abs_rw_dorw
+		push	hl
+		ld	de,UD_FLAGS##
+		add	hl,de
+		bit	UF_F12,(hl)
+		pop	hl
+		jr	nz,abs_rw_dorw
+		ld	e,.NDOS##
+
+abs_common_doerr:
+		push	bc
+		ld	a,(iy+@RW_FLAGS##)
+		push	af
+		res	RF_DOS2,(iy+@RW_FLAGS##)	;To avoid misguided behavior of BUILD_UPB
+		ld	a,e
+		ld	de,0FFFFh		;If any error then tell
+		ld	b,d			; the user and loop back
+		pcall	C_DISK_ERR		; to try it again.
+		pop	af
+		ld	(iy+@RW_FLAGS##),a
+		pop	bc
+		jr	try_rw_val
+
+abs_rw_dorw:
+		pcall	FL_UD			;Flush and invalidate any
+		pcall	INV_UD			; buffers for this drive.
+;
+		call	RW_MANY			;Transfer the sectors
+;
+		pcall	FL_UD			;Flush and invalidate any
+		pcall	INV_UD			; buffers for this drive
+
+		;If the disk has actually a FAT12 or FAT16 filesystem,
+		;set unit descriptor as having UPB but needing validation;
+		;otherwise, set unit descriptor as not having UPB.
+
+		ld	de,UD_FLAGS##
+		add	hl,de
+		ld	a,(hl)
+		and	UFM_F2+UFM_F6
+		ld	a,0
+		jr	z,abs_rw_val0
+		inc	a
+abs_rw_val0:	ld	de,UD_TIME##-UD_FLAGS##
+		add	hl,de
+		ld	(hl),a			
+
+		xor	a			;Zero error code
+
+abs_common_end:	ld	(iy+@RW_FLAGS##),0	;To avoid misguided behavior of BUILD_UPB
+		ret
+
+
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	RW_MANY
+;
+;    This routine reads sequential whole sectors into the user's  DTA  address
+; and  is used for both file read/writes and absolute sector read/writes.  The
+; transfer will be directly to the TPA where possible, but bufferred transfers
+; have to be done where sector boundaries are crossed.  These buffered sectors
+; are transferred by calling "RW_SECTOR".
+;
+;    Care is taken to correctly handle any sectors within  the  transfer  area
+; which  are  already  sitting in sector buffers.  This is check is done after
+; calling the unit handler to read or write sectors.  For a read, such buffers
+; are  left  intact  but if they are dirty then their contents are copied into
+; the relevent part of the user's DTA.  For write all such buffers are  simply
+; invalidated  whether  or  not they are dirty since the data on disk has been
+; altered.
+;
+;    The  variables  "RW_PSEC" and "RW_DTA" are adjusted appropriately for the
+; number of sectors transferred but other  variables  are  not  altered.   The
+; routine  will  always  behave as if it has transfered the required number of
+; sectors, although some of them may have been ignored.
+;
+; Entry:         HL = Pointer to unit descriptor
+;	  (RW_PSEC) = First physical sector to transfer
+;		  B = Number of sectors to transfer
+; Returns:      None
+; Corrupts:    AF,BC,DE,AF',BC',DE',HL'
+;
+;
+sector_loop:	xor	a
+		cp	b			;Return with no error if no
+		ret	z			; sectors to do.
+;
+		ld	a,(RW_FLAGS##)
+		and	RFM_PG
+		ld	de,(RW_DTA##)		;Get user's DTA address and
+		call	GET_SEGMENT		; convert it to page-2 and get
+		set	7,d			; segment number into A'.
+		ex	af,af'
+;
+		push	hl
+		ld	hl,0BE00h		;If there are less than 200h
+		or	a			; bytes left in this segment
+		sbc	hl,de			; then jump to do the cross-
+		jr	c,boundary_sec
+;
+		ld	a,h			;A := number of sectors left
+		srl	a			;     up to the end of this
+		inc	a			;     16k segment
+		cp	b
+		jr	c,transfer_part		;A := number of sectors to
+		ld	a,b			;     transfer this time.
+transfer_part:	ld	c,a
+		pop	hl			;Get unit descriptor back.
+;
+		sub	b			;Adjust remaining sector
+		neg				; count for these sectors.
+		ld	b,a
+		push	bc			;Save remaining sector count
+;
+		ld	b,c			;B := sector count this time
+		ex	af,af'
+		ld	c,a			;A := segment number
+		push	bc
+;
+		xor	a			;Clear "ignore" flag
+retry_transfer:	push	bc			;Save sector count & segment
+		push	de
+		push	de
+		ex	(sp),ix			;IX -> DTA address
+;===== start add FAT16 (RAMRED patch)
+		ld	e,(iy+@RW_EX_PSEC##)	;DIO_EX_SECTOR := sector number (bit16-22)
+		ld	(iy+@DIO_EX_SECTOR##),e
+
+;===== end add FAT16
+		ld	de,(RW_PSEC##)		;DE := sector number
+		push	de
+		dec	a			;Don't do a disk transfer
+		jr	z,error_skip		; if "ignore" flag set (A=1).
+;
+		ld	a,RD_CMD##		;Call the unit handler with
+		bit	RF_READ,(iy+@RW_FLAGS##); either a read or write
+		jr	nz,use_rd_cmd		; command as appropriate.
+		ld	a,WR_CMD##
+use_rd_cmd:	pcall	RW_UNIT
+		jr	no_error_skip
+;
+error_skip:	ld	b,1			;Pretend that one sector was
+						; done OK if error was ignored
+no_error_skip:	ex	af,af'			;Save error code in A'
+		pop	de
+		pop	ix			;Restore IX
+;
+		push	hl
+		ld	l,b
+		ld	h,0			;Adjust sector number for
+		add	hl,de			; any sucessfully read
+		ld	(RW_PSEC##),hl		; sectors.
+;===== start add FAT16 (NUM_1 patch)
+		jr	nc,rw_many_not_carry
+		inc	(iy+@RW_EX_PSEC##)
+rw_many_not_carry:
+;===== end add FAT16
+		pop	hl
+;
+		pop	de
+		ld	a,d			;Adjust DTA address for the
+		add	a,b			; sucessfully read sectors.
+		add	a,b
+		ld	d,a
+;
+		ld	a,b
+		pop	bc
+		sub	b			;Adjust sector count (in B)
+		neg				; for number of sectors
+		ld	b,a			; sucessfully transferred.
+		ex	af,af'
+		push	de			;Tell user about error,
+		ld	de,(RW_PSEC##)		; including which sector
+;===== start mod DOS2.50 (add 23bit sector address support)
+		push	bc
+		ld	bc,(RW_EX_PSEC##-1)
+		pcall	nz,NC_DISK_ERR		; it was on.  Ignore is OK.
+		pop	bc
+;;		pcall	nz,NC_DISK_ERR		; it was on.  Ignore is OK.
+;===== end mod DOS2.50
+		pop	de
+		inc	b			;If more sectors to do then
+		dec	b			; loop back to retry if A=0
+		jr	nz,retry_transfer	; or ignore a single sector
+						; if A=1.
+;
+;
+				; FIDDLE AROUND WITH BUFFERED SECTORS
+;
+no_unit_error:	pop	bc			;B:=sector count
+		call	CORRECT_BUF
+		pop	bc			;C := sector count
+		ld	a,(iy+@RW_DTA##+1)	;Adjust user's DTA address
+		add	a,c			; to allow for all the
+		add	a,c			; sectors just done.
+		ld	(iy+@RW_DTA##+1),a
+		jp	sector_loop		;Loop to do more sectors
+;
+;
+;				; TRANSFER A SINGLE CROSS-SEGMENT SECTOR
+;
+boundary_sec:	pop	hl
+		dec	b			;Decrement remaining sector
+		push	bc			; count by one.
+		ld	de,200h			;Transfer whole sector
+		ld	b,e			;Start at beginning of sector
+		ld	c,e
+		call	RW_SECTOR		;Transfer the sector via buffer
+		pop	bc
+		inc	(iy+@RW_PSEC##)
+		jr	nz,bound_sec_done	;Adjust physical sector number
+		inc	(iy+@RW_PSEC##+1)	; for next sector.
+;===== start add FAT16 (NUM_2 patch)
+		jr	nz,bound_sec_done	;Adjust physical sector number
+		inc	(iy+@RW_EX_PSEC##)	; for next sector.
+;===== end add FAT16
+bound_sec_done:	jp	sector_loop
+;
+;
+;------------------------------------------------------------------------------
+;
+CORRECT_BUF:
+;
+;    This  routine is called after "RW_MANY" has transferred some disk sectors
+; directly to user's DTA without going through sector buffers.  It has to make
+; any corrections necessary in cases where some of the transferred sectors are
+; also in sector buffers.
+;
+;    For a WRITE function, any buffers containing transferred sectors are just
+; invalidated,  whether  or  not  they are dirty, and the buffers moved to the
+; start of the chain.  For a READ function, if a relevent buffer is dirty then
+; the data from it is copied into the correct part of the  user's  DTA.   Note
+; that  this transfer is a simple LDIR because if the sector crossed a segment
+; boundary then "RW_MANY" would have done the transfer via a buffer  and  this
+; routine would not have been called.  The "LDIR" must be done into the user's
+; DTA segment of course.
+;
+; Entry:          HL = Address of unit descriptor
+;		   B = Number of sectors transferred (non-zero)
+;		   C = User's DTA segment number
+;		  DE = Pointer to byte after last sector in DTA (page-2).
+;	   (RW_PSEC) = Last sector + 1.  Sectors are  RW_PSEC-B....RW_PSEC-1
+; Returns:       None
+; Corrupts:     AF,AF',BC',DE',HL'
+;
+; Assumes:      BD_UNIT=2    BD_FLAGS=3    BD_SECT=4    BD_EX_SECT=8
+;
+;
+		pcall	FLG_UD			;Flag all buffers for this unit
+;
+correct_loop:	push	bc
+		exx
+		pcall	FLG_NEXT		;Get next buffer for this unit
+		jr	z,correct_done		; and jump to return if no more
+		ld	bc,BD_SECT##
+		add	hl,bc
+		ld	e,(hl)			;DE := sector number from this
+		inc	hl			;      buffer.
+		ld	d,(hl)
+;===== start add FAT16 (DSKBUF patch)
+		ld	bc,BD_EX_SECT##-BD_SECT##-1
+		add	hl,bc
+		ld	a,(hl)			;A := sector number (bit16-22)
+						; from this buffer
+;===== end add FAT16
+		ex	de,hl
+		ld	bc,(RW_PSEC##)		;Compare with sector number
+		sbc	hl,bc			; of transfer just done.
+;===== start add FAT16 (DSKBUF patch)
+		ld	bc,(RW_EX_PSEC##)
+		sbc	a,c
+;===== end add FAT16
+		pop	bc
+;===== start mod FAT16 (DSKBUF patch)
+		and	h			;A=H=0FFh ?
+;;		ld	a,h
+;===== end mod FAT16
+		inc	a
+		jr	nz,correct_next		;If sector is not one of those
+		ld	a,l			; just transferred then jump
+		add	a,b			; to loop back to try next one.
+		jr	nc,correct_next
+;
+		dec	de			;SECTOR IS A TRANSFERRED ONE
+		dec	de			;HL -> flags byte in buffer
+		ex	de,hl			;DE = -ve sector number -1...-B
+		bit	RF_READ,(iy+@RW_FLAGS##)
+		jr	nz,correct_read		;Jump if operation was read.
+;
+;
+;
+		dec	hl			;WRITE OPERATION.
+		ld	(hl),0			;Invalidate the buffer (set
+		dec	hl			; unit number to zero) and put
+		dec	hl			; it on start of chain for
+		pcall	BF_START		; immediate re-use.
+correct_next:	exx
+		jr	correct_loop		;Loop to find another buffer
+;
+;
+;
+correct_read:	bit	7,(hl)			;READ OPERATION
+		jr	z,correct_next		;Do nothing if not dirty.
+;
+		ld	a,c			;A := user's DTA segment
+		exx
+		push	de			;Save end of DTA pointer
+		exx
+		ld	bc,BD_DATA##-BD_FLAGS##
+		add	hl,bc			;HL -> data in buffer
+		ex	(sp),hl			;HL := end of DTA pointer
+;
+		ld	d,e			;Subtract (200h * -ve sec num)
+		ld	e,b			; from the end of DTA pointer
+		add	hl,de			; to get pointer to start of
+		add	hl,de			; sector in DTA.
+		ex	de,hl			;DE -> start of sector in DTA
+		res	7,d			;      Adjusted from page-2
+						;      to page-0.
+		pop	hl			;HL -> start of data in buffer
+;
+		ld	bc,200h			;Copy the sector from buffer
+		call	P0_LDIR##		; to DTA in page-0.
+		jr	correct_next		;Loop for next buffer.
+;
+;
+;
+correct_done:	exx				;When no more buffers, return
+		pop	bc			; to caller.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	RW_SECTOR
+;
+;    This routine is called to read or write a single sector to the user's TPA
+; via a buffer.  It is used for the partial sector at the beginning and end of
+; a transfer and also for any sectors which  must  be  buffered  because  they
+; cross a segment boundary.  The variable RW_DTA is updated but all others are
+; left alone.
+;
+;    For writing, the sector is only pre-read in if it  is  a  partial  sector
+; where  the  un-written part of the sector is not past the end of file.  This
+; avoids un-necessary pre-reads.
+;
+; Entry:          HL = Pointer to unit descriptor
+;		  IX = Pointer to opened FCB
+;		  DE = Size to read (1...200h)
+;		  BC = Start offset in segment (0...1FFh)
+;	   (RW_PSEC) = Physical sector to read or write
+; Returns:        BC = Size read (DE on entry)
+; Corrupts:    AF,BC,DE,AF',BC',DE',HL'
+;
+;
+		push	hl
+		ex	(sp),ix			;IX -> unit descriptor
+		push	de			;Save size of transfer
+		push	bc			;Save sector offset
+;
+					;DECIDE WHETHER TO READ SECTOR
+		bit	RF_READ,(iy+@RW_FLAGS##);If READ then always read
+		jr	nz,must_read_sec	; the sector
+		bit	1,d			;If writing whole sector then
+		jr	nz,dont_read_sec	; don't pre-read from disk.
+		bit	RF_ZERO,(iy+@RW_FLAGS##);If "zero fill" write then
+		jr	nz,must_read_sec	; read the sector.
+;
+		push	de			;Calculate  (RW_SIZE-RW_OVER)
+		ld	hl,(RW_SIZE##)		; which is distance from first
+		ld	de,(RW_OVER##)		; byte to write to end of file.
+		or	a			;Carry set means that end of
+		sbc	hl,de			; file has already been reached
+		pop	de			; so skip to handle this case.
+		jr	c,reached_eof
+		ld	a,b			;NOT EOF.  If not writing from
+		or	c			; start of sector (BC<>0) then
+		jr	nz,must_read_sec	; must do pre-read.
+		sbc	hl,de			;Test if EOF occurs within the
+		jr	c,dont_read_sec		; write being done and don't
+		jr	must_read_sec		; pre-read if it does.
+;
+reached_eof:	add	hl,bc			;REACHED EOF.  Only pre-read if
+		jr	nc,dont_read_sec	; EOF is in unread portion at
+						; start of sector
+;
+must_read_sec:	ld	b,3
+		code	lxi hl
+dont_read_sec:	ld	b,2
+		ld	de,(RW_PSEC##)		;DE := sector number
+;===== start add FAT16 (BUF_2 patch)
+		ld	a,(RW_EX_PSEC##)	;A := sector number (bit16-22)
+;===== end add FAT16
+		pcall	BF_SECTOR		;Get a buffer for the sector
+;
+		pop	de			;DE := start offset in sector
+		add	hl,de
+		ld	bc,BD_DATA##		;Point HL at first byte to
+		add	hl,bc			; transfer in buffer.
+		pop	bc			;BC := size to transfer
+		push	de			;Save start offset in sector
+		push	bc			;Save transfer size.
+;
+		ld	de,(RW_DTA##)		;DE -> first byte in user's
+		push	de			;      DTA and save it
+		ld	a,(RW_FLAGS##)		;Do the transfer between user
+		call	SEG_LDIR		; memory and the buffer.
+		pop	hl			;HL := old DTA address
+		pop	bc			;BC := size of transfer
+		add	hl,bc			;Calcluate new DTA address
+		ld	(RW_DTA##),hl		;Record new DTA address
+;
+		bit	RF_READ,(iy+@RW_FLAGS##);If it is a WRITE then flag
+		pcall	z,DIRT_CACHE		; the buffer as dirty.
+;
+		pop	hl			;HL := start offset in sector
+		add	hl,bc			;HL := end offset in sector
+		bit	1,h			;If end offset = 200h then
+		ld	hl,(B_CACHE##)		; put buffer at start of chain
+		pcall	nz,BF_SFL		; and flush it as it is now
+						; finished with.
+;
+		ex	(sp),ix			;Restore IX
+		pop	hl			;Restore HL -> unit descriptor
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	SEG_LDIR
+;
+;    This routine emulates an LDIR operation,  where  either  the  source  or
+; destination address is subjected to paging using the "GET_SEGMENT" routine.
+; A flag is passed in register A to control the direction of transfer (HL->DE
+; or  DE->HL)  and  register  DE is always the paged address whilst HL is not
+; paged.  Register  A  also  controls  the  paging  mode  which  is  used  by
+; "GET_SEGMENT".  The  registers  are not updated as you would expect from an
+; LDIR operation, they are simply corrupted.
+;
+; Entry:     DE = Paged address
+;	     HL = Non-paged address
+;	     BC = Transfer size
+;	      A = Control flags:
+;			bit RF_READ - set => HL->DE,   clear => DE->HL
+;			bit PF_PAGE - paging mode for GET_SEGMENT
+; Returns:   None
+; Corrupts:  AF,BC,DE,HL
+;
+;
+seg_ldir_loop:	push	de
+		push	bc			;Save overall LDIR parameters
+		push	af
+		push	hl
+		and	RFM_PG			;Translate DTA address into
+		call	GET_SEGMENT		; page-0 and segment number
+		ld	hl,4000h
+		or	a
+		sbc	hl,de			;HL := space left in page-0
+		sbc	hl,bc
+		jr	nc,seg_ldir_all		;If space left in page-0 is
+		add	hl,bc			; less than transfer size (BC)
+		ld	c,l			; then set amount to transfer
+		ld	b,h			; on this LDIR to the amount
+seg_ldir_all:	pop	hl			; left in page-0.
+;
+		ex	(sp),hl			;Test direction flag on stack.
+		bit	RF_READ,h
+		ex	(sp),hl
+		push	bc			;Do this LDIR in the correct
+		jr	nz,usr_read_ldir	; direction depending on
+		ex	de,hl			; whether it is a read or a
+usr_read_ldir:	call	P0_LDIR##		; write operation.
+		jr	nz,usr_read_ldir2
+		ex	de,hl
+usr_read_ldir2:	pop	bc
+;
+		pop	af			; A := control flags for loop
+		ex	(sp),hl			;HL := total size required
+		or	a
+		sbc	hl,bc			;BC := (total size) -
+		ld	b,h			;      (this size)
+		ld	c,l			;    = size left to do
+		pop	hl			;HL := next buffer address
+		jr	z,seg_ldir_done		;Jump if all done
+;
+		ld	e,a
+		pop	af			;Get old DTA address in user's
+		and	0C0h			; memory space and force it to
+		add	a,40h			; start of next page.
+		ld	d,a
+		ld	a,e			;A := control flags
+		ld	e,0			;Low byte of new DTA address
+		jr	seg_ldir_loop		;Loop for rest of transfer.
+;
+;
+seg_ldir_done:	pop	de			;Clean up stack
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	GET_SEGMENT
+;
+;    This routine is used to translate a DTA address into a page-0 address and
+; a segment number.  If the paging mode flag on entry is zero then it uses the
+; four user TPA segments defined by the variables  P0_TPA...P3_TPA,  otherwise
+; it uses the current four segments defined by the variables P0_SEG...P3_SEG.
+;
+; Entry:     DE = address to be translated.
+;	      A = Paging mode,  0 => user's DTA
+;			      <>0 => current segments
+; Returns:   DE = address in page-0
+;	      A = segment number for this address
+; Corrupts:  AF,DE
+;
+;
+		push	de
+		push	hl
+		ld	hl,P0_TPA##		;Point to HL to the correct
+		or	a			; list of segment numbers
+		jr	z,user_tpa_segs		; depending on the paging
+		ld	hl,P0_SEG##		; mode flag.
+user_tpa_segs:
+		ld	a,d			;Extract page number from
+		and	11000000b		; top two bits of address
+		rlca				; and use it to index into
+		rlca				; the table of segment
+		ld	e,a			; numbers.
+		ld	d,0
+		add	hl,de
+		ld	a,(hl)			;Get segment number
+		pop	hl
+		pop	de
+		res	6,d			;Force address into page-0
+		res	7,d
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<RW>
+	end
+;

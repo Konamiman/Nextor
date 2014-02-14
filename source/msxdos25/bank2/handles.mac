@@ -1,0 +1,1878 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	File Handle Functions and File Access Block Routines
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	WRCH_HANDLE
+;
+;    This routine writes a single character to the specified file handle. All
+; it does is locate the FAB for the file handle and call the device driver if
+; it  is  a device FAB, and the general disk write routine (with a byte count
+; of 1) if it is a disk file.  It  is  used  by  the  CP/M  character  output
+; functions except for non-redirected console output which bypasses the  file
+; handle  system  for speed.  An ASCII/binary mode flag must be passed in the
+; MD_ASC bit of register C and this is simply passed straight through to  the
+; device, or ignored if it is a disk file.
+;
+; Entry:       A = Character to write
+;	       B = File handle to write to
+;	       C = ASCII/binary mode flag in MD_ASC bit (passed to device)
+; Returns:     A = Error code (flags not set)
+; Corrupts:    AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+;
+		ex	af,af'
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if it is invalid
+		ret	z			; or not open.
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;Skip if the FAB is for a
+		jr	z,wrch_disk_file	; disk file.
+;
+		ld	l,(ix+FAB_ID##+2)	;Get jump table address
+		ld	h,(ix+FAB_ID##+3)	; into HL.
+		inc	hl
+		inc	hl
+		inc	hl			;HL -> WRITE routine
+		ex	af,af'			;A = character to write.
+JP_HL:		jp	(hl)			;Call the driver and return
+						; any error direct to caller.
+;
+;
+wrch_disk_file:	ex	af,af'
+		ld	de,CH1_BUF##		;If it is a disk file then
+		ld	(de),a			; store the character in a
+		ld	bc,1			; one byte buffer and call the
+		ld	a,0FFh			; general routine to write
+		pcall	WR_FAB			; this one byte.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	RDCH_HANDLE
+;
+;    This routine reads a single character from the  specified  file  handle.
+; All it does is locate the FAB and then either call the device descriptor if
+; it  is  a  device  FAB, or call the general purpose disk file write routine
+; (with a byte count of 1) if it is a disk file.  It  is  used  by  the  CP/M
+; character  input  functions  except  for non-redirected console input which
+; bypasses the file handle system because it behaves in a  non-standard  way.
+; An  ASCII/binary  mode  flag must be passed in the MD_ASC bit of register C
+; and this is simply passed straight through to the device, or ignored if  it
+; is  a  disk  file.   End-of-line  errors  from  the device are ignored, and
+; end-of-file errors are also ignored in binary  mode.   A  Ctrl-Z  character
+; read from a disk file in ASCII mode will produce an end-of-file error.
+;
+; Entry:       B = File handle to read from
+;	       C = ASCII/binary mode flag in MD_ASC bit (passed to device)
+; Returns:     A = Error code (flags not set)
+;	       B = character read
+; Corrupts:    AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+;
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if it is invalid
+		ret	z			; or not open.
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;Skip if the FAB is for a
+		jr	z,rdch_disk_file	; disk file.
+;
+		res	MD_EOF,(ix+FAB_MODE##)	;Clear end-of-file condition
+		ld	l,(ix+FAB_ID##+2)	;Get jump table address
+		ld	h,(ix+FAB_ID##+3)	; into HL.
+		push	bc
+		call	JP_HL			;Call the driver's RDCH
+		pop	de			; routine to read a character.
+		cp	.EOL##
+		jr	z,rdch_no_err		;Always suppress end-of-line
+		bit	MD_ASC,e		; errors, and also suppress
+		ret	nz			; end-of-file errors in
+		cp	.EOF##			; binary mode since there
+		ret	nz			; is no such thing.
+rdch_no_err:	xor	a
+		ret
+;
+;
+rdch_disk_file:	push	bc
+		ld	de,CH1_BUF##		;If it is a disk file then
+		ld	bc,1			; call the general disk read
+		ld	a,0FFh			; routine to read one byte
+		pcall	RD_FAB			; into a buffer and return
+		ld	hl,CH1_BUF##		; it in register B.
+		ld	b,(hl)
+		pop	de
+		or	a
+		ret	nz			;Return if error
+		or	e
+		ret	z			;Return if binary mode
+		ld	a,b			;If no error in ASCII mode
+		cp	CTRL_Z			; then check for a ctrl-Z
+		ld	a,.EOF##		; and if it is one, then
+		ret	z			; return end-of-file.
+		xor	a
+		ret				;No error if not ctrl-Z.
+;
+;
+;------------------------------------------------------------------------------
+;
+;    This  routine does the "open file handle" and "create file handle" KBDOS
+; functions.  It is passed either an ASCIIZ string or a fileinfo block and it
+; returns  a  newly  allocated  and opened file handle.  It is also passed an
+; "access mode" byte which indicates whether reading or  writing  is  allowed
+; and whether the file handle should be inherited by a child process.  In the
+; case of "create file handle" it is also passed the attributes which the new
+; file  should  be  created  with  and  an  error  will  be returned if these
+; attributes specify a volume name.
+;
+;    If used to open or create a sub-directory then the file handle  will  be
+; returned as 0FFh (which is an invalid number).
+;
+;    The  file  to  be  opened  or  created  is located by calling NEW_FIB or
+; LOC_FIB which sets up a FIB for the file.  If this is succesful then a  new
+; file  access block (FAB) is allocated and linked in to the lowest available
+; file handle.  The common information from the FIB is then copied  into  the
+; FAB and "OPEN_FAB" is called to set up the remaining of the FAB.
+;
+;    After  succesfully opening the file handle, the routine "CHECK_REDIR" is
+; called in case the standard input or  output  redirection  state  has  been
+; changed.
+;
+; Entry:      DE = ASCIIZ string or fileinfo block pointer
+;	       A = Access mode
+;	       B = Required attributes (create only)
+; Returns:     A = Error code
+;	       B = File handle
+;
+;
+	PROC	F_CREATE
+		ex	af,af'			;Save access mode byte
+		bit	AT_VOL,b		;Complain if the attributes
+		ld	a,.IATTR##		; byte is set for a volume
+		ret	nz			; name.
+;
+		pcall	NEW_FIB			;Create the new entry and
+if 1
+		ret	nz			;Give up if error
+		ld	b,0FFh			;If it is a sub-directory then
+		bit	AT_DIR,a		; jump to return no error
+		jr	nz,open_directory	; and B=0FFh.
+endif
+		jr	f_create_open		; jump into common code
+;
+;
+	PROC	F_OPEN
+		ex	af,af'			;Save access mode byte
+		pcall	LOC_FIB			;Find the directory entry
+if 0
+;
+f_create_open:	ret	nz			;Give up if error
+		ld	b,0FFh			;If it is a sub-directory then
+		bit	AT_DIR,a		; jump to return no error
+		jr	nz,open_directory	; and B=0FFh.
+else
+		ret	nz			;Give up if error
+		bit	AT_DIR,a		;If it is a sub-directory then
+		ld	a,.DIRX##		; report it.
+		ret	nz
+f_create_open:
+endif
+;
+;
+		push	hl			;Save unit descriptor address
+		call	FIND_NEW_HANDLE		;Find a file handle to use
+		jr	nz,open_ret_1		; and give up if none free.
+;
+		push	hl			;Allocate a new FAB and set
+		call	NEW_FAB			; up its reference count.
+		jr	nz,open_ret_2		;Error if out of memory.
+;
+		ex	de,hl
+		ex	(sp),hl			;Save directory entry pointer
+		ld	(hl),e			;Store the pointer to the
+		inc	hl			; new FAB in the file
+		ld	(hl),d			; handle table
+;
+		push	bc
+		push	de			;Copy the compatible portion
+		ex	(sp),ix			; of the FIB into the new
+		pop	hl			; FAB as a start for
+		ld	bc,FAB_FIB##		; setting it up.
+		ldir
+		pop	bc			;Get file handle back
+		pop	de			;DE -> directory entry
+;
+		ld	(ix+FAB_SA##),ATM_HID+ATM_SYS ;Set search attributes
+						      ; so that any file, but
+						      ; no sub-directories
+						      ; will be found.
+;
+		xor	a
+		ld	(ix+FAB_PTR##),a	;Set the four byte file
+		ld	(ix+FAB_PTR##+1),a	; pointer to zero in the
+		ld	(ix+FAB_PTR##+2),a	; file access block.
+		ld	(ix+FAB_PTR##+3),a
+;
+		pop	hl
+		ex	af,af'			;Get access mode byte back
+		call	OPEN_FAB		;Open the file access block
+		call	CHECK_REDIR		; and return with no error
+open_directory:	xor	a			; after updating standard
+		ret				; I/O redirection flags.
+;
+;
+open_ret_2:	pop	hl
+open_ret_1:	pop	hl			;Return with error code
+		ret
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_CLOSE
+;
+;    This  routine  does the "close file handle" KBDOS function.  An error is
+; returned if the file handle is invalid or not open,  otherwise  "CLOSE_FAB"
+; is called to decrement the reference count and free up the FAB if required,
+; and zero the file handle pointer.  After this the routine  jumps  into  the
+; "ensure"  routine  below  to actually ensure the file on disk and flush any
+; dirty buffers.  The order of this is important to ensure  that  if  a  disk
+; error  occurs and is aborted while "ensuring" the file or flushing buffers,
+; then  the  file  handle,  and  possibly  the  FAB,  is  still   freed   up.
+; "CHECK_REDIR" is called in case the standard I/O redirection state has been
+; affected by the close operation.
+;
+; Entry:      B = File handle
+; Returns:    A = Error code
+;
+;
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if it is invalid
+		ret	z			; or not open.
+;
+		call	CLOSE_FAB		;Close the file handle.
+		call	CHECK_REDIR		;Update standard I/O flags
+		jr	do_ensure		;Jump into "ensure" code.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_ENSURE
+;
+;    This  routine  does the "ensure file handle" KBDOS function.  An error is
+; returned if the file handle is invalid or not open,  otherwise  "ENSURE_FAB"
+; is  called  to update the directory entry on disk if necessary, and "FL_LOG"
+; is then called to flush any dirty buffers for the drive.   This  routine  is
+; shared with the "F_CLOSE" function above.
+;
+; Entry:      B = File handle
+; Returns:    A = Error code
+;
+;
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if it is invalid
+		ret	z			; or not open.
+;
+do_ensure:	call	ENSURE_FAB		;Update dir entry if required
+		ld	a,(ix+FAB_DRV##)	;Flush any dirty buffers for
+		pcall	FL_LOG			; this drive.
+		xor	a
+		ret				;Return with no error.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_DUP
+;
+;    This  is  the  "duplicate file handle" function routine.  It is passed a
+; file handle which must already be open and it creates another reference  to
+; the same file access block using the first available file handle.  An error
+; is returned if the handle given is  not  open  or  if  there  are  no  free
+; handles.   The  routine  "CHECK_REDIR"  is  called  just  in  case  the DUP
+; operation has affected the redirection  state  of  the  standard  input  or
+; output.
+;
+; Entry:      B = File handle to be duplicated
+; Returns:    A = Error code
+;	      B = Duplicate file handle number
+;
+;
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if out of range or
+		ret	z			; not open.
+;
+		call	FIND_NEW_HANDLE		;Find a free handle and
+		ret	nz			; error if none available.
+;
+		call	INC_FAB_REF		;Try to bump reference count
+		ret	nz			; of the file access block
+						; and error if reached limit.
+;
+		ld	(hl),e			;Record the address of the
+		inc	hl			; file access block in the
+		ld	(hl),d			; new file handle entry
+		call	CHECK_REDIR
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_READ
+;
+;    This routine does the "read file handle" KBDOS call.  It is pretty simple
+; since it just locates the (FAB) file access block  for  the  specified  file
+; handle and then if this is OK, calls the routine "RD_FAB" to do the work.
+;
+; Entry:     B = File handle
+;	    DE = Transfer address
+;	    HL = Number of bytes to read
+; Returns:   A = Error code
+;	    HL = Number of bytes read
+;
+;
+		push	de
+		push	hl
+		call	FIND_HANDLE_B		;Find the file handle and
+		pop	bc			; moan if it is invalid
+		pop	de			; or not open.
+		ret	nc
+		ret	z
+;
+		xor	a
+		pcall	RD_FAB			;Do the read operation and
+		push	bc			; return with number of bytes
+		pop	hl			; read in HL.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_WRITE
+;
+;    This  routine  does  the  "write  file  handle" KBDOS call.  It is pretty
+; simple since it just locates the (FAB) file access block for  the  specified
+; file handle and then if this is OK, calls the routine  "WR_FAB"  to  do  the
+; work.
+;
+; Entry:     B = File handle
+;	    DE = Transfer address
+;	    HL = Number of bytes to write
+; Returns:   A = Error code
+;	    HL = Number of bytes written
+;
+;
+		push	de
+		push	hl
+		call	FIND_HANDLE_B		;Find the file handle and
+		pop	bc			; moan if it is invalid
+		pop	de			; or not open.
+		ret	nc
+		ret	z
+;
+		xor	a
+		pcall	WR_FAB			;Do the write operation and
+		push	bc			; return with number of bytes
+		pop	hl			; written in HL.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_SEEK
+;
+;    This routine does the "move file handle pointer" KBDOS function call.  It
+; simply  locates  the FAB for this file handle and modifies the FAB_PTR field
+; according to the offset and method code passed.
+;
+; Entry:       B = File handle
+;	       A = Method code - 0 => from start of file
+;				 1 => from current position
+;				 2 => from end of file
+;	   DE:HL = Offset (signed 32 bit number)
+; Returns:     A = Error code
+;	   DE:HL = New file pointer value.
+;
+;
+		ex	af,af'			;Save method code in A'
+		push	de
+		push	hl
+		call	FIND_HANDLE_B		;Find the file access block
+		pop	de			; and winge if it cannot
+		pop	hl			; be found.
+		ret	nc
+		ret	z
+		ex	af,af'
+;
+		push	hl			;Save high word of offset.
+		ld	hl,0
+		ld	bc,0			;Jump with BC:HL=0 if offset
+		or	a			; is from start of the file.
+		jr	z,seek_got_start
+		ld	l,(ix+FAB_PTR##)
+		ld	h,(ix+FAB_PTR##+1)
+		ld	c,(ix+FAB_PTR##+2)	;Jump with BC:HL = current
+		ld	b,(ix+FAB_PTR##+3)	; position if offset if from
+		dec	a			; current position.
+		jr	z,seek_got_start
+		ld	l,(ix+FAB_SIZE##)
+		ld	h,(ix+FAB_SIZE##+1)	;Else set BC:HL = file size
+		ld	c,(ix+FAB_SIZE##+2)	; if offset is from end of
+		ld	b,(ix+FAB_SIZE##+3)	; the file.
+seek_got_start:
+		add	hl,de			;Add low word of offset to
+		ex	(sp),hl			; base and get result into
+		pop	de			; register DE.
+		adc	hl,bc			;Add high word of offset
+		ex	de,hl			; to base and get whole
+		ld	(ix+FAB_PTR##),l	; result into DE:HL.
+		ld	(ix+FAB_PTR##+1),h
+		ld	(ix+FAB_PTR##+2),e	;Store the new file pointer
+		ld	(ix+FAB_PTR##+3),d	; and return with no error.
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_IOCTL
+;
+;    This routine does the "I/O control"  KBDOS  function  call.   It  simply
+; locates  the  FAB  for  this  file  handle and then does an operation on it
+; depending on the sub-function code passed in register  A.   Currently  only
+; sub-function codes 00h (get file handle info)  and  01h  (set  ASCII/binary
+; mode).   Sub-function 01h is only available on device files and simply sets
+; the ASCII/binary bit in "FAB_MODE".  Sub-function 00h  simply  returns  the
+; "FAB_MODE"  flags  for a device file.  For a disk file it returns the drive
+; number, with the EOF bit set if the file pointer is at or beyond the end of
+; the file.
+;
+; Entry:       B = File handle
+;	       A = Sub-function code 0 => get file handle info
+;				     1 => set ASCII/binary mode
+;					 E = b5 - set   => binary
+;						  clear => ASCII
+;				     2 => check input status
+;				     3 => check output status
+;				     4 => get screen size.
+; Returns:     A = Error code
+;	       E = 00h => ready, FFh => not ready (sub-functions 2 & 3 only)
+;	      DE = file handle flags (sub-functions 0 and 1)
+;	       D = number of rows (0 => infinite)   \
+;	       E = number of columns (0=>infinite)  / (sub-function 4 only)
+;
+;
+		ex	af,af'			;Save sub-function code in A'
+		push	de
+		call	FIND_HANDLE_B		;Find the file access block
+		pop	de			; and winge if it cannot
+		ret	nc			; be found.
+		ret	z
+		ex	af,af'
+;
+		ld	l,(ix+FAB_ID##+2)	;HL -> device jump table
+		ld	h,(ix+FAB_ID##+3)	;      in anticipation.
+;
+		or	a
+		jr	z,get_handle_mode	;Get file handle info
+		dec	a
+		jr	z,set_ascii_mode	;Set ASCII/binary mode
+		dec	a
+		jr	z,chk_in_status		;Check input status
+		dec	a
+		jr	z,chk_out_status	;Check output status
+		dec	a
+		jr	z,get_screen_size	;Get screen size
+bad_sub_fun:	ld	a,.ISBFN##		;Error if invalid sub-function
+		ret
+;
+;	----------------------------------------
+;
+set_ascii_mode:	bit	MD_DEV,(ix+FAB_MODE##)	;Can't set mode for disk file
+		jr	z,bad_sub_fun
+		ld	a,(ix+FAB_MODE##)
+		xor	e			;If "set ASCII/binary" mode
+		and	NOT MDM_ASC		; then mask the relevent bit
+		xor	e			; into the flags, and clear
+		res	MD_EOF,a		; the end-of-file flag.
+		ld	(ix+FAB_MODE##),a
+;
+;	----------------------------------------
+;
+get_handle_mode:ld	e,(ix+FAB_MODE##)	;Get mode flags into register
+		xor	a			; DE and return this, with
+		ld	d,a			; no error if it is a device
+		bit	MD_DEV,e		; file handle.
+		ret	nz
+;
+chk_file_end:	ld	e,(ix+FAB_DRV##)	;E := logical drive number
+		dec	e			;     (0=>A: etc).
+		ld	b,4
+test_eof_loop:	ld	a,(ix+FAB_PTR##+3)	;Loop to compare the file
+		cp	(ix+FAB_SIZE##+3)	; pointer with the file size
+		jr	c,not_file_eof		; and set the EOF bit if the
+		jr	nz,is_file_eof		; pointer is at or beyond the
+		dec	ix			; end of the file.
+		djnz	test_eof_loop
+is_file_eof:	set	MD_EOF,e
+not_file_eof:	xor	a
+		ld	d,a
+		ret
+;
+;	----------------------------------------
+;
+chk_in_status:	bit	AC_RD,(ix+FAB_ACC##)	;Never ready from input if
+		jr	nz,status_not_rdy	; open in write only mode
+		bit	MD_DEV,(ix+FAB_MODE##)
+		jr	nz,chk_dev_status
+		call	chk_file_end		;For disk file see if we are
+		bit	MD_EOF,e		; at end of file and return
+		jr	nz,status_not_rdy	; "ready" unless we are.
+if 0
+		ld	b,0
+else
+		ld	e,0
+endif
+		ret
+;
+chk_out_status:	bit	AC_WR,(ix+FAB_ACC##)	;Never ready for output if
+		jr	nz,status_not_rdy	; open in read only mode
+		inc	hl
+		inc	hl			;Adjust HL for WRST device
+		inc	hl			; routine.
+		bit	MD_DEV,(ix+FAB_MODE##)
+		jr	nz,chk_dev_status	;Disk file is always ready
+if 0
+status_not_rdy:	ld	b,0FFh			; for output.
+else
+status_not_rdy:	ld	e,0FFh			; for output.
+endif
+		ret
+;
+chk_dev_status:	ld	bc,3*2			;For device FAB's just call
+		add	hl,bc			; device routine to see if it
+		ld	c,(ix+FAB_MODE##)	; is ready or not.
+		jp	(hl)
+;
+;	----------------------------------------
+;
+get_screen_size:bit	MD_DEV,(ix+FAB_MODE##)
+		jr	nz,screen_sz_dev	;For a disk file, always
+		xor	a			; say that screen is infinite
+		ld	e,a			; in size (ie. no limits).
+		ld	d,a
+		ret
+;
+screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
+		add	hl,bc			; how big it is.
+		jp	(hl)
+;
+;
+;=============================================================================
+;
+	PROC	F_DELETE
+;
+;    This is the "delete file or sub-directory" KBDOS function  call.   It  is
+; passed  an ASCIIZ string or a fileinfo block which is relolved by "LOC_FIB".
+; The directory entry is then deleted by  the  routine  "DEL_FIB"  which  will
+; detect all the various error conditions.
+;
+; Entry:     DE = ASCIIZ string or fileinfo block pointer
+; Returns:    A = Error code.
+;
+;
+		pcall	LOC_FIB			;Find the directory entry
+		ret	nz
+;
+		ld	a,0FFh			;Delete the file, setting the
+		pcall	DEL_FIB			; dirty disk flag to allow
+		ret				; un-deletion.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_HDELET
+;
+;   This is the "delete file handle" KBDOS call.  Most of the work is done  by
+; the  routine  "DEL_FIB".  This routine locates the file handle and closes it
+; by calling "CLOSE_FAB" which frees up the RAM used  by  the  FAB.   It  then
+; ensures   the  file  on  disk  and  gets  the  directory  entry  by  calling
+; "ENSURE_FAB_1" and then calls "DEL_FIB" to actually delete the file.  There
+; may  be copies of the file handle which were created by DUP or FORK.  These
+; will now be unusable so a flag (AC_DEAD) is set in the  FAB  to  make  sure
+; that the FAB is not used any more.
+;
+; Entry:      B = File handle
+; Returns:    A = Error code
+;
+;
+		call	FIND_HANDLE_B		;Find the file handle and
+		ret	nc			; error if it is invalid
+		ret	z			; or not open.
+;
+		call	CLOSE_FAB		;Free the file access block
+		call	CHECK_REDIR		; if required.
+;
+		call	ENSURE_FAB_1		;Update and find the directory
+		set	AC_DEAD,(ix+FAB_ACC##)	; entry for this FAB and mark
+		or	a			; it as dead now.
+		ret	nz
+;
+		pcall	DI_SAME			;Ensure DE -> directory entry
+		ld	a,0FFh			;Delete the file, setting the
+		pcall	DEL_FIB			; dirty disk flag to allow
+		ret				; un-deletion.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_RENAME
+;
+;    This is the "rename file" function.  It is passed a pointer to an  ASCIIZ
+; drive/path  file  string  or  a  fileinfo block and it locates the directory
+; entry by calling "LOC_FIB".  It then calls "REN_FIB" to rename the directory
+; entry.  Note that the FIB is not updated with the new filename.
+;
+; Entry:      DE = Pointer to drive/path/file ASCIIZ string or fileinfo block
+;	      HL = Pointer to new filename ASCIIZ string
+; Returns:     A = Error code
+;
+;
+		push	hl
+		pcall	LOC_FIB			;Find the directory entry on
+		pop	bc			; disk and moan if any
+		ret	nz			; error.
+;
+		pcall	REN_FIB			;Rename the file on disk and
+		ret				; return with any error.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_HRENAM
+;
+;    This is the "rename file handle" function.  It is passed  a  file  handle
+; and  a  new filename string.  It locates the file access block (FAB) for the
+; file handle and "ensures" it to make sure that the directory entry has  been
+; updated  for  any  writes  and  then calls "REN_FIB" to rename the directory
+; entry.  If this is succesful then it calls "REOPEN_FAB" to get the new  name
+; into the file access block.
+;
+; Entry:       B = File handle
+;	      HL = Pointer to new filename ASCIIZ string
+; Returns:     A = Error code
+;
+;
+		push	hl
+		call	FIND_HANDLE_B		;Find the FAB for this
+		pop	bc			; file handle and moan
+		ret	nc			; if error.
+		ret	z
+;
+		push	bc
+		call	ENSURE_FAB_1		;Ensure that the FAB is up
+		pop	bc			; to date on disk and get
+		or	a			; the directory entry into
+		ret	nz			; a buffer somewhere.
+;
+		pcall	DI_SAME			;Ensure entry still buffered
+		pcall	REN_FIB			;Rename the directory entry
+		or	a			; and moan if any error.
+		ret	nz
+		call	REOPEN_FAB		;Update the FAB
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_MOVE
+;
+;    This is the "move file"  function  which  is  almost  identical  to  the
+; "rename  file"  function  above.   It  is  passed  a  pointer  to an ASCIIZ
+; drive/path file string or a fileinfo block and  it  locates  the  directory
+; entry by calling "LOC_FIB".  It then calls "MOVE_FIB" to move the directory
+; entry  to  the  new path specified by HL.  Note that the FIB is not updated
+; with the new location of the directory entry and so care must be  taken  in
+; using this FIB in future.
+;
+; Entry:      DE = Pointer to drive/path/file ASCIIZ string or fileinfo block
+;	      HL = Pointer to new path ASCIIZ string
+; Returns:     A = Error code
+;
+;
+		push	hl
+		pcall	LOC_FIB			;Find the directory entry on
+		pop	bc			; disk and moan if any
+		ret	nz			; error.
+;
+		pcall	MOVE_FIB		;Move the directory entry
+		ret				; to the new path.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_HMOVE
+;
+;    This  is  the  "move  file handle" function which is very similar to the
+; "rename file handle" function above.  It is passed a file handle and a  new
+; path  string.   It  locates the file access block (FAB) for the file handle
+; and "ensures" it to make sure that the directory entry has been updated for
+; any  writes and then calls "MOVE_FIB" to move the directory entry.  If this
+; is succesful then it calls "REOPEN_FAB" to get the new  details  about  the
+; directory entry into the file access block.
+;
+; Entry:       B = File handle
+;	      HL = Pointer to new path ASCIIZ string
+; Returns:     A = Error code
+;
+;
+		push	hl
+		call	FIND_HANDLE_B		;Find the FAB for this
+		pop	bc			; file handle and moan
+		ret	nc			; if error.
+		ret	z
+;
+		push	bc
+		call	ENSURE_FAB_1		;Ensure that the FAB is up
+		pop	bc			; to date on disk and get
+		or	a			; the directory entry into
+		ret	nz			; a buffer somewhere.
+;
+		pcall	DI_SAME			;Ensure entry still buffered
+		pcall	MOVE_FIB		;Move the directory entry
+		or	a			; and moan if any error.
+		ret	nz
+		call	REOPEN_FAB		;Update the FAB
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_ATTR
+;
+;    This is the "get/set file attributes" function.  It is passed a  pointer
+; to  an ASCIIZ drive/path file string or a fileinfo block and it locates the
+; directory entry by calling  "LOC_FIB".   For  a  "set"  function  it  calls
+; "ATTR_FIB"  to  set  the  new  attributes  byte and returns an error if the
+; requested attributes are invalid.  If "set" is succesful, or  for  a  "get"
+; function  it then extracts the attributes byte from the directory entry and
+; returns it.  Note that for "set" the attributes byte  in  the  FIB  is  not
+; updated with the new value.
+;
+; Entry:      DE = Pointer to drive/path/file ASCIIZ string or fileinfo block
+;	       A = 0 => get current attributes
+;		   1 => set new attributes
+;	       L = New attributes value (only if A=1)
+; Returns:     A = Error code
+;	       L = Current attributes
+;
+;
+		ex	af,af'			;Save get/set flag
+		push	hl
+		pcall	LOC_FIB			;Find the directory entry on
+		pop	bc			; disk and moan if any
+		ret	nz			; error.
+		ex	af,af'
+;
+		or	a			;Set new attributes if it is
+		pcall	nz,ATTR_FIB		; a "set" function and give
+		or	a			; up if any error.
+		ret	nz
+;
+		pcall	DI_SAME			;Get the directory entry back
+		ld	hl,DR_ATTR##		; and extract the attributes
+		add	hl,de			; byte from it.
+		ld	l,(hl)
+		xor	a
+		ret				;Return with no error.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_HATTR
+;
+;    This is the "get/set file handle attributes" function.  It  is  passed  a
+; file  handle and a flag to indicate whether to get or set the attributes. If
+; the flag indicates "set" (A=1) then a new set of attributes are also passed.
+; For  "get"  the  attributes  are  simply returned from the file access block
+; (FAB) with no disk accessing.  For "set" the routine "ATTR_FIB" is  used  to
+; update  the  attributes  on  disk  and an error will be generated if the new
+; setting  is  invalid.   If  "ATTR_FIB"  does  not  generate  an  error  then
+; "REOPEN_FAB"  is  called  to  get the new attributes byte from the directory
+; entry into the FAB.
+;
+; Entry:       B = File handle
+;	       A = 0 => get current attributes
+;		   1 => set new attributes
+;	       L = New attributes value (only if A=1)
+; Returns:     A = Error code
+;	       L = Current attributes
+;
+;
+		ex	af,af'			;Save get/set flag
+		ld	c,l			;C := new attributes
+		call	FIND_HANDLE_B
+		ret	nc			;Find the FAB for this
+		ret	z			; file handle and moan
+		ex	af,af'			; if error.
+;
+		or	a			;Skip if it is a "get
+		jr	z,get_hattrs		; attributes" function.
+;
+		push	bc
+		call	ENSURE_FAB_1		;Ensure that the FAB is up
+		pop	bc			; to date on disk and get
+		or	a			; the directory entry into
+		ret	nz			; a buffer somewhere.
+;
+		pcall	DI_SAME			;Ensure entry still buffered
+		pcall	ATTR_FIB		;Update the attributes on disk
+		ret	nz			; and moan if error.
+		call	REOPEN_FAB		;Update the FAB
+;
+get_hattrs:	ld	l,(ix+FAB_ATTR##)	;Get the attributes byte
+		xor	a			; from the file access block
+		ret				; and return with no error.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_FTIME
+;
+;    This  is  the  "get/set  file  date  and time" function.  It is passed a
+; pointer to a fileinfo  block  or  an  ASCIIZ  string  and  it  locates  the
+; directory  entry  by  calling "LOC_FIB".  If it is a "get" function then it
+; just returns the date and time from the directory entry directly, otherwise
+; it  first  calls  "FTIME_FAB" to set the new date and time in the directory
+; entry and then if this does not generate an error returns the date and time
+; from  the directory entry.  Note that for "set" the FIB is not updated with
+; the new date and time.
+;
+; Entry:      DE = Pointer to drive/path/file ASCIIZ string or fileinfo block
+;	       A = 0 => get current attributes
+;		   1 => set new attributes
+;	      IX = New time (only if A=1)
+;	      HL = New date (only if A=1)
+; Returns:     A = Error code
+;	      DE = Current time
+;	      HL = Current date
+;
+;
+		ex	af,af'			;Save get/set flag
+		push	ix
+		push	hl			;Locate the directory entry
+		pcall	LOC_FIB			; on disk and moan if any
+		pop	bc			; error.
+		pop	de			;BC:=new date, DE:=new time
+		ret	nz
+		ex	af,af'
+;
+		or	a			;If it is a "set" function
+		pcall	nz,FTIME_FIB		; then set the new date and
+		or	a			; time and give up if any
+		ret	nz			; error.
+;
+		pcall	DI_SAME			;Get the directory entry back
+		ld	hl,DR_TIME##		; and extract the date and
+		add	hl,de			; time from it into DE and
+		ld	e,(hl)			; HL for return.
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_HFTIME
+;
+;    This is the "get/set file handle date and time" function.  It is passed a
+; file  handle and a flag to indicate whether to get or set the date and time.
+; If the flag indicates "set" (A=1) then a new date and time are also  passed.
+; For "get" the current date and time are simply returned from the file access
+; block with no disk accessing.  For "set" the routine "FTIME_FIB" is used  to
+; update the attributes on disk, after "ensuring" that the directory entry has
+; been updated for any writing which has been done.
+;
+; Entry:       B = File handle
+;	       A = 0 => get current date and time
+;		   1 => set new date and time
+;	      IX = New time (only if A=1)
+;	      HL = New date (only if A=1)
+; Returns:     A = Error code
+;	      DE = Current time
+;	      HL = Current date
+;
+;
+		ex	af,af'			;Save get/set flag
+		push	ix
+		push	hl
+		call	FIND_HANDLE_B		;Find the FAB for this
+		pop	bc			; file handle and moan
+		pop	de			; if error.
+		ret	nc
+		ret	z
+		ex	af,af'
+;
+		or	a			;If it is "get" then jump
+		jr	z,get_hdate_time	; to get current values.
+;
+		push	bc
+		push	de
+		call	ENSURE_FAB_1		;Ensure that the FAB is up
+		pop	de			; to date on disk and find
+		pop	bc			; the directory entry.  Give
+		or	a			; up if any error.
+		ret	nz
+;
+		pcall	FTIME_FIB		;Set the new date and time
+		ret	nz			; in the directory entry and
+		call	REOPEN_FAB		; update the FAB if OK.
+;
+get_hdate_time:	ld	e,(ix+FAB_TIME##)	;Get date and time into
+		ld	d,(ix+FAB_TIME##+1)	; DE and HL from the file
+		ld	l,(ix+FAB_DATE##)	; access block, and return
+		ld	h,(ix+FAB_DATE##+1)	; with no error.
+		xor	a
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	F_HTEST
+;
+;    This rather strange function  is  passed  a  file  handle  and  either  a
+; "drive/path/file" ASCIIZ string or a fileinfo block.  It checks whether they
+; refer to the same file or not and simply returns  a  flag  to  indicate  the
+; result.   It is provided to enable the "COPY" command to do some fancy error
+; checking although I suppose someone may find another use for it.
+;
+; Entry:       B = File handle
+;	      DE = ASCIIZ string or fileinfo block pointer
+; Returns:     A = Error code
+;	       B = 00h => not the same file
+;		   FFh => they are the same file
+;
+;
+		push	bc			;Locate the directory entry
+		pcall	LOC_FIB			; for the ASCIIZ string or
+		pop	bc			; FIB.
+		ret	nz
+;
+		bit	MD_DEV,(ix+FIB_MODE##)	;Never match a device FIB
+		jr	nz,no_handle_match	; or ASCIIZ string.
+;
+		push	hl			;Find the file access block
+		call	FIND_HANDLE_B		; for this handle into IX
+		pop	hl			; and return if it is not
+		ret	nc			; open or invalid.
+		ret	z
+;
+		ld	b,0FFh			;Compare the FAB with the
+		call	CMP_FAB			; located directory entry
+		ret	z			; and return A=0 & B=FFh
+						; if they are the same.
+;
+no_handle_match:xor	a			;If there is no match then
+		ld	b,a			; return A=B=0.
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	F_FORK
+;
+;    This is the "fork a child process"  funtion  call.   It  increments  the
+; process  id  and  allocates  another  file handle vector.  Any file handles
+; which need to be inherited are then copied into the new vector.  It returns
+; the old process id in register B if succesful.  Errors can result from lack
+; of memory.  "CHECK_REDIR" is called in case the standard  input  or  output
+; redirection state has been affected by the FORK.
+;
+; Entry:     None
+; Returns:   A = Error code
+;	     B = Parent process id (if A=0)
+;
+;
+		ld	hl,MAX_HAND##+1		;Allocate another file handle
+		add	hl,hl			; vector and give up if not
+		pcall	ALL_P2			; enough memory.
+		ret	nz
+;
+		ld	de,(HANDLES##)
+		ld	(HANDLES##),hl		;Link the new vector into
+		ld	(hl),e			; the start of the chain.
+		inc	hl
+		ld	(hl),d
+		ld	a,d			;If there was no old vector
+		or	e			; then don't bother trying
+		jr	z,no_inheritance	; to inherit anything.
+;
+		inc	de
+		ld	b,MAX_HAND##		;Loop to duplicate any file
+inherit_loop:	push	bc			; handles which want to be
+		inc	hl			; inherited.
+		inc	de
+		ld	a,(de)
+		ld	c,a			;Get next file access block
+		inc	de			; pointer from the old file
+		ld	a,(de)			; handle vector.
+		ld	b,a
+		or	c			;Can't inherit it if it is
+		jr	z,dont_inherit		; not open!
+;
+		push	bc
+		pop	ix			;Skip if this file access
+		bit	AC_INH,(ix+FAB_ACC##)	; block doesn't want to
+		jr	z,dont_inherit		; be inherited.
+;
+		call	INC_FAB_REF		;Bump the reference count but
+		jr	nz,dont_inherit		; skip if it has reached limit.
+		ld	(hl),c			;If everything is OK then
+		inc	hl			; store the file access block
+		ld	(hl),b			; pointer in the new file
+		dec	hl			; handle vector.
+;
+dont_inherit:	inc	hl
+		pop	bc			;Loop 'til tried all
+		djnz	inherit_loop		; file handles.
+;
+no_inheritance:	ld	a,(PROC_ID##)		;Bump the process id. by
+		ld	b,a			; one and return the old
+		inc	a			; value in register B.
+		ld	(PROC_ID##),a
+		call	CHECK_REDIR		;Adjust standard I/O falgs.
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_JOIN
+;
+;   This  is  the  "rejoin  parent  process" function call.  It is passed the
+; process id. of the process to rejoin and any file handles or user  segments
+; for  higher numbered processes that that will be freed.  If the process id.
+; is zero then all handles and user  segments  will  be  freed,  the  default
+; handles  re-opened  and  the  process  id. set back to 1.  "CHECK_REDIR" is
+; called in case the standard input or  output  redirection  state  has  been
+; affected by the JOIN.
+;
+;    Closing the file handles is rather tricky because a disk error may occur
+; when closing a file and the user may abort it.  It is  therefore  essential
+; to  free  up  all  the  memory  and  adjust the process id. before actually
+; starting to close the files.  This makes the routine  rather  more  complex
+; than  it would otherwise be.  Even so if it is passed B=0, and a disk error
+; is aborted while it is closing a file, then it will leave the system  in  a
+; rather  dubious  state  with  no  file handle vector.  Another call to this
+; function with B=0 will then succeed.
+;
+; Entry:      B = Process id to rejoin
+; Returns:    A = Error code
+;
+;
+		ld	a,b			;If the process to join to
+		or	a			; is non-zero then error if
+		jr	z,join_proc_ok		; it is not smaller than the
+		ld	hl,PROC_ID##		; current process id.
+		cp	(hl)
+		ld	a,.IPROC##
+		ret	nc
+join_proc_ok:
+		pcall	FRE_USER_SEG		;Free up user RAM segments.
+;
+		ld	hl,(HANDLES##)		;Save current file handle
+		push	hl			; table pointer.
+dec_proc_loop:	ld	a,h
+		or	l			;Exit loop if file handle
+		jr	z,null_handles		; pointer is null.
+		push	bc
+		push	hl
+		pcall	FR_P2			;Free up this handle vector
+;
+		ld	b,0FFh			;Go through all file handles
+dec_ref_loop:	inc	b			; in the freed vector and
+		call	FIND_HANDLE_B		; for each one which is
+		jr	nc,dec_ref_done		; open, decrement the
+		call	nz,DEC_FAB_REF		; reference count of the
+		jr	dec_ref_loop		; file access block.  (Will
+						; be freed but not closed
+						; if it goes to zero.)
+dec_ref_done:
+		pop	hl
+		pop	bc
+		ld	e,(hl)			;Get next file handle vector
+		inc	hl			; pointer into HL and store
+		ld	d,(hl)			; it as the current file
+		ex	de,hl			; handle vector pointer.
+		ld	(HANDLES##),hl
+;
+;===== start mod DOS2.50
+		dec	(iy+@PROC_ID##)		;Decrement the current
+		ld	a,(PROC_ID##)		; process id by one.
+;;		ld	a,(PROC_ID##)
+;;		dec	a
+;;		ld	(PROC_ID##),a
+;===== end mod DOS2.50
+		inc	b			;If requested process id
+		dec	b			; is zero then loop until
+		jr	z,dec_proc_loop		; no handles left.
+		cp	b			;Otherwise loop 'til got
+		jr	nz,dec_proc_loop	; to the required process.
+;
+		xor	a			;Mark the end of the "freed
+		ld	(de),a			; handles" chain with a zero
+		dec	de			; so that we know when to
+		ld	(de),a			; stop closing files.
+null_handles:
+;===== start mod DOS2.50
+		ld	(iy+@PROC_ID##),b	;Store new process id, since
+						; it may be wrong if B=0.
+;;		ld	a,b
+;;		ld	(PROC_ID##),a
+;===== end mod DOS2.50
+;
+;
+;
+close_hand_lp1:	pop	hl			;Get pointer to next "freed
+		ld	a,h			; handle vector" and exit
+		or	l			; loop if end of chain.
+		jr	z,close_hand_done
+		ld	e,(hl)
+		inc	hl			;Save pointer to next
+		ld	d,(hl)			; "freed vector".
+		push	de
+
+		ld	b,MAX_HAND##
+close_hand_lp2:	inc	hl
+		ld	e,(hl)			;Walk through this file
+		inc	hl			; handle vector looking
+		ld	d,(hl)			; at each file handle in turn.
+		push	de
+		pop	ix
+		ld	a,d
+		or	e			;If the file handle is open
+		push	hl			; then do an "ensure" to
+		push	bc			; update its directory entry
+		call	nz,ENSURE_FAB		; if required.
+		pop	bc
+		pop	hl
+		djnz	close_hand_lp2		;Loop 'til done all handles
+		jr	close_hand_lp1		;Loop for next vector
+close_hand_done:
+		ld	a,0FFh			;Flush all dirty buffers
+		pcall	FL_PHYS			; for all drives.
+;
+;
+		ld	a,(PROC_ID##)		;If the proccess id. is
+		or	a			; zero then fork a base
+		jr	nz,not_zero_id		; process and open the
+		call	F_FORK			; default file handles.
+		call	OPEN_DEF_HAND
+if 0
+		pcall	ENV_KILL		;Re-initialise environment
+		pcall	CHAR_INIT		;Re-initialise character I/O
+else
+		pcall	EAT_CBUF		;Re-initialize character I/O
+endif
+not_zero_id:	call	CHECK_REDIR
+		pcall	CHL_KILL		;Zap console line input buffer
+		xor	a
+		ret				;Return with no error
+;
+;
+;=============================================================================
+;
+CHECK_REDIR:
+;
+;    This routine is called after any file handle operation  which  may  have
+; affected  the  redirection state of either the standard input or output. It
+; looks at the STDIN and STDOUT file handles  and  sets  the  "IO_RDR"  flags
+; variable  up correctly to indicate whether or not they are redirected.  The
+; operations which call this routine are: OPEN, CREATE, CLOSE, DESTROY, FORK,
+; JOIN and DUP.
+;
+; Entry:      None
+; Returns:    None
+; Corrupts:   AF
+;
+;
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		ld	c,0			;Assume not redirected first
+;
+		ld	b,STDIN##		;Look for standard input FAB
+		call	FIND_HANDLE_B		; and if it does not exist then
+		jr	nc,in_not_redir		; input is not redirected.
+		jr	z,in_not_redir
+		ld	a,(ix+FAB_MODE##)	;FAB is redirected unless it
+		and	MDM_DEV+MDM_CIN		; is a device FAB, and has the
+		cp	MDM_DEV+MDM_CIN		; "console input" flag set.
+		jr	z,in_not_redir
+		set	0,c			;Flag that input is redirected
+in_not_redir:
+;
+		ld	b,STDOUT##		;Look for standard output FAB
+		call	FIND_HANDLE_B		; and if it does not exist then
+		jr	nc,out_not_redir	; output is not redirected
+		jr	z,out_not_redir
+		ld	a,(ix+FAB_MODE##)	;FAB is redirected unless it
+		and	MDM_DEV+MDM_COT		; is a device FAB, and has the
+		cp	MDM_DEV+MDM_COT		; "console output" flag set.
+		jr	z,out_not_redir
+		set	1,c			;Flag output as redirected
+out_not_redir:
+;
+;===== start mod DOS2.50
+		ld	(iy+@IO_RDR##),c	;Store the I/O redirection
+						; flags.
+;;		ld	a,c
+;;		ld	(IO_RDR##),a
+;===== end mod DOS2.50
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+FIND_NEW_HANDLE:
+;
+;    This  routine  finds  the  lowest unused file handle and returns its file
+; handle number and a pointer to its entry in the file handle table.  An error
+; is returned if there are no free handles.
+;
+; Entry:      None
+; Returns:     A = Error code (with Z-flag set)
+;	       B = New file handle number
+;	      HL = Address of entry in file handle table
+; Corrupts:   AF,BC,HL
+;
+;
+		push	de
+		push	ix			;Locate each file handle in
+		ld	b,0FFh			; turn until we find one
+new_hand_loop:	inc	b			; which is free or we reach
+		call	FIND_HANDLE_B		; the end of the vector.
+		ld	a,.NHAND##
+		jr	nc,no_free_hand		;Error if none free
+		jr	nz,new_hand_loop	;Loop if this one not free
+		xor	a			;No error => got handle
+;
+no_free_hand:	pop	ix
+		pop	de
+		or	a			;Set Z-flag according to
+		ret				; error & return.
+;
+;
+;-----------------------------------------------------------------------------
+;
+FIND_HANDLE_B:
+;
+;    This routine is passed a file handle number in B.  It checks that  it  is
+; within range and returns with carry clear and A=.IHAND if not.  Otherwise it
+; returns with carry set and HL pointing to the appropriate entry in the  file
+; handle table and DE and IX containing the value from this  entry.   If  DE=0
+; (file  handle  not  open) then the Z-flag will be set and A=.NOPEN.  This is
+; frequently used as an error condition.
+;
+; Entry:         B = File handle number
+; Returns:   Carry - clear => file handle is out of range (A=.IHAND)
+;		       set => file handle within range
+;		HL = Address of entry in file handle table
+;	     IX=DE = File handle table entry (file access block address)
+;	    Z-flag - clear => file handle is open (DE<>0, A=undefined)
+;		       set => file handle not open (DE=0, A=.NOPEN)
+;		 A = Error code (.IHAND, .NOPEN or undefined)
+; Corrupts:   AF,DE,HL,IX
+;
+;
+		ld	a,b			;Return with carry clear
+		cp	MAX_HAND##		; if file handle number is
+		jr	nc,find_hand_inv	; totally stupid
+;
+		ld	hl,(HANDLES##)		;Also return NC if there
+		ld	a,h			; is no file handle vector
+		or	l			; allocated.
+		jr	z,find_hand_inv
+;
+		push	bc
+		inc	hl
+		inc	hl			;Get pointer to file handle
+		ld	c,b			; table and index into it to
+		ld	b,0			; find this file handle.
+		add	hl,bc
+		add	hl,bc
+		ld	e,(hl)			;Get the entry for this
+		inc	hl			; file handle into DE
+		ld	d,(hl)			; leaving HL pointing at
+		dec	hl			; the entry.
+		pop	bc
+;
+		push	de			;Get IX pointing at FAB
+		pop	ix			; as well as DE.
+;
+		ld	a,d			;Set Z-flag if entry is not
+		or	e			; in use (zero).
+		scf				;Carry => handle number OK
+		ld	a,.NOPEN##
+		ret
+;
+;
+find_hand_inv:	ld	a,.IHAND##		;Return error and carry
+		or	a			; clear if invalid handle
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+INC_FAB_REF:
+;
+;    This routine simply bumps the reference count of a file access block
+; pointed to by IX.  It returns an error (and doesn't alter the reference
+; count) if it has already reached its limit.
+;
+; Entry:      IX -> File access block
+; Returns:     A =  Error code (Z-flag set appropriately)
+; Corrupts:   AF
+;
+;
+		ld	a,(ix+FAB_CNT##)	;Bump the file access block's
+		inc	a			; reference count but don't
+		jr	z,dont_inc_ref		; let it wrap around.
+		ld	(ix+FAB_CNT##),a
+		xor	a
+		ret
+;
+dont_inc_ref:	ld	a,.NHAND##		;Return an error if the
+		or	a			; reference count has
+		ret				; reached its limit.
+;
+;
+;-----------------------------------------------------------------------------
+;
+DEC_FAB_REF:
+;
+;    This  routine  decrements  the  reference  count  of  a file access block
+; pointed to by IX.  If the reference count goes to zero then the file  access
+; block  is  freed  and  unlinked from the FAB chain.  The file is NOT closed,
+; this is the responsibility of the calling routine.  The zero  flag  will  be
+; returned set (with A=0) if the reference count did go to zero.
+;
+; Entry:      IX -> File access block
+; Returns:     A =  0 (and Z-flag set) if refernce count zero
+;		 <> 0 (and Z-flag clear) if reference count not zero.
+; Corrupts:   AF
+;
+;
+;===== start mod DOS2.50
+		dec	(ix+FAB_CNT##)		;Decrement the reference
+		ld	a,(ix+FAB_CNT##)	; count by one and return
+						; if it is not zero.
+;;		ld	a,(ix+FAB_CNT##)
+;;		dec	a
+;;		ld	(ix+FAB_CNT##),a
+;===== end mod DOS2.50
+		ret	nz
+;
+		push	de
+		push	bc
+		push	ix
+		ex	(sp),hl
+		ld	bc,FAB_NEXT##		;Point DE to the start of
+		add	hl,bc			; the file access block
+		ex	de,hl			; in the chain.
+		ld	hl,FAB_CHAIN##		;HL -> start of chain
+		call	FR_LINK			;Unlink and de-allocate
+		pop	hl			; the file access block.
+		pop	bc
+		pop	de
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	FR_LINK
+;
+;    This routine is given a pointer to an item in a chain and  a  pointer  to
+; the  chain  head.   It frees up the RAM for the item and unlinks it from the
+; chain.  It is used for freeing FABs and  also  for  freeing  up  environment
+; items.
+;
+; Entry:      HL -> Chain head
+;	      DE -> Item to be freed
+; Returns:    None
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		ex	de,hl
+		ld	b,h			;BC -> this item
+		ld	c,l
+		pcall	FR_P2			;Free up the item
+;
+		ex	de,hl			;Look through the chain
+unlink_loop:	ld	e,(hl)			; for the one we want to
+		inc	hl			; unlink.
+		ld	d,(hl)			;If we reach end of chain
+		ld	a,d			; then something is wrong
+		or	e			; so just return without
+		ret	z			; unlinking it.
+		ex	de,hl
+		sbc	hl,bc			;Loop back to try next link
+		add	hl,bc			; in the chain if this is
+		jr	nz,unlink_loop		; not the one we want.
+;
+		dec	de
+		ld	a,(hl)			;Remove this item from the
+		ld	(de),a			; chain by storing the value
+		inc	hl			; from its NEXT field in the
+		inc	de			; previous link in the chain.
+		ld	a,(hl)
+		ld	(de),a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+NEW_FAB:
+;
+;    This  routine  is  called to allocate a new file access block and link it
+; into the chain.  Only the "FAB_NEXT" and "FAB_COUNT" fields are  set  up  by
+; this routine.
+;
+; Entry:     None
+; Returns:    A = Error code (flags set)
+;	     HL = Pointer to new FAB
+; Corrupts:  AF,HL
+;
+;
+		ld	hl,FAB_SZ##		;Allocate RAM for the FAB
+		pcall	ALL_P2			; and give up if there is
+		ret	nz			; none spare.
+;
+		push	de
+		ld	de,(FAB_CHAIN##)	;Link the new FAB into the
+		ld	(FAB_CHAIN##),hl	; start of the chain.
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ld	(hl),1			;Set reference count to 1.
+		inc	hl
+		pop	de
+		ret				;Return with A=0 and Z-set.
+;
+;
+;-----------------------------------------------------------------------------
+;
+OPEN_DEF_HAND:
+;
+;    This routine simply opens the standard file handles as below. If there is
+; any  error  from  trying  to open them, it will be ignored, except that that
+; handle will be opened to "NUL" to at least ensure that the handles exist.
+;
+;		00h - Standard input    (device "CON" read only)
+;		01h - Standard output   (device "CON" write only)
+;		02h - Standard error    (device "CON" read/write)
+;		03h - Standard aux I/O  (device "AUX" read/write)
+;		04h - Standard printer  (device "PRN" write only)
+;
+;
+		ld	b,5			;Number of default handles
+		ld	hl,DEF_TABLE		;Pointer to table
+open_def_loop:	push	bc
+		ld	e,(hl)
+		inc	hl			;DE := pointer to device
+		ld	d,(hl)			;      name to be opened.
+		inc	hl
+		ld	b,(hl)			;B := access mode flags
+		inc	hl
+		push	hl
+		push	bc
+		ld	a,b
+		call	F_OPEN			;Try to open the device
+		pop	bc
+		or	a			;If it failed then open
+		ld	de,NUL_NAME		; to "NUL" device instead.
+		ld	a,b
+		call	nz,F_OPEN
+		pop	hl
+		pop	bc
+		djnz	open_def_loop		;Loop 'til done all of them.
+		ret
+;
+;
+DEF_TABLE:	dw	CON_NAME
+		db	ACM_WR+ACM_INH
+		dw	CON_NAME
+		db	ACM_RD+ACM_INH
+		dw	CON_NAME
+if 1
+		db	ACM_INH
+else
+		db	ACM_RD+ACM_INH
+endif
+		dw	AUX_NAME
+		db	ACM_INH
+		dw	PRN_NAME
+		db	ACM_RD+ACM_INH
+;
+CON_NAME:	db	"CON",0
+AUX_NAME:	db	"AUX",0
+PRN_NAME:	db	"PRN",0
+NUL_NAME:	db	"NUL",0
+;
+;
+;-----------------------------------------------------------------------------
+;
+OLD_FAB:
+;
+;    This  routine validates the drive and relocates the directory entry for a
+; file access block (FAB).  It returns a pointer to  the  directory  entry  if
+; there  is  no  error.   If the FAB is a device FAB then it still returns the
+; correct values.
+;
+; Entry:     IX = Pointer to FAB
+; Returns:    A = Error code (flags set appropriately)
+;	     HL = Address of unit descriptor or device descriptor
+;	     DE = Pointer to directory entry
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;For a device get the device
+		jr	z,old_fab_not_dev	; descriptor address from FAB
+		pcall	O_DEV			; and use directory entry in
+		xor	a			; the descriptor.
+		ret
+;
+old_fab_not_dev:ld	c,(ix+FAB_DRV##)	;Validate the drive and
+		ld	b,1			; give up if any error.
+		pcall	VAL_FIB
+		or	a
+		ret	nz
+;
+		ld	e,(ix+FAB_FDC##)	;Get first directory cluster
+		ld	d,(ix+FAB_FDC##+1)	; and store it ready to start
+		ld	(DE_START##),de		; a directory search
+;
+		push	ix
+		ex	(sp),hl			;Point DE at the filename
+		ld	bc,FAB_NAME##		; in the FAB and expand
+		add	hl,bc			; it into "FNAME_BUF" ready
+		ld	(STR_PTR##),hl		; for searching for a match
+		pop	hl			; with it.
+		ld	de,FNAME_BUF##
+		pcall	PAR_ITEM
+		or	a
+		ld	a,.IFNM##		;Error if invalid (it
+		ret	nz			; shouldn't be!)
+;
+		ld	de,FNAME_BUF##
+		ld	(iy+@SE_FLAGS##),SEM_SR	;Search the directory for a
+		pcall	FND_FIRST		; match with the filename
+find_fab_ret:	or	a			; in the FAB and return
+		ret				; error if not found.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	ENSURE_FAB
+;
+;    This  routine  does  an  "ensure" operation on a file access block.  This
+; means doing nothing if it is a device FAB, or  if  the  file  has  not  been
+; written  to,  and  otherwise  updating the directory entry and reopening the
+; file.  There are  two  entry  points,  "ENSURE_FAB"  will  only  locate  the
+; directory entry if an  update  is  necessary,  whereas  "ENSURE_FAB_1"  will
+; always locate the directory entry but will only update it if necessary.  The
+; directory entry is re-located by re-searching for the filename  in  the  FAB
+; and is then updated with the current date and time and the new file size and
+; first cluster number from the FAB.  Note that this routine  does  NOT  flush
+; dirty  disk  buffers.   If this is required then it is the responsibility of
+; the caller.
+;
+; Entry:       IX = Pointer to file access block (FAB)
+; Returns:      A = Error code (flags not set)
+;	       HL = Unit descriptor address (not valid if called at
+;			"ENSURE_FAB" and update was not necessary).
+; Corrupts:    AF,BC,DE,HL
+;
+;
+		xor	a			;Return immediately if
+		bit	AC_MOD,(ix+FAB_ACC##)	; file has not been
+		ret	z			; written to.
+;
+ENSURE_FAB_1:	bit	AC_DEAD,(ix+FAB_ACC##)	;Winge if someone has deleted
+		ld	a,.HDEAD##		; the file on us.
+		ret	nz
+;
+		call	OLD_FAB			;Find the directory entry for
+		ret	nz			; this FAB.
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;Do nothing except return
+		ret	nz			; A=0 if it is a device FAB.
+;
+		bit	AC_MOD,(ix+FAB_ACC##)	;Also do nothing if it has
+		ret	z			; not been written to.
+;
+		pcall	DATE_TIME		;Update date and time in
+						; directory entry.
+		push	ix
+		ex	(sp),hl
+		ld	bc,FAB_SIZE##		;DE -> file size in FAB
+		add	hl,bc			;      used below.
+		ex	de,hl
+;
+		ld	bc,DR_ATTR##		;Set the archive bit in
+		add	hl,bc			; directory entry since file
+		set	AT_ARC,(hl)		; has been altered.
+;
+		ld	bc,DR_CLU##-DR_ATTR##
+		add	hl,bc
+		ld	c,(ix+FAB_FPC##)	;Copy the first cluster
+		ld	b,(ix+FAB_FPC##+1)	; number from the FAB
+		ld	(hl),c			; into the directory
+		inc	hl			; entry.
+		ld	(hl),b
+		inc	hl
+;
+		ex	de,hl			;Copy new file size from FAB
+		ld	bc,4			; into directory entry.
+		ldir
+;
+		pcall	DIRT_CACHE		;Mark buffer as dirty.
+;
+		pop	hl			;HL -> unit descriptor
+		 ;	;
+		 ;	;   Drop through to re-open the FAB
+		 ;	;
+;-----------------------------------------------------------------------------
+;
+REOPEN_FAB:	pcall	DI_SAME			;Make sure entry is still
+						; buffered and DE points to it.
+		ld	a,(ix+FAB_ACC##)	;Use same access mode
+;
+	PROC	OPEN_FAB
+;
+;    This routine is given a file access block and a directory  entry  and  it
+; sets  up  the  file  access block for accessing that particular file.  It is
+; assumed that the "FAB_DRV", "FAB_ID" and "FAB_MODE" fields are already  set
+; up and this routine sets up the remaining fields.  It must also be passed a
+; set of file access flags which will be stored in the  FAB.   The  directory
+; variables  must  be  set  up for the correct directory entry unless it is a
+; device FAB.
+;
+; Entry:     IX -> FAB to be filled in
+;	     HL -> unit descriptor or device descriptor
+;	     DE -> directory entry
+;	      A =  Access mode flags (b0...b2)
+; Returns:    A =  0 (never generates errors)
+; Corrupts:  AF,DE
+;
+;
+		push	bc			;Save BC for return
+		ex	af,af'			;Save access mode
+		pcall	FILL_FIB		;Fill in user fields of FIB
+		ex	af,af'
+;
+		and	00000111b		;Record the access mode byte
+		ld	(ix+FAB_ACC##),a	; in the FAB.
+;
+		ld	(ix+FAB_UD##),l		;Record the unit descriptor
+		ld	(ix+FAB_UD##+1),h	; address, directory sector and
+		ld	bc,(DE_SECTOR##)	; entry number within this
+		ld	(ix+FAB_DSEC##),c	; sector.
+		ld	(ix+FAB_DSEC##+1),b	;These fields are only used in
+;===== start add FAT16 (STOR_3 patch)
+		ld	a,(DE_EX_SECTOR##)
+		ld	(ix+FAB_EX_DSEC##),a
+;===== end add FAT16
+		ld	a,(DE_ENT##)		; "FAB_SCAN" to check for the
+		sub	(iy+@DE_E_LEFT##)	; same file being accessed.
+		ld	(ix+FAB_ENT##),a
+;
+		ld	bc,(DE_START##)		;Set the "first directory
+		ld	(ix+FAB_FDC##),c	; cluster" to the start of
+		ld	(ix+FAB_FDC##+1),b	; the appropriate directory.
+;
+		ld	c,(ix+FAB_CLU##)	;Get the start cluster of
+		ld	b,(ix+FAB_CLU##+1)	; the file and store it
+		ld	(ix+FAB_FPC##),c	; in the "first physical
+		ld	(ix+FAB_FPC##+1),b	; cluster" field of the FAB.
+		ld	(ix+FAB_LPC##),c	;Also store it as "last
+		ld	(ix+FAB_LPC##+1),b	; accessed physical cluster"
+		xor	a			; and set the "last accessed
+		ld	(ix+FAB_LLC##),a	; logical cluster" field
+		ld	(ix+FAB_LLC##+1),a	; to zero.
+;
+		pop	bc			;Restore BC and return
+		ret				; with A=0.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	CLOSE_FAB	;CLOSE_FAB:
+;
+;    This routine closes a file handle and the associated access block.  It
+; does not do an "ensure" operation, this is the responsability of the calling
+; routine.  It simply decrements the FAB reference count which will free the
+; FAB if it goes to zero, and then then zeroes the file handle pointer.
+;
+; Entry:     HL -> Entry in file handle table
+;	     IX -> File access block
+; Returns:   None
+; Corrupts:  AF,HL
+;
+;
+		call	DEC_FAB_REF		; call then decrement the
+		xor	a			; reference count of the FAB
+		ld	(hl),a			; and clear the file handle
+		inc	hl			; entry.  (FAB will get freed
+		ld	(hl),a			; if ref. count goes to zero.)
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	FAB_SCAN
+;
+;    This routine looks down the chain of file access blocks to see if any  of
+; them  refer  to  the  same  file  as  one  which  is  about to be used.  The
+; comparison is done by comparing the unit descriptor address and the location
+; of  the  directory entry (specified by sector number and entry number within
+; that sector).  If all of these match then an error  (".FOPEN")  is  returned
+; unless it is actually the same FAB as the one pointed to by IX on entry. The
+; directory variables must be set up to the entry which is  being  matched  in
+; order for this routine to work.
+;
+; Entry:      IX = Pointer to FAB to be compared
+;	      HL = Address of unit descriptor
+; Returns:     A = Error code (flags set appropriately).
+; Corrupts:   AF
+;
+;
+		push	de
+		push	bc
+		ex	de,hl			;DE := unit descriptor address
+		push	ix
+		pop	bc			;BC = address of this FAB
+;
+		ld	ix,FAB_CHAIN##-FAB_NEXT##
+fab_scan_loop:	ld	l,(ix+FAB_NEXT##)	;Get next entry in FAB
+		ld	h,(ix+FAB_NEXT##+1)	; chain and jump to
+		ld	a,h			; exit with no error
+		or	l			; if it is end of chain.
+		jr	z,no_fab_match
+;
+		push	de
+		ld	de,-FAB_NEXT##		;Set IX to point to the FAB
+		add	hl,de			; for this entry in the
+		pop	de			; chain (offset is for link
+		push	hl			; and reference count).
+		pop	ix
+		or	a
+		sbc	hl,bc			;Ignore this FAB if it is
+		jr	z,fab_scan_loop		; the one we are using.
+;
+		ex	de,hl			;See if this FAB matches the
+		call	CMP_FAB			; directory entry and loop
+		ex	de,hl			; back if it does not.
+		jr	nz,fab_scan_loop
+;
+;
+		ld	a,.FOPEN##		;Got match so prepare error
+no_fab_match:	push	bc
+		pop	ix			;Restore FAB pointer
+		ex	de,hl			;Restore unit descriptor addr
+		pop	bc
+		pop	de			;Restore registers and return
+		or	a			; with error code in A and
+		ret				; flsgs set appropriately.
+;
+;
+;-----------------------------------------------------------------------------
+;
+CMP_FAB:
+;
+;    This routine tests whether the FAB pointed to by IX refers to the current
+; directory  entry  defined by the directory variables and the unit descriptor
+; pointer.  A device FAB will never be matched.  It is  called  by  "FAB_SCAN"
+; above and also by the "test file handle" function call routine.
+;
+; Entry:        IX -> FAB to be compared
+;		HL =  Unit descriptor address
+; Returns:  Z-flag -  set  (Z)  => FAB matches  (A=0)
+;		     clear (NZ) => FAB does not match (A undefined)
+; Corrupts:     AF,DE
+;
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;Don't match it if it is a
+		ret	nz			; device FAB.
+;
+		ld	a,(DE_ENT##)		;Return with no match if it is
+		sub	(iy+@DE_E_LEFT##)	; not the same entry within
+		cp	(ix+FAB_ENT##)		; the directory sector.
+		ret	nz
+;
+		push	hl
+;===== start mod FAT16 (STOR_4 patch)
+		ld	hl,(DE_SECTOR##)	;Return with no match if it
+		ld	a,(DE_EX_SECTOR##)
+		ld	e,(ix+FAB_DSEC##)	; is not the same directory
+		ld	d,(ix+FAB_DSEC##+1)	; sector number.
+		;assume Cy=0 (check "ret nz")
+		sbc	hl,de
+		sbc	a,(ix+FAB_EX_DSEC##)
+;;		ld	de,(DE_SECTOR##)
+;;		ld	l,(ix+FAB_DSEC##)
+;;		ld	h,(ix+FAB_DSEC##+1)
+;;		or	a
+;;		sbc	hl,de
+;===== end mod FAT16
+		pop	hl
+		ret	nz
+;
+		ld	e,(ix+FAB_UD##)		;Return with no match if it is
+		ld	d,(ix+FAB_UD##+1)	; not the same unit descriptor
+		xor	a			; address, and with a match
+		sbc	hl,de			; if it is the same.
+		add	hl,de
+if 1 ;v2.30
+		ret	nz
+;
+		push	hl
+		push	bc
+		ld	hl,UD_ID##		;Return with no match if it is
+		add	hl,de			; not the same volume id.
+		ex	de,hl			;DE -> volume id of UD.
+		push	ix
+		pop	hl
+		ld	bc,FAB_ID##		;HL -> volume id of FAB.
+		add	hl,bc
+		PCALL	CP_VOLID
+		pop	bc
+		pop	hl
+endif
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<HANDLES>
+	end
+;

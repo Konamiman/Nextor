@@ -1,0 +1,1502 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	CP/M character Functions
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+	PROC	CHAR_INIT
+;
+;    This is the initialisation routine which is called when a  "JOIN  0"  is
+; done.  It does any initialisation required for the BDOS character routines.
+; This is primarily initialising the  line  input  circular  buffer  and  the
+; buffer  for  ASCII  mode  console  device  input,  but  it  also clears the
+; character input buffer and switches off printer echo.
+;
+		ld	hl,CIRC_BUFF##
+		ld	(CUR_LINE##),hl		;Initialise pointers to
+		ld	(END_LINE##),hl		; the circular buffer.
+		ld	de,BUFF_END##
+		ex	de,hl
+		or	a			;Calculate the length of the
+		sbc	hl,de			; circular buffer.
+		ex	de,hl
+clear_buff_lp:	ld	(hl),CR
+		inc	hl			;Fill the whole buffer with
+		dec	de			; CR's to indicate blank
+		ld	a,d			; lines.
+		or	e
+		jr	nz,clear_buff_lp
+		ld	(BUF_EM_FLAG##),a	;Flag that buffer is empty.
+;
+	PROC	EAT_CBUF
+		xor	a
+		ld	(CHAR_BUF##),a		;Clear single character buffer.
+		ld	(PR_ECHO##),a		;Disable printer echo.
+		ret
+;
+;
+;==============================================================================
+;
+	PROC	F_CNIN
+;
+;    This is the main CP/M console input routine.  It reads a character  from
+; the  standard  input by calling the F_INNOE function, and then echoes it to
+; the standard  output  by  calling  the  CON_OUT  routine  unless  it  is  a
+; non-echoable control character.
+;
+		call	F_INNOE		;Get a character into L and save it
+		push	hl		; for return.
+		ld	a,l
+		call	ECHO_TEST	;If it is a printable character then
+		call	nc,CON_OUT_1	; echo it to the standard output.
+		pop	hl
+		xor	a		;Return L=char A=H=0
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_CNOUT
+;
+;    This is the main CP/M "console output" routine.  All the work is done  by
+; the "CON_OUT" routine, this just gets the parameters and results correct.
+;
+		ld	a,e
+		call	CON_OUT		;Send the character to standard output
+		xor	a
+		ld	h,a		;Return A=H=L=0
+		ld	l,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_INNOE
+;
+;    This  function inputs a single character from the standard input without
+; echoing it to the standard output.  If the  standard  input  is  redirected
+; then  the  character  is  simply  read  from the file handle.  If it is not
+; redirected the the "CN_IN" routine is used which reads a character from the
+; console input BIOS routine, taking note of  the  single  character  buffer.
+; The "CN_IN" routine will filter out the special control characters.
+;
+		bit	0,(iy+@IO_RDR##)	;Jump to read from the STDIN
+		ld	c,0FFh			; handle if standard input is
+		jr	nz,CON_IN_REDIR		; redirected. (C=FFh indicates
+						; ASCII mode.)
+;
+		call	CN_IN			;Get a character from console
+		ld	l,a			; input, gobbling up special
+		xor	a			; control characters.
+		ld	h,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_CNST
+;
+;    This is the console status function.  It always checks the status of the
+; console device, even if the standard input  is  redirected  from  somewhere
+; else.   This  is  necessary  because of CP/M programs which gobble up input
+; until there is no more in order to get something which has just been typed.
+; This  is  a compromise solution which may have some rather strange effects.
+; The status check routine used ("CN_ST") will  filter  out  special  control
+; characters such as Ctrl-C.
+;
+		call	CN_ST		;See if a character is ready and
+		ld	l,a		; return result in L.
+		xor	a
+		ld	h,a		;Return L=result A=H=0
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DIO
+;
+;    This is the CP/M "direct input/output" function call.  If E=FFh on entry
+; then  it  returns  A=0  if no character is ready or if a character is ready
+; then it is returned in register A without checks or echoing.  If E<>FFh  on
+; entry then the character is written to the standard output.
+;
+;    The input  and  output use the STDIN and STDOUT file handles if they are
+; redirected, but if not they use the BIOS console routines directly. However
+; the  status  check  always  uses  the  BIOS  console  status  check routine
+; regardless of redirection. This may seem rather  strange  but  gets  around
+; problems  with  certain  CP/M  programs  which  gobble up input waiting for
+; "character not ready".
+;
+		ld	a,e			;If parameter is FFh then
+		inc	a			; skip to do input operation.
+		jr	z,direct_io_in
+;
+		bit	1,(iy+@IO_RDR##)	;E<>FFh so must output the
+		ld	a,e			; character.  Jump to use
+		ld	c,0			; file handle if output is
+		jr	nz,CON_OUT_REDIR	; redirected. (C=0 indicates
+						; binary mode.)
+;
+		pcall	CHR_OUT			;Output is not redirected
+		xor	a			; so send the character
+		ld	h,a			; direct to the BIOS console
+		ld	l,a			; output routine.
+		ret
+;
+if 1
+direct_io_in:	bit	0,(iy+@IO_RDR##)	;Jump to use file handle if
+		ld	c,0			; the input is redirected.
+		jr	nz,CON_IN_REDIR		; (C=0 indicates binary mode.)
+;
+		ld	hl,CHAR_BUF##		;If there is a character in
+		cp	(hl)			; the input buffer then jump
+		jr	nz,dir_in_getch		; to get it.
+;
+		pcall	CHR_ST			;No buffered char, so ask BIOS
+		jr	nz,dir_in_getch		; if it has a character ready
+		ld	l,a			; and jump to read it if so,
+		ld	h,a			; otherwise return A=HL=0;
+		ret
+else
+direct_io_in:	ld	hl,CHAR_BUF##		;If there is no character in
+		cp	(hl)			; the input buffer then
+		jr	z,dir_empty_buf		; skip to do BIOS status call.
+;
+		bit	0,(iy+@IO_RDR##)	;If there is a character in the
+		jr	z,dir_in_getch		; buffer then jump to get it
+						; unless input is redirected.
+;
+dir_empty_buf:	pcall	CHR_ST			;No buffered char, so ask BIOS
+		jr	nz,dir_in_getch		; if it has a character ready
+		ld	l,a			; and jump to read it if so,
+		ld	h,a			; otherwise return A=HL=0;
+		ret
+endif
+;
+;	----------------------------------------
+;
+	PROC	F_DIN
+;
+;	 This  is  the direct input function which reads a character from the
+; standard input with redirection but without control character checks and so
+; on.   It  uses the file handle if the input is redirected but uses the BIOS
+; console input routine directly if not.  Also if it is not  redirected  then
+; it checks the single character buffer to avoid loosing characters.
+;
+		bit	0,(iy+@IO_RDR##)	;Jump to use file handle if
+		ld	c,0			; the input is redirected.
+		jr	nz,CON_IN_REDIR		; (C=0 indicates binary mode.)
+;
+dir_in_getch:	ld	a,(CHAR_BUF##)		;If there is a character in the
+		or	a			; buffer return that one, else
+		pcall	z,CHR_IN		; call the BIOS routine to get
+		ld	l,a			; another character and return
+		xor	a			; it directly.
+		ld	h,a
+		ld	(CHAR_BUF##),a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+CON_IN_REDIR:	ld	b,STDIN##		;Read a character from standard
+		push	bc			; input if it is redirected.
+		pcall	RDCH_HANDLE
+		pop	de			;Get ASCII/binary flag back
+		or	a
+		jr	nz,inerr_abort		;Abort if any error
+		or	e
+		jr	z,no_ctrl_c_chk		;In ASCII mode only, if the
+		ld	a,b			; character is Ctrl-C then
+		sub	CTRL_C			; abort the program with
+		jr	z,inerr_abort		; a ".INERR" error but a
+no_ctrl_c_chk:	ld	l,b			; secondary error code of
+		xor	a			; zero.
+		ld	h,a
+		ret
+;
+CON_OUT_REDIR:	ld	b,STDOUT##		;Console output if it is
+		jr	handle_output_a		; redirected.
+;
+;	----------------------------------------
+;
+	PROC	F_AXIN
+		ld	b,STDAUX##		;Auxilliary output always
+		ld	c,0FFh			; goes through the file
+		pcall	RDCH_HANDLE		; handle in ASCII mode.
+		or	a
+		ld	l,b
+		ld	h,a
+		ret	z
+inerr_abort:	ld	c,.INERR##
+		jr	SIO_ABORT
+;
+;	----------------------------------------
+;
+	PROC	F_AXOUT
+		ld	b,STDAUX##		;Auxilliary input always goes
+		jr	handle_out_asc		; through the file handle
+						; in ASCII mode.
+;
+;	----------------------------------------
+;
+	PROC	F_LSTOUT
+		ld	b,STDLST##		;Printer output always goes
+handle_out_asc:	ld	c,0FFh			; through the file handle
+		ld	a,e			; in ASCII mode.
+handle_output_a:pcall	WRCH_HANDLE
+		or	a
+		ld	l,a
+		ld	h,a
+		ret	z			;Drop through if error
+		 ;	;
+		ld	c,.OUTERR##
+		 ;	;
+;
+;	----------------------------------------
+;
+SIO_ABORT:	ld	b,a			;Abort with original error in
+		ld	a,c			; register B, and .INERR or
+						; .OUTERR in register A.
+		pcall	GO_ABORT		;Abort with an error code.
+		jr	$
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_BFIN
+;
+;    This is the CP/M buffered line input function.  If the standard input is
+; not  redirected  then it uses the "CN_LINE" routine to read a line into the
+; user's buffer allowing full editing facilities  and  re-entry  of  previous
+; lines.  If the standard input is redirected then characters are simply read
+; from the STDIN file handle, echoed and stored in the user's buffer, until a
+; CR is found.  If there is room left in the buffer then a CR is added to the
+; end of the line as a terminator but this is  not  included  in  the  buffer
+; count.
+;
+		push	de
+		bit	0,(iy+@IO_RDR##)	;Skip if the standard input is
+		jr	nz,not_con_bfin		; not coming from the console
+						; device.
+;
+		xor	a			;Value for CNL_ECHO
+		call	CN_LINE			;Call the edited console input
+		jr	bfin_check_cr		; & jump to add the CR.
+;
+not_con_bfin:	ex	de,hl			;If it is redirected then
+		ld	b,(hl)			; must read characters from
+		ld	c,0			; the file handle.
+		inc	hl
+		push	hl
+bfin_loop:	push	hl
+		push	bc
+		ld	c,0FFh			;Read a character from the
+		call	CON_IN_REDIR		; STDIN file handle in
+		ld	a,l			; ASCII mode.
+		pop	bc
+		pop	hl
+		or	a
+		jr	z,bfin_loop		;Ignore NULL
+		cp	LF
+		jr	z,bfin_loop		;Ignore LF
+		cp	CR
+		jr	z,bfin_loop_done	;Stop if we have got a CR
+		ld	e,a
+		ld	a,b			;If buffer is already
+		cp	c			; full then skip to ping
+		jr	z,bfin_full		; at the user.
+		inc	c			;If buffer is not full then
+		inc	hl			; bump the character count
+		ld	(hl),e			; and put character in the
+		ld	a,e			; buffer.
+		push	hl
+		push	bc			;Echo the character to the
+		call	CON_OUT			; standard output.
+		jr	bfin_loop_2
+;
+bfin_full:	push	hl			;If buffer is full then send
+		push	bc			; a ping direct to the
+		ld	a,BELL			; console (ignores any
+		pcall	CHR_OUT			; redirection which may be
+bfin_loop_2:	pop	bc			; set up.
+		pop	hl
+		jr	bfin_loop
+;
+bfin_loop_done:	pop	hl			;Store final buffer count
+		ld	(hl),c			; at the start of the buffer
+		call	CON_OUT			;Echo the CR character
+;
+;
+bfin_check_cr:	pop	hl
+		push	hl			;If there is room in the
+		ld	a,(hl)			; buffer then store a CR
+		inc	hl			; at the end, otherwise
+		cp	(hl)			; just don't bother.
+		jr	z,no_room_for_cr
+		ld	e,(hl)
+		ld	d,0
+		add	hl,de
+		inc	hl
+		ld	(hl),CR
+;
+no_room_for_cr:	pop	de			;Return with buffer pointer
+		xor	a			; intact and A=H=L=0.
+		ld	l,a
+		ld	h,a
+		ret
+;
+;
+;==============================================================================
+;
+	PROC	CN_LINE
+;
+;    This  is  the  console  line  input  function  which is used by the CP/M
+; buffered line input function when it is  not  redirected  and  by  the  CON
+; device  when  it  is reading in ASCII mode.  A flag is passed in register A
+; which is zero for buffered line  input  and  non-zero  for  console  device
+; input.  This is stored at CNL_ECHO to ensure that output will be redirected
+; in the former case but not in the latter.
+;
+;    It maintains a circular buffer containing previously entered lines which
+; can  be selected with UP and DOWN keys.  The routine "LINE_EDIT" is used to
+; actually edit a selected line, and it  returns  when  UP,  DOWN  or  CR  is
+; pressed.   If  it  is  UP or DOWN then this routine selects the appropriate
+; line from the circular buffer, copies it into the editing buffer and  calls
+; "LINE_EDIT" again.
+;
+;    When CR is pressed the edited line  is  returned  to  the  user  in  the
+; buffer.   However  if the line has been modified at all then it is added to
+; the end of the circular buffer so that it will  be  available  for  reentry
+; later.   The  returned  line does not contain a CR, and the length of it is
+; stored at (DE+1).  The buffer pointer (DE) is not preserved.
+;
+; Entry:     DE -> Editing buffer.  (DE) = buffer length
+;	     A = output redirection flag (00h=>yes, FFh=>no)
+; Returns:   (DE+1) = length of line entered.
+;	     (DE+2...) = characters of the line
+; Corrupts:  AF,BC,DE,HL
+;
+		ld	(CNL_ECHO##),a		;Save outpur redirection flag
+;
+		inc	de
+		xor	a			;Set character count in buffer
+		ld	(de),a			; to zero initially.
+		dec	de
+		ld	(FLAG_FIRST##),a	;Flag no UP/DOWN yet
+;
+cn_line_loop:	push	de			;Get a line from the user
+		call	LINE_EDIT		; (exits on CR, UP or DOWN)
+		pop	de
+		dec	a
+		jr	z,mov_up		;Go if UP (prev line)
+		dec	a
+		jr	z,mov_down		;Go if DOWN (next line)
+;
+		inc	de			;Else must be ENTER
+		ld	a,(de)			;Get number of characters
+		or	a			; and return immediately
+		ret	z			; if zero.
+;
+		ld	b,a			;B := number of characters
+		ld	(BUF_EM_FLAG##),a	;Flag buffer not empty now
+		ld	a,(FLAG_FIRST##)	;If no UP or DOWN was done
+		or	a			; at all then must put the
+		jr	z,put_at_end		; line on the end of buffer.
+;
+		push	de			;Compare the line with the
+		push	bc			; current line in the buffer
+		ld	hl,(CUR_LINE##)		; to see if it is identical.
+compare_loop:	inc	de
+		ld	a,(de)
+		cp	(hl)
+		jr	nz,compare_done		;Skip if not the same.
+		call	INC_HL
+		djnz	compare_loop
+		ld	a,(hl)			;If characters match then make
+		cp	CR			; sure length is the same.
+compare_done:	pop	bc
+		pop	de			;If line is not changed then
+		jr	z,line_unchanged	; don't alter buffer.
+;
+put_at_end:	ld	hl,(END_LINE##)		;HL -> place to store new line.
+copy_line_loop:	inc	de			;Copy line from (DE) to (HL)
+		ld	a,(de)			; in the circular buffer.
+		ld	(hl),a
+		call	INC_HL
+		djnz	copy_line_loop
+;
+		ld	a,(hl)			;Put the CR on the end of this
+		ld	(hl),CR			; line, saving old char to
+		call	INC_HL			; check for line end below.
+		ld	(END_LINE##),hl		;Address to put next line.
+;
+line_unchanged:	ld	(CUR_LINE##),hl		;Record current line start
+pad_line_loop:	cp	CR
+		ret	z			;Loop to replace characters
+		ld	a,(hl)			; with CR until we find a CR
+		ld	(hl),CR			; there already.  This makes
+		call	INC_HL			; sure that we don't get part
+		jr	pad_line_loop		; lines left in the buffer.
+;
+;		--------------------------------
+;
+mov_up:		ld	a,(BUF_EM_FLAG##)	;CURSOR UP PRESSED
+		or	a
+		jr	z,cn_line_loop		;Ignore if buffer is empty.
+;
+		ld	hl,(CUR_LINE##)		;Step backwards from start of
+prev_end_loop:	call	DEC_HL			; the current line to find a
+		ld	a,(hl)			; non-CR character which must
+		cp	CR			; be last character of previous
+		jr	z,prev_end_loop		; line.
+;
+prev_st_loop:	call	DEC_HL			;Then carry on looking for a
+		ld	a,(hl)			; CR which must be just before
+		cp	CR			; the start of previous line.
+		jr	nz,prev_st_loop
+;
+		call	INC_HL			;HL -> first chracter of the
+		jr	got_new_line		;      previous line.
+;
+;		--------------------------------
+;
+mov_down:	ld	a,(BUF_EM_FLAG##)	;CURSOR DOWN PRESSED
+		or	a
+		jr	z,cn_line_loop		;Ignore if buffer is empty.
+;
+		ld	hl,(CUR_LINE##)		;Start of current line.
+next_end_loop:	ld	a,(hl)			;Find end of current line in
+		cp	CR			; order to find start of next.
+		call	INC_HL
+		jr	nz,next_end_loop
+;
+		scf
+next_st_loop:	call	nc,INC_HL		;Step through any CR characters
+		ld	a,(hl)			; to find start of next line.
+		cp	CR
+		jr	z,next_st_loop
+;
+;		--------------------------------
+;
+got_new_line:	ld	(CUR_LINE##),hl		;Start of new current line.
+		push	de			;DE -> editing buffer
+		ld	a,(de)
+		ld	b,a			;B := size of buffer
+		inc	de
+		inc	de			;DE -> first char in buffer
+		ld	c,-1			;Count of characters copied.
+;
+copy_line_in:	ld	a,(hl)			;Copy the new line into the
+		ld	(de),a			; editing buffer until we
+		inc	c			; find a CR, or until the
+		call	INC_HL			; editing buffer is full.
+		cp	CR
+		inc	de
+		jr	z,copy_in_done		;Stop if found CR
+		djnz	copy_line_in
+		inc	c			;Adjust count if buffer full
+copy_in_done:
+		pop	de
+		inc	de
+		ld	a,c			;Put count in buffer
+		ld	(de),a
+		dec	de			;ED -> start of buffer
+		ld	(FLAG_FIRST##),a	;Flag UP/DOWN has been done
+		jp	cn_line_loop
+;
+;	--------------------------------------------------
+;
+;    These two support routines for CN_LINE simply increment and decrement  a
+; circular  buffer pointer in HL.  They automatically wrap around at the ends
+; of the buffer.  All registers except HL are preserved, including the flags.
+;
+INC_HL:		push	af
+		push	de
+		ld	de,BUFF_END##-1		;End of buffer pointer
+		or	a
+		sbc	hl,de			;Test if we are at end of
+		add	hl,de			; buffer already.
+		inc	hl
+		jr	nz,inc_no_wrap		;If so then back to start,
+		ld	hl,CIRC_BUFF##		; just increment pointer.
+inc_no_wrap:	pop	de
+		pop	af
+		ret
+;
+;
+DEC_HL:		push	af
+		push	de
+		ld	de,CIRC_BUFF##		;Start of buffer pointer
+		or	a
+		sbc	hl,de			;Test if we are at start of
+		add	hl,de			; buffer already.
+		dec	hl
+		jr	nz,dec_no_wrap		;If so then back to end, else
+		ld	hl,BUFF_END##-1		; just decrement pointer.
+dec_no_wrap:	pop	de
+		pop	af
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+LINE_EDIT:
+;
+;    This routine performs the line editing of the selected  line.   It  does
+; its  input through CN_IN since it must always read from the console even if
+; the  standard  input  is  redirected.   Its  output  is  done  through  the
+; intermediate routine OUT_CHAR which carets control characters and sends the
+; characters to either CON_OUT (which will be redirected if required)  or  to
+; CN_OUT  (which  will not be redirected).  The decision of which of these to
+; call depends on the state of the "CNL_ECHO" flag which is  set  up  from  a
+; parameter  passed  to "CN_LINE".  CON_OUT is used if the routine was called
+; from a CP/M buffered line input function call, and CN_OUT is used if it was
+; called  from the console device reading in ASCII mode. Control output (BELL
+; and cursor control) is done directly to CHR_OUT  to  bypass  printer  echo,
+; redirection and cursor positioning.
+;
+; On entry, DE -> buffer for edit, possibly with a line to edit.
+;		(DE)   = maximum length of buffer.
+;		(DE+1) = Length of line in buffer to be edited, 0 if none.
+;		remainder = line to edit if (DE+1)<>0.
+;
+; On exit,  Buffer will contain edited line (DE not preserved)
+;	    A=0 => ENTER, A=1 => 'joystick up', A=2 => 'joystick down' pressed.
+;
+		ld	hl,(CUR_COL##)		;Remember the start column no.
+		ld	(PROM_COL##),hl
+		ld	(MAX_CUR_POS##),hl	; Furthest cursor has been.
+		ex	de,hl			;HL -> input buffer.
+;
+RESTART:	ld	c,(hl)			;Get buffer size.
+		inc	hl			;HL -> character count.
+		ld	(IN_START##),hl
+		ld	a,(hl)			;Any text to be printed?
+		or	a
+		ld	b,a			; (B=character count)
+		jr	z,new_line		;Go if not.
+;
+		inc	hl			;Else print line at (HL).
+		call	TEXT_OUT
+		dec	hl
+		ld	a,b			;Character count.
+new_line:	ld	(IN_COUNT##),a
+		xor	a			;Set overwrite mode.
+		call	INS_TOG2
+;
+BUFIN_LOOP:	ld	de,BUFIN_LOOP		;Get a character, call the
+		push	de			; routine, and return to here.
+;
+		push	hl
+		ld	hl,IN_COUNT##		;If buffer counter is not
+		ld	a,(hl)			; greater than total chars
+		cp	b			; in buffer then update the
+		jr	nc,no_count_adj		; total buffer counter.
+;
+		ld	(hl),b
+no_count_adj:	pop	hl
+		call	CN_IN			;Get a character into A.
+		or	a			;Ignore nulls.
+		ret	z
+;
+		cp	LF
+		ret	z			;Ignore LF.
+;
+		cp	CR
+		jp	z,END_BUFIN		;Go if end of line edit.
+;
+		cp	LEFT
+		jp	z,JOY_LEFT		;Go if joystick left.
+;
+		cp	RIGHT
+		jp	z,JOY_RIGHT		;Go if joystick right.
+;
+		cp	DEL			;Delete character right if DEL
+		jp	z,DEL_RIGHT
+;
+		cp	BS			;Delete char left if backspace
+		jp	z,DEL_LEFT
+;
+		cp	INS
+		jp	z,INS_TOG		;Toggle insert mode if ins key.
+;
+		cp	ESC
+		jr	z,clear_cur_z		;Clear current line if ESC
+		cp	CTRL_X			; or Ctrl-X or Ctrl-U.
+		jr	z,clear_cur_z
+		cp	CTRL_U
+clear_cur_z:	jp	z,CLEAR_CUR
+;
+		cp	UP
+		jp	z,UP_LINE		;Go if joystick up.
+;
+		cp	DOWN
+		jp	z,DOWN_LINE		;Go if joystick down.
+;
+		cp	HOME			;Go if home.
+		jp	z,BEGIN_LINE
+;
+		ld	e,a			;Save character.
+if 0
+		ld	a,b			;Check room in the buffer.
+		cp	c
+		jp	z,BUF_FULL
+;
+endif
+		ld	a,(INS_FLAG##)		;In insert mode?
+		or	a
+		jp	nz,INS_CHAR		;Go & insert character if yes.
+;
+		ld	a,(IN_COUNT##)		;Adding at the end?
+		cp	b
+		jr	z,AT_END		;Go if yes.
+;
+		inc	hl			;Next address in buffer.
+if 1
+		ld	a,e
+		pcall	CHK_16_CHAR		;1st byte of 16 bit char?
+		jr	nc,new_8_char		; no
+;
+;
+new_16_char:	ld	a,(IN_COUNT##)		;Adding to the end-1?
+		dec	a
+		cp	b
+		jr	nz,not_at_end16		;No, always ok to replace
+		inc	a			;Room in buffer?
+		cp	c
+		dec	hl
+		jp	nc,BUF_FULL_16		;No
+		inc	hl
+		inc	a
+		ld	(IN_COUNT##),a
+;
+not_at_end16:	ld	a,(hl)
+		pcall	CHK_16_CHAR		;If we are overstriking 8 bit
+		inc	hl			; character by 16 bit character
+		call	nc,PAD_16_CHAR		; look for next character if
+		dec	hl			; it is a 16 bit character.
+		jr	RE_PRINT_16
+;
+;
+new_8_char:	call	PAD_16_CHAR		;If we are replacing 16 bit
+		jr	c,RE_PRINT		; pad 2nd byte.
+;
+endif
+		ld	a,(hl)			;Get old character.
+		cp	' '			;control char?
+		jr	c,RE_PRINT		;yes, always reprint
+		ld	a,e			;Old char was ordinary,
+		cp	' '			;control char?
+		jr	c,RE_PRINT		;yes, always reprint
+		jr	ONE_PRINT
+;
+;
+AT_END:		cp	c			;Room in buffer for character?
+		jr	nc,BUF_FULL		;Go & ping if not.
+;
+if 1
+		ld	a,e
+		pcall	CHK_16_CHAR
+		jr	c,INS_CHAR_16		;16 bit char
+;
+endif
+		inc	hl
+;
+ONE_PRINT:	ld	(hl),e			;Else put in buffer.
+		ld	a,e			;And print it.
+		inc	b
+		call	OUT_CHAR		;Print it over what was there.
+		call	UPDATE_MAX		;Update max cursor pos
+		ret
+;
+;
+INS_CHAR:
+if 1
+		ld	a,e			;inserting 16 bit char?
+		pcall	CHK_16_CHAR
+		jr	nc,not_ins16		;no
+;
+INS_CHAR_16:	ld	a,(IN_COUNT##)		;room for 2 bytes?
+		inc	a
+		cp	c
+		jr	nc,BUF_FULL_16		;No
+		inc	a
+		ld	(IN_COUNT##),a		;update in_count
+		dec	a			;calc amount to transfer
+		dec	a
+		sub	b
+		jr	z,no_shift16		;nothing to transfer
+;
+		push	de
+		push	bc
+		ld	c,a
+		ld	b,0
+		add	hl,bc
+		ld	d,h
+		ld	e,l
+		inc	de
+		inc	de
+		lddr
+		pop	bc
+		pop	de
+;
+no_shift16:	inc	hl
+;
+RE_PRINT_16:	ld	(hl),e			;set 1st byte
+		inc	hl
+		call	CN_IN
+		ld	(hl),a			;set 2nd byte
+		dec	hl
+		call	OUT_TO_END
+		inc	b
+		inc	b
+		jp	LEFT_TO_B
+;
+not_ins16:
+endif
+		ld	a,(IN_COUNT##)
+		cp	c			;Room to insert character?
+		jr	nc,BUF_FULL		;Go if yes, else 'ping'.
+;
+		inc	a
+		ld	(IN_COUNT##),a		;Increment character count.
+		dec	a
+		sub	b
+		jr	z,no_shift		;Go if no need to move buffer.
+;
+		push	de			;Save character.
+		push	bc
+		ld	c,a			;Else shift buffer down one.
+		ld	b,0
+		add	hl,bc			;HL -> last character.
+		ld	d,h
+		ld	e,l
+		inc	de			;DE -> last character + 1.
+		lddr
+		pop	bc
+		pop	de
+;
+no_shift:	inc	hl
+;
+RE_PRINT:	ld	(hl),e			;Insert character into buffer.
+		call	OUT_TO_END		;Re-display to the end of line.
+		inc	b
+		jp	LEFT_TO_B		;Move cursor back again.
+;
+;
+if 1
+BUF_FULL_16:
+		call	CN_IN			;Eat 2nd byte of 16 bit char.
+;
+endif
+BUF_FULL:	ld	a,BELL
+		push	bc
+		push	hl			;Send the BELL direct to the
+		pcall	CHR_OUT			; console to bypass any
+		pop	hl			; redirection etc.
+		pop	bc
+		ret
+;
+;
+;	----------------------------------------
+;
+INS_TOG:	ld	a,(INS_FLAG##)
+		cpl				;Toggle current insert mode.
+INS_TOG2:	ld	(INS_FLAG##),a		;Set new insert mode, then set
+		or	a			; the cursor type according to
+		ld	a,'y'			; the new mode.
+		jr	nz,OVERW_MODE		;Go if overwrite mode.
+;
+		dec	a			;A='x'.
+OVERW_MODE:	push	bc
+		push	hl			;Write out an appropriate
+		push	de			; escape sequence to control
+		push	af			; the cursor (ESC x 4/5).
+		ld	a,ESC			;This is sent direct to the
+		pcall	CHR_OUT			; BIOS to bypass redirection,
+		pop	af			; printer echo and cursor
+		pcall	CHR_OUT			; coulmn counting.
+		ld	a,'4'
+		pcall	CHR_OUT
+		pop	de
+		pop	hl
+		pop	bc
+		ret
+;
+;	----------------------------------------
+;
+JOY_RIGHT:	ld	a,(IN_COUNT##)
+		cp	b			;Ignore if at last character.
+		ret	z
+;
+		inc	hl			;Move cursor by getting the
+		inc	b			; character and calling the
+		ld	a,(hl)			; routine to print it. This
+if 1
+		pcall	CHK_16_CHAR		;1st byte of 16 bit char?
+		jp	nc,OUT_CHAR		;no
+;
+		call	OUT_CHAR		;print 1st byte
+		inc	hl
+		inc	b
+		ld	a,(hl)
+endif
+		jp	OUT_CHAR		; takes care of tabs etc.
+;
+;	----------------------------------------
+;
+BEGIN_LINE:	ld	a,b			;Ignore if already at the
+		or	a			; start of the line.
+		ret	z
+		ld	b,0			;Otherwise position there.
+		jr	LEFT_TO_B
+;
+;	----------------------------------------
+;
+JOY_LEFT:	ld	a,b			;Ignore if at first character.
+		or	a
+		ret	z
+;
+		dec	b
+;
+;	----------------------------------------
+;
+LEFT_TO_B:
+;
+;	This positions the cursor correctly according to the value that is
+; passed in register B.
+;
+		ld	hl,(IN_START##)		;HL -> start of buffer.
+		ld	de,(PROM_COL##)		;DE = initial column number.
+		push	bc			;Save final count.
+		inc	b
+		jr	count_next
+;
+count_loop:	inc	hl
+		ld	a,(hl)			;Get next character in buffer.
+if 1
+		pcall	CHK_16_CHAR
+		jr	nc,not_16_char		;Go if not 16 bit char.
+;
+		inc	hl			;Else skip over 2nd byte
+		djnz	count_two		; of 16 bit character.
+;
+		dec	hl			;Bumped in the middle of 16
+		dec	hl			; bit sequence.  So adjust
+		pop	bc			; buffer location and saved
+		dec	b			; character position on the
+		push	bc			; stack.
+		jr	count_done
+not_16_char:
+;
+endif
+		cp	TAB
+		jr	nz,not_tab_count	;Go if not tab.
+;
+		ld	a,e			;Else adjust current position
+		or	111B			; to next tab stop.
+		ld	e,a
+		jr	count_one
+;
+not_tab_count:	cp	' '
+		jr	nc,count_one		;Add one if an echoable char.
+;
+count_two:	inc	de			;Else add two.
+count_one:	inc	de
+count_next:	djnz	count_loop
+;
+count_done:	push	hl
+		ld	hl,(CUR_COL##)		;Find difference in col nos.
+		or	a
+		sbc	hl,de
+		jr	z,pos_ok		;Go if the same.
+;
+back_lp:	ld	a,BS			;Else backspace until equal.
+		call	OUT_CHAR
+		dec	hl
+		ld	a,h
+		or	l
+		jr	nz,back_lp
+;
+pos_ok:		pop	hl
+		pop	bc
+		ret
+;
+;	----------------------------------------
+;
+DEL_LEFT:	ld	a,b
+		or	a			;Ignore if at start.
+		ret	z
+;
+		dec	b
+		call	LEFT_TO_B		;Else move left, & delete right
+;
+;	----------------------------------------
+;
+DEL_RIGHT:	ld	a,(IN_COUNT##)
+		cp	b			;Ignore if already at end.
+		ret	z
+;
+		dec	a
+		ld	(IN_COUNT##),a		;Decrement character count.
+SHIFT:		sub	b			;A=number of chars to right.
+		jr	z,NO_SHIFT2
+if 1
+		ld	e,a			;save it
+		inc	hl			;on 1st byte of 16 bit char?
+		ld	a,(hl)
+		dec	hl
+		pcall	CHK_16_CHAR
+		ld	a,e			;restore it
+		jr	nc,del_not16		;no
+		push	hl			;delete 2 bytes
+		ld	hl,IN_COUNT##
+		dec	(hl)
+		pop	hl
+		dec	a			;on last?
+		jr	z,no_shift2		;yes
+;
+		push	bc
+		push	hl
+		ld	c,a
+		ld	b,0
+		inc	hl
+		ld	d,h
+		ld	e,l
+		inc	hl
+		inc	hl
+		ldir				;Move buffer contents up.
+		pop	hl
+		pop	bc
+;
+		jr	no_shift2
+;
+del_not16:
+endif
+;
+		push	bc
+		push	hl
+		ld	c,a
+		ld	b,0
+		inc	hl
+		ld	d,h
+		ld	e,l
+		inc	hl
+		ldir				;Move buffer contents up.
+		pop	hl
+		pop	bc
+;
+NO_SHIFT2:	inc	hl
+		call	OUT_TO_END		;Re-draw rest of line.
+		dec	hl
+		jp	LEFT_TO_B		;Move cursor back again.
+;
+;	----------------------------------------
+;
+DEL_LINE:	xor	a
+		cp	b
+		ld	b,a
+		call	nz,LEFT_TO_B		;Move cursor to start of line.
+		call	SPACE_TO_END		;Blank line.
+		ld	b,0
+		call	LEFT_TO_B		;Re-position cursor.
+		ld	hl,(IN_START##)		;Zap line.
+		ld	(hl),0
+		dec	hl
+		ret
+;
+;	----------------------------------------
+;
+CLEAR_CUR:	call	DEL_LINE
+		pop	de			;Clear stack.
+		jp	RESTART
+;
+;	----------------------------------------
+;
+END_BUFIN:					;'ENTER' pressed.
+		inc	hl
+		call	OUT_TO_END		;Put cursor on end of line.
+		ld	hl,(IN_START##)
+		ld	a,(IN_COUNT##)
+		ld	(hl),a
+;
+		xor	a			;Set cursor back to
+		call	INS_TOG2		; overwrite mode.
+		ld	a,CR
+		call	OUT_CHAR
+		pop	hl			;Remove BUFIN_LOOP return.
+		xor	a			;0 means enter pressed.
+		ret
+;
+;	----------------------------------------
+;
+UP_LINE:	pop	hl			;Remove BUFIN_LOOP return.
+		call	DEL_LINE
+		ld	a,1			;Code for UP a line.
+		ret
+;
+;	----------------------------------------
+;
+DOWN_LINE:	pop	hl
+		call	DEL_LINE
+		ld	a,2
+		ret
+if 1
+;
+;	----------------------------------------
+;
+PAD_16_CHAR:	ld	a,(hl)			;If we are replacing
+		pcall	CHK_16_CHAR		; first byte of 16 bit char
+		ret	nc			; pad the 2nd byte with space
+		inc	hl			; and return with carry set.
+		ld	(hl),' '
+		dec	hl
+		ret
+endif
+;
+;
+;------------------------------------------------------------------------------
+;
+;		OUTPUT ROUTINES
+;
+SPACE_TO_END:	push	bc
+		push	de
+		push	hl
+		jr	SPACE2
+;
+;
+OUT_TO_END:
+;
+;	This prints the current line, from HL to the end.  It requires B to
+; be set up as throughout the program.  The routine will also print spaces,
+; if necessary, from the end to (MAX_CUR_POS).
+;
+; Entry:        HL: Where to start printing from.
+;		B:  As passed around the program.
+; Corrupts:     AF
+;
+		push	bc
+		push	de
+		push	hl
+		ld	a,(IN_COUNT##)
+		sub	b
+		ld	b,a
+		call	TEXT_OUT		; Output line from (HL).
+SPACE2:		ld	de,(CUR_COL##)
+		ld	hl,(MAX_CUR_POS##)
+		or	a
+		sbc	hl,de			;Beyond current max position?
+		jr	z,NO_SPC		;Go if yes.
+		jr	c,NO_SPC
+;
+LOP_OTE:	ld	a,' '			;Else space until max position
+		call	OUT_CHAR		; to clear the rest of the line
+		dec	hl
+		ld	a,h
+		or	l
+		jr	nz,LOP_OTE
+;
+		ld	(MAX_CUR_POS##),de	; Reset maximum position.
+NO_SPC:
+if 1
+		ld	a,ESC
+		pcall	CHR_OUT
+		ld	a,'K'
+		pcall	CHR_OUT
+endif
+		pop	hl
+		pop	de
+		pop	bc
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+TEXT_OUT:
+;
+;	This routine prints a string of text which is pointed to by HL.
+;
+; Entry:        HL: Address of text to be printed.
+;		B:  Number of characters to print.
+; Corrupts:     AF
+;
+		push	bc
+		inc	b			;B characters from HL.
+		jr	LOP_OUT1
+;
+LOP_OUT2:	ld	a,(hl)
+		call	OUT_CHAR
+		call	UPDATE_MAX
+		inc	hl
+LOP_OUT1:	djnz	LOP_OUT2
+;
+		pop	bc
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+UPDATE_MAX:
+;
+;   This routine updates the maximum column number to the cursor column if
+; it is greater than the current value.
+;
+; Corrupts:   F
+;
+		push	hl
+		push	bc
+		ld	hl,(MAX_CUR_POS##)	;Previous maximum cursor value.
+		ld	bc,(CUR_COL##)
+		or	a
+		sbc	hl,bc			;Is it a new maximum value?
+		jr	nc,NOT_NEW_MAX		;No - so return
+		ld	(MAX_CUR_POS##),bc	;Yes - so store new value.
+NOT_NEW_MAX:	pop	bc
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+OUT_CHAR:
+;
+;    The  main  outputing  routine  for  the console line input routine.  All
+; output except for special control code sequences  will  pass  through  this
+; part  of  the  code.   It  will expand unprintable control characters to '^
+; char'. The output is done by calling CON_OUT or  CN_OUT  depending  on  the
+; CNL_ECHO  flag.   This  ensures  that  output  redirection is used for CP/M
+; buffered  line input functions but not for reading from the console  device
+; in ASCII mode.
+;
+; Entry:        A: The character.
+; Corrupts:     AF
+;
+		push	bc			;Display the character.
+		push	de
+		push	hl
+		call	ECHO_TEST		;Echoable characters are
+		jr	nc,straight_out		; displayed directly.
+;
+		push	af			;Control characters are
+		ld	a,'^'			; displayed as ^A etc.
+		call	out_char_1
+		pop	af
+		add	a,"Z"-CTRL_Z		;Convert to letter.
+straight_out:	call	out_char_1
+		pop	hl
+		pop	de
+		pop	bc
+		ret
+;
+out_char_1:	ld	b,a			;Call the appropriate output
+		ld	a,(CNL_ECHO##)		; routine depending on the
+		or	a			; control flag.  CON_OUT will
+		ld	a,b			; do redirection whereas
+		jp	z,CON_OUT_1		; CN_OUT will always write
+		jp	CN_OUT			; to the screen.
+;
+;
+;------------------------------------------------------------------------------
+;
+ECHO_TEST:
+;
+;    This takes a character and does various compares on  it,  and  sets  the
+; flags   according   to  the  results.   It  distinguishes  between  control
+; characters and not since they are not printable, but it also  lets  through
+; others such as CR, LF and BS.
+;
+; Entry:        A:  The character.
+; Returns:      Z:  CR, LF, TAB, BS, DEL.
+;		C:  Control character.
+;		NC: Printable character.
+; Corrupts:     F only
+;
+		cp	CR
+		ret	z
+		cp	LF
+		ret	z
+		cp	TAB
+		ret	z
+		cp	BS
+		ret	z
+		cp	DEL
+		ret	z
+		cp	' '
+		ret
+;
+;
+;==============================================================================
+;
+CON_OUT:
+;
+;    This  is  the  main  output routine, which is called form several of the
+; other routines in this module.  It does a console status check  by  calling
+; "CN_ST"  and  then writes the character to the standard output file handle,
+; or directly to the console if the standard output is not  redirected.  TABs
+; are  expanded to 8 character positions and CUR_COL is adjusted according to
+; the character.  This is done here to ensure that it is  correct  regardless
+; of what device the output is actually going to.
+;
+; Entry:        A: The character to be printed.
+; Corrupts:     AF,BC,DE,HL
+;
+		push	af			;Check keyboard for special
+		call	CN_ST			; control characters.
+		pop	af
+;
+CON_OUT_1:	cp	TAB
+		jr	nz,con_out_2		;Loop to expand TABs until the
+tab_out_loop:	ld	a," "			; cursor column is a multiple
+		call	con_out_2		; of 8 characters.
+		ld	a,(CUR_COL##)
+		and	07h
+		jr	nz,tab_out_loop
+		ret
+;
+con_out_2:	ld	hl,(CUR_COL##)		;Adjust cursor column for
+		call	UPDATE_COLUMN		; this character.
+		ld	(CUR_COL##),hl
+;
+		bit	1,(iy+@IO_RDR##)	;If the standard output is not
+		jp	z,CHAR_OUT		; redirected then send the
+		ld	c,0FFh			; character to the screen.
+		jp	CON_OUT_REDIR		;Else use the file handle
+						; in ASCII mode.
+;
+;
+;==============================================================================
+;
+	PROC	CN_ST
+;
+;    This routine checks whether there is  a  keyboard  character  ready  for
+; input  or  not,  and  also  checks  for the special control characters.  It
+; always does a call to the  BIOS  console  status  routine  first,  so  that
+; ctrl-STOP  will be checked.  However if there is already a character in the
+; buffer then it ignores the  result  and  just  returns  A=FFh  to  indicate
+; character ready.
+;
+;    If  there  is  no  character  in  the buffer then the result of the BIOS
+; status call is checked and if it said that a character was ready, then  the
+; character  is  read  from  the  keyboard with the BIOS "CHR_IN" routine and
+; "INPUT_CHECK" is called to handle the special control characters.  If  this
+; returns  zero  this routine returns "no character ready", otherwise it puts
+; the character in the buffer and returns "character ready".
+;
+; Returns:     A = 00h (and Z-flag set) if no character ready
+;		 = FFh (and Z-flag clear) if character is ready.
+; Corrupts:   AF,BC,DE,HL
+;
+		pcall	CHR_ST			;Check real status (will
+		ld	b,a			; abort if ctrl-STOP).
+;
+		ld	a,(CHAR_BUF##)		;If there is a character in
+		or	a			; the buffer then jump to
+		jr	nz,char_waiting		; return "character ready"
+;
+		ld	a,b			;If no character in buffer
+		or	a			; then see whether BIOS said
+		ret	z			; there was character ready
+		pcall	CHR_IN			; & return if not, or read
+						; the character if so.
+;
+		call	INPUT_CHECK		;Check for special control
+		or	a			; characters and ignore if it
+		ret	z			; was one of them (or null).
+;
+		ld	(CHAR_BUF##),a		;Record new character in buffer
+char_waiting:	xor	a
+		dec	a			;Return with A=FFh, and NZ.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	CN_IN
+;
+;    This routine does a low level "ASCII mode"  character  input  operation.
+; This  involves  checking  the  single  character  buffer and returning that
+; character if there is one.  Otherwise a character is read from the BIOS  by
+; calling  "CHR_IN"  and  then  "INPUT_CHECK" is called to handle the special
+; control characters.  The resultant character is then returned, or if it was
+; gobbled  by  "INPUT_CHECK"  then  "CHR_IN"  is called again to read another
+; character.
+;
+; Returns:      A = Character from device
+; Corrupts:     AF
+;
+		ld	a,(CHAR_BUF##)		;If there is a character in
+		ld	(iy+@CHAR_BUF##),0	; the buffer then remove
+		or	a			; it and return it to the
+		ret	nz			; user.
+;
+cn_in_loop:	pcall	CHR_IN			;If not then get a character
+		call	INPUT_CHECK		; from the BIOS and handle
+		or	a			; special control characters.
+		jr	z,cn_in_loop
+		ret				;Return when we have a char.
+;
+;
+;------------------------------------------------------------------------------
+;
+INPUT_CHECK:
+;
+;    This  routine checks a character in A for the special control characters
+; Ctrl-C, Ctrl-P, Ctrl-N and Ctrl-S.  If it is not one  of  these  characters
+; then  it  returns  the  character  in  A,  otherwise  it  returns A=0 after
+; processing the special character.  Ctrl-C will re-boot, Ctrl-P will  enable
+; printer  echo,  Ctrl-N  will  disable  printer echo and Ctrl-S will hang up
+; waiting for another character which will be ignored unless it is Ctrl-C  in
+; which case it will re-boot.
+;
+; Entry:     A = Character to be tested
+; Returns:   A = Unchanged if not a special character
+;		 Zero if special character was processed
+; Corrupts:  AF
+;
+		cp	CTRL_P			;Ctrl-P enables printer echo
+		jr	z,ctrl_p_in
+;
+		cp	CTRL_N			;Ctrl-N disables printer echo
+		jr	z,ctrl_n_in
+;
+		cp	CTRL_C			;Ctrl-C aborts the program
+		jr	z,ctrl_c_in
+;
+		cp	CTRL_S			;Ctrl-S stops screen output
+		ret	nz			;Return if bot special char
+;
+		pcall	CHR_IN			;Ctrl-S, so wait for another
+		cp	CTRL_C			; character from the BIOS.
+		ld	a,0
+		ret	nz			;Fall to ctrl-C if typed.
+;
+ctrl_c_in:	ld	a,.CTRLC##		;Ctrl-C so abort the program
+		ld	b,0			; with a ".CTRLC" error and
+		pcall	GO_ABORT		; zero secondary error.
+		jr	$
+;
+ctrl_p_in:	ld	a,0FFh			;Ctrl-P enables printer echo
+		code	cpi			; and Ctrl-N disables it.
+ctrl_n_in:	xor	a
+		ld	(PR_ECHO##),a
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	CN_OUT
+;
+;    This  is the low level console output routine.  Output from file handles
+; or FCBs goes through "CN_OUT" and will have TABs expanded  and  the  cursor
+; column  adjusted.   Output  from  CP/M character functions goes through the
+; CHAR_OUT entry point and will not do this.  In both cases the character  is
+; echoed to the printer if printer echo is enabled.
+;
+; Entry:        A: The character to be printed.
+; Corrupts:     AF,BC,DE,HL
+;
+		cp	TAB
+		jr	nz,cn_out_2		;Loop to expand TABs until the
+tab_loop:	ld	a," "			; cursor column is a multiple
+		call	cn_out_2		; of 8 characters.
+		ld	a,(CUR_COL##)
+		and	07h
+		jr	nz,tab_loop
+		ret
+;
+cn_out_2:	ld	hl,(CUR_COL##)		;Adjust cursor column for
+		call	UPDATE_COLUMN		; this character.
+		ld	(CUR_COL##),hl
+;
+CHAR_OUT:	pcall	CHR_OUT			;Print the char to the screen.
+		ld	hl,PR_ECHO##
+		bit	0,(hl)			;If printer echo is enabled
+		ret	z			; then echo the character
+		ld	e,a			; to the printer file handle
+		jp	F_LSTOUT		; by calling the BDOS function.
+;
+;
+
+;------------------------------------------------------------------------------
+
+	PROC	F_STROUT
+
+; STROUT routine, prints a string until a "$" character is found.
+; Note that this code is reached only when the fast STROUT has been
+; enabled with the FOUT function.
+
+	ld	de,($SECBUF##)
+	do_strout	CON_OUT,0	;Macro defined in macros.inc
+
+
+;------------------------------------------------------------------------------
+
+	PROC	F_ZSTROUT
+
+; ZSTROUT routine, prints a string until a 0 byte is found.
+; Note that this code is reached only when the fast STROUT has been
+; enabled with the FOUT function.
+
+	ld	de,($SECBUF##)
+zstr_loop:
+	LD	A,(DE)
+	INC	DE
+	or	a
+	ret	z
+	PUSH	DE
+	CALL	CON_OUT
+	POP	DE
+	JR	zstr_loop
+
+
+;------------------------------------------------------------------------------
+;
+UPDATE_COLUMN:
+;
+;    This  routine  is  used to update the cursor column count according to a
+; character which is being output.  It checks the character  that  is  to  be
+; output, and then updates the 16-bit column count accordingly.
+;
+; Entry:         A = The character (must not be TAB).
+;		HL = Current cursor column
+; Corrupts:     BC,HL
+;
+		inc	hl			;If it is a printable character
+		cp	DEL			; then increment column number
+		jr	z,no_inc_col
+		cp	' '
+		ret	nc
+;
+no_inc_col:	dec	hl			;If column number is already
+		ld	b,a			; zero then leave it at zero.
+		ld	a,h
+		or	l
+		ld	a,b
+		ret	z
+;
+		dec	hl			;If character is Ctrl-H or
+		cp	BS			; DEL (7Fh) then decrement
+		ret	z			; column number by one.
+		cp	DEL
+		ret	z
+;
+		inc	hl			;CR sets column number to zero
+		cp	CR			; any other control code
+		ret	nz			; leaves it unaltered.
+;
+		ld	hl,0
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<CHAR>
+	end
+;

@@ -1,0 +1,413 @@
+	.Z80
+;
+; This is the dis-assembled version of CLIBMATH.
+; Though "NAME", "CSEG" or "ENTRY" statements are necessary to generate
+; exactly the same .REL file, they have no effects to the final .COM file.
+;									H.F.
+;
+	NAME	('CLIBMATH')
+;
+	CSEG
+C_MATH::
+;
+	ENTRY	E.T,	E.2
+	ENTRY	C.GT,	C.LE,	C.LT,	C.GE
+	ENTRY	C.UGE,	C.ULE,	C.UGT,	C.ULT
+	ENTRY	C.TST
+	ENTRY	C.ASR,	C.USR,	C.ASL
+	ENTRY	C.COM
+	ENTRY	C.SXT
+	ENTRY	C.MULT,	C.UDV,	C.DIV
+	ENTRY	O.,	X.,	A.
+	ENTRY	E.0,	E.
+	ENTRY	C.NOT
+	ENTRY	N.,	S.,	S.1
+	ENTRY	C.NEG
+	ENTRY	G.,	H.,	Q.
+	ENTRY	.SWITCH
+;
+	ENTRY	E@T,	E@2
+	ENTRY	C@GT,	C@LE,	C@LT,	C@GE
+	ENTRY	C@UGE,	C@ULE,	C@UGT,	C@ULT
+	ENTRY	C@TST
+	ENTRY	C@ASR,	C@USR,	C@ASL
+	ENTRY	C@COM
+	ENTRY	C@NOT
+	ENTRY	C@SXT
+	ENTRY	C@MULT,	C@UDV,	C@DIV
+	ENTRY	C@NEG
+	ENTRY	O@,	X@,	A@
+	ENTRY	E@0,	E@
+	ENTRY	N@,	S@,	S@1
+	ENTRY	G@,	Q@
+	ENTRY	@SWITCH
+	ENTRY	H@
+;
+	EXTRN	$END
+;
+	CSEG
+
+O.::
+O@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+	LD	A,L
+	OR	E
+	LD	L,A
+	LD	A,H
+	OR	D
+	LD	H,A
+	RET
+
+X.::
+X@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+	LD	A,L
+	XOR	E
+	LD	L,A
+	LD	A,H
+	XOR	D
+	LD	H,A
+	RET
+
+A.::
+A@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+	LD	A,L
+	AND	E
+	LD	L,A
+	LD	A,H
+	AND	D
+	LD	H,A
+	RET
+
+E.0::
+E@0::
+	LD	A,H
+	OR	L
+	RET	Z
+E.T::
+E@T::
+	LD	HL,0
+E.2::
+E@2::
+	INC	L
+	RET
+
+E.::
+E@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+	LD	A,H
+	CP	D
+	LD	A,L
+	LD	HL,0
+	JP	NZ,__0
+	CP	E
+	JP	NZ,__0
+	INC	L
+	RET
+
+__0:	XOR	A
+	RET
+
+C.NOT::
+C@NOT::
+	LD	A,H
+	OR	L
+	JP	Z,E.2
+	LD	HL,0
+	XOR	A
+	RET
+
+N.::
+N@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+	LD	A,H
+	CP	D
+	LD	A,L
+	LD	HL,1
+	RET	NZ
+	CP	E
+	RET	NZ
+	DEC	L
+	RET
+
+C.GE::
+C@GE::
+	EX	DE,HL
+C.LE::
+C@LE::
+	LD	A,D
+	CP	H
+	JP	NZ,__1
+	LD	A,E
+	CP	L
+	JP	NZ,__2
+	LD	HL,0
+	INC	L
+	RET
+
+C.GT::
+C@GT::
+	EX	DE,HL
+C.LT::
+C@LT::
+	LD	A,D
+__1:	XOR	H
+	JP	M,__4
+	LD	A,D
+	CP	H
+	JP	NZ,__2
+	LD	A,E
+	CP	L
+__2:	LD	HL,1
+	RET	C
+__3:	DEC	L
+	RET
+
+__4:	LD	A,H
+	AND	A
+	LD	HL,1
+	JP	M,__3
+	OR	L
+	RET
+
+C.TST::
+C@TST::
+	LD	A,H
+	XOR	80h
+	LD	H,A
+	ADD	HL,DE
+	RET
+
+C.UGE::
+C@UGE::
+	EX	DE,HL
+C.ULE::
+C@ULE::
+	LD	A,H
+	CP	D
+	JP	NZ,__5
+	LD	A,L
+	CP	E
+__5:	LD	HL,1
+	JP	NC,__6
+	DEC	L
+	RET
+
+__6:	OR	L
+	RET
+
+C.UGT::
+C@UGT::
+	EX	DE,HL
+C.ULT::
+C@ULT::
+	LD	A,D
+	CP	H
+	JP	NZ,__7
+	LD	A,E
+	CP	L
+__7:	LD	HL,1
+	RET	C
+	DEC	L
+	RET
+
+C.ASR::
+C@ASR::
+	EX	DE,HL
+__8:	LD	A,H
+	RLA
+__9:	DEC	E
+	RET	M
+	LD	A,H
+	RRA
+	LD	H,A
+	LD	A,L
+	RRA
+	LD	L,A
+	JP	__8
+
+C.USR::
+C@USR::
+	EX	DE,HL
+	XOR	A
+	JP	__9
+
+C.ASL::
+C@ASL::
+	EX	DE,HL
+__10:	DEC	E
+	RET	M
+	ADD	HL,HL
+	JP	__10
+
+S.::
+S@::
+	POP	BC
+	POP	DE
+	PUSH	BC
+S.1::
+S@1::
+	LD	A,E
+	SUB	L
+	LD	L,A
+	LD	A,D
+	SBC	A,H
+	LD	H,A
+	RET
+
+C.NEG::
+C@NEG::
+	DEC	HL
+C.COM::
+C@COM::
+	LD	A,H
+	CPL
+	LD	H,A
+	LD	A,L
+	CPL
+	LD	L,A
+	RET
+
+G.::
+G@::
+	LD	A,(HL)
+C.SXT::
+C@SXT::
+	LD	L,A
+	RLCA
+	SBC	A,A
+	LD	H,A
+	RET
+;
+	CSEG
+H.::
+H@::
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	RET
+
+Q.::
+Q@::
+	EX	DE,HL
+	POP	HL
+	EX	(SP),HL
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	EX	DE,HL
+	RET
+
+.SWITCH::
+@SWITCH::
+	EX	DE,HL
+	POP	HL
+__11:	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)
+	INC	HL
+	LD	A,B
+	OR	C
+	JP	Z,__12
+	LD	A,(HL)
+	INC	HL
+	CP	E
+	LD	A,(HL)
+	INC	HL
+	JP	NZ,__11
+	CP	D
+	JP	NZ,__11
+	LD	H,B
+	LD	L,C
+__12:	JP	(HL)
+
+C.MULT::
+C@MULT::
+	LD	B,H
+	LD	C,L
+	LD	HL,0
+	LD	A,D
+	OR	A
+	LD	A,16
+	JP	NZ,__13
+	LD	D,E
+	LD	E,H
+	RRCA
+__13:	ADD	HL,HL
+	EX	DE,HL
+	ADD	HL,HL
+	EX	DE,HL
+	JP	NC,__14
+	ADD	HL,BC
+__14:	DEC	A
+	JP	NZ,__13
+	RET
+
+C.UDV::
+C@UDV::
+	XOR	A
+	PUSH	AF
+	JP	__15
+
+C.DIV::
+C@DIV::
+	LD	A,D
+	XOR	H
+	PUSH	AF
+	XOR	H
+	EX	DE,HL
+	CALL	M,C.NEG
+	EX	DE,HL
+	LD	A,H
+	OR	A
+__15:	CALL	P,C.NEG
+	LD	C,L
+	LD	B,H
+	LD	HL,0
+	LD	A,B
+	INC	A
+	JP	NZ,__16
+	LD	A,D
+	ADD	A,C
+	LD	A,16
+	JP	C,__17
+__16:	LD	L,D
+	LD	D,E
+	LD	E,H
+	LD	A,8
+__17:	ADD	HL,HL
+	EX	DE,HL
+	ADD	HL,HL
+	EX	DE,HL
+	JP	NC,__18
+	INC	HL
+__18:	PUSH	HL
+	ADD	HL,BC
+	POP	HL
+	JP	NC,__19
+	ADD	HL,BC
+	INC	DE
+__19:	DEC	A
+	JP	NZ,__17
+	EX	DE,HL
+	POP	AF
+	RET	P
+	EX	DE,HL
+	CALL	C.NEG
+	EX	DE,HL
+	JP	C.NEG
+	RET
+;
+	END

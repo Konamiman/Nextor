@@ -1,0 +1,8 @@
+	public	jmessages
+jmessages:
+	db	"ドライブ",0
+	db	": のディスクはMSX-DOSしか立ち上げることが出来なくなります",0
+	db	"何かキーを押して下さい ",0
+	db	"*** MSX-DOSのバージョンが違います",0
+
+	end

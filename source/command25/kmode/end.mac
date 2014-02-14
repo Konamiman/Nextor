@@ -1,0 +1,11 @@
+	.z80
+;
+	title	KANJI - Japanese MSX-DOS2 utility
+	subttl  End of Program
+;
+; This file just declares a label at the end.
+;
+END::
+;
+;
+	end

@@ -1,0 +1,405 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Kernel BIOS Level Character I/O Routines
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+MSX_CHSNS	equ	0009Ch
+MSX_CHGET	equ	0009Fh
+MSX_CHPUT	equ	000A2h
+MSX_LPTOUT	equ	000A5h
+MSX_LPTSTT	equ	000A8h
+MSX_KILBUF	equ	00156h
+;
+MSX_LINLEN	equ	0F3B0h
+MSX_CRTCNT	equ	0F3B1h
+MSX_CNSDFG	equ	0F3DEh
+;
+;------------------------------------------------------------------------------
+;
+	PROC	SCR_SZ
+;
+;   This routine just returns the number of rows and columns of the screen
+; in register DE.
+;
+;===== start mod DOS2.50
+		;assume MSX_LINLEN+1 = MSX_CRTCNT
+		ld	de,(MSX_LINLEN)		;E := number of columns
+		ld	a,d
+;;		ld	a,(MSX_LINLEN)
+;;		ld	e,a
+;;		ld	a,(MSX_CRTCNT)
+;===== end mod DOS2.50
+		ld	hl,MSX_CNSDFG
+		add	a,(hl)
+		ld	d,a			;D := number of rows
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	KCONIN
+	PROC	CHR_IN
+;
+;    This is the BIOS keyboard input routine.  It simply calls  the  MSX  BIOS
+; ROM  to  get a character, but first flushes anything which may be waiting in
+; the screen buffer.
+;
+		call	H_CHIN##		;Call a hook in page-3
+		call	CH_FLUSH		;Flush screen buffer if req.
+		push	ix
+		ld	ix,MSX_CHGET
+		call	GO_BIOS
+		call	STOP_TST
+		pop	ix
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	KCONST
+	PROC	CHR_ST
+;
+;    This is the BIOS console status routine.  It is complicated by  the  fact
+; that  it contains timeout code to avoid doing too many calls to the MSX BIOS
+; status routine.  If a console status call returns "no character ready"  then
+; a  counter  is  started which is decremented on every subsequent status call
+; and until it expires, "no character ready" will  be  returned  automatically
+; without  calling  the  MSX  BIOS  ROM.   The  counter is reset to 1 on every
+; interrupt (50Hz or 60Hz) to ensure that a real console status check is  done
+; at least this often.
+;
+		call	H_CHST##		;Call a hook in page-3
+;
+		ld	hl,ST_COUNT##		;Decrement timeout and if
+		dec	(hl)			; not expired then jump to
+		jr	nz,no_char_ready	; return char not ready.
+		inc	(hl)			;Set timeout back to 1 in
+						; anticipation.
+;
+		ld	a,(CH_COUNT##)		;If console output timeout
+		dec	a			; has expired then flush
+		call	z,CH_FLUSH		; the output buffer.
+;
+		push	ix
+		ld	ix,MSX_CHSNS		;Actually do the console
+		call	GO_BIOS			; status call and also test
+		call	STOP_TST		; for stop key.  If a
+		pop	ix			; character is ready then
+		ld	a,0FFh			; return A=FFh and NZ, with
+		ret	nz			; ST_COUNT left as 1.
+;
+		ld	a,ST_TMOUT##		;No character ready so start
+		ld	(ST_COUNT##),a		; timeout counter going again.
+no_char_ready:	xor	a			;No character ready so return
+		ret				; A=0 and Z-flag set.
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	KCONOUT
+		ld	a,c
+	PROC	CHR_OUT
+;
+;   This is the BIOS screen output routine.  The character is  stored  in  the
+; character  output  buffer  which is then flushed if it is full, if we are in
+; the middle of an escape sequence, or if the character is an LF or  BELL.  If
+; the  character  is  an  ESCAPE then the buffer is flushed before putting the
+; character into the buffer.  Before storing the character, the  buffer  flush
+; timeout  counter  "CH_COUNT"  is  reset to its maximum value.  There is also
+; code to maintain a 16-bit character flag.  This is used in the buffer  flush
+; routine to ensure that the two bytes of a 16-bit character will not be split
+; up with cursor control escape sequences.
+;
+		call	H_CHOUT##		;Call a hook in page-3
+if 1 ;==HF== Skip buffering fiddle at the moment...
+		push	ix
+		ld	ix,MSX_CHPUT
+		call	GO_BIOS
+		pop	ix
+		ret
+endif
+;===== start del DOS2.50 (not use)
+;		ld	e,a			;Save character in E.
+;;
+;		cp	ESC			;Always flush buffer before
+;		call	z,CH_FLUSH		; putting an ESC in.
+;;
+;		ld	hl,CH_16FLG##		;If 16-bit character flag is
+;		bit	0,(hl)			; set then clear it (this
+;		res	0,(hl)			; must be 2nd byte of 16-bit
+;		jr	nz,not_16_char		; char).
+;		pcall	CHK_16_CHAR		;If not set then test this
+;		jr	nc,not_16_char		; character and set or clear
+;		set	0,(hl)			; the flag appropriately.
+;not_16_char:
+;		ld	a,CH_TMOUT##		;Reset buffer flush timeout
+;		ld	(CH_COUNT##),a		; to its maximum value
+;		ld	a,(CH_PTR##)		;Get character buffer index
+;		ld	c,a			; and turn it into a buffer
+;		ld	b,0			; pointer.
+;		ld	hl,CH_BUF##
+;		add	hl,bc
+;		ld	(hl),e			;Store the character in buffer
+;		inc	a			; and update buffer index.
+;		ld	(CH_PTR##),a
+;		cp	CHB_SZ##		;Flush the buffer if
+;		jr	z,FLUSH_BUF		; it is full.
+;;
+;		ld	a,(ESCCNT##)		;If in escape sequence then
+;		or	a			; must flush buffer straight
+;		jr	nz,FLUSH_BUF		; away without cursor control.
+;;
+;		ld	a,e
+;		cp	LF			;Also flush if character is
+;		jr	z,FLUSH_BUF		; an LF or BELL, else return.
+;		cp	BELL
+;		jr	z,FLUSH_BUF
+;		ret
+;===== end del DOS2.50
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	CH_FLUSH
+;
+;   This  is  the  flush  buffer routine which is called when the buffer flush
+; timeout has expired or when any other I/O operation is done to  ensure  that
+; the  buffer is empty.  It preserves all registers and is reasonably quick if
+; there is nothing in the buffer.  All  the  work  is  actually  done  by  the
+; routine "FLUSH_BUF".
+;
+; Entry:    None
+; Returns:  None
+; Corrupts: None
+;
+		call	H_CHFL##		;Call a hook in page-3
+		push	af
+		ld	a,(CH_PTR##)		;If there is nothing in the
+		or	a			; buffer then don't try to
+		jr	z,no_flush		; flush it.
+		push	bc
+		push	de			;If there is something in the
+		push	hl			; buffer then flush it out
+		call	FLUSH_BUF		; preserving all registers.
+		pop	hl
+		pop	de
+		pop	bc
+no_flush:	pop	af
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+FLUSH_BUF:
+;
+;    This is the internal flush buffer routine which is called when the buffer
+; must  be  flushed.   It  is  only ever called when there is something in the
+; buffer.  Its normal operation is to send a cursor off escape sequence at the
+; start  of  the  buffer  and  a  cursor  on at the end.  However these escape
+; sequences  will  not  be sent if the MXS variable "ESCCNT" is non-zero since
+; this  means  it is already in the middle of an escape sequence.  The initial
+; "cursor off" sequence is sent by tacking it onto the  front  of  the  buffer
+; (the data is already there so just the pointer and count are adjusted).  The
+; final "cursor on" sequence is sent separately.
+;
+;    There  is  also  code  to ensure that the two bytes of a 16-bit character
+; will not be split up by cursor control escape sequences.  This  is  done  by
+; examining  a  flag  ("CH_16FLG")  which  is set if the last character in the
+; buffer is the first byte of a 16-bit character.  If this flag  is  set  then
+; the  buffer  count  is  decremented to ensure that the last character is not
+; sent. After the buffer has been flushed, the last character is then  put  at
+; the  start of the buffer and the buffer count set to 1.  In the special case
+; where there is only one character in the buffer and it is the first byte  of
+; a 16-bit character, then no bytes will be flushed.
+;
+; Entry:     None
+; Returns:   None
+; Corrupts:  AF,BC,DE,HL
+;
+		ex	af,af'
+		exx
+		push	af
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		push	iy
+if 1
+;
+;   Modified by Hal_F
+;	This line must be here, or "no_flush_16ch" will corrupt first
+;	byte of 16-bit character.  Codes after "not_1st_of_16" are
+;	also optimized.
+;
+		ld	hl,CH_BUF##
+endif
+		ld	a,(CH_16FLG##)		;If last character is first
+		bit	0,a			; of a 16-bit character then
+		push	af			; decrement the buffer index
+		ld	a,(CH_PTR##)		; in register A.  Also saves
+		jr	z,not_1st_of_16		; flag on stack.
+		dec	a			;If count goes to zero then
+		jr	z,no_flush_16ch		; skip the actual flushing.
+not_1st_of_16:
+if 1	; by Hal_F
+		ld	b,a			;If we are in the middle of an
+		ld	a,(ESCCNT##)		; escape sequence then do not
+		or	a			; include the "cursor off"
+		jr	nz,do_no_cursor_off	; sequence.
+		ld	hl,CH_BUF##-3		;Set buffer pointer and count
+		inc	b			; to include the "cursor off"
+		inc	b			; escape sequence at the
+		inc	b			; start of the buffer.
+do_no_cursor_off:
+		call	$FLUSH##		;Write out the buffer.
+else
+		add	a,3			;Set buffer pointer and count
+		ld	b,a			; to include the "cursor off"
+		ld	hl,CH_BUF##-3		; escape sequence at the
+		ld	a,(ESCCNT##)		; start of the buffer in
+		or	a			; anticipation.
+		jr	z,do_cursor_off		;If we are in the middle of an
+		dec	b			; escape sequence then adjust
+		dec	b			; the pointer and count to
+		dec	b			; not include this sequence.
+		ld	hl,CH_BUF##
+do_cursor_off:	call	$FLUSH##		;Write out the buffer.
+endif
+;
+		push	hl
+		ld	hl,CH_BUF##-6		;If we are not in the middle
+		ld	b,3			; of an escape sequence now,
+		ld	a,(ESCCNT##)		; then write out a "cursor on"
+		or	a			; escape sequence from the
+		call	z,$FLUSH##		; start of the buffer.
+		pop	hl
+;
+no_flush_16ch:	xor	a			;Zero the buffer index and
+		ld	(CH_PTR##),a		; also the buffer flush
+		ld	(CH_COUNT##),a		; timeout counter.
+;
+		pop	af			;If the last character was
+		jr	z,no_16ch_fiddle	; 1st byte of a 16-bit char
+		ld	a,(hl)			; then it was not written
+		ld	(CH_BUF##),a		; out so put it back at the
+		ld	a,1			; start of the buffer and
+		ld	(CH_PTR##),a		; set buffer count to 1.
+no_16ch_fiddle:
+		pop	iy
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		exx
+		ex	af,af'
+		ret
+;
+;
+;==============================================================================
+;
+	PROC	KLST
+	PROC	LST_OUT
+;
+		call	H_LSTOUT##		;Call a hook in page-3
+		call	CH_FLUSH
+		push	ix
+		ld	ix,MSX_LPTOUT
+		call	GO_BIOS
+		pop	ix
+		ret
+;
+;
+	PROC	KLSTST
+	PROC	LST_ST
+;
+		call	H_LSTST##		;Call a hook in page-3
+		push	ix
+		ld	ix,MSX_LPTSTT
+		call	GO_BIOS
+		pop	ix
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	KREADER
+	PROC	AUX_IN
+;
+		call	CH_FLUSH
+		ld	hl,$AUXIN##
+		pcall	GO_EXIT			;Call page-3 routine
+		ret
+;
+;
+	PROC	KPUNCH
+		ld	a,c
+	PROC	AUX_OUT
+;
+		call	CH_FLUSH
+		ld	hl,$AUXOUT##
+		pcall	GO_EXIT			;Call page-3 routine
+		ret
+;
+;
+;==============================================================================
+;
+	PROC	STOP_TST
+;
+;    This routine checks whether the Ctrl-STOP key has been pressed and if  so
+; does  an  "ABORT" with a ".STOP" error.  It is called at various appropriate
+; times during the operation of the system such as whenever a disk  driver  is
+; called  or  a  console  status  check  is done.  The check is simply done by
+; looking at the "INTFLG" variable which the interrupt routine will  have  set
+; to 03h if ctrl-STOP was detected.
+;
+		push	af
+		ld	a,(INTFLG##)
+		sub	CTRL_C
+		jr	z,got_ctrl_stop
+		pop	af
+		ret
+;
+;
+got_ctrl_stop:	ld	(INTFLG##),a		;Clear the ctrl-STOP flag
+		ld	ix,MSX_KILBUF		;Make sure that the Ctrl-C
+		call	GO_BIOS			; is eaten up.
+		ld	a,.STOP##		;Abort the program with a
+		ld	b,0			; ".STOP" error and zero
+		pcall	GO_ABORT		; secondary error.
+		jr	$
+;
+;
+;------------------------------------------------------------------------------
+;
+GO_BIOS:	ex	af,af'
+		exx
+		push	af
+		push	bc
+		push	de
+		push	hl
+		push	iy
+		exx
+		ex	af,af'
+		call	P0_CALL##
+		ex	af,af'
+		exx
+		pop	iy
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		exx
+		ex	af,af'
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<KBIOS>
+	end
+;

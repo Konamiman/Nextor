@@ -1,0 +1,473 @@
+	.z80
+
+DEV_INFO	equ	4163h
+LUN_INFO	equ	4169h
+
+DEVINFO_STRLEN	equ	64
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+USAGE_S:
+	db	"DEVINFO - displays information about the devices handled by a disk driver",13,10
+	db	13,10
+	db	"Usage: DEVINFO <slot>[-<subslot>][:<segment>]|0",13,10
+	db	13,10
+	db	"If 0 is specified, the primary disk controller slot is assumed",13,10
+	db	13,10
+	db	1Ah
+	db	0
+
+START:
+	call	CHK250##
+
+	;--- Get slot, subslot, segment
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	nz,FOUND_PARAMS
+	
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+FOUND_PARAMS:
+
+	ld	hl,BUF
+	call	GETSLOT##
+	or a	
+	jr	nz,NO_PRIMARY
+	ld	a,(0F348h)
+NO_PRIMARY:
+	ld	(SLOT),a
+	ld	a,b
+	ld	(SEGMENT),a
+
+	;--- Check that the driver exists and is a device-based driver
+
+	;ld	a,(SEGMENT)
+	ld	e,a
+	ld	a,(SLOT)
+	ld	d,a
+	xor	a
+	ld	hl,BUF_INFO
+	ld	c,_GDRVR##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	ld	a,(BUF_INFO+4)
+	and	10000001b
+	cp	10000001b
+	ld	b,.IDRVR##
+	ld	c,_TERM##
+	jp	nz,5
+
+	;--- Loop for all devices
+
+	ld	iy,BUF_REG
+	ld	(iy+1),1
+	ld	hl,BUF_INFO
+	ld	(iy+6),l
+	ld	(iy+7),h
+
+DEV_LOOP:
+
+	;* Get and display basic information
+
+	ld	(iy+3),0
+	call	CALL_DEVINFO
+	push	ix
+	pop	af
+	or	a
+	jp	nz,DEV_LOOP_NEXT2
+
+	ld	a,(iy+1)
+	add	a,"0"
+	ld	(DEVINDEX_MSG),a
+	ld	a,(BUF_INFO)
+	ld	(LUNS),a
+	add	a,"0"
+	ld	(LUNS_MSG),a
+	ld	de,DEV_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	;* Get and display manufacturer name
+
+GET_INFO_1:
+	inc	(iy+3)
+	call	CALL_DEVINFO
+	push	ix
+	pop	af
+	or	a
+	jr	nz,GET_INFO_2
+
+	ld	de,MANUF_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	hl,BUF_INFO
+	ld	bc,DEVINFO_STRLEN
+	call	PRPAD##
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+	;* Get and display device name
+
+GET_INFO_2:
+	inc	(iy+3)
+	call	CALL_DEVINFO
+	push	ix
+	pop	af
+	or	a
+	jr	nz,GET_INFO_3
+
+	ld	de,NAME_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	hl,BUF_INFO
+	ld	bc,DEVINFO_STRLEN
+	call	PRPAD##
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+	
+	;* Get and display serial number
+
+GET_INFO_3:
+	inc	(iy+3)
+	call	CALL_DEVINFO
+	push	ix
+	pop	af
+	or	a
+	jr	nz,GET_INFO_4
+
+	ld	hl,BUF_INFO-1
+	ld	b,DEVINFO_STRLEN
+SKIPSP:
+	inc	hl	;This time string is left-padded
+	ld	a,(hl)
+	cp	" "
+	jr	nz,OKSKIPSP
+	djnz	SKIPSP
+	jr	GET_INFO_4
+OKSKIPSP:
+
+	push	hl
+	ld	de,SERIAL_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	pop	de
+
+	xor	a
+	ld	(BUF_INFO+DEVINFO_STRLEN),a
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+GET_INFO_4:
+
+	;--- Display information about LUNs
+
+	ld	a,(iy+1)
+	ld	iy,BUF_REG2
+	ld	(iy+1),a
+	ld	(iy+3),1
+	ld	hl,BUF_INFO
+	ld	(iy+6),l
+	ld	(iy+7),h
+
+LUN_INFO_LOOP:
+	call	CALL_LUNINFO	
+	push	ix
+	pop	af
+	or	a
+	jp	nz,LUN_INFO_NEXT2
+
+	;* LUN number
+
+	ld	a,(iy+3)
+	add	a,"0"
+	ld	(LUNINDEX_MSG),a
+	ld	de,LUN_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	;* Device type
+
+	ld	a,(BUF_INFO)
+	ld	de,BLOCK_MSG
+	or	a
+	jr	z,OK_LUNTYPE
+	ld	de,CDROM_MSG
+	dec	a
+	jr	z,OK_LUNTYPE
+	ld	de,UNKNOWN_MSG
+OK_LUNTYPE:
+	ld	c,_ZSTROUT##
+	call	5
+
+	;* Device capacity, if block device with 512K sectors
+
+	ld	a,(BUF_INFO)
+	or	a
+	jp	nz,NO_CAPACITY
+	ld	hl,(BUF_INFO+1)
+	ld	de,512
+	or	a
+	sbc	hl,de
+	jr	nz,NO_CAPACITY
+
+	ld	ix,BUF_INFO+3
+	ld	e,(ix)
+	ld	d,(ix+1)
+	ld	l,(ix+2)
+	ld	h,(ix+3)
+	srl	h		;HLDE=Capacity in KB
+	rr	l
+	rr	d
+	rr	e
+	
+	ld	a,h
+	or	l
+	jr	nz,DIVIDE1
+	push	de
+	ex	de,hl
+	ld	bc,10240
+	or	a
+	sbc	hl,bc
+	pop	de
+	ld	hl,0
+	jr	c,DISPLAY
+
+DIVIDE1:
+	ld	e,d	;Divide by 1024 to obtain MB
+	ld	d,l
+	ld	l,h
+	srl	l
+	rr	d
+	rr	e
+	srl	l
+	rr	d
+	rr	e
+	ld	a,"M"
+	ld	(CAPAUNIT),a
+
+	ld	a,l
+	or	a
+	jr	nz,DIVIDE2
+	push	de
+	ex	de,hl
+	ld	bc,10240
+	or	a
+	sbc	hl,bc
+	pop	de
+	ld	hl,0
+	jr	c,DISPLAY
+
+DIVIDE2:
+	ld	e,d	;Divide by 1024 to obtain GB
+	ld	d,l
+	srl	d
+	rr	e
+	srl	d
+	rr	e
+	ld	a,"G"
+	ld	(CAPAUNIT),a
+
+DISPLAY:
+	ex	de,hl
+	ld	de,CAPACITY_MSG+2
+	call	Num2Dec
+	ld	a,(CAPAUNIT)
+	ld	(de),a
+	inc	de
+	ld	a,"B"
+	ld	(de),a
+	inc	de
+	xor	a
+	ld	(de),a
+	ld	de,CAPACITY_MSG
+	ld	c,_ZSTROUT##
+	call	5
+NO_CAPACITY:
+
+	;* Device flags
+
+	ld	ix,BUF_INFO+7
+	bit	0,(ix)
+	ld	de,FIXED_MSG
+	jr	z,DO_REMFIXED
+	ld	de,REMOVABLE_MSG
+DO_REMFIXED:
+	ld	c,_ZSTROUT##
+	call	5
+
+	bit	1,(ix)
+	jr	z,NO_READONLY
+	ld	de,READONLY_MSG
+	ld	c,_ZSTROUT##
+	call	5
+NO_READONLY:
+
+	bit	2,(ix)
+	jr	z,NO_FLOPPY
+	ld	de,FLOPPY_MSG
+	ld	c,_ZSTROUT##
+	call	5
+NO_FLOPPY:
+
+	;* Go for next LUN
+
+LUN_INFO_NEXT:
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+LUN_INFO_NEXT2:
+	ld	a,(iy+3)
+	inc	a
+	ld	(iy+3),a
+	cp	8
+	jp	c,LUN_INFO_LOOP
+
+	ld	iy,BUF_REG
+
+	;--- Go for next device
+
+DEV_LOOP_NEXT:
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+DEV_LOOP_NEXT2:
+	ld	a,(iy+1)
+	inc	a
+	ld	(iy+1),a
+	cp	8
+	jp	c,DEV_LOOP
+
+	ld	b,0
+	ld	c,_TERM##
+	jp	5
+
+
+CALL_LUNINFO:
+	ld	de,LUN_INFO
+	ld	hl,BUF_REG2
+	jr	CALL_DRIVER
+
+CALL_DEVINFO:
+	ld	de,DEV_INFO
+	ld	hl,BUF_REG
+
+CALL_DRIVER:
+	ld	a,(SEGMENT)
+	ld	b,a
+	ld	a,(SLOT)
+	ld	c,_CDRVR##
+	call	5
+	ret	z
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+	
+
+Num2Dec:
+	xor	a
+	ld	(de),a
+	ld	bc,-10000
+	call	Num1
+	ld	bc,-1000
+	call	Num1
+	ld	bc,-100
+	call	Num1
+	ld	c,-10
+	call	Num1
+	ld	c,-1
+	call	Num1
+	xor	a
+	ld	(Num3),a
+	ld	(Num3+1),a
+	ret
+
+Num1:	ld	a,'0'-1
+Num2:	inc	a
+	add	hl,bc
+	jr	c,Num2
+	sbc	hl,bc
+
+Num3:	nop
+	nop
+	cp	"0"
+	ret	z
+	ld	(de),a
+	inc	de
+	ld	a,18h	;jr code
+	ld	(Num3),a
+	ld	a,Num4-Num3-2
+	ld	(Num3+1),a
+	ret
+Num4:
+	ld	(de),a
+	inc	de
+	ret
+
+
+DEV_MSG:
+	db	"Device index "
+DEVINDEX_MSG:
+	db	"0:",13,10
+	db	"  Number of logical units: "
+LUNS_MSG:
+	db	"0"
+CRLF:
+	db	13,10,0
+
+NAME_MSG:
+	db	"  Device name: ",0
+MANUF_MSG:
+	db	"  Device manufacturer: ",0
+SERIAL_MSG:
+	db	"  Device serial number: ",0
+
+LUN_MSG:
+	db	"    LUN "
+LUNINDEX_MSG:
+	db	"0: ",0
+
+BLOCK_MSG:
+	db	"Block device",0
+CDROM_MSG:
+	db	"CD-ROM",0
+UNKNOWN_MSG:
+	db	"Unknown type",0
+REMOVABLE_MSG:
+	db	", removable",0
+FIXED_MSG:
+	db	", fixed",0
+READONLY_MSG:
+	db	", read-only",0
+FLOPPY_MSG:
+	db	", floppy disk",0
+CAPAUNIT:
+	db	"K"
+CAPACITY_MSG:
+	db	", 00000KB",0
+
+DEVINDEX:
+	db	1
+SLOT:	db	-1
+SEGMENT:	db	255
+LUNS:	db	0
+
+BUF:
+BUF_REG:
+BUF_REG2	equ	BUF_REG+8
+BUF_INFO	equ	BUF_REG2+8
+	end

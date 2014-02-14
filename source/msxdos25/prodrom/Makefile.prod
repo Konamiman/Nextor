@@ -1,0 +1,146 @@
+.SUFFIXES: .mac .rel .hex .sym
+
+.mac.rel:
+	m80 =$*.mac
+
+#########################################
+#	Top Level Makefile.		#
+#########################################
+all:	banks dos2rom.bin
+
+files:	codes.rel ;@cd ../sys; $(MAKE)
+
+load:	;re10 dos2rom.bin
+
+dos2rom.bin: bank0/b0.hex bank1/b1.hex bank2/b2.hex bank3/b3.hex
+	@echo Loading $@
+	@h2b	-o -4000 bank0/b0.hex \
+		-o     0 bank0/b0.hex -f 4100,7fcf,ff -o    0 bank1/b1.hex \
+		-o  4000 bank0/b0.hex -f 8100,bfcf,ff -o 4000 bank2/b2.hex \
+		-o  8000 bank3/b3.hex >$@
+
+#dos2rom.bin: bank0/b0.hex bank1/b1.hex bank2/b2.hex bankk/kanjiio.bin
+#	@echo Loading $@
+#	@(h2b                 -f 0000,3fff,ff -o -4000 bank0/b0.hex \
+#	 -o    0 bank0/b0.hex -f 4100,7fff,ff -o     0 bank1/b1.hex \
+#	 -o 4000 bank0/b0.hex -f 8100,bfff,ff -o  4000 bank2/b2.hex \
+#	; echo Appending kanjiio.bin >&2; cat bank3/kanjiio.bin ) >$@
+
+megarom.bin: bankk/bj.hex bank1/b1.hex bank2/b2.hex bankk/bk.hex
+	@echo Lading $@
+	@h2b                   -f 0000,3fff,ff -o -4000 bankk/bj.hex \
+	 -o    0 bank0/b0k.hex -f 4100,7fff,ff -o     0 bank1/b1.hex \
+	 -o 4000 bank0/b0k.hex -f 8100,bfff,ff -o  4000 bank2/b2.hex \
+	 -o 8000 bank0/b0k.hex -f c100,ffff,ff -o  8000 bankk/bk.hex >$@
+
+banks:	$(COMREL)
+	@cd bank0;	APPEND=:.. $(MAKE) -f ../Makefile bank0
+	@cd bank1;	APPEND=:.. $(MAKE) -f ../Makefile bank1
+	@cd bank2;	APPEND=:.. $(MAKE) -f ../Makefile bank2
+	@cd bank3;	APPEND=:.. $(MAKE) -f ../Makefile bank3
+#	@cd bankk;	APPEND=:.. $(MAKE) -f ../Makefile bankk
+
+#########################################
+#	Common Library			#
+#########################################
+COMINC=	macros.inc const.inc
+COMREL=	codes.rel kvar.rel data.rel
+
+$(COMREL): $(COMINC)
+
+#########################################
+#	Common to all Banks		#
+#########################################
+INCS=	../macros.inc ../const.inc
+RELS=	../codes.rel ../kvar.rel ../data.rel
+
+#########################################
+#	Ruleset for BANK0.		#
+#########################################
+bank0:	dos2kit.rel
+
+B0RELS=	init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel
+
+b0.rel: ../bank.inc
+init.rel: ../bank.inc
+$(B0RELS): $(INCS)
+
+dos2kit.rel: $(RELS) doshead.rel 40ff.rel b0.rel $(B0RELS)
+	lib80 dos2kit=codes,kvar,data,doshead,40ff,b0,init,alloc,dskbasic,dosboot,bdos,ramdrv/e
+
+b0.hex: dos2kit.rel drv.rel chgbnk2.rel
+	xl80 -p4000 dos2kit.rel -p7405 drv.rel -p7fd0 chgbnk2.rel -x$@ -yb0.sym
+
+#########################################
+#	Ruleset for BANK1.		#
+#########################################
+bank1: b1.hex
+
+B1RELS=	dosinit.rel mapinit.rel ../bank0/alloc.rel msg.rel
+
+b1.rel: ../bank.inc
+$(B1RELS): $(INCS)
+
+b1.hex: $(RELS) b1.rel $(B1RELS)
+	xl80 -p40ff $(RELS) b1.rel $(B1RELS) -x$@ -yb1.sym
+
+#########################################
+#	Ruleset for BANK2.		#
+#########################################
+bank2:	b2.hex
+
+B2RELS=	kinit.rel \
+	char.rel dev.rel kbios.rel misc.rel env.rel time.rel seg.rel \
+	path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel \
+	buf.rel fat.rel val.rel err.rel cpm.rel
+
+b2.rel:	../bank.inc
+$(B2RELS): $(INCS)
+
+b2.hex: $(RELS) b2.rel $(B2RELS)
+	l80 -p40ff $(RELS) b2.rel $(B2RELS) -x$@ -yb2.sym
+
+#########################################
+#	Ruleset for BANK3.		#
+#########################################
+bank3:	b3.hex
+
+B3RELS=	dos1kit.rel ../bank0/drv.rel chgbnk1.rel
+
+b3.hex:	$(B3RELS)
+	xl80 -p4000 -df237 dos1kit.rel drv.rel -p7fd0 chgbnk1.rel -x$@ -yb3.sym
+
+#########################################
+#	Ruleset for BANKK.		#
+#########################################
+bankk:	bj.hex bk.hex
+
+BJRELS=	knjdrv.rel ../bank0/dos2kit.rel ../bank0/drv.rel
+BKRELS=	knjhead2.rel kanji.rel
+
+knjhead2.rel: kanji.inc
+
+bj.hex: dosheadk.rel chgbnkk.rel $(BJRELS)
+	xl80 -p4000 dosheadk.rel chgbnkk.rel -p40b4 $(BJRELS) -x$@ -ybj.sym
+
+bk.hex: $(BKRELS)
+	xl80 -p40c0 $(BKRELS) -x$@ -ybk.sym
+
+#########################################
+DISK=	/b
+PUT=	put
+doskit: bank0/dos2kit.rel bank1/b1.hex bank2/b2.hex bank3/dos1kit.rel
+	$(PUT) -b bank0/dos2kit.rel	$(DISK)/dos2kit.rel
+	$(PUT) -a bank1/b1.hex		$(DISK)/b1.hex
+	$(PUT) -a bank2/b2.hex		$(DISK)/b2.hex
+	$(PUT) -b bank3/dos1kit.rel	$(DISK)/dos1kit.rel
+
+kanjikit: bank3/dosheadk.rel bank3/knjdrv.rel bank0/doskit.rel bank1/b1.hex bank2/b2.hex bank3/b3.hex
+	copy bank3/dosheadk.rel $(DISK)	>nul
+	copy bank3/knjdrv.rel $(DISK)	>nul
+	copy bank0/doskit.rel $(DISK)	>nul
+	copy bank1/b1.hex $(DISK)	>nul
+	copy bank2/b2.hex $(DISK)	>nul
+	copy bank3/b3.hex $(DISK)	>nul
+	copy makekbin.bat $(DISK)	>nul
+	copy bank3/chgbnk.mac $(DISK)	>nul

@@ -1,0 +1,922 @@
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL	Miscellaneous Routines
+;
+;
+	INCLUDE	COMMAND.INC
+;
+;
+;
+		SUBTTL	SKIP
+;******************************************************************************
+;
+;	 This routine skips HL past separator characters, which  are  used  to
+; separate  parameters  to  commands. This is a little more comlicated than it
+; may  at  first  seem,  since  it  is  convenient if a parameter separator is
+; defined as BLANKS or [BLANKS] CHAR [BLANKS], where BLANKS means one or  more
+; spaces or tabs, CHAR means one of the valid sepearator characters "; , or ="
+; and [..] means that the enclosed item is optional. Thus  all  the  following
+; are  valid  ways  of specifying the first parameter as 'a' and the second as
+; 'b':  "a b"   "a,b"   "a, b"   "a  ,b"   "a , b".
+;
+;	 DTSKIP is similar to SKIP, but skips passed separators that are valid
+; separators for each number in a date or time string.
+;
+; On entry, HL points to the separator start.
+; On exit,  HL points to the first invalid character or end of line.
+;	     A contains the character at (HL).
+;	     Cy set => HL -> invalid separator character.
+;	    NC & Z  => HL -> end of line.
+;	    NC & NZ => HL -> next character after separator.
+;	    Only HL and AF are corrupted.
+;
+;
+GETCH::		LD	A,(HL)		; Skip HL past separator characters
+		CALL	SEP?		; If not a separator character then
+		RET	NZ		;   just return.
+;
+SKIP:		LD	A,(HL)		; Get character.
+		CALL	BLANK?		; First character a space or tab ?
+		JR	NZ,SKP10	; Deal with CHAR [BLANKS] if not.
+;
+		CALL	STRIP		; Else deal with BLANKS [CHAR [BLANKS]].
+		CALL	SKP10
+		OR	A		; Never an error if leading space.
+		RET			; With NC, and Z if end of line.
+;
+SKP10:		OR	A
+		RET	Z
+;
+		CALL	SEP?		; Valid CHAR ?
+		SCF
+		RET	NZ		; Return with Cy if not.
+;
+STP10:		INC	HL		; Else skip CHAR and trailing BLANKS.
+STRIP::		LD	A,(HL)		; Get character.
+		CALL	BLANK?		; Space or tab ?
+		JR	C,STP10		; Ignore if yes.
+		RET			; Else return NC, and Z if end of line.
+;
+SEP?::					; Z if valid CHAR, else NZ.
+		CP	','
+		RET	Z		; Z if comma.
+;
+		CP	';'
+		RET	Z		; Z if semi-colon.
+;
+		CP	'='
+		RET	Z		; Z if equals.
+;
+		CP	' '
+		RET	Z		; Z if space.
+;
+		CP	TAB
+		RET	Z		; Z if tab.
+
+		OR	A		; Else Z if end of line, else NZ.
+		RET
+;
+BLANK?::				; C if blank,Z if blank or end of line.
+		CP	' '
+		SCF
+		RET	Z		; C and Z if space.
+;
+		CP	TAB
+		SCF
+		RET	Z		; C and Z if tab.
+;
+		OR	A		; Else NC, and Z if end of line.
+		RET
+;
+;
+DTSKIP::	LD	A,(HL)		; As SKIP above.
+		CALL	BLANK?
+		JR	NZ,DTS10
+;
+		CALL	STRIP
+		CALL	DTS10
+		OR	A
+		RET
+;
+DTS10:		OR	A
+		RET	Z
+;
+		CALL	SEP?
+		JR	Z,STP10
+;
+		CP	':'
+		JR	Z,STP10
+;
+		CP	','
+		RET	C
+;
+		CP	'/'+1
+		CCF
+		RET	C
+;
+		JR	STP10
+;
+;
+;
+		SUBTTL	PARSE
+;******************************************************************************
+;
+;	 This routine is called at the start of most functions, and  parses  a
+; drive/path/filename on the command line by calling the BDOS parse function.
+;
+;	 The items parsed may be path strings separated by '+', and these will
+; be  look to the outside world as though just one ambiguous filename had been
+; parsed. / options are also parsed, and a bit is set in ATTRS (according to a
+; table  whose  pointer is passed to the routine) for each option. An error is
+; returned if a given option is not in the table.
+;
+;	 The bits are set in ATTRS (the search attributes used  by  FIRST  and
+; NEXT) because the /H option sets the appropriate bit, and also the directory
+; bit gets set for the directory only commands (eg. RNDIR, MVDIR). FIRST needs
+; to  parse  each item again as it needs them, and since this calls PARSE_ITEM
+; below, also accumulates / option flags in ATTRS.   Thus  when  it  is  first
+; called, FIRST saves the value of ATTRS in SWITCHES, and then each time it is
+; called, it initialises ATTRS before parsing the  item.  Before  parsing  the
+; items,  PARSE  parses the initial / options and saves them in INIATR, and it
+; is this value that FIRST uses to initialise ATTRS.  This  ensures  that  the
+; initial  / options given apply over the whole command, but any given after a
+; filename apply only to  that  filename.  Thus,  during  the  command,  ATTRS
+; contains  the  flags  for  the  options to use on the current filename being
+; searched, whilst SWITCHES contains other / options  for  the  whole  command
+; which may appear anywhere on the command line.
+;
+;	 A  fiddle  is  done here to treat /P specially. Also /A is fiddled to
+; reset the /B bit, and /B resets the /A bit (used in COPY and CONCAT).
+;
+;
+; On entry, HL -> Start of the drive/path/filename string.
+;	    DE -> Table of valid / switch options.
+;	    Carry set for 'directory' commands (eg. RNDIR), else reset.
+; On exit,   B =  Flags from Parse Path.
+;	    AF =  Error code (may be internally generated or from BDOS).
+;	    HL -> following parameter on command line.
+;	    DE -> terminating character (may =HL).
+;
+;
+PARSE::		LD	(OPTPTR##),DE	; Save pointer to options table.
+		EX	DE,HL		; Save pointer to command line.
+		SBC	A,A		; 0 => files, FF => directories.
+		AND	ATDIR		; Set ATDIR bit if directory command.
+		LD	(ATTRS##),A	; ATTRS=0 if files command, else ATDIR.
+		LD	HL,FLAGS##
+		OR	(HL)		; Set ONLYD bit in FLAGS to find only
+		LD	(HL),A		;   directories if directory command.
+;
+		EX	DE,HL		; HL -> command line.
+		LD	(FIRSTFN##),HL	; Save pointer to start.
+		CALL	CHKOPT		; Skip initial options.
+		RET	NZ
+;
+		DEC	A
+		LD	(PLUSES##),A	; Number of '+'s parsed.
+;
+		LD	A,(ATTRS##)	; Save first / options given as default
+		LD	(INIATR##),A	;   / switch settings.
+;
+		CALL	PARSE_ITEM	; Parse first item.
+		RET	NZ		; Return if error.
+;
+		LD	(IY+@PARSF##),B	; Save parse flags for first filename.
+		LD	A,C		; Get drive.
+		LD	(FDRV##),A	; Save it for command to use.
+		XOR	A		; Skip next call & return.
+;
+PRS10:		CALL	NZ,PARSE_ITEM	; Parse a filename etc.
+		RET	NZ		; Return if error.
+;
+		LD	A,(HL)		; Get terminating character.
+		OR	A
+		RET	Z		; Ret if end of string.
+;
+		CP	'+'		; '+' another filename ?
+		JR	NZ,XORET	; Return with no error if not.
+;
+		INC	HL		; Point passed '+'.
+		CALL	GETCH		; Ignore separator characters.
+		CALL	CHKOPT		; Check for / options.
+		RET	NZ		; Return if error.
+;
+		LD	A,(PLUSES##)	; Increment count of number of items.
+		INC	A
+		LD	(PLUSES##),A
+		.SET	$AMBIG,(IY+@PARSF##)	; Set ambiguous filename flag.
+		INC	A		; NZ.
+		JR	PRS10		; Go with NZ to parse next item.
+;
+;
+PARSE_ITEM:				; Returns DE -> terminating char.
+					;         HL -> next item (may =DE)
+		LD	BC,_PARSE##	; B=attributes (0), C=function.
+		EX	DE,HL		; DE -> filename to be parsed.
+		CALL	_BDOS##		; Parse filename.
+		LD	(LAST_ITEM##),HL; Save pointer to start of last item.
+		LD	L,E		; HL, DE -> terminating character, B
+		LD	H,D		;   = parse flags.
+		RET	NZ		; Return if error.
+;
+		LD	A,B		; If last item was null, then set the
+		AND	$FN OR $EXT	;   ambiguous flag.
+		JR	NZ,PIT10
+;
+		.SET	$AMBIG, B
+PIT10:		LD	A,(HL)		; Return .IPATH if terminating char
+		CALL	SEP?		;   is not a separator, / or + (file-
+		JR	Z,CHOPT		;   name probably has spurious chars
+;					;   on the end).
+		CP	'+'
+		JR	Z,XORET
+;
+		CP	'/'
+		JR	Z,GETOPT
+;
+		LD	A,.IPATH##
+		RET
+;
+XORET:		XOR	A
+		RET
+;
+;
+;
+CHOPT:		CALL	GETCH		; Skip separators.
+CHKOPT::	LD	A,(HL)		; Start of / option switch ?
+		CP	'/'
+		JR	NZ,XORET	; Return with no error if not.
+;
+GETOPT:		INC	HL		; Else point to character.
+		LD	A,(HL)		; Get / character.
+		INC	HL
+		EXX
+		PUSH	HL		; Save alternate registers.
+		PUSH	BC
+		CALL	UC##		; Save upper-cased user's option in C.
+		LD	C,A
+		LD	HL,(OPTPTR##)	; Get pointer to options table.
+;
+CHOP10:		LD	A,(HL)		; Get option from table.
+		OR	A		; End of table ?
+		JR	Z,CHOP30	; Go with A=0,Z if yes (return .IOPT).
+;
+		INC	HL		; Else HL -> next option in table.
+		INC	HL
+		CP	C		; Same as user's option character ?
+		JR	NZ,CHOP10	; Check next table entry if not.
+;
+		DEC	HL		; HL -> bit to set for option in ATTRS.
+		CP	'A'		; /A given ?
+		JR	NZ,NOTA		; Go if not.
+;
+		.RES	OPTB,(IY+@ATTRS##)	; Else reset /B bit.
+NOTA:		CP	'B'		; /B given ?
+		JR	NZ,NOTB		; Go if not.
+;
+		.RES	OPTA,(IY+@ATTRS##)	; Else reset /A bit.
+NOTB:		SUB	'P'		; Set the /P PAUSE line count if /P,
+		OR	(IY+@LINES##)	;   but only if already 0 (ie. the
+		CALL	Z,SETP##	;   first time it's parsed).
+;
+		LD	A,(HL)		; OR flags in ATTRS (0 if /P).
+		LD	HL,ATTRS##
+		OR	(HL)
+		LD	(HL),A
+		OR	H		; NZ => no error, check next option.
+CHOP30:		POP	BC		; Restore BC'.
+		POP	HL		; Restore options table pointer.
+		EXX
+		JR	NZ,CHOPT	; Check for another option if no error.
+;
+		OR	.IOPT##		; Else return 'invalid option'.
+		RET
+;
+;
+;
+		SUBTTL	CHKEOL, CHKPAR
+;******************************************************************************
+;
+;	 This routine is called after PARSE if no error occured, and  returnes
+; an  error  if garbage remains on the end of the command line.
+;
+;
+GCHKEOL::	PUSH	HL
+		CALL	GETCH
+		POP	HL
+		LD	A,.INP##
+		RET	NZ
+;
+		XOR	A
+		RET
+;
+;
+CHKEOL::	LD	A,(HL)		; Get next character on command line.
+		OR	A
+		RET	Z		; Return with no error if end of line.
+;
+		LD	A,.INP##	; Else return 'too many parameters'.
+		RET
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 This  routine  is called after PARSE if no error occured, and returns
+; an error if no filename was actually parsed.
+;
+;
+CHKPAR::	LD	A,B		; Get parse flags.
+		AND	$ODRV OR $DRV
+		SUB	1		; C => nothing parsed.
+		SBC	A,A		; FF => nothing parsed, else 0.
+		AND	.NOPARM##	; NOPARM if nothing parsed, else 0.
+		RET
+;
+;
+;
+		SUBTTL	FIRST
+;******************************************************************************
+;
+;	 This is the serach for first  routine,  used  by  most  of  the  disk
+; accessing commands. It is called after calling PARSE, so that the  necessary
+; variables  are set up. FIRST is called by the command, and FRST is jumped to
+; from NEXT if the current filename being searched for  was  not  found.  This
+; then looks for the next one, if present.
+;
+; On exit, the registers are as returned from NEXT, but B=parse flags from
+;   parsing the item just searched for.
+;
+FIRST::		LD	A,(ATTRS##)	; Save ATTRS after PARSE in SWITCHES.
+		LD	(SWITCHES##),A
+		LD	HL,(FIRSTFN##)	; Set up pointer to next filename to
+		LD	(NEXTFN##),HL	;   search for.
+;
+FRST:		LD	HL,NXT		; Return to NXT to check attributes of
+		PUSH	HL		;   file found etc.
+		LD	HL,(NEXTFN##)	; Get pointer to first filename to use.
+if 0	;(Hal_F)
+		LD	(BUFF2##),HL	; Temp. save start of item.
+endif
+FSTAGN:		LD	A,(INIATR##)	; Initialise ATTRS.
+		LD	(ATTRS##),A
+		CALL	CHKOPT		; Skip passed options.
+		RET	NZ
+;
+		PUSH	HL		; Save pointer to start of filename.
+		CALL	PARSE_ITEM	; Find end of item & get flags in B.
+		.BIT	DIR,(IY+@FLAGS##)	; DIR command ?
+		JR	Z,GOTFN			; Go if not.
+;
+		.BIT	$FN,B		; Else default filename to '*' if not
+		JR	NZ,DGOTFN	;   given.
+;
+		PUSH	HL		; Save ptr to start of next item.
+		LD	HL,(LAST_ITEM##); Get ptr to start of last item.
+		CALL	INSTAR		; Insert a '*' before it.
+		POP	HL		; Restore ptr to next item.
+		INC	HL		; Now one byte further up.
+		INC	DE
+DGOTFN:		LD	(BUFF2##+2),DE	; DIR, so save end of pathname.
+		.BIT	$AMBIG,B	; Default extension to .* if ambiguous
+		JR	Z,GOTFN		;   to prevent a double search.
+;
+		.BIT	$EXT,B		; If non-ambiguous, then this test is
+		JR	Z,DFLTE		;   done after first search.
+;
+GOTFN:		LD	A,(HL)		; Get start of next item.
+		CP	'+'		; Another item to do later ?
+		JR	NZ,FST10	; Go if not (last item).
+;
+		INC	HL		; Point passed '+'.
+		CALL	GETCH
+		LD	(NEXTFN##),HL	; Save pointer to start of next item.
+FST10:		LD	HL,PLUSES##	; Decrement files done count.
+		DEC	(HL)
+		LD	HL,0		; Zero number of files found count.
+NULL		 EQU	$-1
+		LD	(FILES),HL
+		EX	DE,HL		; HL -> terminating character.
+		POP	DE		; DE -> start.
+if 1	;(Hal_F)
+		PUSH	DE		; Save again.
+endif
+		LD	C,(HL)		; Save terminating character.
+		LD	(HL),0		; Terminate filename with a null.
+		PUSH	HL		; Save ptr to terminating character.
+		PUSH	BC		; Save terminating character.
+		LD	IX,FIB##	; Point IX to space for FIB.
+		CALL	@FIRST		; Do a search for first.
+		POP	BC		; Restore terminating character.
+		POP	HL
+		LD	(HL),C
+if 1	;(Hal_F)
+		POP	DE		; DE -> start of filename
+endif
+		.BIT	ATDIR,(IY+@FLAGS##)	; Return with error code if a
+		JR	NZ,ORET			;   'directory only' command.
+;
+		CP	.NOFILE##	; If file not found, then check for
+		JR	Z,NDIR		;   DIR defaulting the extension.
+;
+		OR	A
+		RET	NZ		; Else return if error.
+;
+		.BIT	ATDIR,(IX+FIB_AT)	; Directory found ?
+		JR	Z,NDIR			; Go if not.
+;
+		.BIT	$AMBIG,B	; Found with non-ambiguous filename ?
+		JR	Z,FNDDIR	; Go if yes (use *.* in directory).
+;
+NDIR:		.BIT	DIR,(IY+@FLAGS##)	; DIR command ?
+		RET	Z			; Ret with error code if not.
+;
+		.BIT	$EXT,B		; Extension given ?
+		RET	NZ		; Ret with error code if yes.
+;
+		LD	HL,PLUSES##	; Restore PLUSES before searching
+		INC	(HL)		;   again.
+if 1	;(Hal_F)
+		PUSH	DE		; Pointer to start of item.
+DFLTE:
+else
+		CODE	MVI A
+DFLTE:		POP	HL		; Balance stack.
+endif
+		LD	HL,(BUFF2##+2)	; Else get pointer to end of filename
+		LD	C,'.'		;   and append extension of '.*'.
+		CALL	INSERT
+		INC	HL
+		CALL	INSTAR
+if 1	;(Hal_F)
+		POP	HL		; Get pointer to start of item and
+else
+		LD	HL,(BUFF2##)	; Get pointer to start of item and
+endif
+		JP	FSTAGN		;   search for first again.
+;
+FNDDIR:		.SET	$AMBIG,(IY+@PARSF##)	; We know it's ambiguous now.
+		PUSH	IX		; Else search for *.* in the directory.
+		POP	DE		; OK to use the same FIB !
+		LD	HL,NULL		; HL -> null => *.*.
+@FIRST:		PUSH	BC		; Save flags in B.
+		LD	BC,0+(ATDIR OR ATSYS OR ATHID)*256+_FFIRST##
+		CALL	_BDOS##
+		POP	BC
+ORET:		OR	A
+		RET
+;
+;
+INSTAR:		LD	C,'*'		; INSERT a '*' character.
+		.SET	$AMBIG,B	; Filename '*' is ambiguous.
+		.SET	$AMBIG,(IY+@PARSF##)
+INSERT:		PUSH	DE		; Save DE.
+		PUSH	BC		; Save B and character in C.
+		LD	BC,0		; Count characters to end of line.
+INS10:		LD	A,(HL)		; Find end of string.
+		INC	HL
+		INC	C
+		OR	A
+		JR	NZ,INS10
+;
+		LD	E,L
+		LD	D,H
+		DEC	HL
+		LDDR			; Copy line up one byte.
+		POP	BC		; Restore B and character in C.
+		EX	DE,HL
+		LD	(HL),C		; Put character in 'gap'.
+		POP	DE		; Restore DE.
+		RET
+;
+;
+;
+		SUBTTL	NEXT
+;******************************************************************************
+;
+;	 This  routine  is  called  after  FIRST to find the next file. If the
+; current file being searched for is not found, then FIRST is called again  to
+; look for the next filename given on the command line when they are separated
+; by '+'. A count of the number of files successfully found (ie.  files  found
+; with suitable attributes) is kept (FILES), and when no more files are found,
+; .NOFILE is returned if FILES=0. Otherwise, A is returned as 0 since no error
+; has occured, but the carry is set to force commands to return.
+;
+; On exit, NC => a file was found, else Z => no more files, NZ => error.
+;	   BC is not corrupte.
+;
+NEXT::		LD	A,.NOFILE##
+		.BIT	$AMBIG,(IY+@PARSF##)	; Don't bother doing another
+		JR	Z,NXT			;   search if not ambiguous.
+;
+		LD	IX,FIB##	; Point to FIB and do a find next.
+NXT10:		PUSH	BC
+		LD	C,_FNEXT##
+		CALL	_BDOS
+		POP	BC
+;
+NXT:		OR	A		; Set flags (NXT entered from FIRST).
+		CALL	Z,TATRIB	; Check attributes of found file if no
+		JR	C,NXT10		;   error, and search again if wrong.
+;
+		LD	HL,(FILES##)	; Number of files successfully found.
+		JR	NZ,NXT30	; Go if error from search.
+;
+		INC	HL		; Else inc. number of files found,
+		LD	(FILES##),HL	;   and return with no error & NC.
+		RET
+;
+NXT30:		CP	.NOFILE##	; Return error if not .NOFILE.
+		SCF
+		RET	NZ
+;
+		LD	A,H		; If no files have been matched (FILES
+		OR	L		;   = 0), then return .NOFILE.
+		JR	Z,NOFILE
+;
+NXT40:		LD	A,(PLUSES##)	; Get number of filenames left.
+		INC	A		; P => more to do.
+		JP	P,FRST		; Search for next filename if one left.
+;
+		XOR	A		; Else no error.
+		SCF			; But Cy set => stop calling NEXT.
+		RET
+;
+NOFILE:		LD	A,(FLAGS##)	; Return .NODIR if a directory command,
+		AND	ATDIR		;   .NOFILE otherwise.
+		LD	A,.NODIR##
+		SCF
+		RET	NZ		; With NZ and C.
+;
+		SBC	A,A
+		LD	A,.NOFILE##
+		RET			; With NZ and C.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 TATRIB  is  conditionally  called  from  NEXT  and  checks  that  the
+; attributes of the found file are suitable for what we want. If they are not,
+; then the carry is returned set, otherwise AF=0 and Z.
+;
+;
+TATRIB:		LD	A,(ATTRS##)	; Get flags for files to find.
+		AND	NOT ATSYS	; System bit is used for / options.
+		CPL
+		AND	(IX+FIB_AT)	; Check found attributes are OK.
+		AND	ATHID OR ATDIR OR ATSYS OR ATDEV
+		SCF
+		RET	NZ		; Return with C if not.
+;
+		LD	A,(IX+FIB_AT)	; Reject non-directories if 'directory
+		CPL			;   only' flag is set.
+		AND	(IY+@FLAGS##)
+		AND	ATDIR
+		RET	Z		; Return with NC and Z if OK.
+;
+		SCF			; Else return with C.
+		RET
+;
+;
+;
+		SUBTTL	CHKCHR
+;******************************************************************************
+;
+;	 This routine takes a  character  in  A  and  calls  the  BDOS  CHKCHR
+; routine,  preserving all registers except A, in which the flags (passed in D
+; from the BDOS) are returned.
+;
+;
+CHKCHR::	PUSH	HL		; Save registers.
+		PUSH	DE
+		PUSH	BC
+		LD	E,A		; E=character.
+		LD	D,0		; Flags=0.
+		LD	C,_CHKCHR##
+		CALL	_BDOS##
+		JR	NZ,CHRERR	; Go if error.
+;
+		LD	A,D		; Else return the flags in A.
+CHRERR:		POP	BC
+		POP	DE
+		POP	HL
+		RET
+;
+;
+;
+		SUBTTL	ON?, OFF?
+;******************************************************************************
+;
+;	 This routine takes a pointer to a string in HL,  and  returns  NC  if
+; that  string  is  set to ON in the environment space, C otherwise. DE and BC
+; are preserved.
+;
+;
+ECHO?::		LD	HL,ECHO$##
+if 1
+ON?::		PUSH	BC
+		LD	BC,ON$
+		JR	ONOFF?
+;
+OFF?::		PUSH	BC
+		LD	BC,OFF$
+;
+ONOFF?:		PUSH	DE
+else
+ON?::		PUSH	BC		; Save BC and DE.
+		PUSH	DE
+endif
+		CALL	GENV2		; Get value of environment string.
+		SCF
+		JR	NZ,OFF		; Return Cy => OFF if error.
+;
+if 1
+		LD	H,B		; Else compare with 'ON' or 'OFF'.
+		LD	L,C
+else
+		LD	HL,ON$		; Else compare with ON.
+endif
+		DEC	DE		; Pretend DE -> length byte.
+		LD	B,(HL)		; Length of 'ON' or 'OFF'.
+		CALL	COMPARE##	; NC if match.
+OFF:		POP	DE
+		POP	BC
+		RET
+;
+ON$:		DEFB	2,'ON'
+if 1
+OFF$:		DEFB	3,'OFF'
+endif
+;
+;
+;
+		SUBTTL	FENV, GENV, SENV
+;******************************************************************************
+;
+;	 These routines do the  appropriate  find,  get  and  set  environment
+; string calls. Where appropriate, BUFF2 is used for the name and BUFF is used
+; for the value. On entry, the appropriate  registers  are  pointed  here.  On
+; exit, they are as returned from the BDOS call. Where there is a second entry
+; point (eg. GENV2), HL is already set up on entry.
+;
+;
+FENV::		LD	HL,BUFF2##	; Get name to here.
+		LD	B,B2LEN##	; Length of buffer.
+		LD	C,_FENV##
+		JP	_BDOS##
+;
+;
+GENV::		LD	HL,BUFF2##	; HL -> name.
+GENV2::		LD	DE,BUFF##	; Get value to here.
+if 1
+		PUSH	BC
+endif
+		LD	B,BLEN##	; Length of buffer.
+		LD	C,_GENV##
+		PUSH	HL
+		CALL	_BDOS##
+		POP	HL
+if 1
+		POP	BC
+endif
+		RET	Z
+;
+		PUSH	AF
+		XOR	A
+		LD	(DE),A		; Null string if error.
+		POP	AF
+		RET
+;
+;
+SENV::		LD	HL,BUFF2##	; HL -> name.
+SENV2::		LD	DE,BUFF##	; Value should be here.
+		LD	C,_SENV##
+		JP	_BDOS##
+;
+;
+;
+		SUBTTL	GET8
+;******************************************************************************
+;
+;
+;	 GET16 reads a 16 bit number from (HL), returning  it  in  DE  and  an
+; error code in AF. GET8 is similar but returns an 8 bit number in E.
+;
+;	 CHKNO can be called after GET16 or GET8 if no error was  returned  to
+; check that no garbage followed the number.
+;
+;
+GET8::		CALL	GET16
+		RET	NZ
+;
+		INC	D		; Make sure that number < 255.
+		DEC	D
+		RET	Z		; Return with no error if it is.
+;
+		JR	IPARM		; Else 'Invalid parameter'.
+;
+;
+GET16::		CALL	GETDIG		; Make sure at least 1 digit is given.
+		JR	C,BADNO		; Error if not.
+;
+		LD	DE,0		; Zero result so far.
+		LD	B,E		; B stays as 0.
+G16:		CALL	GETDIG		; Get next digit.
+		LD	C,A		; Save digit.
+		CCF
+		SBC	A,A
+		RET	Z		; Ret with no error if end of number.
+;
+		INC	HL
+		PUSH	HL		; Save pointer to number.
+		LD	L,E
+		LD	H,D		; HL = DE = result so far.
+		CALL	ADC		; Multiply by 10.
+		CALL	NC,ADC
+		POP	DE
+		JR	C,IPARM		; Return .IPARM if more than 16 bits.
+;
+		ADD	HL,BC
+		EX	DE,HL		; DE = result so far, HL -> number.
+		JR	NC,G16
+;
+IPARM:		LD	A,.IPARM##
+		OR	A
+		RET			; Return .IPARM and NZ.
+;
+BADNO:		LD	A,.BADNO##
+		OR	A
+		RET			; Return .BADNO and NZ.
+;
+;
+ADC:		ADD	HL,DE
+		RET	C
+		ADD	HL,HL
+		RET
+;
+;
+;
+CHKNO::		LD	A,(HL)
+		CALL	SEP?
+		LD	A,.BADNO##	; 'Invalid number' if number does not
+		RET	NZ		;   end in a separator.
+;
+		CALL	GETCH		; Else skip separator.
+		XOR	A		; No error.
+		RET
+;
+;
+;
+		SUBTTL	GETNO
+;******************************************************************************
+;
+;	 This  routine is called from DATE and TIME to read a component number
+; of a date/time string. One or two digits make up the read  number,  although
+; leading zeros are accepted. The number is returned in A and the carry is set
+; if an invalid number was read.
+;
+;
+GETNO::		CALL	GETDIG		; Check first character is a digit.
+		LD	E,A		; E=digit value.
+		RET	C		; Ret with error if 1st char <> digit.
+;
+GN10:		LD	A,(HL)		; Skip leading zeros.
+		INC	HL
+		CP	'0'
+		JR	Z,GN10
+;
+		DEC	HL
+		CALL	GETDIG		; Get a digit.
+		JR	C,GN20		; Go with E=0 if number was 0.
+;
+		INC	HL		; Else point to next digit.
+GNO::		LD	E,A		; Save first digit.
+		CALL	GETDIG		; See if there's a second digit.
+		LD	D,A		; Save it.
+GN20:		LD	A,E		; Return first char in A if one digit.
+		CCF
+		RET	NC		; Return with NC if one digit.
+;
+		INC	HL		; Point to next character.
+		ADD	A,A		; Else multiply the first by 10.
+		ADD	A,A
+		ADD	A,E
+		ADD	A,A
+		ADD	A,D		; Add on second digit, leaves NC.
+		RET
+;
+;
+;
+		SUBTTL	GETDIG
+;******************************************************************************
+GETDIG::
+;
+;	 This routine is used from GET8 and  GETNO,  and  reads  in  an  ASCII
+; character  from  (HL). If it is an invalid digit, then the carry is returned
+; set and HL is unchanged. Otherwise, A contains the digit in binary and HL is
+; unchanged.
+;
+;
+		LD	A,(HL)		; Get character.
+		SUB	'0'
+		RET	C		; Return if invalid digit.
+;
+		CP	10
+		CCF
+		RET			; With Cy if invalid.
+;
+;
+;
+		SUBTTL	TFORM
+;******************************************************************************
+;
+;	 This routine sets the variable TM_FORM according to the current  time
+; format that should be used. This is called from DIR and from TIME.
+;
+;
+TFORM::		LD	HL,TIME$##	; Get format environment string.
+		CALL	GENV2
+		EX	DE,HL
+;
+		CALL	GETCH		; Point passed separators.
+		LD	D,(HL)		; Get characters.
+		INC	HL
+		LD	E,(HL)
+		LD	HL,'24'		; 24 hour specified ?
+		XOR	A
+		SBC	HL,DE
+		JR	Z,TF10		; Go if yes with A=0 => 24 hour.
+;
+		DEC	A		; Else default to 12 hour format.
+TF10:		LD	(TM_FORM##),A	; Save format.
+		RET
+;
+;
+;
+		SUBTTL	DFORM
+;******************************************************************************
+;
+;	 This routine sets the variable DT_FORM according to the current  date
+; format that should be used. This is called from DIR and from DATE.
+;
+;
+DFORM::		LD	HL,DATE$##
+		CALL	GENV2		; Get format string for DATE.
+		EX	DE,HL		; HL -> format string.
+;
+		LD	B,0		; Zero format fields.
+		CALL	GETCH		; Skip leading separators.
+DF10:		LD	A,(HL)		; Get character.
+		OR	A
+		JR	Z,DF30		; Go if end of format string.
+;
+		CALL	UC##		; Else uppercase it.
+		LD	C,3		; Initiaise bit field value.
+		CP	'Y'
+		JR	Z,DF20		; Go with bit field value = 3 if year.
+;
+		DEC	C
+		CP	'M'
+		JR	Z,DF20		; Go with bit field value = 2 if month.
+;
+		CP	'D'
+		JR	NZ,DF30		; End if invalid charcter in string.
+;
+		DEC	C
+DF20:		LD	E,A		; Save character.
+		INC	HL		; Skip next char if the same (may be in
+		LD	A,(HL)		;   the format DD-MM-YY or D-M-Y).
+		CALL	UC##
+		CP	E
+		JR	NZ,DF25		; Go if not the same.
+;
+		INC	HL
+DF25:		LD	A,B		; Get current format value.
+		ADD	A,A		; Make room for new.
+		ADD	A,A
+		OR	C		; Add in new field.
+		LD	B,A
+		CALL	DTSKIP		; Skip passed valid date separators.
+		JR	DF10		; Get next format character.
+;
+DF30:		LD	A,B		; Get final format value.
+		OR	A		; Still 0 ?
+		JR	NZ,DF40		; Go if not, A=format value.
+;
+		LD	A,(COUNTRY##)	; Else convert the COUNTRY variable
+		AND	111B		;   into an equivalent format.
+		CP	1
+		LD	A,111001B
+		JR	C,DF40		; YY-MM-DD if COUNTRY = 0.
+;
+		LD	A,100111B
+		JR	Z,DF40		; MM-DD-YY if COUNTRY = 1.
+;
+		LD	A,011011B	; DD-MM-YY if COUNTRY >= 2.
+DF40:		LD	(DT_FORM##),A	; Save date format.
+		RET
+;
+;
+;
+		SUBTTL
+		END

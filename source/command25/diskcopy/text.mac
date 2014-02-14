@@ -1,0 +1,141 @@
+	Title   MSX-DOS 2 Diskcopy Program - Text file
+	.Z80
+;****************************************************************************
+;
+;    This is the text file for the MSX-DOS 2 "DISKCOPY" utility  program.   It
+; contains  all  the  text  required  by the program, so that it may easily be
+; changed to any other language.  All the text is defined using the macro MSG,
+; and  this defines an external label as a number which is accessed throughout
+; the utility.  The absolute address of the text may then be found by  passing
+; this  number in register A, to the routine GET_MSG_ADR which will return the
+; address in register HL. So that  these  labels  are  easily  distinguishable
+; elsewhere, they will be prefixed by '__'.
+;
+;    The file also contains the response characters for questions which need a
+; Yes/No response.  These are stored as a string of text  for  each,  so  both
+; upper and lower case options need to be included. The responses are accessed
+; by the global names YES_CHARS; NO_CHARS; and each string is terminated by  a
+; zero.
+;
+;----------------------------------------------------------------------------
+;               Some useful EQUs.
+CR              EQU     13
+LF              EQU     10
+CLEOL           EQU     19H
+;
+;----------------------------------------------------------------------------
+;               The responses.
+;
+YES_CHARS::     DEFB    'Yy',0
+NO_CHARS::      DEFB    'Nn',0
+;
+;----------------------------------------------------------------------------
+;               The MSG macro.
+;
+msg_num         DEFL    0
+;
+MSG             MACRO   name,text
+__&name&_MSG     EQU     msg_num
+msg_num          DEFL    msg_num+1
+		 DEFB    text,0
+		 PUBLIC  __&name&_MSG
+		ENDM
+;
+;-----------------------------------------------------------------------------
+;       GET_MSG_ADR:  This routine is used to find out the absolute address of
+; a text message.
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+GET_MSG_ADR::
+if      1
+		push	af
+		push	de
+		xor	a
+		ld	de,1100h
+;
+		exx
+		ex	af,af'
+		push	af
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		push	iy
+		ex	af,af'
+		exx
+;
+		call	0FFCAh			;FCALL
+;
+		exx
+		ex	af,af'
+		pop	iy
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		ex	af,af'
+		exx
+;
+		pop	de
+		or	a
+		ld	hl,MSG_TABLE
+		jr	z,in_ank
+		ld	hl,jmsg_table##
+in_ank:
+		pop     af
+else
+		LD      HL,MSG_TABLE            ;Address of the start of the
+endif
+		OR      A                       ; message table.
+		RET     Z                       ;If first message then found.
+		PUSH    BC
+;
+		LD      B,A                     ;Message number.
+LOP_PASS_MSG:   LD      A,(HL)                  ;Bypass this message.
+		INC     HL
+		OR      A                       ;Each message is terminated
+		JR      NZ,LOP_PASS_MSG         ; by a zero.
+		DJNZ    LOP_PASS_MSG
+;
+		POP     BC
+		RET
+;
+;----------------------------------------------------------------------------
+;               The text messages.
+;
+MSG_TABLE:
+;
+MSG     WARN,   <"Warning: ">
+MSG     ERS,    <" errors were detected.  Target disk may be unusable.">
+;
+MSG     FIN,    <CR,LF,"Diskcopy finished ok">
+;
+MSG     SRC,    <"Source drive? ">
+MSG     TRG,    <"Target drive? ">
+;
+MSG     FROM,   <"Insert source disk in drive ">
+MSG     TO,     <"Insert target disk in drive ">
+MSG     KEY,    <"Press any key to continue... ">
+;
+MSG     WER,    <"Error writing sector ">
+MSG     RER,    <"Error reading sector ">
+MSG     VER,    <"Error verifying sector ">
+MSG     RNF,    <"Error: sector not found - ">
+MSG     SEEK,   <"Error seeking sector ">
+;
+MSG     E_INCOM   <CR,LF,"*** The two disks are incompatible with each other">
+MSG     E_WR_SSIZ <CR,LF,"*** Disks have wrong sector size">
+MSG     E_SAM_DR, <CR,LF,"*** Can't copy disk onto itself">
+MSG     E_NO_ID,  <CR,LF,"*** Target disk is not an MSX-DOS 2 disk">
+MSG     E_VER,    <CR,LF,"*** Wrong version of MSX-DOS"> 
+;
+MSG     MORE,   <"Copy more disks (Y/N)? ">
+;
+;-----------------------------------------------------------------------------
+;
+	END
+;

@@ -1,0 +1,569 @@
+	.z80
+	TITLE	MSX-DOS KERNEL  Copyright (1986)  IS Systems Ltd.
+	SUBTTL	Delete, Rename, Move, Attribute and Date/Time Routines
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+	PROC	DEL_FIB
+;
+;    This routine deletes the file or sub-directory associated with a fileinfo
+; block  (FIB)  or  file  access  block  (FAB).  It is used for all the delete
+; functions, and also for deleteing files  in  the  "create"  functions.   The
+; entry  which  the  fileinfo  block  refers to must already have already been
+; located on disk and a pointer to it passed in register DE. Also  a  flag  is
+; passed to this routine to indicate whether "DIRTY_DISK" should be called.
+;
+;    If the FIB is a device FIB then this routine just returns  without  doing
+; anything.  Otherwise a search is done down the FAB chain to see if there are
+; any other open FABs for this file and if so, an error  (".FOPEN") is  given.
+; The  attributes  of  the  directory  entry  will  be checked, and if it is a
+; sub-directory then the sub-directory will be searched and an error given  if
+; it  is not empty.  Also if it is a read only file then a ".FILRO" error will
+; be returned.
+;
+;    If all of this is OK then the entry is deleted by setting the first  byte
+; to  0E5h  and flagging the buffer as dirty.  The original first character is
+; saved in a normally unused byte of the directory entry to enable an external
+; UNDELETE program to restore the full name.  If the start cluster is non-zero
+; then "FR_CHAIN" is called to free the cluster chain. Also, if the entry flag
+; was  non-zero  then  "DIRTY_DISK"  is  called  to mark the disk as dirty and
+; therefore allow undeletion.
+;
+; Entry:        IX = Pointer to FIB to be deleted.
+;		DE = Pointer to directory entry for FIB
+;		HL = Address of unit descriptor.
+;		 A = 0 => don't call "DIRTY_DISK"
+;		   <>0 => do call "DIRTY_DISK"
+; Returns:       A = Error code (flags not set)
+; Corrupts:     AF,BC,DE
+;
+;
+		ld	c,a			;Save "DIRTY_DISK" flag in C
+		xor	a			;If it is a device FIB then
+		bit	MD_DEV,(ix+FIB_MODE##)	; return with no error
+		ret	nz
+;
+		pcall	FAB_SCAN		;Error if any FAB is open
+		ret	nz			; for this same file.
+;
+		push	hl			;Get the attributes byte from
+		ld	hl,DR_ATTR##		; the directory entry.
+		add	hl,de			;
+		ld	b,(hl)
+		pop	hl
+		bit	AT_RO,b			;Return an error if it is
+		ld	a,.FILRO##		; a read only file.
+		ret	nz
+;
+		bit	AT_DIR,b		;If it is a sub-directory
+		jr	z,delete_file		; then skip the empty test.
+;
+;	----------------------------------------
+;
+		call	TST_DOT			;Refuse to remove the "."
+		ret	c			; or ".." entries.
+;
+		pcall	SV_ENTRY		;Save variables for this entry
+						; so we can find it again.
+;
+		pcall	DI_INIT			;Start a search of the
+		pcall	DI_FIRST		; directory to be removed.
+chk_empty_loop:	jr	z,dir_end		;Exit if "never been used"
+		call	TST_DOT			;Loop 'til end of directory and
+		ld	a,.DIRNE##		; return a .DIRNE error if an
+		ret	nz			; un-deleted entry other than
+		pcall	DI_NEXT			; "." or ".." is found.
+		jr	nc,chk_empty_loop
+dir_end:
+;
+		pcall	GT_ENTRY		;Get variables back for the
+						; entry to be deleted.
+;
+;	----------------------------------------
+;
+delete_file:	pcall	DI_SAME			;Ensure entry is still buffered
+		ld	a,c			;A := "DIRTY_DISK" flag
+		push	hl
+		ld	hl,DR_CLU##
+		add	hl,de
+		ld	c,(hl)			;BC := cluster number from
+		inc	hl			;      directory entry.
+		ld	b,(hl)
+		pop	hl
+;
+		or	a			;Mark disk as dirty if entry
+		pcall	nz,DIRTY_DISK		; flag was set to force this.
+;
+		ld	d,b
+		ld	e,c
+		ld	a,d			;If the cluster number is
+		or	e			; non-zero then free all
+		pcall	nz,FR_CHAIN		; clusters in the chain.
+		pcall	DI_SAME			;Get directory entry back
+						; into a buffer.
+;
+		push	hl
+		ld	hl,DR_DCHAR##		;Save first character of the
+		add	hl,de			; entry in the DR_DCHAR byte of
+		ld	a,(de)			; the entry which is otherwise
+		ld	(hl),a			; unused.
+		ld	a,0E5h			;Set the first byte to 0E5h
+		ld	(de),a			; to mark entry as deleted.
+		pop	hl
+;
+DEL_RET_OK:	call	CHANGED_ENTRY		;Dirty buffer etc. and kill
+		pcall	nz,ZAP_CD		; cluster if directory.
+		xor	a
+		ret				;Return with no error.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	REN_FIB
+;
+;    This routine renames the directory entry associated with the FIB  or  FAB
+; passed  to it in IX.  The directory entry must already have been located and
+; a pointer to it passed in register DE.  A new filename string, which may  be
+; ambiguous,  is  also passed in register BC.  If the FIB is for a device then
+; the routine returns immediately with no error.  An error will  be  generated
+; if there is any other FAB open to this file (".FOPEN" error) or if the entry
+; is the "." or ".." entry (".IDOT" error).
+;
+;    The new filename is parsed and merged with the existing filename (in case
+; the  new  one  is  ambiguous)  and  an  error (".IFNM") is returned if it is
+; invalid in any way.  Otherwise the directory is  searched  for  a  duplicate
+; filename  and  a  ".DUPF"  error  returned  if one is found.  If there is no
+; duplicate then the new name is copied  into  the  directory  entry, the
+; archive attribute bit is set, and the buffer marked as dirty so it will  be
+; written  to disk.  If the entry was a sub-directory then "ZAP_CD" is called
+; to force a re-location of the current directory.
+;
+; Entry:     IX = Pointer to FIB or FAB to be renamed
+;	     HL = Pointer to unit descriptor
+;	     DE = Pointer to directory entry
+;	     BC = Pointer to new filename ASCIIZ string
+; Returns:    A = Error code (flags not set)
+; Corrupts:  AF,BC,DE
+;
+;
+		xor	a
+		bit	MD_DEV,(ix+FIB_MODE##)	;Return with no error if it
+		ret	nz			; is a device FIB.
+;
+		pcall	FAB_SCAN		;Error if the file is open
+		ret	nz			; on a different FAB.
+;
+		call	TST_DOT			;Refuse to rename the "."
+		ret	c			; or ".." entries.
+;
+		ld	(STR_PTR##),bc
+		push	de
+		ld	de,FNM2_BUF##		;Parse the filename into an
+		pcall	PAR_ITEM		; 11 byte buffer.
+		pop	de
+		or	a
+		ld	a,.IFNM##		;Moan if filename was
+		ret	nz			; not valid.
+;
+		push	hl			;Merge the old name with
+		ld	hl,FNM2_BUF##		; the new name to get the
+		ld	bc,FNM2_BUF##		; actual new name for the
+		pcall	MRG_NAME		; file.
+		pop	hl
+;
+		ld	de,FNM2_BUF##		;Check that the new name is
+		ld	(FNM_PTR##),de		; valid and error if not.
+		ld	a,0FFh			; A=0FFh => reject dev names)
+		pcall	TST_NAME		; (Also sets up pointer at
+		ret	nz			;  "FNM_PTR" for "NM_SEARCH")
+		call	TST_DOT			;Also refuse to rename to "."
+		ret	c			; or ".." names.
+;
+		pcall	SV_ENTRY		;Save variables for this entry
+						; so we can find it again.
+;
+		pcall	DI_FIRST		;Search the whole directory
+		pcall	NM_SEARCH		; for a match with the new
+		ld	a,.DUPF##		; name and return an error
+		ret	c			; if one is found.
+;
+;
+		pcall	GT_ENTRY		;Find the directory entry
+		pcall	DI_SAME			; again and get a pointer.
+;
+		push	hl
+		push	de
+		ld	hl,FNM2_BUF##
+		ld	b,8+3			;Copy the new filename
+		ld	a,(hl)			; from the buffer into the
+		cp	0E5h			; directory entry, not
+		jr	nz,not_E5h_fiddle	; forgetting the fiddle for
+		ld	a,05h			; the first byte being 0E5h.
+not_E5h_fiddle:	ld	(de),a
+		inc	hl
+		inc	de
+		ld	a,(hl)
+		djnz	not_E5h_fiddle
+		pop	de
+		pop	hl
+;
+		jp	DEL_RET_OK		;Jump to common return code
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	MOVE_FIB
+;
+;    This routine moves the directory entry associated with the  FIB  or  FAB
+; passed to it in IX, to another directory.  The directory entry must already
+; have been located and a pointer to it  passed  in  register  DE.   The  new
+; pathname  string is passed in register BC.  If the FIB is for a device then
+; the routine returns immediately with no error.  An error will be  generated
+; if  there  is  any  other  FAB open to this file (".FOPEN" error) or if the
+; entry is the "." or ".." entry (".IDOT" error).
+;
+;    The filename of the entry to be moved is copied into "FNM2_BUF" to check
+; for  name clashes in the target directory, and the cluster number is stored
+; in  "CHK_CLU"  to  detect  any  attempt  to  create   loops   when   moving
+; sub-directories.   The  details of the current directory entry are saved in
+; "DE_2SV" and then the new path  string  is  parsed  to  locate  the  target
+; directory.   If  this  produces  an  error, or if the "SE_ERR" flag was set
+; (indicating an attempt to  create  a  directory  loop)  then  an  error  is
+; returned.
+;
+;    Once  the  target  directory has been located, it is searched for a name
+; match with the directory entry to be moved and a ".DUPF" error returned  if
+; there  is  one.  An error is also returned if there is no free entry in the
+; target directory, otherwise the location of this entry is saved by calling
+; "SV_ENTRY".
+;
+;    At this point we know that the  move  operation  can  be  done,  so  the
+; original  directory entry is relocated using the information stored earliet
+; in "DE_2SV".  The whole directory entry is copied to a temporary buffer  at
+; "DEV_ENTRY"  (which is safe because devices are tested for much earlier on)
+; and it is marked as deleted by putting an 0E5h  in  the  first  byte.   The
+; buffer is marked as dirty to ensure that it will get written to disk.
+;
+;    The free entry in the target directory is then relocated and  the  saved
+; directory entry copied into it with the archive bit  set,  and  the  buffer
+; marked  as  dirty.  This is the end of the operation if it was a file being
+; moved.  However if it was a sub-directory being moved then the  ".."  entry
+; in  the moved sub-directory is located so that its parent directory cluster
+; can be updated correctly.
+;
+; Entry:     IX = Pointer to FIB or FAB to be moved
+;	     HL = Pointer to unit descriptor
+;	     DE = Pointer to directory entry
+;	     BC = Pointer to new pathname ASCIIZ string
+; Returns:    A = Error code (flags not set)
+; Corrupts:  AF,BC,DE,AF'
+;
+;
+		xor	a
+		bit	MD_DEV,(ix+FIB_MODE##)	;Return with no error if it
+		ret	nz			; is a device FIB.
+;
+		pcall	FAB_SCAN		;Error if the file is open
+		ret	nz			; on a different FAB.
+;
+		call	TST_DOT			;Refuse to move the "."
+		ret	c			; or ".." entries.
+;
+		push	hl
+		ld	hl,DR_CLU##		;Store start cluster of the
+		add	hl,de			; directory or file in
+		ld	a,(hl)			; "CHK_CLU" so that "SE_ERR"
+		inc	hl			; flag will get set if this
+		ld	h,(hl)			; directory is found in the
+		ld	l,a			; new path string.  The is to
+		ld	(CHK_CLU##),hl		; avoid creating loops.)
+;
+		ld	hl,DR_ATTR##		;Look at attributes byte in
+		add	hl,de			; the directory entry and if
+		ld	a,(hl)			; it is a sub-directory then
+		pop	hl			; zap current dir cluster to
+		bit	AT_DIR,a		; ensure that whole path is
+		pcall	nz,ZAP_CD		; checked for a loop.
+;
+		push	bc
+		push	hl
+		ld	hl,FNM2_BUF##		;Copy the current filename
+		ld	b,8+3			; from the directory entry
+		ld	a,(de)			; into a buffer ready for
+		cp	05h			; name clash checking later.
+		jr	nz,not_05h_fiddle	;Don't forget the fiddle
+		ld	a,0E5h			; for a first character
+not_05h_fiddle:	ld	(hl),a			; being 05h.
+		inc	hl
+		inc	de
+		ld	a,(de)
+		djnz	not_05h_fiddle
+;
+		ld	hl,DE_FSTV##		;Save the info. on this
+		ld	de,DE_2SV##		; directory entry in a
+		ld	bc,DE_LSTV##-DE_FSTV##	; special area so that we
+		ldir				; can find it again easily.
+		pop	hl
+		pop	de			;DE -> new path string
+;
+		ld	c,PCM_DI+PCM_LA+PCM_ND	;Parse the new pathname string
+		ld	b,(ix+FIB_SA##)		; accessing disk, including
+		ld	a,(ix+FIB_DRV##)	; last item and not allowing
+		ld	(iy+@SE_FLAGS##),0	; a drive name.  SE_ERR flag
+		pcall	PAR_PATH		; cleared for "CHK_CLU" test.
+		ret	nz			;Give up if any error or
+		or	c			; if if stuff left on the end
+		ld	a,.IPATH##		; of the string.
+		ret	nz
+		bit	SE_ERR,(iy+@SE_FLAGS##)	;Also error if attempting to
+		ld	a,.DIRE##		; move a sub-directory into
+		ret	nz			; one of its own decendants.
+;
+		pcall	DI_FIRST		;Search the new directory for
+		ld	bc,FNM2_BUF##		; a match with the filename
+		ld	(FNM_PTR##),bc		; which we are trying to move.
+		pcall	NM_SEARCH
+		ld	a,.DUPF##		;Error if a match was found
+		ret	c
+;
+		pcall	GT_ENTRY		;No match so give an error if
+		ret	nz			; there is no free entry.
+		pcall	SV_ENTRY		;Remember where the free entry
+						; is (in case GT_ENTRY had to
+						; extend the sub-directory).
+;
+;
+;
+					;MOVE ENTRY FROM OLD POSITION TO NEW
+;
+		push	hl			;Load the search variable for
+		ld	hl,DE_2SV##		; the original entry back into
+		ld	de,DE_FSTV##		; the main search variables.
+		ld	bc,DE_LSTV##-DE_FSTV##
+		ldir
+		pop	hl			;Relocate the original
+		pcall	DI_SAME			; directory entry.
+;
+		push	hl			;Copy 32 bytes of directory
+		ld	hl,DEV_ENTRY##		; entry into DEV_ENTRY.  (Any
+		push	de			; temporary buffer will do
+		ex	de,hl			; and this is as good as any.)
+		ld	bc,32
+		ldir
+;
+		pop	hl			;Mark old entry as deleted
+		ld	(hl),0E5h		; and flag buffer as dirty so
+		pcall	DIRT_CACHE		; it will get written out.
+;
+		pop	hl			;HL -> unit descriptor
+		pcall	GT_ENTRY		;Get free entry back and
+		pcall	DI_SAME			; point DE at it.
+		push	hl
+		ld	hl,DEV_ENTRY##		;Copy directory entry from
+		ld	bc,32			; buffer into new position.
+		push	de
+		ldir
+		pop	de			;DE -> moved entry
+		pop	hl			;HL -> unit descriptor
+;
+		call	CHANGED_ENTRY		;Dirty buffer etc, and return
+		ret	z			; if not directory.
+;
+;
+					;UPDATE ".." ENTRY IF SUB-DIRECTORY
+;
+		pcall	ZAP_CD			;Zap current directory cluster
+						; in case it was affected by
+						; the move we just did.
+;
+		ld	bc,(DE_START##)		;Get start cluster of new
+		push	bc			; parent directory.
+;
+		pcall	DI_INIT			;Search the moved directory
+		pcall	DI_FIRST		; for the ".." entry which
+		ld	bc,DOT_DOT_NAME		; must be updated with the
+		ld	(FNM_PTR##),bc		; new parent directory 
+		pcall	NM_SEARCH		; cluster number.
+		pop	bc
+		ret	nc			;Return with A=0 if ".." not
+		and	ATM_DIR			; found or if it is not a
+		ret	z			; sub-directory (???).
+;
+;===== start mod FAT16 (DOS2.50 original patch)
+		ld	a,b			;If parent directory is root
+		and	c			; then must store is as zero
+		inc	a
+		jr	nz,not_root_parent
+;;		bit	7,b
+;;		jr	z,not_root_parent
+;===== end mod FAT16
+		ld	bc,0			; rather than -ve.
+not_root_parent:
+		push	hl
+		ld	hl,DR_CLU##		;Insert new parent directory
+		add	hl,de			; cluster into the ".." entry.
+		ld	(hl),c
+		inc	hl
+		ld	(hl),b
+		pcall	DIRT_CACHE		;Mark buffer as dirty and
+		xor	a			; return with no error.
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	ATTR_FIB
+;
+;    This   function  changes  the  attributes  of  a  file  or  sub-directory
+; associated with a fileinfo block (FIB) or file access block (FAB).   If  the
+; FIB  is  for  a  device  then this routine returns immediately, otherwise it
+; checks whether there is any other  FAB  open  for  this  device  and  if  so
+; generates an ".FOPEN" error.
+;
+;    The  new  attributes byte is compared with the one in the directory entry
+; to check that no invalid  bits  are  being  changed,  a  ".IATTR"  error  is
+; generated  if  this  is  the  case.  For a file only the "system", "hidden",
+; "read only" and "archive" bits may be altered and for a  sub-directory  only
+; the "hidden" bit.  If the new attributes byte is OK then it is stored in the
+; directory  entry  and the buffer marked as dirty so that it will get written
+; to disk at some time.
+;
+; Entry:     IX = Pointer to FIB or FAB
+;	     DE = Pointer to directory entry for this FIB or FAB
+;	     HL = Address of unit descriptor.
+;	      C = Required attributes
+; Returns:    A = Error code (flags not set)
+; Corrupts:  AF,BC,DE
+;
+;
+		xor	a			;If it is a device FIB then
+		bit	MD_DEV,(ix+FIB_MODE##)	; return immediately with
+		ret	nz			; no error.
+;
+		pcall	FAB_SCAN		;Error if the file is open
+		ret	nz			; on a different FAB.
+;
+		push	hl
+		ld	hl,DR_ATTR##		;Point to attributes byte
+		add	hl,de			; in directory entry and
+		ld	a,(hl)			; get current value.
+;
+		ld	b,NOT (ATM_HID+ATM_ARC)	;For directory only allow
+		bit	AT_DIR,a		; "hidden" & "archive" bits
+		jr	nz,chk_new_attr		; to change.
+		ld	b,NOT (ATM_HID+ATM_SYS+ATM_RO+ATM_ARC)
+chk_new_attr:	xor	c
+		and	b			;Error if any invalid changes
+		ld	a,.IATTR##		; are being made.
+		jr	nz,attr_fib_ret
+;
+		ld	(hl),c			;If new attributes are OK then
+		pcall	DIRT_CACHE		; store them in directory
+		xor	a			; entry, mark buffer dirty
+attr_fib_ret:	pop	hl			; and return with no error
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	FTIME_FIB
+;
+;    This function changes the date and  time  of  a  file  or  sub-directory
+; associated  with  a fileinfo block (FIB) or file access block (FAB).  If it
+; is a device FIB then it returns immediately  with  no  error,  otherwise  a
+; check  is  done to see if any other FAB is open to this file and if so then
+; an error (".FOPEN") is returned.  If this is all OK then the new  date  and
+; time  are stored in the directory entry without any checking and the buffer
+; is marked as dirty to ensure that it gets written to disk.  The archive bit
+; is also set as this counts as "touching" the file.
+;
+; Entry:     IX  = Pointer to FIB or FAB containing new date and time
+;	     HL  = Address of unit descriptor
+;	     BC  = new date value
+;	     DE  = new time value
+; Returns:    A  = Error code (flags not set)
+; Corrupts:  AF,BC,DE
+;
+;
+		xor	a			;Return straight away with no
+		bit	MD_DEV,(ix+FIB_MODE##)	; error if it is a device FIB.
+		ret	nz
+;
+		pcall	FAB_SCAN		;Error if the file is open
+		ret	nz			; on a different FAB.
+;
+		push	hl
+		push	de
+		pcall	DI_SAME			;Get the directory entry
+		ld	hl,DR_TIME##		; back and copy the new
+		add	hl,de			; date and time values
+		ex	de,hl			; into the appropriate
+		ex	(sp),hl			; fields of it.
+		ex	de,hl
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ld	(hl),c
+		inc	hl
+		ld	(hl),b
+		pop	de			;Drop through to code shared
+		pop	hl			; with DEL, REN and MOVE
+;
+CHANGED_ENTRY:	push	hl
+		ld	hl,DR_ATTR##		;Look at attributes byte of
+		add	hl,de			; the entry and if it is not
+		bit	AT_DIR,(hl)		; a sub-directory then set the
+		jr	nz,no_set_archive	; archive bit.
+		set	AT_ARC,(hl)
+no_set_archive:	pcall	DIRT_CACHE		;Mark buffer as dirty and
+		pop	hl			; return with directory flag.
+		ld	a,0
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	TST_DOT
+;
+;    This  is  a  fairly  simple routine which simply tests whether an 11 byte
+; name pointed to by DE is "." or "..".  The result is returned in the Z-flag.
+;
+; Entry:         DE = Pointer to 11 byte filename
+; Returns:    Carry - Set (C)    => name is "." or "..".  Z-flag will be set
+;		    - Clear (NC) => Z  => Name starts with 0E5h or 00h
+;				    NZ => Name is not "." or ".."
+;		  A = .DOT error (always)
+; Corrupts:   AF
+;
+;
+		push	hl
+		push	bc
+		ld	hl,DOT_NAME
+		xor	a
+		pcall	CMP_NAME		;Test for "."
+		jr	z,is_dot_name
+		ld	hl,DOT_DOT_NAME
+		xor	a			;If not the test for ".."
+		pcall	CMP_NAME
+is_dot_name:	pop	bc
+		pop	hl
+		ld	a,.DOT##		;Prepare error code in case
+		ret
+;
+;
+DOT_DOT_NAME:	db	"."
+DOT_NAME:	db	".       ","   "
+;
+;-----------------------------------------------------------------------------
+;
+;
+	finish	<DEL>
+	end
+;

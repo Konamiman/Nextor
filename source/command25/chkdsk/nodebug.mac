@@ -1,0 +1,31 @@
+	title   MSX-DOS 2 CHKDSK Program - Non-debugging Routines
+	.z80
+	INCLUDE MACROS.INC
+	INCLUDE CONST.INC
+;******************************************************************************
+;
+MSG_DEBUG::
+;
+DP_DEBUG::
+;
+GU_DEBUG::
+;
+LF_DEBUG::
+;
+ENT_DEBUG::
+SD_DEBUG::
+;
+SF_DEBUG::
+;
+REC_DEBUG::
+;
+SV_DEBUG::
+;
+CD_DEBUG::
+		ret
+;
+;------------------------------------------------------------------------------
+;
+	finish  <NODEBUG>
+	end
+;

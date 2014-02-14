@@ -1,0 +1,1473 @@
+	title	MSX-DOS 2 UNDEL Program - Main Section
+	.z80
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;******************************************************************************
+;
+	db	CR,LF
+	db	'MSX-DOS 2 UNDEL program',CR,LF
+	db	'Version '
+	db	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+	db	'Copyright (c) '
+	db	CRYEAR##/1000 MOD 10 +'0'
+	db	CRYEAR##/ 100 MOD 10 +'0'
+	db	CRYEAR##/  10 MOD 10 +'0'
+	db	CRYEAR##      MOD 10 +'0'
+	db	' ASCII Corporation',CR,LF
+	db	CR,LF,EOF
+;
+;
+;------------------------------------------------------------------------------
+;
+ENTRY::
+;
+;    This is the entry point of the UNDELETE program which is entered when  it
+; is loaded.  L80 will insert a jump to here at link time.
+;
+;
+		ld	sp,STACK##	;Setup stack in page-zero.
+;
+		call	INIT		;Initialise variables etc.
+;
+		call	FIND_DIR	;Find the directory to search
+;
+		call	GET_UPB		;Determine disk parameters
+;
+		call	LOAD_FATS	;Read in and expand the FATs
+;
+		call	SCAN_FATS	;Locate any "deleted chains"
+;
+		call	SCAN_DIR	;Scan directory for candidates entries
+;
+		call	NAME_CHK	;Re-scan directory for name clashes
+;
+		call	CLU_CHK		;Resolve cluster and name clashes
+;
+		call	MOD_DIR		;Undelete required directory entries
+					; & modify FATs in memory
+;
+		call	SAVE_FAT	;Write modified FAT back out to disk
+;
+		call	WR_CRLF##	;Write a CR-LF and terminate with
+		xor	a		; zero error code.
+		jr	EXIT
+;
+;
+;------------------------------------------------------------------------------
+;
+;    These  are  the  various routines for terminating the program.  "EXIT" is
+; the normal exit which will return the error code passed in register A.  This
+; is used for sucessful termination (A=0) and for errors which COMMAND.COM can
+; handle.  The other exits are for errors which are specific to  the  undelete
+; program.   For  these,  a message is printed and a general error code in the
+; range 1...31 is returned.
+;
+;
+CANT_UNDEL:	ld	b,__CANT_MSG##		;Can't undelete on this disk.
+		ld	a,1
+		jr	abort_error
+;
+WRONG_VER:	ld	b,__WVER_MSG##		;Wrong version of system.
+		ld	a,2
+;
+abort_error:	push	af
+		ld	a,b
+		call	WR_MSG##		;Print the error message and
+		pop	af			; exit with the error code.
+;
+EXIT::		ld	b,a			;Re-boot MSX-DOS with an
+		ld	c,_TERM##		; error code.
+		call	MSX_DOS
+		rst	0			;Should never get here!
+;
+;
+;******************************************************************************
+;
+INIT:
+;
+;    This routine is called once only when the program starts  up  to  do  any
+; initialisation which the program requires.  Its functions are as follows:
+;
+;	1.  Check the system version number
+;
+;	2.  Define a user error vector routine to enable READ_SECT and
+;	      FLUSH to handle errors in any FAT copy.
+;
+;
+		ld	c,_DOSVER##		;Find out the MSX-DOS version
+		call	MSX_DOS			; number.
+		or	a
+		jr	nz,WRONG_VER
+		ld	a,2-1			;Reject any version number
+		cp	b			; of MSXDOS.SYS or the
+		jr	nc,WRONG_VER		; kernel which is less than
+		cp	d			; 2.00.
+		jr	nc,WRONG_VER
+;
+		ld	c,_DEFER##		;Set address of user error
+		ld	de,ERV_ROUTINE##	; routine.
+		call	MSX_DOS
+		ret
+;
+;
+;
+;******************************************************************************
+;
+FIND_DIR:
+;
+;    This  routine  decodes  the  command line by using the "parse path" call.
+; Having done this it locates the directory to be searched, leaving the drive,
+; filename and start cluster number in "FIB" ready to be used.
+;
+;    If the filename specified is null then it is assumed ambiguous. for first
+; is then done to locate the directory - it  doesn't  matter  if  this  search
+; finds  a  file or not.  However if it finds a sub-directory, and if the name
+; specified was unambiguous, then this  sub-directory  is  searched  with  the
+; filename replaced by "*.*".
+;
+;
+		call	MSG_DEBUG##		;Check for special command
+						; to print all messages.
+;
+		ld	hl,81h			;Point at command tail
+		call	SKIP_SPACE		;Skip any leading white space
+;
+		LD	(PATH_ADR##),HL		;Start of path.
+;
+		EX	DE,HL			;Start of path into DE.
+		ld	c,_PARSE##
+		ld	B,0			;Not a volume name.
+		call	MSX_DOS			;Parse the string
+		jp	nz,EXIT			; and give up if error
+;
+		LD	H,D			;Pointer to termination char.
+		LD	L,E
+;
+		call	SKIP_SPACE		;Ignore any trailing spaces.
+		or	a
+		ld	a,.IPARM##		;If any trailing characters
+		jp	nz,EXIT			; then exit with error.
+;
+		LD	A,C			;Logical drive number.
+		LD	(DRIVE##),A		;Store it.
+;
+		LD	A,B			;Parse flags.
+		and	PFM_F+PFM_E
+		jr	nz,not_null_fname	;If filename was totally null
+setup_ambig:	set	PF_AMB,b		;Flag ambiguous.
+not_null_fname:
+;
+		push	bc			 ;Save "ambiguous flag"
+		ld	de,(PATH_ADR##)		 ;Address of path string.
+		LD	HL,null_name		 ;In case come from sub-dir.
+		LD	IX,FIB##		 ;A file info block for result.
+		LD	B,ATM_HID+ATM_SYS+ATM_DIR;Hidden, system & sub-dirs.
+		LD	C,_FFIRST##		 ;Search for first occurence.
+		call	MSX_DOS
+		pop	bc
+		jr	nz,first_err		;Skip if any error.
+;
+		BIT	AT_DEV,(IX+FIB_ATTR)	;Check if it is actually a
+		LD	A,.NOFIL##		; device, and give error if so.
+		JP	NZ,EXIT
+;
+		bit	PF_AMB,b
+		jr	nz,first_ok		;Jump if search was ambiguous
+		BIT	AT_DIR,(IX+FIB_ATTR)	;What have we found ??
+		jr	z,first_ok		;Jump if not a sub-directory
+;
+		LD	HL,FIB##		;Pretend FIB is the path.
+		LD	(PATH_ADR##),HL
+		JR	setup_ambig
+;
+;
+first_err:	cp	.NOFIL##		;Any error other than "file
+		jp	nz,EXIT			; not found" is fatal.
+;
+first_ok:	jp	FD_DEBUG##		;Print out debugging info.
+;
+null_name:	db	0			;A null filename, used if the
+						; the name given turns out to
+						; be a sub-directory.
+;
+;------------------------------------------------------------------------------
+;
+SKIP_SPACE:	ld	a,(hl)
+SKIP_SPACE_2:	inc	hl			;Skip past any leading white
+		cp	" "			; space (spaces or tabs) in
+		jr	z,skip_space		; the string pointed to by HL.
+		cp	TAB			;First non-space character is
+		jr	z,skip_space		; returned in HL.
+		dec	hl
+		ret
+;
+;******************************************************************************
+;
+GET_UPB:
+;
+;    This routine is called to get the disk parameters for the  drive  into  a
+; buffer.   Some initial checks on the feasibility of doing the undeletion are
+; also done here.  If the disk has no volume id, or only one FAT copy then  it
+; is  totally  impossible  to  ever do any undeletion from this disk and so an
+; error message to that effect is printed.  If this is OK but the  dirty  disk
+; flag  is  zero  then  there  are  no files to undelete and so the program is
+; terminated with a "file not found" error.
+;
+;
+		ld	a,(DRIVE##)		;Get logical drive into
+		ld	L,a			; register L and go and get
+		ld	C,_DPARM##		; the disc parameters.
+		LD	DE,UD_IMAGE##		;Where to store it.
+		call	MSX_DOS
+		jp	nz,EXIT			;Give up if any error.
+;
+		ld	a,(VOL_ID##)
+		add	a,a			;Can't undelete from this
+		jp	c,CANT_UNDEL		; disk if it has no volume
+		ld	a,(FAT_COPY##)		; ID or if it only has one
+		dec	a			; copy of the FAT.
+		jp	z,CANT_UNDEL
+;
+		ld	a,(DIRT_FLAG##)		;Exit with a "file not found"
+		or	a			; error if the disk is not
+		ld	a,.NOFIL##		; dirty.
+		jp	z,EXIT
+;
+		LD	A,(SEC_CLU##)		;Work out the cluster shift
+		LD	B,-1			; factor, so that later
+loop_clu_sft:	INC	B			; calculations are easier.
+		RRCA
+		JR	NC,loop_clu_sft
+		LD	A,B
+		LD	(CLU_SHIFT##),A
+;
+		jp	GU_DEBUG##		;Print out debugging info.
+;
+;
+;******************************************************************************
+;
+LOAD_FATS:
+;
+;    This  routine  reads  in two copies of the FAT to memory above the top of
+; the program.  It first checks that there is enough  space  in  the  TPA  and
+; gives  an "insufficient memory" error if not.  The two copies of the FAT are
+; then read in via the sector buffer and expanded to 16 bits  per  entry.  The
+; top four bits are used later for flags and are initially zero.
+;
+;
+		ld	hl,(TOT_CLU##)		;DE := total clusters
+		add	hl,hl			; * 2 which is the size of a
+		ex	de,hl			; whole FAT copy in memory.
+		ld	hl,PROG_END##
+		ld	(FAT_1##),hl		;Store address of buffer
+		add	hl,de			; for first copy of the FAT
+		jr	c,out_of_memory
+		ld	(FAT_2##),hl		;Store address of buffer
+		add	hl,de			; for second copy.
+		jr	c,out_of_memory
+		ld	(FILE_LIST##),hl	;Store address for start of
+		ld	de,(6)			; file list.
+		sbc	hl,de
+		jr	c,memory_ok		;Check that we are before the
+out_of_memory:					; end of the TPA and return an
+		ld	a,.NORAM##		; return an error iff too high
+		jp	EXIT
+;
+;
+memory_ok:	ld	de,(FAT_START##)	;DE := 1st sector of 1st FAT
+		ld	hl,(FAT_1##)		;HL -> buffer for first FAT
+		call	READ_FAT		;Read first FAT into buffer
+;
+		ld	hl,FAT_FLAGS##		;Set flag to indicate reading
+		set	0,(hl)			; last FAT copy.
+		ld	hl,(FAT_START##)
+		ld	a,(FAT_SIZE##)
+		ld	e,a			;Work out first sector of last
+		ld	d,0			; copy of the FAT by adding
+		ld	a,(FAT_COPY##)		; the FAT size on (FAT_COPY-1)
+		dec	a			; times.
+last_fat_loop:	add	hl,de
+		dec	a
+		jr	nz,last_fat_loop
+		ex	de,hl			;DE := 1st sector of last FAT
+		ld	hl,(FAT_2##)		;HL -> buffer for second FAT
+		call	READ_FAT
+;
+		jp	LF_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+READ_FAT:
+;
+;    This  routine  reads  a  single  copy  of  the  FAT into a memory buffer,
+; expanding each entry to 16 bits.  It uses the subroutine "GET_NYBBLE"  which
+; returns  the  next  nybble from the FAT, reading in new sectors as required.
+; For each cluster from zero up to (TOT_CLU-1), three  nybbles  are  read  and
+; stored as the two byte entry.
+;
+; Entry:     DE = First sector number of FAT
+;	     HL = Address of memory buffer for FAT
+;
+;
+		push	hl			;Save memory address
+		ld	bc,0			;Get nybble count to BC' and
+		exx				; sector number to DE'.
+		ld	bc,(TOT_CLU##)		;BC := cluster count
+		pop	hl			;HL := memory address
+;
+read_fat_loop:	call	GET_NYBBLE		;Get lowest nybble
+		ld	d,a
+		call	GET_NYBBLE		;Get next lowest nybble and
+		add	a,a			; multiply it by 16 to get
+		add	a,a			; it into the top half of a
+		add	a,a			; byte.
+		add	a,a
+		add	a,d			;Combine the two nybbles and
+		ld	(hl),a			; store in the next byte of
+		inc	hl			; the buffer.
+		call	GET_NYBBLE		;Get third nybble and store
+		ld	(hl),a			; as high byte of entry.
+		inc	hl
+		dec	bc
+		ld	a,b			;Decrement cluster count and
+		or	c			; loop until got all FAT
+		jr	nz,read_fat_loop	; entries.
+;
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+GET_NYBBLE:
+;
+;    This  routine  returns  the  next  nybble  from the bufferred FAT sector,
+; reading in the next sector when required.   BC'  contains  a  count  of  the
+; number  of  unread nybbles in the sector buffer and register DE' is the next
+; sector number to read.  Register HL' points  to  the  current  byte  in  the
+; sector  buffer,  but  need  not  be defined if BC'=0 since it will be set up
+; afresh when the new sector is read in.  The sectors are read by "R_FAT_SECT"
+; or  "READ_SECT"  depending  on  the  state  of the last FAT flag in bit-0 of
+; "FAT_FLAGS".
+;
+; Entry:    BC' = Count on nybbles remaining in buffer 0...1023
+;	    DE' = Next logical sector to read
+;	    HL' = Current address in sector buffer (undefined in BC'=0)
+; Returns:  BC',DE',HL' = Updated appropriately
+;	     A  = Value of nybble (0...0Fh)
+;
+;
+		exx
+		ld	a,b			;Skip if there are any nybbles
+		or	c			; left in the current sector
+		jr	nz,same_fat_sect
+;
+		ld	hl,FAT_FLAGS##
+		bit	0,(hl)			;Read sector (DE) either as
+		jr	nz,read_last_fat	; a single copy or multi-copy
+		call	R_FAT_SECT##		; read depending on the last
+		jr	fat_sect_read		; FAT flags.
+read_last_fat:	call	READ_SECT##
+fat_sect_read:	jp	nz,EXIT			;Give up if error.
+		inc	de			;Bump sector number
+		ld	bc,1024			;Re-initialise nybble count
+;
+same_fat_sect:	xor	a			;Rotate next nybble out of the
+		rrd				; byte, with bits 4...7 clear
+		bit	0,c
+		jr	z,low_nybble		;If finished byte then step on
+		inc	hl			; to next byte
+low_nybble:	dec	bc			;Decrement nybble count
+		exx
+		ret
+;
+;
+;******************************************************************************
+;
+SCAN_FATS:
+;
+;    This routine does three passes through the FATs in memory,  in  order  to
+; establish  the chain structure within them and correct any corrupted chains.
+; The top four bits of the entries in FAT_2 are used as flags.  FAT_1  is  not
+; altered  at  all  since it is the copy which will be written back to disk if
+; any files are undeleted.  The function of the three passes are as follows:
+;
+; PASS 1 - Locates all "undeletable" clusters.  For each entry in FAT_1 which
+;	     is non-zero, the corresponding entry in FAT_2 is set to the same
+;	     value.  This ensures that the two FATs are consistent.  For each
+;	     entry in FAT_1 which is zero (unallocated) and whose corresponding
+;	     FAT_2 entry is non-zero (allocated), the "FL_UNDEL" bit in the
+;	     entry in FAT_2 is set to mark the cluster as "undeletable".
+;	     Entries which are zero in both FATs are not altered at all.
+;
+; PASS 2 - Identifies all clusters which are referenced by an allocated cluster
+;	     and which therefore must not be part of an undeleted chain.  This
+;	     is done by examining each entry FAT_2 which was not marked as
+;	     "undeletable" in pass-1.  If the entry refers to a valid cluster
+;	     number then the "FL_REF" bit in the referenced entry in FAT_2 is
+;	     set.
+;
+; PASS 3 - Resolves any corruptions in the "undeletable" cluster chains.  Each
+;	     "undeletable" entry in FAT_2 is examined in turn.  If it is an end
+;	     of chain cluster then it is left alone.  Otherwise if the entry
+;	     refers to an invalid cluster number, an allocated cluster
+;	     ("FL_UNDEL" flag clear from pass 1) or a cluster which is in turn
+;	     referred to by another cluster ("FL_REF" flag set in pass 2 or
+;	     "FL_CHAIN" flag set earlier during this pass), then the entry
+;	     will be set to zero to indicate a truncated file chain.
+;	   If none of these conditions is true then the entry must refer to
+;	     a reasonable looking "undeletable" cluster and so it is left
+;	     alone and the "FL_CHAIN" bit of the entry to which it refers is
+;	     set.
+;
+;    This  results  in  the  "undeletable"  clusters  being  in  tidy   chains
+; terminated either by an "end of file" marker, or by a zero which indicates a
+; truncated chain.  If a chain terminating in zero is undeleted then a warning
+; message will be produced.  The start of an "undeletable" chain will have its
+; "FL_UNDEL" flag set and both the "FL_REF" and "FL_CHAIN" flags clear.
+;
+;
+		ld	hl,(FAT_1##)		;HL -> first copy of FAT
+		ld	de,(FAT_2##)		;DE -> second copy of FAT
+		ld	bc,(TOT_CLU##)		;BC := number of entries
+pass_1_loop:	push	bc			;      for loop count.
+		ld	c,(hl)
+		inc	hl
+		ld	b,(hl)			;BC := entry from FAT_1
+		inc	hl
+		ex	de,hl
+		ld	a,b
+		or	c			;Skip if FAT_1 entry is
+		jr	z,zero_entry_1		; zero (unallocated).
+;
+		ld	(hl),c			;If FAT_1 entry is non-zero
+		inc	hl			; then set FAT_2 entry to
+		ld	(hl),b			; the same value.
+		jr	done_entry_1
+;
+zero_entry_1:	ld	a,(hl)			;If FAT_1 entry is zero then
+		inc	hl			; test FAT_2 entry and do
+		or	(hl)			; nothing if it is also zero.
+		jr	z,done_entry_1		;If FAT_2 entry is non-zero
+		set	FL_UNDEL,(hl)		; then set the flag.
+;
+done_entry_1:	inc	hl			;Adjust FAT_2 pointer to next
+		ex	de,hl			; entry and put back in DE.
+		pop	bc
+		dec	bc
+		ld	a,b			;Decrement loop count and
+		or	c			; loop back until done
+		jr	nz,pass_1_loop		; all entries.
+;
+;
+;	----------------------------------------
+;
+;
+		ld	de,(TOT_CLU##)
+pass_2_loop:	dec	de			;Get value of next entry
+		call	NEXT_CLU##		; and exit when done whole
+		jr	nz,pass_2_done		; FAT.
+;
+		bit	FL_UNDEL,a		;Ignore this entry if it
+		jr	nz,pass_2_loop		; is an "undeletable" one.
+;
+		push	de			;Try to find the referenced
+		ex	de,hl			; entry and do nothing if it
+		call	F_FAT2##		; is an invalid entry number.
+		pop	de
+		jr	nz,pass_2_loop
+;
+		inc	hl			;Set "referenced" bit in the
+		set	FL_REF,(hl)		; referenced cluster and
+		jr	pass_2_loop		; loop back for next entry.
+;
+pass_2_done:
+;
+;
+;	---------------------------------------
+;
+;
+		ld	de,(TOT_CLU##)
+pass_3_loop:	dec	de			;Get value of next entry
+		call	NEXT_CLU##		; and exit when done the
+		jr	nz,pass_3_done		; whole FAT.
+;
+		bit	FL_UNDEL,a		;Ignore allocated clusters
+		jr	z,pass_3_loop		; on this pass.
+;
+		bit	7,h			;If it is an "end of file"
+		jr	nz,pass_3_loop		; cluster then leave it alone
+;
+		push	de
+		ex	de,hl			;Look for the entry which
+		call	F_FAT2##		; this cluster refers.  Jump
+		pop	de			; to truncate the chain if
+		jr	nz,invalid_chain	; the referred cluster is:
+		inc	hl			;    an invalid cluster number
+		bit	FL_UNDEL,(hl)		; OR an allocated cluster
+		jr	z,invalid_chain		; OR referenced by any other
+		bit	FL_REF,(hl)		;    cluster.
+		jr	nz,invalid_chain
+		bit	FL_CHAIN,(hl)
+		set	FL_CHAIN,(hl)		;Mark the cluster as
+		jr	z,pass_3_loop		; referenced by an entry.
+;
+invalid_chain:	call	F_FAT2##		;In any of the avove invalid
+		ld	(hl),0			; situations, set the value
+		inc	hl			; of the entry to zero to mark
+		ld	a,(hl)			; it as a truncated chain.
+		and	0F0h
+		ld	(hl),a
+		jr	pass_3_loop
+;
+pass_3_done:
+;
+;
+		jp	SF_DEBUG##		;Print out debugging info.
+;
+;
+;******************************************************************************
+;
+SCAN_DIR:
+;
+;    This routine does the first pass through the directory.  For  each  entry
+; it  calls the routine "CHECK_ENTRY" which adds the entry to the file list if
+; it looks like a good candidate for undeleting.   The  directory  scan  stops
+; when  a  "never  been used" entry is found.  A warning message is printed if
+; the directory chain is corrupted.
+;
+;
+		ld	hl,(FILE_LIST##)	;Initialise file list to
+		ld	(hl),0			; be empty.
+;
+		ld	hl,(FIB##+FIB_DVAR+D_START)
+						;Initialise a search of the
+		ld	(DIR_START##),hl	; required directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	scan_dir_go		; and jump to process it.
+scan_dir_loop:	call	DRE_NEXT##		;Get next directory entry
+scan_dir_go:	jr	nz,scan_dir_end		;Exit if reached physical
+		ld	a,(hl)			; end of directory, or logical
+		or	a			; end (never been used entry).
+		jr	z,scan_dir_done
+		call	CHECK_ENTRY		;Process this one entry and
+		jr	scan_dir_loop		; loop back for next.
+;
+scan_dir_end:	dec	a			;Print a warning message if
+		ld	a,__CRPT_MSG##		; directory chain was corrupt.
+		call	nz,WR_MSG##
+;
+scan_dir_done:	ld	a,(MEM_FULL##)		;If memory overflowed then
+		or	a			; print a warning message
+		ld	a,__FULL_MSG##		; but carry on.
+		call	nz,WR_MSG##
+;
+		ld	hl,(FILE_LIST##)
+		ld	a,(hl)			;If no candidates were found
+		or	a			; then might as well give up
+		ld	a,.NOFIL##		; straight away.
+		jp	z,EXIT
+;
+		jp	SD_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_ENTRY:
+;
+;    This routine is called during the first directory scan for every entry in
+; the directory.  The first section of code does some initial checks to decide
+; whether the entry is  a  candidate  for  undeletion.   These  tests  are  as
+; follows:  1.   Must  be a deleted entry (first byte 0E5h). 2.  Must not be a
+; volume name or sub-directory entry.  3.   The  name  must  not  contain  any
+; invalid  filename  characters  after  the  first  chracater is restored from
+; DR_DCHAR. 4.  The cluster number field must contain a valid cluster  number.
+; 5.  The cluster referred to must be the start of an "undeletable" file chain
+;
+;    If  all  of  these points are satisfied then the entry is a candidate for
+; undeletion so it is added to the file list in memory.
+;
+; Entry:      HL -> directory entry in question
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	a,(hl)			;Do nothing if entry is
+		cp	0E5h			; not deleted
+		ret	nz
+;
+		ld	de,ENT_BUF##		;Copy the entry to a fixed
+		ld	bc,32			; buffer for ease of
+		ldir				; handling.
+;
+		ld	a,(ENT_ATTR##)		;Ignore entry if it is for
+		bit	AT_VOL,a		; a volume name.
+		ret	nz
+;
+		ld	a,(ENT_DCHAR##)		;Restore old first character
+		ld	(ENT_BUF##),a		; to start of the name.
+		xor	a
+		ld	(ENT_DCHAR##),a		;Zero deleted character byte.
+;
+		ld	hl,ENT_BUF##
+		ld	bc,11*256+0		;B=loop count, C=char flags
+uncase_loop:	ld	a,(hl)
+		call	C_CH1##			;Use MSX-DOS's upper caseing
+		ld	(hl),a			; because of 16 bit characters.
+		inc	hl
+		djnz	uncase_loop
+;
+		ld	de,ENT_BUF##		;Compare the filename in the
+		ld	hl,FIB+FIB_PAT		; entry with the one we
+		call	CMP_FNAME##		; are looking for and return
+		ret	nz			; if no match.
+;
+		ld	de,(ENT_CLU##)		;Get cluster from directory
+		call	NEXT_CLU##		; entry, find its FAT_2 entry
+		ret	nz			; and return if invalid.
+;
+		bit	FL_UNDEL,a		;Must be an "undeletable"
+		ret	z			; cluster.
+		bit	FL_CHAIN,a		;Must be the start of a chain
+		ret	nz
+		bit	FL_REF,a		;Must not be referenced by
+		ret	nz			; an allocated cluster
+;
+;
+;	---------------------------------------
+;
+;
+		ld	hl,(FILE_LIST##)
+		ld	bc,1+32+SV_SIZE##	;Step through files in the
+add_file_loop:	ld	a,(hl)			; file list until we find the
+		add	hl,bc			; zero which marks the end
+		or	a			; of the list.
+		jr	nz,add_file_loop
+;
+		ld	de,(6)			;Test whether there is room
+		sbc	hl,de			; to allocate another item
+		jr	c,not_mem_full		; before the top of the TPA.
+		ld	a,0FFh			;If not then set the "memory
+		ld	(MEM_FULL##),a		; full" flag and return.
+		ret
+;
+not_mem_full:	add	hl,de			;Put in a zero to mark the
+		ld	(hl),0			; new end of the file list.
+;
+		dec	hl
+		ex	de,hl			  ;Copy the search variables
+		ld	hl,SV_START##+SV_SIZE##-1 ; into the new item on the
+		ld	bc,SV_SIZE##		  ; list.
+		lddr
+;
+		ld	hl,ENT_BUF##+32-1	;Copy the directory entry
+		ld	bc,32			; into the new item.
+		lddr
+;
+		ld	a,080h			;Mark file item as being in
+		ld	(de),a			; use and clear other flags.
+;
+		jp	ENT_DEBUG##		;Print out debugging info
+;
+;
+;******************************************************************************
+;
+NAME_CHK:
+;
+;    This routine does the second pass through the directory which rejects any
+; name  clashes  with already existing files in the directory.  Each directory
+; entry in turn is located and passed to "NAME_CHK_ENTRY"  which  will  reject
+; any candidate files in the list which exactly match the name from disk.
+;
+;
+		ld	hl,(FIB##+FIB_DVAR+D_START)
+		ld	(DIR_START##),hl	;Initialise a search of the
+						; required directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	scan2_dir_go		; and jump to process it.
+;
+scan2_dir_loop:	call	DRE_NEXT##		;Get next directory entry
+scan2_dir_go:	jr	nz,scan2_dir_end	;Exit if reached physical
+		ld	a,(hl)			; end of directory, or logical
+		or	a			; end (never been used entry).
+		jr	z,scan2_dir_end
+		call	NAME_CHK_ENTRY		;Process this one entry and
+		jr	scan2_dir_loop		; loop back for next.
+;
+scan2_dir_end:	jp	NC_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+NAME_CHK_ENTRY:
+;
+;    This  routine  checks  one  directory  entry  from disk for possible name
+; clashes.  It returns immediately if the entry is deleted or is for a  volume
+; id.  Otherwise the name in the directory entry is compared in turn with each
+; name in the candidate list and any candidates  which  match  are  marked  as
+; invalid by setting bit-6 of the flags byte (first byte of the item).
+;
+; Entry:       HL -> Directory entry in question
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	a,(hl)			;Ignore this entry if it is
+		cp	0E5h			; deleted.
+		ret	z
+;
+		ld	de,ENT_BUF##		;Copy the entry to a fixed
+		ld	bc,32			; buffer for ease of
+		ldir				; handling.
+;
+		ld	a,(ENT_ATTR##)		;Ignore entry if it is for
+		bit	AT_VOL,a		; a volume name.
+		ret	nz
+;
+		ld	hl,(FILE_LIST##)	;Look through each item
+name_chk_loop:	ld	a,(hl)			; in the file list in turn.
+		or	a
+		ret	z			;Return when done whole list
+		push	hl
+		inc	hl
+		ld	de,ENT_BUF##
+		call	CMP_FNAME##		;If name in file list matches
+		pop	hl			; the name from disk then
+		jr	nz,no_name_clash	; set bit-6 of flags byte to
+		call	NC_ENT_DEBUG##		; mark it as invalid.
+		set	6,(hl)
+no_name_clash:	ld	bc,1+32+SV_SIZE##
+		add	hl,bc			;Step onto next item in list
+		jr	name_chk_loop		; and loop back.
+;
+;
+;******************************************************************************
+;
+CLU_CHK:
+;
+;    This  routine  has  the  job of examining the list of candidate files for
+; undeletion (the "items") and resolving any cluster clashes.  Where a cluster
+; number  occurs  in  more  than  one  item it must select a single item to be
+; undeleted and reject all others.  It produces a byte of flags at  the  start
+; of  each item which indicate which items have been selected and also various
+; error flags on each one.
+;
+;	bit-7 - Clear => end of list
+;	bit-6 - Set => name clash with existing file in directory
+;	bit-5 - Set => file size wrong (only if bit-3 clear)
+;	bit-4 - Set => invalid directory (only if bit-3 set)
+;	bit-3 - Set => sub-directory,  clear => file
+;	bit-2 -    Not used
+;	bit-1 - Set => item has been rejected (only if bit-0 set)
+;	bit-0 - Set => item has been examined
+;
+;
+		ld	hl,(FILE_LIST##)
+clu_chk_loop:	ld	a,(hl)			;Look at next item in list and
+		or	a			; return if end of list.
+		jp	z,CC_DEBUG##
+		bit	0,(hl)			;Ignore the item if it has
+		jp	nz,clu_chk_next		; already been examined.
+;
+;
+;	----------------------------------------
+;
+;
+		push	hl
+		ld	de,1+DR_CLU		;Get the cluster number from
+		add	hl,de			; out of this item and store
+		ld	e,(hl)			; it at CC_CLUSTER so we can
+		inc	hl			; look for same cluster
+		ld	d,(hl)			; clashes.
+		ld	(CC_CLUSTER##),de
+		ld	bc,-1
+cc_size_loop:	inc	bc			;Count the number of clusters
+		call	NEXT_CLU##		; in the chain and store it
+		ex	de,hl			; at CC_SIZE for checking the
+		jr	z,cc_size_loop		; size of files.
+		ld	(CC_SIZE##),bc
+		pop	hl
+;
+		xor	a			;Flag that directory validity
+		ld	(CC_DRCHK##),a		; has not been checked yet.
+;
+		call	EXAMINE_ENTRY		;Setup directory and file
+		push	hl			; flags for this item.
+		call	CC_1ENT_DEBUG##		;Print out debugging info
+		ld	d,h
+		ld	e,l			;DE := initial "old" item
+;
+;
+;	----------------------------------------
+;
+;
+cc_loop2:	ld	bc,1+32+SV_SIZE##	;Step onto next item in list
+		add	hl,bc			; for comparison and exit the
+		ld	a,(hl)			; inner loop if end of list.
+		or	a
+		jr	z,cc_loop2_done
+;
+		push	hl
+		ld	bc,1+DR_CLU		;Get the cluster number from
+		add	hl,bc			; this item compare with
+		ld	c,(hl)			; the cluster number for this
+		inc	hl			; iteration of the main loop.
+		ld	b,(hl)
+		ld	hl,(CC_CLUSTER##)
+		sbc	hl,bc
+		pop	hl			;If wrong cluster number then
+		jr	nz,cc_loop2		; ignore this item.
+;
+		push	de			;If correct cluster number
+		call	EXAMINE_ENTRY		; then set up the validity
+		pop	de			; flags for the new item.
+		call	CC_2ENT_DEBUG##		;Print out debugging info.
+;
+		ld	a,(CC_DRCHK##)
+		ld	b,a			;B := directory checked flags
+;
+		ld	a,(de)			;A := flags for old item.
+		bit	3,a			;If both old and new items
+		jr	z,old_not_dir		; are sub-directories then
+		bit	3,(hl)			; jump to check for name
+		jr	nz,chk_name		; clash & date/time.
+;
+		bit	4,b			;If old item is a directory and
+		jr	z,reject_new		; new one is file then keep the
+		jr	reject_old		; directory if it is valid and
+						; the file if the directory
+						; was invalid.
+;
+old_not_dir:	bit	3,(hl)			;If old item is file and new
+		jr	z,neither_dir		; item is directory then keep
+		bit	4,b			; the directory if it is valid
+		jr	z,reject_old		; and the file if the directory
+		jr	reject_new		; was invalid.
+;
+neither_dir:	ld	a,(de)
+		xor	(hl)			;Both are files. If both sizes
+		bit	5,a			; are valid or both invalid,
+		jr	z,chk_name		; check for names & date/time.
+		bit	5,(hl)			;If one is valid and one is
+		jr	nz,reject_new		; invalid then reject whichever
+		jr	reject_old		; one is invalid.
+;
+;
+chk_name:	ld	a,(de)			;If both items are equally
+		xor	(hl)			; valid then see if one of them
+		bit	6,a			; has a name clash with a file
+		jr	z,chk_date_time		; in the directory.  If so
+		bit	6,(hl)			; then reject that one.
+		jr	nz,reject_new
+		jr	reject_old
+;
+;
+chk_date_time:	push	hl			;If neither or both items have
+		push	de			; a name clash then compare the
+		ld	bc,1+DR_DATE+1		; two dates and times and
+		add	hl,bc			; reject the older one of the
+		ex	de,hl			; two.
+		add	hl,bc			;HL & DE -> high byte of date
+		ex	de,hl			; in the two items.
+		ld	b,4
+		xor	a
+date_time_loop:	ld	a,(de)			;Loop to compare the four bytes
+		cp	(hl)			; of date and time until a
+		jr	nz,date_time_diff	; difference is found.
+		dec	hl
+		dec	de
+		djnz	date_time_loop
+date_time_diff:	pop	de			;Restore item pointers
+		pop	hl			;If old item date/time was
+		jr	c,reject_old		; lower then reject it, else
+						; reject the new item.
+;
+reject_new:	call	CC_REJ_DEBUG##
+		set	1,(hl)			;Set flag to reject new item
+		jr	cc_loop2		; loop back to continue checks
+;
+reject_old:	ex	de,hl			;Set flag to reject old item
+		set	1,(hl)			; get address of new item into
+		ld	h,d			; DE so it will become the
+		ld	l,e			; new "old" item.
+		call	CC_ACC_DEBUG##
+		jr	cc_loop2
+;
+;
+;	----------------------------------------
+;
+;
+cc_loop2_done:	pop	hl			;Inner loop finished so restore
+						; pointer to find next item
+						; to examine.
+;
+clu_chk_next:	ld	de,1+32+SV_SIZE##
+		add	hl,de			;Point to next item and loop
+		jp	clu_chk_loop		; back.
+;
+;
+;------------------------------------------------------------------------------
+;
+EXAMINE_ENTRY:
+;
+;     This subroutine is called by "CLU_CHK" above  to  set  up  the  validity
+; flags for a new item addressed by HL.  The "examined" flag (bit-0) is always
+; set to prevent the item being examined twice.  The attributes  of  the  item
+; are then examined since files and sub-directories are treated differently.
+;
+;    Currently  a  sub-directory just has the "sub-directory" flag (bit-3) set
+; and the "invalid directory" flag (bit-4)  left  clear.   Also  the  variable
+; "CC_DRCHK"  has  bit-3  set and bit-4 cleared to indicate that the directory
+; has been checked and is valid.  In the final version the sub-directory  must
+; be  searched  to ensure that it looks sensible ("." and ".." entries present
+; and all other entries deleted).
+;
+;    For a file, the file size is divided by the cluster size and rounded  up.
+; This is compared with the length of the cluster chain in "CC_SIZE" and if it
+; is different then the file size is set to the correct value for the  cluster
+; chain and the "wrong size" flag (bit-5) is set.  In all cases for a file the
+; "sub-directory" flag (bit-3) is left clear.
+;
+; Entry:     HL = Address of flags byte of item to be examined
+; Corrupts:  AF,BC,DE
+;
+;
+		set	0,(hl)			;Flag item has been examined
+		push	hl			;Must preserve item pointer
+		ld	de,1+DR_ATTR
+		add	hl,de
+		bit	AT_DIR,(hl)		;Look at attributes and
+		jr	z,examine_file		; skip if it is a file.
+;
+		ld	(hl),ATM_DIR		;SUB-DIRECTORY - set attributes
+		call	CHECK_DIR		;Check whether valid or not
+		pop	hl			; and mask the result into
+		or	(hl)			; the flags byte for this
+		ld	(hl),a			; item.
+		ret
+;
+;
+;
+examine_file:	ld	(hl),ATM_ARC		;FILE - set default attributes
+		ld	de,DR_SIZE-DR_ATTR
+		add	hl,de
+		push	hl
+		ld	e,(hl)			;Get file size from the item
+		inc	hl			; into BC:DE ready for
+		ld	d,(hl)			; determining the number of
+		inc	hl			; cluster which the file is
+		ld	c,(hl)			; supposed to have.
+		inc	hl
+		ld	b,(hl)
+;
+		ld	a,d			;Decrement the file size
+		or	e			; to ensure partial clusters
+		dec	de			; are included properly.
+		jr	nz,no_dec32_carry
+		dec	bc
+no_dec32_carry:
+		ld	a,(CLU_SHIFT##)		;Divide the file size - 1 by
+		add	a,9			; the cluster size which
+byte_clu_loop:	srl	b			; is always a power of two.
+		rr	c			;This gives the number of
+		rr	d			; clusters - 1 in BC:DE
+		rr	e
+		dec	a
+		jr	nz,byte_clu_loop
+;
+		inc	de			;Increment the result by 1 to
+		ld	a,d			; get the actual number of
+		or	e			; clusters in the file.
+		jr	nz,no_inc32_carry
+		inc	bc
+no_inc32_carry:
+		ld	a,c			;File size must be wrong if
+		or	b			; more than 65535 clusters.
+		jr	nz,invalid_size
+		ld	hl,(CC_SIZE##)		;Compare result with actual
+		sbc	hl,de			; number of clusters in chain
+		jr	z,valid_size		; and return if it is correct.
+;
+invalid_size:	ld	a,(CLU_SHIFT##)		; FILE IS WRONG SIZE.
+		inc	a
+		ld	b,a			;Multiply the actual number of
+		ld	hl,(CC_SIZE##)		; clusters by the cluster size
+		xor	a			; to get the actual size which
+clu_byte_loop:	add	hl,hl			; the file is supposed to be.
+		adc	a,a
+		djnz	clu_byte_loop
+;
+		ex	de,hl
+		pop	hl			;Store the actual size of the
+		ld	(hl),0			; file in place of the wrong
+		inc	hl			; file size in the item.
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ld	(hl),a
+		pop	hl			;Restore item pointer and set
+		set	5,(hl)			; "wrong size" flag.
+		ret
+;
+valid_size:	pop	hl			;File is correct size so
+		pop	hl			; restore pointer and return
+		ret				; with flags still clear.
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_DIR:
+;
+;    This routine checks  that  the  sub-directory  starting  at  the  cluster
+; defined  in  "CC_CLUSTER"  is  valid.   If  "CC_DRCHK"  is  non-zero the the
+; directory has already  be  checked  so  this  value  is  returned  directly.
+; Otherwise, all entries in the directory are examined.  The first two entries
+; must be "." and ".." with the correct cluster numbers and all other  entries
+; must  start  with  zero  (never been used) or 0E5h (deleted).  The result is
+; returned in register A and also stored in "CC_DRCHK" in case this routine is
+; called again.
+;
+; Entry:      None
+; Returns:    A = bit-3  always set to indicate sub-directory
+;		  bit-4 set if directory is invalid, clear if valid
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		ld	a,(CC_DRCHK##)		;If directory has already been
+		or	a			; checked then return the
+		ret	nz			; result straight away.
+;
+		ld	hl,(CC_CLUSTER##)	;Set up to search the
+		ld	(DIR_START##),hl	; sub-directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	nz,invalid_dir		; and complain if none.
+		ld	de,dot_name
+		ld	bc,(CC_CLUSTER##)	;Check that first entry is
+		call	CHECK_DOT_DIR		; "." with the correct cluster
+		jr	nz,invalid_dir		; number.  Reject if not.
+;
+		call	DRE_NEXT##		;Similarly check that the 2nd
+		jr	nz,invalid_dir		; entry is present & cluster
+		ld	de,dot_dot_name		; no. of main search dir.
+		ld	bc,(FIB##+FIB_DVAR+D_START)
+		call	CHECK_DOT_DIR
+		jr	nz,invalid_dir		;Reject if not.
+;
+check_dir_loop:	call	DRE_NEXT##		;Loop through all other entries
+		jr	nz,valid_dir		; in the directory making sure
+		ld	a,(hl)			; that they start with zero
+		or	a			; (never been used) or 0E5h
+		jr	z,check_dir_loop	; (deleted).
+		cp	0E5h
+		jr	z,check_dir_loop
+;
+invalid_dir:	ld	a,00011000b		;Set "directory checked" flag
+		code	lxi hl			; and also set the "invalid
+valid_dir:	ld	a,00001000b		; directory" flag if the
+		ld	(CC_DRCHK##),a		; directory was dubious.
+		ret
+;
+;
+dot_dot_name:	db	"..         "
+dot_name:	db	".          "
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_DOT_DIR:
+;
+;    This  routine checks that a directory entry contains the name and cluster
+; number specified, and is a sub-directory.  If the required cluster number is
+; -ve  then the cluster number in the directory must be zero (to indicate root
+; directory).
+
+; Entry:     HL -> directory entry as returned by "DRE_NEXT"
+;	     DE -> required name (11 bytes)
+;	     BC =  cluster number required
+; Returns:   Z-flag set (Z) => name and cluster match
+;		    clear (NZ) => name and cluster do not match
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		push	bc
+		ld	b,11
+check_dot_loop:	ld	a,(de)			;Loop to check 11 characters
+		cp	(hl)			; of name and jump to return
+		jr	nz,dot_fail_nz_1	; NZ if any of them are wrong.
+		inc	hl
+		inc	de
+		djnz	check_dot_loop
+;
+		ld	a,(hl)			;Test attributes byte and if
+		and	ATM_DIR			; it is not a sub-directory
+		cp	ATM_DIR			; then return NZ to indicate
+dot_fail_nz_1:	pop	bc			; failure.
+		ret	nz
+;
+		bit	7,b			;If required cluster is -ve
+		jr	z,not_root_clu		; then set it to zero since
+		ld	bc,0			; this is what is in entry.
+not_root_clu:
+;
+		ld	de,DR_CLU-DR_ATTR	;Get cluster number from
+		add	hl,de			; directory entry and compare
+		ld	e,(hl)			; it with the one passed in BC.
+		inc	hl
+		ld	d,(hl)
+		ex	de,hl
+		sbc	hl,bc			;Return Z or NZ as appropriate.
+		ret
+;
+;
+;******************************************************************************
+;
+MOD_DIR:
+;
+;    This  routine  goes  through  all  the  selected  items  for  undeletion,
+; modifying  FAT_1 appropriately and writing the undeleted directory entry out
+; to disk. Any items  which  clash  with  a  file  already  in  the  directory
+; (including  ones  we  have just un-deleted) will be renamed as a file of the
+; form "FILEnnnn.UDL" by the routine "RENAME_ITEM".
+;
+;
+		ld	hl,(FILE_LIST##)
+mod_dir_loop:	ld	a,(hl)			;Look at next item in list and
+		or	a			; exit if end of list.
+		jp	z,mod_dir_done
+		bit	1,(hl)			;Ignore item if it has been
+		jp	nz,mod_dir_next		; rejected.
+;
+		push	hl
+		call	WR_NAME_ITEM		;Print name of item
+		pop	hl
+;
+		bit	4,(hl)			;If item is an invalid sub-
+		jr	z,not_inv_dir		; directory then mark the
+		set	1,(hl)			; item as rejected.
+		push	hl
+		ld	a,__INV_MSG##		;Print out "invalid sub-
+		call	WR_MSG##		; directory" message and
+		call	WR_CRLF##		; go on to the next item.
+		pop	hl
+		jp	mod_dir_next
+;
+not_inv_dir:	bit	6,(hl)			;If name clash with file
+		ex	de,hl			; in directory then jump
+		jr	nz,must_rename		; to rename it.
+;
+		ld	hl,(FILE_LIST##)	;Check for name clash with
+chk_name2_loop:	bit	1,(hl)			; all previously un-deleted
+		jr	nz,chk_name2_next	; items.
+		bit	2,(hl)
+		jr	z,dont_rename		;Exit when reach this one.
+		push	hl
+		push	de
+		inc	hl			;Compare the names in the
+		inc	de			; two items and if they are
+		call	CMP_FNAME##		; the same then jump to rename
+		pop	de			; the new item.
+		pop	hl
+		jr	z,must_rename
+chk_name2_next:	ld	bc,1+32+SV_SIZE##	;Step onto next item and
+		add	hl,bc			; loop back.
+		jr	chk_name2_loop
+;
+;
+must_rename:	push	de			;If item requires renaming
+		call	RENAME_ITEM		; then do so & write out
+		pop	de			; a warning messae.
+dont_rename:	ex	de,hl
+		set	2,(hl)			;Flag item un-deleted.
+;
+;
+		push	hl
+		bit	5,(hl)			;If file size was adjusted
+		ld	a,__SZA_MSG##		; then print a warning
+		call	nz,WR_MSG##		; message.
+		pop	hl
+;
+		push	hl
+		bit	3,(hl)			;If item was a sub-directory
+		ld	a,__DIR_MSG##		; then print a warning message
+		call	nz,WR_MSG##
+		call	WR_CRLF##		;Go to start of new line.
+		pop	hl
+;
+;
+		push	hl
+		ld	bc,1+32			;Load directory search
+		add	hl,bc			; variables back down from
+		ld	de,SV_START##		; item so we can re-locate
+		ld	bc,SV_SIZE##		; the directory entry.
+		ldir
+		call	DRE_SAME##		;Find directory entry
+		ex	de,hl
+		pop	hl
+		push	hl			;Load the new directory entry
+		inc	hl			; from the item on top of the
+		ld	bc,32			; old one.
+		ldir
+		call	DIRTY_BUFFER##		;Mark sector buffer as dirty
+;
+;
+		pop	hl
+		push	hl			;Get start cluster number
+		ld	bc,1+DR_CLU		; from the item.
+		add	hl,bc
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+;
+		ld	hl,(FAT_1##)		;BC := offset from FAT_2 to
+		ld	bc,(FAT_2##)		;      FAT_1. Used in the
+		sbc	hl,bc			;      loop below.
+		ld	b,h
+		ld	c,l
+;
+undel_fat_loop:	call	F_FAT2##		;Find next FAT_2 entry in
+		ld	e,(hl)			; the chain.
+		inc	hl
+		ld	a,(hl)
+		and	0Fh			;DE := next cluster number
+		ld	d,a
+		or	e
+		jr	nz,not_null		;If next cluster number is
+		ld	de,0FFFh		; zero then set it to 0FFFh
+not_null:	add	hl,bc
+		ld	(hl),d			;Put new cluster number
+		dec	hl			; into correct entry in
+		ld	(hl),e			; FAT_1.
+		ld	hl,0FF8h-1
+		or	a			;Loop back if cluster number
+		sbc	hl,de			; is less than 0FF8h to get
+		jr	nc,undel_fat_loop	; next one in chain.
+		pop	hl
+;
+;
+mod_dir_next:	ld	bc,1+32+SV_SIZE##	;Step on to next item to
+		add	hl,bc			; undelete.
+		jp	mod_dir_loop
+;
+;
+mod_dir_done:	call	FLUSH##			;Flush any dirty buffers
+		jp	MD_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+RENAME_ITEM:
+;
+;    This routine is called when the item pointed to by DE must be renamed  as
+; a file of the form "FILEnnnn.UDL".  It check that the intended new name does
+; not already exist in the directory.  If it does then  the  ASCII  number  is
+; incremented  and it tries again.  Once a suitable name has been found, it is
+; printed out along with a "renamed" message.
+;
+; Entry:      DE -> Item to be renamed
+; Corrupts:  AF,BC,DE,HL
+
+		push	de
+;
+rename_clash:	ld	hl,undel_name+7		;Increment the ASCII number
+undel_inc_loop:	inc	(hl)			; in the undelete filename
+		ld	a,(hl)			; ready for checking for
+		cp	"9"+1			; a clash.
+		jr	nz,rename_check
+		ld	(hl),"0"
+		dec	hl
+		jr	undel_inc_loop
+;
+rename_check:	ld	hl,(FIB##+FIB_DVAR+D_START)
+		ld	(DIR_START##),hl	;Initialise a search of the
+						; directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	ren_chk_go		; and jump to process it.
+;
+ren_chk_loop:	call	DRE_NEXT##		;Get next directory entry.
+ren_chk_go:	jr	nz,ren_chk_end		;Exit if reached physical
+		ld	a,(hl)			; end of directory, or logical
+		or	a			; end (never been used entry).
+		jr	z,ren_chk_end
+		cp	0E5h			;Ignore entry if it is
+		jr	z,ren_chk_loop		; deleted.
+;
+		ex	de,hl			;Compare this entry with the
+		ld	hl,undel_name		; name we are intending to
+		call	CMP_FNAME##		; use and loop back if not the
+		jr	nz,ren_chk_loop		; same.
+		jr	rename_clash		;Jump to try next number if
+						; there is a clash.
+;
+;
+;
+ren_chk_end:	pop	de
+		push	de
+		inc	de			;Copy the new name into
+		ld	hl,undel_name		; the item ready for
+		ld	bc,11			; un-deletion.
+		ldir
+;
+		ld	a,__REN_MSG##		;Print a "renamed" message
+		call	WR_MSG##		; followed by the new name
+		pop	hl			; of the file.
+		jp	WR_NAME_ITEM
+;
+;
+undel_name:	db	"FILE0000","UDL"
+;
+;
+;------------------------------------------------------------------------------
+;
+WR_NAME_ITEM:
+;
+;    This routine prints out the name from an item pointed to by  HL.   It  is
+; left  justified and padded out with spaces to 12 characters to ensure a neat
+; display if any warning messages are needed.
+;
+; Entry:     HL -> item whose name is to be displayed
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	c,12+1			;Initialise space counter
+;
+		inc	hl
+		ld	a,(hl)			;If first character of filename
+		cp	05h			; is 05h then translate it
+		jr	nz,no_e5_fiddle		; into 0E5h for printing.
+		ld	a,0E5h
+no_e5_fiddle:
+		ld	b,8			;Character count for filename
+fname_loop:	inc	hl
+		cp	" "			;Print characters of filename
+		jr	z,no_name_space		; supressing spaces.
+		call	WR_CHAR##		;Decrement space count in C
+		dec	c			; for every character printed.
+no_name_space:	ld	a,(hl)
+		djnz	fname_loop
+;
+;
+;
+		cp	" "			;If extension is present
+		jr	z,no_extension		; then print a "." and
+		ld	a,"."			; decrement space count in
+		call	WR_CHAR##		; register C.
+		dec	c
+		ld	a,(hl)
+;
+		ld	b,3			;Exactly the same as the
+fext_loop:	inc	hl			; loop to print the filename
+		cp	" "			; but this one prints the
+		jr	z,no_ext_space		; three characters of the
+		call	WR_CHAR##		; extension, supressing
+		dec	c			; spaces.
+no_ext_space:	ld	a,(hl)
+		djnz	fext_loop
+;
+;
+;
+no_extension:	ld	b,c
+		jr	pad_space_st
+;
+pad_space_loop:	ld	a," "			;Pad out with the required
+		call	WR_CHAR##		; number of spaces to get to
+pad_space_st:	djnz	pad_space_loop		; 12 characters total.
+;
+		ret
+;
+;
+;******************************************************************************
+;
+SAVE_FAT:
+;
+;    This is the last major routine of the program.  It  writes  the  modified
+; FAT back to disk from FAT_1.  This involves packing the entries back up into
+; 12 bits each by calling "PUT_NYBBLE" three times for each entry.   When  all
+; entries have been written the last FAT sector is padded out with 07h nybbles
+; to  keep  things neat.  After this "FLUSH" is called to ensure that no dirty
+; buffers are left around.  The last copy of the FAT is not updated,  so  that
+; another "UNDEL" command can be issued.
+;
+;
+		ld	de,(FAT_START##)	;DE' := first sector of FAT
+		ld	bc,0			;BC' := initial nybble count
+		exx
+		ld	hl,(FAT_1##)		;HL -> start of FAT in RAM
+		ld	bc,(TOT_CLU##)		;BC := cluster count
+;
+save_fat_loop:	ld	a,(hl)
+		call	PUT_NYBBLE		;Put lowest nybble of FAT
+		ld	a,(hl)			; entry in.
+		rlca
+		rlca
+		rlca
+		rlca				;Put next nybble of FAT entry
+		call	PUT_NYBBLE		; in.
+		inc	hl
+		ld	a,(hl)
+		call	PUT_NYBBLE		;Put highest nybble of FAT
+		inc	hl			; entry in
+		dec	bc
+		ld	a,b
+		or	c			;Loop back 'til done all
+		jr	nz,save_fat_loop	; entries
+;
+pad_fat_loop:	exx				;Pad out last sector with
+		ld	a,b			; 0777h entries until the
+		or	c			; nybble count goes to zero.
+		jr	z,pad_fat_done
+		exx
+		ld	a,0Fh
+		call	PUT_NYBBLE
+		jr	pad_fat_loop
+;
+pad_fat_done:	call	FLUSH##			;Ensure all buffers written
+		jp	SV_DEBUG##		;Print out debugging info
+;
+;
+;------------------------------------------------------------------------------
+;
+PUT_NYBBLE:
+;
+;    This  routine adds a single nybble to the bufferred FAT sector.  A nybble
+; count is kept in BC' and a pointer in HL'.  If the nybble count is zero then
+; a  new  buffer  is  obtained  for  the  sector (and HL' need not be valid on
+; entry).  This will normally result in the old sector being written out.
+;
+; Entry:     BC' = Count of nybbles left in sector (0...1023)
+;	     DE' = Next logical sector number
+;	     HL' = Current location in buffer (undefined if BC'=0)
+;	      A  = Value of nybble to store (bits 4...7 ignored)
+; Returns:   BC',DE',HL' = updated accordingly
+; Corrupts:   AF,BC',DE',HL'
+;
+;
+		push	af			;Save new nybble value
+		exx
+		ld	a,b			;If there is space left in
+		or	c			; current buffer then skip.
+		jr	nz,same_sector
+;
+		call	G_FAT_BUFF##		;If new sector needed then
+		call	DIRTY_BUFFER##		; get a buffer for it and
+		inc	de			; mark it as dirty.
+		ld	bc,1024			;Re-initialise nybble counter.
+;
+same_sector:	pop	af			;Get new nybble value.
+		rrd				;Rotate it into current byte
+		bit	0,c
+		jr	z,sv_low_nybble		;If finished byte then point
+		inc	hl			; on to next one.
+sv_low_nybble:	dec	bc
+		exx				;Restore main registers and
+		ret				; return.
+;
+;
+;******************************************************************************
+;
+	finish	<MAIN>
+	end	ENTRY
+;

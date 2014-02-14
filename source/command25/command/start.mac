@@ -1,0 +1,975 @@
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL	Startup and initialisation
+;
+;
+	INCLUDE	COMMAND.INC
+;
+;
+;
+
+;------------------------------------------------------------------------------
+;
+;	 This is the start of COMMAND.COM. Control is passed to here  when  it
+; is  loaded  for  the  first time by MSX-DOS.SYS and when COMMAND is run as a
+; transient program.
+;
+;	 Most  of  COMMAND executes at 100H as a normal transient program.  It
+; is capable of loading another transient program on top of this bit of memory
+; after  saving  an  image of itself in high memory. When the loaded transient
+; program terminates, a section of code needs to checksum the saved image  and
+; copy  it  back  to the normal execution address if not corrupted, or re-load
+; the appropriate part off disk if it is.
+;
+;	 The bit of code that does this sits at the top of the TPA, above  the
+; BDOS entry jump (the destination of the jump at 5). It gets control when the
+; transient program terminates because the initialisation code (in this  file)
+; patches the re-boot BIOS jump table entry point to point to it. When COMMAND
+; first starts up, this jump is saved somewhere before patching it, as is  the
+; BDOS  jump  at 5. When COMMAND then terminates, it can restore these back to
+; there former values and then re-boot in the normal  transient  program  way.
+; This  will  either return to MSX-DOS.SYS (which can do whatever it likes but
+; will probably just re-load it again) or to the program that loaded it, which
+; may be some other transient program or another invocation of COMMAND.COM.
+;
+;
+;	 When a transient program is loaded, the memory  map  is  as  follows.
+; Many  parts  of  this  memory map are placed on 256-byte page boundaries for
+; CP/M compatibility, and these are indicated below. The TPA is shown as it is
+; when  COMMAND.COM  is  running.  This  will  be overwritten by the transient
+; program when it is loaded.
+;
+;
+;		 =======================================
+;		|	     MSX system 		|
+;		|=======================================|
+;		|					|<---------
+;		|	     MSX-DOS.SYS		|	   |
+;		|					|	   |
+;		|---------------------------------------|	   |
+;		|					|	   |
+;		|	   BIOS jump table		|	   |
+;		|					|	  /|\
+;		|- - - - - - - - - - - - - - - - - - - -|<-----    |
+;		|	 Re-booting BIOS jump		|->-	|  |
+;	zz03:	|- - - - - - - - - - - - - - - - - - - -|   |	|  |
+;		|	 Cold start BIOS jump		|   |	|  |
+;	zz00:	|---------------------------------------|   |	|  |
+;		|					|  \|/ /|\/|\
+;		|	Used by MSX-DOS.SYS		|   |	|  |
+;		|					|   |	|  |
+;		|---------------------------------------|	   |
+;		|	   BDOS entry jump		|------>---|
+;	yy06:	|- - - - - - - - - - - - - - - - - - - -|	   |
+;		|      CP/M serial & version number	|   |	| /|\
+;	yy00:	|=======================================|   |	|  |
+;		|					|   |	|  |
+;		|	 Saved environment strings	|   |	|  |
+;		|					|   |	|  |
+;		|---------------------------------------|  \|/ /|\/|\
+;		|   Strings copied from MESSAGES file,	|   |	|  |
+;		|	   used when re-booting 	|   |	|  |
+;		|- - - - - - - - - - - - - - - - - - - -|   |	|  |
+;		|   Address of first of above strings	|   |	|  |
+;		|- - - - - - - - - - - - - - - - - - - -|   |	|  |
+;		|   Saved COMMAND.COM re-loading code	|   |  /|\/|\
+;		|- - - - - - - - - - - - - - - - - - - -|   |	|  |
+;		|   Saved re-locatable re-booting code	|   |	|  |
+;		|---------------------------------------|-<-	|  |
+;		|					|	|  |
+;		|     Saved non-transient variables	|	|  |
+;		|					|	| /|\
+;		|---------------------------------------|	|  |
+;		|	       Not used 		|	|  |
+;		|---------------------------------------|	|  |
+;		| Small stack for program. Top 2 bytes	|	|  |
+;		| point to bottom of saved CLI, and are |	|  |
+;		| pointed to by CLI_PTR## in fixed bit. |	|  |
+;		|---------------------------------------|	   |
+;	xx06:	|     Copy of BDOS entry jump and	|----------
+;	xx00:	|      version & serial numbers 	|<---------
+;		|---------------------------------------|	   |
+;		|    Transient program loading code	|	|  |
+;		|- - - - - - - - - - - - - - - - - - - -|	| /|\
+;		|					|	|  |
+;		|    Saved copy of checksummed part	|	|  |
+;		|	    of COMMAND.COM		|      /|\ |
+;		|					|	|  |
+;		|=======================================|	|  |
+;		|					|	|  |
+;		|					|	| /|\
+;		|		 TPA			|	|  |
+;		|					|	|  |
+;		|					|      /|\ |
+;		|=======================================|	|  |
+;		|	 COMMAND.COM variables		|	|  |
+;		|    Checksummed part of COMMAND.COM	|	| /|\
+;		|- - - - - - - - - - - - - - - - - - - -|	|  |
+;		|     COMMAND.COM re-booting code	|	|  |
+;		|- - - - - - - - - - - - - - - - - - - -|      /|\ |
+;		|    Message at start of COMMAND.COM	|	|  |
+;		|- - - - - - - - - - - - - - - - - - - -|	|  |
+;		|	 JP to initialisation		|	| /|\
+;	0100:	|=======================================|	|  |
+;		|     CP/M compatible upper-cased	|	|  |
+;	0080:	|	     command line		|      /|\ |
+;		|---------------------------------------|	|  |
+;	006C:	|      Two initialised CP/M FCBs	|	|  |
+;	005C:	|---------------------------------------|	| /|\
+;		|					|	|  |
+;		|	       Not used 		|	|  |
+;		|					|	|  |
+;		|---------------------------------------|	   |
+;		|	      BDOS jump 		|----------
+;	0005:	|---------------------------------------|
+;		|     CP/M compatible default drive	|	|
+;	0004:	|---------------------------------------|	|
+;		|      Set to 0 (I/O byte in CP/M)	|	|
+;	0003:	|---------------------------------------|	|
+;		|	  Program re-boot jump		|-------
+;	0000:	 =======================================
+;
+;
+;
+	SUBTTL	Start of code
+;******************************************************************************
+;
+;	 This is the start of thew actual code, & simply consists of a jump to
+; the  actual initialisation routine. After this jump is a message. Nothing in
+; the system uses this message, but it displays a title and copyright  message
+; if  the  command  'TYPE  COMMAND.COM'  is given, which would otherwise print
+; garbage.
+;
+;
+START:	JP	INIT		; Jump around message and serial number.
+;
+;
+						; A copyright message is at the
+	DEFB	CR,LF				;   file start in case someone
+	DEFB	'MSX-DOS 2  COMMAND version '	;   goes TYPE COMMAND.COM.
+	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+	DEFB	'Copyright ('
+	DEFB	CRYEAR##/1000 MOD 10 +'0'
+	DEFB	CRYEAR##/ 100 MOD 10 +'0'
+	DEFB	CRYEAR##/  10 MOD 10 +'0'
+	DEFB	CRYEAR##      MOD 10 +'0'
+	DEFB	') ASCII Corporation',CR,LF
+	DEFB	CR,LF
+	DEFB	1AH				; ^Z stops TYPE.
+;
+;
+;
+	SUBTTL	REBOOT
+;******************************************************************************
+;
+;	 The following code deals with the re-booting of  COMMAND.COM  when  a
+; transient program terminates or just when an Abort error occurs.
+;
+;	 When COMMAND is first started up, some of this code is copied to just
+; below the BDOS entry jump. A small piece of this code  is  re-locatable  and
+; this  just copies a larger piece of code to an absolute address where it can
+; be executed sensibly. This then checksums the area of  memory  that  COMMAND
+; saved  itself  in  before  loading  the transient program to see if it still
+; intact. If it is, COMMAND is copied to it's  normal  execution  address  and
+; jumped  to.  If  it  has been corrupted, however, then it is loaded off disk
+; again.
+;
+;	 When a command is executed, some fixed variables are copied  to  just
+; below  the  resident  code  (at TPA_TOP). These variables need to out-live a
+; transient program, so the re-booting code copies  these  variables  back  to
+; their normal position in memory.
+;
+;	 When a transient command has not been  executed,  then  this  routine
+; does  not  get  executed  because an abort routine is defined which does not
+; return.
+;
+;	 The reboot code here needs to be near the start of the file  so  that
+; the  rest  of  the file is included in the checksum. This code itself is not
+; included in the checksum as it is saved above the BDOS entry jump (jumped to
+; by  the  jump  at 5) so that it outlives a transient program. Only the start
+; jump and the start  message  (which  nothing  uses)  are  come  before  this
+; checksumming.
+;
+;
+RESIDENT:			; Start of resident code.
+;
+;
+; This bit of code is the relocatable bit.
+;
+RELOC:	LD	SP,P3_STACK##	; Put stack in page-3 to restore paging.
+if 0
+	LD	A,(P0_64K##)	; Restore the paging in case the transient
+	CALL	PUT_P0##	;   program changed it.
+	LD	A,(P1_64K##)
+	CALL	PUT_P1##
+	LD	A,(P2_64K##)
+	CALL	PUT_P2##
+;
+	CALL	P0_RAM##	; Make sure the correct slots are enabled.
+	LD	A,(RAMAD3##)
+	LD	H,40H
+	PUSH	AF
+	CALL	ENASLT##
+	POP	AF
+	LD	H,80H
+	CALL	ENASLT##
+endif
+;
+	CODE	LXI H		; Switch to CLI's stack. Top two bytes point to
+CLIPAT:	 DEFW	0
+	DEC	HL		;   bottom of saved CLI.
+	DEC	HL
+	LD	SP,HL		; (SP+1)->bottom address of saved copy of CLI.
+	LD	HL,(_BIOS##+1)	; Find out where we are, by looking at the
+	INC	HL		;   re-boot jump address in the BIOS jump
+	LD	E,(HL)		;   table.
+	INC	HL
+	LD	D,(HL)
+	PUSH	DE		; Save addr of start of this routine (RELOC).
+if 0
+	LD	HL,RLCLEN	; Offset from this code to the fixed code.
+	ADD	HL,DE		; Point to the code to be moved.
+	LD	DE,REBOOT	; Move the code to a fixed address.
+else
+	EX	DE,HL
+	LD	DE,RELOC
+	LD	BC,RLCLEN
+	LDIR
+endif
+	PUSH	DE
+	LD	BC,REBLEN
+	LDIR			; Jump to it, (SP) -> end of saved variables,
+	RET			;   HL -> messages saved above re-load code.
+RLCLEN	EQU	$-RELOC
+;
+;
+; Following immediately after the relocatable bit is this fixed bit.
+;
+REBOOT:	LD	A,(HL)		; Get address of first re-boot message.
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	LD	(MSGPAT),HL	; Save start address of messages.
+;
+	POP	HL		; HL -> end of saved variables.
+	DEC	HL
+	LD	DE,VAREND##-1	; Copy the saved variables back to their usual
+	LD	BC,VARSIZE##	;   place so that they can be addressed
+	LDDR			;   normally.
+;
+	LD	HL,VECTORS##	; Before calling the BDOS, restore vectors in
+	LD	DE,_BIOS##	;    page 0 to what they were when COMMAND was
+	LD	BC,VECLEN##	;    invoked.
+	LDIR
+;
+	LD	DE,0		; Un-define user's disk error routine before
+	LD	C,_DEFER##	;   invoking a BDOS disk accessing function.
+	CALL	_BDOS## 	;   (error ignored)
+;
+if 1	;v230
+	LD	DE,JOINAB	; Define abort routine for JOIN so that
+	LD	C,_DEFAB##	;   JOIN returns abort code.
+	CALL	_BDOS## 	;   (error ignored)
+;
+endif
+	LD	HL,START	; Set up jump at start since this is not
+	CODE	MVI M		;   included in the checksum (and neither is
+	CODE	JMP		;   the message but that doesn't matter)
+	INC	HL
+	LD	(HL),LOW INIT
+	INC	HL
+	LD	(HL),HIGH INIT
+;
+	LD	A,(PROGID##)
+	LD	B,A
+	LD	C,_JOIN##
+	CALL	_BDOS## 	; Get the error code from the program.
+	JR	NZ,JERR 	; Return join error if error (shouldn't occur).
+;
+	LD	A,B		; Else return program's error.
+JERR:	LD	(ERR),A 	; Save error code for returning to CLI.
+	LD	A,C		; Also save secondary error code.
+	LD	(ERR2),A
+;
+	LD	A,1		; Turn off character redirection.
+	LD	BC,0*256+_REDIR##
+	CALL	_BDOS##		;   (error ignored)
+	LD	A,B
+	LD	(REDFLG),A	; Save flags for restoring after checksumming.
+;
+	LD	DE,LDAB		; Define an abort routine in case an abort
+	LD	C,_DEFAB##	;   occurs before the CLI has been checksummed.
+	CALL	_BDOS##		;   (error ignored)
+;
+	CALL	CHKCLI		; Check the CLI checksums OK.
+	POP	HL		; HL -> bottom of saved CLI.
+	CALL	NZ,CPYCLI	; Copy & check saved version if not.
+	JP	Z,JPCLI		; Return to CLI with program's error if OK.
+;
+RELOAD:	LD	HL,SHELL$	; Read the SHELL environment string.
+	LD	DE,BUFF##
+	LD	B,BLEN##
+	LD	C,_GENV##
+	CALL	_BDOS##
+	JR	NZ,NOSHEL	; Don't use environment string if error.
+;
+	LD	A,(DE)		; Don't attempt to use it if not defined.
+	OR	A
+	JR	Z,NOSHEL
+;
+	PUSH	DE		; Save start address of string.
+	LD	BC,0*256+_PARSE##
+	CALL	_BDOS##		; Parse drive/path/filename.
+	POP	HL
+	JR	NZ,NOSHEL	; Parse error presumably means silly string.
+;
+	LD	(DE),A		; Terminate drive/path/filename with a null.
+	LD	A,1		; Not write.
+	EX	DE,HL		; DE -> start of string.
+	LD	C,_OPEN##	; Attempt to open file specified by SHELL.
+	CALL	_BDOS##
+	JR	Z,OPNOK		; Go if openned OK, else look on boot drive.
+;
+NOSHEL:	LD	DE,COMSTR	; No SHELL, so use root of boot drive.
+	LD	A,1		; Not write.
+	LD	C,_OPEN##
+	CALL	_BDOS##
+	JR	NZ,LDERR	; Go if error.
+;
+OPNOK:	LD	HL,CSUM_TOP-START	; Position file pointer to start of
+	XOR	A			;   checksummed part of COMMAND.COM.
+	LD	E,A
+	LD	D,A
+	LD	C,_SEEK##
+	PUSH	BC		; Save file handle.
+	CALL	_BDOS##
+	POP	BC
+	JR	NZ,LDERR
+;
+	LD	DE,CSUM_TOP	; Read COMMAND.COM to here.
+	LD	HL,CSUM_BOT##-CSUM_TOP	; This many bytes.
+	LD	C,_READ##
+	PUSH	BC		; Save file handle.
+	CALL	_BDOS##
+	EX	AF,AF'		; Save error code.
+	POP	BC		; Get file handle.
+	LD	C,_CLOSE##
+	CALL	_BDOS##		; Close file again.
+	JR	NZ,LDERR	; Go if error from close.
+;
+	EX	AF,AF'
+	JR	NZ,LDERR	; Go if error from read.
+;
+	LD	A,.BADCOM##	; Give 'Invalid COMMAND.COM' error if not the
+				;   correct checksum.
+;
+LDAB:	LD	SP,(PTR_SAVE##)	; Reset SP to a stack out of the way.
+	PUSH	AF		; Save error code.
+	CALL	CHKCLI		; COMMAND now intact ?
+	POP	BC
+	LD	A,B
+	JR	NZ,LDERR	; Print error message & prompt if not.
+;
+JPCLI:	CODE	MVI B		; Restore the redirection flags.
+REDFLG:	 DEFB	0
+	LD	C,_REDIR##
+	LD	A,1
+	CALL	_BDOS## 	;   (error ignored)
+;
+	LD	DE,CLI_ABORT##	; Define abort routine to CLI's.
+	LD	C,_DEFAB##
+	CALL	_BDOS## 	;   (error ignored)
+;
+	LD	DE,BUFF##	; Un-define the PROGRAM and PARAMETERS
+	XOR	A		;   environment strings, which were set up for
+	LD	(DE),A		;   the program's use.
+	LD	HL,PARAM$##
+	LD	C,_SENV##
+	PUSH	DE
+	CALL	_BDOS## 	;   (error ignored)
+	POP	DE
+	LD	HL,PROG$##
+	LD	C,_SENV##
+	CALL	_BDOS## 	;   (error ignored)
+if 1	;v230
+	CALL	SETLANG##
+endif
+;
+if 1
+	LD	A,-1
+	LD	(EXEFLG##),A	; Say CRLF necessary before prompt.
+endif
+;
+	CODE	MVI A		; Get error code from program.
+ERR:	 DEFB	0
+	CODE	MVI B		; Get secondary error code.
+ERR2:	 DEFB	0
+	JP	CLI_ABORT##	; Jump to CLI's abort routine with error codes.
+;
+;
+JOINAB:	OR	A		; Set Zero flag accordingly.
+	LD	C,B		; Set secondary error code if any.
+	POP	HL		; Return control after JOIN.
+	RET			;
+;
+;
+LDERR:				; Error during re-loading - A=error code.
+if 1	;(Hal_F)
+	PUSH	AF
+	LD	A,1		; Turn off character redirection.
+	LD	BC,0*256+_REDIR##
+	CALL	_BDOS## 	;   (error ignored)
+	POP	AF
+endif
+	CP	.NOFILE##	; If 'file not found', then suppress error
+	JR	Z,NOCOM 	;   message & just prompt for COMMAND disk.
+;
+	LD	DE,BUFF##	; Point DE to buffer for message.
+	LD	B,A		; B=error code.
+	PUSH	AF
+	LD	C,_EXPLAIN##	; C=function code to get error message.
+	CALL	_BDOS## 	; Attempt to get a message for the error.
+	POP	AF
+;
+	PUSH	DE		; Save message pointer.
+	CP	.STOP## 	; Extra new line for .STOP and .CTRLC.
+	JR	Z,XCRLF
+;
+	CP	.CTRLC##
+XCRLF:	CALL	Z,CRLF
+	CALL	CRLF
+	LD	A,SPLATS
+	CALL	DMESS2		; Print '***' before message.
+	POP	DE
+	CALL	DMSG		; Print actual message.
+	LD	A,EREND 	; Print a string after message.
+	CALL	DMESS2		;   (null in English).
+NOCOM:	CALL	CRLF		; Followed by a new line.
+	LD	A,INSERT
+	CALL	DMESS2		; Print 'Insert COMMAND.COM disk' etc.
+	LD	A,(COMSTR)	; Get the boot drive & print it.
+	CALL	OUCH
+	LD	A,INSDRV	; Print rest of message.
+	CALL	DMESS2
+	CALL	CRLF
+	LD	A,PRAK		; Print 'Press any key to continue' etc.
+	CALL	DMESS2
+GOBL:	LD	C,_CONST##	; See if a key has been pressed.
+	CALL	_BDOS##
+	PUSH	AF		; Save character ready flag.
+;
+	LD	C,_INNOE##	; Read a character anyway.
+	CALL	_BDOS##
+;
+	POP	AF		; If a character was ready then read another
+	JR	NZ,GOBL 	;    (to flush the kbd buffer).
+;
+	CALL	CRLF		; Then new line.
+if 0
+	JP	RELOAD		; Try again.
+else
+	JP	NOSHEL		; Try again on boot drive.
+endif
+;
+;
+CPYCLI:				; HL -> bottom of saved CLI.
+	LD	DE,CSUM_TOP	; Copy back to normal place.
+	LD	BC,CSUM_BOT##-CSUM_TOP
+	LDIR			; Move, then drop through to checksum checking.
+;
+CHKCLI:	CALL	CSUMCLI 	; Get the checksum for the CLI.
+	LD	BC,CSUM_LO	; Compare with previously calculated.
+	PUSH	IX
+	EX	(SP),HL 	; Get the low word of the checksum.
+	CALL	CHKC10		; Check it's the same.
+	POP	HL
+	RET	NZ		; Ret with NZ if not, else check high word.
+;
+CHKC10:	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A		; DE = word of pre-calculated checksum.
+	OR	A
+	SBC	HL,DE		; Compare with word from current checksum.
+	RET
+;
+;
+CSUMCLI:LD	BC,0+(CSUM_BOT##-CSUM_TOP)/4	; No. 32 bit words to do.
+	EXX
+	LD	BC,CSUM_TOP	; Start of area to checksum.
+	LD	HL,0		; Zero 32 bit checksum accumulator.
+	PUSH	HL
+	POP	IX
+;
+CSUM10:	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A		; Get 16 bit word.
+	ADD	IX,DE		; Add on to partial result.
+	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A		; Get other word.
+	ADC	HL,DE		; Add on to high word.
+	EXX
+	DEC	BC
+	LD	A,B
+	OR	C
+	EXX
+	JR	NZ,CSUM10	; Do next 32 bit word.
+	RET
+;
+;
+CSUM_LO:DEFW	0		; Checksum patched in here.
+CSUM_HI:DEFW	0
+;
+;
+DMESS2:	CALL	GETRMSG 	; DE -> address of string (backwards).
+DMS:	LD	A,(DE)		; Get character.
+	OR	A
+	RET	Z		; Return if end of string.
+;
+	DEC	DE		; Point to next character.
+	CALL	OUCH		; Print it.
+	JR	DMS
+;
+;
+GETRMSG:CODE	LXI D
+MSGPAT:	 DEFW	0		; Address of messages patched here.
+	LD	B,A		; Save message count.
+	INC	B
+GMS:	DEC	B
+	RET	Z		; Return if message found.
+;
+GMS2:	LD	A,(DE)		; Else find end of string.
+	DEC	DE
+	OR	A
+	JR	NZ,GMS2
+	JR	GMS
+;
+;
+DMSG:	LD	A,(DE)		; Get character.
+	OR	A
+	RET	Z		; Return if end of string.
+;
+
+	CALL	OUCH		; Print it.
+	INC	DE
+	JR	DMSG
+;
+;
+CRLF:	LD	A,CR
+	CALL	OUCH
+	LD	A,LF
+;
+OUCH:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A
+	LD	C,_CONOUT##
+	CALL	_BDOS##
+	POP	BC
+	POP	DE
+	POP	HL
+	RET
+;
+;
+SHELL$::DEFB	'SHELL',0
+COMSTR:	DEFB	'A:\COMMAND2.COM',0	; String used for re-booting (A: gets
+					;   patched to boot drive).
+;
+HELPSTR::
+	DEFB	'A:\HELP',0		; String for HELP directory (A: gets
+					;   patched to boot drive).
+;
+if 1	;v230
+KHELPSTR::
+	DEFB	'A:\KHELP',0		; String for KHELP directory (A: gets
+					;   patched to boot drive).
+;
+endif
+TEMPSTR:DEFB	'A:\',0 		; String for TEMP directory (A: gets
+					;   patched to booting drive).
+;
+REBLEN	EQU	$-REBOOT	; Size of fixed address re-boot code.
+;
+RESEND:				; Last byte+1 of resident code.
+RESLEN	EQU	$-RESIDENT	; No. bytes in resident code.
+;
+;
+;
+;	 The label below marks the top of the area that  is  checksummed.  The
+; code  above  is  not  included because it is either initialisation code that
+; only gets executed when COMMAND starts up, or is the  re-booting  code  that
+; gets saved during the execution of a transient program anyway.
+;
+;
+CSUM_TOP::
+;
+;
+;
+	SUBTTL	Initialisation
+;******************************************************************************
+;
+;	 This  is  the  start  of  the code that gets entered when COMMAND.COM
+; first gets loaded. It is  executed  this  once  and  then  never  again.  It
+; performs  all  the  initialisation  that needs to only be done once, such as
+; patching the BIOS re-boot jump table entry and re-locating  some  re-booting
+; code at the top of memory.
+;
+;
+INIT:	LD	SP,CLI_STACK##
+;
+	LD	A,(LOAD_FLAG##) ; NZ => loaded by MSX-DOS.SYS or COMMAND.COM
+	EX	AF,AF'		;   (goes to 0 on first BDOS call)
+;
+	LD	C,_DOSVER##	; Make sure KBDOS and MSX-DOS.SYS are at least
+	CALL	_BDOS##		;   version 2. (error ignored).
+	LD	A,1
+	CP	B
+	JR	NC,BADVER
+;
+	CP	D
+	JR	C,VEROK
+;
+BADVER: CALL	CRLF
+	LD	A,__SPLATS##	; Print message and halt.
+	CALL	DMESS##
+	LD	A,__BADVER##
+	CALL	DMESS##
+	LD	A,__EREND##
+	CALL	DMESS##
+	CALL	CRLF
+	DI
+	HALT
+;
+;
+VEROK:	LD	DE,0		; Make sure no abort routine is defined.
+	PUSH	DE
+	LD	C,_DEFAB##
+	CALL	_BDOS## 	;   (error ignored)
+;
+	POP	DE		; Make sure no disk error routine is defined.
+	LD	C,_DEFER##
+	CALL	_BDOS## 	;   (error ignored)
+;
+	LD	A,(BOOT_DRV##)	; Get drive that we booted from, and save it
+	ADD	A,'A'-1		;   for setting up the HELP environment item.
+	LD	(HELPSTR),A
+if 1	;v230
+	LD	(KHELPSTR),A
+endif
+	LD	(COMSTR),A	; And for re-loading COMMAND2.COM.
+	LD	(TEMPSTR),A	; And for the TEMP environment string.
+;
+	LD	HL,_BIOS##	; Save jump vectors etc. at bottom of memory
+	LD	DE,VECTORS##	;   so that they can be restored when COMMAND
+	LD	BC,VECLEN##	;   terminates (even though they are likely to
+	LDIR			;   be very similar).
+;
+if 0
+	LD	HL,(CLI_PTR##)	; Save CLI_PTR over the execution of COMMAND,
+	LD	(PTR_SAVE##),HL	;   so that COMMAND.COMs will nest.
+;
+endif
+	CALL	CSUMCLI		; Checksum the transient part of the CLI.
+	LD	(CSUM_LO),IX	; Save the checksum for the re-booting code to
+	LD	(CSUM_HI),HL	;   compare with.
+;
+	LD	DE,(_BDOS##+1)	; Copy all environment strings to top of mem.
+	LD	BC,7*256+1	; B=7 (loop count), C=1 (env. string number).
+DECDE:	DEC	DE		; Avoid the BDOS entry jump & serial number.
+	DJNZ	DECDE		; Leaves B=0 for 16 bit env. string number.
+;
+GETENV: PUSH	BC
+	EXX
+	POP	DE		; DE = environment item number.
+	CALL	FENV##		; Get name of environment item.
+	JR	NZ,NXTSTR
+;
+	OR	(HL)		; Null (end of items) ?
+	JR	Z,GOTENV	; All items have been saved if yes.
+;
+	CALL	GENV##		; Get value of item.
+;
+	EXX			; DE -> top of memory.
+	CALL	CHKMEM		; Make sure we're not out of memory.
+	LD	HL,BUFF2##
+CNAM:	LD	A,(HL)		; Copy name.
+	INC	HL
+	LD	(DE),A
+	DEC	DE
+	OR	A
+	JR	NZ,CNAM
+;
+	LD	HL,BUFF##
+CSTR:	LD	A,(HL)		; Then copy current value.
+	INC	HL
+	LD	(DE),A
+	DEC	DE
+	OR	A
+	JR	NZ,CSTR
+;
+	EXX
+NXTSTR:	EXX
+	INC	BC		; Next environment item.
+	JR	GETENV
+;
+;
+GOTENV:	EXX			; Get current top of memory pointer.
+	LD	(DE),A		; Another null => end of saved items.
+	DEC	DE
+;
+if 1
+	LD	(LANG##),A	; Always use default language for re-load.
+endif
+	LD	HL,MSGTAB	; Copy text required for re-booting messages.
+	LD	C,MSGS		; HL -> table of message nos., C=no. entries.
+	PUSH	DE		; Save address of first message.
+	PUSH	DE		; Save top address of saved messages.
+CPYMSG:	LD	A,(HL)		; Get message number to copy.
+	INC	HL
+	CALL	GETMSG##	; DE -> message.
+	EX	(SP),HL 	; Save table pointer, get high memory pointer.
+	EX	DE,HL		; DE -> top of memory.
+	CALL	CHKMEM		; Make sure there's enough memory.
+	EX	DE,HL
+CPYMS2: LD	A,(DE)		; Get character from string.
+	INC	DE
+	LD	(HL),A		; Copy to high memory.
+	DEC	HL		; String stored backwards !
+	OR	A		; End of string copied ?
+	JR	NZ,CPYMS2	; Copy next character if not.
+;
+	EX	(SP),HL 	; Save memory top pointer, get table pointer.
+	DEC	C
+	JR	NZ,CPYMSG	; Copy next string.
+;
+	POP	HL		; HL = current top of memory.
+	POP	DE		; DE -> first string copied.
+	LD	(HL),D		; Save address of first string.
+	DEC	HL
+	LD	(HL),E
+	DEC	HL
+	EX	DE,HL		; DE -> new top of memory.
+;
+if 1
+	LD	L,E
+	LD	H,D
+	LD	BC,RESLEN+VARSIZE##
+	OR	A
+	SBC	HL,BC		; Calc what whould be the CLI_PTR
+	LD	(CLIPAT),HL	;  and patch it into the resident code.
+	LD	(PTR_SAVE##),HL
+;
+endif
+	CALL	CHKMEM		; Make sure there's enough memory.
+	LD	HL,RESEND-1	; Copy resident code to below messages.
+	LD	BC,RESLEN
+	LDDR
+;
+	CALL	CHKMEM		; Make sure there's enough memory.
+	LD	(TPA_TOP##),DE	; Save top address now usable by commands etc.
+	LD	C,E
+	LD	B,D
+	INC	BC		; BC = start address of re-boot code.
+;
+	LD	HL,(_BIOS##+1)	; Get address of BIOS jump table, and save the
+	INC	HL		;   address currently in the reboot jump.
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	(OLD_REBOOT##),DE
+;
+	EXX			; Before patching the BIOS jump table or
+	LD	DE,EXIT##	;   setting any environment items, change the
+	LD	C,_DEFAB##	;   abort routine to EXIT so that these are
+	CALL	_BDOS## 	;   undone.    (error ignored).
+	EXX
+;
+	LD	(HL),B		; Patch address of COMMAND's re-booting code
+	DEC	HL		;   into the BIOS re-boot jump.
+	LD	(HL),C
+;
+	EX	AF,AF		; If not loaded by MSX-DOS.SYS or COMMAND, then
+	OR	A		;   don't attempt to set up SHELL (we don't
+	JR	Z,PROGD 	;   know where we were loaded from).
+;
+	LD	HL,PROG$##	; If the PROGRAM environment string is set up,
+	CALL	GENV2## 	;   then set SHELL to it, else set SHELL to
+	LD	HL,SHELL$	;   the root directory of the boot drive.
+	JR	NZ,NPROG
+;
+	LD	A,(DE)
+	OR	A
+	JR	NZ,SETPROG
+;
+NPROG:	LD	DE,COMSTR
+	LD	C,_SENV##
+	CALL	_BDOS## 	;   (error ignored)
+	XOR	A
+;
+SETPROG:CALL	NZ,SENV2##
+;
+PROGD:	LD	HL,HELP$##	; Set up the default environment strings,
+	LD	DE,HELPSTR	;   unless they're already set up.
+	CALL	SET?
+;
+if 1	;v230
+	LD	HL,KHELP$##	; Set up the default environment strings,
+	LD	DE,KHELPSTR	;   unless they're already set up.
+	CALL	SET?
+;
+endif
+	LD	HL,TEMP$##	; Set up TEMP to root directory of drive
+	LD	DE,TEMPSTR	;   loaded from.
+	CALL	SET?
+;
+	LD	HL,DATE$##
+	LD	DE,YMD$
+	LD	A,(COUNTRY##)	; Set DATE up according to COUNTRY.
+	AND	111B
+	CP	1
+	JR	C,GOTD		; Go if COUNTRY=0 (ISO format = YY-MM-DD).
+;
+	LD	DE,MDY$
+	JR	Z,GOTD		; Go if COUNTRY=1 (American format = MM-DD-YY).
+;
+	LD	DE,DMY$ 	; Else default to UK format (DD-MM-YY).
+GOTD:	CALL	SET?		; Set up DATE if not already set up.
+;
+	LD	HL,TIME$##
+	LD	DE,T12$
+	CALL	SET?		; Set up TIME if not already set up.
+;
+	LD	HL,PATH$##
+	LD	DE,P$		; Set up PATH if not alreay set up.
+	CALL	SET?
+;
+	LD	HL,PROMPT$##
+	LD	DE,OFF$##
+	CALL	SET?		; Set up PROMPT type if not alreay set up.
+;
+	LD	HL,ECHO$##
+	LD	DE,OFF$##
+	CALL	SET?		; Set up ECHO if not already set up.
+;
+if 1
+	LD	HL,UPPER$##
+	LD	DE,OFF$##
+	CALL	SET?		; Set up UPPER if not already set up.
+;
+	LD	HL,REDIR$##
+	LD	DE,ON$##
+	CALL	SET?		; Set up REDIR if not already set up.
+;
+endif
+	LD	DE,BUFF##	; Un-define the PROGRAM and PARAMETERS
+	XOR	A		;   environment strings, which will have been
+	LD	(DE),A		;   set up if COMMAND.COM was loaded from
+	LD	HL,PARAM$##	;   another COMMAND.COM.
+	LD	C,_SENV##
+	PUSH	DE
+	CALL	_BDOS## 	;   (error ignored)
+	POP	DE
+	LD	HL,PROG$##
+	LD	C,_SENV##
+	CALL	_BDOS## 	;   (error ignored)
+if 1
+	CALL	SETLANG##
+endif
+;
+	JP	CLI##		; Start up the actual command interpreter.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 This routine is called several times during the  initialisation  just
+; before  something  (eg.  a  string  or code section) is copied to the top of
+; memory. It ensures that  there  is  enough  memory,  and  returns  with  all
+; registers  preserved  if  there  is.  If there isn't, then a 'terminate with
+; error code' is done with a .NORAM error code (this is OK since  COMMAND  has
+; not yet 'installed' itself).
+;
+;	 The  current  high memory pointer, passed in DE, is checked to see if
+; it has come within a certain number of bytes of the top of the variables (at
+; TPA).  This  amount  is  the  amount  of memory that COPY needs free (CPYMEM
+; bytes) plus some more for the maximum length of the item's being copied  and
+; also for the minimum size of COPY's buffer, which is one sector's worth.
+;
+;
+CHKMEM:	PUSH	HL		; Preserve all registers.
+	PUSH	DE
+	LD	HL,TPA##	; Start of free memory, DE=end.
+	OR	A
+	SBC	HL,DE		; HL = -free amount, C set.
+	LD	DE,-(CPYMEM+512)-1	; - Minimum amount (-1 since Cy set).
+	SBC	HL,DE		; Cy => OK.
+	POP	DE
+	POP	HL
+	RET	C		; Return if enough emory free.
+;
+	LD	B,.NORAM##	; Terminate with .NORAM error.
+	LD	C,_TERM##
+	JP	_BDOS##
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 This  routine is called from the part of the initialisation that sets
+; up the default environment items, and sets the item whose name is at (HL) to
+; the value at (DE) only if it is not already set up.
+;
+;
+SET?:	PUSH	DE		; Save pointer to default value.
+	PUSH	HL		; Save pointer to name.
+	CALL	GENV2## 	; Get current value into BUFF.
+	LD	A,(DE)		; Get first char of value, 0 => null.
+	POP	HL		; Restore pointer to name.
+	POP	DE		; Restore pointer to default value.
+	RET	NZ		; Ignore error.
+;
+	OR	A		; Null value ?
+	RET	NZ		; Don't set if not.
+;
+	LD	C,_SENV##
+	JP	_BDOS## 	; Else set new value, ignore error.
+;
+;
+YMD$:	DEFB	'yy-mm-dd',0	; Strings for date formats.
+MDY$:	DEFB	'mm-dd-yy',0
+DMY$:	DEFB	'dd-mm-yy',0
+;
+P$:	DEFB	';',0		; Default PATH is null.
+;
+T12$:	DEFB	'12',0		; Default TIME mode is 12 hour.
+;
+;
+MSG	MACRO	NAME
+NAME	 EQU	MSGNO
+MSGNO	 DEFL	MSGNO+1
+	 DEFB	__&NAME##
+	ENDM
+;
+MSGNO	DEFL	0
+;
+;
+MSGTAB:	MSG	SPLATS		; '***' printed before error.
+	MSG	EREND		; Message printed before error.
+	MSG	INSERT		; 'Insert COMMAND disk ...'.
+	MSG	INSDRV		; Message after drive letter.
+	MSG	PRAK		; 'Press any key ...'.
+;
+MSGS	EQU	MSGNO		; Number of messages used when re-booting.
+;
+;
+;
+	SUBTTL
+	END

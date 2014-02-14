@@ -1,0 +1,1946 @@
+	TITLE	MSX-DOS 2 - MSX-DOS.SYS copyright (1986) IS Systems Ltd.
+	SUBTTL	BDOS and BIOS
+;
+	.Z80
+	include	MACROS.INC
+;
+;
+FALSE	EQU	0
+TRUE	EQU	NOT FALSE
+;
+TEST	EQU	FALSE				; TRUE for testing version.
+;
+;
+;        This file contains all the code of MSX-DOS2.SYS once in memory. It is
+; re-located  to high memory on start up and is always put on a page boundary,
+; so that the BIOS jump table can be on a page boundary.
+;
+;        The re-location in memory is done by comparing linking the .REL  file
+; twice  on page boundaries, and comparing the two images. Any differences are
+; the high bytes of addresses that  need  re-locating  (the  low  bytes  being
+; correct).
+;
+;        For this reason, this file cannot be split  into  two  or  more  .REL
+; files and it must contain no global symbol declarations and no references to
+; external symbols that would need relocation.
+;
+;        The start of the file, which is the thing which must  be  on  a  page
+; boundary, is the BIOS jump table. The first entry is jumped to in  order  to
+; start  MSX-DOS.SYS  up properly. Below this on the next page boundary is the
+; destination of the BDOS jump at 5. This jump is not included in  MSX-DOS.SYS
+; but  is  set  up during the initialization. The 250 bytes or so between this
+; jump  and the BIOS jump table is used as the BDOS stack. The BIOS also needs
+; to switch to a separate stack, although this one does  not  need  to  be  so
+; large.
+;
+START:
+;
+;
+CODE	MACRO	OPCODE,ARG
+	 .8080
+	 DB	(OPCODE ARG)
+	 .Z80
+	ENDM
+;
+;
+LF	EQU	0AH
+CR	EQU	0DH
+ESC	EQU	1BH
+;
+;
+P3BDOS	EQU	0F37DH		; Disk BASIC BDOS entry point in page 3.
+
+MFLAGS	EQU	0F2EFH		; Miscellaneous flags
+;
+;
+;
+	SUBTTL	BIOS Table and Routines
+;******************************************************************************
+;
+;        This is the dummy CP/M BIOS jump table. The first entry, as in  CP/M,
+; is  the  cold  start  entry  point  and  is  jumped to by the loader code to
+; actually start up MSX-DOS.SYS. It has to jump to the loaded code at  a  well
+; known entry point because this code is not allowed to declare any externals.
+;
+;        The  character entry points just end up calling the BIOS entry points
+; in the disk ROM, which then do all the dirty stuff necessary to call the MSX
+; BIOS ROM.
+;
+;
+BIOS_TAB:
+	JP	STARTUP		; Initial start-up entry point.
+JREBOOT:JP	REBOOT		; Re-load COMMAND.COM.
+	JP	CONST		; Console status.
+	JP	CONIN		; Console input.
+	JP	CONOUT		; Console output.
+	JP	LIST		; Printer output.
+	JP	PUNCH		; Auxiliary output.
+	JP	READER		; Auxiliary input.
+	JP	DISK		; Disk functions, return errors where possible.
+	JP	DISK
+	JP	DISK
+	JP	DISK
+	JP	DISK
+	JP	DISK
+	JP	DISK
+	JP	LISTST		; Printer status.
+	JP	DISK
+;
+;
+	DEFW	VERMSG		; Pointer to version message.
+VERNUM:
+	defb	RELEASE##+(RELEASE##/256)*16
+	defb	VERSION##
+;
+;
+VERMSG:	DEFB	'NEXTOR.SYS version '
+	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0'
+	DEFB	0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        This is the sign-on message that gets printed when MSX-DOS.SYS starts
+; up.  If  the  testing version is assembled, then extra text is included as a
+; warning.
+;
+if 0
+SIGNON:	DEFB	'Nextor version '
+	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0'
+	DEFB	CR,LF
+	DEFB	'Copyright ('
+	DEFB	CRYEAR##/1000 MOD 10 +'0'
+	DEFB	CRYEAR##/ 100 MOD 10 +'0'
+	DEFB	CRYEAR##/  10 MOD 10 +'0'
+	DEFB	CRYEAR##      MOD 10 +'0'
+	DEFB	') Konamiman',CR,LF
+;
+	IF	TEST
+	 DEFB	CR,LF
+	 DEFB	'*** MZED-compatible testing version ***'
+	 DEFB	CR,LF
+	ENDIF
+;
+	DEFB	CR,LF
+	DEFB	0
+endif
+;
+;
+;------------------------------------------------------------------------------
+;
+;        This is the initial start up entry point. As in CP/M, this is entered
+; via  the  first  BIOS  jump and should not normally be re-entered. If it is,
+; however, it will probably not do any real  harm  as  the  system  will  just
+; re-start.   It  is  assumed,  however, that characters can be output without
+; getting disk errors, which would otherwise cause the disk error  &  possibly
+; the  abort  routine to be called, which are not yet defined. The sign-on and
+; 'not enough memory' messages are printed by  calling  the  disk  BASIC  BDOS
+; entry point at F37D, since when these messages need printing the normal BDOS
+; entry point is not yet set up properly.
+;
+;        The disk BASIC entry point at F37D is not supported in MSX-DOS 2, and
+; so  once  MSX-DOS.SYS  has  started  up a jump is put at F37D to jump to the
+; normal BDOS entry code. If anything is trying to call F37D, this stands more
+; of a chance of working than anything else that could be done to F37D.
+;
+STARTUP:LD	HL,P3BDOS	; Character outputs initially go through page 3
+	LD	(OVEC),HL	;   entry point.
+;
+if 0 ;v2.31
+	LD	A,(NOTFIRST##)	; Print sign-on message through page 3 entry,
+	LD	DE,SIGNON	;   but only if the first time.
+	OR	A
+	CALL	Z,DSTR
+;
+endif
+	LD	C,_DOSVER##	; Get the version number.
+	CALL	P3BDOS		; In case it's an old system.
+	LD	A,B
+	CP	2		; Check KBDOS is 2.00 or later.
+	LD	A,__BADVER##	; Print error & halt if not.
+	JP	C,HANG
+;
+	LD	HL,SERIAL##	; Copy the serial number (will probably be
+	LD	DE,SERNO	;   wrong if this is entered a second time
+	LD	BC,4		;   via the BIOS jump table, but that doesn't
+	LDIR			;   particularly matter).
+;
+RESTART:LD	HL,0		; Zero main and secondary errors returned by
+	LD	(ERROR2),HL	;   process.
+;
+ifdef ver880722
+	LD	DE,80H		; DE -> command line buffer.
+	LD	A,(DE)		; Command (from _SYSTEM command from BASIC)?
+	OR	A
+	JR	NZ,BOOT		; Leave it there if it is.
+;
+endif
+	LD	A,(BOOT_DRV##)	; Else set up AUTOEXEC.BAT if the first boot or
+	ADD	A,'A'-1		;   REBOOT otherwise, with the boot drive as
+	LD	(AUTPAT),A	;   a parameter (so that the batch files can
+	LD	(REBPAT),A	;   access the boot drive as %1).
+	LD	(AUTOCMD+1),A	; Load AUTOEXEC from the boot drive.
+	LD	(REBCMD+1),A	; Load REBOOT from the boot drive.
+	LD	(CMNDM),A	; Load COMMAND.COM from the boot drive.
+;
+ifndef ver880722
+	LD	DE,80H		; DE -> command line buffer.
+	LD	A,(DE)		; Command (from _SYSTEM command from BASIC)?
+	OR	A
+	JR	NZ,BOOT		; Leave it there if it is.
+;
+endif
+	LD	HL,NOTFIRST##	; NZ => not the first boot.
+	LD	A,(HL)
+	LD	(HL),H		;   (set flag => not first time any more)
+;
+	LD	HL,AUTOCMD
+	OR	A
+	JR	Z,COPYCMD
+;
+	LD	HL,REBCMD
+COPYCMD:LD	C,(HL)		; Get length of command.
+	INC	C		; Include length byte (B=0 from above).
+	INC	C		; Include null on end.
+	LDIR
+;
+	JR	BOOT		; Jump to re-booting code to load COMMAND.COM.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        This  is  the  re-booting code for the BIOS jump table entry. It gets
+; entered when a transient program that was previously loaded  terminates  (by
+; RETurning  with the same stack, jumping to zero or one of the 101 other ways
+; of terminating), and just loads COMMAND.COM at  100H  and  calls  it  (as  a
+; transient  program). The standard MSX-DOS2 COMMAND.COM patches the BIOS jump
+; table re-boot entry point to point to a bit of  code  in  high  memory  that
+; checksums  the  area of memory that COMMAND.COM was saved in so that it only
+; re-loads it off disk if it has to.
+;
+;        COMMAND.COM is executed as a standard CP/M  transient  program.   The
+; BIOS  jump  at 0 and the BDOS jump at 5 are set up appropriately and jump to
+; addresses of the form xx03 and xx06 respectively as in CP/M. A command  line
+; was  put there by whatever code loaded and executed MSX-DOS.SYS, and this is
+; left intact for the command interpreter to look at. If no command was given,
+; however,  then  MSX-DOS.SYS  provides  one.  This  is either AUTOEXEC.BAT or
+; REBOOT.BAT, depending upon whether a variable is zero  (first  start-up)  or
+; non-zero  (re-booting). Although a CP/M-compatible command line is provided,
+; the default CP/M FCBs are not set up, as this is rather a lot of  bother  to
+; do. The FCBs are instead just zeroed.
+;
+;        In principle then it should be possible to rename any CP/M or MSX-DOS
+; program as COMMAND.COM and MSX-DOS will boot  up  into  it.   The  preferred
+; method  of  doing  this, however, is to load the program in the REBOOT batch
+; file.
+;
+;        The BOOT entry point below is used when booting COMMAND.COM  for  the
+; first  time after MSX-DOS.SYS is loaded. The REBOOT entry point is used when
+; COMMAND.COM terminates, and it clears the command  buffer  which  the  first
+; time contained a command to execute or a AUTOEXEC.BAT or REBOOT.BAT command.
+;
+;        The error returned from the last process (as returned from  the  JOIN
+; function  call)  is  zeroed initially by STARTUP. After that, the error code
+; will actually be the error code returned by the last invocation of  COMMAND.
+; If  this  is not .BADCMD or .OKCMD (or if the first time round) then COMMAND
+; will simply be loaded from disk at 100H and executed.  If however the  error
+; code was .BADCMD or .OKCMD , then it is assumed that COMMAND is still intact
+; in memory and it simply gets jumped to at 100H without re-loading.
+;
+;        This is a fiddle for the initial boot. COMMAND is passed the name  of
+; the  batch  file ('AUTOEXEC' or 'REBOOT') as a command to execute, and if it
+; does not find the batch file then it returns .BADCMD. If the batch file  was
+; executed  OK  then  it returns .OKCMD. The fiddle described above is done to
+; prevent a re-load of COMMAND in this perfectly valid  and  not  particularly
+; uncommon  case.   COMMAND co-operates in this scheme by guaranteeing that if
+; it terminates with .BADCMD or .OKCMD then it is still in memory.
+;
+;
+REBOOT:	XOR	A		; Zero command in command buffer so that when
+	LD	(80H),A		;   it is re-loaded it does not get a command.
+;
+BOOT:	CALL	$DOSOFF##	; Set up page 1.
+;
+	LD	HL,DISK_ERROR	; Set up disk error handler vector.
+	LD	(KDSK_VECT##),HL
+	LD	HL,ABORT	; Set up abort routine vector.
+	LD	(KAB_VECT##),HL
+;
+	LD	DE,0		; Undefine user's routines.
+	CALL	@DEFER
+	CALL	@DEFAB
+;
+	LD	HL,REBOOT	; Make sure re-boot BIOS jump is set up.
+	LD	(JREBOOT+1),HL
+	LD	A,0FFH		; Initialize BDOS re-entrancy count.
+	LD	(ENTERS),A
+;
+	LD	HL,0		; Set up jump vectors at bottom of memory.
+	CODE	MVI A
+	 CODE	JMP
+	LD	(HL),A
+	INC	HL
+	LD	(HL),LOW BIOS_TAB+3
+	INC	HL
+	LD	(HL),HIGH BIOS_TAB
+	INC	HL
+	LD	(HL),0		; I/O byte not implemented.
+	INC	HL
+	INC	HL		; Current drive set up later.
+	LD	(HL),A		; 5 = BDOS jump, address set up later.
+	LD	HL,JBDOS+8	; Last byte of destination of JP at 5.
+;
+	LD	(HL),HIGH BDOS	; Set up jump address.
+	DEC	HL
+	LD	(HL),LOW BDOS
+	DEC	HL
+	LD	(HL),A		; Set up actual JP opcode.
+	LD	(6),HL		; Set up address in jump at 5.
+	DEC	HL
+	EX	DE,HL		; Copy serial number which was copied to SERNO
+	LD	HL,SERNO+3	;   from the start of the MSX-DOS.SYS file.
+	LD	BC,4
+	LDDR
+	EX	DE,HL
+	LD	(HL),22		; Put in CP/M version number.
+	DEC	HL
+	LD	(HL),0
+;
+	LD	A,H		; If out of page 3, then print out of memory
+	CP	0C0H		;   error & hang.
+	JR	NC,MEMOK
+;
+	LD	A,__NOMEM##	; Get DE -> message.
+HANG:	CALL	MESSAGE
+	CALL	DERRM		; Print error.
+	CALL	CRLF
+	DI
+	HALT
+;
+MEMOK:	LD	SP,BIOS_STACK	; Use MSX-DOS.SYS's own stack in page 3.
+	LD	HL,BDOS		; OK to use the normal BDOS entry point now.
+	LD	(OVEC),HL
+;
+	LD	C,_CURDRV##	; Get the current drive and put it at 4 for
+	CALL	BDOS		;   CP/M compatibility.
+	LD	(4),A
+;
+if 0 ;Hal_F
+	LD	HL,(6)		; Make the F37D entry point jump to the same
+	LD	(P3BDOS+1),HL	;   place as the normal entry point at 5.
+	CODE	MVI A
+	 CODE	JMP
+	LD	(P3BDOS),A
+endif
+;
+	LD	A,(ERROR)	; Get error code from COMMAND without doing a
+	CP	.BADCMD##	;   JOIN, and don't reload if .BADCMD or .OKCMD
+	JR	Z,LOADOK	;   =>COMMAND is still in memory. Go with NC.
+;
+	CP	.OKCMD##	;   (ERROR will be 0 first time round)
+	JR	Z,LOADOK	; Go with NC.
+;
+	CP	.BATEND##	; Means AUTOEXEC/REBOOT were terminated by the
+	JR	Z,LOADOK	;   user. Go with NC.
+;
+REJOIN:	LD	BC,0*256+_JOIN##; Reset file handles etc.
+	CALL	BDOS
+	JR	NZ,REJOIN	; May fail first time, but should then be OK.
+;
+	OR	B		; Any error from previous process?
+	JR	Z,NPERR		; Go if not.
+;
+	CALL	DERR		; Else print error message.
+	CALL	CRLF
+NPERR:	LD	DE,CMNDM	; DE -> '\COMMAND.COM'.
+	LD	C,_OPEN##
+	XOR	A
+	CALL	BDOS		; Attempt to open COMMAND.COM.
+	JR	NZ,LDERR	; Go if error.
+;
+	LD	DE,100H		; Else load program to here.
+	LD	HL,JBDOS-100H	; Maximum number of bytes loadable.
+	PUSH	HL
+	PUSH	BC		; Save file handle.
+	LD	C,_READ##
+	CALL	BDOS		; Read COMMAND.COM to 100H.
+	POP	BC		; Restore file handle.
+	POP	DE		; Restore maximum number of bytes usable.
+	JR	NZ,LDERR	; Go if error.
+;
+	SBC	HL,DE		; All of memory filled up?
+	LD	A,.NORAM##	;   (should not really occur)
+	JR	Z,LDERR		; Print 'Not enough memory' if yes.
+;
+	LD	C,_CLOSE##	; Close file handle.
+	CALL	BDOS
+	JR	NZ,LDERR
+;
+	SCF			; Cy => set LOAD_FLAG to FF.
+LOADOK:				; COMMAND.COM is sitting at 100H.
+	PUSH	AF		; Save LOAD_FLAG.
+	LD	HL,5CH		; Zero CP/M FCBs.
+	LD	B,H		; B=0 for later.
+ZLOOP:	LD	(HL),H
+	INC	L
+	JP	P,ZLOOP		; Zero until 80H, which is the command line.
+;
+	EX	DE,HL		; Set up default DMA address to 80H.
+	LD	C,_SETDTA##
+	CALL	BDOS
+;
+	POP	AF		; Set LOAD_FLAG to FF if a real load => loaded
+	SBC	A,A		;   by MSX-DOS.SYS.
+	LD	(LOAD_FLAG##),A
+;
+	XOR	A		; Put address 0 on the stack so that when
+	LD	L,A		;   the COMMAND terminates MSX-DOS.SYS
+	LD	H,A		;   re-loads and executes it.
+	PUSH	HL
+	LD	DE,BIOS_TAB-1	; CP/M seems to execute transient programs
+	LD	C,0FFH		;   with the registers set up this way.
+	LD	B,A
+	JP	100H		; Jump to the program.
+;
+;
+AUTOCMD:DEFB	18,'A:\AUTOEXEC.BAT '	; A: patched to the boot drive.
+AUTPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
+REBCMD:	DEFB	16,'A:\REBOOT.BAT '	; A: patched to the boot drive.
+REBPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
+;
+CMNDM:	DEFB	'A:\COMMAND2.COM',0	; A: patched to the boot drive.
+CMDLEN	EQU	$-CMNDM
+;
+;
+LDERR:				; Error during re-loading - A=error code.
+	CP	.NOFILE##	; If 'file not found', then suppress error
+	LD	B,A		;   message & just prompt for COMMAND disk.
+	CALL	NZ,DERR
+	CALL	CRLF
+	LD	A,__INSERT##
+	CALL	DMSG		; Print 'Insert COMMAND.COM disk' etc.
+	LD	C,_CURDRV##
+	CALL	BDOS		; Get current drive.
+	ADD	A,'A'		; Convert to drive letter and print it.
+	CALL	OUTCH
+	LD	A,__INSDRV##	; Print rest of message (':' in English).
+	CALL	DMSG
+	CALL	CRLF
+	LD	A,__PAUSE##	; Print 'Press any key to continue' etc.
+	CALL	DMSG
+	CALL	INCH		; Wait for a keypress.
+	JP	REBOOT		; Try again.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The BIOS character I/O  routines  follow.  These  are  fairly  simple
+; because  all  they  really do is call the disk ROM, which has suitable entry
+; points for the BIOS routines.
+;
+;
+CONST:	LD	HL,KCONST##
+	JR	BIOS
+;
+CONIN:	LD	HL,KCONIN##
+	JR	BIOS
+;
+CONOUT:	LD	HL,KCONOUT##
+	JR	BIOS
+;
+LIST:	LD	HL,KLIST##
+	JR	BIOS
+;
+PUNCH:	LD	HL,KPUNCH##
+	JR	BIOS
+;
+READER:	LD	HL,KREADER##
+	JR	BIOS
+;
+LISTST:	LD	HL,KLISTST##
+;
+BIOS:	LD	(BIOS_SP),SP	; Save user's stack and switch to
+	LD	SP,BIOS_STACK	;   stack in page 3.
+;
+	CALL	GO_BIOS##
+;
+	LD	SP,(BIOS_SP)	; Restore user's stack.
+	RET
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        This is the routine entered for the disk BIOS  functions,  which  are
+; not  supported. They return errors where possible but otherwise just return.
+; No CP/M program calling one of these is going to work in  any  sensible  way
+; anyway.
+;
+;
+DISK:	XOR	A
+	LD	L,A		; HL = 0 => error from SELDSK function.
+	LD	H,A
+	DEC	A		; A = FF => error from read/write.
+	RET
+;
+;
+;
+	SUBTTL	BDOS Entry/Exit Code.
+;******************************************************************************
+;
+;        When a program does a BDOS call, it calls location 5. This contains a
+; jump to another jump at an address of the form xx06 (for CP/M compatibility)
+; which then jumps to here. This code can then call the KBDOS.
+;
+;
+;        If  a  user's  disk error routine is defined and a disk error occurs,
+; then it is likely to want to do character I/O calls. Thus  this  entry  code
+; has  to be re-entrant for at least the direct console I/O function, although
+; no steps are taken to prevent an attempted re-entry of other functions.  The
+; reason  they  may  not  work  is  that another disk error could occur. It is
+; inadvisable to call even the other character  functions  re-entrantly  since
+; these can still result in a disk error through re-direction and so on.
+;
+;        During a BDOS call, the ABORT routine may be jumped  to.   This  gets
+; jumped  to  with  an  error  code  in A from somewhere within the mysterious
+; depths of the KBDOS.  When  this  happens,  the  user's  abort  routine  (if
+; defined) is called also with the error code in A. If that returns, then  the
+; error  code  (which may have been modified) is stored in the ERROR variable.
+; If it chooses not to return, then ERROR is zero because it is zeroed  before
+; calling  a  transient program. ERROR2 is treated similarly, but contains the
+; secondary error code.
+;
+;        In order to ensure that the user's routine is called in a state where
+; he  may  return  or  may  continue,  the  user's  error routine is called by
+; patching the 'RET' at the end of the BDOS return code to a NOP, so execution
+; falls  through to the code below which does the actual calling. This ensures
+; that the stack etc. is OK.
+;
+;
+;        When the KBDOS performs a read or write, it uses the segments defined
+; by  the  variables  P0_TPA..P3_TPA.  These  are set up when a stack switched
+; occurs (ie. when the BDOS is called non-reentrantly) but not at other times.
+; On  return,  the  paging  will always by set up to P0_TPA..P3_TPA. On return
+; from a re-entrant call from a disk error routine therefore the  paging  will
+; be set up to the paging state when the BDOS was first called.
+;
+;        For all calls, all other parameters must either be in registers or in
+; page 3 RAM. Since many BDOS calls pass pointers etc.,  the  items  that  are
+; pointed to are copied to a page 3 buffer, and pointers to this buffer passed
+; to  the  KBDOS.   The   things   which   are   copied   are   FCBs,   ASCIIZ
+; drive/path/filename  strings,  File  Info  Blocks and strings to be printed.
+; Since the latter is of arbitrary length, a little print  string  routine  is
+; implemented here.
+;
+;        All  other copied data structures are 64 bytes or less, although some
+; functions require more than one thing to be copied.
+;
+;        A few functions alter the values of IX and IY. These are pushed  onto
+; the  stack  immediately  before the return address when calling the function
+; routines, and so these functions can change them in a slightly naughty way.
+;
+;        On every BDOS call, the fixed page 3 variable  LOAD_FLAG  is  set  to
+; zero.  This  is  used by COMMAND.COM and specially-written programs to check
+; whether it was loaded from COMMAND.COM or MSX-DOS.SYS.
+;
+BDOS:
+	LD	(A_SAVE),A	; Save A parameter to function.
+	LD	A,(ENTERS)	; Get re-entrancy count.
+	INC	A		; First entry?
+	LD	(ENTERS),A
+if 1
+	jr	z,BDOS05
+	ld	(BIOS_SP),sp
+	ld	sp,BIOS_STACK-100
+	push	hl
+	push	bc
+	ld	hl,(BDOS_STACK##)
+	ld	bc,(BIOS_SP)
+	or	a
+	sbc	hl,bc
+	jr	c,BDOS02
+	ld	bc,BDS_SZ##
+	sbc	hl,bc
+	ccf
+BDOS02:	pop	bc
+	pop	hl
+	ld	sp,(BIOS_SP)
+	jr	nc,BDOS10
+	xor	a
+	ld	(ENTERS),a
+BDOS05:
+else
+	JR	NZ,BDOS10	; Go if not, else switch stacks.
+endif
+;
+	LD	(LOAD_FLAG##),A	; Gets set to 0 on every BDOS call.
+	LD	(BDOS_SP),SP
+	LD	SP,(BDOS_STACK##)
+;
+BDOS10:	EX	AF,AF'		; Save alternate register set, as the KBDOS
+	PUSH	AF		;   doesn't.
+	EXX			; Save BDOS parameters in alternate registers.
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	HL,(SP_SAVE)	; Save SP_SAVE for re-entrancy reasons.
+	PUSH	HL
+	PUSH	IX		; A couple of routines below change the values
+	PUSH	IY		;   of these saved IX and IYs.
+	LD	(SP_SAVE),SP	; Save SP for abort entry.
+if 1 ;v2.30
+	LD	HL,DISK_ERROR	; Set up disk error handler vector.
+	LD	(KDSK_VECT##),HL
+	LD	HL,ABORT	; Set up abort routine vector.
+	LD	(KAB_VECT##),HL
+endif
+	LD	HL,BDOS_DONE	; Call KBDOS then return to BDOS_DONE.
+	PUSH	HL
+;
+	EXX			; Get back BDOS call parameters.
+	PUSH	HL
+	LD	A,C		; Get function number.
+	CP	MAXFN		; If function number is greater than we know
+	JR	C,OKFN		;   about, then just pass it through to KBDOS.
+;
+	LD	A,BADNO
+OKFN:	LD	HL,FNTAB	; HL -> table of function routine addresses.
+	ADD	A,A		; *2 (addresses in table are 2 bytes)
+	ADD	A,L
+	LD	L,A
+	JR	NC,NOINC
+;
+	INC	H
+NOINC:	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	EX	(SP),HL		; Save routine address, get HL back.
+	CODE	MVI A		; Get A back again.
+A_SAVE:	 DEFB	0
+	RET			; Jump to routine for this function.
+;
+;
+BDOS_DONE:
+	EX	AF,AF'		; Save returned A.
+	CODE	MVI A		; Ensure final 'RET' is set up.
+	CODE	RET
+	LD	(RETPAT),A
+	EX	AF,AF'
+BDOS_RET:
+	CODE	LXI SP
+SP_SAVE: DEFW	0		; Restore stack pointer.
+	EXX			; Save returned registers.
+	EX	AF,AF'
+	POP	IY		; Restore index registers.
+	POP	IX
+	POP	HL
+	LD	(SP_SAVE),HL	; Restore saved value of SP_SAVE.
+	POP	BC		; Restore saved alternate register set.
+	POP	DE
+	POP	HL
+	EXX
+	POP	AF
+	EX	AF,AF'
+	PUSH	AF
+;
+	LD	A,(ENTERS)	; Switch back to user's stack if
+	DEC	A		;   returning from first call.
+	LD	(ENTERS),A
+	JP	P,BDOS20
+;
+	POP	AF		; Pop AF again over stack switch.
+	LD	SP,(BDOS_SP)
+	PUSH	AF
+BDOS20:
+	POP	AF		; Restore A returned from KBDOS.
+	OR	A		; Set flags.
+RETPAT:	RET			; Patched to a 'NOP' for abort.
+;
+;	    ;
+	    ;
+	    ;
+JP_ABORT:			; Abort user's BDOS or BIOS call.
+	PUSH	HL
+	PUSH	AF		; Save error code.
+	LD	HL,(ABORT_VECT)	; Get user's abort routine address.
+	LD	A,H
+	OR	L
+	POP	HL		; H=error code.
+	LD	A,H		; AF=error code.
+	POP	HL
+	CODE	CNZ		; Call user's routine if defined.
+ABORT_VECT:
+	 DEFW	0
+	LD	(ERROR),A	; Save error and re-boot if no user routine or
+	LD	A,B		;   if it returned the error.
+	LD	(ERROR2),A	; Save secondary error code.
+;
+;	Simulate DOS1 compatible Control-C handler.
+;
+	ld	a,(ERROR)
+	or	a
+	JR	Z,GO_REBOOT
+;
+OLD_BREAK:
+	ld	hl,(BREAKVECT##)
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ex	de,hl
+	jp	(hl)
+;
+GO_REBOOT:
+	JP	0
+;
+;
+;------------------------------------------------------------------------------
+;
+FNTAB:				; Table of routine addresses for the functions.
+	DEFW	@TERM0		; Terminate program with no error.
+	DEFW	@CONIN		; Console input.
+	DEFW	@CONOUT		; Console output.
+	DEFW	@AUXIN		; Auxiliary input.
+	DEFW	@AUXOUT		; Auxiliary output.
+	DEFW	@LSTOUT		; List output.
+	DEFW	@DIRIO		; Direct console I/O.
+	DEFW	@DIRIN		; Direct console input, no echo.
+	DEFW	@INNOE		; Console input, no echo.
+	DEFW	@STROUT		; String output.
+	DEFW	@BUFIN		; Buffered line input.
+	DEFW	@CONST		; Console status.
+;
+	DEFW	@CPMVER		; Return CP/M version number.
+	DEFW	@DSKRST		; Disk reset.
+	DEFW	@SELDSK		; Select disk.
+;
+	DEFW	@FOPEN		; Open file (FCB).
+	DEFW	@FCLOSE		; Close file (FCB).
+	DEFW	@SFIRST		; Search for first (FCB).
+	DEFW	@SNEXT		; Search fir next (FCB).
+	DEFW	@FDEL		; Delete file (FCB).
+	DEFW	@RDSEQ		; Read sequential (FCB).
+	DEFW	@WRSEQ		; Write sequential (FCB).
+	DEFW	@FMAKE		; Create file (FCB).
+	DEFW	@FREN		; Rename file (FCB).
+;
+	DEFW	@LOGIN		; Get login vector.
+	DEFW	@CURDRV		; Get current drive.
+	DEFW	@SETDTA		; Set disk transfer address.
+	DEFW	@ALLOC		; Get allocation information.
+;
+	DEFW	@BADCPM		; Write protect disk in CP/M.
+	DEFW	@BADCPM		; Get read only vector in CP/M.
+	DEFW	@BADCPM		; Set file attributes in CP/M.
+	DEFW	@BADCPM		; Get Disk Parameter Block in CP/M.
+	DEFW	@BADCPM		; Get/set user code in CP/M.
+;
+	DEFW	@RDRND		; Read random (FCB).
+	DEFW	@WRRND		; Write random (FCB).
+	DEFW	@FSIZE		; Get file size (FCB).
+	DEFW	@SETRND		; Set random record (FCB).
+	DEFW	@BADFN		; Undefined function in CP/M.
+	DEFW	@WRBLK		; Write random block (FCB).
+	DEFW	@RDBLK		; Read random block (FCB).
+	DEFW	@WRZER		; Write random with zero fill (FCB).
+	DEFW	@BADFN		; Unused.
+;
+	DEFW	@GDATE		; Get date.
+	DEFW	@SDATE		; Set date.
+	DEFW	@GTIME		; Get time.
+	DEFW	@STIME		; Set time.
+	DEFW	@VERIFY		; Set/reset verify flag.
+;
+	DEFW	@RDABS		; Absolute sector read.
+	DEFW	@WRABS		; Absolute sector write.
+;
+	DEFW	@DPARM		; Get disk parameters.
+;
+BADNO	EQU	32H		; Function no. used for un-implemented fns.
+	DEFW	@BADFN		; Un-implemented functions.
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+	DEFW	@BADFN
+;
+				; Start of MSX-DOS 2 functions.
+	DEFW	@FFIRST		; Find first entry.
+	DEFW	@FNEXT		; Find next entry.
+	DEFW	@FNEW		; Find new entry.
+;
+	DEFW	@OPEN		; Open file handle.
+	DEFW	@CREATE		; Create file and open file handle.
+	DEFW	@CLOSE		; Close file handle.
+	DEFW	@ENSURE		; Ensure file handle.
+	DEFW	@DUP		; Duplicate file handle.
+	DEFW	@READ		; Read from file handle.
+	DEFW	@WRITE		; Write to file handle.
+	DEFW	@SEEK		; Seek (position file pointer).
+	DEFW	@IOCTL		; I/O control for devices.
+	DEFW	@HTEST		; Test file handle.
+;
+	DEFW	@DELETE		; Delete file or sub-directory.
+	DEFW	@RENAME		; Rename file or sub-directory.
+	DEFW	@MOVE		; Move file or sub-directory.
+	DEFW	@ATTR		; Get/set file attributes.
+	DEFW	@FTIME		; Get/set file time.
+;
+	DEFW	@HDELETE	; Delete file handle.
+	DEFW	@HRENAME	; Rename file handle.
+	DEFW	@HMOVE		; Move file handle.
+	DEFW	@HATTR		; Get/set file handle attributes.
+	DEFW	@HFTIME		; Get/set file handle time.
+;
+	DEFW	@GETDTA		; Get disk transfer address.
+	DEFW	@GETVFY		; Get verify flag setting.
+	DEFW	@GETCD		; Get current directory.
+	DEFW	@CHDIR		; Set current directory.
+	DEFW	@PARSE		; Parse path-name string.
+	DEFW	@PFILE		; Parse filename.
+	DEFW	@CHKCHR		; Check character.
+	DEFW	@WPATH		; Get whole path string.
+	DEFW	@FLUSH		; Flush disk buffers.
+;
+	DEFW	@FORK		; Fork to process.
+	DEFW	@JOIN		; Join to process.
+	DEFW	@TERM		; Terminate with error code.
+	DEFW	@DEFAB		; Define abort exit routine.
+	DEFW	@DEFER		; Define critical error handler routine.
+	DEFW	@ERROR		; Get previous error code.
+	DEFW	@EXPLAIN	; Explain error code.
+	DEFW	@FORMAT		; Format a disk.
+	DEFW	@RAMD		; Create or destroy RAM-disk.
+	DEFW	@BUFFER		; Allocate sector buffers.
+	DEFW	@ASSIGN		; Logical drive assignment.
+;
+	DEFW	@GENV		; Get environment string.
+	DEFW	@SENV		; Set environment string.
+	DEFW	@FENV		; Find environment name.
+;
+	DEFW	@DSKCHK		; Get/set disk check status.
+	DEFW	@DOSVER		; Get version number.
+	DEFW	@REDIR		; Get/set redirection status (missing in the original???)
+
+	DEFW	@FOUT		; Get/set fast STROUT mode.
+	DEFW	@ZSTROUT	; Zero-terminated string output.
+
+	DEFW	@RDDRV		; Absolute drive sector read.
+	DEFW	@WRDRV		; Absolute drive sector write.
+
+	DEFW	@RALLOC		; Get/set reduced allocation information mode vector
+	DEFW	@DSPACE		; Get disk space information
+
+	DEFW	@LOCK		; Lock/unlock drive
+
+	DEFW	@GDRVR		; Get driver information
+	DEFW	@GDLI		; Get drive letter information
+	DEFW	@GPART		; Get information about disk partition
+	DEFW	@CDRVR		; Call a routine in a disk driver
+	DEFW	@MAPDRV		; Map a drive to a driver/device/LUN/sector
+
+	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
+;
+MAXFN	EQU	($-FNTAB)/2	; Largest function number.
+;
+;
+;
+	SUBTTL	BDOS CP/M Character I/O Functions
+;******************************************************************************
+;
+@CONIN:
+@CONOUT:
+@AUXIN:
+@AUXOUT:
+@LSTOUT:
+@DIRIO:
+@DIRIN:
+@INNOE:
+@CONST:
+@CPMVER:
+if 0
+@DSKRST:
+@SELDSK:
+endif
+@SNEXT:
+@LOGIN:
+@CURDRV:
+@SETDTA:
+@VERIFY:
+@BADCPM:
+	CALL	KBDOS
+	LD	A,L		; Get value to return in A, L.
+	LD	B,H		; Get value to return in B, H.
+	RET
+;
+;
+if 1
+@DSKRST:
+	LD	E,0
+@SELDSK:
+	PUSH	DE		; Save drive over call.
+	CALL	KBDOS
+	POP	DE
+	OR	A
+	LD	A,E
+	JR	NZ,BAD_DRIVE	; If drive was good put it at 4 for
+	LD	(4),A		;  CP/M compatibility.
+BAD_DRIVE:
+	LD	A,L
+	LD	B,H
+	RET
+endif
+;
+;
+;------------------------------------------------------------------------------
+;
+
+@STROUT:
+	ld	a,(MFLAGS)
+	and	1
+	jr	z,strout_slow	;If fast STROUT not enabled, use the slow version.
+
+	;--- STROUT, fast version
+
+	ex	de,hl
+	ld	de,($SECBUF##)
+	ld	bc,511
+	ldir
+	ld	a,"$"
+	ld	(de),a
+	ld	c,_STROUT##
+	call	KBDOS
+	jr	CPMRET
+
+	;--- STROUT, slow version
+
+strout_slow:
+
+	do_strout	KBDOS,CPMRET,1	;Macro defined in macros.inc
+;
+;
+;------------------------------------------------------------------------------
+;
+@BUFIN:	PUSH	DE
+	LD	A,(DE)		; Copy only the max. length byte at the start.
+	LD	DE,BUFF1	; Use this as the input buffer.
+	LD	(DE),A
+	CALL	KBDOS
+	POP	DE		; Copy the characters back again.
+	LD	A,(DE)		; Copy back the number of characters specified
+	INC	DE		;   by the max. length byte+1 for the actual
+	LD	HL,BUFF1+1	;   length byte. Cannot just copy the right
+	LD	C,A		;   number of characters because there is a
+	LD	B,0		;   CR character on the end which may or may
+	INC	BC		;   not be there.
+	LDIR
+;
+CPMRET:	XOR	A
+	LD	B,A
+	LD	L,A
+	LD	H,A
+	RET
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;
+@ZSTROUT:
+	ld	a,(MFLAGS)
+	and	1
+	jr	z,zstr_slow	;If fast STROUT not enabled, use the slow version.
+
+	;--- ZSTROUT, fast version
+
+	ex	de,hl
+	ld	de,($SECBUF##)
+	ld	bc,511
+	ldir
+	xor	a
+	ld	(de),a
+	ld	c,_ZSTROUT##
+	call	KBDOS
+	xor	a
+	ret
+
+	;--- ZSTROUT, slow version
+
+zstr_slow:
+	LD	A,(DE)		;Cannot call the KBDOS routine because the
+	INC	DE		; string may be any length so cannot be
+	or	a
+	ret	z
+	PUSH	DE
+	LD	E,A
+	LD	C,_CONOUT##
+	CALL	KBDOS
+	POP	DE
+	JR	zstr_slow
+;
+;
+	SUBTTL	BDOS CP/M FCB File Functions
+;******************************************************************************
+;
+;        Most of the CP/M file functions involve copying  FCBs  backwards  and
+; forwards.   For  the sequential operations, 33 bytes need to by copied.  For
+; the random operations, 36 bytes need to be copied.  For the MSX-DOS 1  block
+; operations, either 36 or 37 bytes need to be copied depending on whether the
+; block size is greater than 63 bytes or not respectively.
+;
+;
+@ALLOC:	
+	call	FUNC_WITH_IXIY
+	LD	A,C		; Return sectors/cluster in A, not C.
+	LD	C,(IX+2)	; Return sector size.
+	LD	B,(IX+3)
+	RET
+
+@DOSVER:
+	call	FUNC_WITH_IXIY
+	ld	de,(VERNUM)
+	;LD	D,VERSION##	; Return MSX-DOS.SYS version too.
+	;LD	E,RELEASE##+(RELEASE##/256)*16
+	ret
+
+FUNC_WITH_IXIY:
+	EXX
+	pop	bc
+	POP	HL		; Get return address, and pop off the saved
+	POP	DE		;   values of IX and IY.
+	POP	DE
+	PUSH	HL
+	push	bc
+	EXX
+	CALL	KBDOS		; Call KBDOS, which returns stuff in IY & IX.
+	EXX			; Save returned values.
+	pop	bc
+	POP	HL		; Get the return address again.
+	PUSH	IX		; Push new 'saved' IX and IY values.
+	PUSH	IY
+	PUSH	HL
+	push	bc
+	EXX
+	RET
+
+;
+;
+;------------------------------------------------------------------------------
+;
+@FOPEN:
+@FCLOSE:
+@SFIRST:
+@FDEL:
+@RDSEQ:
+@WRSEQ:
+@FMAKE:
+@FREN:
+	LD	A,33		; Ordinary FCBs are 33 bytes long.
+	CODE	LXI H		; Skip 36 byte FCB entry point.
+;
+;	    ;
+	    ;
+	    ;
+;
+;
+;------------------------------------------------------------------------------
+;
+@RDRND:
+@WRRND:
+@FSIZE:
+@SETRND:
+@WRZER:	LD	A,36		; Random FCBs are 36 bytes long.
+;
+	PUSH	DE		; Save pointer to user's FCB.
+	EXX			; Save parameters to BDOS call.
+	POP	HL		; HL -> user's FCB.
+	LD	C,A
+	LD	B,0		; BC = number of bytes in FCB.
+;
+RW:				; HL->user's FCB, BC=length, '=other params.
+	PUSH	HL		; Save it again for after the KBDOS call.
+	PUSH	BC		; Save number of bytes in FCB.
+	LD	DE,BUFF1	; Copy to buffer.
+	PUSH	DE
+	LDIR
+	EXX			; Get back other parameters.
+	POP	DE		; DE -> FCB in page 3.
+	PUSH	DE
+	CALL	KBDOS
+	EXX			; Save return parameters,
+	POP	HL		; HL -> FCB in page 3.
+	POP	BC		; Get number of bytes in FCB to copy.
+	POP	DE		; Get pointer to user's FCB.
+	LDIR			; Copy FCB back again.
+	EXX			; Get returned values.
+	LD	A,L
+	LD	B,H
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+@WRBLK:
+@RDBLK:	PUSH	DE		; Save user's FCB pointer for after KBDOS call.
+	EXX			; Save function number and HL.
+	POP	HL		; HL -> user's FCB.
+	PUSH	HL
+	LD	BC,14+1
+	ADD	HL,BC		; HL -> high byte of record size.
+	LD	C,36
+	LD	A,(HL)
+	OR	A
+	JR	NZ,BLK10	; Copy 36 bytes if record size >63, else 37.
+;
+	DEC	HL
+	LD	A,(HL)
+	CP	64
+	JR	NC,BLK10
+;
+	INC	C
+BLK10:	POP	HL		; HL -> user's FCB.
+	CALL	RW		; Do read/write operation, copy FCB back.
+	EX	DE,HL		; Return KBDOS's DE in HL for block functions.
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+@GDATE:
+@GTIME:
+@SDATE:
+@STIME:	CALL	KBDOS
+	LD	A,C		; Return day in A.
+	RET
+;
+;
+@DPARM:	PUSH	DE		; Save buffer pointer.
+	LD	DE,BUFF1
+	CALL	KBDOS		; Get disk parameters into BUFF1.
+	EX	DE,HL		; HL -> disk parameters.
+	POP	DE		; DE -> user's buffer.
+	PUSH	DE		; Return original DE un-corrupted.
+	LD	BC,32
+	LDIR			; Copy disk parameters to user's buffer.
+	POP	DE
+	RET
+;
+;
+;
+	SUBTTL	BDOS MSX 2 File Functions
+;******************************************************************************
+;
+@FFIRST:
+@FNEW:
+	CALL	?COPYDE		; Copy string or FIB at DE.
+	CALL	C,COPYHL	; Copy string at HL if DE -> FIB.
+	RET	NZ		; Return if error.
+;
+;
+@FNEXT:
+	PUSH	IX
+	POP	HL		; HL -> user's FIB.
+	PUSH	HL
+	LD	DE,BUFF2	; DE -> buffer for FIB.
+	PUSH	BC
+	LD	BC,64
+	LDIR			; Copy user's FIB for FNEXT.
+	POP	BC
+;
+	CALL	_KBDOS
+	POP	DE		; DE -> user's FIB space (IX will be returned
+	LD	HL,BUFF2	;   pointing here because the BDOS entry code
+	LD	BC,64		;   preserves IX).
+	LDIR			; Copy FIB to user's space.
+	RET			; Error from function not corrupted.
+;
+;
+;
+;
+@RENAME:
+@MOVE:
+	CALL	COPYHL		; Copy new filename into BUFF3.
+	LD	HL,BUFF3	; Copy string at (DE), HL -> other string.
+;
+@DELETE:
+@ATTR:
+@FTIME:
+@OPEN:
+@CREATE:
+@HTEST:	EX	AF,AF'		; Save parameter passed in A.
+	PUSH	DE		; Save pointer to user's FIB.
+	CALL	?COPYDE		; Copy FIB or string at DE.
+	PUSH	AF		; Save FIB/string copied flag (Cy => FIB).
+	EX	AF,AF'		; Get back the user's A.
+	CALL	_KBSDE		; Sets DE -> string, HL preserved.
+	EX	AF,AF'		; Save the error code.
+	EXX			; Save the returned registers.
+	POP	AF		; Cy set => FIB copied, must copy back.
+	POP	DE		; DE -> user's FIB.
+	JR	NC,XRET		; Return with error code if not FIB function.
+;
+	LD	HL,BUFF1	; HL -> Updated FIB.
+	LD	BC,64
+	LDIR			; Update user's FIB.
+XRET:	EX	AF,AF'		; Get back error code.
+	EXX			; Get back the returned registers.
+	RET
+
+
+;
+;
+@HRENAME:
+@HMOVE:
+	EX	AF,AF'		; Save parameter passed in A.
+	CALL	COPYHL		; Copy new filename into BUFF3.
+	EX	AF,AF'
+;
+	    ;
+	    ;
+	    ;
+;
+;------------------------------------------------------------------------------
+;
+;        The _KBDOS entry point points the registers at the buffers that  FIBs
+; and strings have been copied too, and falls through to KBDOS. This then does
+; the actual calling of the real KBDOS.
+;
+_KBDOS:	LD	IX,BUFF2	; IX -> buffer possibly containing FIB.
+	LD	HL,BUFF3	; HL -> buffer possibly containing string.
+_KBSDE:	LD	DE,BUFF1	; DE -> buffer containing FIB or string.
+;
+	    ;
+	    ;
+	    ;
+;
+;
+@TERM0:
+@RDABS:
+@WRABS:
+@CLOSE:
+@ENSURE:
+@DUP:
+@READ:
+@WRITE:
+@SEEK:
+@IOCTL:
+@HDELETE:
+@HATTR:
+@HFTIME:
+@GETDTA:
+@GETVFY:
+@CHKCHR:
+@FLUSH:
+@TERM:
+@FORMAT:
+@RAMD:
+@BUFFER:
+@FILES:
+@ASSIGN:
+@ERROR:
+@GENV:
+@SENV:
+@FENV:
+@DSKCHK:
+@REDIR:
+@FOUT:
+@RDDRV:
+@WRDRV:
+@RALLOC:
+@DSPACE:
+@LOCK:
+@GPART:
+@Z80MODE:
+
+;
+@BADFN:				; Undefined functions go straight through.
+KBDOS:
+	JP	GO_BDOS##	; Call the KBDOS in kernel page-0 and
+				;  return with the KBDOS results.
+;
+;
+;------------------------------------------------------------------------------
+;
+@PARSE:	PUSH	DE
+	CALL	COPYDE		; Copy path string.
+	POP	DE
+@GETCD:
+@WPATH:
+	EX	DE,HL		; HL -> user's buffer.
+	PUSH	HL
+	LD	DE,BUFF1	; KBDOS puts it's string here.
+	OR	A
+	SBC	HL,DE		; HL = offset from BUFF1 to user's buffer.
+	PUSH	HL
+	PUSH	DE		; Save BUFF1 address.
+	CALL	KBDOS		; Get the string to BUFF1.
+	EXX			; Save the returned registers.
+	POP	HL		; BUFF1.
+	POP	BC		; Offset to user's buffer.
+	POP	DE		; User's buffer.
+	PUSH	BC		; Save offset to user's buffer.
+	LD	BC,64
+	LDIR			; Copy the string to the user's buffer.
+	EXX
+	EX	(SP),HL		; Save returned HL, get offset.
+	EX	DE,HL		; DE=offset to user's buffer.
+	ADD	HL,DE		; Adjust returned DE.
+	EX	(SP),HL		; Save adjusted DE, get returned HL.
+	ADD	HL,DE		; Adjust returned HL.
+	POP	DE		; Get back adjusted DE.
+	RET			; Return with BC and error code intact.
+;
+;
+@PFILE:	PUSH	HL		; Save pointer to user's buffer twice.
+	PUSH	HL
+	LD	L,E		; Save user's string pointer in HL.
+	LD	H,D
+	CALL	COPYDE		; Copy filename string to BUFF1.
+	LD	DE,BUFF1	; Calculate offset from BUFF1 to user's string.
+	OR	A
+	SBC	HL,DE
+	EX	(SP),HL		; Save offset, get pointer to buffer.
+	PUSH	HL		; Save pointer again.
+	CALL	_KBDOS		; Get the parsed filename to BUFF3.
+	EXX			; Save the returned registers.
+	POP	DE		; Get pointer to user's buffer.
+	LD	BC,11		; 11 bytes in buffer.
+	LD	HL,BUFF3	; Copy the updated filename buffer to the
+	LDIR			;   user's buffer.
+	EXX
+	POP	HL		; Get offset to user's string, & point pointer
+	ADD	HL,DE		;   to terminating character there.
+	EX	DE,HL
+	POP	HL		; Return the original pointer to user's buffer.
+	RET			; Return with BC and error code intact.
+;
+;
+;
+@FORK:	LD	HL,0		; Zero returned main and secondary error code.
+	LD	(ERROR2),HL
+	JR	KBDOS		; Do a KBDOS fork.
+
+;
+;
+@CHDIR:
+	CALL	COPYDE		; Copy string to BUFF1.
+	JR	_KBSDE
+;
+;
+@JOIN:	CALL	KBDOS		; Do a KBDOS join.
+	LD	BC,(ERROR2)	; B=error code, C=secondary error code.
+	LD	HL,0		; Zero them just in case.
+	LD	(ERROR2),HL
+	RET			; With error code from KBDOS.
+;
+;
+@EXPLAIN:
+	PUSH	DE		; Save pointer to user's buffer.
+	LD	DE,ERRBUF	; Get message to here.
+	CALL	KBDOS
+	EX	DE,HL		; HL -> message in ERRBUF.
+	POP	DE		; DE -> user's buffer.
+	PUSH	DE
+	PUSH	BC		; Save returned B.
+	LD	BC,64		; Copy all bytes of message buffer back.
+	LDIR
+	POP	BC		; Return B as returned from the function.
+	POP	DE		; Return DE -> message in user's buffer.
+	RET			; Error code un-corrupted.
+;
+;
+@DEFAB:	LD	(ABORT_VECT),DE	; Save address of user's abort
+	XOR	A		;   routine.
+;
+	LD	HL,GO_REBOOT
+	LD	(BRK_ERRV),HL	; Cancel any setting of MSX-DOS 1.0
+	LD	HL,BRK_ERRV	;   compatible control-C handler.
+	LD	(BREAKVECT##),HL
+;
+	RET			; Return with no error.
+;
+;
+@DEFER:	LD	(DISK_VECT),DE	; Save address of user's disk error
+	XOR	A		;   routine.
+;
+	LD	HL,DSK_ERR
+	LD	(DSK_ERRV),HL	; Cancel any setting MSX-DOS 1.0
+	LD	HL,DSK_ERRV	;  compatible disk-error handler.
+	LD	(DISKVECT##),HL
+;
+	RET			; Return with no error.
+;
+;
+;@DOSVER:CALL	KBDOS		; Get KBDOS version number.
+;	LD	D,VERSION##	; Return MSX-DOS.SYS version too.
+;	LD	E,RELEASE##+(RELEASE##/256)*16
+;	RET
+
+@GDRVR:
+@GDLI:
+	push	hl
+	LD	HL,BUFF3
+	call	GO_BDOS##
+	pop	hl
+	or	a
+	ret	nz
+	push	hl
+	ex	de,hl
+	ld	hl,BUFF3
+	ld	bc,64
+	ldir
+	pop	hl
+	ret
+
+@CDRVR:
+	push	de
+	push	bc
+	ld	de,BUFF3
+	ld	bc,8
+	ldir
+	pop	bc
+	pop	de
+	ld	hl,BUFF3
+
+	EXX
+	POP	HL		; Get return address, and pop off the saved
+	POP	DE		;   values of IX and IY.
+	POP	DE
+	PUSH	HL
+	EXX
+	push	iy
+	CALL	KBDOS		; Call KBDOS, which returns stuff in IY & IX.
+	pop	iy
+	EXX			; Save returned values.
+	POP	HL		; Get the return address again.
+	PUSH	IX		; Push new 'saved' IX and IY values.
+	PUSH	IY
+	PUSH	HL
+	EXX
+	ret
+
+@MAPDRV:
+	push	de
+	push	bc
+	ld	de,BUFF3
+	ld	bc,8
+	ldir
+	pop	bc
+	pop	de
+	ld	hl,BUFF3
+	jp	KBDOS
+;
+;
+;------------------------------------------------------------------------------
+;
+;        These miscellaneous routines do various copying operations needed  by
+; the MSX-DOS 2 functions.
+;
+; ?COPYDE copies either a FIB or a string at DE to BUFF1. If a string, then  a
+; check  is  made that the string is not too long, and an error is returned if
+; it is. If a FIB is copied, then an error code is not returned but the  carry
+; is returned set.
+;
+; COPYDE  always copies a FIB to BUFF1 from DE, and returns with the carry set
+; as described above.
+;
+; COPYHL always copies a string from HL to BUFF3 and returns an error code.
+;
+?COPYDE:			; Copies string or FIB at DE to BUFF1.
+	LD	A,(DE)		; FIB?
+	INC	A
+	JR	NZ,CDE10	; Copy a string if not.
+;
+COPYDE:	PUSH	HL
+	PUSH	BC
+	EX	DE,HL		; HL -> FIB/string.
+	LD	DE,BUFF1
+	LD	BC,64
+	LDIR
+	POP	BC		; Restore BC and HL.
+	POP	HL
+	SCF			; Cy set => FIB copied (not string).
+	RET
+;
+CDE10:	PUSH	HL		; Save HL.
+	PUSH	BC
+	EX	DE,HL		; HL -> string.
+	LD	DE,BUFF1	; Copy string to here.
+	LD	B,LEN1
+	CALL	STRCPY
+	POP	BC
+	POP	HL
+	RET
+;
+;
+COPYHL:				; Copies the string at HL to BUFF3.
+	PUSH	DE
+	PUSH	BC
+	LD	DE,BUFF3
+	LD	B,LEN3
+	CALL	STRCPY
+	POP	BC
+	POP	DE
+	RET
+;
+;
+STRCPY:	LD	A,(HL)		; Get character from string.
+	INC	HL
+	LD	(DE),A		; Copy into buffer.
+	INC	DE
+	OR	A
+	RET	Z		; Return with no error & NC if end of string.
+;
+	DJNZ	STRCPY		; Else copy up to 64 bytes.
+	LD	A,.PLONG##	; String too long if null not encountered.
+	RET			; Still NC.
+;
+;
+;
+	SUBTTL	Abort Routine
+;******************************************************************************
+;
+;        This is MSX-DOS.SYS's abort routine, which  calls  the  user's  abort
+; routine  and then aborts the program by jumping to 0 if it returns or is not
+; defined.
+;
+;        In order to call the  user's  routine,  the  original  BDOS  call  is
+; returned from, but the 'RET' at the end is patched to a NOP so that it drops
+; through into the code to call the user's routine.   This  ensures  that  the
+; user's  routine is entered in a state where the user does not have to return
+; (ie. on the user's stack and with the alternate register set preserved etc.)
+;
+ABORT:	PUSH	AF		; Save error code.
+	LD	A,(ENTERS)	; In a BDOS call?
+	INC	A
+	JR	Z,ABIOS		; Go if not (BIOS call).
+;
+	XOR	A		; Patch out the 'RET' instruction in the BDOS
+	LD	(RETPAT),A	;   return code to call user abort routine.
+	LD	(ENTERS),A	; Switch back to user's stack on return.
+	POP	AF		; Get back error code.
+	JP	BDOS_RET
+;
+;
+ABIOS:	POP	AF		; Get back error code.
+	LD	SP,(BIOS_SP)	; Jump to user's abort routine on his BIOS
+	JP	JP_ABORT	;   stack.
+;
+;
+;
+	SUBTTL	Disk Error Handler
+;******************************************************************************
+;
+;        This is the disk error handler routine, which is  always  defined  as
+; long  as MSX-DOS.SYS is running. It is patched into the disk error vector at
+; startup and is the routine that normally  prints  out  'Abort,  Retry'  type
+; messages when a low-level disk error occurs.
+;
+;        The  transient  program  can  define it's own disk error routine by a
+; BDOS call that is handled by  MSX-DOS.SYS  (not  KBDOS).  Thus  it  is  this
+; routines job also to call the user's routine.
+;
+; On entry from KBDOS, A=error code.
+;                      B=logical drive number.
+;                      C=flags: b0 => read/write error.
+;                               b1 => ignore OK/ ignore dangerous.
+;                               b2 => normal/auto-abort error (eg. .IFAT)
+;                               b3 => sector number in DE is valid.
+;                     DE=logical sector number or error (if bit 3,C=1).
+;
+; On return to KBDOS, A=1, 2 or 3 for Abort, Retry, Ignore (any other aborts).
+;                     Any registers (including alternates) may be corrupted.
+; On entry to the user's routine, The registers are set up as above.
+; On  return  from  the user's routine, the registers are set up as above with
+;     the addition that A=0 => use the default error handling.
+;
+;
+DISK_ERROR:
+	PUSH	AF		; Save error on SP for user's
+	EX	AF,AF'		;   routine.
+	PUSH	AF
+	PUSH	BC		; Save drive in B, flags in C.
+	LD	HL,(DISK_VECT)	; Get user's error routine address.
+	LD	A,H
+	OR	L		; Defined?
+	CALL	NZ,JP_USERS	; Go if yes (restores error code first).
+	POP	BC		; Restore saved drive and flags in BC.
+	EX	AF,AF'
+	POP	AF		; Restore saved old error code in A'.
+	EX	AF,AF'
+	POP	HL		; Restore error code in H.
+	OR	A		; User's routine defined & returned a result?
+	RET	NZ		; Return it to KBDOS if yes.
+;
+; Pass control through old DISKVECT interface.
+;
+; Entry:    A' = Old error code (passed to DISKVECT in C)
+;           H  = New error code (passed to DISKVECT in A')
+;           B  = Drive number (decremented & passed to DISKVECT in A)
+;           C  = New Flags (passed to DISKVECT in B)
+;          DE  = Sector number (passed to DISKVECT in DE)
+;
+	LD	A,H
+	EX	AF,AF'		;A':= new error code
+	PUSH	BC		;Save drive number for routine
+	LD	B,C		;B := flags
+	LD	C,A		;C := MSX-DOS 1.0 error flag
+;
+	LD	HL,(DISKVECT##)
+	LD	A,(HL)		;Get the address of the user's
+	INC	HL		; disk error handler routine.
+	LD	H,(HL)
+	LD	L,A
+;
+	POP	AF		;Get drive number back
+	DEC	A		;A := drive number (0=>A: etc)
+;
+	CALL	JPHL		;Call the user's disk error handler.
+;
+	LD	A,3		;Translate the action code
+	SUB	C		; for the KBDOS values.
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+; Entry:    A  = Drive number (0=A:,1=B: etc)
+;           C  = Old error code
+;           A' = New error code
+;           B  = New Flags - b0 set => writing
+;                            b1 set => ignore not recommended
+;                            b2 set => auto-abort error
+;                            b3 set => sector number is valid
+;           DE = Sector number
+;
+; Results:  C = 0 => Ignore
+;               1 => Retry
+;               2 => Abort
+;
+DSK_ERR:
+	LD	C,B		; Set flags
+	INC	A
+	LD	B,A		; Set drive number
+	PUSH	BC		; Save drive and flags.
+	EX	AF,AF'
+	LD	B,A		; B=error number.
+	EX	AF,AF'
+	LD	DE,ERRBUF	; Point to buffer for error message.
+	LD	C,_EXPLAIN##	; Function number.
+	CALL	BDOS		; Get error message.
+	CALL	CRLF		; Print new line and error message.
+	PUSH	DE
+	LD	A,__PRERR##	; Print a message first (null in English).
+	CALL	DMSG
+	POP	DE
+	CALL	DSTR		; Print actual error message.
+	POP	BC		; Get back flags.
+;
+	LD	A,__READ##	; In case reading.
+	BIT	0,C
+	JR	Z,RDERR		; Go if reading.
+;
+	LD	A,__WRITE##	; Else writing.
+RDERR:	PUSH	BC		; Save drive and flags again.
+	CALL	DMSG		; Print 'reading' or 'writing' message.
+	LD	A,__DRIVE##	; Print 'drive'.
+	CALL	DMSG
+	POP	BC		; Get drive.
+	LD	A,B
+	ADD	A,'A'-1		; Convert to upper case letter and print it.
+	CALL	OUTCH
+	LD	A,__ARIDRV##	; Print message after drive (':' in English).
+	CALL	DMSG
+;
+	CALL	CRLF
+	BIT	2,C		; If an 'auto abort' error (eg. .IFAT) then
+	LD	L,1		;   return A=1 for Abort without giving an
+	JR	NZ,DERRET	;   Abort, Retry prompt.
+;
+ERRLOOP:LD	A,__AR##	; Assume 'Abort, Retry' message.
+	BIT	1,C
+	JR	NZ,ABRET	; Go if ignore not recommended.
+;
+	LD	A,__ARI##	; Else include ignore option.
+ABRET:	CALL	DMSG		; Print message, flags in C preserved.
+	CALL	INCH		; Get a keypress in H.
+	LD	L,0		; L=0 initially => abort.
+	LD	A,__ABORT##
+	CALL	ARITEST		; Test for abort character.
+	LD	A,__RETRY##
+	CALL	NC,ARITEST	; Test for retry character.
+	LD	A,__IGNORE##
+	CALL	NC,ARITEST	; Test for ignore character.
+	JR	NC,ERRLOOP	; If invalid character, then re-print message.
+;
+DERRET:	LD	A,3
+	SUB	L
+	LD	C,A		; Return with the MSX-DOS1 response in C.
+	RET
+;
+JP_USERS:
+	EX	AF,AF'		; Restore error code.
+JPHL:	JP	(HL)		; Jump to user's disk error routine.
+;
+;
+;
+;
+; This  little  subroutine takes a message number in A and tests to see if the
+; character in H is in the appropriate string.  This is used to test to see if
+; the character in H is an appropriate one for Abort, retry or Ignore.
+;
+; B, DE and AF are corrupted, and the carry is set on return if the  character
+; was in the string. Also L is returned incremented (this is the code returned
+; to the KBDOS).
+;
+ARITEST:
+	INC	L		; Return with L incremented.
+	CALL	MESSAGE		; DE -> string containing valid characters.
+ARIT10:	LD	A,(DE)
+	OR	A
+	RET	Z		; Return with C clear if end of string.
+;
+	INC	DE
+	CP	H		; Character in string.
+	JR	NZ,ARIT10	; Compare with next if not.
+	SCF			; Else return with carry set.
+	RET
+;
+;
+;
+	SUBTTL	I/O Routines
+;******************************************************************************
+;
+;        DERR  below  takes  an  error  number in B and prints the appropriate
+; error message, without a CR,LF on the end. DERRM is similar, but on entry DE
+; already points to the message.
+;
+;        DERRM  may  be  called  whilst  the  normal  BDOS  routine is not yes
+; callable, and so it must only call OUTCH which in  this  case  goes  through
+; F37D. DERR is OK since the BDOS is set up properly when it is called.
+;
+;
+DERR:	LD	DE,ERRBUF	; Point DE to buffer for message.
+	LD	C,_EXPLAIN##	; C=function code to get error message.
+	CALL	BDOS		; Attempt to get a message for the error.
+;
+DERRM:	PUSH	DE		; Save message pointer.
+	CALL	CRLF
+	LD	A,__SPLATS##
+	CALL	DMSG		; Print '***' before message.
+	POP	DE
+	CALL	DSTR		; Print actual message.
+	LD	A,__EREND##	; Print a string after message.
+	    ;
+	    ;
+	    ;
+;
+;        DMSG below takes a message number in A  and  prints  the  appropriate
+; message. DSTR prints the 0 terminated string at (DE).
+;
+;
+DMSG:	CALL	MESSAGE		; Point DE at message whose code is in A.
+;
+DSTR:	LD	A,(DE)		; Get character from message.
+	INC	DE
+	OR	A
+	RET	Z		; Return if end of string.
+;
+	CALL	OUTCH		; Print character.
+	JR	DSTR
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        This  routine  takes a message number in A and returns DE pointing to
+; the message, which is terminated by a 0. B and A are corrupted.
+;
+;
+MESSAGE:LD	B,A		; B=message number.
+if 0
+	LD	DE,MESSAGES	; Point DE to messages table.
+else
+	xor	a
+	ld	de,1100h	; See if Kanji driver is active.
+	call	0FFCAh		; FCALL
+	LD	DE,MESSAGES+2	; Point DE to messages table.
+	or	a
+	jr	z,ank_msg
+	push	hl
+	ex	de,hl
+	dec	hl
+	ld	d,(hl)
+	dec	hl
+	ld	e,(hl)
+	add	hl,de
+	ex	de,hl
+	pop	hl
+ank_msg:
+endif
+	INC	B		; For first time round.
+;
+GMSG10:	DEC	B		; Message found?
+	RET	Z		; Return with DE pointing to message if yes.
+;
+GMSG20:	LD	A,(DE)
+	INC	DE		; Else find end of message.
+	OR	A
+	JR	Z,GMSG10	; Test again with DE -> next message.
+;
+	JR	GMSG20
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        INCH waits for a key to be pressed, and returns it's ASCII  value  in
+; A,  without  corrupting  BC.  It  first  gobbles  up any characters that are
+; waiting to be read (ie.  flushes  the  keyboard  buffer)  before  reading  a
+; keypress.   It is called when prompting for the insertion of the COMMAND.COM
+; disk and for Abort, Retry disk error prompting.
+;
+;
+INCH:	PUSH	BC
+;
+IN10:	LD	C,_CONST##	; See if a key has already been pressed.
+	CALL	BDOS
+	PUSH	AF
+;
+	LD	C,_INNOE##	; Get a keypress anyway.
+	CALL	BDOS
+	LD	H,A		; Return it in H.
+;
+	POP	AF		; If a character was ready then read another
+	JR	NZ,IN10		;   (this flushes the keyboard buffer)
+;
+	LD	A,H
+	CP	' '		; Echo it if a printing character.
+	CALL	NC,OUTCH
+	POP	BC		; End with a CRLF.
+;
+	    ;
+	    ;
+	    ;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        OUTCH  takes  a character in A and prints it, corrupting only A. CRLF
+; prints a carriage return followed by a line feed. Guess what SPACE does.
+;
+;
+;
+CRLF:	LD	A,CR		; Output a CR followed by an LF.
+	CALL	OUTCH
+	LD	A,LF
+	JR	OUTCH
+;
+SPACE:	LD	A,' '
+;
+OUTCH:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A
+	LD	C,_CONOUT##
+	CODE	CALL		; This CALL either points to F37D (initially)
+OVEC:	 DEFW	 P3BDOS		;   or to the normal BDOS entry.
+	POP	BC
+	POP	DE
+	POP	HL
+	RET
+;
+;
+;
+	SUBTTL	Variables
+;******************************************************************************
+;
+;        The variable declarations for MSX-DOS.SYS  are  here.  They  are  not
+; defined  using  DEFBs  etc. so that they do not form part of the MSX-DOS.SYS
+; file, making it considerably smaller, especially considering the  fact  that
+; two copies of this file are linked.
+;
+; The  variables  live  in the gap that exists between the BIOS jump table and
+; the BDOS entry jump. The BIOS jump table is defined at  the  start  of  this
+; module and the BDOS jump is created at initialization time.
+;
+;
+VAR	MACRO	NAME, SIZE
+OFF	 DEFL	OFF-(SIZE)	; New offset from BIOS jump table.
+NAME	 EQU	BIOS_TAB+OFF	; Variable defined as offset from BIOS table.
+	ENDM
+;
+OFF	DEFL	0		; Offset of current variable from BIOS table.
+;
+PRINT	MACRO	SIZE, TEXT
+	 IF1
+	  .PRINTX % SIZE TEXT
+	 ENDIF
+	ENDM
+;
+;
+	VAR	BIOS_STACK,0
+	VAR	YYY, 128	; BIOS stack.
+;
+LEN1	EQU	100		; Length of buffer 1 (must be >63).
+LEN3	EQU	100		; Length of buffer 3 (must be >63).
+	VAR	BUFF3, LEN3	; Copy buffer for strings at (HL).
+	VAR	BUFF2, 64	; Copy buffer for FIBs at (IX).
+	VAR	BUFF1, LEN1	; Copy buffer for strings/FIBs at (DE).
+	VAR	ERRBUF, 64	; Buffer for error messages.
+;
+	VAR	SERNO,	4	; Copy of MSX-DOS.SYS serial number.
+;
+	VAR	ENTERS, 1	; BDOS re-entrancy count, -1 => not in BDOS.
+	VAR	BDOS_SP, 2	; BDOS SP save for stack switching.
+	VAR	BIOS_SP, 2	; BIOS SP save for stack switching.
+;
+	VAR	DISK_VECT, 2	; User's disk error routine address.
+;
+	VAR	ERROR, 1	; Main error code.            These two must be
+	VAR	ERROR2, 1	; Secondary error code.         in this order
+;
+;
+	VAR	BDOS_STUFF, 9+2+2
+				; Error vectors + BDOS entries
+;
+VARP	EQU	(0-OFF+0FFH)/256; Number of 256 byte pages used by variables.
+;
+;
+	PRINT	%VARP, <pages of RAM used by variables> ; No. pages used.
+	PRINT	%(VARP*256-(0-OFF)), <bytes of RAM wasted> ; No. unused bytes.
+;
+;
+	IF	TEST
+JBDOS	 EQU	0C100H		; BDOS entry jump goes here to avoid MZED.
+	ELSE
+JBDOS	 EQU	BIOS_TAB-256*VARP	; Destination address of BDOS JP at 5.
+DSK_ERRV EQU	JBDOS+9
+BRK_ERRV EQU	JBDOS+11
+	ENDIF
+;
+;
+SIZE	EQU	$-START
+	IF	LOW (256-LOW SIZE)
+	 DEFS	256-LOW SIZE,0		; Pad out to page boundary.
+	ENDIF
+;
+	PRINT	%SIZE, <bytes of code>	; No. bytes for code.
+;
+MESSAGES:				; Start of messages when linked.
+;
+;
+;
+	SUBTTL
+	END

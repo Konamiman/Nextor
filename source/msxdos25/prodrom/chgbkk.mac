@@ -1,0 +1,63 @@
+	.z80
+	title	CHGBNK - OEM Supplied Bank Switching Module
+
+;
+; Definition of a sample bank switching register.  Lower 2 bits hold the
+; bank number to be selected.
+;
+BNKREG	equ	6000h			;MEGAROM local bank register
+
+INTRPT	equ	0			;non-zero means disk driver uses
+					;timer interrupt, zero otherwise
+
+;-----------------------------------------------------------------------
+;
+;   This is a manufacturer-supplied bank switching module.  This module,
+; along  with  DOSHEAD,  is  placed  at  the top of every local banks of
+; DOS2-ROM.
+;
+;   This is a sample  program.   DOS2-ROM  has  no  assumptions  on  the
+; mechanism  of bank switching, for example, where the bank register is,
+; which bits are assigned to bank switching,  etc.   The  bank  register
+; does not have to be readable.
+;
+;
+; Entry:  Acc = 0 --- switch to bank #0
+;               1 --- switch to bank #1
+;               2 --- switch to bank #2
+;               3 --- switch to bank #3
+; Exit:   None
+;
+; Only AF can be modified
+;
+; CAUTION!!     This must be the first module.
+;
+	public	CHGBNK
+CHGBNK:
+	ld	(BNKREG),a
+	ret
+
+if INTRPT
+;-----------------------------------------------------------------------
+;
+;   This is a manufacturer-supplied disk driver timer interrupt entry.
+;
+;   Because of bank switching,  this must be placed  at the top of every
+; local banks of DOS2-ROM.
+;
+; Entry:    None.
+; Exit:     None.
+; Modifies: All.
+;
+@DRVINT::	ld	a,(BNK_ID##)	;Save current bank
+		push	af
+		xor	a		;Switch to bank #0
+		call	CHGBNK
+		call	DRVINT##	;Call our interrupt handler.
+		pop	af		;Restore old bank
+		jp	CHGBNK
+;
+endif
+;
+;
+	end

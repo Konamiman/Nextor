@@ -1,0 +1,305 @@
+	.z80
+	title	MSX-DOS 2   Copyright (1988)  ASCII Corporation
+	subttl	Public constants declarations
+	.sall
+;-----------------------------------------------------------------------------
+;
+const	macro	name,value		;;Macro for declaring public
+name	 equ	 (value)		;; constants.
+	 public	 name
+	endm
+;
+;
+;-----------------------------------------------------------------------------
+;
+;	 BDOS function codes
+;	=====================
+;
+	const	_TERM0,   00h	;Terminate program
+	const	_CONIN,   01h	;Console input
+	const	_CONOUT,  02h	;Console output
+	const	_AUXIN,   03h	;Auxilliary input
+	const	_AUXOUT,  04h	;Auxilliary output
+	const	_LSTOUT,  05h	;List output
+	const	_DIRIO,   06h	;Direct console I/O
+	const	_DIRIN,   07h	;Direct console input, no echo
+	const	_INNOE,   08h	;Console input, no echo
+	const	_STROUT,  09h	;String output
+	const	_BUFIN,   0Ah	;Buffered line input
+	const	_CONST,   0Bh	;Console status
+;
+	const	_CPMVER,  0Ch	;Return CP/M version number
+	const	_DSKRST,  0Dh	;Disk reset
+	const	_SELDSK,  0Eh	;Select disk
+;
+	const	_FOPEN,   0Fh	;Open file (FCB)
+	const	_FCLOSE,  10h	;Close file (FCB)
+	const	_SFIRST,  11h	;Search for first (FCB)
+	const	_SNEXT,   12h	;Search for next (FCB)
+	const	_FDEL,    13h	;Delete file (FCB)
+	const	_RDSEQ,   14h	;Read sequential (FCB)
+	const	_WRSEQ,   15h	;Write sequential (FCB)
+	const	_FMAKE,   16h	;Create file (FCB)
+	const	_FREN,    17h	;Rename file (FCB)
+;
+	const	_LOGIN,   18h	;Get login vector
+	const	_CURDRV,  19h	;Get current drive
+	const	_SETDTA,  1Ah	;Set disk transfer address
+	const	_ALLOC,   1Bh	;Get allocation information
+;
+	const	_RDRND,   21h	;Read random (FCB)
+	const	_WRRND,   22h	;Write random (FCB)
+	const	_FSIZE,   23h	;Get file size (FCB)
+	const	_SETRND,  24h	;Set random record (FCB)
+	const	_WRBLK,   26h	;Write random block (FCB)
+	const	_RDBLK,   27h	;Read random block (FCB)
+	const	_WRZER,   28h	;Write random with zero fill (FCB)
+;
+	const	_GDATE,   2Ah	;Get date
+	const	_SDATE,   2Bh	;Set date
+	const	_GTIME,   2Ch	;Get time
+	const	_STIME,   2Dh	;Set time
+	const	_VERIFY,  2Eh	;Set/reset verify flag
+;
+	const	_RDABS,   2Fh	;Absolute sector read
+	const	_WRABS,   30h	;Absolute sector write
+	const	_DPARM,   31h	;Get disk parameters
+;
+	const	_FFIRST,  40h	;Find first entry
+	const	_FNEXT,   41h	;Find next entry
+	const	_FNEW,    42h	;Find new entry
+;
+	const	_OPEN,    43h	;Open file handle
+	const	_CREATE,  44h	;Create file and open handle
+	const	_CLOSE,   45h	;Close file handle
+	const	_ENSURE,  46h	;Ensure file handle
+	const	_DUP,     47h	;Duplicate file handle
+	const	_READ,    48h	;Read from file handle
+	const	_WRITE,   49h	;Write to file handle
+	const	_SEEK,    4Ah	;Seek (position file pointer)
+	const	_IOCTL,   4Bh	;I/O control for devices
+	const	_HTEST,   4Ch	;Test file handle
+;
+	const	_DELETE,  4Dh	;Delete file or subdirectory
+	const	_RENAME,  4Eh	;Rename file or subdirectory
+	const	_MOVE,    4Fh	;Move file or subdirectory
+	const	_ATTR,    50h	;Change file or subdirectory attributes
+	const	_FTIME,   51h	;Get/set file date and time
+;
+	const	_HDELETE, 52h	;Delete file handle
+	const	_HRENAME, 53h	;Rename file handle
+	const	_HMOVE,   54h	;Move file handle
+	const	_HATTR,   55h	;Change file handle attributes
+	const	_HFTIME,  56h	;Get/set file handle date and time
+;
+	const	_GETDTA,  57h	;Get disk transfer address
+	const	_GETVFY,  58h	;Get verify flag setting
+	const	_GETCD,   59h	;Get current directory
+	const	_CHDIR,   5Ah	;Change directory
+	const	_PARSE,   5Bh	;Parse pathname
+	const	_PFILE,   5Ch	;Parse filename
+	const	_CHKCHR,  5Dh	;Check character
+	const	_WPATH,   5Eh	;Get whole path string
+	const	_FLUSH,   5Fh	;Flush disk buffers
+;
+	const	_FORK,    60h	;Fork a child process
+	const	_JOIN,    61h	;Return to parent process
+	const	_TERM,    62h	;Terminate with error code
+	const	_DEFAB,   63h	;Define abort exit routine
+	const	_DEFER,   64h	;Define critical error handle routine
+	const	_ERROR,   65h	;Get previous error code
+	const	_EXPLAIN, 66h	;Explain error code
+;
+	const	_FORMAT,  67h	;Format disk
+	const	_RAMD,    68h	;Create or destroy RAMdisk
+	const	_BUFFER,  69h	;Allocate sector buffers
+	const	_ASSIGN,  6Ah	;Logical drive assignment
+;
+	const	_GENV,    6Bh	;Get environment item
+	const	_SENV,    6Ch	;Set environment item
+	const	_FENV,    6Dh	;Find environment item
+;
+	const	_DSKCHK,  6Eh	;Get/set disk check status
+	const	_DOSVER,  6Fh	;Get MSX-DOS version number
+	const	_REDIR,   70h	;Get/set redirection flags
+
+	const	_FOUT,	  71h   ;Get/set fast STROUT mode
+        const	_ZSTROUT, 72h	;Zero-terminated string output
+
+	const	_RDDRV,   73h	;Absolute drive sector read
+	const	_WRDRV,   74h	;Absolute drive sector write
+
+	const	_RALLOC,  75h	;Reduced allocation information mode vector
+	const	_DSPACE,  76h	;Get disk space information
+
+	const	_LOCK,   77h	;Lock/unlock drive
+
+	const	_GDRVR,	  78h	;Get information about disk driver
+	const	_GDLI,    79h	;Get information about drive letter
+	const	_GPART,   7Ah	;Get information about disk partition
+	const	_CDRVR,	  7Bh	;Call a routine in a disk driver
+	const	_MAPDRV,  7Ch   ;Map a drive letter to a drive or device/LUN/partition
+
+	const	_Z80MODE, 7Dh	;Enable or disable the Z80 access mode for a driver
+;
+;
+;-----------------------------------------------------------------------------
+;
+;	 Error Codes
+;	=============
+;
+;    The following errors are those which a disk error  routine  may  normally
+; expect  to  be  passed,  although such a routine should be general enough to
+; handle any error code.
+;
+	const	.NCOMP, 0FFh	;Incompatible disk
+	const	.WRERR, 0FEh	;Write error
+	const	.DISK,  0FDh	;Disk error
+	const	.NRDY,  0FCh	;Not ready
+	const	.VERFY, 0FBh	;Verify error
+	const	.DATA,  0FAh	;Data error
+	const	.RNF,   0F9h	;Sector not found
+	const	.WPROT, 0F8h	;Write protected disk
+	const	.UFORM, 0F7h	;Unformatted disk
+	const	.NDOS,  0F6h	;Not a DOS disk
+	const	.WDISK, 0F5h	;Wrong disk
+	const	.WFILE, 0F4h	;Wrong disk for file
+	const	.SEEK,  0F3h	;Seek error
+	const	.IFAT,  0F2h	;Bad file allocation table
+	const	.NOUPB, 0F1h	;    (forces re-validation of disk)
+	const	.IFORM, 0F0h	;Cannot format this drive
+				;0EFh \
+				; ..   >  Reserved for future use
+				;0E0h /
+;
+;
+;    The following errors are those which may be returned by KBDOS functions.
+;
+	const	.INTER, 0DFh	;Internal error
+;
+	const	.NORAM, 0DEh	;Not enough memory
+				;0DDh - reserved
+	const	.IBDOS, 0DCh	;Invalid BDOS call
+;
+	const	.IDRV,  0DBh	;Invalid drive
+	const	.IFNM,  0DAh	;Invalid filename
+	const	.IPATH, 0D9h	;Invalid pathname
+	const	.PLONG, 0D8h	;Pathname too long
+;
+	const	.NOFIL, 0D7h	;File not found
+	const	.NODIR, 0D6h	;Directory not found
+	const	.DRFUL, 0D5h	;Root directory full
+	const	.DKFUL, 0D4h	;Disk full
+	const	.DUPF,  0D3h	;Duplicate filename
+	const	.DIRE,  0D2h	;Invalid directory move
+	const	.FILRO, 0D1h	;Read only file
+	const	.DIRNE, 0D0h	;Directory not empty
+	const	.IATTR, 0CFh	;Invalid attributes
+	const	.DOT,   0CEh	;Invalid . or .. operation
+	const	.SYSX,  0CDh	;System file exists
+	const	.DIRX,  0CCh	;Directory exists
+	const	.FILEX, 0CBh	;File exists
+	const	.FOPEN, 0CAh	;File is already in use
+;
+	const	.OV64K, 0C9h	;Cannot transfer above 64k
+	const	.FILE,  0C8h	;File allocation error
+	const	.EOF,   0C7h	;End of file
+	const	.ACCV,  0C6h	;File access violation
+;
+	const	.IPROC, 0C5h	;Invalid process id
+	const	.NHAND, 0C4h	;No spare file handles
+	const	.IHAND, 0C3h	;Invalid file handle
+	const	.NOPEN, 0C2h	;File handle not open
+	const	.IDEV,  0C1h	;Invalid device operation
+;
+	const	.IENV,  0C0h	;Invalid environment string
+	const	.ELONG, 0BFh	;Environment string too long
+;
+	const	.IDATE, 0BEh	;Invalid date
+	const	.ITIME, 0BDh	;Invalid time
+;
+	const	.RAMDX, 0BCh	;RAM disk already exists
+	const	.NRAMD, 0BBh	;RAM disk does not exist
+;
+	const	.HDEAD, 0BAh	;File handle has been deleted
+	const	.EOL,   0B9h	;End of line (internal error)
+	const	.ISBFN, 0B8h	;Invalid sub-function number
+	const	.IFCB,  0B7h	;Invalid FCB
+
+	const	.IDRVR, 0B6h	;Invalid device driver
+	const	.IDEVL, 0B5h	;Invalid device or LUN
+	const	.IPART, 0B4h	;Invalid partition number
+	const	.PUSED, 0B3h	;Partition is already in use
+				;0B2h \
+				; ..   > Reserved for future use
+				;0A0h /
+;
+;
+;    The following are errors which the KBDOS may pass to the  ABORT  routine.
+; Of  cource  a  user  abort routine may see any other error but these are the
+; ones which are generated internally and may require special case handling.
+;
+	const	.STOP,  09Fh	;Ctrl-STOP pressed
+	const	.CTRLC, 09Eh	;Ctrl-C pressed
+	const	.ABORT, 09Dh	;Disk operation aborted
+	const	.OUTERR,09Ch	;Error on standard output
+	const	.INERR, 09Bh	;Error on standard input
+				;09Ah \
+				; ..   > Reserved for future use
+				;090h /
+;
+;
+;    The following errors are those generated by COMMAND2.COM.  These will not
+; be  returned from KBDOS functions, but user application programs may find it
+; useful to return some of these errors.
+;
+	const	.BADCOM,08Fh	;Wrong version of COMMAND2.COM
+	const	.BADCMD,08Eh	;Unrecognized command
+	const	.BUFUL, 08Dh	;Command too long
+	const	.OKCMD, 08Ch	;    (Command executed correctly)
+;
+	const	.IPARM, 08Bh	;Invalid parameter
+	const	.INP,   08Ah	;Too many parameters
+	const	.NOPAR, 089h	;Missing parameter
+	const	.IOPT,  088h	;Invalid option
+	const	.BADNO, 087h	;Invalid number
+;
+	const	.NOHELP,086h	;File for HELP not found
+	const	.BADVER,085h	;Wrong version of system
+;
+	const	.NOCAT, 084h	;Cannot concatenate destination file
+	const	.BADEST,083h	;Cannot create destination file
+	const	.COPY,  082h	;File cannot be copied onto itself
+	const	.OVDEST,081h	;Cannot overwrite previous destination file
+	const	.BATEND,080h	;    (Batch file has ended)
+;
+	const	.INSDSK,07Fh	;Insert MSX-DOS 2 disk in drive x:
+	const	.PRAK,  07Eh	;Press any key to continue...
+;
+				;07Dh \
+				; ..   > Reserved for future use
+				;040h /
+;
+;
+;    Error codes below 40h may be used by user programs for any purpose  which
+; they desire, and will be guarenteed to be different from any errors returned
+; by the system.  COMMAND2.COM will not print an error message  for  codes  in
+; the range 00h...1Fh.
+;
+;
+;-----------------------------------------------------------------------------
+;
+;	 Standard File Handles
+;	=======================
+;
+	const	STDIN,  0		;Standard input channel
+	const	STDOUT, 1		;Standard output channel
+	const	STDERR, 2		;Standard error channel
+	const	STDAUX, 3		;Auxilliary I/O channel
+	const	STDLST, 4		;Standard list channel
+;
+;
+;-----------------------------------------------------------------------------
+;
+	end
+;

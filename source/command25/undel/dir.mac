@@ -1,0 +1,323 @@
+	title	MSX-DOS 2 Undelete Program - Directory Search Routines
+	.z80
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;******************************************************************************
+;
+DRE_START::
+;
+;    This routine is called to start the search of a directory.  The directory
+; is  specified by its start cluster number in the variable "DIR_START", which
+; will be -ve if it is the root directory.  Once it  has  done  some  fiddling
+; around  with  the cluster number, this routine jumps into DRE_NEXT to set up
+; the directory search variables.
+;
+; Returns:    Z-flag  set  =>  HL -> directory entry in sector buffer
+;	      Z-flag clear =>  A=1 => end of directory reached (HL undefined)
+;			       A=2 => directory chain was corrupt (..	..  )
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		ld	de,(DIR_START##)	;Get start cluster number
+		bit	7,d			; and jump into "DRE_NEXT"
+		jr	z,SUB_DRE_START		; if it is a sub-directory.
+;
+;
+						;ROOT DIRECTORY
+;
+		LD	HL,(RT_ENT##)		;Number of root directory ents.
+		LD	B,4			;/16 for no. full sectors.
+loop_sec_sft:	SRL	H
+		RR	L
+		DJNZ	loop_sec_sft
+		LD	A,L			;RT_SEC.
+		PUSH	AF
+		LD	A,(RT_ENT##)		;Find remainder when /16 to
+		AND	00001111b		; give "DIR_ODD" value.
+
+
+		ld	hl,0FFFFh		;Set next cluster -ve to
+						; indicate root directory.
+		ld	bc,(RT_START##)		;BC := first  sector number
+		jr	ROOT_DRE_START
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+DRE_SAME::	ld	hl,DIR_E_LEFT##		;Bump entries left count to
+		inc	(hl)			; ensure we get same entry.
+;
+DRE_NEXT::
+;
+;    This routine returns a pointer to the next entry in the  directory  being
+; searched.   If  the  physical  end  of  the  directory is reached, or if the
+; cluster chain is invalid then it returns NZ and the search must  stop.   The
+; root directory is treated as a single cluster of rather an odd size.
+;
+; Returns:    Z-flag  set  =>  HL -> directory entry in sector buffer
+;	      Z-flag clear =>  A=1 => end of directory reached (HL undefined)
+;			       A=2 => directory chain was corrupt (..	..  )
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		ld	de,(DIR_SECTOR##)	;DE := current sector number
+		ld	a,(DIR_E_LEFT##)	;Decrement number of entries
+		dec	a			; left and if non-zero then
+		jr	nz,same_sector		; jump to use same sector.
+;
+		inc	de			;Bump sector number
+		ld	a,(DIR_S_LEFT##)	;Decrement number of sectors
+		dec	a			; left in this cluster and
+		jr	nz,same_cluster		; jump if non-zero.
+;
+		ld	a,(DIR_ODD##)		;If there is an odd sector at
+		or	a			; the end of this cluster then
+		jr	nz,odd_sector		; jump to process it.
+;
+		ld	de,(DIR_NEXT_CLU##)	;Get next cluster number and
+		bit	7,d			; if it is -ve, return NZ
+		ld	a,1			; and A=1 to indicate end of
+		ret	nz			; directory reached.
+;
+SUB_DRE_START:	call	NEXT_CLU		;Find next cluster number and
+		ld	a,2			; return NZ and A=2 if it is
+		ret	nz			; invalid.
+		call	CLU_TO_SEC		;Translate current cluster
+						; to sector number in BC.
+		ld	a,(SEC_CLU##)		;Put number of sectors in this
+		push	af			; cluster on the stack.
+		xor	a			;Flag no odd sector
+;
+ROOT_DRE_START:	ld	(DIR_ODD##),a		;Record odd sector count
+		ld	(DIR_NEXT_CLU##),hl	;Record next cluster number
+		ld	d,b			;DE := new sector number
+		ld	e,c
+		pop	af			;A := number of sectors in
+						;     this cluster.
+;
+;
+;
+same_cluster:	ld	b,512/32		;Get entry count for whole
+		or	a			; sector into B and skip if any
+		jr	nz,not_odd_sector	; whole sectors are left.
+;
+odd_sector:	ld	a,(DIR_ODD##)		;For an odd sector, get number
+		ld	b,a			; of entries into B and zero
+		xor	a			; it for next time round.
+		ld	(DIR_ODD##),a
+		inc	a			;Sectors left = 1.
+;
+not_odd_sector:	ld	(DIR_S_LEFT##),a	;Record number of sectors left
+		ld	a,b			;Record total number of entries
+		ld	(DIR_ENT##),a		; in this sector.
+		ld	(DIR_SECTOR##),de	;Record new sector number.
+;
+;
+;
+same_sector:	ld	(DIR_E_LEFT##),a	;Record number of entries left
+		push	af			; in sector & save it for below
+		call	READ_SECT##		;Read the sector into buffer
+;
+		pop	bc			;Calculate the entry number
+		ld	a,(DIR_ENT##)		; within this sector from
+		sub	b			; total number of entries and
+		jr	start_ent_loop		; the entries left.
+;
+dir_ent_loop:	ld	de,32
+		add	hl,de			;Loop to point HL at required
+		dec	a			; entry within this sector
+start_ent_loop:	jr	nz,dir_ent_loop		; in its buffer.
+;
+;
+;
+		xor	a			;Return with Z-set to indicate
+		ret				; sucess.
+;
+;
+;------------------------------------------------------------------------------
+;
+CLU_TO_SEC::
+;
+;    This  routine simply translates a cluster number passed in register DE to
+; a sector number which is returned in register BC.  No check on the  validity
+; of  the  cluster  number  is done so this should be done before calling this
+; routine.
+;
+; Entry:     DE = Cluster number
+; Returns:   BC = Sector number
+; Corrupts:  AF,BC
+;
+;
+;
+		push	de			;Cluster number to HL and
+		ex	(sp),hl			; save old HL on stack.
+		dec	hl			;Decrement cluster number
+		dec	hl			; by two.
+;
+		ld	a,(SEC_CLU##)		;Multiply the cluster number
+		DEC	A			; by the number of sectors
+		JR	Z,no_shift		; per cluster.
+		LD	B,H
+		LD	C,L
+clu_shift_loop:	add	hl,BC			; value from unit descriptor.
+		dec	a
+		jr	nz,clu_shift_loop
+;
+no_shift:	ld	bc,(DATA_START##)	;Add on the first data sector
+		add	hl,bc			; to get the final sector
+		ex	(sp),hl			; number and get it into BC
+		pop	bc			; also restoring HL.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+NEXT_CLU::
+;
+;    This routine returns the next cluster number for a specified cluster.
+;
+; Entry:     DE = Cluster number
+; Returns:   Z-flag set =>  A = top four bit flags from entry (b0...b3 clear)
+;			   HL = bottom 12 bits of entry.  If entry is FF8h
+;				or higher then HL=FFFFh (end of chain).
+;	     Z-flag clear => invalid cluster number (HL and A are undefined)
+;			     Note clusters 0 and 1 are invalid
+; Corrupts:  AF,HL
+;
+;
+		call	F_FAT2			;Find FAT entry and return
+		ret	nz			; NZ if invalid number.
+;
+		push	de
+		ld	e,(hl)			;Get value of this entry
+		inc	hl
+		ld	a,(hl)
+		push	af			;Save top bit flags for return
+		and	0Fh
+		ld	d,a			;DE := 12 bit entry 0...FFFh
+		ld	hl,0FF8h-1
+		sbc	hl,de
+		ex	de,hl			;If entry is FF8h...FFFh then
+		jr	nc,not_end_chain	; set HL to 0FFFFh to indicate
+		ld	hl,0FFFFh		; end of chain.
+not_end_chain:	pop	af			;Get top bit flags back and
+		and	0F0h			; clear bottom four bits.
+		pop	de			;Get original entry number back
+		cp	a
+		ret				;Return with Z-flag set
+;
+;
+;------------------------------------------------------------------------------
+;
+F_FAT2::
+;
+;    This routine just returns a pointer to the required entry in FAT_2, or  a
+; non-zero  flag to indicate an invalid entry number. Zero and one are counted
+; as invalid entry numbers byu this routine.
+;
+; Entry:     DE = Required FAT entry number
+; Returns:    A = 00h (and Z)  if DE is valid entry number
+;	      A = FFh (and NZ) if DE an invalid entry number
+;	     HL = Address of entry DE in FAT_2.  Undefined if A=FFh.
+; Corrupts:  AF,HL
+;
+;
+		ld	a,e			;Check for cluster number
+		res	0,a			; zero or one and return
+		or	d			; NZ if it is one of these.
+		jr	nz,not_clu_0_1
+		dec	a
+		ret
+;
+not_clu_0_1:	scf
+		ld	hl,(TOT_CLU##)		;Check that the cluster
+		sbc	hl,de			; number is within the range
+		jr	nc,find_fat_ok		; for this disk.
+		xor	a
+		dec	a			;Return A=FFh and NZ if
+		ret				; entry is out of range.
+;
+find_fat_ok:	ld	hl,(FAT_2##)		;If entry is in range then
+		add	hl,de			; get the address of the
+		add	hl,de			; entry into HL and return
+		xor	a			; with A=0 and Z-set.
+		ret
+;
+;
+;******************************************************************************
+;
+CMP_FNAME::
+;
+;    This routine tests whether a filename pointed to by DE matches a possibly
+; ambiguous  filename pointed to by HL.  Both filenames are in FCB format (8+3
+; characters padded with spaces).  The  0E5h  fiddle  is  done  on  the  first
+; character of the (DE) filename, so that if this is 05h it will be translated
+; to 0E5h.  Each character of the filename pointed to  by  DE  will  be  upper
+; cased before comparison. The necessary  checks  for  16-bit  characters  are
+; included in this routine.
+;
+; Entry:      DE -> Filename to be tested (non-ambiguous)
+;	      HL -> Required filename (may be ambigous)
+; Returns:  Z-flag set (Z) => filename matched
+;		       (NZ) => filename didn't match or was invalid
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	a,(de)
+		cp	05h			;If first character of file
+		jr	nz,no_e5_fiddle		; name is 05h then turn it
+		ld	a,0E5h			; into 0E5h (the usual fiddle).
+no_e5_fiddle:
+		ld	bc,11*256+0		;B:=char count, C:=char flags
+cmp_fname_loop:	push	af
+		ld	a,(hl)			;Check character for 16-bit
+		call	C_CH1			; flags.
+		pop	af
+		cp	(hl)			;Skip if two characters are
+		jr	z,char_match		; the same.
+		bit	CF_2ND,c
+		ret	nz			;If not then match them if
+		ld	a,(hl)			; the one at (hl) is "?", but
+		cp	"?"			; not if it is 2nd byte of a
+		ret	nz			; 16-bit character.
+;
+char_match:	inc	hl
+		inc	de			;Point to next character pair
+		ld	a,(de)			; and loop 'til done whole
+		djnz	cmp_fname_loop		; filename.
+;
+		xor	a			;Return Z-set to indicate match
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+C_CH1::
+;
+;	 This routine does a call to MSX_DOS's check character routine.   This
+; is  in  order that 16 bit characters may be found and upper casing done, and
+; also to test for filename terminator characters.
+;
+; Entry:        A: The character.
+;		C: The flags.
+;
+		PUSH	HL
+		PUSH	DE
+		PUSH	BC
+		LD	E,A			;Character into E.
+		LD	D,C			;Character flags.
+		LD	C,_CHKCHR##
+		CALL	MSX_DOS
+		LD	A,E			;The revised character.
+		POP	BC
+		LD	C,D			;Character flags.
+		POP	DE
+		POP	HL
+		RET
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<DIR>
+	end
+;

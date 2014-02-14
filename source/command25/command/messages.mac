@@ -1,0 +1,630 @@
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL	Sample Messages File (English)
+;
+	.Z80
+;
+;
+;	 This is a sample messages file for MSX-DOS 2 COMMAND.COM. It contains
+; messages  and  text  in  English  in the format required by the COMMAND .REL
+; files.
+;
+;	 Care  should  be taken when changing this file that spaces within the
+; messages are preserved.  Any of the messages may be changed to a null string
+; so that nothing will be printed, and indeed in the standard English messages
+; given here some are already null.
+;
+;
+;	 These  messages  are  used  by  COMMAND.COM  by looking for the 'n'th
+; string, where n is the number corresponding to the string required.  In  all
+; cases, the actual value of 'n' is defined by a label defined as external  in
+; this module, so the messages can be in any order. The strings themselves are
+; ordinary ASCII strings terminated by a null (0).
+;
+;	 A macro MSG is used here to  define  the  strings  and  the  external
+; labels.  It is used in the form: 1) MSG NAME,<STRING> or 2) MSG NAME. In the
+; former case, an external label of the form __NAME with an appropriate  value
+; is  declared, and the string is defined with DEFBs with the null on the end.
+; In the latter case, the label is still defined but no text is defined.  This
+; allows  following  DEFBs  to  define the text, which may be on more than one
+; line. Don't forget a DEFB 0 at the end though !.
+;
+;
+;	The start of the messages is at the global label MESSAGES.
+;
+;
+CR		EQU	0DH	; Carriage Return.
+LF		EQU	0AH	; Line Feed.
+;
+;
+MSG	MACRO	NAME,TEXT
+__&NAME	 EQU	MSGNO		;; Define message number label.
+GLOBAL	 __&NAME		;; And declare it public.
+MSGNO	 DEFL	MSGNO+1
+	 IFNB	<TEXT>		;; Define the text, if given.
+	  DEFB	'&TEXT',0
+	 ENDIF
+	ENDM
+;
+MSGNO	DEFL	0		;; First message must be number 0.
+;
+;
+MESSAGES::				; Start of messages.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The first two pieces of text below are not printed, but  contain  the
+; valid  characters  for 'Y' and 'N' responses from prompts such as 'Erase all
+; files (Y/N)?' (from the ERASE command). These strings may contain any number
+; of  possible characters for each response.  No upper casing is done, so both
+; upper and lower case versions of the characters  must  be  included  in  the
+; strings.
+;
+	MSG	Y, <Yy>			; Valid 'Y' (yes) responses.
+	MSG	N, <Nn>			; Valid 'N' (no) responses.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The text for the 'DIR' command follows. This text should be near  the
+; start  of  the  messages  file  so  that they are found quickly by the 'DIR'
+; command. If they are near the bottom then the speed of 'DIR' may  be  slowed
+; down noticably.
+;
+;	 The DIR command prints first the volume name as in the  VOL  command,
+; and then prints the directory whose files are being listed. This is simply a
+; string of the form:
+;
+;	 Directory of A:\
+;	\            /\ /
+;	  ----a-----   b
+;
+;
+;	 Part  (a)  is  just  the  simple  message  DIROF below, and part B is
+; printed by the DIR command. Part (a), and the 'Volume in..' message  printed
+; by the VOL command both begin with a space. This is so that if the output of
+; the DIR command is put  through  a  sorting  program  (to  obtain  a  sorted
+; directory listing) these two lines remain at the top of the file, instead of
+; appearing half way through the sorted directory listing.
+;
+;
+	MSG	DIROF, < Directory of >		; Part (a), one leading space.
+;
+;
+;
+;	 When a sub-directory entry is printed, the file size is replaced by a
+; string  indicating sub-directories (<dir> in English). This string must be 8
+; characters long to be the same size as the file size  that  is  printed  for
+; files.
+;
+	MSG	DIR
+	 DEFB	'  <dir> ',0
+;
+;
+;	 After the files have been listed, another line is printed  indicating
+; the  number  of bytes total in the listed files and the amount of disk space
+; free. This line is quite complicated because the  number  of  bytes  can  be
+; printed  either  in  bytes  or  in  K, and if the number printed is 1 then a
+; singular version of the message is displayed. The printing of the plurals is
+; useful in most languages, but if not required the messages can be phrased so
+; that the same message is printed for both singular and the plural numbers.
+;
+;	 The message printed at the bottom of the DIR command output takes the
+; basic form:
+;
+;	  19K in 18 files   17K free
+;	\/   \  /  \       /   \   /
+;	a   b  c     --d--    b  e
+;
+;
+;	Where the number of bytes is printed in K, if the number is less than
+; 1024 then the actual number of bytes will be printed, in the form:
+;
+;	  16 bytes in 15 files   14 bytes free
+;	\/  \    /\  /  \       /  \    /\   /
+;	a      f    c     --d--       f    e
+;
+;
+;	 Parts  (b),  (d) and (f) also have singular versions of the messages.
+; In the standard English version, the plural of part (b) is the same  as  the
+; singular ('K'). The message may thus take the form:
+;
+;	  1 byte in 1 file   1 byte free
+;	\/ \   /\  / \      / \   /\   /
+;	a    g    c    --h-     g    e
+;
+;
+;	 It  is  just possible that if all three numbers have many digits, the
+; line will be longer than the 38 characters that the rest of the DIR  command
+; has  been  designed  to  fit  within.  It  is therfore desirable to keep the
+; message length and the spacing reasonably short. In normal use the  standard
+; English messages given here fit within the line quite well.
+;
+	MSG	SPACE, < >		; Part (a) is one space in English.
+	MSG	IN, < in >		; Part (c), 1 leading, 1 ending space.
+	MSG	FREE, < free>		; Part (e), one leading space.
+;
+;
+	MSG	K, <K>			; Part (b).
+	MSG	KS,<K>			; Plural of (b), the same in English.
+	MSG	FIL, < file   >		; Part (h), 1 leading, 3 ending spaces.
+	MSG	FILS, < files	>	; Part (d), 1 leading, 3 ending spaces.
+	MSG	BYT, < byte>		; Part (g), one leading space.
+	MSG	BYTS, < bytes>		; Part (f), one leading space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 SPLATS below is printed just before an error message  when  an  error
+; occurs from an internal or external command. It can also be printed during a
+; DATE or TIME command when an invalid date or time is input, when  the  error
+; message is printed by the command before re-prompting rather than by the CLI
+; when the command terminates.
+;
+;	 After printing SPLATS and the actual error message, EREND is printed.
+; In the standard English messages given here, this is just null.
+;
+;
+	MSG	SPLATS, <*** >		; Three asterisks and a space.
+	MSG	EREND			; Message after error message
+	 DEFB	0			;   (null in English)
+;
+;
+;
+;-----------------------------------------------------------------------------
+;
+;	 PRAK  below  is  printed in several places when a key press in waited
+; for before continuing. The PAUSE command, for example,  prints  it,  and  it
+; gets printed when the 'DIR /P' command has printed a screen full of text.
+;
+	MSG	PRAK, <Press any key to continue >	; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The following text is for the stuff printed by the 'VOL' command, and
+; by  the  'DIR' at the start of the files listed. The message has two formats
+; and is split up in the following way:
+;
+;
+;	Volume in drive B: has no name
+;      \              / \/\          /
+;	 -----a------   b   ----c---
+;
+;
+;      Volume in drive B: is UTILITIES
+;     \              / \/\ /
+;	------a-----   b  d
+;
+;
+;	 Note that part (a) begins with a space  to  be  compatible  with  the
+; 'Directory of...' part of the text printed by DIR.
+;
+;
+	MSG	VOLUM, < Volume in drive >	; Part (a), one leading,
+						;   one trailing space.
+	MSG	VOLDR, <: >			; Part (b), one trailing space.
+	MSG	HASNO, <has no name>		; Part (c).
+	MSG	VOLIS, <is >			; Part (d), one trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The following message is printed by the ERASE (DEL, ERA) command.
+;
+;	 ERALL is a prompt printed if the filename given is totally  ambiguous
+; ie.  *.*,  and  a  Y/N (yes/no) response is expected.  The actual characters
+; accepted for 'yes' and 'no' responses are specified by the messages Y and  N
+; elsewhere in the MESSAGES file.
+;
+;	 It is recommended that this message attempts to describe  the  action
+; that  is going to be taken, as this is more useful to the user. For example,
+; the 'Erase all files (Y/N)' message here is prefered to MS-DOS  and  MSX-DOS
+; 1's message 'Are you sure '(Y/N)'.
+;
+;
+	MSG	ERALL, <Erase all files (Y/N)? >	; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When commands such as ERASE, MOVE and RENAME fail on a function call,
+; the  filename of the file is printed followed by HYPHS below followed by the
+; actual error message obtained from the EXPLAIN BDOS call. Currently HYPHS is
+; just two hyphens with a space on either side.
+;
+;
+	MSG	HYPHS, < -- >
+
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The following text is printed by the DATE command. The format of  the
+; date command messages is, for example:
+;
+;	Current date is Wed   15-4-85
+;	\              /\ /\/\      /\/
+;	  -----a------   b c   -d--  e
+;
+;
+;	 DATIS (Part (a)) is printed before the current date.  Part  (b),  the
+; current day, is printed from the messages SUN, MON, TUE, WED, THU, FRI, SAT.
+; After printing the day, DATE (part (c)) is printed, which is  just  null  in
+; the standard English text.  The actual date (part (d))  is  printed  with  a
+; leading  space  by  the system according to the format specified by the DATE
+; environment string, followed by ENDAT (part (e)) which is just a null string
+; in the Standard Enlish messages given here.
+;
+;	 Following this, a prompt is printed for the new date to  be  printed.
+; This  may  be in one of two forms, depending on whether the DATE environment
+; item is defined. If it is not defined, then the prompt is in  the  following
+; form:
+;
+;	Enter new date:
+;	\            /\/
+;	  -----f----  g
+;
+;	 If  however  the  DATE  environment  item is defined, then the prompt
+; takes the form:
+;
+;	Enter new date (yy-mm-dd) :
+;	\            /\/\      /\/\/
+;	  -----f----  h   -i--  j g
+;
+;
+;	 ENTDAT (part (f)) is always printed first, and PRDAT  (part  (g))  is
+; always printed last. SFMT (part (h)), part (i), and EFMT (part (j)) are only
+; printed if the DATE environment item is defined (as it is  by  default  when
+; COMMAND  starts  up).  Part  (i)  is  printed by the DATE command and is the
+; actual DATE environment string.
+;
+;
+	MSG	DATIS, <Current date is >	; Part (a), one trailing space.
+;
+	MSG	SUN, <Sun>			; Texts for part (b).
+	MSG	MON, <Mon>
+	MSG	TUE, <Tue>
+	MSG	WED, <Wed>
+	MSG	THU, <Thu>
+	MSG	FRI, <Fri>
+	MSG	SAT, <Sat>
+;
+	MSG	DATE				; Part (c),
+	 DEFB	0				;   (null in English)
+	MSG	ENDAT				; Part (e),
+	 DEFB	0				;   (null in English)
+	MSG	ENTDAT, <Enter new date>	; Part (f).
+	MSG	PRDAT, <: >			; Part (g), one trailing space.
+;
+	MSG	SFMT, < (>			; Part (h), one leading space.
+	MSG	EFMT, <)>			; Part (j).
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The first message printed by the TIME command is TIMIS below, and  it
+; prints the current time. It takes the form:
+;
+;	Current time is 2:45:01.03p
+;	\             /\          /\/
+;	  -----a-----    ----b---  c
+;
+;	 TIMIS (part (a)) is printed first, and then the  system  prints  part
+; (b)  with  a  leading  space. ENDTIM (part (c)) is printed at the end of the
+; line, and is null in the standard English version given here.
+;
+;	 The prompt for the new time is printed after the next message, and is
+; just a single message called ENTIM.
+;
+;
+	MSG	TIMIS, <Current time is>	; Part (a).
+	MSG	ENDTIM				; Part (c),
+	 DEFB	0				;   (null in English)
+;
+	MSG	ENTIM, <Enter new time: >	; Prompt, one trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When  the  BUFFERS  command prints the current number of buffers, the
+; message BUFFS below is printed first. Ideally this  message  should  not  be
+; changed,  since  the  output  has  been  arranged such that exactly the same
+; format and wording could be typed in as a command.
+
+;
+;
+	MSG	BUFFS, <BUFFERS=>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When the VERIFY command prints the current verify state, the  message
+; VERFY  below  is  printed first. Ideally this message should not be changed,
+; since the output has been arranged such that exactly  the  same  format  and
+; wording could be typed in as a command.
+
+;
+;
+	MSG	VERFY, <VERIFY=>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When the RAMDISK command  prints  the  current  RAM  disk  size,  the
+; message  RAMD  is printed first. Ideally this message should not be changed,
+; since the output has been arranged such that exactly  the  same  format  and
+; wording could be typed in as a command.
+;
+;
+	MSG	RAMD, <RAMDISK=>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	The FORMAT command first issues the prompt and reads the reply required
+; by MSX disk drivers. The following text is then printed:
+;
+;	All data on drive A: will be destroyed
+;	\                / \                 /
+;	  -------a------     -------b-------
+;
+;	and will be followed by the 'PAUSE' message PRAK defined elsewhere.
+;
+;	 FMTDR (part (a)) will first be printed, followed  by  part  (b)  (the
+; drive that is about to be formatted), followed by DSTRY (part (c)).
+;
+;
+if 1 ;;v2.30
+	MSG	FMT1,  <Drive name? (>
+	MSG	FMT2,  <) >
+;
+endif
+	MSG	FMTDR, <All data on drive >	; Part (a), one trailing space.
+	MSG	DSTRY, <: will be destroyed>	; Part (c).
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The COPY command, after copying the files, prints the number of files
+; copied. This message takes the form:
+;
+;	  10 files copied
+;	\/\/\           /
+;	a b   ----c----
+;
+;	 COPD (part (a)) is printed first, and is just spaces in the  standard
+; English  version  given  here.  Part  (b)  is  the number of files that were
+; copied.  Part (c) is printed after the number, and has two forms. CPF is the
+; singular  form and is printed if the number printed is 1. Otherwise, CPFS is
+; printed.
+;
+;
+	MSG	COPD, <      >			; Part (a), six spaces.
+;
+	MSG	CPF, < file copied>		; Part (C), one trailing space.
+;
+	MSG	CPFS, < files copied>		; Plural version.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 If a HELP command is given with no parameters, then the message  HELP
+; below is printed, instead of getting the text from a disk file. If this HELP
+; message is longer than a screenful, then the normal PAUSE message is printed
+; at the end of the screen (as in other commands when /P is given).
+;
+;	 It  is  recommended that this message contains at least a list of the
+; standard commands that can be given, and instructions on how to get help  on
+; any of the specific commands listed. In the standard English  message  given
+; here,  the  list of commands is followed by a brief explaination of what the
+; command does. For any commands and HELP subjects mentioned here  there  must
+; of course be a help file.
+;
+;
+	MSG	HELP
+if	1
+	 DEFB	'Use this command on a screen wider than 63 characters.',CR,LF
+endif
+	 DEFB	'The following standard commands are available.',CR,LF
+	 DEFB	'For more information on a specific command, type:',CR,LF
+	 DEFB	'   HELP  command name',CR,LF
+	 DEFB	CR,LF
+	 DEFB	'ASSIGN ... logical to physical drive assignment',CR,LF
+	 DEFB	'ATDIR .... changes the attributes of directories',CR,LF
+	 DEFB	'ATTRIB ... changes the attributes of files',CR,LF
+	 DEFB	'BASIC .... goes into MSX disk BASIC',CR,LF
+	 DEFB	'BUFFERS .. displays/sets the number of disk buffers',CR,LF
+	 DEFB	'CD ....... see CHDIR',CR,LF
+	 DEFB	'CHDIR .... displays/sets the current directory',CR,LF
+	 DEFB	'CHKDSK ... checks the integrity of a disk',CR,LF
+	 DEFB	'CLS ...... clears the screen',CR,LF
+	 DEFB	'CONCAT ... joins files together',CR,LF
+	 DEFB	'COPY ..... copies files',CR,LF
+	 DEFB	'DATE ..... displays/sets the current date',CR,LF
+	 DEFB	'DEL ...... see ERASE',CR,LF
+	 DEFB	'DIR ...... displays the file names on a disk',CR,LF
+	 DEFB	'DISKCOPY . copies a whole disk to another',CR,LF
+	 DEFB	'ECHO ..... prints the following text',CR,LF
+;
+	 DEFB	'ERA ...... see ERASE',CR,LF
+	 DEFB	'ERASE .... deletes files',CR,LF
+	 DEFB	'EXIT ..... exits COMMAND2.COM',CR,LF
+	 DEFB	'FIXDISK .. updates MSX-DOS 1 disks to MSX-DOS 2',CR,LF
+	 DEFB	'FORMAT ... formats a disk',CR,LF
+	 DEFB	'HELP ..... gives help information on a command',CR,LF
+	 DEFB	'KMODE .... sets or resets "Kanji Mode"',CR,LF
+	 DEFB	'MD ....... see MKDIR',CR,LF
+	 DEFB	'MKDIR .... creates a new sub-directory',CR,LF
+	 DEFB	'MODE ..... changes the screen mode',CR,LF
+	 DEFB	'MOVE ..... moves files on a disk',CR,LF
+	 DEFB	'MVDIR .... moves sub-directories',CR,LF
+	 DEFB	'PATH ..... displays/sets the command search path',CR,LF
+	 DEFB	'PAUSE .... prompts for a keypress',CR,LF
+	 DEFB	'RAMDISK .. displays/sets the size of the RAM disk',CR,LF
+	 DEFB	'RD ....... see RMDIR',CR,LF
+	 DEFB	'REM ...... remark... Ignores the following text.',CR,LF
+	 DEFB	'REN ...... see RENAME',CR,LF
+	 DEFB	'RENAME ... renames files',CR,LF
+	 DEFB	'RMDIR .... removes empty sub-directories',CR,LF
+	 DEFB	'RNDIR .... renames sub-directories',CR,LF
+	 DEFB	'SET ...... displays/sets environment strings',CR,LF
+	 DEFB	'TIME ..... displays/sets the current time',CR,LF
+;
+	 DEFB	'TYPE ..... displays the contents of files',CR,LF
+	 DEFB	'UNDEL .... recovers deleted files',CR,LF
+	 DEFB	'VER ...... displays MSX-DOS version numbers',CR,LF
+	 DEFB	'VERIFY ... displays/sets the current verify state',CR,LF
+	 DEFB	'VOL ...... displays/sets disk volume name',CR,LF
+	 DEFB	'XCOPY .... copies files from a directory tree',CR,LF
+	 DEFB	'XDIR ..... displays filenames in a directory tree',CR,LF
+	 DEFB	CR,LF
+	 DEFB	'Help for other MSX-DOS features is also available.',CR,LF
+	 DEFB	'The standard topics are:',CR,LF
+	 DEFB	CR,LF
+	 DEFB	'BATCH .... batch files',CR,LF
+	 DEFB	'EDITING .. command line editing and re-entering',CR,LF
+	 DEFB	'ENV ...... environment strings',CR,LF
+	 DEFB	'ERRORS ... error messages and Abort, Retry errors',CR,LF
+	 DEFB	'IO ....... redirection, piping and standard I/O',CR,LF
+	 DEFB	'SYNTAX ... notation used in command descriptions',CR,LF
+	 DEFB	0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 After running a transient program, COMMAND.COM may  need  to  re-load
+; itself  off  disk. If an error occurs or if the file is not found (specified
+; by the SHELL environment string) then a  prompt  is  printed.   The  message
+; INSERT  is printed, followed by the drive name, followed by INSDRV, which is
+; just a colon (:) in the standard English messages given here.
+;
+;	 After printing the text as described above, the prompt  message  PRAK
+; is printed. This message is elsewhere in this file.
+;
+;	 Note  that  MSX-DOS.SYS  goes  through a similar procedure when it is
+; trying to load COMMAND.COM for the first time,  and  it  is  desirable  that
+; these messages are similar.
+;
+;
+	MSG	INSERT, <Insert COMMAND2.COM disk in drive >	; One trailing
+								; space.
+	MSG	INSDSK, <:>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	The following message is printed by the RAMDISK command.
+;
+;	 DELRAM is printed when a new RAM disk is  specified  without  the  /D
+; option  and  a  RAM  disk  already  exists,  and  a Y/N (yes/no) response is
+; expected.  The  actual  characters accepted for 'yes' and 'no' responses are
+; specified by the messages Y and N elsewhere in the MESSAGES file.
+;
+;	 It  is  recommended that this message attempts to describe the action
+; that is going to be taken, as this is more useful to the user. For  example,
+; 'Destroy all data on RAM disk (Y/N)?' is preferable to a vague 'Are you sure
+; (Y/N)?'.
+;
+;
+	MSG	DELRAM,<Destroy all data on RAM disk (Y/N)? >	; One trailing
+								;   space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The message BADVER below is printed when COMMAND.COM  starts  up  and
+; finds that MSX-DOS is not version 2.00 or later.
+;
+;	 After printing this message, COMMAND.COM just halts the system, since
+; it cannot do much else (re-booting back to MSX-DOS.SYS would just  cause  it
+; to  be  re-loaded).   This message should therefore inform the user that the
+; system has been halted.
+;
+;
+	MSG	BADVER,<Wrong version of MSX-DOS, system halted>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When a program that is executing in a  batch  file  is  automatically
+; aborted  (eg. by an 'abort' response from an Abort, Retry error or by a 'End
+; of file on standard input' error), the prompt TERM is  printed,  which  asks
+; the  user whether he/she wants to terminate the batch file. A 'Y/N' (yes/no)
+; response is expected. The actual characters  accepted  for  'yes'  and  'no'
+; responses  are  specified  by the messages Y and N elsewhere in the MESSAGES
+; file.
+;
+	MSG	TERM,<Terminate batch file (Y/N)? >	; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When  COMMAND.COM  attempts  to  read  a command froma batch file, it
+; defines a disk error routine and traps 'Wrong file' and 'Wrong disk' errors.
+; These  are  converted to prompts which prompt for the insertion of the batch
+; file disk.
+;
+;	 INSBAT is printed first, followed by the drive from which  the  batch
+; file  is  being  read.  Then BATDRV is printed, which is just a colon in the
+; standard English version given here.
+;
+;	 The  prompt  PRAK  is  then  printed (as in the PAUSE command) before
+; COMMAND.COM tries again to read from the batch file.
+;
+;
+	MSG	INSBAT,<Insert batch file disk in drive >	; One trailing
+								;   space.
+	MSG	BATDRV,<:>
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When an error occurs and COMMAND.COM prints an error message, it  may
+; also  print an 'error type'.  These indicate from where the error came from.
+; For example, it will print:
+;
+;		*** Redirection error: Invalid filename
+;
+; instead of just 'invalid filename' if the filename that is  invalid  is  one
+; following > or < symbols.
+;
+;	 REDER is printed for redirection errors, PIPER is printed for  piping
+; errors,  BATER  is  printed  for  errors whilst reading from batch files and
+; INPER and OUTER are printed for errors on  the  standard  input  and  output
+; respectively.
+;
+;
+	MSG	REDER, <Redirection error: >		; One trailing space.
+;
+	MSG	PIPER, <Piping error: >			; One trailing space.
+;
+	MSG	BATER, <Batch file error: >		; One trailing space.
+;
+	MSG	INPER, <Standard input error: >		; One trailing space.
+;
+	MSG	OUTER, <Standard output error: >	; One trailing space.
+;
+;
+;
+	END

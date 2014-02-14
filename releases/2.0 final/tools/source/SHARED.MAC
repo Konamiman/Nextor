@@ -1,0 +1,669 @@
+	title	MSX-DOS 2.50 - Common file for utility applications
+
+	.Z80
+	include	MACROS.INC
+;	include CONST.INC
+
+;-----------------------------------------------------------------------------
+;
+;    Convert a 8 bit number to an unterminated string
+;    Input:  A  = Number
+;            IX = Destination address
+;    Output: IX points after the generated string
+;    Modifies: C
+
+BYTE2ASC::	cp	10
+	jr	c,B2A_1D
+	cp	100
+	jr	c,B2A_2D
+	cp	200
+	jr	c,B2A_1XX
+	jr	B2A_2XX
+
+	;--- One digit
+
+B2A_1D:	add	a,"0"
+	ld	(ix),a
+	inc	ix
+	ret
+
+	;--- Two digits
+
+B2A_2D:	ld	c,"0"
+B2A_2D2:
+	inc	c
+	sub	10
+	cp	10
+	jr	nc,B2A_2D2
+
+	ld	(ix),c
+	inc	ix
+	jr	B2A_1D
+
+	;--- Between 100 and 199
+
+B2A_1XX:
+	ld	(ix),"1"
+	sub	100
+B2A_XXX:
+	inc	ix
+	cp	10
+	jr	nc,B2A_2D	;If 1XY with X>0
+	ld	(ix),"0"	;If 10Y
+	inc	ix
+	jr	B2A_1D
+
+	;--- Between 200 and 255
+
+B2A_2XX:
+	ld	(ix),"2"
+	sub	200
+	jr	B2A_XXX
+
+
+;-----------------------------------------------------------------------------
+;
+;    Extract a parameter from the command line
+;    INPUT:   A  = Parameter index (starting at 1)
+;             DE = Destination address for parameter
+;    OUTPUT:  A  = Total number of parameters
+;             CY = 1 -> Parameter does not exists
+;                       B undefined, destination buffer unmodified
+;             CY = 0 -> Parameter copied at address DE, zero terminated
+;		B = Parameter length (not including terminating zero)
+;    MODIFIES: -
+
+EXTPAR::	or	a	;Terminate with error if A = 0
+	scf
+	ret	z
+
+	ld	b,a
+	ld	a,(80h)	;Terminate with error if no parameters available
+	or	a
+	scf
+	ret	z
+	ld	a,b
+
+	push	af
+	push	hl
+	ld	a,(80h)
+	ld	c,a	;Put zero at the end of command line
+	ld	b,0
+	ld	hl,81h
+	add	hl,bc
+	ld	(hl),0
+	pop	hl
+	pop	af
+
+	push	hl
+	push	de
+	push	ix
+	ld	ix,0	;IXl: Number of parameters
+	ld_ixh_a	;IXh: Parameter to be extracted
+	ld	hl,81h
+
+PASASPC:
+	ld	a,(hl)	;Skip spaces
+	or	a
+	jr	z,ENDPNUM
+	cp	" "
+	inc	hl
+	jr	z,PASASPC
+
+	inc	ix
+PASAPAR:	ld	a,(hl)	;Traverse parameter characters
+	or	a
+	jr	z,ENDPNUM
+	cp	" "
+	inc	hl
+	jr	z,PASASPC
+	jr	PASAPAR
+
+ENDPNUM:
+	ld_a_ixh	;Error if parameter index
+	dec	a	;is larger that the number of parameters
+	cp_ixl
+	jr	nc,EXTPERR
+
+	ld	hl,81h
+	ld	b,1	;B = current parameter
+PASAP2:	ld	a,(hl)	;Skip spaces until finding next parameter
+	cp	" "
+	inc	hl
+	jr	z,PASAP2
+
+	ld_a_ixh	;If it is the desired parameter, extract it.
+	cp	B	;Otherwise...
+	jr	z,PUTINDE0
+
+	inc	B
+PASAP3:	ld	a,(hl)	;...skip it and jump to PASAP2
+	cp	" "
+	inc	hl
+	jr	nz,PASAP3
+	jr	PASAP2
+
+PUTINDE0:
+	ld	b,0
+	dec	hl
+PUTINDE:
+	inc	b
+	ld	a,(hl)
+	cp	" "
+	jr	z,ENDPUT
+	or	a
+	jr	z,ENDPUT
+	ld	(de),a	;Copy paramater to (DE)
+	inc	de
+	inc	hl
+	jr	PUTINDE
+
+ENDPUT:	xor	a
+	ld	(de),a
+	dec	b
+
+	ld_a_ixl
+	or	a
+	jr	FINEXTP
+EXTPERR:
+	scf
+FINEXTP:
+	pop	ix
+	pop	de
+	pop	hl
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Checks that Nextor 2.0 is running and that NEXTOR.SYS 2.0 is loaded.
+; If so, returns normally; otherwise, terminates program.
+; Corrupts AF, BC, DE.
+
+CHK250::
+	ld	b,05Ah
+	ld	hl,01234h
+	ld	de,0ABCDh
+	ld	c,_DOSVER##
+	ld	ix,0
+	call	5
+	push	de
+
+	ld	de,BADKER_MSG
+	ld	a,b
+	cp	2
+	jr	c,CHK250_ERR
+	push	ix
+	pop	bc
+	ld	a,b
+	cp	1	;NEXTOR_ID
+	jr	nz,CHK250_ERR
+	ld	a,c
+	cp	2
+	jr	c,CHK250_ERR
+
+	pop	bc
+	ld	de,BADSYS_MSG
+	ld	a,b
+	cp	2
+	ret	nc
+
+CHK250_ERR:
+	ld	c,_STROUT##
+	call	5
+	ld	c,_TERM0##
+	jp	5
+
+BADKER_MSG:
+	db	"*** This program requires Nextor 2.0 or later",13,10,"$"
+BADSYS_MSG:
+	db	"*** Bad version of NEXTOR.SYS, version 2.0 or later is required",13,10,"$"
+
+
+;-----------------------------------------------------------------------------
+;
+; Check a string that must be either "on" or "off".
+; If it is none of these, terminate program with "Invalid parameter" error.
+; Input:  HL = Pointer to zero-terminated parameter
+; Output: A=0, Z if "off"; A=FFh, NZ if "on"
+; Corrupts AF, HL
+
+CHKONOFF::
+	ld	a,(hl)
+	or	32
+	cp	"o"
+	jp	nz,IPARM
+
+	inc	hl
+	ld	a,(hl)
+	or	32
+	cp	"f"
+	jr	nz,NO_OFF
+	inc	hl
+	ld	a,(hl)
+	or	32
+	cp	"f"
+	jp	nz,IPARM
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jp	nz,IPARM
+	ret
+
+NO_OFF:
+	cp	"n"
+	jp	nz,IPARM
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jp	nz,IPARM
+	dec	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Check a parameter that must be a drive letter.
+; If it is not a valid drive letter, terminate program with "Invalid parameter" error.
+; Input:  HL = Pointer to zero-terminated parameter
+; Output: A=Drive letter (1=A:, 2=B:, etc)
+; Corrupts AF, HL
+
+CHKLET::
+	ld	a,(hl)
+	or	32
+	cp	"a"
+	jp	c,IPARM
+	cp	"h"+1
+	jp	nc,IPARM
+	push	af
+	inc	hl
+	ld	a,(hl)
+	cp	":"
+	jp	nz,IPARM
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jp	nz,IPARM
+
+	pop	af
+	sub	"a"-1
+	ret
+
+
+CHKL2::
+	ld	a,(hl)
+	or	32
+	cp	"a"
+	jr	c,CHKLET4
+	cp	"h"+1
+	jr	nc,CHKLET4
+	push	af
+	inc	hl
+	ld	a,(hl)
+	cp	":"
+	jr	nz,CHKLET3
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jr	nz,CHKLET3
+
+	pop	af
+	sub	"a"-1
+	ret
+
+CHKLET3:
+	pop	af
+CHKLET4:
+	ld	a,.IPARM##
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Print a slot+segment number
+; The output will be <slot>[-<subslot>][:<segment>]
+; Input: A = Slot number, B = Segment number
+; Modifies: AF, BC, DE, HL
+
+PRSLOT::
+	push	bc
+	push	af
+	and	11b
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Print main slot number
+
+	pop	af
+	bit	7,a
+	jr	z,DO_PRINT_SEGMENT
+	rrca
+	rrca
+	and	11b
+	add	a,"0"
+	ld	e,a
+	push	de
+	ld	e,"-"
+	ld	c,_CONOUT##
+	call	5
+	pop	de
+	ld	c,_CONOUT##
+	call	5		;Print sub-slot number
+
+DO_PRINT_SEGMENT:
+	pop	bc
+	ld	a,b
+	cp	0FFh
+	ret	z
+	
+	push	ix
+	ld	ix,PRSLOT_BUF+1
+	call	BY2ASC
+	ld	(ix),0
+	pop	ix
+	ld	de,PRSLOT_BUF
+	ld	c,_ZSTROUT##
+	jp	5
+
+PRSLOT_BUF:
+	db	":000",0
+
+
+;-----------------------------------------------------------------------------
+;
+; Convert a 8 bit number to an unterminated string
+; Input:  A  = Number
+;         IX = Destination address
+; Output: IX points after the generated string
+; Modifies: C
+
+BY2ASC::
+	cp	10
+	jr	c,B2A1D
+	cp	100
+	jr	c,B2A2D
+	cp	200
+	jr	c,B2A1XX
+	jr	B2A2XX
+
+	;* One digit
+
+B2A1D:	add	a,"0"
+	ld	(ix),a
+	inc	ix
+	ret
+
+	;* Two digits
+
+B2A2D:	ld	c,"0"
+B2A2D2:
+	inc	c
+	sub	10
+	cp	10
+	jr	nc,B2A2D2
+
+	ld	(ix),c
+	inc	ix
+	jr	B2A1D
+
+	;* Between 100 and 199
+
+B2A1XX:
+	ld	(ix),"1"
+	sub	100
+B2AXXX:
+	inc	ix
+	cp	10
+	jr	nc,B2A2D	;If 1XY with X>0
+	ld	(ix),"0"	;If 10Y
+	inc	ix
+	jr	B2A1D
+
+	;* Between 200 and 255
+
+B2A2XX:
+	ld	(ix),"2"
+	sub	200
+	jr	B2AXXX
+
+
+;-----------------------------------------------------------------------------
+;
+; Prints a string which is padded with spaces at right
+; (modifies the string by appending a 0 byte over the first padding space)
+; Input: HL = String address
+;        BC = String length
+
+PRPAD::
+	push	hl
+	add	hl,bc
+PRPAD_LOOP:
+	dec	hl
+	ld	a,(hl)
+	cp	" "
+	jr	nz,PRPAD_FOUND
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,PRPAD_LOOP
+	ret	;Do nothing if the string was just spaces
+
+PRPAD_FOUND:
+	inc	hl
+	ld	(hl),0
+
+	pop	de
+	ld	c,_ZSTROUT##
+	jp	5
+
+
+
+;-----------------------------------------------------------------------------
+;
+;    Extracts a 8 bit number from a string
+;    INPUT:  HL = ASCII string address
+;    OUTPUT: A  = number
+;            E  = First non-numeric character
+;	     HL = Address after the number
+;            Cy=1 if error (not a number, or number too big)
+;    MODIFIES: BC
+
+EXT8::
+	call	EXTNUM
+	ret	c
+	or	a
+	scf
+	ret	nz
+	ld	a,b
+	or	a
+	scf
+	ret	nz
+	ld	a,d
+	or	a
+	scf
+	ret	z
+	ld	a,c
+	ld	c,d
+	ld	b,0
+	add	hl,bc
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+;    Extract a 5 digit number from a string
+;    INPUT:    HL = ASCII string address
+;    OUTPUT:   CY-BC = 17 bit number
+;              D  = Count of digits of the number.
+;		The number is considered to be extracted
+;                   when a non-numeric character is found,
+;                   or when five digits have been extracted.
+;              E  = First non-numeric character (o 6th digit)
+;              A  = error code:
+;                   0 => Success
+;                   1 => The number has more than 5 digits.
+;                        CY-BC contains then the number built from
+;                        the first 5 digits.
+;    MODIFIES:  -
+
+EXTNUM::
+	push	hl
+	push	ix
+	ld	ix,ACA
+	res	0,(ix)
+	set	1,(ix)
+	ld	bc,0
+	ld	de,0
+BUSNUM:	ld	a,(hl)	;Jump to FINEXT if not a digit, or is the 6th digit
+	ld	e,a
+	cp	"0"
+	jr	c,FINEXT
+	cp	"9"+1
+	jr	nc,FINEXT
+	ld	a,d
+	cp	5
+	jr	z,FINEXT
+	call	POR10
+
+SUMA:	push	hl	;BC = BC + A
+	push	bc
+	pop	hl
+	ld	bc,0
+	ld	a,e
+	sub	"0"
+	ld	c,a
+	add	hl,bc
+	call	c,BIT17
+	push	hl
+	pop	bc
+	pop	hl
+
+	inc	d
+	inc	hl
+	jr	BUSNUM
+
+BIT17:	set	0,(ix)
+	ret
+ACA:	db	0	;b0: num>65535. b1: more than 5 digits
+
+FINEXT:	ld	a,e
+	cp	"0"
+	call	c,NODESB
+	cp	"9"+1
+	call	nc,NODESB
+	ld	a,(ix)
+	pop	ix
+	pop	hl
+	srl	a
+	ret
+
+NODESB:	res	1,(ix)
+	ret
+
+POR10:	push	de
+	push	hl	;BC = BC * 10
+	push	bc
+	push	bc
+	pop	hl
+	pop	de
+	ld	b,3
+ROTA:	sla	l
+	rl	h
+	djnz	ROTA
+	call	c,BIT17
+	add	hl,de
+	call	c,BIT17
+	add	hl,de
+	call	c,BIT17
+	push	hl
+	pop	bc
+	pop	hl
+	pop	de
+	ret	
+
+
+;-----------------------------------------------------------------------------
+;
+; Extract a slot+segment from a string with the format <slot>[-<subslot>][:<segment>]
+; If the string is not valid, terminate with "Invalid parameter" error.
+; Input: HL = String address
+; Output: A = Slot, B = Segment
+; Modifies: AF, BC, DE, HL
+
+GETSLOT::
+	ld	a,-1
+	ld	(SUBSLOT),a
+	ld	(SEGMENT),a
+
+	call	EXTNUM_TERM	;Get main slot number
+	cp	4
+	jp	nc,IPARM
+	ld	(SLOT),a
+	ld	a,e
+	or	a
+	jr	z,OK_SLOTSUBSEG
+	cp	":"
+	jr	z,OK_SUBSLOT
+	cp	"-"
+	jp	nz,IPARM
+
+	inc	hl
+	call	EXTNUM_TERM	;Get subslot number
+	cp	4
+	jp	nc,IPARM
+	ld	(SUBSLOT),a
+	ld	a,e
+	or	a
+	jr	z,OK_SLOTSUBSEG
+	cp	":"
+	jp	nz,IPARM
+OK_SUBSLOT:
+
+	inc	hl
+	call	EXTNUM_TERM	;Get segment number
+	ld	(SEGMENT),a
+	ld	a,e
+	or	a
+	jp	nz,IPARM
+OK_SLOTSUBSEG:
+
+	;* Convert slot+subslot to slot byte
+
+	ld	a,(SUBSLOT)
+	cp	-1
+	jr	z,OK_MAKESLOT
+
+	rlca
+	rlca
+	and	00001100b
+	ld	b,a
+	ld	a,(SLOT)
+	or	b
+	or	10000000b
+	ld	(SLOT),a
+OK_MAKESLOT:
+
+	ld	a,(SEGMENT)
+	ld	b,a
+	ld	a,(SLOT)
+	ret
+
+SLOT:	
+	db	0
+SUBSLOT:
+	db	0
+SEGMENT:
+	db	0
+
+
+EXTNUM_TERM:
+	call	EXT8
+	ret	nc
+IPARM:
+	ld	b,.IPARM##
+	ld	c,_TERM##
+	jp	5
+
+	end

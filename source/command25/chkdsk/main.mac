@@ -1,0 +1,1596 @@
+	title	MSX-DOS 2 Chkdsk Program - Main Section
+	.z80
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;******************************************************************************
+;
+	db	CR,LF
+	db	"MSX-DOS 2 CHKDSK program",CR,LF
+	db	"Version "
+	db	VERSION##+"0", ".", RELEASE##/256+"0", RELEASE##+"0",CR,LF
+	db	"Copyright (c) "
+	db	CRYEAR##/1000 MOD 10 +"0"
+	db	CRYEAR##/ 100 MOD 10 +"0"
+	db	CRYEAR##/  10 MOD 10 +"0"
+	db	CRYEAR##      MOD 10 +"0"
+	db	" ASCII Corporation",CR,LF
+	db	CR,LF,EOF
+;
+;
+;------------------------------------------------------------------------------
+;
+ENTRY::
+;
+;    This is the entry point of the CHKDSK program which is entered when it is
+; loaded.  L80 will insert a jump to here at link time.
+;
+;
+		ld	sp,STACK##	;Setup stack in page-zero.
+;
+		call	INIT		;Initialise variables etc.
+;
+		call	DEC_PARAMS	;Decode command line
+;
+		call	GET_UPB		;Determine disk parameters
+;
+		call	LOAD_FAT	;Read in and expand the FAT
+;
+		call	SCAN_DIR	;Do a recursive directory scan.
+;
+		call	SCAN_FAT	;Scan FAT for lost clusters.
+;
+		call	RECOVER		;Recover the lost disk space.
+;
+		call	SAVE_FAT	;Write out modified FAT to disk
+;
+		call	CROSS_CHECK	;Check for cross links
+;
+		call	PRINT_INFO	;Print out statistics
+;
+		call	WR_CRLF##	;Write a CR-LF and terminate with
+		xor	a		; zero error code.
+		jr	EXIT
+;
+;
+;------------------------------------------------------------------------------
+;
+;    These are the various routines for terminating the program.   "EXIT"  is
+; the  normal  exit  which  will  return the error code passed in register A.
+; This  is  used  for  sucessful  termination  (A=0)  and  for  errors  which
+; COMMAND.COM  can  print  out.   The other exits (currently only "FATAL" and
+; "WRONG_VER") are for errors which are specific to the chkdsk program.   For
+; these, a message is printed and a general error code in the range 1...31 is
+; returned.
+;
+;
+FATAL:		ld	b,__FTL_MSG##		;General fatal error.
+		ld	a,1
+		jr	abort_error
+;
+WRONG_VER:	ld	b,__WVER_MSG##		;Wrong version of system.
+		ld	a,2
+;
+abort_error:	push	af
+		ld	a,b
+		call	WR_MSG##		;Print the error message and
+		pop	af			; exit with the error code.
+;
+EXIT::		ld	b,a			;Re-boot MSX-DOS with an
+		ld	c,_TERM##		; error code.
+		call	MSX_DOS
+		rst	0			;Should never get here!
+;
+;
+;******************************************************************************
+;
+INIT:
+;
+;    This routine is called once only when the program starts  up  to  do  any
+; initialisation which the program requires.  Its functions are as follows:
+;
+;	1.  Check the system version number.
+;
+;	2.  Define a user error vector routine to enable READ_SECT and
+;	      FLUSH to handle errors in any FAT copy.
+;
+;	3.  Record the address of the top of the TPA at "TPA_TOP".
+;
+;
+		ld	c,_DOSVER##		;Find out the MSX-DOS version
+		call	MSX_DOS			; number.
+		or	a
+		jr	nz,WRONG_VER
+		ld	a,2-1			;Reject any version number
+		cp	b			; of MSXDOS.SYS or the
+		jr	nc,WRONG_VER		; kernel which is less than
+		cp	d			; 2.00.
+		jr	nc,WRONG_VER
+;
+		ld	de,ERV_ROUTINE##	;Patch in the address of a
+		ld	c,_DEFER##		; user error routine for FISH.
+		call	MSX_DOS
+;
+		ld	hl,(6)			;Record address of top of TPA
+		ld	(TPA_TOP##),hl
+;
+		ret
+;
+;
+;******************************************************************************
+;
+DEC_PARAMS:
+;
+;    This  routine  decodes  the  command  line  and  sets  up the "DRIVE" and
+; "OPTIONS" variables.  "DRIVE" will be set to the default drive or the  drive
+; specified.  Currently the only option is "/F" to allow changes to be written
+; to the disk.
+;
+;
+		call	MSG_DEBUG##		;Check for special command
+						; to print all messages.
+;
+		ld	c,_CURDRV##		;D := default drive in case
+		call	MSX_DOS			;     no drive given.
+		ld	d,a			;Returns CP/M value, so need
+		inc	d			; to add one (-> 1 to 26).
+		ld	e,0			;E := default option flags
+		ld	hl,81h			;HL -> start of command
+;
+		call	SKIP_SPACE
+		or	"a"-"A"			;Look at first non-space
+		sub	"a"			; character of command and
+		jr	c,not_drive		; skip if it is not a letter.
+		cp	26
+		jr	nc,not_drive
+		inc	a			;If it is a letter then turn
+		ld	d,a			; into drive number & save it.
+;
+		inc	hl
+		ld	a,(hl)			;If drive number was given then
+		cp	":"			; check that it is followed by
+		jr	nz,inv_param_err	; a ":" character & error if
+		inc	hl			; not.
+;
+not_drive:
+option_loop:	call	SKIP_SPACE		;Ignore any white space and
+		cp	"/"			; skip if next character is
+		jr	nz,not_switch		; not an option switch
+		inc	hl
+		ld	a,(hl)
+		inc	hl
+		or	"a"-"A"			;Get the option character and
+		cp	"f"			; error if it is not "F".
+		jr	nz,inv_param_err
+		set	0,e			;If "F" option then set a flag
+		jr	option_loop		; to indicate it.
+;
+not_switch:	or	a			;End of options, error if any
+		jr	nz,inv_param_err	; non-space character left.
+;
+		ld	a,d
+		ld	(DRIVE##),a		;Store drive number
+		ld	a,e
+		ld	(OPTIONS##),a		;Store selected option flags
+;
+		jp	DP_DEBUG##		;Print out debugging info.
+;
+;
+inv_param_err:	ld	a,.IPARM##		;Any invalid parameters, give
+		jp	EXIT			; a general error.
+;
+;
+;------------------------------------------------------------------------------
+;
+SKIP_SPACE:	ld	a,(hl)
+		inc	hl			;Skip past any leading white
+		cp	" "			; space (spaces or tabs) in
+		jr	z,skip_space		; the string pointed to by HL.
+		cp	TAB			;First non-space character is
+		jr	z,skip_space		; returned in HL.
+		dec	hl
+		ret
+;
+;
+;******************************************************************************
+;
+GET_UPB:
+;
+;    This routine is called to get the disk parameters for the  drive  into  a
+; buffer  which  is  used later to find out details about where the FAT is and
+; how many copies there are.
+;
+;
+		LD	A,(DRIVE##)		;Do an MSX-DOS call to obtain
+		LD	L,A			; the disc parameters.
+		LD	DE,UD_IMAGE##
+		LD	C,_DPARM##
+		CALL	MSX_DOS
+		JP	NZ,EXIT
+;
+		LD	A,(SEC_CLU##)		;Work out the cluster shift
+		LD	B,-1			; factor, so that later
+loop_clu_sft:	INC	B			; calculations are easier.
+		RRCA				;Wait for a bit to "fall" off
+		JR	NC,loop_clu_sft		; the end.
+		LD	A,B
+		LD	(CLU_SHIFT##),A
+;
+		LD	A,(VOL_ID##)		;If this media has no vol_id
+		BIT	7,A			; inform it to the user.
+		LD	A,__ND2_MSG##		;
+		CALL	NZ,WR_MSG##		;Print warning message.
+;
+		jp	GU_DEBUG##		;Print out debugging info.
+;
+;
+;******************************************************************************
+;
+LOAD_FAT:
+;
+;    This routine reads in the FAT to memory above the top of the program.  It
+; first   checks  that  there  is  enough  space  in  the  TPA  and  gives  an
+; "insufficient memory" error if not.  The FAT is then read in via the  sector
+; buffer  and expanded to 16 bits per entry.  The top four bits are used later
+; for flags and are initially zero.  If the first copy of any  FAT  sector  is
+; not  readable then the other ones will be tried before giving an error (this
+; is done by "R_FAT_SECT".
+;
+;
+		ld	hl,(TOT_CLU##)		;DE := total number of clusters
+		add	hl,hl			; * 2 which is the size of a
+		ex	de,hl			; whole FAT copy in memory.
+		ld	hl,PROG_END##
+		ld	(FAT##),hl		;Store address of FAT buffer
+		add	hl,de
+		jr	c,out_of_memory
+		ld	(RAM_START##),hl	;Store address for start of
+		ld	de,(TPA_TOP##)		; general RAM allocation.
+		sbc	hl,de
+		jr	c,memory_ok		;Check that we are before the
+out_of_memory::	ld	a,.NORAM##		; end of the TPA and return an
+		jp	EXIT			; "insufficient memory" error
+						; if too high.
+;
+memory_ok:	ld	de,(FAT_START##)	;DE := 1st sector of 1st FAT
+		ld	bc,0			;Get nybble count to BC' and
+		exx				; sector number to DE'.
+		ld	bc,(TOT_CLU##)		;BC := cluster count
+		ld	hl,(FAT##)		;HL -> buffer for FAT
+;
+read_fat_loop:	call	GET_NYBBLE		;Get lowest nybble
+		ld	d,a
+		call	GET_NYBBLE		;Get next lowest nybble and
+		add	a,a			; multiply it by 16 to get
+		add	a,a			; it into the top half of a
+		add	a,a			; byte.
+		add	a,a
+		add	a,d			;Combine the two nybbles and
+		ld	(hl),a			; store in the next byte of
+		inc	hl			; the buffer.
+		call	GET_NYBBLE		;Get third nybble and store
+		ld	(hl),a			; as high byte of entry.
+		inc	hl
+		dec	bc
+		ld	a,b			;Decrement cluster count and
+		or	c			; loop until got all FAT
+		jr	nz,read_fat_loop	; entries.
+;
+		jp	LF_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+GET_NYBBLE:
+;
+;    This routine returns the next  nybble  from  the  bufferred  FAT  sector,
+; reading  in  the  next  sector  when  required.  BC' contains a count of the
+; number of unread nybbles in the sector buffer and register DE' is  the  next
+; sector  number  to  read.   Register  HL'  points to the current byte in the
+; sector buffer, but need not be defined if BC'=0 since  it  will  be  set  up
+; afresh when the new sector is read in.
+;
+; Entry:    BC' = Count on nybbles remaining in buffer 0...1023
+;	    DE' = Next logical sector to read
+;	    HL' = Current address in sector buffer (undefined in BC'=0)
+; Returns:  BC',DE',HL' = Updated appropriately
+;	     A  = Value of nybble (0...0Fh)
+;
+;
+		exx
+		ld	a,b			;Skip if there are any nybbles
+		or	c			; left in the current sector
+		jr	nz,same_fat_sect
+;
+		call	R_FAT_SECT##		;Read sector (DE) into a buffer
+		inc	de			;Bump sector number
+		ld	bc,1024			;Re-initialise nybble count
+;
+same_fat_sect:	xor	a			;Rotate next nybble out of the
+		rrd				; byte, with bits 4...7 clear
+		bit	0,c
+		jr	z,low_nybble		;If finished byte then step on
+		inc	hl			; to next byte
+low_nybble:	dec	bc			;Decrement nybble count
+		exx
+		ret
+;
+;
+;******************************************************************************
+;
+SCAN_DIR:
+;
+;    This  routine  does  the  first  recursive  scan  through  the  directory
+; structure of the disk.  This examines every directory entry and checks  that
+; it is valid.
+;
+;
+		ld	hl,(RAM_START##)	;Start free RAM area right
+		ld	(RAM_BOT##),hl		; after the FAT.
+		ld	hl,(TPA_TOP##)		;Set to of free memory area
+		ld	(RAM_TOP##),hl		; to the top of the TPA and
+		ld	(FILE_PTR##),hl		; initialise file record ptr
+;
+		ld	hl,0FFFFh		;Prepare to start search of
+		ld	(DIR_START##),hl	; root directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	scan_dir_go
+scan_dir_next:	call	DRE_NEXT##		;Get next directory entry
+scan_dir_go:	jr	nz,scan_dir_end		;Skip if end of directory
+		ld	a,(hl)			;If entry has never been used
+		or	a			; then stop search, else
+		jr	nz,scan_dir_entry	; jump to process the entry.
+;
+scan_dir_end:	call	DRE_LD##		;End of directory, return
+		jr	z,scan_dir_next		; to higher level search and
+		jp	SD_DEBUG##		; exit when finished.
+;
+;
+scan_dir_entry:	push	hl			;Point IX at directory entry
+		pop	ix			; in sector buffer.
+		cp	0E5h
+		jr	nz,not_deleted		;If entry is deleted then
+		xor	a			; remove the saved first
+		cp	(ix+DR_DCHAR)		; character so it can't be
+		ld	(ix+DR_DCHAR),a		; un-deleted and mark buffer
+		call	nz,DIRTY_BUFFER##	; as dirty if it was non-zero.
+		jr	scan_dir_next
+;
+;
+;	---------------------------------------
+;
+;
+not_deleted:	call	FLST_NEW##		;Create a new record for this
+		call	ENT_DEBUG##		; entry in the file list.
+;
+		ld	a,(ix+DR_ATTR)		;Test volume-name bit and
+		bit	AT_VOL,a		; skip if not set.
+		jr	z,not_vol_name
+;
+		ld	a,(DIR_START##+1)	;  VOLUME-NAME
+		bit	7,a			;Test if volume-name is in the
+		ld	a,__VRT_MSG##		; root directory and if not
+		jr	z,kill_vol_name		; then jump to error & delete
+		ld	hl,VOL_FLAG##		; it.
+		bit	0,(hl)
+		set	0,(hl)			;Also if volume-name has
+		jr	z,scan_dir_next		; already been found then
+		ld	a,__VDUP_MSG##		; delete duplicate one & error.
+;
+kill_vol_name:	call	QER_MSG##		;Give error message
+		ld	(ix+0),0E5h		;Delete the volume-id.
+		call	DIRTY_BUFFER##
+		jr	scan_dir_next		;Loop for next entry
+;
+;
+;	----------------------------------------
+;
+;
+not_vol_name:	call	CHECK_CHAIN		;Check that chain is valid
+		ex	af,af'                  ;Save file size check flag
+		bit	AT_DIR,(ix+DR_ATTR)	;If entry is a file then skip
+		jr	z,not_sub_dir		; to file size checking.
+;
+		call	DRE_SV##		;Setup for sub-dir search
+		call	CHECK_DIR		;Check directory for validity
+		jr	z,scan_dir_next		; and loop back to search it if
+						; it is valid.
+;
+		call	DRE_LD##		;Abort this directory and go
+		call	DRE_SAME##		; back to its parent.
+		ld	a,__CVD_MSG##		;Print out an error message.
+		call	QER_MSG##
+		ld	(ix+DR_ATTR),ATM_ARC	;Convert the directory into
+		call	DIRTY_BUFFER##		; a file, both in the sector
+		ld	hl,(FILE_PTR##)		; buffer and in the file
+		ld	(hl),ATM_ARC		; list record.
+;
+not_sub_dir:	ex	af,af'			;If file is not cross linked
+		call	z,CHECK_FILE_SIZE	; then check the file size.
+		jp	scan_dir_next		;Loop for next directory entry
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_CHAIN:
+;
+;    This  routine  is  called  by  "SCAN_DIR" above to check that the cluster
+; chain hanging off a file or sub-directory entry is valid.  Each link in  the
+; chain  is  checked  to make sure that it is a valid cluster number, and also
+; whether it has been referenced before.  If an already referenced cluster  is
+; found  then the check stops.  This prevents an infinite loop if the chain is
+; looped. If an invalid entry is found then  it  is  replaced  with  0FFFh  to
+; indicate the end of the chain, and an error is printed.
+;
+;    As the chain is scanned, a count of the number of clusters is kept.  When
+; the scan has finished, this count is added on to the total cluster count for
+; the  correct  type  of  entry  (directory,  system file, hidden file or user
+; file). Also the entry count for this catagory is incremented.  The number of
+; clusters  is  stored  in  "CH_SIZE" to allow the file size to be checked for
+; files.  If the chain was cross linked then it returns NZ which will  supress
+; file size checking.
+;
+; Entry:     IX -> directory entry to be checked
+; Returns:  Z-flag set => file size should be checked
+;                  clear => file size should not be checked
+; Corrupts:  AF,BC,DE,HL,BC',DE',HL'
+;
+;
+		ld	bc,0			;Start cluster count
+		exx				; at zero.
+;
+		ld	e,(ix+DR_CLU)		;Get first cluster from
+		ld	d,(ix+DR_CLU+1)		; directory entry and if
+		ld	a,d			; it is zero then return
+		or	e			; immediately with BC=0
+		jr	z,chain_done_z		; to indicate null chain.
+;
+chk_chain_loop:	call	F_FAT##			;Find next entry and jump if
+		jr	nz,invalid_entry	; it is invalid.
+		inc	hl			;If next entry is already
+		bit	FL_CHAIN,(hl)		; referenced then jump to
+		jr	nz,chain_xlink		; flag it as cross linked.
+		exx
+		inc	bc
+		exx				;Flag that next entry has now
+		set	FL_CHAIN,(hl)		; been referenced.
+		ld	(LAST_CLU##),de		;Remember this cluster in case
+						; truncation is necessary.
+		call	NEXT_CLU##		;Get next entry and put its
+		ex	de,hl			; number into DE.
+		bit	7,d			;Loop back if not end of
+		jr	z,chk_chain_loop	; chain.
+		jr	chain_done_z
+;
+chain_xlink:	set	FL_XLINK,(hl)		;Set cross link flag in FAT.
+		ld	hl,ER_FLAGS##		;Set a general cross link flag.
+		set	3,(hl)
+		jr	chain_done		;Jump to return NZ to prevent
+						; the file size check.
+;
+;
+invalid_entry:	exx				;Got an invalid cluster so
+		ld	a,b			; must give an error and
+		or	c			; truncate the file chain.
+		exx				;Skip if it is not the first
+		jr	nz,inv_not_first	; cluster which is invalid.
+;
+invalid_first:	ld	hl,(FILE_PTR##)		;First cluster number is
+		inc	hl			; invalid so zero the cluster
+		ld	(hl),0			; number both in the file
+		inc	hl			; list record and also in the
+		ld	(hl),0			; directory entry itself.
+		ld	(ix+DR_CLU),0
+		ld	(ix+DR_CLU+1),0		;Flag sector as dirty to
+		call	DIRTY_BUFFER##		; ensure it gets written out
+		ld	a,__IENT_MSG##
+		call	QER_MSG##		;Print an error message.
+		jr	chain_done_z
+;
+;
+inv_not_first:	ld	de,(LAST_CLU##)		;Invalid cluster number in
+		call	F_FAT##			; the chain so set the
+		ld	(hl),0FFh		; previous entry to 0FFFh
+		inc	hl			; to indicate end of chain.
+		ld	a,(hl)
+		or	0Fh
+		ld	(hl),a
+if	1
+		call	DIRTY_FAT
+endif
+;
+		ld	a,__ICLU_MSG##		;Give an error message.
+		call	QER_MSG##
+;
+;
+;
+chain_done_z:	xor	a			;Allow file size check.
+chain_done:	push	af			;Save file size check flag
+		exx
+		ld	a,(ix+DR_ATTR)
+		ld	hl,DIR_COUNT##		;Point HL at correct count
+		bit	AT_DIR,a		; variable for this directory
+		jr	nz,got_count_addr	; entry.  There are seperate
+		ld	hl,SYS_COUNT##		; counts for sub-directories,
+		bit	AT_SYS,a		; system files, hidden files
+		jr	nz,got_count_addr	; and user files.
+		ld	hl,HID_COUNT##
+		bit	AT_HID,a
+		jr	nz,got_count_addr
+		ld	hl,FIL_COUNT##
+got_count_addr:
+		inc	(hl)			;Increment the number of
+		inc	hl			; this type of entries
+		jr	nz,no_inc_carry		; which have been found.
+		inc	(hl)
+no_inc_carry:	inc	hl
+;
+		ld	a,(hl)			;Add the cluster count for
+		add	a,c			; this entry on to the
+		ld	(hl),a			; total cluster count for this
+		inc	hl			; type of entry.
+		ld	a,(hl)
+		adc	a,b
+		ld	(hl),a
+;
+		ld	(CH_SIZE##),bc		;Store length of chain.
+		pop	af			;Return with file size check
+		ret				; flag in Z/NZ.
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_FILE_SIZE:
+;
+;    This  routine  is  called for a file entry.  Its job is to check that the
+; file size corresponds to the cluster count determined earlier (and stored in
+; "CH_SIZE")  and if it doesn't then the file size is adjusted and an error is
+; printed.
+;
+; Entry:     IX -> Directory entry to be checked
+; Returns:   None
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	l,(ix+DR_SIZE)		;Get file size from the
+		ld	h,(ix+DR_SIZE+1)	; directory entry into DE:HL
+		ld	e,(ix+DR_SIZE+2)
+		ld	d,(ix+DR_SIZE+3)
+		ld	a,d			;If file size is zero then
+		or	e			; skip the arithmetic below
+		or	h			; 'cos it doesn't cope with
+		or	l			; this case.
+		jr	z,zero_file_size
+;
+		ld	a,l			;Decrement the file size
+		or	h			; to ensure partial clusters
+		dec	hl			; are included properly.
+		jr	nz,no_dec32_carry
+		dec	de
+no_dec32_carry:
+		ld	a,(CLU_SHIFT##)		;Divide the file size - 1 by
+		add	a,9			; the cluster size which
+byte_clu_loop:	srl	d			; is always a power of two.
+		rr	e			;This gives the number of
+		rr	h			; clusters - 1 in DE:HL
+		rr	l
+		dec	a
+		jr	nz,byte_clu_loop
+;
+		inc	hl			;Increment the result by 1 to
+		ld	a,h			; get the number of clusters
+		or	l			; which the file size indicates
+		jr	nz,no_inc32_carry	; should be in the file.
+		inc	de
+no_inc32_carry:
+		ld	a,d			;File size must be wrong if
+		or	e			; more than 65535 clusters.
+		jr	nz,invalid_size
+zero_file_size:	ld	de,(CH_SIZE##)		;DE := actual length of chain
+		sbc	hl,de			;Compare result with actual
+		ret	z			; number of clusters in chain
+						; and return if it is correct.
+;
+invalid_size:	ld	a,(CLU_SHIFT##)		; FILE IS WRONG SIZE
+		inc	a			;Multiply the actual number of
+		ld	b,a			; clusters by the cluster size
+		xor	a			; to get the actual size which
+		ex	de,hl			; the file should be.
+clu_byte_loop:	add	hl,hl
+		adc	a,a
+		djnz	clu_byte_loop
+;
+		ld	(ix+DR_SIZE),0		;Store the actual size of the
+		ld	(ix+DR_SIZE+1),l	; file in place of the wrong
+		ld	(ix+DR_SIZE+2),h	; file size in the directory
+		ld	(ix+DR_SIZE+3),a	; entry
+		call	DIRTY_BUFFER##		;Flag that sector is dirty
+;
+		ld	a,__ALOC_MSG##		;Report the error to the
+		jp	QER_MSG##		; user.
+;
+;
+;------------------------------------------------------------------------------
+;
+CHECK_DIR:
+;
+;    This routine starts the search of a sub-directory and checks that the "."
+; and  ".." entries are present and valid.  If either of these is missing (ie.
+; not the correct name  and  attributes)  then  this  routine  returns  NZ  to
+; indicate  a  totally  invalid  directory.  If the name and attributes are OK
+; then the cluster number is checked and if this is wrong then it is corrected
+; and  an error printed.  In this case the routine returns with the Z-flag set
+; since the sub-directory is basically usable.
+;
+; Entry:      None
+; Returns:    Z-flag  set  (Z)  => sub-directory seems OK
+;                    clear (NZ) => invalid sub-directory
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		call	DRE_START##		;Get first directory entry
+		ret	nz			; and complain if none.
+		ld	de,dot_name
+		ld	bc,(DIR_START##)	;Check that first entry is
+		call	CHECK_DOT_DIR		; "." & sort out the cluster
+		ret	nz			; number.  Reject if not.
+;
+		call	DRE_NEXT##		;Similarly check that the
+		ret	nz			; ".." entry is present
+		ld	de,dot_dot_name		; and sort out its cluster
+		ld	bc,(DIR_PARENT##)	; number.
+;
+;
+CHECK_DOT_DIR:	push	bc			;Save required cluster number
+		ld	b,11
+check_dot_loop:	ld	a,(de)			;Loop to check 11 characters
+		cp	(hl)			; of name and jump to return
+		jr	nz,dot_fail_nz_1	; NZ if any of them are wrong.
+		inc	hl
+		inc	de
+		djnz	check_dot_loop
+;
+		ld	a,(hl)			;Test attributes byte and if
+		and	ATM_DIR			; it is not a sub-directory
+		cp	ATM_DIR			; then return NZ to indicate
+dot_fail_nz_1:	pop	bc			; failure.
+		ret	nz
+;
+		bit	7,b			;If required cluster is -ve
+		jr	z,not_root_clu		; then set it to zero since
+		ld	bc,0			; this is what should be in
+not_root_clu:					; the entry.
+;
+		ld	de,DR_CLU-DR_ATTR	;Get cluster number from
+		add	hl,de			; directory entry and compare
+		ld	e,(hl)			; it with the one passed in BC.
+		inc	hl
+		ld	d,(hl)
+		ex	de,hl
+		sbc	hl,bc			;Return Z if cluster number is
+		ret	z			; correct.
+;
+		ex	de,hl			;If cluster number was wrong
+		ld	(hl),b			; correct it and mark the
+		dec	hl			; sector buffer dirty so it
+		ld	(hl),c			; will get written to disk.
+		call	DIRTY_BUFFER##
+;
+		ld	a,__CRD_MSG##
+		jp	QER_MSG##		;Report that the directory was
+						; dubious but has been (or
+						; would be fixed).
+;
+;
+dot_dot_name:	db	"..         "		;These are the two names
+dot_name:	db	".          "		; which we check for.
+;
+;
+;******************************************************************************
+;
+SCAN_FAT:
+;
+;    This routine scans through the FAT in memory locating all  lost  clusters
+; and  counting  up how many there are and in how many chains.  It also counts
+; up free, bad and reserved clusters.  It is organised as  a  series  of  four
+; passes through the FAT.  The function of each pass is as follows:
+;
+; PASS 1 - Examines all clusters which are not in file chains looking for
+;	     bad clusters (value FF7h) and reserved clusters (values FF0h...
+;	     FF6h).  Any such clusters have their FL_CHAIN bit set so that
+;	     they will not be treated as lost clusters.  A seperate count
+;	     of reserved and bad clusters is kept.
+;
+; PASS 2 - Sets the FL_LOST flag of all clusters which are not in a file chain
+;	     and which are refered to by a cluster which is not in a file
+;	     chain.  This marks all clusters which are lost and are not the
+;	     start of a lost chain.  If such a cluster is already flagged then
+;	     it is a potential cross link so the new cluster which refers to
+;	     it is set to FFFh (end of chain).  If a cluster which is not in
+;	     a file chain refers to a cluster which is in a file chain (has its
+;	     FL_CHAIN flag set) then this first cluster will be set to FFFh to
+;	     prevent cross links into existing files.
+;
+; PASS 3 - Counts up lost and free clusters.  Lost clusters are any which have
+;	     the FL_CHAIN flag clear and either the FL_LOST flag set, or have
+;	     a non-zero value.  Free clusters are those with FL_CHAIN and
+;	     FL_LOST both clear and a zero value.  In addition, the number of
+;	     lost chains is counted by counting up the lost clusters which
+;	     do not have the FL_LOST flag set.  Each chain is followed and all
+;	     clusters in them have their FL_CHK flag set.  This is so that the
+;	     next pass can identify isolated loops.
+;
+; PASS 4 - Breaks any isolated loops of lost clusters.  Any cluster which is
+;	     not in a file chain and has its FL_LOST flag set and FL_CHK
+;	     clear must be in an isolated loop.  The loop is broken by setting
+;	     the cluster to 0FFFh, clearing the FL_LOST flag of the cluster it
+;	     used to refer to (to indicate the start of a chain) and then
+;	     walking down the chain setting the FL_CHK flag of each cluster.
+;	     Also the lost chain count is incremented.
+;
+;    The  result of this is that the number of clusters in all catagories, and
+; the number of lost chains is known.  In addition the lost chains  will  have
+; been  tidied  up  so  that they can be turned directly into files if this is
+; what the user wants.
+;
+;
+;	+++++++  PASS 1.  Find bad and reserved clusters.  +++++++
+;
+;
+		ld	de,(TOT_CLU##)
+pass_1_loop:	dec	de
+		call	NEXT_CLU##		;Get next cluster and exit
+		jr	nz,pass_1_done		; when done them all.
+		bit	FL_CHAIN,a		;Ignore cluster if it is
+		jr	nz,pass_1_loop		; already in a chain.
+;
+		ld	bc,0FF7h
+		or	a			;If value of cluster is FF7h
+		sbc	hl,bc			; then must be a bad cluster
+		jr	z,bad_cluster		; so jump.
+		ld	bc,0FF0h-0FF7h
+		or	a			;Values FF0h...FF6h are
+		sbc	hl,bc			; reserved clusters so ignore
+		jr	c,pass_1_loop		; all others.
+;
+		ld	hl,RES_CLU##
+		jr	got_res_addr		;Increment the appropriate
+bad_cluster:	ld	hl,BAD_CLU##		; 16 bit count for bad or
+got_res_addr:	inc	(hl)			; reserved clusters.
+		jr	nz,no_inc16_carry
+		inc	hl
+		inc	(hl)
+no_inc16_carry:
+;
+		call	F_FAT##
+		inc	hl			;Flag the cluster as being in
+		set	FL_CHAIN,(hl)		; a chain so it will not be
+		jr	pass_1_loop		; treated as lost.
+;
+pass_1_done:
+;
+;
+;	+++++++  PASS 2.  Find lost chains.  +++++++
+;
+;
+		ld	de,(TOT_CLU##)
+pass_2_loop:	dec	de
+		call	NEXT_CLU##		;Get next cluster and exit
+		jr	nz,pass_2_done		; when done whole FAT.
+		bit	FL_CHAIN,a		;Ignore cluster if it is in
+		jr	nz,pass_2_loop		; a file chain.
+;
+		push	de
+		ex	de,hl			;Find the cluster which this
+		call	F_FAT##			; one refers to and do nothing
+		pop	de			; if it is not a valid cluster
+		jr	nz,pass_2_loop
+		inc	hl			;If the referenced cluster is
+		bit	FL_CHAIN,(hl)		; in a file chain then must
+		jr	nz,kill_reference	; kill the reference.
+		bit	FL_LOST,(hl)		;Flag the referenced cluster
+		set	FL_LOST,(hl)		; but if it was already flagged
+		jr	z,pass_2_loop		; then kill the new reference.
+;
+kill_reference:	call	F_FAT##
+		ld	(hl),0FFh		;Set the original cluster
+		inc	hl			; value to 0FFh in order
+		ld	a,(hl)			; to kill the invalid
+		or	0Fh			; reference.
+		ld	(hl),a
+if	1
+		call	DIRTY_FAT
+endif
+		jr	pass_2_loop
+;
+pass_2_done:
+;
+;	+++++++  PASS 3.  Count lost and free clusters	+++++++
+;
+;
+		ld	de,(TOT_CLU##)
+pass_3_loop:	dec	de
+		call	NEXT_CLU##		;Get next cluster and exit
+		jr	nz,pass_3_done		; when done whole FAT.
+		bit	FL_CHAIN,a		;Ignore cluster if it is in
+		jr	nz,pass_3_loop		; a file chain.
+;
+		bit	FL_LOST,a		;If already referenced then
+		jr	nz,lost_cluster		; must be a lost cluster.
+		ld	a,h
+		or	l			;If unreferenced and value is
+		jr	z,free_cluster		; zero then must be free.
+;
+		call	LOST_CHAIN		;Start of lost chain so
+						; account for it.
+lost_cluster:	ld	hl,LST_CLU##
+		jr	got_lost_addr		;Increment the appropriate
+free_cluster:	ld	hl,AVL_CLU##		; 16 bit counter for lost
+got_lost_addr:	inc	(hl)			; or free clusters.
+		jr	nz,no_inc_16_carry
+		inc	hl
+		inc	(hl)
+no_inc_16_carry:
+		jr	pass_3_loop
+;
+pass_3_done:
+;
+;
+;	+++++++  PASS 4.  Turn isolated loops into chains  +++++++
+;
+;
+		ld	de,(TOT_CLU##)
+pass_4_loop:	dec	de
+		call	NEXT_CLU##		;Get next cluster and exit
+		jr	nz,pass_4_done		; when done whole FAT.
+		bit	FL_LOST,a		;Ignore any cluster unless it
+		jr	z,pass_4_loop		; a lost cluster which has
+		bit	FL_CHK,a		; not been found in a chain
+		jr	nz,pass_4_loop		; yet.
+;
+		push	de			;Found an isolated loop.
+		push	hl
+		call	F_FAT##			;Set the value of the cluster
+		ld	(hl),0FFh		; to FFFh to indicate end of
+		inc	hl			; the chain.
+		ld	a,(hl)
+		or	0Fh
+		ld	(hl),a
+if	1
+		call	DIRTY_FAT
+endif
+		pop	de			;Clear the FL_LOST flag in the
+		call	F_FAT##			; cluster it used to refer to
+		inc	hl			; to mark the start of the
+		res	FL_LOST,(hl)		; chain.
+		call	LOST_CHAIN		;Account for the new chain
+		pop	de
+		jr	pass_4_loop		;Loop to look for more loops.
+;
+pass_4_done:	jp	SF_DEBUG##
+;
+;
+;------------------------------------------------------------------------------
+;
+LOST_CHAIN:
+;
+;    This routine is called whenever the start of  a  lost  cluster  chain  is
+; identified.   It  flags each cluster in the chain so that any isolated loops
+; may be detected.  The last cluster in the chain is checked to ensure that it
+; is a valis end of chain marker and if not it is set to 0FFFh. After this the
+; lost chain count in incremented.
+;
+; Entry:      DE = Cluster number of start of chain
+; Returns:    None
+; Corrupts:  AF,HL
+;
+		push	de			;Walk through the lost chain
+lost_loop:	call	F_FAT##			; flagging each cluster so that
+		jr	nz,lost_loop_done	; isolated loops can be
+		ld	(LAST_CLU##),de		; detected.
+		ld	e,(hl)
+		inc	hl
+		ld	a,(hl)
+		and	0Fh
+		ld	d,a
+		set	FL_CHK,(hl)
+		jr	lost_loop
+;
+lost_loop_done:	ld	de,(LAST_CLU##)		;Get last cluster in chain and
+		call	NEXT_CLU##		; see what value it is.
+		bit	7,h			;If it is correct end of chain
+		jr	nz,chain_end_ok		; value the leave it.
+		call	F_FAT##
+		ld	(hl),0FFh		;If no correct end of chain
+		inc	hl			; value then set it to 0FFFh.
+		ld	a,(hl)
+		or	0Fh
+		ld	(hl),a
+if	1
+		call	DIRTY_FAT
+endif
+;
+chain_end_ok:	pop	de			;Increment the count of lost
+		ld	hl,(LST_COUNT##)	; chains to account for this
+		inc	hl			; new one.
+		ld	(LST_COUNT##),hl
+		ret
+;
+;
+;******************************************************************************
+;
+RECOVER:
+;
+;    This routine reports any lost cluster chains if there are any and prompts
+; the user for what he wants to do with them.  They can either be recovered as
+; files in the root directory or the disk space can be freed.
+;
+;
+		ld	hl,(LST_CLU##)		;If there are no lost clusters
+		ld	a,h			; then do nothing
+		or	l
+		ret	z
+;
+		push	hl
+		ld	a,__NUL_MSG##		;Ensure that /F warning message
+		call	ER_MSG##		; has been printed if required
+		call	WR_CRLF##		;New line to look pretty
+		pop	hl
+;
+		xor	a
+		call	WR_16##			;Tell the user how many
+		ld	a,__LST1_MSG##		; lost clusters and chains
+		call	WR_PLURAL##		; there are.
+		ld	hl,(LST_COUNT##)
+		xor	a
+		call	WR_16##
+		ld	a,__LST2_MSG##
+		push	hl
+		call	WR_PLURAL##
+		pop	hl
+;
+
+ask_again:	ld	a,__CONV_MSG##		;Ask whether to recover as
+		push	hl			; files or not and get a
+		call	WR_PLURAL##		; yes/no response.
+		call	GET_YN##
+		pop	hl			;Ask again if didn't get a
+		jr	c,ask_again		; sensible response.
+		jr	z,recover_files		;Jump if files required.
+;
+;
+;	----------------------------------------
+;
+;
+		ld	bc,(LST_CLU##)
+		ld	a,(OPTIONS##)		;If /F option was specified
+		bit	0,a			; and we are freeing the lost
+		jr	z,not_freed		; clusters then add the number
+		ld	hl,(AVL_CLU##)		; of lost clusters on to the
+		add	hl,bc			; free clusters.
+		ld	(AVL_CLU##),hl
+not_freed:
+		ld	(FRED_CLU##),bc		;Record lost clusters as freed
+		ld	hl,0			; and set number of remaining
+		ld	(LST_CLU##),hl		; lost clusters to zero.
+;
+		ld	de,(TOT_CLU##)
+free_clu_loop:	dec	de
+		call	F_FAT##			;Look for any clusters which
+		jr	nz,recover_done		; are not in a file chain.
+		inc	hl
+		bit	FL_CHAIN,(hl)
+		jr	nz,free_clu_loop
+;
+		ld	a,(hl)			;Set all such clusters to
+		and	0F0h			; zero to free them
+		ld	(hl),a
+		dec	hl
+		ld	(hl),0
+if	1
+		call	DIRTY_FAT
+endif
+		jr	free_clu_loop
+;
+;
+;	------------------------------------------
+;
+;
+recover_files:	call	WR_CRLF##		;Blank line to look pretty
+		ld	hl,OPTIONS##		;Flag that files were
+		set	1,(hl)			; recovered.
+;
+		ld	de,(TOT_CLU##)
+recover_loop:	dec	de			;Look for all clusters which
+		call	NEXT_CLU##		; are not in a file chain, do
+		jr	nz,recover_done		; do not have the FL_LOST flag
+		bit	FL_CHK,a		; set and are non-zero. These
+		jr	z,recover_loop		; clusters are the start of the
+		bit	FL_LOST,a		; lost chains.
+		jr	nz,recover_loop
+		ld	a,h
+		or	l
+		jr	z,recover_loop
+;
+		push	de			;Recover this lost chain as a
+		call	RECOVER_FILE		; file.
+		pop	de
+		jr	z,recover_loop		;Loop unless directory full
+;
+		LD	a,__DRF1_MSG##		;Print out root directory full
+		CALL	WR_MSG##		; message and number of
+		ld	hl,(LST_COUNT##)	; remaining files.
+		ld	de,(REC_COUNT##)
+		scf
+		sbc	hl,de
+		inc	hl
+		jr	z,one_remaining		;Don't print the "1" if there
+		call	WR_16##			; is only one file remaining.
+		ld	a," "			;Space after the number if
+		call	WR_CHAR##		; it is printed.
+one_remaining:	ld	a,__DRF2_MSG##
+		call	WR_PLURAL##
+;
+;
+recover_done:	jp	REC_DEBUG##		;Print out debugging info.
+;
+;
+;------------------------------------------------------------------------------
+;
+RECOVER_FILE:
+;
+;    This routine recovers a single lost cluster chain as a file.   The  files
+; are  given  names  of  the form "FILExxxx.CHK" in the root directory and the
+; date and time fields are set up correctly (current date and  time).   Checks
+; are  done  to  avoid creating duplicate filenames and returns NZ if the root
+; directory becomes full.
+;
+; Entry:    DE = Cluster number of start of chain
+; Returns:  Z-flag  set  => chain was recovered OK
+;		   clear => root directory is full
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		push	de			;Save starting cluster number
+		xor	a			;Flag no free entry found yet
+		ld	(FREE_FLAG##),a
+;
+file_clash:	ld	hl,file_name+7
+file_inc_loop:	inc	(hl)			;Increment the ASCII Number
+		ld	a,(hl)			; in the file name ready
+		cp	"9"+1			; for checking for a name
+		jr	nz,file_check		; clash.
+		ld	(hl),"0"
+		dec	hl
+		jr	file_inc_loop
+;
+file_check:	ld	hl,0FFFFh		;Prepare to search root
+		ld	(DIR_START##),hl	; directory.
+;
+		call	DRE_START##		;Get first directory entry
+		jr	file_chk_go
+file_chk_loop:	call	DRE_NEXT##		;Get next directory entry
+file_chk_go:	jr	nz,file_chk_end
+		call	CHK_FREE_ENTRY		;Record free entry if
+		ld	a,(hl)			; appropriate.
+		or	a
+		jr	z,file_chk_end		;Exit if entry never been used.
+;
+		ex	de,hl
+		ld	hl,file_name		;Check for a filename clash
+		call	CMP_FNAME##		; and go on to next entry if
+		jr	nz,file_chk_loop	; no clash.
+		jr	file_clash		;File name clash so go back
+						; to try another name.
+;
+;
+file_chk_end:	ld	a,(FREE_FLAG##)		;If no free entry found then
+		inc	a			; return NZ to indicate
+		pop	de			; the error.
+		ret	nz
+		push	de
+;
+		ld	hl,SV_COPY##
+		ld	de,SV_START##		;Restore the search variables
+		ld	bc,SV_SIZE##		; for the free directory entry
+		ldir				; and get the sector back into
+		call	DRE_SAME##		; a buffer.
+;
+		ex	de,hl
+		ld	hl,file_name
+		ld	bc,11			;Copy 11 bytes of file name
+		ldir				; into the entry.
+		ex	de,hl
+		ld	a,ATM_ARC
+		ld	(hl),a			;Set up archive byte.
+		inc	hl
+		ld	b,10
+zero_ent_loop:	ld	(hl),0			;Set next 10 unused bytes to
+		inc	hl			; zero.
+		djnz	zero_ent_loop
+;
+		push	hl			;Save entry pointer
+		ld	c,_GTIME##		;Get current time from
+		call	MSX_DOS			; MSX-DOS in binary.
+		sla	l
+		sla	l			;HL = hours*256 + minutes*4
+		add	hl,hl			;HL = hours*512 + minutes*8
+		add	hl,hl			;HL = hours*1024 + minutes*16
+		add	hl,hl			;HL = hours*2048 + minutes*32
+		srl	d			;D := seconds/2
+		ld	a,l
+		add	a,d			;B:A = hours*2048 + minutes*32
+		ld	b,h			;      + seconds/2
+		pop	hl
+		ld	(hl),a			;Store this final time in
+		inc	hl			; the directory entry.
+		ld	(hl),b
+		inc	hl
+;
+		push	hl
+		ld	c,_GDATE##		;Get date in binary format
+		call	MSX_DOS			; from MSX-DOS.
+		ld	bc,1980
+		or	a			;Convert year to 0....99
+		sbc	hl,bc
+		ld	a,d
+		rra
+		rra
+		rra
+		rra				;Carry:A = month*32
+		rl	l
+		add	a,e			;B:A =   year*512 + month*32
+		ld	b,l			;      + date
+		pop	hl
+		ld	(hl),a
+		inc	hl			;Store the complete date in
+		ld	(hl),b			; the directory entry.
+		inc	hl
+;
+		pop	de
+		ld	(hl),e			;Store the starting cluster
+		inc	hl			; number of the file chain
+		ld	(hl),d			; in the directory entry.
+		inc	hl
+;
+		push	hl
+		ld	bc,0FFFFh
+file_size_loop:	call	NEXT_CLU##		;Step through file chain
+		inc	bc			; in the FAT counting the
+		ex	de,hl			; number of clusters.
+		jr	z,file_size_loop
+		ld	(CH_SIZE##),bc		;Remember number of clusters
+;
+		ld	hl,(LST_CLU##)		;Subtract this number of
+		or	a			; clusters from the lost
+		sbc	hl,bc			; clusters and add it to the
+		ld	(LST_CLU##),hl		; recovered clusters.
+		ld	hl,(REC_CLU##)
+		add	hl,bc
+		ld	(REC_CLU##),hl
+		ld	hl,(REC_COUNT##)	;Increment count of number
+		inc	hl			; of recovered files.
+		ld	(REC_COUNT##),hl
+;
+		ld	h,b
+		ld	l,c
+		ld	a,(CLU_SHIFT##)		;Convert the number of clusters
+		inc	a			; to a file size by multiplying
+		ld	b,a			; by the appropriate power of
+		xor	a			; two depending on the cluster
+clu_shift_loop:	add	hl,hl			; size.
+		adc	a,a
+		djnz	clu_shift_loop
+		ex	de,hl
+		pop	hl
+		ld	(hl),0			;Store the file size in the
+		inc	hl			; directory entry.
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ld	(hl),a
+		call	DIRTY_BUFFER##		;Flag buffer as dirty.
+;
+		ld	hl,file_record		;Display the recovered
+		call	WR_PTH2##		; file name
+		ld	a,__RFNM_MSG##
+		call	QWR_MSG##
+		ld	hl,(CH_SIZE##)		;Display its size in K.
+		xor	a
+		call	WR_CLU##
+		call	WR_CRLF##		;New line
+;
+		xor	a			; return Z-flag set to
+		ret				; indicate sucess.
+;
+;
+;
+file_record:	db	0,0,0,0,0
+file_name:	db	"FILE0000","CHK"
+;
+;
+;------------------------------------------------------------------------------
+;
+CHK_FREE_ENTRY:
+;
+;    This routine is  called  by  "RECOVER_FILE"  whenever  it  finds  a  root
+; direcory entry.  If no free entry has been found yet and if the new entry is
+; free then it is recorded as the free entry to be used for creating  the  new
+; file.
+;
+; Entry:     HL -> New directory entry
+; Returns:   None
+; Corrupts:  AF
+;
+;
+		ld	a,(FREE_FLAG##)		;Do nothing if already
+		or	a			; found a free entry.
+		ret	nz
+;
+		ld	a,(hl)
+		or	a			;Do nothing if this entry
+		jr	z,got_free_entry	; is not free.
+		cp	0E5h
+		ret	nz
+;
+got_free_entry:	ld	a,0FFh			;Flag that we have now found
+		ld	(FREE_FLAG##),a		; a free entry.
+;
+		push	hl
+		push	de
+		push	bc			;Copy the directory search
+		ld	hl,SV_START##		; variables into a save area
+		ld	de,SV_COPY##		; ready for creating the new
+		ld	bc,SV_SIZE##		; entry.
+		ldir
+		pop	bc
+		pop	de
+		pop	hl
+		ret
+;
+;
+;******************************************************************************
+;
+SAVE_FAT:
+;
+;    This  routine  writes  the  modified  FAT back to disk from memory.  This
+; involves  packing  the  entries  back  up  into  12  bits  each  by  calling
+; "PUT_NYBBLE" three times for each entry.  When all entries have been written
+; the last FAT sector is padded out with 07h nybbles to keep things neat.
+;
+;
+if	1
+		ld	a,(DFAT_FLAG##)		;FAT needs to be written back?
+		and	a
+		ret	z			;no, return soon
+endif
+		ld	de,(FAT_START##)	;DE' := first sector of FAT
+		ld	bc,0			;BC' := initial nybble count
+		exx
+		ld	hl,(FAT##)		;HL -> start of FAT in RAM
+		ld	bc,(TOT_CLU##)		;BC := cluster count
+;
+save_fat_loop:	ld	a,(hl)
+		call	PUT_NYBBLE		;Put lowest nybble of FAT
+		ld	a,(hl)			; entry in.
+		rlca
+		rlca
+		rlca
+		rlca				;Put next nybble of FAT entry
+		call	PUT_NYBBLE		; in.
+		inc	hl
+		ld	a,(hl)
+		call	PUT_NYBBLE		;Put highest nybble of FAT
+		inc	hl			; entry in
+		dec	bc
+		ld	a,b
+		or	c			;Loop back 'til done all
+		jr	nz,save_fat_loop	; entries
+;
+pad_fat_loop:	exx				;Pad out last sector with
+		ld	a,b			; 0777h entries until the
+		or	c			; nybble count goes to zero.
+		jp	z,SV_DEBUG##
+		exx
+		ld	a,0Fh
+		call	PUT_NYBBLE
+		jr	pad_fat_loop
+;
+;
+;------------------------------------------------------------------------------
+;
+PUT_NYBBLE:
+;
+;    This routine adds a single nybble to the bufferred FAT sector.  A  nybble
+; count is kept in BC' and a pointer in HL'.  If the nybble count is zero then
+; a new buffer is obtained for the sector  (and  HL'  need  not  be  valid  on
+; entry).  This will normally result in the old sector being written out.
+;
+; Entry:     BC' = Count of nybbles left in sector (0...1023)
+;	     DE' = Next logical sector number
+;	     HL' = Current location in buffer (undefined if BC'=0)
+;	      A  = Value of nybble to store (bits 4...7 ignored)
+; Returns:   BC',DE',HL' = updated accordingly
+; Corrupts:   AF,BC',DE',HL'
+;
+;
+		push	af			;Save new nybble value
+		exx
+		ld	a,b			;If there is space left in
+		or	c			; current buffer then skip.
+		jr	nz,same_sector
+;
+		call	G_FAT_BUFF##		;If new sector needed then
+		call	DIRTY_BUFFER##		; get a buffer for it and
+		inc	de			; mark it as dirty.
+		ld	bc,1024			;Re-initialise nybble counter.
+;
+same_sector:	pop	af			;Get new nybble value.
+		rrd				;Rotate it into current byte
+		bit	0,c
+		jr	z,sv_low_nybble		;If finished byte then point
+		inc	hl			; on to next one.
+sv_low_nybble:	dec	bc
+		exx				;Restore main registers and
+		ret				; return.
+;
+;
+;******************************************************************************
+;
+CROSS_CHECK:
+;
+;    This  routine  checks  for  cross  linked  files.   If they exist then no
+; corrective action is taken but warning messages are printed.   If  the  file
+; list is still active then each cross linked file is displayed along with the
+; cross linked cluster number.  If the  file  list  is  dead  then  a  general
+; warning message is printed.
+;
+;
+		ld	hl,ER_FLAGS##		;Do nothing if there are
+		bit	3,(hl)			; no cross linked files.
+		ret	z
+;
+		res	4,(hl)			;Flag no path error printed
+						; yet (ensures that a blank
+						; line will be left).
+		set	5,(hl)			;Suppress the "/F" warning
+						; message printing.
+;
+		bit	2,(hl)			;If file list is dead then
+		ld	a,__QXL_MSG##		; just print a general
+		jp	nz,WR_MSG##		; warning message.
+;
+xlink_loop:	ld	hl,(FILE_PTR##)		;If have reached end of file
+		ld	de,(TPA_TOP##)		; list then return.
+		or	a
+		sbc	hl,de
+		ret	z
+;
+		ld	hl,(FILE_PTR##)		;Ignore this record if it
+		bit	AT_VOL,(hl)		; is a volume name.
+		jr	nz,xlink_next
+;
+		inc	hl
+		ld	e,(hl)			;Get start cluster of this
+		inc	hl			; file or directory.
+		ld	d,(hl)
+chk_xlink_loop:	call	NEXT_CLU##		;Walk through chain until the
+		jr	nz,xlink_next		; end or until a cross linked
+		bit	FL_XLINK,a		; cluster found.
+		ex	de,hl
+		jr	z,chk_xlink_loop
+;
+		push	hl			;Found a cross linked cluster
+		call	WR_PATH##		; so display the path name.
+		call	WR_CRLF##
+		ld	a,__XLK1_MSG##		;Display "Is cross linked at
+		call	WR_MSG##		; cluster " message.
+		pop	hl
+		xor	a
+		call	WR_16##			;Append the cluster number
+		ld	a,__XLK2_MSG##		; and put a full stop and
+		call	WR_MSG##		; new line on.
+;
+xlink_next:	ld	hl,(FILE_PTR##)		;Point on to next record in
+		ld	de,16			; the file list and loop
+		add	hl,de			; back to process it.
+		ld	(FILE_PTR##),hl
+		jr	xlink_loop
+;
+;
+;******************************************************************************
+;
+PRINT_INFO:
+;
+;    This  routine  prints out the statistics about the disk.  It also flushes
+; disk buffers in case any were left dirty.
+;
+;
+		call	FLUSH##			;Get rid of dirty buffers
+		call	WR_CRLF##		;New line for neatness
+;
+		ld	hl,(TOT_CLU##)		;Adjust the total number of
+		dec	hl			; clusters to not include
+		dec	hl			; the first two.
+		ld	(TOT_CLU##),hl
+;
+		ld	ix,INFO_TABLE
+info_loop:	bit	7,(ix+0)		;Exit if reached end of
+		ret	nz			; the table
+;
+		ld	l,(ix+1)
+		ld	h,(ix+2)		;HL := cluster count pointer
+		ld	e,(ix+4)
+		ld	d,(ix+5)		;DE := file count pointer
+;
+		ld	a,d
+		or	e
+		jr	z,no_file_count
+		ex	de,hl			;If file count is present in
+		ld	a,(hl)			; this item then check
+		inc	hl			; whether it is zero and only
+		or	(hl)			; display the item if not.
+		dec	hl
+		ex	de,hl
+		jr	z,ignore_item
+		jr	display_item
+;
+no_file_count:	bit	0,(ix+0)		;No file count, skip if zero
+		jr	nz,display_item		; cluster count should be shown
+		ld	a,(hl)
+		inc	hl			;Otherwise don't print the
+		or	(hl)			; item if cluster count is
+		dec	hl			; zero.
+		jr	z,ignore_item
+;
+display_item:	ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a			;Display cluster count
+		ld	a," "			; as a number of K, with
+		call	WR_CLU##		; leading spaces.
+;
+		ld	a,(ix+3)		;Get next message number
+		bit	1,(ix+0)		;If the "is/would be" flag is
+		jr	z,dont_inc_msg		; set (bit-1 of IX+0) and the
+		ld	hl,OPTIONS##		; /F options was not given then
+		bit	0,(hl)			; increment the message number
+		jr	nz,dont_inc_msg		; to select the "would be"
+		inc	a			; version of the message.
+dont_inc_msg:	or	a
+		call	nz,WR_MSG##		;Print the message if required
+;
+		ex	de,hl
+		ld	a,h			;If file count pointer is zero
+		or	l			; then we won't print it.
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)			;HL := file count value
+		ld	l,a
+		push	hl			;Save count for plural test
+		ld	a,0			;Print the file count unless
+		call	nz,WR_16##		; the pointer was zero.
+;
+		ld	a,(ix+6)		;Display the main type message
+		or	a			; if required.
+		call	nz,WR_MSG##
+;
+		ld	a,(ix+7)		;Get next message number
+		or	a
+		pop	hl			;Print the message in singular
+		call	nz,WR_PLURAL##		; or plural as required.
+;
+;
+ignore_item:	ld	de,1+2+1+2+1+1		;Point IX at next item
+		add	ix,de			; and loop back to display
+		jr	info_loop		; it.
+;
+;
+;	--------------------------------
+;
+INFO_TABLE:	db	00000000b
+		dw	TOT_CLU##	;nK total disk space
+		db	0
+		dw	0
+		db	__TOT_MSG##
+		db	0
+;
+		db	00000000b
+		dw	BAD_CLU##	;nK in bad clusters
+		db	0
+		dw	0
+		db	__BAD_MSG##
+		db	0
+;
+		db	00000000b
+		dw	RES_CLU##	;nK in reserved clusters
+		db	0
+		dw	0
+		db	__RES_MSG##
+		db	0
+;
+		db	00000010b	;"Is/Would be" flag
+		dw	FRED_CLU##	;    nK disk space freed
+		db	__FRED_MSG##	; OR nK disk space would be freed
+		dw	0
+		db	0
+		db	0
+;
+		db	00000110b	;"Is/Would be" flag (& 2nd flag)
+		dw	REC_CLU##	;    nK in 2 recovered files
+		db	__IN_MSG##	; OR nK would be in 2 recovered files
+		dw	REC_COUNT##
+		db	0
+		db	__RCV_MSG##
+;
+		db	00000010b	;"Is/Would be" flag
+		dw	LST_CLU##	;    nK still in lost clusters
+		db	__LST_MSG##	; OR nK would still be in lost clusters
+		dw	0
+		db	0
+		db	0
+;
+		db	00000000b
+		dw	FIL_CLU##	;nK in 2 user files
+		db	__IN_MSG##
+		dw	FIL_COUNT##
+		db	0
+		db	__USER_MSG##
+;
+		db	00000000b
+		dw	SYS_CLU##	;nK in 2 system files
+		db	__IN_MSG##
+		dw	SYS_COUNT##
+		db	0
+		db	__SYS_MSG##
+;
+		db	00000000b
+		dw	HID_CLU##	;nK in 2 hidden files
+		db	__IN_MSG##
+		dw	HID_COUNT##
+		db	0
+		db	__HID_MSG##
+;
+		db	00000000b
+		dw	DIR_CLU##	;nK in 2 directories
+		db	__IN_MSG##
+		dw	DIR_COUNT##
+		db	0
+		db	__DIR_MSG##
+;
+		db	00000001b
+		dw	AVL_CLU##	;nK available disk space
+		db	0		;The count address is zero as a
+		dw	0
+		db	__AVL_MSG##	; code to ensure that a zero value
+		db	0		; will be printed for this one.
+;
+		db	10000000b	;End of table
+;
+
+if	1
+
+;
+;	Indicate that FAT read into buffer (pointed to by FAT##) is
+;	dirty so needs to be written back.
+;
+;		JeyS
+;
+DIRTY_FAT:
+		push	af
+		ld	a,1
+		ld	(DFAT_FLAG##),a
+		pop	af
+		ret
+
+endif
+
+;
+;
+;*********************************************************************
+;
+	finish	<MAIN>
+	end	ENTRY
+;

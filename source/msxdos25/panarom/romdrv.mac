@@ -1,0 +1,1029 @@
+	TITLE	SRAMDRV - MSXDOS disk driver for A1STV ROM/SRAM disk
+
+	.Z80
+
+rdslt	equ	000ch
+wrslt	equ	0014h
+snsmat	equ	0141h
+drvtbl	equ	0FB21h
+
+media_id	equ	0ffh
+
+rom_mapper_slot	equ	10001111b	; slot 3-3
+
+mapper_write	equ	7000h
+mapper_read	equ	7ff4h
+mapper_exp	equ	7ff8h
+mapper_control	equ	7ff9h
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Built-in software on/off switch
+;
+sysreg		equ	0e4h
+sysdat		equ	0e5h
+
+sw_in		equ	5
+built_in_bit	equ	6		; 0 - off, 1 - on
+built_in_mask	equ	01000000b
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+fat_sec_std		equ	1
+fat_sec_opt		equ	4
+dir_sec_std		equ	7
+dir_sec_opt		equ	8
+dat_sec_std_0		equ	9
+dat_sec_std_1		equ	516
+dat_sec_opt		equ	1031
+
+fat_sec_std_ofs		equ	0
+fat_sec_opt_ofs		equ	3
+dir_sec_std_ofs		equ	3
+dir_sec_opt_ofs		equ	4
+dat_sec_std_0_ofs	equ	4
+dat_sec_std_1_ofs	equ	516
+dat_sec_opt_ofs		equ	1026
+
+std_0_bank		equ	100h
+std_1_bank		equ	0a9h
+opt_bank		equ	140h
+patch_bank		equ	0c0h
+
+.comment	%
+
+	8192 bytes/bank
+	 512 bytes/sector
+		->	16 sectors/bank
+
+ROM disk
+
+	STANDARD ROM DISK		OPTIONAL ROM DISK
+
+	bank 100	+-------+	bank 140	+-------+
+			| BOOT 0|			| Sign.	|
+			+-------+			+-------+
+			| FAT  1|			| FAT  4|
+			+-------+			+-------+
+			| FAT  2|			| FAT  5|
+			+-------+			+-------+
+			| FAT  3|			| FAT  6|
+			+-------+			+-------+
+			| DIR  7|			| DIR  8|
+			+-------+			+-------+
+			| DAT  9|			|DAT1031|
+			+-------+			+-------+
+			    :				    :
+			+-------+			+-------+
+			| DAT 19|			|DAT1041|
+			+-------+			+-------+
+	bank 101..11f	  DAT 20..515	bank 141..17f	 DAT1042..2049
+	bank  a9.. b7	  DAT516..755
+
+	dummy		  DAT756..1030
+
+	PATCH ROM DISK
+
+	bank c0, c4, c8, cc, d0, d4, d8, dc
+
+			+-------+
+			| Sign. |
+			+-------+
+			| TABLE |
+			+-------+
+			| PAT  2|
+			+-------+
+			    :
+			+-------+
+			| PAT 15|
+			+-------+
+	bank c1..df	  PAT 16..511
+
+		patch_table:
+				defb	number_of_patches
+
+				defw	wrong_sector_1
+					:
+				defw	wrong_sector_n
+
+				defw	patch_sector_1
+					:
+				defw	patch_sector_n
+
+%
+
+sram_bank	equ	82h
+fat_address	equ	8000h+1fc0h
+fat_len		equ	40h
+
+.comment	%
+
+SRAM disk
+
+	Sector 0	Boot sector 	(resides in the disk driver)
+	Sector 1	FAT		(in bank 81 to save disk space)
+	Sector 2	Directory	(1 sector, total 16 entries)
+	Sector 3..33	Data
+
+	bank 81	  0000h	+-------+
+			|	|
+			|	|
+			|	|
+			|	|
+		  1fc0h	+-------+	FAT
+	bank 82	  0000h	+-------+	signature (last 14 bytes)
+			|  DIR	|
+		  0200h	+-------+
+			|	|
+			|  DATA	|
+			|	|
+	bank 83	  0000h	+-------+
+			|	|
+			|	|
+			|  DATA	|
+			|	|
+			|	|
+		  1fffh	+-------+
+%
+
+;
+;	MSX system specific constants
+;
+CR	EQU	0DH
+LF	EQU	0AH
+;
+;	external symbols
+;
+	EXTRN	PROMPT
+	EXTRN	GETSLOT 	;get slot  address  (i.e.,  where  I am)
+				;in [A]
+	EXTRN	GETWRK		;get base  of  work  area  in  [IX]  and
+				;[HL]
+	EXTRN	DIV16		;[BC] =  [BC]/[DE],  remainder	in  [HL]
+	EXTRN	XFER		;block transfer routine
+	EXTRN	$SECBUF 	;pointer to  sector  buffer for physical
+				;driver
+	EXTRN	RAMAD0,RAMAD1,RAMAD2,RAMAD3
+	EXTRN	ENASLT
+	EXTRN	RAWFLG		;read after write flag
+	EXTRN	SETINT,PRVINT
+	EXTRN	DISINT,ENAINT
+	EXTRN	$DOSON
+
+;
+;	Definition of my own work area
+;
+	extrn	fdnum, flags, map_control_save, map_save, map_exp_save
+if	0
+	extrn	opt_rom		; m80 accepts 'bit <external_val>,<reg>'
+	extrn	patch_rom	;  but the linked code will be
+				;  'bit 0,<reg>' !
+else
+	opt_rom		equ	7
+	patch_rom	equ	6
+endif
+
+;
+;	drive parameters supported by this cartridge
+;
+ROM_DPBTBL:
+	DEFB	media_id	;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	0		;CLUSMSK
+	DEFB	1		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	1		;FATCNT
+	DEFB	32		;MAXENT
+	DEFW	9		;FIRREC
+	DEFW	2041+1		;MAXCLUS
+	DEFB	6		;FATSIZ
+	DEFW	7		;FIRDIR
+
+SRAM_DPBTBL:
+	DEFB	media_id	;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	0		;CLUSMSK
+	DEFB	1		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	1		;FATCNT
+	DEFB	16		;MAXENT
+	DEFW	3		;FIRREC
+	DEFW	31+1		;MAXCLUS
+	DEFB	1		;FATSIZ
+	DEFW	2		;FIRDIR
+
+	public	is_romdisk
+is_romdisk:
+	push	bc
+	push	hl
+	push	af
+	call	getwrk
+	pop	af
+	cp	(ix+fdnum)	; if FD        ->  C, NZ
+				; if ROM disk  -> NC,  Z
+				; if SRAM disk -> NC, NZ
+	pop	hl
+	pop	bc
+	ret
+
+	SUBTTL	write
+	PAGE
+;
+;	DSKIO entry
+;
+	PUBLIC	a_DSKIO
+a_DSKIO:
+	pop	af
+	call	save_mapper
+	JP	NC,READ 	;if no carry, we should read
+;
+;	Write a sector
+;
+; inputs:
+;	[B]  = sector count to write
+;	[DE] = logical sector number
+;	[HL] = transfer address
+;
+; outputs:
+;	if successful, return with carry flag reset
+;	otherwise,     return with carry flag set,
+;		       error code in [A],
+;		       number of sectors remaining in [B]
+;
+;	AF, BC, DE and HL can be modified
+;
+WRITE:
+	sub	(ix+fdnum)	; ROM disk?
+	scf			; assume so
+	jr	z,dskio_done	; good assumption, return 'write protected'
+sram_wrloop:
+	push	bc
+	call	sram_write_sub
+	pop	bc
+	djnz	sram_wrloop
+dskio_done_no_error:
+	and	a		; always no error
+dskio_done:
+	jp	close_mapper
+
+	SUBTTL	read
+	PAGE
+;
+;	Read sectors
+;
+; inputs:
+;	[B]  = sector count to read
+;	[DE] = logical sector number
+;	[HL] = transfer address
+;
+; outputs:
+;	if successful, return with carry flag reset
+;	otherwise,     return with carry flag set,
+;		       error code in [A],
+;		       number of sectors remaining in [B]
+;
+;	AF, BC, DE and HL can be modified
+;
+READ:
+	sub	(ix+fdnum)	; ROM disk?
+	jr	nz,sram_rdloop	; no, read SRAM disk
+rom_rdloop:
+	push	bc
+	call	rom_read_sub
+	pop	bc
+	djnz	rom_rdloop
+	jr	dskio_done_no_error
+				; always no error
+
+sram_rdloop:
+	push	bc
+	call	sram_read_sub
+	pop	bc
+	djnz	sram_rdloop
+	jr	dskio_done_no_error
+				; always no error
+
+;
+;
+;	Subroutines (read/write SRAM, read ROM)
+;
+;
+sram_write_sub:
+	ld	a,e
+	and	a		; boot sector?
+	jr	nz,sram_write_not_boot
+				; no
+	inc	de		; ignore this
+	ld	bc,512
+	add	hl,bc
+	ret
+
+sram_write_not_boot:
+;
+;	target -> $secbuf
+;
+	push	de		; save sector number
+	ld	de,($secbuf)
+	ld	bc,512
+	ldir
+	pop	de		; restore sector number
+;
+;	$secbuf -> SRAM
+;
+	push	hl		; save target address
+	push	de		; save sector number
+	call	open_sram
+	ex	de,hl
+	ld	hl,($secbuf)
+	ldir
+	call	close_mapper
+	pop	de		; restore sector number
+	inc	de
+	pop	hl		; restore target address
+	ret
+
+sram_read_sub:
+	ld	a,e
+	and	a		; boot sector?
+	jr	nz,sram_read_not_boot
+				; no
+;
+;	SRAM boot sector (in ROM) -> target
+;
+	ex	de,hl
+	ld	hl,sram_boot_sec
+	ld	bc,sram_boot_sec_len
+	ldir
+	ex	de,hl
+	ld	de,512-sram_boot_sec_len
+	add	hl,de
+	ld	de,1		; prepare next sector number
+	ret
+
+rom_read_sub:
+	push	de		; save sector number
+	push	hl		; save target address
+	call	open_rom
+	jr	read_sub_cont
+
+sram_read_not_boot:
+	push	de		; save sector number
+	push	hl		; save target address
+	call	open_sram
+read_sub_cont:
+;
+;	SRAM/ROM -> $secbuf
+;
+	ld	de,($secbuf)
+	ldir
+	call	close_mapper
+;
+;	$secbuf -> target
+;
+	pop	de		; restore target address
+	ld	hl,($secbuf)
+	ld	bc,512
+	ldir
+	ex	de,hl
+	pop	de		; restore sector number
+	inc	de
+	ret
+
+;
+;	open_rom
+;	open_sram
+;
+;	Entry:	DE = sector number
+;	Exit:	HL = pointer to target sector within a window
+;		BC = sector size
+;	Regs:	AF, DE may be affected
+;
+open_rom:
+	call	rom_calc_target
+	jr	open_mapper
+
+open_sram:
+	call	sram_calc_target
+open_mapper:
+	push	hl		; save address in window
+	push	bc		; save length
+	ld	e,a		; set mapper # low
+	ld	d,(ix+map_exp_save)
+	res	4,d		; set mapper # high (0)
+	jr	nc,open_mapper_1
+				; bank 00..FF specified
+	set	4,d		; bank above 100h specified
+open_mapper_1:
+	di
+	call	set_rom_mapper
+	ld	h,80h
+	ld	a,rom_mapper_slot
+	call	enaslt
+	pop	bc		; restore length
+	pop	hl		; restore address in window
+	ret
+
+;
+;	close_mapper
+;
+;	Entry:	none
+;	Exit:	none
+;	Regs:	AF must be preserved
+;
+close_mapper:
+	push	af
+	ld	h,80h
+	ld	a,(ramad2)
+	call	enaslt
+	ld	e,(ix+map_save)
+	ld	d,(ix+map_exp_save)
+	call	set_rom_mapper
+	ei
+	pop	af
+	ret
+
+;
+;	set_rom_mapper
+;
+;	Entry:	DE = new status of ROM mapper registers
+;	Exit:	none
+;	Regs:	All registers may be affected
+;
+set_rom_mapper:
+	push	de
+	ld	e,00011100b
+	ld	hl,mapper_control
+	call	write_reg
+	pop	de
+	push	de
+	ld	hl,mapper_write
+	call	write_reg
+	pop	de
+	ld	e,d
+	ld	hl,mapper_exp
+	call	write_reg
+	ld	e,(ix+map_control_save)
+	ld	hl,mapper_control
+	jp	write_reg
+
+save_mapper:
+	push	hl
+	push	de
+	push	bc
+	push	af
+	call	getwrk		; set up IX
+	ld	(ix+map_control_save),0
+;
+;	Read all registers
+;
+	ld	hl,mapper_control
+	ld	b,10
+read_regs:
+	call	read_reg
+	ei
+	push	af
+	dec	hl
+	djnz	read_regs
+;
+;	Enable all registers
+;
+	ld	e,00011100b
+	ld	hl,mapper_control
+	di
+	call	write_reg
+;
+;	Guess BE (Bank register read Enable) bit
+;
+	ld	hl,7ff0h
+	ld	c,0
+	ld	b,8
+cmp_regs:
+	call	read_reg
+	pop	de
+	cp	d
+	jr	z,same_bank
+	ld	c,1
+same_bank:
+	inc	hl
+	djnz	cmp_regs
+	ld	a,c
+	and	a
+	jr	nz,be_off
+	set	2,(ix+map_control_save)
+be_off:
+;
+;	Guess EE (Extended mapper register access Enable) bit
+;
+	call	read_reg
+	pop	de
+	cp	d
+	jr	nz,ee_off
+	set	4,(ix+map_control_save)
+ee_off:
+;
+;	Guess CE (Control register read Enable) bit
+;
+	pop	af		; restore mapper_control
+	bit	3,a		; read as 1?
+	jr	z,ce_off	; no, CE cannot be on
+if	0
+	and	00010100b	; leave EE and BE
+else
+	and	11110111b	; this is safer if unused bits of
+				; mapper_control is guaranteed to be all 0's
+endif
+	cp	(ix+map_control_save)
+				; are these 2 bits correct?
+	jr	nz,ce_off	; no
+	set	3,(ix+map_control_save)
+ce_off:
+	ld	hl,mapper_read
+	call	read_reg
+	ld	(ix+map_save),a
+	ld	hl,mapper_exp
+	call	read_reg
+	ld	(ix+map_exp_save),a
+	ld	e,(ix+map_control_save)
+	ld	hl,mapper_control
+	call	write_reg
+	ei
+	pop	af
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+read_reg:
+	push	hl
+	push	bc
+	ld	a,rom_mapper_slot
+	call	rdslt
+	pop	bc
+	pop	hl
+	ret
+
+write_reg:
+	ld	a,rom_mapper_slot
+	jp	wrslt
+
+;
+;	sram_calc_target
+;	rom_calc_target
+;
+;	Entry:	DE = sector number
+;	Exit:	A  = bank number (bit 0..7)
+;		Cy = set   if bit 8 of bank number is 1
+;		     reset if bit 8 of bank number is 0
+;		HL = pointer to target sector within a window
+;		BC = sector size
+;	Regs:	DE may be affected
+;
+sram_calc_target:
+	dec	e		; FAT?
+	jr	nz,not_fat	; no
+;
+;	Handle FAT differently
+;
+	ld	hl,fat_address
+	ld	bc,fat_len
+	ld	a,low (sram_bank-1)
+if	high (sram_bank-1)
+	scf
+else
+	and	a
+endif
+	ret
+
+not_fat:
+	dec	e
+	ld	a,e
+	and	00001111b
+	add	a,a
+	or	80h
+	ld	h,a
+	ld	l,0
+	ld	a,e
+	and	11110000b
+	rrca
+	rrca
+	rrca
+	rrca
+	add	a,low sram_bank
+if	high sram_bank
+	scf
+else
+	and	a
+endif
+	ld	bc,512
+	ret
+
+rom_calc_target:
+	bit	patch_rom,(ix+flags)
+				; patch ROM exists?
+	jp	nz,rom_patch	; yes
+rom_calc_cont:
+	ld	hl,-fat_sec_opt
+	add	hl,de
+	jr	nc,rom_std_first
+	ld	hl,-dir_sec_std
+	add	hl,de
+	jr	nc,rom_opt_fat
+	ld	hl,-dir_sec_opt
+	add	hl,de
+	jr	nc,rom_std_dir
+	ld	hl,-dat_sec_std_0
+	add	hl,de
+	jr	nc,rom_opt_dir
+	ld	hl,-dat_sec_std_1
+	add	hl,de
+	jr	nc,rom_std_0
+	ld	hl,-dat_sec_opt
+	add	hl,de
+	jr	nc,rom_std_1
+;
+;	Data sector of option ROM specified
+;
+rom_opt_data:
+	ld	hl,-dat_sec_opt_ofs
+rom_opt:
+	add	hl,de
+	ld	de,opt_bank
+rom_calculate:
+	push	hl		; save sector offset
+	srl	h		; divide the sector offset by 16
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	add	hl,de
+	ld	a,h		; move bit 8 of bank number to carry
+	rrca
+	ld	a,l		; move bit 0..7 of bank number to A
+	pop	hl		; restore sector offset
+	push	af		; save bank number (bit 8)
+	ld	a,l
+	and	00001111b
+	add	a,a
+	or	80h
+	ld	h,a
+	ld	l,0
+	pop	af		; restore bank number (bit 8)
+	ld	bc,512
+	ret
+
+rom_opt_fat:
+	ld	hl,-fat_sec_opt_ofs
+	jr	rom_opt_dir_fat
+
+rom_opt_dir:
+	ld	hl,-dir_sec_opt_ofs
+rom_opt_dir_fat:
+	bit	opt_rom,(ix+flags)	; optional ROM exists?
+	jr	nz,rom_opt		; yes
+;
+;	Here when FAT or directory of non-existent optional-ROM
+;	is specified. Return a null sector instead.
+;
+	ld	hl,($secbuf)	; fill secbuf with 0
+	ld	e,l
+	ld	d,h
+	inc	de
+	ld	(hl),0
+	ld	bc,512-1
+	ldir
+	ld	hl,($secbuf)	; return secbuf (cheat the caller)
+	ld	bc,512
+	xor	a
+	ret
+
+rom_std_first:
+	ex	de,hl
+rom_std:
+	ld	de,std_0_bank
+	jr	rom_calculate
+
+rom_std_dir:
+	ld	hl,-dir_sec_std_ofs
+	jr	add_rom_std
+
+rom_std_0:
+	ld	hl,-dat_sec_std_0_ofs
+add_rom_std:
+	add	hl,de
+	jr	rom_std
+
+rom_std_1:
+	ld	hl,-dat_sec_std_1_ofs
+	add	hl,de
+	ld	de,std_1_bank
+	jr	rom_calculate
+
+rom_patch:
+	push	de		; save sector number
+	ld	a,(ix+flags)
+	and	111b		; extract patch table bank
+	add	a,a
+	add	a,a
+	add	a,patch_bank
+if	high patch_bank
+	scf
+else
+	and	a
+endif
+	call	open_mapper
+	pop	de		; restore sector number
+	ld	hl,8200h
+	ld	a,(hl)
+	and	a
+	jp	z,rom_calc_cont	; no patch table (!!!), continue
+	ld	b,a		; total number of patches
+	ld	c,a		; save this for later calculation
+patch_cmp:
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	cp	e
+	jr	nz,patch_next
+	ld	a,(hl)
+	cp	d
+	jr	z,patch_found
+patch_next:
+	djnz	patch_cmp
+	jp	rom_calc_cont	; not the patched sector, continue
+
+patch_found:
+	ld	e,c		; DE = total number of patches
+	ld	d,0
+	ld	hl,8200h+1
+	add	hl,de
+	add	hl,de		; HL = top of alternative sector table
+	ld	a,c
+	sub	b
+	ld	e,a		; DE = how many entries were skipped
+	add	hl,de		; HL = pointer to alternative sector entry
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ld	de,patch_bank
+	jp	rom_calculate
+
+sram_boot_sec:
+	defb	0,0,0
+	defb	'SRAMdisk'
+	defw	512		; byte per sector
+	defb	1		; sector per cluster
+	defw	1		; number of reserved sectors
+	defb	1		; number of FATs
+	defw	16		; number of directory entries
+	defw	34		; total number of sectors on media
+	defb	media_id	; media descriptor
+	defw	1		; number of sectors per FAT
+	defw	34		; sectors per track
+	defw	1		; number of heads
+	defw	0		; number of hidden sectors
+
+sram_boot_sec_len	equ	$-sram_boot_sec
+
+	SUBTTL	initialization
+	PAGE
+
+;
+;	get number of drives to [L]
+;
+;	[HL] can be modified
+;
+	PUBLIC	a_DRIVES
+a_DRIVES:
+	ld	(ix+fdnum),l	; save number of FD drives (logical)
+	ld	h,a		; save number of drives declared so far
+	call	check_sw
+	ld	a,h
+	ret	z		; switch is OFF
+	inc	l		; add 1 for ROM disk
+	inc	l		; add 1 for SRAM disk
+	add	a,(ix+fdnum)
+	inc	a		; make it 1 based
+	ld	(boot_drv##),a
+	ld	a,h		; restore number of drives declared so far
+	ret
+
+check_sw:
+	ld	a,sw_in
+	out	(sysreg),a
+	in	a,(sysdat)
+	and	built_in_mask
+	ret	z		; NZ if switch is ON, Z if OFF
+	push	bc
+	xor	a
+	call	snsmat
+	and	00000010b	; is '1' pressed?
+	pop	bc
+	ret			; NZ if not pressed, Z if pressed
+
+;
+;	Initialize environments
+;
+;	All registers may be affected
+;
+	PUBLIC	a_INIENV
+a_INIENV:
+	call	check_sw
+	ret	z		; switch is off
+	call	save_mapper
+	ld	(ix+flags),0	; assume no optional ROM nor patch ROM
+;
+;	Check the presence of optional ROM
+;
+	ld	a,low opt_bank
+if	high opt_bank
+	scf
+else
+	and	a
+endif
+	call	open_mapper
+	ld	hl,8000h	; HL = pointer to possible signature
+	ld	de,opt_rom_sig	; DE = pointer to correct signature
+	ld	b,opt_rom_sig_len
+				; length of signature
+	call	cmp_sub
+	jr	nz,no_opt_rom	; no optional ROM installed
+	set	opt_rom,(ix+flags)
+no_opt_rom:
+;
+;	Check the presence of patch ROM
+;
+	ld	bc,800h + low patch_bank
+				; B = counter
+				; C = patch_bank
+check_patch_loop:
+if	high patch_bank
+	scf
+else
+	and	a
+endif
+	push	bc		; save counter and patch_bank
+	ld	a,c		; load patch_bank
+	call	open_mapper
+	ld	hl,8000h	; HL = pointer to possible signature
+	ld	de,patch_rom_sig
+				; DE = pointer to correct signature
+	ld	b,patch_rom_sig_len
+				; length of signature
+	call	cmp_sub
+	pop	bc		; restore counter and patch_bank
+	jr	nz,no_patch_rom	; no patch ROM installed
+	ld	a,8 + (1 shl patch_rom)
+	sub	b
+	or	(ix+flags)
+	ld	(ix+flags),a
+	jr	check_patch_done
+
+no_patch_rom:
+	ld	a,c		; update patch_bank
+	add	a,4
+	ld	c,a
+	djnz	check_patch_loop
+check_patch_done:
+;
+;	Check SRAM disk
+;
+	ld	de,1		; open FAT sector
+	call	open_sram
+	ld	de,fat_len-sram_sig_len
+	add	hl,de		; HL = pointer to possible signature
+	ld	de,sram_sig	; DE = pointer to correct signature
+	ld	b,sram_sig_len	; length of signature
+	call	cmp_sub
+	jr	nz,go_fmt
+	ld	a,7		; is ESC being pressed?
+	call	snsmat
+	and	00000100b
+	jr	nz,no_fmt	; no, do not format
+go_fmt:
+	call	sram_fmt
+no_fmt:
+	jp	close_mapper
+
+cmp_sub:
+	ld	a,(de)
+	cp	(hl)
+	ret	nz		; comparison failed, return NZ
+	inc	de
+	inc	hl
+	djnz	cmp_sub
+	ret			; return Z
+
+	SUBTTL	disk change handlers
+	PAGE
+;
+;	See if disk has been possibly changed
+;
+; inputs:
+;	[A]  = drive number ( 0 based )
+;	[B]  = 0
+;	[C]  = media descriptor
+;	[HL] = base address of DPB
+;
+	PUBLIC	a_DSKCHG
+a_DSKCHG:
+	and	a		; say no errors
+	ld	b,1		; not changed
+	ret
+
+;
+;	Build a new DPB for the specified drive.
+;
+	PUBLIC	a_GETDPB
+a_GETDPB:
+	EX	DE,HL		; move DPB address to [DE]
+	INC	DE		; skip DRVNUM entry
+	LD	hl,ROM_DPBTBL	; assume ROM disk
+	jr	z,getdpb_rom	; good assumption
+	ld	hl,sram_dpbtbl
+getdpb_rom:
+	LD	BC,18
+	LDIR
+	and	a		; no errors
+	RET
+
+	SUBTTL	disk formatter
+	PAGE
+
+	PUBLIC	a_CHOICE
+a_CHOICE:
+	LD	HL,NULL		; assume ROM disk
+	ret	z
+	ld	hl,0
+	RET
+
+NULL:	db	0
+
+	PUBLIC	a_DSKFMT
+a_DSKFMT:
+	scf			; assume ROM disk
+	ld	a,0
+	ret	z		; good assumption, return 'write protected'
+	call	save_mapper
+	call	sram_fmt
+	jp	close_mapper
+
+sram_fmt:
+;
+;	Initialize FAT
+;
+	ld	de,1		; open FAT sector
+	call	open_sram
+	ld	b,3		; write FAT ID bytes
+fmtloop1:
+	ld	(hl),media_id
+	inc	hl
+	djnz	fmtloop1
+	ld	b,fat_len-3-sram_sig_len
+				; free all clusters
+fmtloop2:
+	ld	(hl),0
+	inc	hl
+	djnz	fmtloop2
+	ex	de,hl		; write signature
+	ld	hl,sram_sig
+	ld	bc,sram_sig_len
+	ldir
+;
+;	Initialize directory
+;
+	ld	de,2		; open directory sector
+	call	open_sram
+fmtloop3:
+	ld	(hl),0
+	inc	hl
+	dec	bc
+	ld	a,c
+	or	b
+	jr	nz,fmtloop3
+	AND	A		; always no error
+	RET
+
+sram_sig:
+	defb	'SRAMdisk by JS'	; must be shorter than 15 chars
+sram_sig_len		equ	$-sram_sig
+
+opt_rom_sig:
+	defb	'option ROM'
+opt_rom_sig_len		equ	$-opt_rom_sig
+
+patch_rom_sig:
+	defb	'patch ROM'
+patch_rom_sig_len	equ	$-patch_rom_sig
+
+;		 1234567890123456
+
+	END

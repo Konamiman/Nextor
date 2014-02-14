@@ -1,0 +1,1 @@
+This is the disk drivers folder. For each subfolder of this folder, there must be a source code fot the bank switching code (CHGBNK.MAC) and a source code for the disk driver (DRIVER.MAC). The compile script will create ROM files named DOS250.(subfolder name).ROM and will copy them to the BIN folder.

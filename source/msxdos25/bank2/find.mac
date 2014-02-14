@@ -1,0 +1,1086 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	Find Functions and Pathname Handling Functions
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GCD
+;
+;    This is the "get current directory" KBDOS call which simply validates the
+; current directory for the drive by doing a call to "PAR_PATH"  with  a  null
+; string,  and  then copies the whole path string into the user's buffer using
+; the "get whole path" function routine.
+;
+; Entry:         B  = Drive number (0=>default, 1=>A: etc)
+;               DE -> User's buffer (64 bytes)
+; Returns:       A  = Status code
+;               DE  = Preserved
+;
+;
+		ld	a,b			;A := drive number
+		ld	b,0			;Clear volume name flag
+		ld	ix,FIB_1##		;Use internal scratch FIB
+		ld	c,PCM_DI+PCM_LA
+		push	de			;Parse a null pathname
+		ld	de,null_path		; string to get the whole
+		pcall	PAR_PATH		; path string.
+		pop	de
+		ret	nz
+;
+		jp	F_WPATH			;Copy the whole path string
+						; into the user's buffer.
+;
+;
+null_path:	db	0			;Null string for parsing
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_CHDIR
+;
+;    This is the "change directory" KBDOS function call.  It simply parses the
+; pathname  string  using "PAR_PATH" and if this returns no error then the new
+; cluster number and path string are copied into the unit descriptor using the
+; "get whole path" function routine.
+;
+; Entry:      DE = New pathname string
+; Returns:     A = Status code
+;
+;
+		xor	a			;Current drive is default
+		ld	b,a			;Clear volume name flag
+		ld	ix,FIB_1##		;Use internal scratch FIB
+		ld	c,PCM_DI+PCM_LA		;Parse filename, including last
+		pcall	PAR_PATH		; item and accessing disk to
+		ret	nz			; locate the sub-directory.
+		or	c			;Error if any of string left
+		ld	a,.IPATH##		; after pathname.
+		ret	nz
+;
+		ld	bc,UD_CDIR##
+		add	hl,bc
+		ld	de,(DE_START##)		;Get the validated cluster
+		ld	(hl),e			; number for the new directory
+		inc	hl			; and store it in the unit
+		ld	(hl),d			; descriptor.
+		inc	hl
+;
+		ex	de,hl			;Use "get whole path" function
+		jp	F_WPATH			; to copy the string into
+						; the unit descriptor.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_PARSE
+;
+;     This is the "parse pathname" KBDOS function.  Most of the work  is  done
+; by the "PAR_PATH" routine, this just provides an interface.
+;
+; Entry:    DE = Pointer to pathname string
+;            B = Search attributes (only AT_VOL is tested)
+; Returns:   A = Error code
+;            B = Parse flags
+;            C = Logical drive number
+;           DE = Pointer to termination character
+;           HL = Pointer to first character of filename
+;
+;
+		ld	c,PCM_ER		;No errors from WPATH
+		ld	ix,FIB_1##
+		xor	a			;Current drive is default
+		pcall	PAR_PATH
+		ld	c,(ix+FIB_DRV##)	;Get logical drive number
+		ld	de,(STR_PTR##)
+		ld	hl,(STR2_PTR##)
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_PFILE
+;
+;     This is the "parse filename" KBDOS function.  Most of the work  is  done
+; by the "PAR_ITEM" routine, this just provides an interface.
+;
+; Entry:    DE = Pointer to pathname string
+;           HL = Pointer to 11 byte buffer for filename
+; Returns:   A = Error code
+;            B = Parse flags
+;           DE = Pointer to termination character
+;           HL = Preserved, buffer filled in with filename
+;
+;
+		push	hl
+		ld	(STR_PTR##),de		;Store string pointer
+		ex	de,hl			;DE -> 11 byte buffer
+		ld	b,0			;Initialise parse flags
+		pcall	PAR_ITEM		;Parse the filename
+		ld	de,(STR_PTR##)		;DE -> terminating character
+		pop	hl			;Restore HL (buffer pointer)
+		xor	a			; and return with no error.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_CHKCHR
+;
+;    This  is  the  "check  character"  KBDOS  function  call.  It is passed a
+; character in B and a set of flags in C.  It modifies the flags appropriately
+; and returns the character possibly upper-cased.  All of the work is actually
+; done by the "CHECK_CHAR" routine, this just provides  an  interface  to  the
+; KBDOS.
+;
+; Entry:     D = Flags - PF_UP, PF_16B and PF_VOL must be set up
+;            E = Character to be tested
+; Returns:   A = 0
+;            D = Flags - PF_16B, PF_2ND and PF_TE may be modified
+;            E = Character, upper cased if PF_UP was not set
+;
+;
+		ld	a,e			;Pretty complicated isn't it!
+		ld	c,d
+		pcall	CHK_CHAR
+		ld	d,c
+		ld	e,a
+		xor	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_WPATH
+;
+;    This is the "get whole path"  KBDOS  function  which  simply  copies  the
+; string  from "WPTH_BUF" to the user's buffer.  A pointer to the start of the
+; last item of the string is returned in HL, which can be used to isolate  the
+; filename component from the end.  If the "WP_ERR" flag is non-zero then this
+; routine will return an error without copying anything, since this means that
+; the whole path string over or underflowed.  The routine is also used by  the
+; "get  current directory" and "change directory" function calls to copy whole
+; path strings.  As the copy is being done, any "01h" characters are  replaced
+; by the "\" which they actually represent.
+;
+; Entry:      DE -> 64 byte buffer
+; Returns:     A =  Error code
+;             DE -> same buffer, filled in
+;             HL -> start of last item in string (may be null)
+;
+;
+		push	de			;Save buffer pointer for return
+		ld	hl,WPTH_BUF##+2		;Point to whole path string
+		ld	c,0			;Initialise 16-bit char flags
+		push	de			;Initialise last item pointer
+;
+		ld	a,(WP_ERR##)		;Refuse to copy the string
+		or	a			; if the error flag is set.
+		jr	nz,copy_wpth_err
+;
+copy_wpth_loop:	ld	a,(hl)
+		inc	hl			;Get next character and jump
+		cp	02h			; to error if it is the
+		jr	z,copy_wpth_err		; overflow character.
+		cp	01h
+		jr	nz,not_backslash	;If character is a 01h then
+		pop	af			; replace it with a backslash
+		ld	a,"\"			; and set the last item pointer
+		inc	de			; (on the stack) to point
+		push	de			; to character after it.
+		dec	de
+not_backslash:	ld	(de),a
+		inc	de			;Put the character into the
+		or	a			; buffer and loop unless
+		jr	nz,copy_wpth_loop	; it was end of string.
+		jr	copy_wpth_end
+;
+copy_wpth_err:	ld	a,.PLONG##		;Error code for overflow.
+copy_wpth_end:	pop	hl			;Get last item pointer.
+		pop	de			;Preserve buffer pointer.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+;    This  code  does  the  "FIND  FIRST", "FIND NEW" and "FIND NEXT" function
+; calls.
+;
+; Entry:      DE = drive/path/file ASCIIZ string or fileinfo block
+;             HL = ASCIIZ filename string (if DE = fileinfo block)
+;             IX = Pointer to new fileinfo block
+;              B = Search attributes
+; Returns:     A = Status code
+;             IX = Unchanged (will have been filled in if A=0)
+;
+;
+	PROC	F_FFIRST
+		ld	a,SEM_SR		;Flag not create (SE_SRCH
+		jr	find_first_new		; flag set).
+;
+	PROC	F_FNEW
+		xor	a			;Flag doing create (SE_SRCH
+find_first_new:	ld	(SE_FLAGS##),a		; flag clear).
+;
+;
+		ld	a,(de)			;Skip if DE points to a
+		inc	a			; fileinfo block rather than
+		jr	z,find_fib		; an ASCIIZ string.
+;
+		xor	a			;Current drive is default
+		ld	c,PCM_DI+PCM_NU		;Parse the pathname, with
+		pcall	PAR_PATH		; disk access flag set and
+		ret	nz			; return if any error, or
+		or	c			; if there was garbage on
+		ld	a,.IPATH##		; the end of the string.
+		ret	nz
+		jr	find_rejoin
+;
+;
+find_fib:	push	hl			;Save ASCIIZ filename pointer
+		push	de			;Validate the drive specified
+		ex	(sp),ix			; by old FIB and download
+		call	O_FIB			; the directory variables.
+		ld	c,(ix+FIB_DRV##)	;C := drive from the old FIB
+		pop	ix
+		jp	nz,find_ret_1		;Return if error, or if it
+		ld	a,.IDEV##		; is a device FIB.
+		jp	c,find_ret_1
+;
+		push	hl			;Get the attributes byte
+		ld	hl,DR_ATTR##		; from the directory entry
+		add	hl,de			; so that we can check that
+		ld	a,(hl)			; it is a sub-directory.
+		pop	hl
+;
+		bit	AT_DIR,a		;Return an error if the
+		ld	a,.IATTR##		; entry is not for a
+		jr	z,find_ret_1		; sub-directory.
+		bit	AT_VOL,b		;Also error if searching for
+		jr	nz,find_ret_1		; volume name (can't be in a
+						; sub-directory).
+;
+		pcall	DI_INIT			;Prepare for search of
+						; this sub-directory.
+;
+		push	bc
+		push	hl			;Copy the volume-id from the
+		ld	bc,UD_ID##		; unit descriptor to the
+		add	hl,bc			; new fileinfo block.
+		push	ix
+		pop	de
+		ex	de,hl
+		ld	bc,FIB_ID##
+		add	hl,bc
+		ex	de,hl
+		ld	bc,4
+		ldir
+		pop	hl
+		pop	bc
+;
+		pop	de			;DE -> ASCIIZ filename
+		ld	a,c			;Drive number from old FIB
+		ld	c,PCM_DI+PCM_NU+PCM_ER+PCM_VA
+						;Parse the filename with flags
+		pcall	PAR_FNM			; set to extend the whole path
+		ret	nz			; string without errors, and
+		or	c			; to expand "" to "*.*".
+		ld	a,.IPATH##		;Error if garbage on the end
+		ret	nz			; of the string.
+;
+;       ----------------------------------------
+;
+find_rejoin:	bit	SE_SRCH,(iy+@SE_FLAGS##) ;If search then don't
+		jr	nz,no_template		 ; use the template.
+		bit	PF_AMB,b		 ;If filename not ambiguous
+		jr	z,no_template		 ; then don't apply template.
+;
+		push	ix
+		ex	(sp),hl			;Parse the template filename
+		ld	bc,FIB_NAME##		; as a single filename item
+		add	hl,bc			; into the second filename
+		ld	(STR_PTR##),hl		; buffer "FNM2_BUF".
+		pop	hl
+		ld	de,FNM2_BUF##
+		pcall	PAR_ITEM
+		or	a			;Error if terminator is not
+		ld	a,.IFNM##		; end of the string.
+		ret	nz
+;
+		push	hl
+		ld	hl,FNAME_BUF##		;Merge the filenames together
+		ld	de,FNM2_BUF##		; into FNAME_BUF to produce
+		ld	bc,FNAME_BUF##		; a filename which should be
+		pcall	MRG_NAME		; unambiguous.
+		pop	hl
+;
+		ld	de,FNAME_BUF##		;test whether we have a device
+		pcall	CHK_DEVICE		; name now and if so then turn
+		ld	(ix+FIB_MODE##),a	; the FIB into a device FIB.
+;
+no_template:	ld	de,FNAME_BUF##
+;
+		push	ix			;Copy the search filename
+		ex	(sp),hl			; into the "pattern" field
+		ld	bc,FIB_PAT##		; of the fileinfo block so
+		add	hl,bc			; that it will be ready
+		ex	de,hl			; for "find next"
+		push	de
+		ld	bc,8+3
+		ldir
+		pop	de			;DE -> search name in FIB
+		pop	hl
+;
+		call	FND_FIRST		;Look for the first match to
+		jr	find_fn_done		; the search filename in the
+						; FIB and jump to return it.
+;
+;
+find_ret_1:	pop	de			;Clean up stack and
+		ret				; return error code.
+;
+;       ----------------------------------------
+;
+	PROC	F_FNXT
+;
+		ld	(iy+@SE_FLAGS##),SEM_SR	;Flag not doing create
+		call	O_FIB			;Download directory variables
+		ret	nz			; ready to continue search.
+		push	ix
+		ex	(sp),hl
+		ld	de,FIB_PAT##
+		add	hl,de			;DE -> search filename at
+		ex	de,hl			;      FIB_PAT.
+		pop	hl
+		call	FND_NEXT		;Find the next matching file
+;
+;       ----------------------------------------
+;
+find_fn_done:	push	af			;Fill the user information
+		call	z,FILL_FIB		; into the FIB from directory
+		pop	af			; entry if there is one.
+;
+		call	GT_DVARS		;Load directory variables back
+		ex	de,hl			; into the FIB ready for
+		ldir				; next time.
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	FILL_FIB
+;
+;    This routine fills up the public fields of a fileinfo block from the data
+; in  a directory entry.  It is used by the "find first" and "find next" code,
+; and also by the "OPEN_FAB" routine.
+;
+; Entry:       IX -> FIB to be filled in
+;              DE -> directory entry
+; Returns:     None
+; Corrupts:    AF,BC,DE
+;
+;
+		push	ix
+		ex	(sp),hl			;HL -> fileinfo block
+;
+		push	hl
+		inc	hl			;DE -> name field of FIB
+		ld	a,(de)			;Get first byte of directory
+		cp	05h			; entry and copy it into the
+		jr	nz,not_05h_fiddle	; FIB, but if it is 05h then
+		ld	a,0E5h			; turn it into 0E5h, and copy
+not_05h_fiddle:	pcall	SQ_NAME			; it into the fileinfo block.
+		pop	hl
+;
+		ld	bc,FIB_ATTR##		;Get attributes byte from
+		add	hl,bc			; directory entry and put
+		ld	a,(de)			; it into the fileinfo
+		ld	(hl),a			; block.
+;
+		ex	de,hl
+		inc	de			;DE -> time field of FIB
+		ld	bc,DR_TIME##-DR_ATTR##
+		add	hl,bc			;Copy the date, time, cluster
+		ld	bc,2+2+2+4		; number and size into the
+		ldir				; fileinfo block.
+;
+		pop	hl
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	LOC_FIB
+;
+;    This routine is called by all functions  which  take  either  a  fileinfo
+; block or a drive/path/file string and its job is to eliminate the difference
+; between the two cases.  It is  normally  entered  at  "LOC_FIB"  which  will
+; relocated  the  directory entry for a given FIB, or find the directory entry
+; specified by a string (using the internal FIB_1).  Any matching  entry  will
+; be found except for a volume name and the attributes  will  be  returned  in
+; register  A  if  there is no error.  A fileinfo block passed to this routine
+; will not be modified at all.
+;
+;   If it is called instead at "NEW_FIB" then DE must point to a string (this
+; is  not  tested for in this routine), and a set of required attributes must
+; also be passed in register B.  The "AT_VOL" bit in register B must  not  be
+; set  although  this is not tested for in this routine.  If the "AT_DEV" bit
+; is set then an existing file will not be deleted.  If A new entry  will  be
+; create  with the appropriate attributes, and the internal "FIB_1" filled in
+; for the new entry.
+;
+;   Devices will be handled in all the necessary ways, including making up a
+; "pretend" directory entry for the device name.
+;
+; Entry:        DE = ASCIIZ string or fileinfo block pointer
+;                B = Required attributes (Only if entered at NEW_FIB)
+;                       bit-7 set => dont delete existing file
+; Returns:  Z-flag -  set  => no error, A=directory attributes
+;                    clear => error, A=Error code
+;               IX = Pointer to fileinfo block (FIB_1 for ASCIIZ string)
+;               HL = Pointer to unit descriptor (or device descriptor)
+;               DE = Adddress of directory entry
+; Corrupts:     AF,BC,DE,HL,IX
+;
+;
+		ld	(iy+@SE_FLAGS##),SEM_SR	 ;Set the "not create" flag
+		ld	b,ATM_DIR+ATM_HID+ATM_SYS;Set search attributes to
+						 ; find all entries.
+;
+		ld	a,(de)			;Skip if we have been passed
+		inc	a			; a previously located
+		jr	z,reloc_fib		; fileinfo block.
+		jr	loc_new_fib
+;
+	PROC	NEW_FIB
+		ld	(iy+@SE_FLAGS##),0	;Clear the "not create" flag
+;
+loc_new_fib:	xor	a			;Current drive is default
+		ld	ix,FIB_1##		;Use internal fileinfo block
+		ld	c,PCM_DI		;Parse ASCIIZ string leaving
+		pcall	PAR_PATH		; the last item in FNAME_BUF.
+		ret	nz
+		or	c			;Give up if any error or if
+		ld	a,.IPATH##		; any of string was left over
+		ret	nz			; after parsing, or if the
+		bit	PF_AMB,b		; filename was ambiguous.
+		ld	a,.IFNM##
+		ret	nz
+;
+		ld	de,FNAME_BUF##		;Look for a match (or create
+		call	FND_FIRST		; one if called at NEW_FIB).
+		jr	loc_fib_done
+;
+;       ----------------------------------------
+;
+reloc_fib:	push	de			;We have been passed an old
+		pop	ix			; fileinfo block so validate
+		call	O_FIB			; it and moan if there is
+		ret	nz			; any problem.
+;
+		bit	AT_VOL,(ix+FIB_SA##)	;Refuse to do anything with
+		ld	a,.IATTR##		; a volume name FIB.
+		ret	nz
+		xor	a
+;
+;       ----------------------------------------
+;
+loc_fib_done:	or	a			;If error then return
+		ret	nz			; with Z-flag clear.
+;
+		push	hl
+		ld	hl,DR_ATTR##		;If no error then return
+		add	hl,de			; with Z-flag set and
+		ld	a,(hl)			; the attributes byte in
+		pop	hl			; register A.
+		cp	a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	O_FIB
+;
+;    This routine is called whenever a fileinfo block is passed to the BDOS to
+; be  re-used.   It  checks  whether  it  is a device or a file and if it is a
+; device then it returns with carry and Z-flag both set (and A=0), HL pointing
+; to  the  device descriptor and DE pointing to the directory entry within the
+; device descriptor.  If the FIB is for a disk  file  then  it  validates  the
+; drive,  downloads the directory variables from the fileinfo block, and calls
+; "DI_SAME" to reload the directory entry.
+;
+; Entry:       IX -> Fileinfo block
+; Returns:      A =  Error code (Z-flag set appropriately)
+;           Carry -  set => device FIB (Z-flag also set and A=0)
+;              HL -> Validated unit descriptor, or device descriptor
+;              DE -> Directory entry for this FIB (only valid if A=0)
+; Corrupts:   AF,DE,HL
+;
+;
+		push	bc			;If it is not a device fileinfo
+		bit	MD_DEV,(ix+FIB_MODE##)	; block then skip to validate
+		jr	z,not_device_fib	; the drive.
+;
+		call	O_DEV			;For device get descriptor
+		pop	bc			; and directory entry address.
+		xor	a
+		scf				;Return with A=0 and carry set
+		ret				; to indicate device FIB.
+;
+not_device_fib:	call	GT_DVARS		;Download directory variables
+		ldir				; from the fileinfo block
+;
+		ld	c,(ix+FIB_DRV##)
+		ld	b,1
+		pcall	VAL_FIB			;Validate the drive
+		pop	bc
+		or	a			;Return with error if VAL_FIB
+		ret	nz			; was not happy.
+;
+		pcall	DI_SAME			;Reload the directory entry
+		xor	a			; and return with no error
+		ret				; and with carry clear to
+						; indicate not device.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	O_DEV
+;
+;    This routine is  used  by  "O_FIB"  and  "OLD_FAB"  to  get  the  device
+; descriptor  and  directory entry address for a deviec FIB or FAB.  The date
+; and time from the FIB or FAB are copied to the directory  entry  to  ensure
+; that they do not get altered.
+;
+; Entry:     IX -> device FIB or FAB
+; Returns:   HL -> device descriptor
+;            DE -> directory entry
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	l,(ix+FIB_ID##)
+		ld	h,(ix+FIB_ID##+1)	;Get device descriptor address
+		push	hl			; and save it for return.
+		ld	de,DD_NAME##
+		add	hl,de			;Get address of the directory
+		push	hl			; entry and save it for return
+		ld	de,DR_TIME##
+		add	hl,de			;Point DE at place for date &
+		ex	de,hl			; time in the directory entry
+		push	ix
+		pop	hl
+		ld	bc,FIB_TIME##		;Point HL at the date and time
+		add	hl,bc			; in the FIB or FAB.
+		ld	bc,4			;Copy the date and time to
+		ldir				; the directory entry.
+		pop	de			;DE -> directory entry
+		pop	hl			;HL -> device descriptor
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	GT_DVARS
+;
+;    This is a boring little routine which  just  sets  HL  to  point  to  the
+; directory  variables  in a fileinfo block (pointed to by IX), DE to point to
+; the variables in RAM, and BC to the number of variables to  copy.   This  is
+; thus all ready for an "LDIR".
+;
+; Entry:      IX =  Address of fileinfo block
+; Returns:    HL -> Directory variables in fileinfo block
+;             DE -> Directory variables in RAM
+;             BC =  Number of bytes to copy
+; Corrupts:   F,BC,DE,HL
+;
+;
+		ld	de,DE_FSTV##
+		push	ix
+		pop	hl
+		ld	bc,FIB_DVAR##
+		add	hl,bc
+		ld	bc,DE_LSTV##-DE_FSTV##
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	FND_FIRST
+;
+;   This routine does the work of searching  for  a  match  to  a  file.   The
+; filename  must be in an expanded format (11 byte) buffer and there must also
+; be validated fileinfo block, with the "FIB_SA" and "FIB_MODE" fields set up.
+; A  pointer  to  the  unit  descriptor  or  device  descriptor  (depending on
+; "FIB_MODE") must also be passed. The variable "SE_FLAGS" must be set up with
+; all  bits  clear  except  the  "SE_SRCH" bit which indicates whether it is a
+; "search" or a "create" operation.
+;
+;    For a "create" operation, the filename is  checked  for  validity  and  a
+; ".IFNM"  error returned if it is invalid.  It returns an error code and also
+; a pointer to the located (or newly  created)  directory  entry.   For  some
+; errors,  register DE is not valid and this is indicated by the Z-flag being
+; clear.  Also for a "create", if the AT_DEV bit of the FIB_SA files  is  set
+; then  the  "SE_NEW" flag is set to ensure that an existing file will not be
+; over-written.
+;
+;    It has a second entry point at "FND_NEXT" which does the  obvious  thing.
+; This is passed a pointer to a fileinfo block, a filename pointer and a  unit
+; descriptor  pointer.   It  will  moan  if the fileinfo block is a device one
+; since there is never a "next device".
+;
+; Entry:     HL = Pointer to unit descriptor or device descriptor
+;            IX = Pointer to fileinfo block
+;            DE = Pointer to search filename in expanded format
+; Returns:    A = Error code
+;            DE = Address of directory entry (unless Z-flag clear)
+; Corrupts:  AF,BC,DE
+;
+;
+		bit	SE_SRCH,(iy+@SE_FLAGS##);If we are doing a "create"
+		jr	nz,fnd_not_create	; then check that the filename
+		push	de			; being created is legal,
+		ld	a,(ix+FIB_SA##)		; including rejecting device
+		and	ATM_DIR			; names if creating a directory
+		pcall	TST_NAME		; and return an error if not.
+		pop	de
+		ret	nz
+		bit	AT_DEV,(ix+FIB_SA##)	;If "create" and the device
+		jr	z,not_create_new	; bit or required attributes
+		set	SE_NEW,(iy+@SE_FLAGS##)	; is set then set a flag to
+not_create_new:					; prevent overwriting of
+						; existing files.
+fnd_not_create:	res	AT_DEV,(ix+FIB_SA##)
+		ld	(FNM_PTR##),de		;Save pointer to filename
+;
+		bit	MD_DEV,(ix+FIB_MODE##)	;Jump if we are being asked
+		jr	nz,fnd_device		; to find a device.
+;
+		pcall	DI_FIRST		;Find first entry of this
+		call	NM_SEARCH		; directory, look for a
+		jr	fnd_start		; match and jump to see what
+						; we found.
+;
+;
+fnd_device:	push	hl			;For a device, point to the
+		ld	de,DD_NAME##		; directory entry in the
+		add	hl,de			; device descriptor.
+		ex	de,hl			;DE -> directory entry
+		call	DATE_TIME		;Put current date/time in
+		pop	hl
+		jp	found_return
+;
+;       ----------------------------------------
+;
+	PROC	FND_NEXT
+;
+		bit	MD_DEV,(ix+FIB_MODE##)	;Always refuse to find
+		ld	a,.NOFIL##		; anything if it is a device
+		ret	nz			; fileinfo block.
+		set	FF_DBUF,(iy+@FAT_FLAGS##)
+		ld	(FNM_PTR##),de		;Store filename pointer
+;
+fnd_loop:	call	NM_SEARCH_MORE		;Look for match with name
+fnd_start:	jr	c,got_name_match	; and skip if found one.
+;
+		bit	SE_SRCH,(iy+@SE_FLAGS##);NO MATCH FOUND.  If we are not
+		ld	a,.NOFIL##		; doing a "create" then return
+		call	z,GT_ENTRY		; a .NOFIL error, otherwise
+		ret	nz			; get the located free entry
+		jr	create_entry		; if there is one.
+;
+got_name_match:	bit	SE_SRCH,(iy+@SE_FLAGS##);GOT MATCHING ENTRY, always
+		jr	z,got_ent_create	; match it if "create"
+;
+		bit	AT_VOL,a		;Always match volume name
+		jr	nz,found_return		; (NM_SEARCH checks this).
+		and	ATM_HID+ATM_SYS+ATM_DIR	;If entry is hidden, system or
+		cpl				; a sub-directory then only
+		or	(ix+FIB_SA##)		; match it if the appropriate
+		inc	a			; bits are also set in the
+		jr	nz,fnd_loop		; search attributes.
+		jr	found_return
+;
+;
+got_ent_create:	ld	b,a
+		bit	SE_NEW,(iy+@SE_FLAGS##)	;If "create new" then never
+		jr	nz,file_exists		; delete old file.
+		bit	AT_SYS,b		;If entry is a system file, or
+		ld	a,.SYSX##		; a sub-directory, or we are
+		jr	nz,found_inv_ret	; trying to create a sub-
+		bit	AT_DIR,b		; directory then jump to return
+		ld	a,.DIRX##		; an appropriate error code.
+		jr	nz,found_inv_ret
+		bit	AT_DIR,(ix+FIB_SA##)	;In these cases the user fields
+file_exists:	ld	a,.FILEX##		; of the FIB will be set up as
+		jr	nz,found_inv_ret	; if it was successful.
+;
+		pcall	DI_SAME			;Get the directory entry back
+		xor	a			; and try to delete it.
+		pcall	DEL_FIB
+		push	af			;Get the directory entry
+		pcall	DI_SAME			; back again.
+		pop	af
+		or	a			;Jump to return error if it
+		jr	nz,found_inv_ret	; could not be deleted.
+;
+create_entry:	ld	de,(FNM_PTR##)		;Refuse to create a "." or
+		pcall	TST_DOT			; ".." error (making sure
+		jr	nc,not_dot_reject	; we return NZ since DE is
+		or	a			; not a directory entry
+		ret				; pointer.
+;
+not_dot_reject:	ld	bc,0			;CREATE ENTRY.  If not creating
+		bit	AT_DIR,(ix+FIB_SA##)	; sub-directory then jump with
+		jr	z,create_not_dir	; BC=0 (cluster number)
+;
+		ld	a,0FFh			;CREATE SUB-DIR.  Allocate one
+		inc	bc			; cluster with flag set to
+		pcall	AL_CLUSTERS		; zero it, and give up if
+		ret	nz			; disk is full.
+		call	INIT_SUB_DIR		;Setup "." and ".." entries
+;
+create_not_dir:	pcall	DI_SAME			;Ensure entry still bufferred
+		ld	a,ATM_VOL+ATM_ARC	;If creating volume name then
+		bit	AT_VOL,(ix+FIB_SA##)	; make sure just volume name
+		jr	nz,got_new_attrs	; and archive bits are set.
+		ld	a,(ix+FIB_SA##)		    ;If creating directory then
+		set	AT_ARC,a		    ; clear archive, read only
+		bit	AT_DIR,a		    ; and system bits, else
+		jr	z,not_dir_attrs		    ; set archive bit and leave
+		and	NOT (ATM_ARC+ATM_RO+ATM_SYS); others alone.
+not_dir_attrs:	and	00111111b		;Always clear bits 6 and 7.
+got_new_attrs:
+		push	hl
+		ld	hl,(FNM_PTR##)		;HL -> new filename
+		call	SETUP_ENT		;Setup the entry & mark the
+		pop	hl			; buffer as dirty
+;
+found_return:	xor	a			;OK so zero error code
+found_inv_ret:	cp	a			;Set Z-flag to indicate that
+		ret				; DE points to a dir entry.
+;
+;
+;-----------------------------------------------------------------------------
+;
+INIT_SUB_DIR:
+;
+;    This routine sets up the "." and ".." entries in the first cluster  of  a
+; newly  created  sub-directory.   The  cluster number of its parent directory
+; must be in "DE_START" so that the ".." entry can be set up.
+;
+; Entry:       HL = Pointer to unit descriptor
+;              BC = Sub-directory cluster number
+; Returns:    None
+; Corrupts:   AF
+;
+;
+		push	de			;Save caller's DE
+		ld	d,b
+		ld	e,c
+		xor	a			;Find sector number of first
+		pcall	CLU_TO_SEC		; sector of the cluster.
+;
+		push	hl
+		ex	(sp),ix			;Get the directory sector
+		push	bc			; into a buffer.
+		ld	b,1
+		pcall	BF_SECTOR
+		pop	bc
+		push	bc
+;
+		ld	de,BD_DATA##
+		add	hl,de
+		ex	de,hl			;DE-> start of sector in buffer
+		ld	hl,DOT_NAME		;HL-> "." name
+		ld	a,ATM_DIR		;Attributes for entry
+		call	SETUP_ENT		;Setup the "." entry
+;
+		ld	hl,32
+		add	hl,de
+		ex	de,hl			;DE -> second entry in sector
+		ld	hl,DOT_DOT_NAME		;HL -> ".." name
+		ld	bc,(DE_START##)		;BC := cluster number of start
+						;      of parent directory.
+		ld	a,ATM_DIR		;Attributes for entry
+		call	SETUP_ENT		;Set up the ".." entry
+		pop	bc
+;
+		ex	(sp),ix			;Restore loads of stuff and
+		pop	hl			; return to caller.
+		pop	de
+		ret
+;
+;
+DOT_DOT_NAME:	db	"."
+DOT_NAME:	db	".       ","   "
+;
+;
+;------------------------------------------------------------------------------
+;
+SETUP_ENT:
+;
+;    This  routine  is  called  by  the  create  code  above to set up the new
+; directory entry.  It is also called by "INIT_SUB_DIR" to set up the "."  and
+; ".."  entries in a new sub-directory.  It copies the filename and attributes
+; byte into the entry, zeroes the rest of it and puts  the  specified  cluster
+; number  in.  If the cluster number is -ve then it is stored in the directory
+; as zero, to  represent  the  root  directory.   It  then  drops  through  to
+; "DATE_TIME"  which  puts in the date and time.
+;
+; Entry:       HL  = Pointer to expanded filename
+;              DE  = Address of start of directory entry
+;              BC  = Cluster number for directory entry
+;               A  = Attributes byte for directory entry
+; Returns:     None
+; Corrupts:    AF,BC,HL
+;
+;
+		push	de			;Save start of entry pointer
+		push	bc			;Save cluster number
+		ld	b,a			;B := attributes byte
+;
+		ld	a,(hl)			;Copy first byte of filename
+		cp	0E5h			; into directory entry, turning
+		jr	nz,not_E5h_fiddle	; it into an 05h if it is
+		ld	a,05h			; really 0E5h.
+not_E5h_fiddle:	ld	(de),a
+		ld	a,b			;A := attributes byte
+		inc	hl
+		inc	de
+		ld	bc,7+3			;Copy remaining 10 bytes of
+		ldir				; filename into entry.
+;
+		pcall	DIRT_CACHE		;Mark sector buffer as dirty
+;
+		ld	(de),a			;Put attributes byte in
+		ex	de,hl
+		ld	b,32-12
+zero_ent_loop:	inc	hl			;Fill rest of entry with
+		ld	(hl),c			; zeroes for now.
+		djnz	zero_ent_loop
+;
+		pop	de			;Get cluster start number and
+;===== start mod FAT16 (CLST_8 patch)
+		ld	a,d
+		and	e
+		inc	a			; if it is -ve then set it to
+		jr	nz,not_root		; zero (indicates root dir.).
+;;		bit	7,d
+;;		jr	z,not_root
+;===== end mod FAT16
+		ld	d,b
+		ld	e,b
+not_root:	ld	bc,-4			;Point back at start cluster
+		add	hl,bc			; position in entry and put
+		ld	(hl),d			; the cluster number in.
+		dec	hl
+		ld	(hl),e
+		pop	de
+;                .        .
+;                .        .
+;           Drop through to DATE_TIME
+;                .        .
+;                .        .
+;------------------------------------------------------------------------------
+;
+	PROC	DATE_TIME
+;
+;   This routine is called whenever the date and time fields of  a  directory
+; entry  need to be updated.  It gets the current date and time, encodes them
+; into the compacted directory format and puts them into the directory entry.
+;
+; Entry:       DE = Address of directory entry
+; Returns:     None
+; Corrupts:    AF
+;
+;
+		push	hl
+		push	bc			;Save registers for return
+		push	de
+;
+		ld	hl,DR_TIME##		;Point HL at TIME field in
+		add	hl,de			; the directory entry and get
+		push	hl			; current date and time.
+		pcall	GT_DATE_TIME
+		ex	(sp),hl
+;
+		ld	a,c
+		add	a,a
+		add	a,a			;B:A := hours*256 + minutes*4
+		ld	c,3
+sq_time_loop:	add	a,a
+		rl	b
+		dec	c
+		jr	nz,sq_time_loop		;B:A := hours*2k + minutes*32
+		srl	e			;E := seconds/2
+		add	a,e			;B:A := complete time
+		ld	(hl),a
+		inc	hl			;Store the time at (HL)
+		ld	(hl),b
+		inc	hl
+;
+		pop	bc			;B:=month    C:=day
+		ld	a,b
+		or	a
+		rra
+		rra
+		rra
+		rra
+		rl	d			;D:A := year*512 + month*32
+		add	a,c			;Add on day number to get
+		ld	(hl),a			; complete date and store
+		inc	hl			; it at (HL).
+		ld	(hl),d
+;
+		pop	de
+		pop	bc
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+NM_SEARCH_MORE:
+;
+;   This routine searches a directory for a match with a filename.  It is used
+; by  the  SEARCH/MAKE/CREATE  function  above.  In addition it is used by the
+; RENAME and MOVE functions to check for possible name clashes.  The directory
+; search  must  have  been initiated with a suitable DI_FIRST or DI_NEXT call.
+; The filename must be pointed to by the  variable  "FNM_PTR".   The  "FIB_SA"
+; field  of the FIB is used to determine whether it is a volume name search or
+; an ordinary filename search.
+;
+; Entry:        HL = Address of unit descriptor
+;               DE = Address of first directory entry to test
+;               IX = Address of FIB
+;               Carry = As returned from DI_FIRST, DI_NEXT or DI_SAME
+; Returns:      Carry - SET (C) => match was found DE -> directory entry
+;                                                   A =  Dir attributes byte
+;                       CLEAR (NC) => no match found
+; Corrupts:     AF,BC,DE
+;
+;
+search_loop:	pcall	DI_NEXT			;Get next directory entry
+;
+	PROC	NM_SEARCH
+;
+		jr	c,no_match		;Jump if end of directory
+		push	ix
+		ex	(sp),hl			;Point HL at filename to
+		ld	hl,(FNM_PTR##)		; be matched and compare
+		ld	a,(ix+FIB_SA##)		; with name in directory
+		pcall	CMP_NAME		; entry (DE).  A = volume
+		pop	hl			; name flag.
+		ret	c			;Return C-set if names match
+		jr	nz,search_loop		;Loop if names do not match
+;
+		bit	SE_FREE,(iy+@SE_FLAGS##);ENTRY NOT IN USE.  If not
+		call	z,SV_ENTRY		; remembered a free entry yet
+						; then remember this one.
+		or	a			;If entry has been used then
+		jr	nz,search_loop		; loop to continue search else
+no_match:	xor	a			; return NC to indicate no
+		ret				; match.
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	SV_ENTRY
+;
+;   This is called by NM_SEARCH above the first time a free entry is  found.
+; It simply copies all the directory variables  into  "DE_COPY"  in  order  to
+; remember  the current directory entry.  It is also used in the "delete" code
+; to  save  the  details  of  the  entry  to  be  deleted  while  searching  a
+; sub-directory to make sure it is empty.
+;
+; Corrupts:    None
+;
+		push	hl
+		push	de
+		push	bc
+		call	GT_DVARS
+		ex	de,hl		;HL -> directory variables
+		ld	de,DE_SV##	;DE -> save area for directory vars.
+		ldir
+		set	SE_FREE,(iy+@SE_FLAGS##)
+		pop	bc
+		pop	de
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	GT_ENTRY
+;
+;    This routine is called when CREATE needs to use a new directory entry, in
+; order  to  restore  the  free  entry which was remembered by "SV_ENTRY".  If
+; there is a saved entry then the directory variables are just downloaded  and
+; it  returns with no error.  Note that a pointer to the entry is not returned
+; but so it is necessary to call "DI_SAME" to get a pointer to  the  directory
+; entry.
+;
+;    If  there  was no saved entry then this means that the directory is full.
+; If it is the root directory ("DE_CLUSTER" is -ve) then a ".DRFUL"  error  is
+; returned.   If it is a sub-directory then another sector is allocated and if
+; this is succesful it is linked onto the sub directory, initialised  so  that
+; all  the  entries  are  "never been used" and "DI_NEXT" is called to get the
+; first entry of this cluster as the current entry.
+;
+; Entry:         HL = Address of unit descriptor
+; Returns:        A = Error code (Z-flag set appropriately)
+; Corrupts:      AF,DE
+;
+;
+		push	bc
+		bit	SE_FREE,(iy+@SE_FLAGS##) ;If no free entry found
+		jr	z,no_free_ent		 ; then jump.
+;
+		push	hl			;Download directory variables
+		call	GT_DVARS		; for the free entry so that
+		ld	hl,DE_SV##		; a call the "DI_SAME" will
+		ldir				; get the free entry.
+		pop	hl
+		jr	fr_ent_ret_1
+;
+;
+					; DIRECTORY FULL
+no_free_ent:	ld	de,(DE_CLUSTER##)	;If it is root directory (-ve)
+;===== start mod FAT16 (CLST_3 patch)
+		ld	a,d			; then just return a .DRFUL
+		and	e			; error as it cannot be
+		inc	a			; extended.
+		jr	nz,fr_ent_subdir
+		or	.DRFUL##		;A = .DRFUL## / Cy = 0
+		jr	fr_ent_err_1
+;;		bit	7,d
+;;		ld	a,.DRFUL##
+;;		jr	nz,fr_ent_err_1
+;===== end mod FAT16
+;
+fr_ent_subdir:	ld	a,0FFh			;If sub-directory then try to
+		ld	bc,1			; allocate one more cluster
+		pcall	AL_CLUSTERS		; (with flag set to zero it)
+		jr	nz,fr_ent_err_1		; and return if disk full.
+;
+		push	bc			;Chain the new cluster onto
+		pcall	FAT_ASET		; the end of the directory
+		pop	bc			; and store the cluster number
+		ld	(DE_NEXT_CLU##),bc	; so that DI_NEXT will know
+						; it is there.
+;
+		pcall	DI_NEXT			;Step on to first entry in new
+fr_ent_ret_1:	xor	a			; cluster and return.
+fr_ent_err_1:	pop	bc
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<FIND>
+	end
+;

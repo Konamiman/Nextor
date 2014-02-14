@@ -1,0 +1,4172 @@
+	.z80
+	title	DSKBASIC - disk BASIC statement handler -
+;
+;	Conditional assembly switches
+;
+OFF	equ	0
+ON	equ	not OFF
+;
+;=======================================================================
+;
+; Revision history:
+;	89/05/08	Fix to LOC function, version 2.01
+;			(returned byte offset instead of record number).
+;
+;	To make version BEFORE above fixes are applied, define label
+;	"VERyymmdd" where yy/mm/dd is the date of fix.
+;
+;=======================================================================
+;
+DEBUG	equ	OFF		;check for internal error
+;
+;	Disk BASIC version
+;
+
+NEWSTT	equ	04601h
+
+	public	BASVER,BASV_HI,BASV_LO
+BASVER	equ	2
+BASV_HI	equ	0
+ifdef VER890508
+BASV_LO	equ	0
+else
+BASV_LO	equ	1
+endif
+;
+;	MACRO
+;
+PRINTL	macro	NAME,VALUE
+	if1
+	.printx	% NAME = VALUE %
+	endif
+	endm
+
+;
+; MSX-DOS file attributes
+;
+ATM_RO	equ	00000001b
+ATM_HID	equ	00000010b
+ATM_SYS	equ	00000100b
+ATM_VOL	equ	00001000b
+ATM_DIR	equ	00010000b
+;
+; External variables of disk system
+;
+	extrn	$DIRBUF
+	extrn	MASTER_SLOT	;slot number of the master (i.e., me)
+	extrn	RECSIZE		;record size temp
+	extrn	PATHNAM
+;
+; External routines of disk system
+;
+	extrn	REBOOT
+	extrn	HOKFMT
+if 0
+	extrn	MUL16		;HL:BC = BC * DE
+	extrn	MULADD		;HL:BC = BC * DE + HL
+endif
+	extrn	GSLOT1
+;
+	extrn	BLDCHK
+	extrn	BSVCHK
+;
+	extrn	BDOS		;BDOS function call entry
+
+;
+; MSX specific constants
+;
+MD.SQI	equ	1		;input only
+MD.SQO	equ	2		;output only
+MD.FIL	equ	4		;file
+MD.APP	equ	8		;append
+MD.BIN	equ	80h		;binary save/load
+;
+;	Usage of FCB (for BASIC)
+;
+;	(PTRFIL) ->	open mode		1 byte
+;			file handle		1 byte
+;			record size		1 byte
+;			back up character	1 byte
+;			drive number		1 byte
+;			internal use		1 byte
+;			pointer to buffer	1 byte
+;			flag			1 byte
+;			pseudo head position	1 byte
+;			BUFFER			256 bytes
+;
+FL.BPS	equ	6		;byte position in buffer
+FL.FLG	equ	7
+FL.BUF	equ	9
+;
+EXPSTK	equ	8		;additional stack depth for expanded slot
+;
+$LEN	equ	92h		;token for 'LEN'
+$TO	equ	0D9h		;token for 'TO'
+EQULTK	equ	0EFh		;token for '='
+;
+; MSX BASIC error codes
+;
+ERRSN	equ	2		;'syntax error'
+ERRFC	equ	5		;'illegal function call'
+ERROM	equ	7		;'out of memory'
+ERRTM	equ	13		;'type mismatch'
+ERRST	equ	16		;'formula too complex'
+;; Predefined file errors.
+ERRFOV	equ	50		;'field overflow'
+ERRIER	equ	51		;'internal error'
+ERRIFN	equ	52		;'bad file number'
+ERRFNF	equ	53		;'file not found'
+ERRFAO	equ	54		;'file already open'
+ERRRPE	equ	55		;'input past end'
+ERRBFN	equ	56		;'bad file name'
+ERRFNO	equ	59		;'file not open'
+;; Start of error codes unique to us.
+DERFST	equ	60
+;
+LDIRMV	equ	0059h
+LDIRVM	equ	005Ch
+CKCNTC	equ	00BDh		;check control-STOP
+ERAFNK	equ	00CCh		;erase function key display
+TOTEXT	equ	00D2h		;force screen to text mode
+PHYDIO	equ	0144h		;physical disk I/O
+RCALBAS	equ	0159h		;call a BASIC routine in ROM
+
+DECSUB	equ	268Ch		;DAC = DAC - ARG
+DECADD	equ	269Ah		;DAC = DAC + ARG
+DECDIV	equ	289Fh		;DAC = DAC / ARG
+VMOVE	equ	2EF3h
+VMOVFM	equ	2F08h
+VMOVMF	equ	2F10h
+MAKINT	equ	2F99h
+CONDS	equ	3042h		;force single precision to double
+VINT	equ	30CFh
+FMULT	equ	325Ch		;DAC = DAC * [CBED]
+INTXT	equ	3FD2h
+;
+ERROR	equ	406Fh		;'xxxx error'
+READYR	equ	409Bh		;Warm start of BASIC
+LINKER	equ	4253h		;fix text links
+NEWSTT	equ	4601h		;new statement fetcher
+CHRGTR	equ	4666h		;get next character from text
+FLTLIN	equ	46FFh		;JP INEG2
+INTID2	equ	4756h
+FINPRT	equ	4AFFh		;finish up with printing
+FRMEQL	equ	4C5Fh
+FRMEVL	equ	4C64h
+DOCNVF	equ	517Ah
+GETIN2	equ	520Fh
+GTBYTC	equ	521Bh
+GETBYT	equ	521Ch
+CONINT	equ	521Fh
+FOUT	equ	537Bh		; where 'JP FOUT' is!
+FRMQNT	equ	542Fh
+SCCPTR	equ	54F7h
+GETYPR	equ	5597h
+PTRGET	equ	5EA4h
+STRINI	equ	6627h
+GETSPA	equ	668Eh
+FRESTR	equ	67D0h
+FINBCK	equ	6825h
+NAMSCN	equ	6A0Eh
+RGETPTR	equ	6A6Dh		;get file pointer
+RNULOPN	equ	6AFAh		;open a file
+CLSFIL	equ	6B24h		;close a file
+CLSALL	equ	6C1Ch		;close all open files
+NOSKCR	equ	6E41h		;trailing procedure for BACKUP
+	public	RBSAVE,RBLOAD
+RBSAVE	equ	6E92h		;BSAVE routine in ROM
+RBLOAD	equ	6EC6h		;BLOAD routine in ROM
+ADRGET	equ	6F0Bh
+CRDONZ	equ	7323h		;force cursor to the top of line
+CRDO	equ	7328h		;finish up with a line
+;
+RETURN	equ	0F38Bh		;where a 'RET' instruction is stored
+LINLEN	equ	0F3B0h		;console width
+LPTPOS	equ	0F415h		;printer head position (0 based)
+PRTFLG	equ	0F416h		;printer flag
+BUF	equ	0F55Eh		;line input buffer (used as scratch)
+TTYPOS	equ	0F661h		;cursor x position (0 based)
+VALTYP	equ	0F663h
+STKTOP	equ	0F674h
+TXTTAB	equ	0F676h
+TEMPPT	equ	0F678h
+DSCTMP	equ	0F698h
+DSCPTR	equ	0F699h
+FRETOP	equ	0F69Bh
+VARTAB	equ	0F6C2h
+STREND	equ	0F6C6h
+DAC	equ	0F7F6h
+FACLO	equ	0F7F8h
+ARG	equ	0F847h
+MAXFIL	equ	0F85Fh
+FILTAB	equ	0F860h
+NULBUF	equ	0F862h
+PTRFIL	equ	0F864h
+FILNAM	equ	0F866h
+RUNFLG	equ	FILNAM
+NLONLY	equ	0F87Ch
+SAVEND	equ	0F87Dh
+FLBMEM	equ	0FCAEh
+RUNBNF	equ	0FCBEh
+SAVENT	equ	0FCBFh
+PROCNM	equ	0FD89h
+;
+;	temporary work area
+;
+TEMP	equ	BUF+10
+;
+FIB		equ	TEMP		; 64 bytes
+FIB_DST		equ	FIB+64		; 64 bytes (for COPY)
+SRC_HANDLE	equ	FIB_DST+64	; for COPY
+DST_HANDLE	equ	SRC_HANDLE+1	; for COPY
+SRC_DATE	equ	DST_HANDLE+1	; for COPY
+SAVE		equ	TEMP		; temp for FLTINT
+MSGTMP		equ	TEMP		; temp for ERRPRT
+TEMPA		equ	TEMP		; temp for FIELD
+TEMPB		equ	TEMPA+2		; temp for FIELD
+CMDTMP		equ	TEMP		; temp for BINLOD/SYSTEM
+DSKTMP		equ	TEMP		; 32 bytes temp for DSKI$/DSKO$
+;
+;	MACRO's
+;
+OUTCHR	macro
+	rst	18h
+	endm
+;
+COMPAR	macro
+	rst	20h
+	endm
+;
+SYNCHK	macro	CHAR
+	call	SYNCHR
+	defb	CHAR
+	endm
+;
+$HOOK	macro	NAME
+;;	public	NAME	;;provides debugging information
+NAME:
+	endm
+
+$$BASIC::
+;
+	subttl	Initialize procedure
+
+	public	SETHOOKS
+SETHOOKS:
+;
+;	Cancel hook at POSDSK to allow FILES "*.COM" etc.
+;
+	ld	hl,POSDSK
+	ld	de,0FEBCH	;H.POSD
+	ld	bc,5
+	ldir
+;
+;	Set up other hooks
+;
+	ld	hl,HOKTBL
+SDSKL:
+	ld	e,(hl)		;get hook address to [DE]
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,e		;end of table?
+	or	d
+	ret	z		;yes
+	ex	de,hl
+	ld	(hl),0F7H	;RST 30H operation code
+	inc	hl
+	ld	a,(MASTER_SLOT)
+	ld	(hl),a		;set my slot address
+	inc	hl
+	ex	de,hl
+	ldi			;set address
+	ldi
+	ld	a,0C9H		;set "RET" instruction
+	ld	(de),a
+	jr	SDSKL
+;
+;	Hook data table
+;
+HOKTBL:
+	defw	0FDEFh,DSKO$
+	defw	0FE17h,DSKI$
+	defw	0FDF9h,NAME
+	defw	0FDFEh,KILL
+	defw	0FE08h,DKCOPY
+	defw	0FE12h,DSKF
+	defw	0FE21h,LSET
+	defw	0FE26h,RSET
+	defw	0FE2Bh,FIELD
+	defw	0FE30h,MKI$
+	defw	0FE35h,MKS$
+	defw	0FE3Ah,MKD$
+	defw	0FE3Fh,CVI
+	defw	0FE44h,CVS
+	defw	0FE49h,CVD
+	defw	0FE4Eh,GETPTR
+	defw	0FE58h,NOFOR
+	defw	0FE5Dh,NULOPN
+	defw	0FE62h,NTFL0
+	defw	0FE71h,BINSAV
+	defw	0FE76h,BINLOD
+	defw	0FE7Bh,FILES
+	defw	0FE80h,DGET
+	defw	0FE85h,FILOU1
+	defw	0FE8Ah,INDSKC
+	defw	0FE99h,LOC
+	defw	0FE9Eh,LOF
+	defw	0FEA3h,EOF
+	defw	0FEADh,BAKUPT
+	defw	0FEB2h,PARDEV
+	defw	0FEB7h,NODEV
+	defw	0FEFDh,ERRPRT
+	defw	0FFA7h,DSKRW##	;PHYDIO
+	defw	0FFACh,HOKFMT	;FORMAT
+NULSTR:	defw	0		;end of table
+
+;
+;	Routine which allows FILES "*.BAS" etc.
+;
+POSDSK:
+	inc	sp
+	inc	sp
+	jp	6F1Dh
+
+	subttl	Expanded statements
+
+	public	STATEMENT
+STATEMENT:
+	ei			;make sure interrupts are enabled
+;
+	ld	a,DV_BANK##		;Call statement handler in disk driver first
+	ld	ix,DV_OEMST##
+	call	CALBNK##
+	ret	nc
+
+	ld	a,(0FFA7h)	;get hook at PHYDIO
+	cp	0C9h		;hook set?
+	scf			;assume not
+	ret	z		;good assumption, disk system is disabled
+	push	hl		;save text pointer
+	call	GSLOT1		;get my slot address
+	ld	hl,MASTER_SLOT	;where slot address of the master is
+	cp	(hl)		;am I the master?
+	jr	nz,ABORT	;no, I am not allowed to proceed
+;
+	ld	hl,COMMAND
+CKCMD1:
+	ld	de,PROCNM
+CKCMD2:
+	ld	a,(de)		;get specified statement
+	cp	(hl)		;compare with my statement
+	jr	nz,NOTCMD	;failed, try next statement
+	inc	de
+	inc	hl
+	and	a		;end of name?
+	jr	nz,CKCMD2	;check more characters
+	ld	e,(hl)		;get address in [DE]
+	inc	hl
+	ld	d,(hl)
+	pop	hl		;restore text pointer
+	call	CHRGOT
+	call	JPDE
+	and	a
+	ret
+;
+JPDE:
+	push	de
+	ret
+;
+NOTCMD:
+	ld	c,0FFh		; skip till end of name
+	xor	a
+	cpir
+	inc	hl		; skip address
+	inc	hl
+	cp	(hl)		; end of table?
+	jr	nz,CKCMD1	; no, search next
+;
+;	Here when not a disk command
+;
+ABORT:
+	pop	hl		;restore text pointer
+	scf
+	ret			;command not in this cartridge
+
+;
+;	Table of expanded statements
+;
+COMMAND:
+	defb	'SYSTEM',0
+	defw	SYSTEM
+	defb	'FORMAT',0
+	defw	FORMAT
+	defb	'CHDRV',0
+	defw	CHDRV
+	defb	'CHDIR',0
+	defw	CHDIR
+	defb	'MKDIR',0
+	defw	MKDIR
+	defb	'RMDIR',0
+	defw	RMDIR
+	defb	'RAMDISK',0
+	defw	RAMDISK
+	defb	'FDISK',0
+	defw	FDISK
+	defb	'MAPDRV',0
+	defw	MAPDRV
+	defb	'MAPDRVL',0
+	defw	MAPDRVL
+	defb	'LOCKDRV',0
+	defw	LOCKDRV
+	defb	'USR',0
+	defw	USR
+	defb	'CURDRV',0
+	defw	CURDRV
+	defb	'NEXTOR',0
+	defw	NEXTOR
+	defb	'DRVINFO',0
+	defw	DRVINFO
+	defb	'DRIVERS',0
+	defw	DRIVERS
+
+;
+	defb	0		;end of table
+
+	subttl	Expanded statements - SYSTEM
+;
+;	_SYSTEM[("<command_string>")]
+;
+SYSTEM:
+	ld	de,CMDTMP	; assume end of statement
+	jr	z,SYSTEM_NO_ARG	; good assumption
+	SYNCHK	'('
+	ld	ix,FRMEVL	; evaluate string
+	call	CALBAS
+	push	hl		; save text pointer
+	ld	ix,FRESTR	; get the string
+	call	CALBAS
+	ld	c,(hl)		; get length of string
+	inc	hl
+	ld	a,(hl)		; get pointer to string
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ld	de,CMDTMP	; where command string be copied
+	inc	c		; null string given?
+	dec	c
+	jr	z,CMD_END	; yes
+	ld	b,0
+	ldir
+CMD_END:
+	pop	hl		; restore text pointer
+	SYNCHK	')'
+	ret	nz		; something follows, error
+SYSTEM_NO_ARG:
+	xor	a		; make ASCIZ
+	ld	(de),a
+
+	;If the given command is of type "X:", first change to the drive
+
+	ld	a,(CMDTMP+2)
+	or	a
+	jr	nz,DO_SYSTEM
+	ld	a,(CMDTMP+1)
+	cp	':'
+	jr	nz,DO_SYSTEM
+	ld	a,(CMDTMP)
+
+	and	0DFh		; force upper
+	sub	'A'		; make it zero based
+				; 0 -> A:
+				; 1 -> B:
+				; 7 -> H:
+	cp	7+1
+	jp	nc,JDERBDN	; bad drive name
+	inc	a
+	call	VAL_DRV		; validate the drive
+	dec	a		; make it zero based (A=0,B=1,etc.)
+	ld	e,a
+	ld	c,_SELDSK##
+	call	BDOS
+
+	xor	a
+	ld	(CMDTMP),a
+
+DO_SYSTEM:
+	ld	ix,CLSALL	;close all files
+	call	CALBAS
+	call	TOTEXT		;force screen to text mode
+	call	ERAFNK		;erase function key display
+
+	ld	hl,CMDTMP
+	jp	REBOOT		;re-boot the MSXDOS
+
+	subttl	Expanded statements - FORMAT
+;
+;	_FORMAT
+;
+FORMAT:
+	ret	nz
+	push	hl		;save text pointer
+	call	HOKFMT
+	pop	hl		;restore text pointer
+	ret
+
+	subttl	Expanded statements - CHDRV
+;
+;	_CHDRV("<new drive>") or _CHDRV(<new drive number>)
+;
+;	example:
+;		_CHDRV("H:") or _CHDRV(8)
+;
+CHDRV:
+	ld	a,4
+	ld	ix,CCHDRV##
+	jp	CALBNK##
+
+if 0	;Command moved to bank 4, also it works in DOS 1 mode
+
+	push	hl
+	SYNCHK	'('
+	pop	hl
+	inc	hl	;CHRGTR returns invalid HL when a number is found after the '('... (???)
+
+	push	hl
+	ld	ix,FRMEVL
+	call	CALBAS
+	ld	a,(VALTYP)
+	cp	3
+	jr	z,CHDRV2
+
+	pop	hl
+	ld	ix,GETBYT
+	call	CALBAS
+	push	af
+	SYNCHK	')'
+	pop	af
+	or	a
+	jp	z,JDERBDN
+	cp	8+1
+	jp	nc,JDERBDN
+	push	hl
+	jp		CHDRV_DO
+
+CHDRV2:
+	pop	hl
+	call	CALL_NAMSCN
+	SYNCHK	')'
+	push	hl		; save text pointer
+if 0
+	ld	hl,(PATHNAM)
+	inc	hl
+	inc	hl
+	ld	a,(hl)		; must be 2 characters in length
+	and	a
+	jp	nz,JDERBDN
+	dec	hl
+	ld	a,(hl)		; must be followed by ":"
+	cp	':'
+	jp	nz,JDERBDN
+	dec	hl
+	ld	a,(hl)		; get drive name
+	and	0DFh		; force upper
+	sub	'A'		; make it zero based
+				; 0 -> A:
+				; 1 -> B:
+				; 7 -> H:
+	cp	7+1
+	jp	nc,JDERBDN	; bad drive name
+	inc	a
+else
+	ld	bc,0*256+_PARSE##
+	call	PATH_BDOSE
+	ex	de,hl
+	ld	a,b
+	and	00000101b	; b2 => drive parsed, b0 => others parsed
+	xor	00000100b	; give bad drive name error if drive not
+	or	(hl)		; parsed, anything parsed after drive or
+	jp	nz,JDERBDN	; anything remains
+	ld	a,c
+endif
+CHDRV_DO:
+	call	VAL_DRV		; validate the drive
+	dec	a		; make it zero based (A=0,B=1,etc.)
+	ld	e,a
+	ld	c,_SELDSK##
+	call	BDOS
+	pop	hl		; restore text pointer
+	ret
+endif
+
+VAL_DRV:
+	push	af
+	ld	c,_LOGIN##	; get login vector into [HL]
+	call	BDOS
+	pop	af
+	push	af
+FIND_DRV:
+	srl	h		; move "drive exists" bit into carry
+	rr	l
+	dec	a
+	jr	nz,FIND_DRV
+	jp	nc,JDERBDN	; bad drive name
+	pop	af
+	ret
+
+
+	subttl	Expanded statements - CHDIR
+;
+;	_CHDIR("<new directory>")
+;
+CHDIR:
+	call	CHK_CALL_NAMSCN
+	SYNCHK	')'
+	push	hl		; save text pointer
+	ld	c,_CHDIR##	; change directory
+	call	PATH_BDOSE
+	pop	hl		; restore text pointer
+	ret
+
+	subttl	Expanded statements - MKDIR
+;
+;	_MKDIR("<new directory>")
+;
+MKDIR:
+	call	CHK_CALL_NAMSCN
+	SYNCHK	')'
+	push	hl		; save text pointer
+	ld	b,ATM_DIR
+	ld	c,_CREATE##	; create new directory
+	call	PATH_BDOSE
+	call	DOS_FLUSH
+	pop	hl		; restore text pointer
+	ret
+
+	subttl	Expanded statements - RMDIR
+;
+;	_RMDIR("<directory>")
+;
+RMDIR:
+	call	CHK_CALL_NAMSCN
+	SYNCHK	')'
+	ret	nz		; no, let NEWSTT generate 'syntax error'
+	push	hl		; save text pointer
+	ld	b,ATM_DIR
+	call	srcfst_do
+	xor	a		; clear carry to indicate nothing deleted
+	push	af
+RMDIR_LOOP:
+	ld	a,(FIB+14)	; get attribute of a found file
+	and	ATM_DIR		; is it directory?
+	jr	z,RMDIR_NOT_DIR	; no
+	ld	de,FIB		; delete it
+	ld	c,_DELETE##
+	call	BDOSE
+	pop	af		; indicate something deleted
+	scf
+	push	af
+RMDIR_NOT_DIR:
+	call	SRCNXT		; search for next file/directory
+	jr	nc,RMDIR_LOOP
+	pop	af		; anything deleted?
+	ld	a,.NODIR##	; assume nothing deleted
+	jp	nc,DOS_ERROR	; good assumption
+	call	DOS_FLUSH
+	pop	hl		; restore text pointer
+	ret
+
+	subttl	Expanded statements - RAMDISK
+;
+;	_RAMDISK([<new_size>][,<numeric_variable>])
+;
+RAMDISK:
+	SYNCHK	'('
+	cp	','		; <new_size> specified?
+	ld	a,0FFh		; assume not
+	jr	z,HAVE_SIZE	; good assumption, inquire ramdisk
+	ld	ix,GETIN2	; get new size (0..32767)
+	call	CALBAS
+	inc	d		; negative value?
+	dec	d
+	jp	m,JFCERR	; yes, error
+	ld	b,4
+DIV16_LOOP:
+	srl	d		; divide by 16, rounding up to next 16
+	rr	e
+	jr	nc,NO_ROUNDUP
+	inc	de
+NO_ROUNDUP:
+	djnz	DIV16_LOOP
+	ld	a,e
+	inc	d		; greater than a byte?
+	dec	d
+	jr	nz,SET_0FEH	; yes, set maximum
+	cp	0FFh
+	jr	nz,HAVE_SIZE	; within proper range, pass it to BDOS
+SET_0FEH:
+	ld	a,0FEh		; set to maximum
+HAVE_SIZE:
+	push	af		; save requested size (or 0ffh)
+	ld	a,(hl)		; should return a value?
+	cp	','
+	ld	de,0		; assume not
+	jr	nz,RETURN_NOSIZE
+				; good assumption
+	call	CHRGET		; skip ','
+	ld	ix,PTRGET
+	call	CALBAS
+RETURN_NOSIZE:
+	pop	bc		; restore specified size (or 0ffh) in B
+	SYNCHK	')'		; correct end of statement?
+	ret	nz		; no
+	ld	a,(VALTYP)	; numeric variable?
+	cp	3
+	jp	z,JTMERR	; no, error
+	push	hl		; save text pointer
+	push	de		; save pointer to variable
+	push	af		; save type of variable
+	ld	c,_RAMD##
+	call	BDOSE
+	ld	l,b
+	ld	h,0
+	add	hl,hl		; multiply by 16
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	(DAC+2),hl
+	pop	af		; restore type of variable
+	ld	(VALTYP),a
+	pop	de		; restore pointer to variable
+	ld	a,e		; return variable specified?
+	or	d
+	call	nz,SET_NUMBER	; yes, set it
+	pop	hl		; restore text pointer
+	ret
+
+;
+;	Return value to variable specified
+;
+SET_NUMBER:
+	push	de		; save pointer to variable
+	ld	hl,VALTYP	; get variable type
+	ld	a,(hl)
+	ld	c,a
+	ld	(hl),2		; set integer type
+	ld	hl,DAC+2	; assume integer
+	cp	2		; is it integer ?
+	jr	z,NUMINT
+	cp	4		; is it single real ?
+	jr	z,NUMFLT
+	cp	8		; is it double real ?
+	jp	nz,JTMERR	; no it was string. an error occurred
+NUMFLT:
+	push	bc
+	ld	ix,DOCNVF
+	call	CALBAS
+	pop	bc		; set amount to transfer
+	ld	hl,DAC		; transfer value to variable
+NUMINT:
+	ld	b,0
+	pop	de		; restore pointer to variable
+	ldir			; store to variable
+	ret
+
+	subttl	CALL FDISK command
+;
+;	_FDISK
+;
+FDISK::
+
+	;ret	nz
+	push	hl
+	ld	a,5
+	ld	ix,04100h
+	call	CALBNK##
+	pop	hl
+
+	ld	hl,NEWTXT
+	ld	de,09000h
+	ld	bc,3
+	ldir
+	ld	hl,09000h
+	ld	ix,NEWSTT
+	jp	CALBAS
+
+NEWTXT:	db	3ah, 94h, 0	; ":NEW"
+
+
+	subttl	CALL MAPDRV command
+;
+;	_MAPDRV(L)
+;
+MAPDRV:
+	xor	a
+	jr	MAPDRV_DO
+MAPDRVL:
+	ld	a,1
+
+MAPDRV_DO:
+	ld	b,a
+	ex	af,af
+	ld	a,b
+	ex	af,af
+	ld	a,4
+	ld	ix,CMAPDRV##
+	jp	CALBNK##
+
+
+	subttl	CALL LOCKDRV command
+;
+;	LOCKDRV
+;
+LOCKDRV:
+	ld	a,4
+	ld	ix,CLOCKDRV##
+	jp	CALBNK##
+
+
+	subttl	CALL USR command
+;
+;	USR
+;
+USR:
+	ld	a,4
+	ld	ix,CUSR##
+	jp	CALBNK##
+
+
+	subttl	CALL CURDRV command
+;
+;	CURDRV
+;
+CURDRV:
+	ld	a,4
+	ld	ix,CCURDRV##
+	jp	CALBNK##
+
+
+	subttl	CALL NEXTOR command
+;
+;	NEXTOR
+;
+NEXTOR:
+	ld	a,4
+	ld	ix,CNEXTOR##
+	jp	CALBNK##
+
+
+	subttl	CALL DRVINFO command
+;
+;	DRVINFO
+;
+DRVINFO:
+	ld	a,4
+	ld	ix,CDRVINFO##
+	jp	CALBNK##
+
+
+	subttl	CALL DRIVERS command
+;
+;	DRIVERS
+;
+DRIVERS:
+	ld	a,4
+	ld	ix,CDRIVERS##
+	jp	CALBNK##
+
+
+	subttl	Utilities
+;
+;	Checks if file specified by PATHNAM is opened elsewhere
+;	and generate a 'file already open' error is so.
+;	PATHNAM must be unambiguous.
+;
+CHKOPN:
+	push	hl		;save environments
+	push	de
+	push	bc
+	xor	a		;say FIB is not yet valid
+	ld	(FIB),a
+	ld	hl,(FILTAB)
+	ld	a,(MAXFIL)	;initialize loop counter
+CKOPNL:
+	push	af		;save loop counter
+	ld	e,(hl)		;get FCB for BASIC
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	hl
+	ex	de,hl
+	ld	a,(hl)
+	and	a		;open?
+	jr	z,CKOPN2	;no
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	a,(hl)
+	cp	8+1		;disk?
+	jr	nc,CKOPN2	;no
+	ld	a,(FIB)		;if FIB valid?
+	and	a
+	jr	nz,FIB_VALID	;yes
+	push	hl
+	ld	de,(PATHNAM)
+	ld	b,ATM_HID+ATM_SYS
+	ld	ix,FIB		; search for files/hidden files/system files
+	ld	c,_FFIRST##
+	call	BDOS_NOFIL
+	pop	hl
+	jr	c,CKOPN3	; no file, can't be same then
+FIB_VALID:
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	b,(hl)		; get handle
+	ld	de,FIB
+	ld	c,_HTEST##
+	call	BDOSE
+	ld	a,b		; are they identical?
+	and	a
+	jp	nz,JDERFAO	; yes
+CKOPN2:
+	pop	hl		;restore pointer to BASIC's FCB
+	pop	af		;restore MAXFIL
+	dec	a		;more to check?
+	jp	p,CKOPNL	;yes
+	jp	PBDHRT		; file not opened elsewhere
+;
+CKOPN3:
+	pop	hl
+	pop	hl
+	jp	PBDHRT
+
+;
+;	Search for the first occurence of file/directory specified by PATHNAM.
+;
+;	Entry:  A = attribute to search for
+;
+;	If not found, generate an error.
+;	If found
+;		if PATHNAM is unambiguous and found item is a directory,
+;			the content of a directory is searched for.
+;		if PATHNAM is ambiguous or found item is a file,
+;			its FIB is returned.
+;	C returns the logical drive number of PATHNAM.
+;
+SRCFST_DIR:
+	push	af		; save attribute
+	ld	b,0
+	ld	c,_PARSE##
+	call	PATH_BDOSE
+	pop	af		; restore attribute
+	push	bc		; save parse flags and logical drive number
+	push	de		; save pointer to termination character
+	push	hl		; save pointer to last item
+	push	af		; save attribute
+	ld	b,a
+	call	SRCFST_DO
+	pop	af		; restore attribute
+	pop	hl		; restore pointer to last item
+	pop	de		; restore pointer to termination character
+	pop	bc		; restore parse flags and logical drive number
+	bit	5,b		; is PATHNAM ambiguous?
+	ret	nz		; ambiguous
+	ld	d,a		; save attribute
+	ld	a,(FIB+14)	; where the file attribute is stored
+	and	ATM_DIR		; directory?
+	ret	z		; no
+	ld	a,l		; any 'last item' specified
+	cp	e
+	ret	z		; no, path name ends with '\'
+	push	bc		; save drive number
+	ld	b,d		; set attribute
+	ld	de,FIB		; do the first search on the same FIB
+	push	de
+	pop	ix
+if 0
+	ld	hl,(PATHNAM)	; pass file name portion in HL
+	ld	(hl),0
+else
+	ld	hl,NULSTR	; pass file name portion in HL (null string)
+endif
+	ld	c,_FFIRST##
+	call	BDOSE
+	pop	bc		; restore drive number
+	ret
+
+;
+;	Search for the first occurrence of file specified by PATHNAM.
+;	If not found, generate an error.
+;	If found, FIB will be set up correctly.
+;
+SRCFST:
+	ld	b,0		; search for normal files only
+SRCFST_DO:
+	ld	c,_FFIRST##
+	jp	FIB_PATH_BDOSE
+
+;
+;	Search for the next occurrence of file/directory specified by FIB
+;	If found, return with carry flag reset.
+;	If not found, return with carry flag set.
+;
+SRCNXT:
+	ld	ix,FIB
+	ld	c,_FNEXT##
+BDOS_NOFIL:
+	call	BDOS
+	ret	z		; no error, return with carry reset
+	cp	.NOFIL##	; file not found?
+	scf			; assume so
+	ret	z		; good assumption, return with carry set
+	jp	DOS_ERROR
+
+;
+;	utility macro to swap stack contents
+;
+;	Many thanks to Sam Furukawa
+;
+SWAP	macro	ITEMS,REPLAC
+	ld	ix,REPLAC
+	ld	iy,2*256*ITEMS
+	call	SWAP_ROUTINE
+	endm
+;
+SWAP_ROUTINE:
+	ei			;make sure interrupt is enabled
+	push	hl		;save environments
+	push	de
+	push	bc
+	push	af
+	ld	a,(MASTER_SLOT)
+	add	a,a
+	ld	hl,16
+	jr	nc,NOEXP1
+	ld	l,16+EXPSTK
+NOEXP1:	add	hl,sp
+	push	ix
+	pop	bc		;get new return address in [BC]
+	ld	(hl),c		;substitute return address
+	inc	hl
+	ld	(hl),b
+	ld	hl,10
+	add	hl,sp
+	ex	de,hl
+	jr	SWAPGO
+;
+SWPCNT:	push	iy
+	pop	bc		;get item count in [B]
+SWPLOP:	ld	c,(hl)		;swap items
+	ld	a,(de)
+	ld	(hl),a
+	ld	a,c
+	ld	(de),a
+	inc	hl
+	inc	de
+	djnz	SWPLOP
+SWAPGO:	ld	a,(MASTER_SLOT)
+	add	a,a
+	ld	hl,18		;assume not expanded
+	jr	nc,NOEXP2	;good assumption
+	ld	l,18+EXPSTK	;add extra offset for secondary slot
+NOEXP2:	add	hl,sp
+	ld	a,e
+	sub	l
+	ld	a,d
+	sbc	a,h
+	jr	c,SWPCNT
+POPALL:
+	pop	af		;restore environments
+PBDHRT:
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+	subttl	GETPTR
+;
+;	stack contents
+;
+;		address of the caller of GETPTR
+;		PTRFIL
+;		return address into GETPTR
+;		XXX
+;		XXX
+;      (SP) ->	XXX
+;
+$HOOK	GETPTR
+	SWAP	1,RETURN
+	pop	hl		;restore PTRFIL
+	ld	a,(hl)		;see if it's open and reset carry to
+	and	a		;indicate not special device
+	ret
+
+	subttl	OPEN disk file
+;
+;	get specified file size
+;
+$HOOK	NOFOR
+	ei
+	ld	bc,256		;set up default record size
+	ld	(RECSIZE),bc
+	call	CHRGOT
+	ld	a,e		;re-get file number
+	ret	z		;end of statement
+	push	af		;save file number
+	push	hl		;save text pointer
+	ld	a,(MASTER_SLOT)
+	add	a,a
+	ld	hl,12
+	jr	nc,NOFORP	;slot not expanded
+	ld	l,12+EXPSTK
+NOFORP:	add	hl,sp
+	ld	a,(hl)		;get open mode
+	cp	MD.FIL		;random mode?
+	jp	nz,JSNERR	;no
+	inc	hl
+	ld	a,(hl)
+	cp	8+1		;disk?
+	jp	nc,JSNERR	;no
+	pop	hl		;restore text pointer
+	SYNCHK	0FFh
+	SYNCHK	$LEN
+	SYNCHK	EQULTK
+	ld	ix,INTID2	;get integer in [DE]
+	call	CALBAS
+	dec	de		;between 1..256?
+	inc	d
+	dec	d
+	jp	nz,JFCERR	;no, illegal record size
+	inc	de
+	ld	(RECSIZE),de
+	pop	af		;restore file number
+	ret
+
+;
+;	open possible disk file
+;
+;	[D]  = drive number
+;	[E]  = open mode
+;	[HL] = file pointer
+;
+;	stack contents
+;
+;		address of the caller of NULOPN
+;		text pointer
+;		file #
+;		return address into NULOPN
+;		XXX
+;		XXX
+;      (SP) ->	XXX
+;
+$HOOK	NULOPN
+	ei
+	ret	nc		; not disk
+	SWAP	2,RETURN
+	call	CHKOPN		; make sure not open
+	ld	(PTRFIL),hl	; set up PTRFIL
+	inc	hl
+	inc	hl
+ifndef VER890508
+	xor	a
+	ld	(hl),a		; set default logical record length (=1)
+	inc	hl
+else
+	inc	hl
+	xor	a
+endif
+	ld	(hl),a		; say no character being backed-up
+	inc	hl
+	ld	(hl),d		; set drive #
+	inc	hl
+	inc	hl		; point to FL.BPS
+	ld	(hl),a		; say nothing in buffer
+	ld	a,e		; get open mode
+	push	af		; save this
+	and	MD.BIN+MD.SQO	; binary save or sequential output?
+	jr	z,NOT_CREATE	; no, try other modes
+;
+;	create a new file for read/write
+;
+CRFILE:
+	xor	a		; mode is read/write
+	ld	b,a		; file attribute is normal
+	ld	c,_CREATE##	; create file handle
+	call	PATH_BDOSE
+OPEN_OK:
+	pop	af		; restore open mode
+	ld	hl,(PTRFIL)
+	ld	(hl),a		; set open mode
+	inc	hl
+	ld	(hl),b		; set file handle
+OPNEND:
+	pop	af		; restore file #
+	pop	hl		; restore text pointer
+	ret
+;
+NOT_CREATE:
+	ld	a,e		; get open mode
+	cp	MD.FIL		; random?
+	jr	nz,NOT_RANDOM
+;
+;	opening a ramdon access file
+;
+	ld	hl,(PTRFIL)	; point to record size field
+	inc	hl
+	inc	hl
+	ld	a,(RECSIZE)	; recsize is 1..256
+	dec	a		; make it 0..255
+	ld	(hl),a
+	ld	de,(PATHNAM)	; see if file exists
+	xor	a
+	ld	c,_OPEN##
+	call	BDOS_NOFIL
+	jr	c,CRFILE	; no file, create it
+	jr	OPEN_OK		; it exists
+
+NOT_RANDOM:
+	cp	MD.SQI
+	jr	nz,OPEN_APPEND
+;
+;	opening a file for sequential input
+;
+	xor	a
+	ld	c,_OPEN##
+	call	PATH_BDOSE
+	ld	hl,FLBMEM	; opened by BSAVE?
+	xor	a
+	cp	(hl)
+	ld	(hl),a		; clear this since seen
+	jr	nz,OPEN_OK	; yes
+;
+;	pre-fetch first byte of a file to determine if it is binary
+;	(SAVEd BASIC text) or not.
+;
+	pop	af		; a = MD.SQI
+	ld	hl,(PTRFIL)	; set these because INPDSK needs them
+	ld	(hl),a
+	inc	hl
+	ld	(hl),b		; set file handle
+	dec	hl
+	ex	de,hl
+	ld	hl,FL.BPS
+	add	hl,de
+	ld	(hl),0FFh
+	push	hl
+	ex	de,hl
+	call	INPDSK
+	pop	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	(hl),a		; back up this character
+	inc	a		; looks like binary saved BASIC text?
+	jr	nz,NOT_BINARY	; no
+	inc	hl		; point to fl.flg
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	(hl),MD.BIN
+NOT_BINARY:
+	pop	af		; restore file #
+	pop	hl		; restore text pointer
+	ret
+
+;
+;	opening a file for append
+;
+OPEN_APPEND:
+	xor	a
+	ld	c,_OPEN##
+	call	PATH_BDOSE
+	pop	af		; discard open mode
+	ld	hl,(PTRFIL)	; set these because INPDSK needs them
+	ld	(hl),MD.SQI
+	inc	hl
+	ld	(hl),b		; set file handle
+	dec	hl
+	ex	de,hl		; DE = PTRFIL
+	ld	hl,FL.BPS
+	add	hl,de
+	ld	(hl),0FFh	; say input buffer empty
+	ex	de,hl		; HL = PTRFIL
+	ld	bc,0		; DE:BC is a character counter
+	ld	e,c
+	ld	d,b
+CALC_CHARS:
+	push	hl		; save PTRFIL
+	push	de		; save character count
+	push	bc
+	call	INPDSK		; read from file
+	pop	bc		; restore character count
+	pop	de
+	pop	hl
+	jr	c,HAS_COUNT	; EOF reached, DE:BC has a character count
+	inc	bc		; bump character count
+	ld	a,c
+	or	b
+	jr	nz,CALC_CHARS	; no carry
+	inc	de		; propagate carry
+	jr	CALC_CHARS
+;
+HAS_COUNT:
+	push	bc		; save lower word of count
+	ld	(hl),MD.SQO	; fake sequential output from now
+	inc	hl
+	ld	b,(hl)		; get file handle
+	inc	hl		; point to FL.BPS
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	xor	a
+	ld	(hl),a		; fake buffer empty
+	pop	hl		; move lower word of count to [HL]
+	ld	c,_SEEK##
+	call	BDOS
+	pop	af		; restore file #
+	pop	hl		; restore text pointer
+	ret
+
+	subttl	sequential input
+;
+$HOOK	INDSKC
+	SWAP	3,RETURN
+	call	INPDSK
+	jp	PBDHRT		;restore environments and return
+
+;
+;	get a character from disk
+;
+;	[HL] = PTRFIL
+;
+;	Carry means EOF detected
+;
+INPDSK:
+	push	hl		;save PTRFIL
+	ld	a,(hl)		;get open mode
+	cp	MD.SQI		;sequential input?
+	jp	nz,JDERBFM	;no, bad mode
+	ld	e,l		;move PTRFIL to [DE]
+	ld	d,h
+	inc	hl		;point to back up character area
+	inc	hl
+	inc	hl
+	ld	a,(hl)		;get possible backed up character
+	and	a		;anything backed up?
+	jr	nz,RETBAK	;yes
+	inc	hl		;point to byte position
+	inc	hl
+	inc	hl
+	inc	(hl)
+	ld	a,(hl)		;anything buffered?
+	inc	hl		;make [HL] point to the start of buffer
+	inc	hl
+	inc	hl
+	jr	nz,INDBUF	;yes, simply get from there
+;
+;	Buffer is empty, read from a file
+;
+	push	hl		;save pointer to start of buffer
+	ex	de,hl		;move PTRFIL to HL
+				;move buffer pointer to DE
+	inc	hl
+	ld	b,(hl)		;get file handle
+	ld	hl,256		;read 256 records (256 bytes)
+	ld	c,_READ##
+	call	BDOS
+	jr	z,INPDSK_OK	; no errors reported
+	cp	.EOF##		; already at or beyond EOF?
+	jp	nz,DOS_ERROR	; no
+	pop	hl		; restore pointer to buffer
+	ld	(hl),1Ah
+	jr	INDBUF_1
+;
+INPDSK_OK:
+	ld	c,l		;copy number of records actually read
+	ld	b,h
+	dec	h
+	ld	a,l		;got all 256 bytes?
+	or	h
+	pop	hl		;restore pointer to start of buffer
+	jr	z,INDBUF	;yes
+;
+;	Move buffer content to the end of buffer, to cope with partial
+;	reads from devices.
+;
+	push	hl
+	ld	e,l		;DE = buffer+255 (end of buffer)
+	ld	d,h
+	inc	d
+	dec	de
+	add	hl,bc		;HL = pointer to last byte read
+	ld	a,c
+	dec	hl
+	lddr			;move it up
+	dec	hl		;point to offset into buffer
+	dec	hl
+	neg
+	ld	(hl),a
+	pop	hl
+INDBUF:
+	ld	c,a		;get offset into buffer
+	ld	b,0
+	add	hl,bc		;make target address
+INDBUF_1:
+	ld	a,(hl)		;get from buffer
+RETBAK:
+	sub	1Ah		;set carry only if 1AH is in [A]
+	sub	1
+	ld	a,(hl)		;re-get character
+	pop	hl		;restore PTRFIL
+	inc	hl		;point to backup character area
+	inc	hl
+	inc	hl
+	ld	(hl),0		;say nothing is backed up
+	ret	nc		;not EOF
+	ld	(hl),a		;we reached EOF, return only EOF from
+	ret			;now on
+
+	subttl	back up a character
+;
+$HOOK	BAKUPT
+	ei
+	push	hl
+	ld	a,(MASTER_SLOT)
+	add	a,a		;in expanded slot?
+	ld	hl,8		;assume not
+	jr	nc,BAKPRM	;good assumption
+	ld	l,8+EXPSTK
+BAKPRM:	add	hl,sp		;point to where the return address of
+				;hook is stored
+	ld	(hl),low NOSKCR
+	inc	hl
+	ld	(hl),high NOSKCR
+	pop	hl
+	inc	hl		;point to back up character area
+	inc	hl
+	inc	hl
+	ld	(hl),c		;store back up character
+	ret
+
+	subttl	sequential output
+;
+$HOOK	FILOU1
+	SWAP	4,RETURN
+	ld	a,(hl)		;get open mode
+	cp	MD.SQO		;sequential output?
+	jp	nz,JDERBFM	;no, error
+	pop	af		;restore character to output
+	push	af		;re-save it
+	call	OUTDSK
+	jp	POPALL		;restore environments and return
+
+	subttl	CLOSE
+;
+$HOOK	NTFL0
+	SWAP	2,RETURN
+	pop	hl		;restore PTRFIL
+	ld	a,(hl)		;get open mode
+	sub	MD.SQO		;sequential output?
+	jr	nz,CLOSEF	;no
+	push	hl
+	ld	hl,FLBMEM
+	cp	(hl)		;memory image file?
+	ld	(hl),a		;clear this since seen
+	pop	hl
+	jr	nz,CLOSEF	;yes, no need for ^Z
+	ld	(hl),MD.FIL	;fake random I/O in case close failed
+	ld	a,1Ah		;end of file character
+	call	OUTDSK
+	call	nz,FLUSH	;not yet flushed, flush now
+CLOSEF:	xor	a
+	cp	(hl)		;affect zero flag (zero if not open)
+	ld	(hl),a		;close it now
+	push	af
+	inc	hl
+	ld	b,(hl)		;get file handle
+	ld	de,FL.FLG-1
+	add	hl,de
+	ld	(hl),a		;clear FL.FLG
+	ld	l,a		;clear PTRFIL
+	ld	h,a
+	ld	(PTRFIL),hl
+	ld	c,_CLOSE##
+	call	BDOSE
+	pop	af		;get back zero flag (zero if not open)
+	pop	hl		;restore possible text pointer
+	ret
+
+;
+;	output a character to file
+;
+;	returns NZ if buffer not yet flushed by this call
+;		Z if buffer flushed
+;
+OUTDSK:
+	push	hl		;save address of FCB
+	ld	bc,FL.BPS
+	add	hl,bc
+	ld	c,(hl)		;get position in buffer
+	inc	(hl)		;advance it, set zero flag if full
+	inc	hl
+	inc	hl
+	inc	hl		;point to the start of buffer
+	add	hl,bc
+	ld	(hl),a		;store in buffer
+	pop	hl		;restore address of FCB
+	ret	nz		;buffer not yet full
+
+;
+;	flush the target file
+;
+;	[HL] = address of the FCB (for BASIC)
+;
+FLUSH:
+	push	hl
+	inc	hl		; get file handle
+	ld	b,(hl)
+	ld	de,FL.BPS-1
+	add	hl,de
+	ld	a,(hl)		; get the length to write
+	inc	hl		; point to the FL.BUF field
+	inc	hl
+	inc	hl
+	ex	de,hl		; de = pointer to target
+	dec	a		; load length to write (0 => 256)
+	ld	l,a
+	ld	h,0
+	inc	hl
+	ld	c,_WRITE##
+	call	BDOSE
+	pop	hl		; restore address of FCB
+	ret			; return with zero flag set
+
+	subttl	binary save
+;
+$HOOK	BINSAV
+	call	REMHOK
+	push	hl		;save text pointer
+	ld	ix,SCCPTR	;get rid of pointers
+	call	CALBAS
+	ld	a,0FFh		;ID byte for BASIC text file
+	call	PUT1BYTE
+	ld	de,(TXTTAB)	;set transfer address to the top
+	ld	hl,(VARTAB)
+	and	a		;clear carry
+	sbc	hl,de		;get length of program
+	call	BLKWRT_0
+	ld	(NLONLY),a	;clear NLONLY
+	pop	hl		;restore text pointer
+	ld	ix,CLSFIL
+	jp	CALBAS		;close file #0
+
+	subttl	binary load
+;
+$HOOK	BINLOD
+	SWAP	1,739Ah		;739AH = LODEND + 3
+	pop	af		;restore MERGE flag
+	jp	z,JDERBFM	;cannot merge binary
+	ld	ix,CLSALL	;close all files unless ',R'
+	call	CALBAS
+	ld	hl,-199		; calculate maximum length we can load
+	add	hl,sp		; hl = sp-199
+	ld	de,(TXTTAB)
+	sbc	hl,de		; hl = sp-199-(txttab)
+	jp	c,JOMERR	; apparantly, no room
+	push	hl		; save maximum length
+	call	GET_HANDLE_0	; load file handle for file #0
+	push	bc		; save file handle
+	xor	a		; seek to 2nd byte
+	ld	de,0
+	ld	hl,1
+	ld	c,_SEEK##
+	call	BDOSE
+	pop	bc		; restore file handle
+	ld	de,(TXTTAB)	; set destination
+	pop	hl		; restore maximum length
+	push	hl		; save maximum length
+	ld	c,_READ##
+	call	BDOSE
+	pop	de		; restore maximum length
+	push	hl
+	and	a
+	sbc	hl,de
+	pop	hl
+	jp	nc,JOMERR	; same with maximum or greater
+	ld	de,(TXTTAB)
+	add	hl,de
+	ld	(VARTAB),hl	;Set end of program
+	ld	ix,LINKER
+	call	CALBAS		;Fix links
+	ld	a,(RUNFLG)	;should run?
+	and	a
+	ret	nz		;yes, leave it to the ROM program
+	ld	(NLONLY),a
+	ld	hl,CLRCMD
+	ld	de,CMDTMP
+	ld	bc,5
+	push	de
+	ldir
+	pop	hl
+	ld	ix,NEWSTT
+	jp	CALBAS
+;
+CLRCMD:	defb	':',92H,0,0,0	;clear statement
+
+	subttl	machine language and screen image save
+;
+;	BSAVE <file_name>,<start_address>,<end_address>
+;			[,<execution_address>|S]
+;
+	public	BSAVE
+BSAVE:
+	push	de		;save drive number
+	call	CHK_ADRGET	;get start address
+	ld	(SAVENT),de	;default entry point
+	push	de		;save start address
+	call	CHK_ADRGET	;get end address
+	ld	(SAVEND),de
+	ex	(sp),hl		;save text pointer, get start address
+	ex	de,hl
+	COMPAR
+	jp	c,JFCERR	;end is less than start
+	ex	de,hl
+	ex	(sp),hl		;save start address, get text pointer
+	call	CHRGOT
+	scf			;assume end of statement
+	jr	z,BSAV0		;good assumption
+	SYNCHK	','		;a comma must follow
+	cp	'S'		;screen save?
+	jr	nz,NOT_SCRSAV	;no
+	call	CHRGET		;skip 'S'
+	and	a		;clear carry to indicate screen save
+	jr	BSAV0
+;
+NOT_SCRSAV:
+	call	CALLADRGET
+	ld	(SAVENT),de	;execution address
+	scf			;say not screen save
+BSAV0:
+	pop	bc		;BC = start
+	jr	nc,SCRSAV	;screen save
+	inc	b		;first 32K specified?
+	dec	b
+	jp	p,JFCERR	;yes
+SCRSAV:
+	pop	de		;D  = drive number
+	push	hl		;save text pointer
+	push	bc		;save start address
+	push	af		;save screen flag
+	xor	a		;open file 0 for output
+	ld	e,MD.SQO	;will get 'syntax error' if not end of
+	ld	ix,RNULOPN	;statement
+	call	CALBAS
+	ld	a,0FEh		;ID byte for memory image file
+	call	PUT1BYTE
+	pop	af		;save screen flag
+	pop	hl		;get start address
+	push	hl		;re-save start address
+	push	af		;re-save screen flag
+	call	PUT1WORD	;output start address
+	ld	hl,(SAVEND)	;output end address
+	call	PUT1WORD
+	ld	hl,(SAVENT)	;output execution address
+	call	PUT1WORD
+	pop	af		;restore screen flag
+	pop	bc		;get start address
+	push	af		;re-save screen flag
+	ld	hl,(SAVEND)
+	and	a
+	sbc	hl,bc		;calculate total length in HL
+	inc	hl
+	pop	af		;restore screen flag
+	jr	nc,SCREEN_SAVE	;',S' specified
+	ld	e,c		; set start address to DE
+	ld	d,b
+	call	BLKWRT_0
+BSAVE_END:
+	ld	a,0FFh
+	ld	(FLBMEM),a
+	xor	a
+	ld	ix,CLSFIL
+	call	CALBAS
+	jp	JFINPRT		;restore text pointer and clear PTRFIL
+;
+SCREEN_SAVE:
+	call	GETBUF_0	;set transfer address, get buffer size
+SCR_SAV_LOOP:
+	push	hl		;save buffer size
+	ld	de,(SAVENT)	;get remaining bytes to transfer
+	COMPAR
+	push	af		;save carry flag
+	push	bc		; save buffer address
+	ld	c,l		;move buffer size to BC
+	ld	b,h
+	ld	hl,(SAVEND)	;load start of VRAM
+	push	hl
+	add	hl,bc		;update source address
+	ld	(SAVEND),hl
+	pop	hl
+	pop	de		;**2.00 load start of buffer
+	push	de		;**2.00 save buffer address
+	call	LDIRMV
+	pop	bc		;**2.00 restore buffer address
+	pop	af		;restore carry flag
+	jr	nc,SCR_SAV_END	;the last transfer
+	pop	hl		;restore buffer size
+	push	hl		;re-save buffer size
+	push	bc		;**2.00 save buffer address
+	ld	e,c
+	ld	d,b
+	call	BLKWRT_0
+	pop	bc		;**2.00 restore buffer address
+	pop	de		;get buffer size
+	ld	hl,(SAVENT)	;get remaining bytes to transfer
+	and	a
+	sbc	hl,de		;update remaining bytes to transfer
+	ld	(SAVENT),hl
+	ex	de,hl		;move buffer size to HL
+	jr	SCR_SAV_LOOP
+;
+SCR_SAV_END:
+	pop	hl		;discard buffer size
+	ld	hl,(SAVENT)	;get remaining bytes to transfer
+	ld	e,c
+	ld	d,b
+	call	BLKWRT_0
+	jr	BSAVE_END
+
+	subttl	machine language load
+;
+;	BLOAD - load memory image from disk
+;
+;	BLOAD <file name>[,<R|S>][,offset]
+;
+	public	BLOAD
+BLOAD:
+	push	de		;save drive number
+	xor	a
+	ld	(RUNBNF),a	;clear run flag
+	ld	c,a		;assume end of statement
+	ld	b,a
+	call	CHRGOT		;end of statement?
+	jr	z,BLOD1		;yes, no offset, not run
+	SYNCHK	','		;a comma must follow next
+	cp	'R'		;'R' option?
+	jr	z,BLOAD_OPTION	;yes
+	cp	'S'		;'S' option?
+	jr	nz,BLOD0	;only offset specified
+BLOAD_OPTION:
+	ld	(RUNBNF),a	;set flag for options
+	call	CHRGET		;skip over option
+	jr	z,BLOD1		;only 'R' or 'S' specified
+	SYNCHK	','		;a comma must follow next
+BLOD0:	call	CALLADRGET	;get offset in [DE]
+	ld	b,d
+	ld	c,e
+BLOD1:	pop	de		;[D]=drive, [BC]=offset
+	push	hl		;save text pointer
+	push	bc		;save offset
+	ld	a,0FFh		;say binary image file to prevent
+	ld	(FLBMEM),a	;pre-loading at NULOPN
+	xor	a		;open file 0 for input
+	ld	e,MD.SQI	;will get 'syntax error' if not end of
+	ld	ix,RNULOPN	;statement
+	call	CALBAS
+	call	GET1BYTE	;grab header byte
+	cp	0FEh
+	jp	nz,JDERBFM	;must be a memory image file
+	pop	bc		;re-get offset
+	call	GETADR
+	push	hl		;save start
+	call	GETADR
+	push	hl		;save end
+	call	GETADR
+	ld	(SAVENT),hl	;save entry point
+	pop	hl		;restore end address
+	pop	bc		;re-get start address
+	and	a
+	sbc	hl,bc		;calculate total length
+	inc	hl
+	ld	a,(RUNBNF)
+	cp	'S'		;'S' option specified?
+	jr	z,SCREEN_LOAD	;yes
+	ld	e,c
+	ld	d,b
+	call	GET_HANDLE_0
+	ld	c,_READ##
+	call	BDOSE
+BLOAD_END:
+	ld	ix,FINPRT
+	call	CALBAS
+	pop	hl		;restore text pointer
+	ret
+;
+SCREEN_LOAD:
+	call	GETBUF_0	;set transfer address, get buffer size
+SCR_LOAD_LOOP:
+	push	hl		;save buffer size
+	push	bc		;**2.00
+	ld	de,(SAVENT)	;get remaining bytes to transfer
+	COMPAR
+	push	af		;save carry flag
+	ld	e,c
+	ld	d,b
+	call	GET_HANDLE_0
+	ld	c,_READ##
+	call	BDOS
+	pop	af
+	pop	hl		;**2.00
+	pop	bc		;restore buffer size
+	push	bc		;re-save buffer size
+	push	hl		;**2.00
+	push	af
+	ld	hl,(SAVEND)	;load start of VRAM
+	push	hl
+	add	hl,bc		;update source address
+	ld	(SAVEND),hl
+	pop	de		;restore target address of VRAM
+	pop	af		;restore carry flag
+	pop	hl		;**2.00 DMAADD
+	jr	nc,SCR_LOAD_END	;the last transfer
+	push	hl		;**2.00
+	call	LDIRVM
+	pop	bc		;**2.00
+	pop	de		;restore buffer size
+	ld	hl,(SAVENT)	;get remaining bytes to transfer
+	and	a
+	sbc	hl,de		;update remaining bytes to transfer
+	ld	(SAVENT),hl
+	ex	de,hl		;move buffer size to HL
+	jr	SCR_LOAD_LOOP
+;
+SCR_LOAD_END:
+	pop	bc		;discard buffer size
+	ld	bc,(SAVENT)	;get remaining bytes to transfer
+	call	LDIRVM
+	xor	a
+	ld	(RUNBNF),a
+	jr	BLOAD_END	;fake no option
+;
+GETADR:
+	push	bc		;save offset
+	call	GET1BYTE
+	push	af
+	call	GET1BYTE
+	ld	h,a
+	pop	af
+	ld	l,a
+	pop	bc		;restore offset
+	add	hl,bc		;add offset
+	ret
+;
+CHK_ADRGET:
+	SYNCHK	','
+;
+;	CALLADRGET - return 16 bit number in [DE]
+;
+CALLADRGET:
+	ld	ix,ADRGET
+	jp	CALBAS
+
+PUT1WORD:
+	push	hl
+	ld	a,l		;output lower byte
+	call	PUT1BYTE
+	pop	af		;output higher byte
+;
+;	put a byte to a file #0
+;
+PUT1BYTE:
+	ld	c,_WRITE##
+	defb	21h		;'LD HL,...' instruction (skip next 2 bytes)
+;
+;	get a byte from a file #0
+;
+GET1BYTE:
+	ld	c,_READ##
+GT1B:
+	call	GET_HANDLE_0
+	push	af		;dummy push
+	ld	hl,1
+	add	hl,sp
+	ex	de,hl
+	ld	hl,1
+	push	bc		; save file handle
+	call	BDOSE
+	pop	bc		; restore file handle
+	pop	af		; get returned value from function call
+	ret
+
+;
+;	write to a file #0
+;
+BLKWRT_0:
+	call	GET_HANDLE_0
+	ld	c,_WRITE##
+	jp	BDOSE
+
+;
+;	get a file handle for file #0
+;
+GET_HANDLE_0:
+	push	hl
+	ld	hl,(FILTAB)	; get FCB for file #0
+	ld	b,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,b
+	inc	hl		; point to file handle field
+	ld	b,(hl)		; get it
+	pop	hl
+	ret
+
+if	1
+	subttl	DSKI$/DSKO$
+;
+;	DSKI$(<drive_number>,<sector_number>)
+;	DSKO$ <drive_number>,<sector_number>
+;
+$HOOK	DSKI$
+	call	REMHOK		;remove hook return
+	call	CHRGET		;skip over current token
+	SYNCHK	'('
+	call	GET_PARAM	;get drive and sector
+	or	a
+	jp	nz,GO_ERROR_A
+	SYNCHK	')'
+	push	hl		;save text pointer
+	ld	hl,INTXT+4	;return null string
+	ld	(FACLO),hl
+	ld	a,3
+	ld	(VALTYP),a
+	ld	l,_RDDRV##
+	jr	DSKO$1		;perform disk input
+;
+$HOOK	DSKO$
+	call	REMHOK		;remove hook return
+	call	GET_PARAM	;get drive and sector
+	call	CHRGOT		;end of statement?
+	ret	nz		;no
+	push	hl		;save text pointer
+	ld	l,_WRDRV##
+DSKO$1:
+	push	hl		; save read/write function number
+	push	de		; save logical sector number
+	push	bc		; save logical drive number (i.e., 0 = default)
+;
+;	Ask DOS to validate disk
+;
+if 0
+	ld	e,c		; move drive number to [E]
+	ld	c,_ALLOC##	; get possible new media ID and physical drive
+	call	BDOS
+	inc	a		; 0ffh (error) returned?
+	jp	z,JDERBDN	; yes, bad drive name
+else
+	ld	de,DSKTMP	; temp for new DPB
+	ld	l,c		; move drive number to [L]
+	ld	c,_DPARM##	; validate possible new media
+	call	BDOSE
+endif
+;
+;	Set transfer address, and read/write
+;
+	ld	de,($DIRBUF)
+	ld	c,_SETDTA##
+	call	BDOS
+	pop	hl		; restore logical drive number in L
+	dec	l		; make it zero based (FF => default)
+if 1
+	ld	c,_CURDRV##
+	call	m,BDOS		; default (0) was specified, get default drive
+endif
+	pop	de		; restore logical sector number
+	pop	bc		; C = read/write function number
+	ld	b,1		; read only 1 sector
+
+	ld	a,l
+	ld	hl,(BUF)	;retore sector number (high 16 bits)
+
+	call	BDOSE
+	pop	hl		; restore text pointer
+	ret
+;
+GET_PARAM:
+	ld	ix,GETBYT	; get drive number
+	call	CALBAS
+	push	de		; save drive number ( 1='A:' )
+	SYNCHK	','
+	ld	ix,FRMEVL	; get logical sector number
+	call	CALBAS
+	push	hl
+	call	DAC2LONG
+	ld	(BUF),hl
+	pop	hl
+	pop	bc		; restore drive number in [C]
+	ret
+endif
+
+; Convert the sector number in DAC to 32 bit integer in HLDE
+; Returns error code in A:
+; 0: Ok
+; 13 (Type mismatch): DAC does not contain a number
+; 69 (Disk I/O error): Negative number
+; 6 (Overflow): Number larger than 32 bits, or precission loss
+
+DAC2LONG::
+	ld	a,(VALTYP)
+	ld	b,a
+
+	;--- Error if not a number
+
+	cp	3
+	ld	a,13
+	ret	z
+
+	;--- If int number, return it directly
+	;    (accept negative numbers in this case for compatibilidty)
+
+	ld	a,b
+	cp	2
+	jr	nz,D2L_NOTINT
+
+	ld	de,(DAC+2)
+if	0	;if 1 to disallow negative numbers
+	bit	7,d
+	ld	a,69
+	ret	nz
+endif
+	ld	hl,0
+	xor	a
+	ret
+
+D2L_NOTINT:
+
+	;--- If mantissa is >=80h, error (negative number)
+
+	ld	a,(DAC)
+	ld	c,a
+	and	80h
+	ld	a,69
+	ret	nz
+
+	;--- If mantissa is >=46h (single) or 4Ah (double), error
+	;    (overflow for double, precission loss for single)
+
+	ld	a,42h
+	add	a,b	;Now A=Maximum value for DAC
+	cp	c
+	ld	a,6
+	ret	c
+
+	;--- If mantissa is <41h, number is <1, so return 0
+
+	ld	a,c
+	cp	41h
+	ld	hl,0
+	ld	de,0
+	ld	a,0
+	ret	c
+
+	;--- Now compose the number in HLDE
+
+	ld	ix,DAC+1
+	ld	a,c
+	and	0Fh
+	ld	b,a	;B = Number of digits
+	ld	hl,0
+	ld	de,0
+	jr	D2L_LOOP2
+
+D2L_LOOP1:
+	call	HLDEX10
+	ld	a,6
+	ret	c
+
+D2L_LOOP2:
+	ld	a,(ix)
+	rrca
+	rrca
+	rrca
+	rrca
+	and	0Fh
+
+	push	bc
+	ld	c,a
+	ld	b,0
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	ld	bc,0
+	adc	hl,bc
+	pop	bc
+	ld	a,6
+	ret	c
+	dec	b
+	jr	z,D2L_DONE
+
+	call	HLDEX10
+	ld	a,6
+	ret	c
+
+D2L_LOOP3:
+	ld	a,(ix)
+	and	0Fh
+
+	push	bc
+	ld	c,a
+	ld	b,0
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	ld	bc,0
+	adc	hl,bc
+	pop	bc
+	ld	a,6
+	ret	c
+	
+	inc	ix
+	djnz	D2L_LOOP1
+
+	;--- Done
+
+D2L_DONE:
+	xor	a
+	ret
+
+
+	;Multiply HLDE by 10, return Cy on overflow
+
+HLDEX10:
+	push	bc
+	push	hl
+	exx
+	pop	de
+	ld	bc,0
+	exx
+	ld	bc,10
+	call	MUL32
+	ex	de,hl
+	exx
+	push	hl
+	exx
+	pop	hl
+	pop	bc
+	ret
+
+;==================================================
+; MULTIPLY ROUTINE 32*32BIT=32BIT
+; H'L'HL = B'C'BC * D'E'DE
+; NEEDS REGISTER A, CHANGES FLAGS
+;
+MUL32:
+        AND     A               ; RESET CARRY FLAG
+        SBC     HL,HL           ; LOWER RESULT = 0
+        EXX
+        SBC     HL,HL           ; HIGHER RESULT = 0
+        LD      A,B             ; MPR IS AC'BC
+        LD      B,32            ; INITIALIZE LOOP COUNTER
+MUL32LOOP:
+        SRA     A               ; RIGHT SHIFT MPR
+        RR      C
+        EXX
+        RR      B
+        RR      C               ; LOWEST BIT INTO CARRY
+        JR      NC,MUL32NOADD
+        ADD     HL,DE           ; RESULT += MPD
+        EXX
+        ADC     HL,DE
+        EXX
+		ret	c
+MUL32NOADD:
+        SLA     E               ; LEFT SHIFT MPD
+        RL      D
+        EXX
+        RL      E
+        RL      D
+        DJNZ    MUL32LOOP
+		EXX
+
+        
+; RESULT IN H'L'HL
+		or	a
+        RET
+
+mul32ov:
+        EXX
+		ret
+
+	ret
+
+
+
+	subttl	random I/O - PUT, GET -
+;
+;	PUT <file-number>[,<record-number>]
+;	GET <file-number>[,<record-number>]
+;
+$HOOK	DGET
+	SWAP	2,RETURN
+	ld	a,(hl)		; get open mode
+	cp	MD.FIL		; random mode?
+	jp	nz,JDERBFM	; no, bad file mode
+	ex	(sp),hl		; save FCB pointer, get text pointer
+	call	CHRGOT
+	jr	z,GETCUR	; end of statement, act on current record
+	SYNCHK	','		; comma must follow
+	ld	ix,FRMEVL	; evaluate formula
+	call	CALBAS
+	push	hl		; save text pointer
+	call	FLTINT		; get record number in [HL:BC]
+	ld	a,c		; record 0 specified?
+	or	b
+	or	l
+	or	h
+	jp	z,JFCERR	;1 is the minimum value
+	ld	a,c
+	or	b
+	dec	bc		;make record number 0 based
+	jr	nz,NOBORROW
+	dec	hl
+NOBORROW:
+	ex	de,hl		;move record number to [DE:BC]
+	pop	hl		;restore text pointer
+	ex	(sp),hl		;save text pointer, re-get FCB address
+	push	hl		;save FCB pointer
+	push	de		; save high word of record number
+	inc	hl
+	inc	hl
+	ld	e,(hl)		; get record size
+	ld	d,0
+	inc	de		; adjust it
+	call	MUL16		; HL:BC = (low word of record) * record size
+	pop	ix		; restore high word
+	push	bc		; save low word of byte position
+	push	ix		; BC = high word of record position
+	pop	bc
+	call	MULADD		; calculate high word of byte position
+	ld	a,l		; too large?
+	or	h
+	jp	nz,JFCERR	; yes
+	ld	e,c		; set high word of byte position to DE
+	ld	d,b
+	pop	hl		; set low word of byte position to HL
+	pop	bc		; restore FCB pointer
+	push	bc		; save it soon
+	inc	bc
+	ld	a,(bc)		; get file handle
+	ld	b,a		; set file handle
+	xor	a		; method is relative to the beginning
+	ld	c,_SEEK##
+	call	BDOS
+	pop	hl		; restore FCB pointer
+	ex	(sp),hl		; save FCB pointer, get text pointer
+GETCUR:
+	ex	(sp),hl		; save text pointer, get FCB pointer
+	inc	hl
+	ld	b,(hl)		; get file handle
+	inc	hl
+	ld	e,(hl)		; get record size
+	ld	d,0
+	inc	de		; make correct record size
+	inc	hl		; point to buffer
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	ex	de,hl		; hl = record size
+				; de = pointer to buffer
+	pop	ix		; restore text pointer
+	pop	af		; restore PUT/GET flag
+	push	ix		; save text pointer
+	and	a		; PUT or GET?
+	ld	c,_READ##	; assume GET
+	jr	z,DGET1		; good assumption
+	ld	c,_WRITE##	; PUT
+DGET1:
+	call	BDOSE
+	jp	JFINPRT		; restore text pointer and clear PTRFIL
+
+	subttl	random non I/O - FIELD, LSET, RSET -
+;
+$HOOK	FIELD
+	call	REMHOK
+	cp	'#'
+	call	z,CHRGET	;eat possible '#'
+	ld	ix,GETBYT
+	call	CALBAS
+	jp	z,JSNERR	;end of statement encountered
+	push	hl		;save text pointer
+	ld	ix,RGETPTR	;get address of FCB to [HL]
+	call	CALBAS
+	ld	e,l		;copy it also to [DE]
+	ld	d,h
+	jp	z,JDERFNO	;file not open
+	jp	c,JFCERR	;special device
+	ld	a,(hl)		;get open mode
+	cp	MD.FIL		;random access mode?
+	jp	nz,JDERBFM	;no
+	inc	hl
+	inc	hl
+	ld	l,(hl)		; get record size
+	ld	h,0
+	inc	hl
+	ld	(TEMPA),hl	;store max allowed
+	ld	hl,0		;zero max # of chars
+	ld	(TEMPB),hl
+	ld	bc,FL.BUF
+	pop	hl		;get back text pointer
+LOPFLD:	ex	de,hl		;save text pointer in [DE]
+	add	hl,bc		;add on data pointer so [HL] now points
+				;at the start of the data
+	ex	de,hl		;text pointer back into [HL]
+				;[DE]=pointer into data area
+	ld	a,(hl)		;more "as"s to scan?
+	cp	','		;comma starts the clause
+	ret	nz		;back to NEWSTT if not
+	push	de		;save the pointer into the data block
+	ld	ix,GTBYTC	;read number into [a] from text
+	call	CALBAS
+	push	af		;save this number
+	SYNCHK	'A'
+	SYNCHK	'S'
+	ld	ix,PTRGET	;get a pointer at the string descriptor
+	call	CALBAS		;into [DE]
+	ld	ix,GETYPR	;make sure it's a string
+	call	CALBAS
+	jp	nz,JTMERR
+	pop	af		;get the number of characters
+	ex	(sp),hl		;save the text pointer and
+				;[HL]=pointer into data block
+	push	de		;save pointer to string descriptor
+	push	hl		;save pointer to data block
+	ld	hl,(TEMPB)	;get total so far
+	ld	c,a		;save # of characters in [C]
+	ld	b,0		;accumulate count
+	add	hl,bc		;add in current field size
+	ld	(TEMPB),hl	;save total again
+	ex	de,hl		;total to [DE]
+	ld	hl,(TEMPA)	;get max allowed
+	COMPAR			;in range?
+	jp	c,JDERFOV	;no, give error
+	pop	de		;restore pointer to data block
+	pop	hl		;restore pointer to string descriptor
+	ld	(hl),c		;store the length
+	inc	hl
+	ld	(hl),e		;store the pointer into the data block
+	inc	hl
+	ld	(hl),d
+	ld	b,0		;[BC] = length of character
+	pop	hl		;get back the text pointer
+	jr	LOPFLD		;continue scanning "as" clauses if more
+
+;
+;	LSET/RSET stringvar = stringexp
+;
+;	If stringvar points to an I/O buffer, use  the  string  size  to
+;	justify string.   If  stringvar  is a literal, make new var with
+;	length of literal.  If stringvar points  to  string  space,  use
+;	it.  If  the  length  of  the  variable is zero, return the null
+;	string.   If  a  copy  must  be  created,  and  stringexp  is  a
+;	temporary, use  this  space over unless length stringvar greater
+;	than stringexp.
+;
+$HOOK	RSET
+	defb	0F6h		;OR <STC>
+;
+$HOOK	LSET
+	scf			;set carry if LSET
+	call	REMHOK		;remove hook return
+	push	af		;save LSET/RSET flag
+	ld	ix,PTRGET	;get pointer to stringvar
+	call	CALBAS
+	ld	ix,GETYPR	;make sure it's a string
+	call	CALBAS
+	jp	nz,JTMERR
+	push	de		;save pointer to descriptor
+	ld	ix,FRMEQL	;eat "=" and evaluate stringexp
+	call	CALBAS
+	pop	bc		;[BC] = pointer to descriptor
+	ex	(sp),hl		;text pointer on bottom of stack
+	push	hl		;LSET/RSET flag next
+	push	bc		;put descriptor pointer back on
+	ld	ix,FRESTR	;error if not string, free temp if string
+	call	CALBAS
+	ld	b,(hl)		;get length of stringexp
+	ex	(sp),hl		;[HL] = descriptor of var, save other
+	ld	a,(hl)		;get length of stringvar
+	ld	c,a		;save in [C]
+	push	bc		;save lengths of both
+	push	hl		;save descriptor pointer
+	push	af		;PSW zero if was temp
+	inc	hl
+	ld	e,(hl)		;get point to stringvar text
+	inc	hl
+	ld	d,(hl)
+	or	a		;stringvar null?
+	jr	z,RETCUR	;yes, don't change
+	ld	hl,(NULBUF)
+	dec	hl
+	COMPAR			;stringvar in disk buffer?
+	jr	c,OLDSTR	;yes, use it
+	ld	hl,(VARTAB)
+	COMPAR			;stringvar in program(literal)?
+	jr	c,OLDSTR	;no, in string space so use it
+;
+;	Need to  make  new  string  for result since stringvar points to
+;	a literal.  If stringexp was a temporary,  it  has  been  freed.
+;	If the  length  of  stringexp  is  greater  than or equal to the
+;	length of  stringvar,  GETSPA  can  be  called  and  no  garbage
+;	collection can  occur  so  temp.   can  be reused.  If stringvar
+;	is greater, must get a temp.  to point to stringexp  if  it  was
+;	a temp.   ,  then  call  GETSPA  which  in this case can garbage
+;	collect.
+;
+	ld	e,c
+	ld	d,0		;# bytes to allocate for result
+	ld	hl,(STKTOP)
+	add	hl,de
+	ex	de,hl
+	ld	hl,(FRETOP)
+	COMPAR			;will GETSPA garbage collect?
+	jr	c,MAKDSC	;yes, better have stringexp temp.
+	pop	af		;get rid of temp indicator
+MADESC:	ld	a,c		;get length of stringvar
+	ld	ix,GETSPA	;get space for result
+	call	CALBAS
+	pop	hl		;get stringvar descriptor
+	pop	bc		;get lengths off stack
+	ex	(sp),hl		;get what we wanted, stringexp descriptor
+	push	de
+	push	bc
+	ld	ix,FRESTR	;free temp if any
+	call	CALBAS
+	pop	bc
+	pop	de
+	ex	(sp),hl
+	push	bc		;restore stack to previous state
+	push	hl
+	inc	hl
+	push	af
+	ld	(hl),e		;set pointer to stringvar copy
+	inc	hl
+	ld	(hl),d
+OLDSTR:	pop	af
+	pop	hl		;get stringvar descriptor
+	inc	hl
+	ld	e,(hl)		;get pointer to text area
+	inc	hl
+	ld	d,(hl)
+	pop	bc		;get lengths off stack
+	pop	hl		;get pointer to stringexp descriptor
+	inc	hl		;point to address part
+	ld	a,(hl)		;get pointer to stringexp text
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ld	a,c		;get length of field(stringvar)
+	cp	b
+	jr	nc,FILDOK	;jump if field large enough for result
+	ld	b,a		;save # of bytes to copy
+FILDOK:	sub	b
+	ld	c,a		;[C] = # blanks to fill
+	pop	af		;get LSET/RSET flag
+	call	nc,BLKFIL	;fill leading if RSET
+	inc	b		;in case zero
+COPLOP:	dec	b		;decrement number to copy
+	jr	z,LRSTDN	;done when all copied
+	ld	a,(hl)		;get byte from stringexp
+	ld	(de),a		;copy to stringvar
+	inc	hl
+	inc	de
+	jr	COPLOP
+;
+RETCUR:	pop	bc		;get garbage off stack
+	pop	bc
+	pop	bc
+	pop	bc
+	pop	bc
+LRSTDN:	call	c,BLKFIL	;fill trailing if LSET
+	pop	hl		;restore text pointer
+	ret
+
+BLKFIL:	ld	a,' '		;fill with spaces
+	inc	c		;in case zero
+BLKFL1:	dec	c		;decrement number to fill
+	ret	z		;return when done
+	ld	(de),a		;store space
+	inc	de
+	jr	BLKFL1
+;
+;	If stringexp  was  a  temporary, create a new temporary to point
+;	to stringexp since old one was freed.  This must be  done  since
+;	GETSPA will  be  called  and garbage collection might occur.  If
+;	stringexp is not a temporary, return.
+;
+MAKDSC:	pop	af		;get temp flag
+	pop	hl
+	pop	bc
+	ex	(sp),hl		;dig down to stringexp descriptor
+	ex	de,hl		;FRETMS wants [DE]
+	jr	nz,MAKDS1	;not a temp, don't reallocate
+	push	bc
+	ld	a,b
+	ld	ix,STRINI	;make a temp point to stringexp
+	call	CALBAS
+	call	MOVE_STR
+	pop	bc
+MAKDS1:	ex	(sp),hl
+	push	bc
+	push	hl		;restore stack to previous state
+	jp	MADESC
+
+	subttl	Conversion Routines
+;
+$HOOK	MKI$
+	ld	a,2		;integer
+	defb	1		;skip next 2 bytes
+;
+$HOOK	MKS$
+	ld	a,4		;single precision
+	defb	1		;skip next 2 bytes
+;
+$HOOK	MKD$
+	ld	a,8		;double precision
+	call	REMHOK		;remove hook return
+	push	af		;save # of bytes
+	ld	ix,DOCNVF	;convert FAC to type
+	call	CALBAS
+	pop	af		;get length back
+	ld	ix,STRINI	;make a string of proper length
+	call	CALBAS
+	ld	hl,(DSCPTR)	;get place to store string
+	call	VMOVMF		;move to string
+MOVE_STR:
+	ld	de,DSCTMP
+	ld	hl,(TEMPPT)
+	ld	(FACLO),hl
+	ld	a,3
+	ld	(VALTYP),a
+	call	VMOVE
+	ld	de,FRETOP
+	COMPAR
+	ld	(TEMPPT),hl
+	jp	z,JSTERR
+	ret
+
+;
+$HOOK	CVI
+	ld	a,1		;integer - 1
+	defb	1		;skip next 2 bytes
+;
+$HOOK	CVS
+	ld	a,3		;single - 1
+	defb	1		;skip next 2 bytes
+;
+$HOOK	CVD
+	ld	a,7		;double - 1
+	call	REMHOK		;remove hook return
+	push	af		;save length - 1
+	ld	ix,FRESTR	;make sure a string
+	call	CALBAS
+	pop	af		;get length - 1 back
+	cp	(hl)		;see if string long enough
+	jp	nc,JFCERR	;error if not long enough
+	inc	a		;[A] = VALTYP
+	inc	hl
+	ld	c,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,c		;[H,L] = pointer to string
+	ld	(VALTYP),a	;store type of FAC
+	jp	VMOVFM		;move to string
+;
+;	change possible float number to unsigned integer
+;
+;	outputs: [HL:BC]
+;
+FLTINT:
+	ld	ix,GETYPR	;get type of formula
+	call	CALBAS
+	jp	m,FLTINT_INT	;already integer
+	jp	z,JTMERR	;string, 'type mismatch'
+	ld	hl,DAC		;save original DAC
+	ld	a,(hl)		;negative float?
+	and	a
+	jp	m,JFCERR	;yes, illegal value
+	ld	de,SAVE
+	ld	bc,8
+	ldir
+	ld	hl,C65536
+	ld	de,ARG
+	ld	c,8
+	ldir
+	call	DECDIV		;DAC = DAC / ARG
+	and	a
+	call	VINT+2		;discard fraction
+	ld	ix,FRMQNT+3	;convert to unsigned integer in [HL]
+	call	CALBAS
+	push	de		;save higher word
+	ex	de,hl
+	ld	ix,FLTLIN	;force unsigned [HL] to single precision
+	call	CALBAS
+	call	CONDS		;force to double
+	ld	bc,6545H	;multiply by 65536
+	ld	de,6053H
+	call	FMULT		;DAC = DAC * 65536
+	ld	hl,DAC		;move INT(value/65536)*65536 to ARG
+	push	hl
+	ld	de,ARG
+	ld	bc,8
+	ldir
+	ld	hl,SAVE		;move original value to DAC
+	pop	de
+	ld	c,8
+	ldir
+	call	DECSUB		;get value mod 65536
+	ld	ix,FRMQNT+3	;convert to unsigned integer in [HL]
+	call	CALBAS
+	ld	c,e		;set lower word
+	ld	b,d
+	pop	hl		;restore higher word
+	ret
+;
+FLTINT_INT:
+	ld	bc,(DAC+2)
+	inc	b		;negative integer?
+	dec	b
+	jp	m,JFCERR	;yes, illegal value
+	ld	hl,0
+	ret	
+;
+C65536:	defb	45H
+	defb	65H,53H,60H,0,0,0,0
+
+	subttl	EOF function
+;
+$HOOK	EOF
+	call	REMHOK
+	push	hl		;save PTRFIL
+	call	INPDSK
+	ld	hl,0		;assume not end of file
+	jr	nc,NOTEOF	;good assumption
+	dec	hl
+NOTEOF:	push	af
+	call	MAKINT
+	pop	af
+	pop	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	(hl),a
+	ret
+
+	subttl	FILES command - list the directory -
+;
+;	FILES [<filespec>] command
+;
+;	it  prints  the  files  which  match  the  <filespec>   wildcard
+;	specifier.  if  <filespec>  is  omitted,  all  the  files on the
+;	currently selected drive are listed
+;
+$HOOK	FILES
+	call	REMHOK		; remove hook
+	call	CHRGOT
+	jr	z,FILES_ALL	; no file name specified
+	cp	','		; file name omitted?
+	jr	z,FILES_ALL	; yes
+	call	CALL_NAMSCN
+	jr	FILES_FIRST
+;
+FILES_ALL:
+	xor	a		; make PATHNAM null string
+	ld	de,(PATHNAM)
+	ld	(de),a
+FILES_FIRST:
+	call	CHRGOT
+	scf			; assume end of statement, so short format
+	jr	z,FILES_SHORT	; short format
+	SYNCHK	','		; must be ',L'
+	SYNCHK	'L'
+	and	a		; clear carry to indicate long format
+FILES_SHORT:
+	push	hl		; save text pointer
+	ld	a,(PRTFLG)
+	inc	a		; NZ if going to printer
+	dec	a
+	push	af		; save as a flag on stack
+	ld	ix,CRDONZ	; force cursor to the top of line
+	call	CALBAS
+	pop	af
+	push	af
+	ld	a,ATM_DIR+ATM_HID+ATM_SYS
+				; assume long format
+				; files + directory + hidden + system
+	jr	nc,SEARCH_LONG	; good assumption
+	ld	a,ATM_DIR	; short format
+				; files + directory
+SEARCH_LONG:
+	call	SRCFST_DIR
+	ld	a,c		; get drive number (1=A:)
+	add	a,'@'		; make ASCII code
+	OUTCHR			; print it
+	ld	a,':'
+	OUTCHR
+	ld	a,'\'
+	OUTCHR
+	ld	de,FIB_DST+1	; use as temp (see below why '+1')
+	push	de
+	ld	c,_WPATH##	; get the whole path
+	call	BDOSE
+	ld	(hl),a		; this will make a null string if
+				; listing a root directory
+	dec	hl
+	ld	(hl),a		; this will put a 0 at '\' if listing
+				; subdirectory. if listing a root directory,
+				; this will put a 0 at fib_dst
+	pop	hl
+	call	PRINT_HL
+	ld	ix,CRDO
+	call	CALBAS
+;
+;	keep printing file names while there
+;	top of the stack contains the flag as shown below
+;		Z	if going to screen
+;		NZ	if going to printer
+;		C	if printing in short format
+;		NC	if printing in long format
+;
+FILNXT:
+	pop	af
+	push	af
+	call	PRINT_ENTRY	; print the entry found
+	call	CKCNTC
+;
+;	done with  printing  a  file  name.  check if there is space for
+;	next file name.
+;
+	pop	af		;get printer switch
+	push	af		;re-save flag
+	jr	nc,NWFILN	; long format, always CRLF
+	ld	a,(LINLEN)	;assume console is the destination
+	ld	b,a		;get line width to [B]
+	ld	a,(TTYPOS)	;get current cursor position
+	jr	z,POSTTY	;good assumption
+	ld	b,80		;get printer width to [B]
+	ld	a,(LPTPOS)	;get current printer head position
+POSTTY:
+	and	a		;are we at the top of line?
+	jr	z,NOCRLF	;yes, neither space nor CRLF required
+	add	a,8+3+1+1
+	cp	b		;compare to current posit
+	jr	nc,NWFILN	;need to force CRLF
+	ld	a,' '		;one space between file names
+	OUTCHR
+	jr	NOCRLF
+;
+NWFILN:
+	ld	ix,CRDO
+	call	CALBAS		;type CRLF
+NOCRLF:
+	ld	ix,FIB
+	ld	c,_FNEXT##
+	call	BDOS
+	jr	z,FILNXT	;found next
+	pop	af		;pop off printer switch
+JFINPRT:
+	pop	hl		;restore text pointer
+	ld	ix,FINPRT
+	jp	CALBAS		;finish printing
+
+;
+;	routine to print an entry
+;
+PRINT_ENTRY:
+	jr	nc,PRINT_LONG	; print in long format
+PRINT_FILENAME:
+	ld	de,FIB+1	; point to where file name is
+	ld	hl,(PATHNAM)	; convert file name to fixed format
+	ld	c,_PFILE##
+	call	BDOSE
+	ld	b,8		; print file name portion
+	call	PRINT_HL_B
+	ld	a,(hl)		; get first character of file extension
+	cp	' '		; blank?
+	jr	z,EXT_BLANK	; yes
+	ld	a,'.'
+EXT_BLANK:
+	OUTCHR
+	ld	b,3		; print file extension portion
+PRINT_HL_B:
+	ld	a,(hl)
+	OUTCHR
+	inc	hl
+	djnz	PRINT_HL_B
+	ret
+
+;
+;	list the directory with long format
+;
+PRINT_LONG:
+	call	PRINT_FILENAME	; print the file name and extension
+	ld	a,' '		; print a separator
+	OUTCHR
+	ld	a,(FIB+14)	; where the file attribute is stored
+	ld	c,a
+	bit	4,c		; check if directory
+	ld	a,'d'
+	call	PRINT_ATTR
+	bit	0,c		; check if read only
+	ld	a,'r'
+	call	PRINT_ATTR
+	bit	1,c		; check if hidden
+	ld	a,'h'
+	call	PRINT_ATTR
+	bit	2,c		; check if system
+	ld	a,'s'
+	call	PRINT_ATTR
+	bit	5,c		; check if archive
+	ld	a,'a'
+	call	PRINT_ATTR
+	ld	bc,(FIB+21)	; get file size in HL:BC
+	ld	hl,(FIB+23)
+	call	TO_FLOAT	; set this as float in DAC
+	ld	ix,FOUT		; convert to ASCII string
+	call	CALBAS
+	inc	hl		; skip blank at the beginning
+	push	hl
+	ld	b,12		; count how many digits we have
+COUNT_DIGITS:
+	ld	a,(hl)
+	inc	hl
+	dec	b
+	and	a
+	jr	nz,COUNT_DIGITS
+	ld	a,' '		; pad spaces to align to right
+PAD_SPACE:
+	OUTCHR
+	djnz	PAD_SPACE
+	pop	hl		; restore pointer to ASCII string
+	call	PRINT_HL	; put it out
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+if	1
+	ret
+else
+	ld	hl,(FIB+17)	; get date
+	ld	a,l		; time stamp set?
+	or	h
+	ret	z		; no, suppress output
+	ld	a,' '
+	OUTCHR
+	call	PRINT_DATE	; output date
+	ld	a,' '
+	OUTCHR
+	ld	hl,(FIB+15)
+	call	PRINT_TIME	; output time
+	ret
+
+;
+;	print the date passed via HL register
+;
+;	format is yyyyyyymmmmddddd
+;
+PRINT_DATE:
+	push	hl			; save date
+	call	DATE_FORMAT		; get date format in Acc
+	pop	hl
+	rlca
+	rlca
+	push	af
+	call	DATE_ITEM
+	ld	a,'-'
+	OUTCHR
+	pop	af
+	rlca
+	rlca
+	push	af
+	call	DATE_ITEM
+	ld	a,'-'
+	OUTCHR
+	pop	af
+	rlca
+	rlca
+DATE_ITEM:
+	and	11b
+	jr	z,DATE_DAY
+	dec	a
+	jr	z,DATE_MONTH
+	ld	a,h			; extract year
+	srl	a
+	add	a,80			; add offset
+	cp	100
+	jr	c,OUT_ITEM
+	sub	100
+	jr	OUT_ITEM
+;
+DATE_DAY:
+	ld	a,l
+	and	00011111b
+	jr	OUT_ITEM
+;
+DATE_MONTH:
+	ld	a,h
+	rra
+	ld	a,l
+	rra
+	rra
+	rra
+	rra
+	rra
+	and	00001111b
+OUT_ITEM:
+	ld	b,-1
+FIND_DIG:
+	inc	b
+	sub	10
+	jr	nc,FIND_DIG
+	push	af
+	ld	a,b
+	add	a,'0'
+	OUTCHR
+	pop	af
+	add	a,'0'+10
+	OUTCHR
+	ret
+
+;
+;	print the time passed via HL register
+;
+;	format is hhhhhmmmmmmsssss
+;
+PRINT_TIME:
+	push	hl			; save time
+	call	TIME_FORMAT		; get time format in Acc
+	pop	hl
+	jr	z,PRINT_24
+	ld	a,h
+	rra
+	rra
+	rra
+	and	00011111b
+	cp	12			; am?
+	ld	b,'a'			; assume so
+	jr	c,PRINT_AM		; good assumption
+	sub	12			; pm
+	ld	b,'p'
+PRINT_AM:
+	and	a			; 0?
+	jr	nz,PRINT_DATE1		; no
+	ld	a,12			; convert to 12
+	jr	PRINT_DATE1
+;
+PRINT_24:
+	ld	a,h
+	rra
+	rra
+	rra
+	and	00011111b
+	ld	b,0
+PRINT_DATE1:
+	push	bc			; save what should follow the time
+	call	OUT_ITEM		; output hour
+	ld	a,':'
+	OUTCHR
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	a,h
+	and	00111111b
+	call	OUT_ITEM
+	pop	af
+	and	a
+	ret	z			; 24 format
+	OUTCHR
+	ret
+
+;
+;	find out in what format the date should be displayed
+;
+;	FFSSTTxx
+;	||||||
+;	||||++-- the 3rd item
+;	||++---- the 2nd item
+;	++------ the 1st item
+;
+;	00 = day
+;	01 = month
+;	10 = year
+;
+DATE_FORMAT:
+	ld	a,10010000b		; currently YY-MM-DD format
+	ret
+
+;
+;	find out in what format the time should be displayed
+;
+;	Z  -> 24
+;	NZ -> 12
+;
+;	the check should be made by comparing the TIME variable with '24'.
+;	Other values than '24' should select 12 format.
+;
+TIME_FORMAT:
+	xor	a			; currently 12 format
+	inc	a
+	ret
+
+endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+PRINT_ATTR:
+	jr	nz,ATTR_SET	; specified attribute is set
+	ld	a,'-'
+ATTR_SET:
+	OUTCHR
+	ret
+
+PRINT_HL:
+	ld	a,(hl)		; get character
+	and	a		; end of string?
+	inc	hl
+	ret	z		; yes
+	OUTCHR			; put it out
+	jr	PRINT_HL
+
+	subttl	KILL command
+;
+;	KILL <file name>
+;
+$HOOK	KILL
+	call	REMHOK		; remove hook return
+	call	CALL_NAMSCN	; scan file name
+	call	CHRGOT		; end of statement?
+	ret	nz		; no, let NEWSTT generate 'syntax error'
+	push	hl		; save text pointer
+	call	SRCFST		; search for first occurence of file
+				; and set FIB
+	ld	c,_DELETE##
+	jr	NAME_LOOP
+
+	subttl	NAME command
+;
+;	NAME <old file> AS <new file>
+;
+$HOOK	NAME
+	call	REMHOK		; remove hook
+	call	CALL_NAMSCN	; parse file name
+	push	hl		; save text pointer
+	call	SRCFST		; set up FIB
+	pop	hl		; restore text pointer
+	SYNCHK	'A'
+	SYNCHK	'S'
+	call	CALL_NAMSCN	; scan new name
+	push	hl
+	ld	c,_RENAME##
+NAME_LOOP:
+	push	bc		; save function number
+	ld	de,FIB		; fib for the existing file
+	ld	hl,(PATHNAM)	; new name for _rename (ignored for _delete)
+	call	BDOSE
+	call	SRCNXT
+	pop	bc		; restore function number
+	jr	nc,NAME_LOOP	; more to rename or delete
+	call	DOS_FLUSH	; flush dirty buffers
+	pop	hl
+	ret
+;
+DOS_FLUSH:
+	ld	b,0FFH		; flush all drives
+	ld	d,0		; flush only
+	ld	c,_FLUSH##
+	jp	BDOSE
+;
+CHK_CALL_NAMSCN:
+	SYNCHK	'('
+CALL_NAMSCN:
+	ld	ix,NAMSCN	;parse file name
+	call	CALBAS
+	ld	a,d
+	cp	8+1		;disk?
+	ret	c		;yes
+	jp	JDERBDN
+
+	subttl	LOF and LOC function
+;
+$HOOK	LOF
+	ld	a,2		; load method code (relative to end of file)
+	defb	11H		; 'LD DE' instruction
+;
+$HOOK	LOC
+	ld	a,1		; load method code (relative to current)
+	call	REMHOK
+	push	af		; save method
+	ld	ix,CONINT	; get file number in [A]
+	call	CALBAS
+	ld	ix,RGETPTR	; get address of FCB to [HL]
+	call	CALBAS
+	jp	c,JFCERR	; special device
+	jp	z,JDERFNO	; file is not open
+	inc	hl
+	ld	b,(hl)		; get file handle
+ifndef VER890508
+	inc	hl
+	ld	c,(hl)		; get logical record length - 1
+endif
+	ld	a,1		; get current position
+	ld	de,0
+	ld	hl,0
+ifndef VER890508
+	push	bc		; save file handle
+	ld	c,_SEEK##
+else
+	ld	c,_SEEK##
+	push	bc		; save file handle
+endif
+	call	BDOSE
+	pop	bc		; restore file handle
+	pop	af		; restore method
+	dec	a		; LOC function?
+ifndef VER890508
+	jr	nz,RET_LOF	; no, must return file size
+	push	bc		; save file handle
+	call	GET_LOC		; get LOC value
+	pop	bc		; restore file handle
+	jr	RET_LOC
+RET_LOF:
+else
+	jr	z,RET_LOC	; yes
+endif
+	push	hl		; save current position
+	push	de
+	ld	a,2		; get end of file position
+	ld	de,0
+	ld	hl,0
+ifndef VER890508
+	ld	c,_SEEK##
+endif
+	push	bc		; save file handle
+	call	BDOSE
+	pop	bc		; restore file handle
+	pop	ix		; restore current position (high)
+	ex	(sp),hl		; save end of file position (low)
+				; and get current position (low)
+	push	de		; save end of file position (high)
+	push	ix		; get current position (high)
+	pop	de
+	xor	a
+	call	BDOSE
+	pop	de		; restore end of file position (high)
+	pop	hl		; restore end of file position (low)
+RET_LOC:
+	ld	c,l		; set low word
+	ld	b,h
+	ex	de,hl		; set high word
+;
+;	change 4 byte unsigned integer to float
+;
+;	inputs: [HL:BC]
+;
+TO_FLOAT:
+	push	bc		;save lower word
+	ld	ix,FLTLIN	;convert unsigned 16 bit to single in DAC
+	call	CALBAS
+	ld	bc,6545H	;multiply by 65536
+	ld	de,6053H
+	call	FMULT		;DAC = DAC * 65536
+	ld	hl,DAC		;save it in ARG
+	ld	de,ARG
+	ld	bc,8
+	ldir
+	pop	hl		;get lower word
+	ld	ix,FLTLIN	;convert unsigned 16 bit to single
+	call	CALBAS
+	call	CONDS		;force to double
+	jp	DECADD		;DAC = DAC + ARG
+
+ifndef VER890508
+;
+; [DE:HL] = ([DE:HL] + [C]) / ([C] + 1)
+;
+GET_LOC:
+	inc	c		; Get logical record length
+	jr	nz,DO_DIVIDE	; less than 256, actually divide.
+;
+	ld	a,l		; Handle record size = 256 separately.
+	ld	l,h		; [DE:HL] = [DE:HL] / 256
+	ld	h,e		;  remainder in [A].
+	ld	e,d
+	ld	d,0
+	jr	DO_PARTIAL	; Fall into rest of the process
+;
+DO_DIVIDE:
+	xor	a
+	ld	b,33
+DIV32LOP:
+	adc	a,a
+	jr	c,QUOTBIG	; Quotient has 9 bits
+	cp	c
+	ccf
+	jr	nc,DIVNEXT
+QUOTBIG:
+	sub	c
+	scf
+DIVNEXT:
+	adc	hl,hl
+	ex	de,hl
+	adc	hl,hl
+	ex	de,hl
+	djnz	DIV32LOP
+;
+; Count partial record as a whole record.
+;
+DO_PARTIAL:
+	or	a		; Partial record at EOF?
+	ret	z		; No, done
+	inc	l		; Else increment [DE:HL] by 1
+	ret	nz
+	inc	h
+	ret	nz
+	inc	e
+	ret	nz
+	inc	d
+;
+	ret
+endif
+
+	subttl	DSKF function
+;
+;	returns the number of  free  clusters  on  the  specified  drive
+;
+$HOOK	DSKF
+
+	if 0
+
+	call	REMHOK		; remove hook
+	ld	ix,CONINT	; convert to integer in [A]
+	call	CALBAS
+	and	a		; default drive?
+	call	nz,VAL_DRV	; validate drive number if not
+	ld	e,a		; move drive number in [E]
+	ld	c,_ALLOC##	; get number of free clusters
+	call	BDOS
+	jp	MAKINT		; return as integer
+
+	endif
+
+	if 1	;Return free Ks instead of free clusters (reduced allocation info mode does NOT apply)
+
+	call	REMHOK		; remove hook
+	ld	ix,CONINT	; convert to integer in [A]
+	call	CALBAS
+	and	a		; default drive?
+	call	nz,VAL_DRV	; validate drive number if not
+	ld	e,a
+	ld	c,_DSPACE##
+	xor	a
+	call	BDOS
+	push	de
+	pop	bc
+	jp	TO_FLOAT
+
+	endif
+
+
+	subttl	COPY command
+;
+;	COPY <source_filespec> [TO <destination_filespec>]
+;
+$HOOK	DKCOPY
+	call	REMHOK		; remove hook return
+	call	CALL_NAMSCN	; set up PATHNAM
+	push	hl		; save text pointer
+	call	SRCFST		; set up FIB
+	pop	hl		; restore text pointer
+	call	CHRGOT		; destination omitted?
+	ld	a,0		; assume so
+	push	hl
+	ld	hl,(PATHNAM)
+	ld	(hl),a
+	pop	hl
+	jr	z,DKCOP1	; good assumption
+	SYNCHK	$TO		; make sure 'TO' follows
+	call	CALL_NAMSCN	; set up PATHNAM
+	call	CHRGOT		; end of statement?
+	ret	nz		; no, will cause 'syntax error' at NEWSTT
+DKCOP1:
+	push	hl		; save text pointer
+DKCLOP:
+	call	CKCNTC		; check STOP and control-STOP
+;
+;	open source
+;
+	ld	de,FIB		; open source
+	xor	a
+	ld	c,_OPEN##
+	call	BDOSE
+	ld	a,b
+	ld	(SRC_HANDLE),a
+	xor	a		; get time/date of source
+	ld	c,_HFTIME##
+	call	BDOSE
+	ld	(SRC_DATE),de
+	ld	(SRC_DATE+2),hl
+	ld	a,0FFH		; say destination not open yet
+	ld	(DST_HANDLE),a
+if 1
+	ld	hl,CPABORT
+	ld	(BREAKVECT##),hl
+endif
+;
+;	Determine what should be used as a temporary buffer for
+;	copy process.
+;
+	call	GETBUF		; get memory for buffering
+	ld	e,c		; set buffer pointer
+	ld	d,b
+COPYBL:
+if 0
+	push	hl		; save buffer size
+	ld	a,(SRC_HANDLE)
+	ld	b,a
+	push	de		; save buffer pointer
+	ld	c,_READ##
+	call	BDOS
+	cp	.EOF##		; already at EOF?
+	jr	z,SRC_EOF	; yes
+	and	a		; any other errors?
+	jp	nz,ABORT_COPY	; yes, terminate copy
+SRC_EOF:
+else
+	push	hl		; save buffer size
+	push	de		; save buffer pointer
+COPYL:
+	ld	a,l		; 0 = buffer full
+	or	h
+	jr	z,READ_OK
+	push	hl
+	push	de
+	ld	a,(SRC_HANDLE)
+	ld	b,a
+	ld	c,_READ##
+	call	BDOS
+	jr	z,SRC_OK
+	cp	.EOF##		; EOF is OK
+SRC_OK:
+	jp	nz,ABORT_COPY	; any other error, terminate copy
+	ex	de,hl		; DE = bytes read
+	pop	hl
+	add	hl,de		; HL -> next free buffer (no carry)
+	ex	(sp),hl
+	sbc	hl,de		; HL = size left
+	ld	a,e
+	or	d		; 0 = EOF
+	pop	de		; DE -> buffer, HL = buffer size
+	jr	nz,COPYL
+READ_OK:
+	ex	de,hl		; HL -> next free byte
+	pop	de		; DE -> buffer pointer
+	push	de
+	sbc	hl,de		; HL = number of byte read so far
+endif
+;
+;	See if destination file handle created
+;
+	ld	a,(DST_HANDLE)	; did we open destination file?
+	inc	a
+	jr	nz,DST_OPEN	; yes
+;
+;	create destination using template
+;
+	push	hl		; save number of bytes actually read
+	ld	hl,FIB+1	; set template for destination
+	ld	de,FIB_DST+1
+	ld	bc,8+1+3+1
+	ldir
+	ld	de,(PATHNAM)
+	ld	b,0
+	ld	ix,FIB_DST
+	ld	c,_FNEW##
+	call	COPY_BDOS
+;
+;	open destination
+;
+	ld	de,FIB_DST	; create destination
+	xor	a
+	ld	c,_OPEN##
+	call	COPY_BDOS
+	ld	a,b
+	ld	(DST_HANDLE),a
+	pop	hl		; restore number of bytes actually read
+DST_OPEN:
+	pop	de		; restore pointer to buffer
+	ld	a,(DST_HANDLE)
+	ld	b,a
+	push	de
+	ld	c,_WRITE##
+	call	COPY_BDOS
+	pop	de
+	pop	bc		; restore buffer size
+	sbc	hl,bc		; fully read?
+				; carry is clear after a BDOS call
+	ld	l,c		; HL = size of buffer
+	ld	h,b
+	jr	nc,COPYBL	; yes, continue
+				; was a partial read, end of copy
+;
+;	copy date and time from source file to destination file
+;
+	ld	a,(DST_HANDLE)
+	ld	b,a
+	ld	a,1
+	ld	ix,(SRC_DATE)
+	ld	hl,(SRC_DATE+2)
+	ld	c,_HFTIME##
+	call	COPY_BDOS
+;
+;	close both files
+;
+	ld	a,(SRC_HANDLE)
+	ld	b,a
+	ld	c,_CLOSE##
+	call	COPY_BDOS
+	ld	a,(DST_HANDLE)
+	ld	b,a
+	ld	c,_CLOSE##
+	call	COPY_BDOS
+if 1
+	ld	hl,DBABORT
+	ld	(BREAKVECT##),hl
+endif
+	call	SRCNXT
+	jp	nc,DKCLOP
+	pop	hl		;restore text pointer
+	ret
+;
+GETBUF_0:
+	ld	(SAVENT),hl	;use SAVENT as the VRAM length
+	ld	(SAVEND),bc	;use SAVEND as the VRAM address
+;
+;	Set the disk transfer address and return the buffer size in HL
+;	and pointer to buffer in BC
+;
+GETBUF:
+	ld	hl,-512
+	add	hl,sp		;[HL] = [SP] - 512
+	jr	nc,NOBUF	;for fail safe, use NULBUF (this is not
+				;likely to happen)
+	ld	bc,(STREND)	;get end of valid data
+	and	a		;calculate available buffer memory in
+				;[HL]
+	sbc	hl,bc
+	jr	c,NOBUF		;not enough room left, use NULBUF
+	ld	a,h
+	and	a		;more than 256 bytes left?
+	ret	nz		;yes, use this
+NOBUF:
+	ld	bc,(NULBUF)	;not enough room left, use NULBUF
+	ld	hl,256		;set record count to transfer ( 256 bytes )
+	ret
+
+CPABORT:
+	defw	CPABORT_ROUTINE
+
+COPY_BDOS:
+	call	BDOS
+	ret	z
+ABORT_COPY:
+	push	af		; save error code
+if 1
+	ld	hl,DBABORT
+	ld	(BREAKVECT##),hl
+endif
+	ld	a,(SRC_HANDLE)	; always close source
+	ld	b,a
+	ld	c,_CLOSE##
+	call	BDOS
+	ld	a,(DST_HANDLE)
+	ld	b,a
+	inc	a		; is destination open?
+	ld	c,_CLOSE##
+	call	nz,BDOS		; yes, close it
+	pop	af
+	jr	DOS_ERROR
+;
+FIB_PATH_BDOSE:
+	ld	ix,FIB
+PATH_BDOSE:
+	ld	de,(PATHNAM)
+BDOSE::
+	call	BDOS
+	ret	z		; no errors
+JDOS_ERROR:
+	jr	DOS_ERROR
+
+;
+;	Disk error handler for Disk BASIC.
+;	Always aborts disk errors.
+;
+	public	DBERR
+DBERR:
+	defw	DBERR_ROUTINE
+DBERR_ROUTINE:
+	ld	c,2
+	ret
+;
+;	Disk BASIC abort handler.
+;	Jumps to READYR if terminate with no error.
+;	Reports other errors to the caller of BDOS.
+;
+	public	DBABORT
+DBABORT:
+	defw	DBABORT_ROUTINE
+
+CPABORT_ROUTINE:
+	cp	.ABORT##
+	jr	nz,not_abort	;If we have an aborted disk error then
+	ld	a,b		; get the original error code in A.
+not_abort:
+	or	a
+	ret
+
+DBABORT_ROUTINE:
+	call	CPABORT_ROUTINE
+	jr	nz,DOS_ERROR
+	ld	ix,READYR
+	jp	CALBAS
+
+	subttl	error dispatcher
+;
+;	Analyze errors returned from BDOS call
+;
+.FRSTER	equ	0B3h	;0BAh		; lowest MSXDOS2 error code supported
+;
+DERNUM	macro	ERRNAM
+    ifidn   <ERRNAM>,<*>
+	defb	QQQQ
+    else
+	defb	ERRNAM
+    endif
+QQQQ	defl	QQQQ+1
+	endm
+;
+QQQQ	defl	.FRSTER
+;
+DERR_TAB:
+
+	DERNUM	ERRPUS	; Partition already in use
+	DERNUM	ERRIPA	; Invalid partition
+	DERNUM	ERRIDL	; Invalid device or LUN
+	DERNUM	ERRIDR	; Invalid driver
+
+	DERNUM	*		; ??? (B7h)
+	DERNUM	*		; Invalid subfunction number
+	DERNUM	*		; EOL
+
+	DERNUM	*		; file handle deleted
+	DERNUM	DERBDN		; RAM disk does not exist
+	DERNUM	DERRAE		; RAM disk already exists
+	DERNUM	*		; invalid time
+	DERNUM	*		; invalid date
+	DERNUM	*		; environment string too long
+;
+	DERNUM	*		; invalid environment string
+	DERNUM	*		; invalid device operation
+	DERNUM	*		; file handle not open
+	DERNUM	*		; invalid file handle
+	DERNUM	*		; no spare file handles
+	DERNUM	*		; invalid process id
+	DERNUM	*		; file access violation
+	DERNUM	ERRRPE		; end of file
+	DERNUM	DERBAT		; file allocation error
+	DERNUM	*		; cannot transfer above 64K
+	DERNUM	DERFSO		; file already in use
+	DERNUM	DERFAE		; file exists
+	DERNUM	DERDAE		; directory exists
+	DERNUM	DERFAE		; system file exists
+	DERNUM	ERRBFN		; invalid . or .. operation
+	DERNUM	*		; invalid attributes
+	DERNUM	DERFAE		; directory not empty
+	DERNUM	DERFWR		; file write protected
+	DERNUM	*		; invalid directory move
+	DERNUM	DERFAE		; duplicate file name
+	DERNUM	DERFUL		; disk full
+	DERNUM	DERTMF		; root directory full
+	DERNUM	DERDNF		; directory not found
+	DERNUM	ERRFNF		; file not found
+;
+	DERNUM	ERRBFN		; pathname too long
+	DERNUM	ERRBFN		; invalid pathname
+	DERNUM	ERRBFN		; invalid file name
+	DERNUM	DERBDN		; invalid drive
+;
+	DERNUM	*		; invalid msxdos call
+	DERNUM	*		; ???????????????
+	DERNUM	*		; not enough memory
+	DERNUM	*		; internal error
+;; Disk errors.
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; reserved
+	DERNUM	*		; Cannot format this drive
+	DERNUM	*		; No UPB (may be an internal error if returned)
+	DERNUM	DERBAT		; Bad file allocation table
+	DERNUM	DERIOE		; Seek error
+	DERNUM	DERIOE		; Wrong disk for file
+	DERNUM	DERIOE		; Wrong disk
+	DERNUM	DERIOE		; Not a DOS disk
+	DERNUM	DERIOE		; Unformatted disk
+	DERNUM	DERFWP		; Write protected disk
+	DERNUM	DERIOE		; Sector not found
+	DERNUM	DERIOE		; Data error
+	DERNUM	DERIOE		; Verify error
+	DERNUM	DEROFF		; Not ready
+	DERNUM	DERIOE		; Disk error
+	DERNUM	DERIOE		; Write error
+	DERNUM	DERIOE		; Incompatible disk
+;
+if QQQQ ne 256
+	PRINTL	<LAST DISK ERROR>,%QQQQ
+endif
+
+DOS_ERROR:
+	push	af		;Save error code
+	call	DOS_FLUSH	;Always flush in case of error
+	pop	af		;Restore error code
+;
+	cp	.STOP##		;Ctrl-STOP pressed
+	jr	z,was_break
+	cp	.CTRLC##	;Ctrl-C pressed
+was_break:
+	ld	ix,READYR	;Go to READYR without any indication of error
+	jp	z,CALBAS	; (must be a better way).
+;
+
+	;This entry point allows to convert a DOS error code
+	;into a BASIC error code in DOS 1 mode
+	;(needed for CALL MAPDRV et al)
+	;Input: A = DOS error, Output: E = BASIC error
+GETERR::
+	ld	e,a
+	cp	.FRSTER		;Errors known to us?
+	jr	c,DOS_UNKNOWN	; no way to translate, use DOS error code
+	ld	c,a
+	ld	b,0
+	ld	hl,DERR_TAB-.FRSTER
+	add	hl,bc
+	ld	a,(hl)
+	ld	e,a
+	cp	DERFST		;Error codes known to MSX BASIC?
+	jr	c,GO_ERROR	; yes, file #0 will be closed by MSX-BASIC.
+DOS_UNKNOWN:
+;
+DERMAK	macro	ERRNAM
+ERRNAM	equ	QQQQ
+	defb	1		;; 'LD BC' instruction (skip next 2 bytes)
+J&ERRNAM:
+	ld	e,ERRNAM
+QQQQ	defl	QQQQ+1
+	endm
+;
+QQQQ	defl	DERFST
+;
+;	Disk-BASIC errors
+;
+	DERMAK	DERBAT		;bad allocation table
+	DERMAK	DERBFM		;bad file mode
+	DERMAK	DERBDN		;bad drive name
+	DERMAK	DERBTS		;bad sector number
+	DERMAK	DERFSO		;file still open
+	DERMAK	DERFAE		;file already exists
+	DERMAK	DERFUL		;disk is full
+	DERMAK	DERTMF		;directory full
+	DERMAK	DERFWP		;disk write protected
+	DERMAK	DERIOE		;disk I/O error
+	DERMAK	DEROFF		;disk offline
+	DERMAK	DERRAD		;rename across disk
+	DERMAK	DERFWR		;file write protected
+	DERMAK	DERDAE		;directory already exists
+	DERMAK	DERDNF		;directory not found
+	DERMAK	DERRAE		;RAM disk already exists
+
+	DERMAK	ERRIDR	; Invalid driver
+	DERMAK	ERRIDL	; Invalid device or LUN
+	DERMAK	ERRIPA	; Invalid partition
+	DERMAK	ERRPUS	; Partition already in use
+;
+DERLST	equ	QQQQ-1		;
+;
+	xor	a		;clear NLONLY so that file #0 is closed
+	ld	(NLONLY),a
+	push	de		;save error code
+	ld	ix,CLSFIL
+	call	CALBAS		;close file #0
+	pop	de
+	jr	GO_ERROR
+;
+;	MSX BASIC errors
+;
+
+GO_ERROR_A:
+	ld	e,a
+GO_ERROR:
+	defb	1
+JSTERR:	ld	e,ERRST
+	defb	1		;skip 2 bytes
+JTMERR:	ld	e,ERRTM
+	defb	1		;skip 2 bytes
+JOMERR:	ld	e,ERROM
+	defb	1		;skip 2 bytes
+JFCERR:	ld	e,ERRFC
+	defb	1		;skip 2 bytes
+JSNERR:	ld	e,ERRSN
+	defb	1		;skip 2 bytes
+;
+JDERFOV:ld	e,ERRFOV
+	defb	1		;skip 2 bytes
+if DEBUG
+JDERIER:ld	e,ERRIER
+	defb	1		;skip 2 bytes
+endif
+JDERIFN:ld	e,ERRIFN
+	defb	1		;skip 2 bytes
+JDERFNF:ld	e,ERRFNF
+	defb	1		;skip 2 bytes
+JDERFAO:ld	e,ERRFAO
+	defb	1		;skip 2 bytes
+JDERRPE:ld	e,ERRRPE
+	defb	1		;skip 2 bytes
+JDERBFN:ld	e,ERRBFN
+	defb	1		;skip 2 bytes
+JDERFNO:ld	e,ERRFNO
+;
+	ld	a,(DOS_VER##)
+	or	a
+	ret	z	;Return if this is called via GETERR in DOS 1 mode
+
+	xor	a		;always clear binary mode flag
+	ld	(FLBMEM),a
+	ld	ix,ERROR
+CALBAS:
+	call	RCALBAS
+	ei			;make sure interrupt is enabled
+	ret
+
+	subttl	miscellaneous routines
+;
+;	make sure of a proper token
+;
+SYNCHR:	call	CHRGOT
+	ex	(sp),hl
+	cp	(hl)		;same with specified character?
+	jr	nz,JSNERR	;no, syntax error
+	inc	hl		;update return address
+	ex	(sp),hl
+	inc	hl
+;
+;	re-get current token
+;
+CHRGOT:	dec	hl
+;
+;	get next token
+;
+CHRGET:	ld	ix,CHRGTR
+	jr	CALBAS
+
+;
+;	H.PARDEV
+;
+;	This hook is to intercept the interpretation of a file name.
+;	This routine is entered as shown below.
+;
+;	NAMSCN:
+;			|
+;		push	hl
+;			|
+;		call	PARDEV
+;			|
+;		ret
+;
+;	PARDEV:
+;		call	H.PARD
+;			|
+;		ret
+;
+;	H.PARD:
+;		CALLF	PARDEV (this routine)
+;		ret
+;
+;	E register holds the length of a file specifier, and HL is a pointer
+;	to it. E register is guaranteed to be non-zero.
+;
+; STRATEGY:
+;
+;	If a ':' is found and it is not 2nd character of the string,
+;	we know the string specifies a built-in or add-on
+;	device, so directly returns to the caller of this hook.
+;
+;	Otherwise, we know the string specifies a disk drive.
+;	The caller of NAMSCN is checked to see if it is called from
+;	BLOAD or BSAVE. If so, the return address into the caller of
+;	NAMSCN (i.e., BLOAD or BSAVE) is changed by an appropriate
+;	RAM routine which calls disk BASIC 2's special BLOAD/BSAVE
+;	routine.
+;	In order to allow disk BASIC 2 to use a full path name in its
+;	file specification, the whole string is copied to PATHNAM.
+;	This is not the end. Some existing applications call NAMSCN
+;	and/or PARDEV to parse file/device name. In order to allow
+;	such programs to work properly, FILNAM and drive name must
+;	also be set. This is done by returning into NAMSCN with proper
+;	string pointer and character count. Care must be taken not to
+;	pass illegal characters (such as '\') to NAMSCN so that
+;	'Bad file name' error does not occur.
+;
+$HOOK	PARDEV
+	ei
+	ld	a,':'
+	cp	(hl)		; is first character colon?
+	jr	z,JDERBFN	; yes, give bad file name error to fix
+				; the ROM BASIC's bug
+	push	hl		;save pointer to file specifier
+	push	de
+	ld	a,e
+	cp	63+1		;too long?
+	jr	nc,JDERBFN	;yes
+	ld	c,e		;set length
+	ld	b,0
+	ld	de,(PATHNAM)	;set destination
+	push	bc
+	push	de
+	ldir			;store in PATHNAM
+	xor	a		;make it ASCIZ
+	ld	(de),a
+;
+	pop	hl		;insure nul characters are not included
+	pop	bc		; for later processing
+	cpir
+	jr	z,JDERBFN
+;
+	ld	c,_PARSE##
+	call	PATH_BDOSE
+	ld	a,(de)
+	cp	":"		;terminated with a colon?
+	jr	nz,IS_DISK_FILE
+	pop	de		;not a disk file name, let ROM handle it
+	pop	hl
+	ret
+
+IS_DISK_FILE:
+	bit	2,b		;drive name specified?
+	jr	nz,HAVE_DRIVE
+	ld	c,0		;default drive if none parsed
+HAVE_DRIVE:
+	ld	a,b
+	and	11000010b	;are directory path, "." or ".." parsed?
+	jr	z,OLD_FORMAT	;none, an old file name format
+;
+	ld	a,(de)		;error if the file name is not nul terminated.
+	or	a
+	jr	nz,JDERBFN
+	pop	de
+	ld	e,a
+	push	de		;fake none left
+	push	bc		;save drive
+	jr	RET_ASIS
+;
+OLD_FORMAT:
+;
+;	Now we know the file name is in OLD (DOS1) format.
+;	We have to check if a file name is longer than 8 characters
+;	without a period. If so, a period must be inserted.
+;
+;	ex.	"ABCDEFGHIJK" -> "ABCDEFGH.IJK"
+;
+	pop	de
+	pop	hl
+	ld	ix,(PATHNAM)
+	bit	2,b		;drive name specified?
+	jr	z,NO_DRIVE	;jump with A=0 if not
+	inc	hl		;skip drive name
+	inc	hl
+	dec	e
+	dec	e
+	inc	ix
+	inc	ix
+NO_DRIVE:
+	push	hl
+	push	de
+	push	bc		;save drive number
+;
+	inc	e
+	dec	e
+	jr	z,RET_ASIS	;skip if drive only
+;
+	ld	c,e
+	ld	a,(hl)		;get first letter of a field
+	cp	' '		;space?
+	jp	z,JDERBFN	;yes, illegal name
+	ld	b,8		;maximum length for a main file name
+	call	DO_FIELD
+	jr	z,MODIFY_END
+;
+	bit	1,d		;if the last character parsed was the first
+	jr	z,NOT_DBCS	; byte of DBCS, back up the character
+	dec	ix		; to keep compatibility with NAMSCN.
+NOT_DBCS:
+	ld	a,'.'
+	ld	(ix),a		;insert '.'
+	inc	ix
+	cp	(hl)
+	jr	nz,NOT_DOT
+	inc	hl
+	dec	c
+	jr	z,MODIFY_END
+NOT_DOT:
+if 1
+	ld	b,3		;parse the extension of the file name
+	call	DO_FIELD
+	jr	z,MODIFY_END	;done if parsed to the end
+	ld	a,(hl)		;otherwise, allow only space character as a
+	cp	" "		; terminator and ignore garbage after that
+	jp	nz,JDERBFN	;
+	ld	c,0		;
+else
+	ld	b,c		;parse to the end of the file name
+	call	DO_FIELD
+	jp	nz,JDERBFN	;error if anything remains
+endif
+;
+MODIFY_END:
+	ld	(ix),c		;make it ASCIZ
+RET_ASIS:
+	ld	a,(MASTER_SLOT)
+	add	a,a
+	ld	hl,12		;assume not expanded
+	jr	nc,PNOEXT	;good assumption
+	ld	l,12+EXPSTK
+PNOEXT:
+	add	hl,sp
+;
+;	now, HL points to a stack entry shown below
+;
+;		caller of NAMSCN
+;		text pointer
+;		caller of PARDEV	(i.e., NAMSCN)
+;	HL ->	caller of H.PARD	(i.e., PARDEV)
+;
+;===== start mod DOS2.50 (avoid assembler bug)
+	ld	de,RETURN
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+;;	ld	(hl),low RETURN
+;;	inc	hl
+;;	ld	(hl),high RETURN
+;===== end mod DOS2.50
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+;
+;	see if NAMSCN is called by BLOAD/BSAVE, if so modify return address
+;	into the caller of NAMSCN
+;
+	ld	e,(hl)		;get caller of NAMSCN
+	inc	hl
+	ld	d,(hl)
+	push	hl		;save pointer to stack
+	ld	hl,RBSAVE+3
+	COMPAR			;called by BSAVE?
+	ld	bc,(BSVCHK)	;assume so
+	jr	z,BSVENT	;yes
+	ld	hl,RBLOAD+3
+	COMPAR			;called by BLOAD?
+	ld	bc,(BLDCHK)	;assume so
+	jr	z,BSVENT	;yes
+	ld	c,e
+	ld	b,d
+BSVENT:
+	pop	hl
+	ld	(hl),b		;re-write return address
+	dec	hl
+	ld	(hl),c
+;
+;	return modified file name to the caller
+;
+	pop	bc		;restore drive number (0 => default)
+	ld	a,c
+	or	a		;set default flag
+	call	nz,VAL_DRV	;generate 'bad drive' error if it is the case
+	pop	de		;restore length of file name
+	pop	hl		;restore pointer to file name
+	ret
+
+DO_FIELD:
+	ld	d,1		;b0=1 => suppress upper casing
+IN_FIELD:
+	push	hl
+	push	bc
+	ld	e,(hl)
+	ld	c,_CHKCHR##	;check the character in anticipation
+	call	BDOSE
+	pop	bc
+	pop	hl
+	ld	a,e
+	bit	4,d		;valid file name character?
+	jr	nz,SPACE_CHK
+	ld	(ix),a
+	inc	ix
+	inc	hl
+	dec	c		;end of path name?
+	ret	z
+	djnz	IN_FIELD
+	ret			;NZ => something follows
+
+SPACE_LOOP:
+	ld	a,(hl)
+SPACE_CHK:
+	cp	' '		;space?
+	ret	nz		;NZ => something follows (maybe '.')
+	inc	hl
+	dec	c		;end of path name?
+	ret	z		;Z => field terminated normally
+	djnz	SPACE_LOOP
+	ret			;NZ => something follows (maybe '.')
+
+;
+$HOOK	NODEV
+	ei
+	ld	a,0		;default is currently selected drive
+	ret
+
+;
+$HOOK	ERRPRT
+	ei			;make sure interrupts not inhibited
+	ld	a,e		;get error code
+	sub	DERFST		;disk error?
+	ret	c		;no
+	cp	DERLST-DERFST+1	;disk error?
+	ret	nc		;no
+	inc	a		;start with 1 for DJNZ
+	ld	b,a		;find corresponding message
+	ld	hl,DERMSG
+ERPRT1:	ld	a,(hl)
+	and	a
+	inc	hl
+	jr	nz,ERPRT1
+	djnz	ERPRT1
+	dec	hl
+	ld	de,MSGTMP	;copy string to system area
+	push	de
+	ld	bc,MAXMSGLEN
+	ldir
+	ld	e,1		;modify error code
+	pop	hl		;modify error message address
+	ret
+;
+DERMSG:	defb	0
+	defb	'Bad FAT',                 0
+	defb	'Bad file mode',           0
+	defb	'Bad drive name',          0
+	defb	'Bad sector number',       0
+	defb	'File still open',         0
+	defb	'File already exists',     0
+	defb	'Disk full',               0
+	defb	'Too many files',          0
+	defb	'Disk write protected',    0
+	defb	'Disk I/O error',          0
+	defb	'Disk offline',            0
+	defb	'Rename across disk',      0
+;
+	defb	'File write protected',    0
+	defb	'Directory already exists',0
+	defb	'Directory not found',     0
+	defb	'RAM disk already exists', 0
+
+	defb	'Invalid device driver',   0
+	defb	'Invalid device or LUN',   0
+	defb	'Invalid partition number',0
+	defb	'Partition already in use',0
+
+;		'----+----1----+----2----'
+;
+MAXMSGLEN	equ	24+2	;2 extra spaces are for terminators
+
+;
+;	Remove hook return
+;
+REMHOK:
+	ei
+	push	hl
+	push	af
+	ld	a,(MASTER_SLOT)
+	add	a,a		;in expanded slot?
+	ld	hl,12		;assume not
+	jr	nc,REMPRM	;good assumption
+	ld	l,12+EXPSTK
+REMPRM:	add	hl,sp		;point to where the return address of
+				;hook is stored
+;===== start mod DOS2.50 (avoid assembler bug)
+	push	de
+	ld	de,RETURN
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	pop	de
+;;	ld	(hl),low RETURN
+;;	inc	hl
+;;	ld	(hl),high RETURN
+;===== end mod DOS2.50
+	pop	af
+	pop	hl
+	ret
+
+;
+;	MUL16        [BC]=[BC]*[DE].       Preserves DE, IX, IY.
+;	MULADD    [HL:BC]=[BC]*[DE]+[HL].  Preserves DE, IX, IY.
+;
+     ;; public	MUL16,MULADD
+MUL16:
+     ;; call	H.MUL16
+	ld	hl,0
+MULADD:
+	ld	a,17
+SHFMUL:
+	rr	b
+	rr	c
+	dec	a
+	ret	z
+	jr	nc,NOADD
+	add	hl,de
+NOADD:
+	rr	h
+	rr	l
+	jr	SHFMUL
+
+	.radix	16
+	PRINTL	DSKBASIC,%($-$$BASIC)
+	.radix	10
+
+	end

@@ -1,0 +1,76 @@
+CODES=	../codes.rel ../command/ver.rel
+TEXTA=	text.rel jtext.rel end.rel
+TEXTC=	text.rel jtext.rel ttab.rel ../clibmath.rel ../msxlib.rel
+
+all:
+	@echo 'This is not a top-level Makefile'; exit 1
+
+#########################################
+#	Ruleset for DISKCOPY.COM	#
+#########################################
+DCRELS=	dcopy.rel
+
+diskcopy.com:	$(CODES) $(DCRELS) $(TEXTC)
+		xl80 $(CODES) $(DCRELS) $(TEXTC) -o $@
+
+#########################################
+#	Ruleset for XCOPY.COM		#
+#########################################
+XCRELS= xcopy.rel xcopyfns.rel
+
+xcopy.com:	$(CODES) $(XCRELS) $(TEXTC)
+		xl80 $(CODES) $(XCRELS) $(TEXTC) -o $@
+
+$(XCRELS):	xcopy.h
+
+#########################################
+#	Ruleset for XDIR.COM		#
+#########################################
+XDRELS= xdir.rel
+
+xdir.com:	$(CODES) $(XDRELS) $(TEXTC)
+		xl80 $(CODES) $(XDRELS) $(TEXTC) -o $@
+
+#########################################
+#	Ruleset for CHKDSK.COM		#
+#########################################
+CDRELS= main.rel misc.rel dir.rel var.rel nodebug.rel
+
+chkdsk.com:	$(CODES) $(CDRELS) $(TEXTA)
+		xl80 $(CODES) $(CDRELS) $(TEXTA) -o$@
+
+main.rel:	macros.inc const.inc
+misc.rel:	macros.inc const.inc
+dir.rel:	macros.inc const.inc
+var.rel:	macros.inc const.inc
+nodebug.rel:	macros.inc const.inc
+
+#########################################
+#	Ruleset for UNDEL.COM		#
+#########################################
+UDRELS= main.rel misc.rel dir.rel var.rel nodebug.rel
+
+undel.com:	$(CODES) $(UDRELS) $(TEXTA)
+		xl80 $(CODES) $(UDRELS) $(TEXTA) -o$@
+
+main.rel:	macros.inc const.inc
+misc.rel:	macros.inc const.inc
+dir.rel:	macros.inc const.inc
+var.rel:	macros.inc const.inc
+nodebug.rel:	macros.inc const.inc
+
+#########################################
+#	Ruleset for FIXDISK.COM		#
+#########################################
+FDRELS= fixdisk.rel
+
+fixdisk.com:	$(CODES) $(FDRELS) $(TEXTA)
+		xl80 -p100 $(CODES) $(FDRELS) $(TEXTA) -o$@
+
+#########################################
+#	Ruleset for KMODE.COM		#
+#########################################
+KMRELS= kmode.rel text.rel end.rel
+
+kmode.com:	$(CODES) $(KMRELS)
+		xl80 -p100 $(CODES) $(KMRELS) -o$@

@@ -1,0 +1,10 @@
+;
+; Release Date: Jan 28, 2008
+;
+	public	R_YEAR,R_DATE
+;
+R_YEAR	equ	2014
+R_DATE	equ	107
+;
+	end
+

@@ -1,0 +1,545 @@
+	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL  Miscellaneous Disk and File Commands
+;
+;
+		INCLUDE COMMAND.INC
+;
+;
+;        This  module  contains  the  command  routines   for   the   assorted
+; disk-accessing commands. These include COPY, DIR, FORMAT and ASSIGN.
+;
+;
+		SUBTTL  CHDIR
+;******************************************************************************
+;
+;        This is the CHDIR (CD) command routine. If  a  path/filename  is  not
+; given  on  the  command  line,  then  it  gets the current directory for the
+; appropriate drive and prints  it.  Otherwise,  it  attempts  to  change  the
+; current directory for the appropriate drive to that specified.
+;
+;
+@CHDIR::        CALL    PRS             ; Parse given directory.
+		CALL    Z,GCHKEOL##
+		RET     NZ              ; Error if not end of line.
+;
+		LD      (HL),A          ; Terminate string.
+		LD      A,C             ; Save drive.
+		.BIT    $ODRV,B         ; If anything after drive parsed,
+		LD      C,_CHDIR##      ;   then change to the specified
+		JP      NZ,_BDOS##      ;   directory.
+;
+		PUSH    AF              ; Save drive.
+		LD      B,A
+		LD      C,_GETCD##
+		LD      DE,BUFF##
+		CALL    _BDOS##         ; DE -> current directory.
+		POP     BC
+		RET     NZ
+;
+		LD      A,B
+CD:             ADD     A,'A'-1         ; Print drive letter.
+		CALL    OUCH##
+		LD      A,':'
+		CALL    OUCH##
+		LD      A,'\'           ; Followed by \path string.
+		CALL    OUCH##
+		JP      DMSCR##
+;
+;
+;
+PRS::           LD      B,0
+_PRS:           LD      C,_PARSE##
+		EX      DE,HL           ; DE -> start of string.
+		PUSH    DE
+		CALL    _BDOS##
+		EX      DE,HL           ; HL -> terminating character.
+		POP     DE              ; DE -> start of filename string.
+		RET     NZ              ; Return if error.
+;
+		LD      A,(HL)
+		CALL    SEP?##          ; 'Invalid pathname' if terminator is
+		LD      A,.IPATH##      ;   not a separator.
+		RET     NZ
+;
+		LD      A,B             ; Set ambiguous bit if null last item.
+		AND     $FN OR $EXT
+		JR      NZ,XORET
+;
+		.SET    $AMBIG,B
+XORET:          XOR     A               ; Else no error.
+		RET
+;
+;
+;
+		SUBTTL  DIR
+;******************************************************************************
+;
+;        This  is  the DIR routine. There are two formats of the listing - the
+; normal format in which one file is listed per line  along  with  file  size,
+; date and time, and the 'wide' format which is chosen with a  /W  option,  in
+; which  more than one file is listed per line without dates and times etc.
+;
+;        In  both  formats,  the  volume  name and path of the directory whose
+; files are being listed are first printed. The volume name is  printed  by  a
+; special entry point in the VOL command routine, and the directory path being
+; listed is built-up by the search-for-first functions and is  returned  by  a
+; function call.
+;
+;        In the normal format, each file is printed along with the file  size,
+; the  file  hidden  and read only attributes if set, and the date and time of
+; creation.  If both attribute bits are set then both an 'r' and  an  'h'  are
+; printed  in  the  two-character  field.  If  only one attribute bit is being
+; printed though, this character is always printed with a space before it,  so
+; the  display  does  not  look cramped if possible. The file size is a 32-bit
+; number printed in a field of 8 characters with leading zeros supressed.  For
+; a sub-directory entry, <dir> is printed in this field instead.  The date and
+; time are printed in the appropriate format. This format  will  fit  into  38
+; characters.  If the width of the output device is less than this then fields
+; from the left hand end are missed off until the display fits on one line. If
+; the  width  is so small that even one filename will not fit on, then it will
+; wrap. The various fields and their widths are:
+;
+;       |filename| ext|rh|  size  |  date   |  time |
+;       |        |    |  |        |         |       |
+;       |<---8-->|<-4>| 2|<---8-->|<---9--->|<--7-->|
+;
+;        In the wide format, only the filename is printed, and sub-directories
+; are not included. The number of filenames per line listed is calculated from
+; the  width  of  the  output  device.  Each  filename  printed fits within 16
+; characters (to make the division easy !) with 8 characters for the filename,
+; one for the dot, 3 for the extension and 4 to space to the next field. The 4
+; spaces are not printed for the last filename on a line, and this is  allowed
+; for  in the calculation. The dot before the extension is only printed if the
+; extension is non-blank.
+;
+;        The find first routine FIRST tests a flag which the DIR command sets.
+; This  flag makes FIRST default filename extensions to .* and filenames to *.
+; This is done by inserting the characters into the command line,  moving  the
+; rest  of  the characters up in memory to make room. Since this will not work
+; if something else has saved a pointer to  the  command  line  (such  as  the
+; piping code), the DIR parameters are copied into BUFF before being used.
+;
+;
+WFN             EQU     9               ; Width of filename display.
+WEXT            EQU     WFN+4           ; Width of extension display.
+WRH             EQU     WEXT+2          ; Width of 'rh' attributes display.
+WSIZE           EQU     WRH+8           ; Width of filesize display.
+WDATE           EQU     WSIZE+9         ; Width of date display.
+WTIME           EQU     WDATE+7         ; Width of time display.
+;
+;
+@DIR::          PUSH    HL              ; Set up the date and time format
+		CALL    TFORM##         ;   variable first as these routines
+		CALL    DFORM##         ;   corrupt BUFF.
+		POP     HL
+;
+		LD      DE,BUFF##       ; Copy parameters to here.
+		PUSH    DE
+CPYDIR:         LD      A,(HL)          ; Get character.
+		LDI                     ; Copy it, increment HL and DE.
+		OR      A               ; Set NC, test for end.
+		JR      NZ,CPYDIR       ; Repeat until null at end copied.
+;
+		POP     HL              ; HL -> start of cpied command line.
+		LD      DE,DIROPTS      ; Parse filenames.
+		CALL    PARSE##
+		CALL    Z,CHKEOL##      ; Check for garbage if no error.
+		RET     NZ
+;
+		LD      A,(FDRV##)      ; Get drive of first filename.
+		ADD     A,'A'-1         ; Convert to letter and put in buffer.
+		LD      HL,BUFF2##
+		LD      E,L             ; DE -> drive string in buffer.
+		LD      D,H
+		LD      (HL),A          ; Construct drive string.
+		INC     HL
+		LD      (HL),':'
+		INC     HL
+		LD      (HL),0
+		CALL    VOL             ; Print volume name of drive.
+		RET     NZ
+;
+		LD      A,(ATTRS##)
+		.BIT    OPTW,A          ; If not /W, then find directories
+		JR      NZ,DIR20        ;   as well as files.
+;
+		LD      HL,INIATR##
+		.SET    ATDIR,(HL)
+;
+DIR20:          .SET    DIR,(IY+@FLAGS##)       ; Set flag => DIR command.
+		CALL    FIRST##         ; Find first match.
+		JR      Z,DIR25         ; Go if no error.
+;
+		CP      .NOFILE##
+		RET     NZ              ; Return error if not .NOFILE.
+;
+		XOR     A               ; Else prevent 'file not found' error.
+		SCF                     ; End search.
+;
+DIR25:          EX      AF,AF'          ; Save error in AF.
+		LD      C,_WPATH##      ; Get and print whole path string.
+		LD      DE,BUFF2##+1
+		CALL    _BDOS
+		RET     NZ
+;
+		LD      (HL),A          ; Take off last item.
+		DEC     HL
+		LD      (HL),A          ; Fiddle for root directory.
+;
+		PUSH    DE
+		LD      A,__DIROF##     ; Print 'Directory of'.
+		CALL    DMESS##
+		POP     DE              ; DE -> whole path string.
+		LD      A,(FDRV##)      ; Get drive of first filename parsed.
+		CALL    CD              ; Call the CHDIR command to print drive
+		CALL    CRLF            ;   \ whole path string.
+;
+		LD      HL,0            ; Zero accumulated file size.
+		LD      (SIZE##),HL     ; Low word.
+		LD      (SIZE##+2),HL   ; High word.
+		LD      (DFILES##),HL   ; Zero number of files found count.
+;
+		LD      BC,1*256+_IOCTL##       ; Get the output width.
+		LD      A,4
+		CALL    _BDOS##
+		JR      NZ,WIDE         ; Error => wide (shouldn't occur).
+;
+		OR      E               ; 0 => very wide, so use 80 columns.
+		JR      NZ,SETCOL
+;
+WIDE:           LD      A,80
+SETCOL:         LD      (COLUMNS##),A   ; Save number of output columns.
+;
+		CP      19
+		JR      NC,DIR30
+;
+		LD      A,19
+DIR30:          ADD     A,3             ; Allow for trailing separators not
+		RRCA                    ;   being printed after last filename.
+		RRCA                    ; Divide by 16 for number of filenames
+		RRCA                    ;   per line in /W format.
+		RRCA
+		AND     0FH
+		LD      B,A             ; B'=max. number of filenames per line.
+		LD      C,0             ; C'=number on current line.
+		EXX
+		EX      AF,AF'          ; Get back FIRST's error.
+;
+;
+DIR_LOOP:                               ; Main loop.
+		JP      C,DIR_DONE      ; Go if no more files to find.
+;
+		LD      HL,(DFILES##)   ; File found OK, so incrment file
+		INC     HL              ;   count.
+		LD      (DFILES##),HL
+
+		CALL    DFILNAM         ; Print filename in appropriate format.
+;
+		LD      HL,FIB##+FIB_FS ; Add filesize in FIB to SIZE.
+		LD      DE,SIZE##
+		CALL    ADD32##
+;
+		.BIT    OPTW,(IY+@SWITCHES##)
+		JR      NZ,DIRW         ; Go if /W.
+;
+		LD      A,(COLUMNS##)
+		CP      WRH             ; Room on line for attributes ?
+		JR      C,NOROOM        ; Go if not.
+;
+		LD      C,(IX+FIB_AT)   ; Get file attributes.
+		.BIT    ATRO,C
+		CALL    Z,SPACE         ; If 'r' not printed, then print space.
+		LD      A,'h'           ; Hidden attribute character.
+		.BIT    ATHID,C
+		CALL    SPACE?##        ; Print 'h' if hidden, else space.
+		LD      A,'r'           ; Read only attribute character.
+		.BIT    ATRO,C          ; Print 'r' if read only.
+		CALL    NZ,OUCH##
+;
+		LD      A,(COLUMNS##)
+		CP      WSIZE           ; Room on line for file size ?
+		JR      C,NOROOM        ; Go if not.
+;
+		.BIT    ATDIR,C         ; Print file size if file, <dir> if
+		JR      NZ,DDIR         ;   directory.
+;
+		LD      A,' '           ; Leading spaces required.
+		LD      DE,FIB##+FIB_FS ; Print file size from FIB.
+		CALL    D32##
+		XOR     A
+DDIR:           LD      A,__DIR##
+		CALL    NZ,DMESS##
+;
+		LD      A,(COLUMNS##)
+		CP      WDATE           ; Room on line for date ?
+		JR      C,NOROOM        ; Go if not.
+;
+		LD      HL,FIB##+FIB_DT+1
+		LD      A,(HL)          ; Don't print date or time if date=0.
+		DEC     HL
+		OR      (HL)
+		JR      Z,NOROOM
+;
+		LD      C,0             ; C=0 => don't print century in date.
+		CALL    DDATE##         ; Print date.
+;
+		LD      A,(COLUMNS##)
+		CP      WTIME           ; Room on line for time ?
+		JR      C,NOROOM        ; Go if not.
+;
+		LD      HL,FIB##+FIB_TM
+		LD      A,(HL)          ; Don't print time if time=0.
+		INC     HL
+		OR      (HL)
+		JR      Z,NOROOM
+;
+		CALL    DTIME##         ; Print time.
+		CALL    OUCH##          ; Print 'a', 'p' or space at end.
+;
+NOROOM:         CALL    CRLF##          ; New line for next file.
+		JR      DIR_NEXT
+;
+;
+DIRW:           EXX                     ; E=no. filenames on line, D=max. no.
+		INC     C               ; Another filename printed.
+		LD      A,C
+		CP      B               ; Last one on line just printed ?
+		JR      C,WSPC          ; Print separating spaces if not.
+;
+		CALL    CRLF##          ; Else print new line.
+		XOR     A               ; Set current count back to 0, set NC.
+		LD      C,A
+WSPC:           EXX
+		LD      B,4             ; Print 4 spaces.
+		CALL    C,SPACES
+;
+;
+DIR_NEXT:       CALL    NEXT##          ; Search for next filename.
+		JP      DIR_LOOP
+;
+;
+DIR_DONE:       RET     NZ              ; Return if error.
+;
+		EXX                     ; Print CRLF if /W display is not on
+		OR      C               ;   a new line.
+		CALL    NZ,CRLF##
+;
+		LD      A,__SPACE##     ; Print leading text (just a space in
+		CALL    DMESS##         ;   English).
+;
+		CALL    DSIZE##         ; Print number of bytes in files.
+		LD      A,__IN##        ; Print ' in '.
+		CALL    DMESS##
+		LD      HL,(DFILES##)   ; Get number of files.
+;
+		PUSH    HL
+		CALL    D16##           ; Print number of files.
+		POP     HL
+;
+		DEC     HL              ; Print 'file' if HL=1, or 'files'
+		LD      A,H             ;   otherwise.
+		OR      L
+		LD      A,__FIL##
+		JR      Z,FILE
+;
+		LD      A,__FILS##
+FILE:           CALL    DMESS##
+;
+		LD      A,(FDRV##)      ; Get drive of first filename parsed.
+		LD      E,A
+		LD      C,_ALLOC##      ; Get allocation information.
+		CALL    _BDOS##
+;
+		LD      B,A             ; B=sectors/cluster, HL=clusters free.
+		CODE    MVI A
+DD10:           ADD     HL,HL           ; Calculate HL*B for the number of
+		SRL     B               ;   free bytes (B is always a power
+		JR      NZ,DD10         ;   of 2) so HL = no. free sectors.
+;
+		LD      E,0             ; Multiply by sectory size (512) into
+		LD      D,L             ;   HLDE to get the number of free
+		LD      L,H             ;   bytes.
+		LD      H,E
+		SLA     D
+		ADC     HL,HL
+		LD      (SIZE##),DE     ; Save in 32 bit number buffer.
+		LD      (SIZE##+2),HL
+		CALL    DSIZE##         ; Print no. bytes or Ks.
+		LD      A,__FREE##      ; Print 'free'.
+		CALL    DMESS##
+		JP      CRLF
+;
+;
+DFILNAM:        LD      HL,FIB##+FIB_FN ; Point to filename to print.
+		LD      B,8             ; Print 8 characters of filename.
+		LD      A,(HL)          ; '.' or '..' ?
+		CP      '.'
+		JR      NZ,NODOTS       ; Print filename if not.
+;
+		INC     HL
+		CP      (HL)            ; '..' ?
+		JR      NZ,DDOT         ; Print one dot & 7 spaces if not.
+;
+		DEC     B               ; Else print two dots & 6 spaces,
+		CALL    OUCH##          ; First dot.
+		LD      A,(HL)          ; Second dot.
+		INC     HL
+DDOT:           CALL    OUCH##          ; Print dot.
+		CALL    SPACES          ; Pad out with spaces.
+		JR      DEXT            ; Pad out extension too (HL -> 0).
+;
+NODOTS:         CALL    DFN
+		LD      A,'.'
+		LD      C,' '           ; Print a space if not /w.
+		.BIT    OPTW,(IY+@SWITCHES##)
+		JR      Z,DEDOT
+;
+		CP      (HL)
+		JR      NZ,NODOT        ; Else print a space if no '.'.
+;
+		LD      C,A             ; Else print a '.'.
+DEDOT:          CP      (HL)            ; Skip '.' if there.
+		JR      NZ,NODOT
+;
+		INC     HL
+NODOT:          LD      A,C
+		CALL    OUCH            ; Output character.
+DEXT:           LD      B,3             ; Output 3 characters of extension.
+;
+DFN:            LD      D,0             ; Zero character flags to start.
+NXTCHR:         LD      E,(HL)          ; Get character from filename.
+		INC     E
+		DEC     E               ; If end of string, then just pad out
+		JR      Z,SPACES        ;   to end of field with spaces.
+;
+		INC     HL
+		PUSH    BC              ; Else check for 16 bit character.
+		PUSH    HL
+		LD      C,_CHKCHR##
+		CALL    _BDOS##
+		POP     HL
+		POP     BC
+		BIT     2,D             ; Second byte of 16 bit character ?
+		JR      NZ,OUTE         ; Output it straight away if yes.
+;
+		BIT     1,D             ; First byte of 16 bit character ?
+		JR      Z,CHKDOT        ; Go if not.
+;
+		LD      A,B             ; Else output it unless last character
+		DEC     A               ;   of field, in which case replace it
+		JR      Z,SPACES        ;   with a space by jumping to SPACES.
+;
+OUTE:           LD      A,E             ; Get character.
+		CALL    OUCH##          ; Output it.
+		DJNZ    NXTCHR          ; Do next character in filename.
+		RET
+;
+CHKDOT:         LD      A,E             ; Ordinary character, so output it
+		CP      '.'             ;   unless '.', in which case pad out
+		JR      NZ,OUTE         ;   rest of field with spaces.
+;
+		DEC     HL              ; Point back to '.'.
+;
+SPACES:         CALL    SPACE##
+		DJNZ    SPACES
+		RET
+;
+;
+DIROPTS:        DEFB    'W',OPTW        ; More than one file/line.
+ERAOPTS::
+ATOPTS::
+RNOPTS::
+		DEFB    'P',0           ; Pause at the end of a screenful.
+		DEFB    'H',OPTH        ; Find hidden files.
+		DEFB    0
+;
+;
+;
+		SUBTTL  MKDIR
+;******************************************************************************
+;
+;        This is the MD/MKDIR command routine, which simply parses a directory
+; path from the command line and creates it.
+;
+;
+@MKDIR::        AND     (HL)
+		LD      A,.NOPARM##     ; 'Missing parameter' if no parameters
+		RET     Z               ;   given.
+;
+		CALL    PRS             ; Parse directory path.
+		CALL    Z,GCHKEOL##     ; Check for garbage.
+		RET     NZ              ; Ret if error.
+;
+		LD      (HL),A          ; Make sure string is null terminated.
+;
+		LD      A,B             ; Give error if last item is null or
+		AND     $FN OR $EXT     ;   ambiguous (this test saves setting
+		LD      A,.IPATH##      ;   up a template filname in a FIB).
+		RET     Z
+;
+		.BIT    $AMBIG,B
+		RET     NZ
+;
+		LD      BC,ATDIR*256+_FNEW##    ; Find new sub-directory.
+		LD      IX,FIB##
+		JP      _BDOS##
+;
+;
+;
+		SUBTTL  VOL
+;******************************************************************************
+;
+;        Displays or sets the volume  name.   A  volume  name  is  changed  by
+; creating a new one which automatically deletes any existing one.
+;
+;        The entry point DVOL is used by the DIR command to display the volume
+; name on the disk.
+;
+@VOL::          LD      B,ATVOL         ; Parse a volume name.
+		CALL    _PRS
+		CALL    Z,GCHKEOL##     ; Check for garbage at end of line.
+		RET     NZ
+;
+		LD      (HL),A          ; Ensure string is null terminated.
+;
+		LD      IX,FIB##
+		LD      C,_FNEW##
+		.BIT    $ODRV,B         ; Anything parsed after drive ?
+		LD      B,ATVOL
+		JP      NZ,_BDOS##      ; Create new volume name if yes.
+;
+;
+VOL:
+;
+; Print volume name. On entry, DE -> string containing drive.
+;
+		LD      IX,FIB##
+		LD      BC,ATVOL*256+_FFIRST##
+		CALL    _BDOS##         ; Look for volume name.
+		JR      Z,DVOL          ; OK if no error or file not found.
+;
+		CP      .NOFILE##
+		RET     NZ
+;
+DVOL:           PUSH    AF              ; Save volume name found flag.
+		LD      A,__VOLUM##     ; Print 'Volume in drive '.
+		CALL    DMESS##
+		LD      A,(FIB##+FIB_DR); Get actual drive letter.
+		ADD     A,'A'-1
+		CALL    OUCH##          ; Print it in ASCII.
+		LD      A,__VOLDR##
+		CALL    DMESS##         ; Print stuff after drive (': ').
+		POP     AF              ; Get volume name flag.
+		OR      A
+		LD      A,__HASNO##     ; Print 'has no name' if no volume
+		JP      NZ,DMESSCR##    ;   name found.
+;
+		LD      A,__VOLIS##     ; Print 'is'.
+		CALL    DMESS##
+		LD      DE,FIB##+FIB_FN
+		JP      DMSCR##         ; Print volume name from FIB.
+;
+;
+;
+		SUBTTL
+		END

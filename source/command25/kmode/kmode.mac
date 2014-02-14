@@ -1,0 +1,436 @@
+	.z80
+	title	KMODE Utility - MSX-DOS2 copyright (1988) ASCII Corporation
+;
+LABEL	macro	NAME
+	.dephase
+NAME:
+	.phase	0C030h+($-BOOTCODE)
+	endm
+;
+CODE    macro   INSTR,ARG
+	.8080
+	 db      (INSTR ARG)
+	.z80
+	endm
+;
+_BIOS	equ	0
+_BDOS	equ	_BIOS+5
+;
+TAB	equ	9
+LF	equ	0Ah
+CR	equ	0Dh
+EOF	equ	1Ah
+;
+;
+	jr	START		;Jump to start of program.
+;
+	defb	CR,LF
+	defb	'MSX-DOS 2 KMODE program',CR,LF
+	defb	'Version '
+	defb	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+	defb	'Copyright ('
+	defb	CRYEAR##/1000 MOD 10 +'0'
+	defb	CRYEAR##/ 100 MOD 10 +'0'
+	defb	CRYEAR##/  10 MOD 10 +'0'
+	defb	CRYEAR##      MOD 10 +'0'
+	defb	') ASCII Corporation',CR,LF
+	defb	CR,LF
+	defb	EOF		;Stops a TYPE command.
+;
+;
+START:	ld	sp,(_BDOS+1)	;Stack in page-3 (hopefully).
+	call	KMODE		;Perform the actual KMODE operation.
+	push	af
+	cp	1		;If error code is 1 (bad version) then
+	ld	a,__BADVER##	; print a message since the system may
+	call	z,DMESS		; ignore error codes.
+	pop	bc
+	ld	c,_TERM##	;Terminate with error code in B
+	call	_BDOS
+	jp	_BIOS		;Emergency exit if _TERM returns
+;
+;
+;
+KMODE:	ld	c,_DOSVER##	;Get DOS's version numbers.
+	call	_BDOS
+	inc	a		;Make sure kernel & MSX-DOS.SYS's versions
+	cp	b		;  are >1.  If not then abort with error
+	ret	nc		;  code = 1.
+	cp	d
+	ret	nc
+;
+	ld	b,0		;No drives specified yet.
+	ld	c,1		;Default mode is '0'.
+;
+	ld	hl,81h		;Look at command line.
+	call	GETCH		;Ignore separators.
+	ld	a,.NOPAR##	;'Missing parameter' if none specified.
+	ret	z
+;
+	call	UC		;Get mode letter.
+	cp	'/'
+	jr	z,NO_MODE	;Mode is not specified.
+;
+	cp	'O'		;'O..' of 'OFF'?
+	jr	nz,KANJI	; No, must be Kanji mode.
+	call	UC
+	cp	'F'		;'.F.' of 'OFF'?
+	jr	nz,IPARM	; No, error.
+	call	UC
+	cp	'F'		;'..F' of 'OFF'?
+	jr	nz,IPARM	; No, error.
+	ld	a,'0'-1		;Tricky one this is.  The code is '/'.
+;
+KANJI:	sub	'0'-1
+	cp	4+1		;NC => invalid mode.
+	ld	c,a
+	jr	nc,IPARM
+	set	7,c		;Say mode is specified.
+;
+;
+	call	GETCH		;Get possible switch char.
+	jr	z,NO_SAVE
+;
+	cp	'/'
+	inc	hl		;Skip switch char.
+	jr	z,NO_MODE	;'Invalid parameter' if not.
+;
+IPARM:	ld	a,.IPARM##
+	ret
+;
+NO_MODE:
+	call	UC
+	cp	'S'		;'S' for save ?
+	jr	nz,IPARM
+;
+	call	GETCH		;Skip separators.
+	jr	nz,DRIVE_NUM	;Got the drive letter.
+;
+	push	bc
+	push	de		;save mode
+	push	hl		;save pointer to parameter
+	ld	c,_CURDRV##
+	call	_BDOS		;get current default drive
+	pop	hl
+	pop	de
+	pop	bc
+	inc	a
+	ld	b,a
+	jr	DRIVE_NUM_OK
+;
+DRIVE_NUM:
+	call	UC		;Get drive letter upper cased.
+;
+	cp	'P'+1		;Make sure it's a valid drive letter.
+	jr	nc,IDRV
+	sub	'A'		;Cy => invalid drive.
+	inc	a		;1 => A: etc.
+	ld	b,a
+	ccf
+IDRV:	ld	a,.IDRV##
+	ret	nc
+;
+	ld	a,(hl)		;Skip optional colon.
+	cp	':'
+	jr	nz,DRIVE_NUM_OK
+	inc	hl
+;
+DRIVE_NUM_OK:
+	push	bc
+	push	de
+	push	hl
+	xor	a		;Do a "get choice string" BDOS call to
+	ld	c,_FORMAT##	; make sure that the drive is formattable.
+	call	_BDOS		; (B:= drive).
+	pop	hl
+	pop	de
+	pop	bc		;Error if drive is not formattable.
+	ret	nz		; or it is an invalid drive.
+;
+	call	GETCH		;Skip trailing spaces etc.
+	ld	a,.INP##	;'Too many parameters' if anything follow.
+	ret	nz
+;
+NO_SAVE:
+;
+FCALL	equ	0FFCAh		;Extended BIOS entry point
+KNJIO	equ	11h*256		; and function number of Kanji BIOS
+				; * 256 because it is loaded into D.
+;
+	ld	a,b		;Update boot sector
+	or	a		; if /S option specified.
+	jr	nz,GO_SAVE
+;
+	push	bc
+	call	KNJ_CHK		;Check if kanji driver is intalled or not.
+	pop	bc
+	ret	z		;Return if not (no error).
+;
+	res	7,c
+	ld	a,c
+	ld	de,KNJIO+1	;Set screen mode according to A.
+	call	FCALL		; (0 => ANK, 1..4 => KANJI0..KANJI3)
+;
+	xor	a		;Return with no error.
+	ret
+;
+;
+GO_SAVE:
+	bit	7,c
+	res	7,c
+	jr	nz,MODE_OK
+	push	bc
+	xor	a
+	ld	de,KNJIO+0	;Get current screen mode
+	call	FCALL		; if mode is not explicitly specified.
+	pop	bc
+	ld	c,a
+MODE_OK:
+	ld	a,c
+	or	a
+	jr	z,TRANSFER	;ANK mode...
+	cp	7Fh		;KANJI driver is not installed ?
+	jr	z,TRANSFER	;not.  ANK mode...
+;
+	add	a,'0'-1
+	ld	hl,MODE
+	ld	(hl),a		;Make "CALL KANJI<mode>"
+	inc	hl		; followed by an ERROR statement
+	ld	(hl),':'	; (anything will do which causes "error").
+	inc	hl
+	ld	(hl),$ERROR
+	inc	hl
+	ld	(hl),0
+TRANSFER:
+;
+	ld	a,__DISK##	;Print 'Disk in drive '.
+	call	DMESS
+	ld	a,b		;Get drive.
+	ADD	a,'A'-1
+	call	OUCH		;Print drive letter.
+	ld	a,__ONLY##	;Print ' will only boot MSX-DOS 2'.
+	call	DMESS
+	call	CRLF
+	ld	a,__PRAK##	;Print 'Press any key to continue... '.
+	call	DMESS
+	push	bc		;Save drive in B, KMODE in C.
+	call	INCH		;Read a character, print CRLF.
+;
+	ld	de,END##	;Sector buffer at end of program.
+	ld	c,_SETDTA##
+	call	_BDOS
+;
+	pop	bc		;Get back drive to do in B.
+	push	bc		;Save again
+	ld	c,_RDABS##
+	call	ABS_RW
+	pop	bc		;Get back drive to do in B.
+	ret	nz		;Return if any error.
+;
+	code	lxi h		;Put a 'jump to boot body' instruction
+	 jr	 $+(30h-1Eh)	; at the boot entry.
+	ld	(END##+1Eh),hl
+;
+	push	bc
+	ld	hl,BOOTCODE	;Overwrite the boot body with the new one.
+	ld	de,END##+30h
+	ld	bc,BOOTLEN
+	ldir
+	pop	bc		;B := drive number
+;
+	ld	c,_WRABS##	;Write back
+ABS_RW:
+	ld	l,b		;L := drive number to do.
+	dec	l		; (A:=0, B:=1 etc)
+	ld	de,0		;Do the absolute read/write
+	ld	h,1		; on the boot sector.
+	jp	_BDOS
+;
+;
+KNJ_CHK:
+	ld	a,-1
+	ld	de,KNJIO+0	;See if Kanji driver is installed or not.
+	call	FCALL
+	inc	a
+	ret	nz		;NZ => KANJI driver is installed.
+	ld	de,_NO_DRIVER
+	jp	DMS		;DMS will return with Z flag set.
+;
+_NO_DRIVER:
+	db	'*** Kanji driver is not installed',CR,LF
+	db	'*** use "CALL KANJI" under BASIC.',CR,LF
+	db	0
+;
+;
+;
+	subttl	Boot sector for KANJI screen
+;*****************************************************************************
+;
+;	This is a boot code of 'Nihongo' MSX-DOS,  which is overwritten to the
+; current MSX-DOS boot code when /S option was specified.   This boot code has
+; number of dirty tricks to fake out MSX disk system and disk BASIC.  First it
+; attempts to install Kanji driver by feeding a 'CALL KANJI' statement to disk
+; BASIC.  If desired screen mode is 'ANK', this is followed by a 'CALL ANK' to
+; restore the screen mode to normal.  There  must  always  be  a  'CALL KANJI'
+; because Kanji driver's work RAM space is not allocated until 'CALL KANJI' is
+; invoked.  After the boot it is VERY difficult or memory wasting to  allocate
+; working space below HIMEM.  So it is here even for 'ANK' mode.
+;
+;	If 'CALL' statements ever gets error (i.e. Kanji driver does not exist
+; or so) the boot code get control over again through H.ERRO hook and, setting
+; DOSFLG to non-zero value to avoid 'Illegal function call' on MSX-DOS1, feeds
+; 'CALL SYSTEM' to start up false reboot sequence.  However, anyway, an 'error
+; statement' next to it gets error to start over the same sequence.  Otherwise
+; nobody will restore the H.ERRO hook.
+;
+;	there is nothing to do with the booting of MSX-DOS 2.  It starts up by
+; itself without the help of boot code.  However, if 'MSXDOS2.SYS' file is not
+; found or the media is booted on a MSX-DOS 1 system, the boot code is entered
+; again to load 'MSXDOS.SYS' file.  In that case, because there are none spare
+; for loading code,  disk BASIC is jumped to, setting DOSFLG to zero to reject
+; later 'CALL SYSTEM' on MSX-DOS 1.  MSX-DOS 2 doesn't care the DOSFLG.
+;
+;
+BOOTCODE:
+	.phase	0C030h
+;
+$CALL	equ	0CAh		;BASIC token of CALL
+$ERROR	equ	0A6h		;BASIC token of ERROR
+;
+CALBAS	equ	0159h
+NEWSTT	equ	4601h
+;
+BASIC	equ	4022h
+;
+DOSFLG	equ	0F346h
+STKTOP	equ	0F674h
+H.ERRO	equ	0FFB1h
+;
+	ccf
+	sbc	a,a
+	ld	(DOSFLG),a	;May get control under DOS1
+	jp	nc,BASIC	;If I was called to boot MSXDOS.SYS
+;
+	ld	hl,H.ERRO
+	code	mvi m
+	 code	 jp
+	inc	hl
+	ld	(hl),low ERROR
+	inc	hl
+	ld	(hl),high ERROR
+;
+	ld	hl,TEXT
+	jr	GO
+;
+ERROR:
+	code	mvi a
+	 code	 ret
+	ld	(H.ERRO),a
+	ld	hl,SYSTEM
+;
+GO:
+	ld	sp,(STKTOP)
+	ld	ix,NEWSTT
+	jp	CALBAS
+;
+;
+TEXT:	defb	":",$CALL,"KANJI"
+;
+LABEL	MODE
+	defb	":",$CALL,"ANK",":",$ERROR,0
+;   overlaid by <mode>,":",$ERROR,0 if KANJI screen.
+;
+SYSTEM:	defb	":",$CALL,"SYSTEM",0
+;
+	.dephase
+;
+BOOTLEN	equ	$-BOOTCODE
+;
+;
+;
+	subttl	I/O
+;******************************************************************************
+;
+;
+GCH0:	inc	hl
+GETCH:	ld	a,(hl)		;Get character.
+	call	SEP?
+	jr	nc,GCH0		;Skip if a valid separator character.
+;
+	call	UC0
+	or	a
+;
+	ret			;Else return with Z if end of line.
+;
+UC:	ld	a,(hl)
+	call	UC0
+	inc	hl
+	ret
+;
+UC0:	cp	'a'
+	ret	c
+	cp	'z'+1
+	ret	nc
+	and	not ('a'-'A')
+	ret
+;
+;
+SEP?:	cp	','		;Comma is OK.
+	ret	z
+;
+	cp	';'		;Semi-colon is OK.
+	ret	z
+;
+	cp	'='		;Equals is OK.
+	ret	z
+;
+	cp	' '		;Space is OK.
+	ret	z
+;
+	cp	TAB		;Tab is OK.
+	ret	z
+;
+	or	a		;Null (end of line) is OK, nothing else is.
+	scf
+	ret
+;
+; DMS must returns with [A] = 0
+;
+DMESS:	call	GETMSG##
+DMS:	ld	a,(de)
+	or	a
+	ret	z		;Ret if end of string.
+;
+	inc	de
+	call	OUCH
+	jr	DMS
+;
+;
+INCH:	ld	c,_CONST##	;See if a key is pressed.
+	call	_BDOS
+	push	af
+	ld	c,_INNOE##	;Wait for a character if key is not pressed.
+	call	_BDOS
+	pop	af
+	jr	NZ,INCH		;If yes, then gobble it up.
+;
+;
+CRLF:	ld	a,CR
+	call	OUCH
+	ld	a,LF
+;
+;
+OUCH:	push	hl
+	push	de
+	push	bc
+	ld	E,a
+	ld	c,_CONOUT##
+	call	_BDOS
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+;
+;
+;
+	end

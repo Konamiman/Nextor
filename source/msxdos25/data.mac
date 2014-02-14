@@ -1,0 +1,578 @@
+	.z80
+	title	MSX-DOS 2 Copyright (1986)  IS Systems Ltd.
+	subttl	Page-3 Fixed System Data Area
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+;-----------------------------------------------------------------------------
+;
+spare	macro	size
+ram_ad	 defl	 ram_ad+(size)
+	endm
+;
+var	macro	name,size,fixed
+	 if1
+	  ifnb	 <fixed>
+	   if	  ram_ad ne x'&fixed'
+	    .radix  16
+	    pr_hex  <name address is>,%ram_ad
+	    .radix  10
+	   endif
+	  endif
+	 endif
+	 const	 name,ram_ad
+ram_ad	 defl	 ram_ad+(size)
+	endm
+;
+var0	macro	name,fixed
+	 var	 name,0,fixed
+	endm
+;
+var1	macro	name,fixed
+	 var	 name,1,fixed
+	endm
+;
+var2	macro	name,fixed
+	 var	 name,2,fixed
+	endm
+;
+var3	macro	name,fixed
+	 var	 name,3,fixed
+	endm
+;
+;-----------------------------------------------------------------------------
+;
+	const	DATABASE,0F1C9h
+ram_ad	defl	DATABASE
+;
+;	------------------------
+;
+	var	PRTBUF,6,F1C9	;MSX-DOS1 compatible string output routine
+	var0	NXT4
+	spare	4
+;
+;	------------------------
+;
+	var0	JUMPBASE,F1D3	;Start of jump table.
+;
+	var3	RD_LDIR		;inter-slot LDIR routine for RAMdisk
+	var3	P0_LDIR		;Data transfer routine used by read/write code
+	var3	P0_CALL		;Call an MSX BIOS subroutine from kernel RAM
+	var3	$FLUSH		;Screen buffer flushing routine
+	var3	GO_DRV		;Call driver routine
+	var3	JP_VECT		;DOS1 compatible error jump
+;
+	var3	$IRQ		;Interrupt entry point
+;
+	var3	$RDSLT		;Inter-slot read
+	var3	$WRSLT		;Inter-slot write
+	var3	$CALSLT		;Inter-slot call (address IYh:IX)
+	var3	$ENASLT		;Enable slot permanently
+	var3	$CALLF		;Inter-slot call (address after call)
+;
+	var3	PUT_BDOS	;Switch kernel RAM into page-0 & page-2
+	var3	PUT_USER	;Restore caller's pages.
+	var3	P0_RAM		;Switch from BIOS ROM to kernel RAM in page-0
+;
+	var0	MAP_VECT,F200
+;
+	var3	ALL_SEG		;Allocate a RAM segment
+	var3	FRE_SEG		;Free a RAM segment
+	var3	RD_SEG		;Read from a RAM segment
+	var3	WR_SEG		;Write to a RAM segment
+	var3	CAL_SEG		;Inter-segment call (address in IYh:IX)
+	var3	CALLS		;Inter-segment call (address in code)
+;
+	var3	PUT_PH		;Put segment into page at (HL)
+	var3	GET_PH		;Get segment in page at (HL)
+	var3	PUT_P0		;\
+	var3	GET_P0		; \
+	var3	PUT_P1		;  |    Routines to read and write
+	var3	GET_P1		;   \   specific page registers.
+	var3	PUT_P2		;   /
+	var3	GET_P2		;  |
+	var3	PUT_P3		; /
+	var3	GET_P3		;/
+
+	;var3	ALL_BK		;Assembler complaints if these are defined (?)
+	;var3	FR_BK
+	;spare	6
+;
+	spare	12		;For future expansion
+;
+	var1	CUR_DRV		;Current logical drive (1=A:)
+	var2	DTA_ADR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
+;
+	var0	NXT7
+	spare	7
+;
+	var1	DIRBFD, F246	;** May be corrupted sometimes.
+;
+	var	KNJWRK,8,F247	;Work area for parasite Kanji driver
+;
+;	------------------------
+;
+	var0	HOOKBEG,F24F
+;
+	var3	H.PROMPT,F24F	;Disk change prompt hook
+;
+	var3	H_BDOS		;KBDOS function routine hook        F252 H.UNPA
+	var3	H_UP		;Upper case routine hook            F255 H.DEVN
+	var3	H_16CH		;16-bit character routine hook      F258 H.CONT
+	var3	H_CHIN		;Console input hook                 F25B H.GETE
+	var3	H_CHOUT		;Console output hook                F25E H.NEXT
+	var3	H_CHST		;Console status hook                F261 H.MOVN
+	var3	H_CHFL		;Console output buffer flush hook   F264 H.DOOP
+	var3	H_LSTOUT	;List output hook                   F267 H.FATR
+	var3	H_LSTST		;List status hook                   F26A H.GETI
+;
+	spare	6*3		;Unsupported hooks
+				; F26D H.FATW  F270 H.DREA  F273 H.FATA
+				; F276 H.DIRW  F279 H.DWRI  F27C H.MUL1
+;
+	var3	H.DIV32,F27F	;Hook for divide, used by old slave code.
+;
+	spare	18*3		;Unsupported hooks
+				; F282 H.FNDC  F285 H.SKPC  F288 H.BUFR
+				; F28B H.BUFW  F28E H.ENUF  F291 H.SETF
+				; F294 H.SETC  F297 H.WRTE  F29A H.NORN
+				; F29D H.WRTL  F2A0 H.OPTI  F2A3 H.FIGR
+				; F2A6 H.ALLO  F2A9 H.RELB  F2AC H.GETC
+				; F2AF H.OUT   F2B2 H.DATE  F2B5 H.SETY
+;
+	const	HOOKLEN,ram_ad-HOOKBEG
+;
+;	------------------------
+;
+	var1	TIM_RATE	;Frequency of calling kernel IRQ.
+	var1	TIM_COUNT	;Number of interrupts since last deci-sec
+	var3	RANDOM		;23 bit random number value.
+	var1	ST_COUNT	;Timeout counter for BIOS console status
+				; reset to 1 by each interrupt forces check.
+	var1	CH_COUNT	;Timeout counter for BIOS console buffer
+				; flush.
+	var1	TIM_TICK	;Deferred timeout counter for unit descriptor
+				; timeouts.
+;
+	var	TIMI_SAVE,5	;Save address for old interrupt hook.
+;
+	var2	MAP_TAB		;Pointer to mapper records.
+;
+	var1	P0_SEG		;Current segments.  These are just images
+	var1	P1_SEG		; of the paging variables and should never
+	var1	P2_SEG		; be accessed directly by the user.
+	var1	P3_SEG
+;
+	var1	P0_TPA		;\
+	var1	P1_TPA		; \  These are the four "TPA" segments which
+	var1	P2_TPA		; /  KBDOS uses for data transfers.
+	var1	P3_TPA		;/
+;
+	var1	DATA_SEG	;Segment number of kernel data
+	var1	CODE_SEG	;Segment number of kernel code
+;
+;	------------------------
+;
+	var2	SP_IRQ		;Saved stack pointer for interrupts
+	const	IRQS_SZ,200	;Size of the interrupt stack
+	var2	IRQ_STACK	;Pointer to interrupt stack which must be
+				; immediately below the BDOS stack.
+;
+;	------------------------
+;
+	var	FCALSAV,5	;Hook chain for extended BIOS
+;
+;	------------------------
+;
+	var2	$ERR_MSG	;Address of page-1 error message routine
+	var2	$PROMPT		;Address of page-1 disk change prompt routine
+	var2	$BDOS		;Address of page-1 BDOS entry
+;
+	var1	SS_TEMP		;Temporary storage for slot handling
+;
+	var2	RD_ADDR		;Transfer address       \
+	var2	RD_SNUM		;Current sector number   > For RAMdisk
+	var1	RD_SCNT		;Number of sectors left /
+;
+	var2	IX_BDOS		;IX saved past inter-slot call to BDOS_GO
+	var2	SP_BDOS		;User's saved SP in BDOS_GO
+;
+	var1	PS_BDOS		;Primary slot register for GO_BDOS
+	var1	SS_BDOS		;RAM secondary slot register for GO_BDOS
+;
+	var1	DSK_CHK		;Disk check control flag
+;
+	var2	DVB_TABLE	;Pointer to table of device-based drives for DOS1	;spare	2
+	var1	MFLAGS		;Miscellaneous flags
+	const	FASTOUT,0	;bit 0: set for fast STROUT
+	const	FIRSTLD,1	;bit 1: set while booting NEXTOR.SYS for the first time
+	spare	1		;Available for DOS 2
+;
+	var2	BLDCHK
+	var2	BSVCHK
+;
+	const	LEN_1,100	;\
+	var2	BUF_1		; \
+	const	LEN_2,64	;  |   Addresses and sizes of buffers
+	var2	BUF_2		;   >  for BDOS_GO to copy FCB's and
+	const	LEN_3,100	;  |   so on into.
+	var2	BUF_3		; /
+	var2	ERR_BUF		;/
+;
+;	------------------------
+;
+	var1	BOOT_DRV	;Drive to re-boot from
+;
+	const	BDS_SZ,300	;Size of "BDOS_STACK" area.
+	var2	BDOS_STACK	;Pointer to page-3 stack for calling KBDOS
+;
+	var2	KDSK_VECT	;Kernel disk error vector
+	var2	KAB_VECT	;Kernel abort vector
+;
+;	------------------------
+;
+	var2	SPSAVE, F304	;\
+	var1	CPMCALL,F306	; > Accessed by MSXDOS1.SYS - cannot move.
+	var2	SRCHFCB,F307	;/
+;
+;	------------------------
+;
+	var1	NXTEMP		;For temporary usage by kernel
+	var0	NXT2
+	var1	TMPLUN
+	var1	TMPDEV
+	spare	1
+	;spare	4
+;
+	var1	RAWFLG, F30D	;Read-after write flag - must not move
+	var1	COUNTRY,F30E	;Accessed by COMMAND.COM - can't move
+	var	KANJTABLE,4,F30F;
+;
+;	var0	FUTURE, F313	;Following 16 bytes had been reserved by DOS1
+;
+	var1	DOS_VER		;DOS version number 2.x
+;
+	var1	P0_64K		;\   These are the basic 64k RAM segment
+	var1	P1_64K		; \  numbers which should never be changed
+	var1	P2_64K		; /  by anyone (including the system).
+	var1	P3_64K		;/
+;
+;===== start mod DOS2.50 (support MegaSCSI)
+	var1	NXT_VER		;Nextor version numbr
+	var1	MAIN_BANK
+	var	KER250,4	;MSX-DOS 2.50 kernel slots,
+                                ;bit 6 is set if timer interrupt routine is to be called
+	var	_TIME_IRQ,5,F31E
+;;	spare	11
+;===== end mod DOS2.50
+;
+;	------------------------
+;
+	var2	DISKVECT,F323	;BDOS_GO disk error vector
+	var2	BREAKVECT,F325	;BDOS_GO ctrl-stop vector
+;
+	var	AUXBODY,10,F327
+
+	;These variables are declared inside ARG, a 16 byte area used by math-pack.
+	;There should be no conflict since DOS kernel and math-pack
+	;are not intended to use this area at the same time.
+
+ARG	equ	0F847h
+	const	KSLOT,ARG 	;Slot of disk controller being called (used in DOS 1 mode)
+	const	TMP_SEC,ARG+1	;Used to temporary storage of a 32 bit sector number
+	const	BK4_ADD,ARG+5	;Address of routine to be called in bank 4
+	const	BUF9,ARG+7	;Use by auto-assign routine in bank 4
+;
+	spare	2
+	var2	$DOS1		;MSX-DOS1 compatible page-1 BDOS entry
+	spare	1
+;
+;	------------------------
+;
+	var1	KEYVLD, F336	;\
+	var1	KEYCHR, F337	; > 
+	var1	TIMFLG, F338	;/
+;
+	spare	2		;  was   F_SPSAVE,   F339
+	
+	var2	PATHNAM		;  was   CURDATE,    F33B
+	var2	RECSIZE		;  used by Disk BASIC
+;
+	var1	TARGET, F33F	;\
+	var1	NOTFIRST,F340	; \
+	var1	RAMAD0, F341	;  |
+	var1	RAMAD1, F342	;  |
+	var1	RAMAD2, F343	;  |  These should all be kept
+	var1	RAMAD3, F344	;   > at the same address for
+;
+	var1	FILMAX, F345	;  |  various reasons of compatibility.
+	var1	DOSFLG, F346	;  |
+	var1	$NUMDRV,F347	;  |
+;
+	var1	MASTER_SLOT,F348;  |
+	var2	HIMSAV, F349	;  |
+	var2	DOSHIM, F34B	;  |
+	var2	$SECBUF,F34D	;  |
+
+	var2	$MAXSEC		;  |  was $BUFFER, F34F
+
+	var2	$DIRBUF,F351	;  |
+
+	var2	RM_DPB		; /   RAMdisk DPB  (was FCBBASE,F353)
+
+	var	$DPBLIST,16,F355;/
+;
+;	------------------------
+;
+	var3	RSLREG, F365	;Read slot register \
+	var3	$DOSON, F368	;Enable master slot  \ used by old slave
+	var3	$DOSOFF,F36B	;Enable RAM slot     / must not move.
+	var3	XFER,   F36E	;RAM LDIR           /
+	var3	$AUXIN, F371	;\ Auxiliary device hooks
+	var3	$AUXOUT,F374	;/
+;
+	var3	GO_BIOS,F377	;Internal KBIOS entry point
+	var3	GO_BDOS,F37A	;Internal KBDOS entry point
+;
+	var3	BDOS,   F37D	;Main BDOS entry point
+;
+	const	DATASIZE,ram_ad-DATABASE
+;
+	IF1
+	 IF	ram_ad NE 0F380h
+	  .radix  16
+	  pr_hex  <Fixed work area end address is>,%ram_ad
+	  .radix  10
+	 ENDIF
+	ENDIF
+;
+;-----------------------------------------------------------------------------
+;
+;         PAGE ZERO ENTRY POINTS
+;       ==========================
+;
+;   The following are entry points for various routines in page-0.  Care must
+; be taken when calling these about what is in page-0 since not all of these
+; routines are available in all page-0's.  There are three different page-0's
+; which need to be considered:
+;				BIOS ROM
+;				MSX-DOS page-0 TPA segment
+;				MSX-DOS kernel code segment
+;
+;	---------------------------------
+;
+;   The following routines are  used  to  access  multiple  slots.   They  are
+; present  in  all  three  page-0's, but the version in the BIOS ROM is rather
+; different  internally  from  the  version  in  the  two  RAM  segments.   In
+; particular  the  RAM segment versions can alter page-0 successfully, but the
+; BIOS ROM version can only alter page-0 between the BIOS ROM and the SUB-ROM.
+;
+	const	RDSLT,  000Ch		;Read from slot
+	const	WRSLT,  0014h		;Write to slot
+	const	CALSLT, 001Ch		;Inter-slot call
+	const	ENASLT, 0024h		;Enable slot
+	const	ID_BYTE,002Bh		;Only in MSX BIOS ROM
+	const	CALLF,  0030h		;Inter-slot call
+	const	LOAD_FLAG,0037h		;Only in TAP segment
+	const	INTRPT, 0038h		;Main interrupt entry
+;
+;	---------------------------------
+;
+;   The following three entry points are routines to switch  secondary  slots.
+; On entry register A is the main slot register setting required to access the
+; secondary slot register and register B is the main slot setting which should
+; be  restored  afterwards.   These  routine are available only in the MSX-DOS
+; page-0 RAM segment when MSX-DOS is running, and in in the  DOS  kernel  code
+; segment.  They are not available in the BIOS ROM.
+;
+	const	SSLOT, 003Bh		;Select slot  (FFFFh)&H+D
+	const	SSLOTL,0046h		;Select slot  L
+	const	SSLOTE,004Bh		;Select slot  E
+	const	SSLSZ, 001Ah		;Size of secondary slot switching code
+;
+;	---------------------------------
+;
+;   The following are entry points to the kernel  code  segment.   "KINIT"  is
+; only  used  for  initialization,  "KBDOS"  is  used  to  access all the BDOS
+; functions, "KTIMI" is for timer interrupts and the  remainder  are  for  the
+; BIOS routines.  
+;
+	const	KINIT,  0000h		;Kernel initialization routine
+	const	KBDOS,  0005h		;Kernel BDOS function dispatcher
+;
+	const	$ALL_SEG,005Ch		;Mapper support allocate segment
+	const	$FRE_SEG,005Fh		;Mapper support free segment
+;
+	const	KCONIN, 0080h		;BIOS console input routine
+	const	KCONOUT,0083h		;BIOS console output routine
+	const	KCONST, 0086h		;BIOS console status routine
+	const	KLIST,  0089h		;BIOS list output routine
+	const	KLISTST,008Ch		;BIOS list status routine
+	const	KPUNCH, 008Fh		;BIOS punch output routine
+	const	KREADER,0092h		;BIOS reader input routine
+;
+;
+;	---------------------------------
+;
+;   Routines available on kernel page 0
+;
+
+	const	GSLOT1,402Dh
+	const	RDBANK,403Ch
+	const	CALBAS,403Fh
+	const	CALBNK,4042h
+	const	GWORK,4045h
+	const	CALDRV,4048h
+
+;-----------------------------------------------------------------------------
+;
+;	  PAGE-3 MSX SYSTEM VARIABLES
+;	===============================
+;
+	const	DRVTBL,0FB21h		;Table of disk driver slots
+;
+	const	BOTTOM,0FC48h		;Bottom of available RAM
+	const	HIMEM, 0FC4Ah		;Top of available RAM
+;
+	const	INTFLG,0FC9Bh		;ctrl-STOP flag
+	const	ESCCNT,0FCA7h		;Escape sequence counter
+;
+	const	EXPTBL,0FCC1h		;Expanded slot flags
+	const	SLTTBL,0FCC5h		;Secondary slot register images
+	const	SLTATR,0FCC9h		;Attributes for each slot
+	const	SLTWRK,0FD09h		;Work area address for each slot
+;
+	const	KBUF,  0F41Fh		;\  Buffer space in main MSX work
+	const	BUF,   0F55Eh		; > area.  May or may not use this
+					;/  depending where it is used.
+;
+;	MAP_SCAN temporary scratch.  Copied later to real locations.
+;
+	const	MAP_REC,KBUF		;Temporary mapper record 16*2 + 1
+	const	CH_TYPE,KBUF		;Type of character generator 0...3
+					; (controls upper-casing routine)
+;
+	const	H.KEYI,0FD9Ah		;Interrupt hook address
+	const	H.TIMI,0FD9Fh		;Timer interrupt hook address
+;
+;-----------------------------------------------------------------------------
+;
+;       Jump table for bank 4 public routines
+
+ram_ad	defl	4100h
+
+	var3	F_GENV
+	var3	F_SENV
+	var3	F_FENV
+	var3	GET_ENV
+
+	var3	F_FOPEN
+	var3	F_FCLOSE
+	var3	F_SFIRST
+	var3	F_SNEXT
+	var3	F_RDSEQ
+	var3	F_WRSEQ
+	var3	F_FMAKE
+	var3	F_FDEL
+	var3	F_FREN
+	var3	F_RDRND
+	var3	F_WRRND
+	var3	F_WRZER
+	var3	F_FSIZE
+	var3	F_SETRND
+	var3	F_RDBLK
+	var3	F_WRBLK
+
+	var3	ALL_BK
+	var3	FR_BK
+
+	var3	F_GPART
+	var3	GDRIVER
+	var3	AUTODRV
+	var3	MKDPB
+
+	var3	F_GDRVR
+	var3	F_GDLI
+	var3	F_CDRVR
+	var3	F_MAPDRV
+	var3	F_Z80MODE
+	
+	var3	UNMAPALL
+
+	var3	DOSV1
+	var3	CMAPDRV
+	var3	CLOCKDRV
+	var3	CUSR
+	var3	CCURDRV
+	var3	CNEXTOR
+	var3	CCHDRV
+	var3	CDRVINFO
+	var3	CDRIVERS
+
+
+;-----------------------------------------------------------------------------
+;
+;	Routines on ROM page 0 and on disk drivers
+
+	const	DV_BANK,7	;Bank number of disk driver
+
+ram_ad	defl	403Ch
+
+	var3	DH_RDBANK
+	var3	DH_CALBAS
+	var3	DH_CABNK
+	var3	DH_GWORK
+
+ram_ad	defl	4100h
+
+	;Common routines
+
+	var	DV_SIGN,14
+	var1	DV_TYPE
+	spare	1
+	var	DV_NAME,32
+	var3	DV_TIMI
+	var3	DV_VERSION
+	var3	DV_INIT
+	var3	DV_OEMST
+	var3	DV_BASDEV
+	var3	DV_EXTBIO
+	var3	DV_D0
+	var3	DV_D1
+	var3	DV_D2
+	var3	DV_D3
+	var3	DV_D4
+	spare	15
+	
+	;Routines for drive-based and device-based drivers
+
+	var0	DV_DSKIO
+	var3	DEV_RW
+	var0	DV_CHGDSK
+	var3	DEV_INFO
+	var0	DV_GETDPB
+	var3	DEV_STATUS
+	var0	DV_CHOICE
+	var3	LUN_INFO
+	var0	DV_FORMAT
+	var3	DEV_FORMAT
+	var0	DV_MTOFF
+	var3	DEV_CMD
+
+;-----------------------------------------------------------------------------
+;
+;	DOS 1 bank routines for interrupt management
+
+ram_ad	defl	04115h-6
+
+	var3	SET1INT
+	var3	PRV1INT
+
+;-----------------------------------------------------------------------------
+;
+
+	finish	<DATA>
+	end
+;

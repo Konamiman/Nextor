@@ -1,0 +1,224 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"LOCK - Lock or unlock a drive",13,10
+	db	13,10
+	db	"When a drive is marked as locked, Nextor will never check the",13,10
+	db	"media change status for the drive; instead, the inserted media is assumed",13,10
+	db  "to never change. This speeds up media access, but be careful since data",13,10
+	db  "corruption may happen if the media is changed while it is locked.",13,10
+	db	13,10
+	db	"Any disk error which is aborted will automatically unlock the involved drive.",13,10
+	db	13,10
+	db	"Usage: LOCK [<drive letter>: [ON|OFF]]",13,10
+	db	1Ah
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	c,DO_GET_ALL
+
+
+	;--- Get drive letter
+
+	ld	hl,BUF
+	call	CHKL2##
+	cp	.IPARM##
+	ld	b,a
+	jp	z,DO_TERM
+	ld	(DRIVE),a
+
+
+	;--- Get ON/OFF switch
+
+	ld	a,2
+	ld	de,BUF
+	call	EXTPAR
+	jr	c,DO_GET
+
+
+	;--- Set value
+
+	ld	hl,BUF
+	call	CHKONOFF##
+	ld	b,a
+	ld	a,(DRIVE)
+	dec	a
+	ld	e,a
+	ld	a,1
+	ld	c,_LOCK##
+	call	5
+	ld	b,a
+	jp	nz,DO_TERM
+
+
+	;--- Get current value and print it
+
+DO_GET:
+	ld	a,(DRIVE)
+	or	a
+	jr	z,DO_GET_ALL
+
+	;* Print value for one drive
+
+	dec	a
+	ld	e,a
+	xor	a
+	ld	c,_LOCK##
+	call	5
+	ld	d,b
+	ld	b,a
+	jp	nz,DO_TERM
+	ld	a,d
+
+	or	a
+	ld	de,OFF_MSG
+	jr	z,ONOFF_OK
+	ld	de,ON_MSG
+ONOFF_OK:
+	push	de
+	ld	a,(DRIVE)
+	add	a,"A"-1
+	ld	(DRIVE_LETTER),a
+
+	ld	de,DRVINFO_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	pop	de
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	b,a
+	jp	DO_TERM
+
+
+	;* Obtain lock status for all drives
+
+DO_GET_ALL:
+	xor	a
+	ld	hl,BUF
+DO_GET_LOOP:
+	push	af
+	push	hl
+	ld	e,a
+	xor	a
+	ld	c,_LOCK##
+	call	5
+	pop	hl
+	jr	z,GET_NOERR
+	ld	b,0
+GET_NOERR:
+	ld	(hl),b
+	inc	hl
+	pop	af
+	inc	a
+	cp	8
+	jr	c,DO_GET_LOOP
+
+	ld	b,8
+	ld	hl,BUF
+	xor	a
+DO_CHK_LOOP:
+	or	(hl)
+	inc	hl
+	djnz	DO_CHK_LOOP
+	or	a
+	jr	nz,DO_PRINT_LOCK
+
+
+	;* No locked drives: print message and terminate
+
+	ld	de,NOLOCK_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	jp	DO_TERM
+
+
+	;* There are locked drives: print them and terminate
+
+DO_PRINT_LOCK:
+	ld	de,LOCKED_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,"A"
+	ld	hl,BUF
+DO_PRINT_LOOP:
+	ld	(DRIVE_MSG),a
+	push	af
+	ld	a,(hl)
+	or	a
+	jr	z,DO_PRINT_NEXT
+
+	push	hl
+	ld	de,DRIVE_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	pop	hl
+
+DO_PRINT_NEXT:
+	inc	hl
+	pop	af
+	inc	a
+	cp	"H"+1
+	jr	c,DO_PRINT_LOOP
+
+
+	;* Done
+
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+
+DO_TERM:
+	ld	a,b
+	or	a
+	ld	c,_TERM##
+	jp	z,5
+
+	push	bc
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	pop	bc
+	ld	c,_TERM##
+	jp	5
+
+USAGE_S:
+	db	"Usage: LOCK [<drive letter>: [ON|OFF]]",13,10
+	db	13,10
+	db	"TYPE LOCK.COM for more details.",13,10
+	db	0
+
+DRVINFO_MSG:
+	db	"Drive "
+DRIVE_LETTER:
+	db	"X: is ",0
+ON_MSG:
+	db	"locked."
+CRLF:	
+	db	13,10,0
+OFF_MSG:
+	db	"NOT locked.",13,10,0
+NOLOCK_MSG:
+	db	"No drives are locked.",13,10,0
+LOCKED_MSG:
+	db	"The following drives are locked:",13,10,0
+DRIVE_MSG:
+	db	"X: ",0
+
+DRIVE:	db	0
+BUF:
+
+	end

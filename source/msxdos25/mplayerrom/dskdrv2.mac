@@ -1,0 +1,680 @@
+;Disk I/F Driver for MSXPLAYer
+
+	.z80
+	cseg
+
+	include ioport.inc
+	include syswork.inc
+	include	diskif.inc
+
+;switch
+USE2HD	equ	0	;0=2DDor1DD/1=2HD
+USE2DD	equ	1	;0=1DD/1=2DD
+
+;extanal symbol
+	extrn	PROMPT
+	extrn	GETWRK	;(ret:HL,IX / brk:AF,BC)
+	extrn	GETSLOT	;(ret:A / brk:F,BC,HL)
+	extrn	SETINT
+	extrn	PRVINT
+	extrn	VDRNUM
+
+;public	symbol
+	public	MYSIZE
+	public	SECLEN
+;	public	DEFDPB	;ï ÇÃèÍèäÇ≈ê›íË
+	;
+	public	INIHRD
+	public	INIENV
+	public	DRIVES
+	public	DSKIO
+	public	DSKCHG
+	public	GETDPB
+	public	CHOICE
+	public	MTOFF
+	public	OEMSTA
+
+;disk driver work area offset
+MOTCNT	equ	0		;1 motor stop counter
+LASTC0	equ	MOTCNT+1	;1 last access counter for drive 0
+LASTC1	equ	LASTC0+1	;1 last access counter for drive 1
+SIMDRV	equ	LASTC1+1	;1 number of simulate drives	(for 2drive simulation)
+CURDRV	equ	SIMDRV+1	;1 current drives		(for 2drive simulation)
+;
+WRKSIZ	equ	CURDRV+1
+
+;disk driver constant defines
+MYSIZE	equ	WRKSIZ		;required workarea size
+SECLEN	equ	512		;max sector size to support
+	IF USE2HD
+DEFDPB	equ	DPBF0		;default DPB address(2HD 18sec)
+	ELSE
+	IF USE2DD
+DEFDPB	equ	DPBF9		;default DPB address(2DD 9sec)
+	ELSE
+DEFDPB	equ	DPBF8		;default DPB address(1DD 9sec)
+	ENDIF
+	ENDIF
+	public	DEFDPB
+
+;INIHRD
+;::::	initalize hardware
+;ent:	none
+;ret:	none
+;brk:	AF,BC,DE,HL,IX,IY
+INIHRD:	ret
+
+;INIENV
+;::::	initalize environment
+;ent:	none
+;ret:	none
+;brk:	AF,BC,DE,HL,IX,IY
+INIENV:	call	GETWRK	;(ret:HL,IX / brk:AF,BC)
+	ld	(ix+MOTCNT),0
+	ld	(ix+LASTC0),0
+	ld	(ix+LASTC1),0
+	;ld	(ix+SIMDRV),0
+	ld	(ix+CURDRV),0
+;;;;	LD	HL,INTRPT
+	ld	hl,@DRVINT##	;for DOS2 hiblid
+	jp	SETINT
+
+;DRIVES
+;::::	return number of drives
+;ent:	Z	0:2 drive mode / 1:1 drive mode
+;ret:	L	number of drives
+;brk:	F,HL,IX,IY
+DRIVES:	push	af
+	push	bc
+	;push	de
+	call	GETWRK	;(ret:HL,IX / brk:AF,BC)
+	;pop	de
+	pop	bc
+	pop	af
+	ld	hl,(VDRNUM)
+	jr	nz,drvs0
+	ld	l,1
+drvs0:	ld	(ix+SIMDRV),l
+	ret
+
+;DSKIO
+;::::	disk read/write access
+;ent:	A	drive number
+;	CY	0:read / 1:write
+;	B	number of sectors
+;	C	media id
+;	DE	start logical sector offset
+;	HL	transfer address
+;ret:	CY	0:no error / 1:error
+;	A	error code (if CY is 1)
+;brk:	AF,BC,DE,HL,IX,IY
+DSKIO:	push	af
+;	ld	a,c
+;	IF USE2HD
+;	cp	0F0h				;2HD
+;	jr	c,dskio_unsupported_media_err
+;	ELSE
+;	cp	0F8h				;2DD
+;	jr	c,dskio_unsupported_media_err
+;	IFE USE2DD
+;	bit	0,a				;1DD
+;	jr	nz,dskio_unsupported_media_err	;Single side only
+;	ENDIF
+;	ENDIF
+	di
+	ld	a,2		;VDP command wait
+	out	(iVDPWR1),a
+	ld	a,8Fh
+	out	(iVDPWR1),a
+diolwv:	in	a,(iVDPRD1)
+	bit	7,a
+	jr	nz,dioqwv
+	bit	0,a
+	jr	nz,diolwv
+dioqwv:	xor	a
+	out	(iVDPWR1),a
+	ld	a,8Fh
+	out	(iVDPWR1),a
+	pop	af
+	ei
+	jr	nc,dskrd
+;write sector
+	call	medchg
+	ret	c
+	ld	c,0D3h
+	out	(c),a	;drive number
+	dec	c
+	out	(c),b	;sector count
+	dec	c
+	out	(c),d	;sector address
+	out	(c),e
+	dec	c
+	ld	d,1	;reset buffer pointer
+	out	(c),d
+	push	af
+diolwb:	ld	a,h	;transfer memory to fdd-buffer
+	cp	80h
+	jp	nc,dionwr
+	cp	3Eh
+	jp	c,dionwr
+	push	bc
+	ld	bc,SECLEN
+	ld	de,($SECBUF##)
+	call	XFER##
+	ei
+	push	hl
+	ld	bc,00D7h
+	ld	hl,($SECBUF##)
+	otir	;REPT	HIGH SECLEN
+	otir	;otir
+		;ENDM
+	pop	hl
+	pop	bc
+	djnz	diolwb
+	jp	dionwq
+dionwr:	push	bc
+	ld	bc,00D7h
+	otir	;REPT	HIGH SECLEN
+	otir	;otir
+		;ENDM
+	pop	bc
+	djnz	diolwb
+dionwq:	ld	a,0FFh		;motor/lamp on
+	call	diowa
+	pop	af
+	di
+	ld	bc,03D0h
+	out	(c),b		;write request
+	ld	c,0D6h
+diolww:	in	e,(c)		;wait write complete
+	inc	e
+	jp	z,diolww
+	ei
+	dec	e
+	jr	dskrs
+;read sector
+dskrd:	call	medchg
+	ret	c
+	ld	c,0D3h
+	out	(c),a	;drive number
+	dec	c
+	out	(c),b	;sector count
+	dec	c
+	out	(c),d	;sector address
+	out	(c),e
+	push	af	;motor/lamp on
+	ld	a,0FFh
+	call	diowa
+	pop	af
+	di
+	dec	c
+	ld	e,2	;read request
+	out	(c),e
+	ld	c,0D6h
+diolrw:	in	e,(c)	;wait read complete
+	inc	e
+	jr	z,diolrw
+	ei
+	dec	e
+	;jr	nz,dskrs
+	ld	c,0D0h
+	ld	d,1	;reset buffer pointer
+	out	(c),d
+	push	af
+	push	de
+diolrb:	ld	a,h	;transfer fdd-buffer to memory
+	cp	80h
+	jp	nc,dionrd
+	cp	3eh
+	jp	c,dionrd
+	push	bc
+	ld	bc,00D7h
+	push	hl
+	ld	hl,($SECBUF##)
+	inir	;REPT	HIGH SECLEN
+	inir	;inir
+		;ENDM
+	pop	hl
+	ld	bc,SECLEN
+	ex	de,hl
+	ld	hl,($SECBUF##)
+	call	XFER##
+	ei
+	ex	de,hl
+	pop	bc
+	djnz	diolrb
+	jp	dionrq
+dionrd:	push	bc
+	ld	bc,0D7h
+	inir	;REPT	HIGH SECLEN
+	inir	;inir
+		;ENDM
+	pop	bc
+	djnz	diolrb
+dionrq:	pop	de
+	pop	af
+;
+dskrs:;	push	af	;motor/lamp off(auto stop)
+;	xor	a
+;	out	(0D4h),a
+;	pop	af
+	push	ix
+	pop	hl
+	add	a,LASTC0
+	add	a,l
+	ld	l,a
+	ld	a,h
+	adc	a,0
+	ld	h,a
+	ld	(hl),120	;120 frame
+	ld	a,e
+	or	a
+	ret	z
+	ld	(hl),0		;0 frame
+	scf
+	ret
+diowa:	out	(0D4h),a
+	ei
+diowa0:	in	a,(0D4h)
+	or	a
+	ret	nz
+	halt
+	jp	diowa0
+
+dskio_unsupported_media_err:
+	pop	af
+	scf
+	ld	c,12
+	ret
+
+;DSKCHG
+;::::	disk change detect
+;ent:	A	drive number
+;	B	0
+;	C	media id
+;	HL	DPB address
+;ret:	CY	0:no error / 1:error
+;	A	error code (if CY is 1)
+;	B	1:changed / 0:unknown / 0FFh:unchanged
+;brk:	AF,BC,DE,HL,IX,IY
+DSKCHG:	ei
+	push	af
+	push	bc
+	push	hl
+	call	GETWRK
+	pop	hl
+	pop	bc
+	pop	af
+	or	a
+	ld	b,(ix+LASTC0)
+	jr	z,dchg0
+	ld	b,(ix+LASTC1)
+dchg0:	inc	b
+	dec	b
+	ld	b,-1
+	ret	nz
+	push	af
+	push	hl
+	push	bc
+	ld	b,1
+	ld	de,1
+	ld	hl,($SECBUF##)
+	call	DSKIO
+	jr	c,dchgx
+	ld	hl,($SECBUF##)
+	pop	bc
+	ld	b,(hl)
+	pop	hl
+	pop	af
+	call	GETDPB
+	ld	a,12
+	ld	b,1
+	ret	c
+	ld	b,-1
+	xor	a
+	ret
+dchgx:	pop	de
+	pop	de
+	pop	de
+	ld	b,0
+	ret
+
+;GETDPB
+;::::	get DPB
+;ent:	A	drive number
+;	B	media id (FAT)
+;	C	media id
+;	HL	DPB address
+;ret:	(set DPB)
+;brk:	AF,BC,DE,HL,IX,IY
+GETDPB:	ei
+	ex	de,hl
+	inc	de
+	ld	a,b
+	IF USE2HD
+	sub	0F0h		;2HD
+	ret	c
+	ELSE
+	sub	0F8h		;2DD
+	ret	c
+	IFE USE2DD
+	bit	0,a		;1DD
+	ret	nz		;Single side only
+	ENDIF
+	ENDIF
+	ld	l,a
+	ld	h,0
+	add	hl,hl
+	ld	c,l
+	ld	b,h
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,bc
+	IF USE2HD
+	ld	bc,DPB2HD	;2HD
+	ELSE
+	ld	bc,DPB2DD	;2DD
+	ENDIF
+	add	hl,bc
+	ld	bc,18
+	ldir
+	ret
+
+;CHOICE
+;::::	get format choice message
+;ent:
+;ret:
+;brk:
+CHOICE:	ld	hl,0
+	ret
+
+;MTOFF
+;::::	drive motor stop / shutdown
+;ent:
+;ret:
+;brk:
+MTOFF:	ret
+
+;OEMSTA
+;::::	OEM specific statement extension
+;(It is the same as "STATEMENT" entry in bootable rom)
+OEMSTA:	scf
+	ret
+
+;2 drive simulation
+;media change message output
+;ent:
+;ret:
+;brk:
+medchg:	push	hl
+	push	de
+	push	bc
+	push	af
+	call	GETWRK	;(ret:HL,IX / brk:AF,BC)
+	ld	a,(IX+SIMDRV)
+	dec	a
+	jr	z,mchg0
+	pop	af
+	push	af
+	cp	(IX+SIMDRV)
+	jr	nc,mchg1
+	cp	(IX+CURDRV)
+	push	ix
+	call	nz,PROMPT
+	pop	ix
+mchg0:	pop	af
+	ld	(IX+CURDRV),a
+	pop	bc
+	pop	de
+	pop	hl
+	xor	a
+	ret
+mchg1:	pop	af
+	pop	bc
+	pop	de
+	pop	hl
+	ld	a,12
+	scf
+	ret
+
+	PUBLIC	DRVINT		;for DOS2 hiblid
+DRVINT	equ	$		;for DOS2 hiblid
+;interrupt
+INTRPT:	push	af
+	call	GETWRK
+	ld	a,(ix+MOTCNT)
+	or	a
+	jr	z,intr0
+	cp	0FFh
+	jr	z,intr0
+	dec	(ix+MOTCNT)
+ 	jr	nz,intr0
+	;motor stop action
+intr0:	ld	a,(ix+LASTC0)	;last access count for drive 0
+	or	a
+	jr	z,intr1
+	dec	(ix+LASTC0)
+intr1:	ld	a,(ix+LASTC1)	;last access count for drive 1
+	or	a
+	jr	z,intr2
+	dec	(ix+LASTC1)
+intr2:	pop	af
+	jp	PRVINT
+
+;DPB
+;::::	DPB table
+	IF USE2HD
+DPB2HD:
+DPBF0:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF1:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF2:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF3:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF4:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF5:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF6:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+DPBF7:	db	0F0h		;2HD/18SEC 1440KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	0
+	dw	1
+	db	2
+	db	224
+	dw	34
+	dw	2846
+	db	9
+	dw	19
+	ENDIF
+DPB2DD:
+DPBF8:	db	0F8h		;1DD/9SEC 360KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	12
+	dw	355
+	db	2
+	dw	5
+DPBF9:	db	0F9h		;2DD/9SEC 720KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	14
+	dw	714
+	db	3
+	dw	7
+DPBFA:	db	0FAh		;1DD/8SEC 320KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	10
+	dw	316
+	db	1
+	dw	3
+DPBFB:	db	0FBh		;2DD/8SEC 640KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	12
+	dw	635
+	db	2
+	dw	5
+DPBFC:	db	0FCh		;1D/9SEC 180KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	1
+	dw	1
+	db	2
+	db	64
+	dw	9
+	dw	352
+	db	2
+	dw	5
+DPBFD:	db	0FDh		;2D/9SEC 360KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	12
+	dw	355
+	db	2
+	dw	5
+DPBFE:	db	0FEh		;1D/8SEC 160KB
+	dw	512
+	db	00001111b
+	db	4
+	db	0
+	db	1
+	dw	1
+	db	2
+	db	64
+	dw	7
+	dw	314
+	db	1
+	dw	3
+DPBFF:	db	0FFh		;2D/8SEC 320KB
+	dw	512
+	db	00001111b
+	db	4
+	db	1
+	db	2
+	dw	1
+	db	2
+	db	112
+	dw	10
+	dw	316
+	db	1
+	dw	3
+
+	END

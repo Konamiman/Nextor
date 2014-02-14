@@ -1,0 +1,22 @@
+	.Z80
+;
+;       This file is necessary so that the C program is able to access the
+; message numbers which are produced by the TEXT.MAC file.  All it does is
+; to take those numbers and produce a table which contains them so that  a
+; C program may access them as standard external variables.
+;
+M_SIZ1::        DW      __SIZ1##
+M_SIZ2::        DW      __SIZ2##
+M_IN::          DW      __IN##
+M_KIN::         DW      __KIN##
+M_FIL1::        DW      __FIL1##
+M_FIL2::        DW      __FIL2##
+M_KFREE::       DW      __KFREE##
+M_VOL1::        DW      __VOL1##
+M_VOL2::        DW      __VOL2##
+M_VOL3::        DW      __VOL3##
+M_XDIR::        DW      __XDIR##
+M_WVER::        DW      __WVER##
+;
+	END
+;

@@ -1,0 +1,16 @@
+	TITLE	MSX-DOS 2 - MSX-DOS.SYS copyright (1986) IS Systems Ltd.
+	SUBTTL	Start of First Copy of Main Code
+	.Z80
+;
+;
+;        This file is linked just before the first copy of the SYS  file,  and
+; just  defines  a global symbol which is the start of the SYS code. The label
+; declaration cannot be inside SYS because it is linked twice, and would  thus
+; produce a %Multiple Defined Global error from L80.
+;
+;
+REF::
+;
+;
+;
+	END

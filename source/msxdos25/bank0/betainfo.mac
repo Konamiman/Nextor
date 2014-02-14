@@ -1,0 +1,11 @@
+if ALPHA gt 0
+	defb	" alpha ",ALPHA+"0","b "
+endif
+
+if BETA gt 0
+	defb	" beta ",BETA+"0"," "
+endif
+
+if RC gt 0
+	defb	" RC ",RC+"0"," "
+endif

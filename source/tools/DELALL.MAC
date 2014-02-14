@@ -1,0 +1,93 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+USAGE_S:
+	db	"DELALL - Deletes all the data in a drive",13,10
+	db	13,10
+	db	"Deletes all files and directories in the specified drive, leaving the media",13,10
+	db	"completely empty. Deletion is done by cleaning the FAT and root directory",13,10
+	db  "areas of the media, therefore there is no way to undo the operation.",13,10
+	db  "Use with care.",13,10
+	db	13,10
+	db	"Usage: DELALL <drive letter>:",13,10
+	db	1Ah
+	db	0
+
+START:
+	call	CHK250##
+
+	;--- Get drive letter
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	nz,FOUND_PARAMS
+	
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+FOUND_PARAMS:
+
+	ld	hl,BUF
+	call	CHKLET##
+
+	push	af	;Check that the drive actually exists
+	ld	l,a
+	ld	de,BUF
+	ld	c,_DPARM##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+	pop	af
+
+	;--- Show a warning message and ask for confirmation
+
+	push	af
+	add	a,"A"-1
+	ld	(DRIVE),a
+	ld	de,WARNING_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	c,_CONIN##
+	call	5
+	or	32
+	cp	"y"
+	ld	b,.ABORT##
+	ld	c,_TERM##
+	jp	c,5
+
+	;--- Do the disk cleaning
+
+	pop	bc
+	ld	c,_FORMAT##
+	ld	a,0FBh
+	ld	hl,BUF
+	ld	de,0
+	call	5
+
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+	
+
+WARNING_MSG:
+	db	13,10,"WARNING!!",13,10
+	db	13,10
+	db	"ALL data on drive "
+DRIVE:
+	db	"X: will be permanently deleted.",13,10
+	db	"There is no way to undo this operation.",13,10
+	db	13,10
+	db	"Are you sure? (y/n) ",0
+
+BUF:
+
+	end

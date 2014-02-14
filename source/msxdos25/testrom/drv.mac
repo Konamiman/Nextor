@@ -1,0 +1,34 @@
+	.z80
+;
+	public	MYSIZE,SECLEN
+MYSIZE	equ	0
+SECLEN	equ	512
+;
+DEFDPB::
+	defb	0F9h
+DRIVES::
+	ld	l,0
+	ret
+DSKIO::
+DSKCHG::
+GETDPB::
+	ld	a,12
+	scf
+INIHRD::
+INIENV::
+DRVINT::
+MTOFF::
+	ret
+;
+CHOICE::
+	ld	hl,null_message
+	ret
+null_message:
+	defb	0
+DSKFMT::
+	ld	a,16
+OEMSTATEMENT::
+	scf
+	ret
+;
+	end

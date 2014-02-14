@@ -1,0 +1,460 @@
+	.z80
+	title	MSX-DOS 2 ROM	Copyright (1986)  IS Systems Ltd.
+	subttl	RAM disk driver
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+SLOT_REG	equ	0A8h
+;
+;-----------------------------------------------------------------------------
+;
+	public	R_SECLEN
+R_SECLEN	equ	512			;Sector size is always 512.
+;
+;
+;-----------------------------------------------------------------------------
+;
+R_DSKCHG::
+;
+;    This is the "media check" function.  It always returns "not changed"  if
+; the  "UPB_VOLID" byte of the boot sector is "V", otherwise it returns "disk
+; changed" as this will force a "BUILD_UPB" function call and the  next  read
+; will re-build the UPB in the boot sector.
+;
+;
+		ld	hl,RD_BOOT##+UPB_VOLID##
+		ld	a,(DATA_SEG##)
+		call	RD_SEG##
+		cp	"V"
+		ld	b,0			;Return "not changed" if
+		ret	z			; UPB is present.
+		dec	b			;Return "disk changed"
+		ret				; if no UPB is present.
+;
+;
+;-----------------------------------------------------------------------------
+;
+R_DSKIO::
+;
+;    This is the sector read and write routine which does all the work of  the
+; RAM  disk.   An initial test is done to see if there is a UPB present in the
+; boot sector (checks for the "V" of the "VOL_ID"  message)  and  if  not  the
+; "MAKE_UPB" is called to create one, and an error is returned if there are no
+; segments allocated ("RD_COUNT"=0).
+;
+;    Most of the routine is a loop which  calls  "FIND_SECTOR"  to  turn  the
+; sector  number  into  a  segment  and  address.   It then transfers as many
+; sectors of the request as are contained in that one segment  and  if  there
+; are  any  more  sectors  left to do then it loops back.  The current sector
+; number, number of sectors left and transfer  address  are  kept  in  global
+; variables  to keep the register handling under control.  The actual copying
+; is done by the routine RAMDISK_LDIR which uses a  different  technique  for
+; the primary mapper and for all other mappers.
+;
+;    Before  doing any transfers, this function saves the four secondary slot
+; register image variables so that it can restore them afterwards.  This is a
+; real  pain  since it takes quite a bit of code to restore them because they
+; must be written out to the real secondary slot registers  as  well  as  the
+; image  variables.  It is all necessary because of the inadequacy of the MSX
+; slot switching routines.
+;
+; Entry:    Carry - clear => read
+;                    set  => write
+;               A = Drive number (ignored)
+;               B = Number of sectors to transfer
+;               C = Media descriptor byte (ignored)
+;              DE = First sector to transfer
+;              HL = Transfer address (always in page-2 or page-3)
+; Returns:  Carry - clear => success
+;                    set  => failure, A = error code
+;                                     B = number of remaining sectors
+;
+;
+if 1
+		ei
+endif
+		ld	(RD_SNUM##),de		;Save sector number
+		ld	(RD_ADDR##),hl		;Save transfer address
+		ld	a,b
+		ld	(RD_SCNT##),a		;Save sector count.
+;
+		ex	af,af'			;Read write flag -> carry'
+		ld	hl,RD_BOOT##+UPB_VOLID##
+		ld	a,(DATA_SEG##)
+		call	RD_SEG##		;If no UPB currently exists
+		ei
+		sub	"V"			; then make one and return
+		call	nz,MAKE_UPB		; an error if we could not
+		ret	c			; make one.
+;
+		ld	hl,(SLTTBL##)		;Save all four secondary slot
+		push	hl			; images for restoring after-
+		ld	hl,(SLTTBL##+2)		; wards.
+		push	hl
+;
+diskio_loop:	ld	de,(RD_SNUM##)		;Find this sector and winge
+		call	FIND_SECTOR		; if it is too big for the
+		jr	c,diskio_done		; disk.
+;
+		ld	e,a
+		ld	a,(RD_SCNT##)		;E = sectors to transfer
+		sub	e			; this time.  A = number of
+		jr	nc,not_all		; sectors left after this.
+		add	a,e
+		ld	e,a
+		xor	a
+not_all:	ld	(RD_SCNT##),a		;Save number of sectors left
+		or	a
+		push	af			;Save "finished" flag
+;
+		push	hl
+		ld	hl,(RD_SNUM##)		;Adjust sector number for
+		ld	d,0			; next time.
+		add	hl,de
+		ld	(RD_SNUM##),hl
+		pop	hl
+;
+		ld	d,e
+		sla	d			;DE := number of bytes to
+		ld	e,0			; transfer & save it for
+		push	de			; adjusting address.
+;
+		call	RAMDISK_LDIR		;Do the LDIR operation.
+;
+		pop	de			;Adjust the transfer address
+		ld	hl,(RD_ADDR##)		; ready for next transfer.
+		add	hl,de
+		ld	(RD_ADDR##),hl
+;
+		pop	af			;Loop back to do next transfer
+		jr	nz,diskio_loop		; if there is any left.
+		xor	a
+;
+diskio_done:	ex	af,af'
+;
+		di
+		pop	hl
+		ld	(SLTTBL##+2),hl		;Restore the four secondary
+		pop	hl			; slot register images which
+		ld	(SLTTBL##),hl		; were saved earlier.  Then go
+		ld	hl,SLTTBL##		; into a horrible loop to write
+		xor	a			; them out to the actual
+sec_slot_loop:	ld	c,a			; registers.  This vile code
+		in	a,(SLOT_REG)		; is necessary because the
+		ld	b,a			; ENASLT switch technique used
+		and	00111111b		; does not necessarily preserve
+		or	c			; the secondary slot register
+		ld	e,(hl)			; for any slots which were
+if 1 ;;S1990BUG
+		push	hl
+		dec	hl
+		dec	hl
+		dec	hl
+		dec	hl
+		bit	7,(hl)
+		pop	hl
+		inc	hl			; used for mapper segments.
+		call	nz,SSLOTE##
+else
+		inc	hl			; used for mapper segments.
+		call	SSLOTE##
+endif
+		ld	a,c
+		add	a,01000000b
+		jr	nz,sec_slot_loop
+		ei
+;
+		ex	af,af'			;Return with error flag
+		ld	b,0			; in carry and B=0 (number
+		ret				; of remaining sectors).
+;
+;       ----------------------------------------
+;
+RAMDISK_LDIR:	di
+		ld	a,(RAMAD3##)		;Skip to handle special case
+		cp	b			; if the required slot is the
+		jr	z,primary_ldir		; primary mapper slot.
+;
+		call	GET_P1##		;Page the required segment into
+		push	af			; page-1 of the mapper slot,
+		ld	a,c			; saving previous contents.
+		call	PUT_P1##
+;
+		set	6,h			;Move HL address to page-1
+		call	RD_LDIR##		;Jump into page-3
+;
+		pop	af			;Restore the original segment
+		call	PUT_P1##		; to page-1.
+		ei
+		ret
+;
+;
+;
+primary_ldir:	call	GET_P0##		;Save current page-0
+		push	af
+		ld	a,c			;Put RAM disk segment
+		call	PUT_P0##		; into page-0
+		ld	b,d
+		ld	c,e
+		ld	de,(RD_ADDR##)
+		ex	af,af'
+		jr	nc,read_noswap		;Swap source and destination
+		ex	de,hl			; addresses if writing.
+read_noswap:	ex	af,af'
+		ldir				;Copy the data
+		pop	af
+		call	PUT_P0##		;Replace old page-0 segment
+		ei
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+FIND_SECTOR:
+;
+;    This routine finds the segment number and address for a specified  sector
+; number.   The  boot  sector  is handled separately since it is stored in the
+; kernel data  segment.   All  other  sectors  are  located  by  dividing  the
+; decremented  sector  number  by  32 and looking up in the segment list.  The
+; remainder is multiplied by 512 to get the address within the  segment.    If
+; the sector is beyond the end of the segment list then an error is returned.
+;
+; Entry:       DE = Sector number
+; Returns:  Carry - clear => success,   C = Segment number
+;                                       B = Slot number
+;                                       A = Max sectors in this segment
+;                                      HL = Address in page-0
+;                    set  => failure,   A = Error code
+; Corrupts:    AF,C,DE,HL
+;
+;
+		ld	a,d			;Skip if it is not sector
+		or	e			; zero (boot sector).
+		jr	nz,not_sector_0
+;
+		ld	a,(DATA_SEG##)		;For sector zero just return
+		ld	c,a			; the kernel data segment and
+		ld	a,(RAMAD3##)		; primary mapper slot, with
+		ld	b,a			; the address of the boot
+		ld	hl,RD_BOOT##-8000h	; sector in page-0.
+		ld	a,1			;Only one sector here.
+		ret
+;
+not_sector_0:
+if 1
+		call	GET_P2##
+		push	af			;Put kernel data segment into
+		ld	a,(DATA_SEG##)		; page-2, saving previous
+		call	PUT_P2##		; contents.
+		ld	hl,(RD_COUNT##)		;Get number of segments
+		ld	h,0
+		add	hl,hl			;Multiply by 32 to get
+		add	hl,hl			; maximum sector number allowed
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		pop	af
+		call	PUT_P2##
+else
+		ld	hl,255*32		;If sector number is larger
+endif
+		sbc	hl,de			; than could possibly fit
+		ld	a,12			; in 255 segments then
+		ret	c			; return an error.
+;
+		ld	h,d
+		ld	l,e
+		dec	hl
+		add	hl,hl			;A := (sector-1 REM 128) * 2
+		ld	a,l			; used in address calculation
+		push	af			; later.
+		add	hl,hl
+		add	hl,hl			;HL := (sector-1) * 8
+		ld	e,h			;DE := (sector-1) * 8/256
+		ld	d,0			;    = logical segment number
+		ld	hl,RD_LIST##
+		add	hl,de			;HL -> required entry in the
+		add	hl,de			;      segment/slot list.
+;
+		call	GET_P2##		;Save current page-2 segment
+		push	af
+		ld	a,(DATA_SEG##)		;Put kernel data segment
+		call	PUT_P2##		; into page-2.
+		ld	c,(hl)			;C := segment number
+		inc	hl
+		ld	b,(hl)			;B := slot number
+		pop	af
+		call	PUT_P2##		;Restore page-2 segment
+;
+		pop	af			; A := (sector-1 REM 128) * 2
+		and	00111110b		; A := (sector-1 REM 32) * 2
+		ld	h,a			;HL := (sector-1 REM 32) * 512
+		ld	l,0			;    = address within segment
+;
+		ld	a,32*2			;A := maximum number of
+		sub	h			; segments which are left
+		rrca				; in this segment.
+;
+		or	a			;Return with carry clear
+		ret				; to indicate no error
+;
+;
+;-----------------------------------------------------------------------------
+;
+MAKE_UPB:
+;
+;    This routine is called whenever a RAM disk  transfer  is  attempted  when
+; there  is  no  UPB  set  up  in the boot sector.  Its job is to set up a UPB
+; depending on the RAM disk size as specified by "RD_COUNT".  If "RD_COUNT" is
+; zero then an error is returned.  For the duration of this routine the kernel
+; data segment, which contains the boot sector, is paged into page-2.
+;
+; Entry:     None
+; Returns:   Carry - clear => success
+;                     set  => failure, A = error code
+; Corrupts:  AF,BC',DE',HL'
+;
+;
+		call	GET_P2##
+		push	af			;Put kernel data segment into
+		ld	a,(DATA_SEG##)		; page-2, saving previous
+		call	PUT_P2##		; contents.
+		ld	a,(RD_COUNT##)
+		or	a			;Get number of segments and
+		jr	nz,make_upb_ok		; skip if non-zero.
+		pop	af
+		call	PUT_P2##		;If zero then there is no
+		ld	a,12			; RAM disk so return an
+		scf				; error.
+		ret
+;
+make_upb_ok:	exx
+		ld	hl,RD_BOOT##+UPB_SSZ##
+		ld	(hl),low 512
+		inc	hl			;Sector size is 512 bytes
+		ld	(hl),high 512
+		inc	hl
+;
+		ld	(hl),1			;One sector per cluster
+if 1
+		cp	4096/32+1		;If number of clusters won't
+		jr	c,fit_12bit_1		; fit 12-bit, two sectors
+		inc	(hl)			; per cluster
+fit_12bit_1:
+endif
+		inc	hl
+;
+		ld	(hl),1			;One reserved sector
+		inc	hl
+		ld	(hl),0
+		inc	hl
+;
+		ld	(hl),2			;Two FAT copies
+		inc	hl
+;
+		ld	c,a			;Calculate directory entries.
+		srl	a
+		srl	a			;A := (segments DIV 4)+4
+		add	a,4			;   = number of dir sectors
+		ld	e,a
+		ld	d,0
+if 1
+		push	de			;Save this for later
+endif
+		ex	de,hl
+		add	hl,hl			;Multiply this by 16 to get
+		add	hl,hl			; the number of entries.
+		add	hl,hl
+		add	hl,hl
+		ex	de,hl
+		ld	(hl),e
+		inc	hl			;Store number of entries.
+		ld	(hl),d
+		inc	hl
+;
+		ld	e,c			;Calculate total sectors
+		ld	d,0
+		ex	de,hl
+		add	hl,hl			;Total number of sectors is
+		add	hl,hl			; just 32 * number of segments
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+if 1
+		inc	hl			; and one more for boot sector
+endif
+		ex	de,hl
+		ld	(hl),e
+		inc	hl			;Store number of sectors
+		ld	(hl),d
+		inc	hl
+;
+		ld	(hl),0FFh		;Media byte is always 0FFh
+		inc	hl
+;
+		ex	de,hl			;Calculate sectors/FAT
+if 1
+		ld	a,c
+		dec	hl			;Overhead for boot sector
+		pop	bc			;Get back number of dir sectors
+		or	a
+		sbc	hl,bc			;HL := remainder sectors
+		cp	4096/32+1
+		jr	c,fit_12bit_2
+;
+		srl	h			;Divide by two
+		rr	l			; to get number of clusters
+fit_12bit_2:
+endif
+		ld	b,h
+		ld	c,l
+		add	hl,bc
+		add	hl,bc			;HL := clusters*3
+		ex	de,hl
+		dec	de			;DE := clusters*3 - 1
+		srl	d
+		srl	d			; D := (clusters*3 - 1) DIV 1024
+		inc	d			;+1 = number of sectors
+		ld	(hl),d
+		inc	hl			;Store sectors/FAT
+		ld	(hl),0
+		inc	hl
+;
+		ld	hl,RAMDISK_VOLID		;Copy the fixed volume
+		ld	de,RD_BOOT##+UPB_VOLID##	; id and dirt disk flag
+		ld	bc,RAMDISK_VEND-RAMDISK_VOLID	; from below into the
+		ldir					; boot sector.
+;
+		exx
+		pop	af			;Restore original page-2
+		call	PUT_P2##		; segment and return with
+		xor	a			; carry clear => success.
+		ret
+;
+;
+RAMDISK_VOLID:	db	"VOL_ID"
+NULL:		db	0			;Dirty disk flag
+		db	1,2,3,4			;Volume-id
+RAMDISK_VEND:
+;
+;
+;-----------------------------------------------------------------------------
+;
+R_GETDPB::	or	a
+		ret
+;
+R_CHOICE::	ld	hl,NULL
+		ret
+;
+R_DSKFMT::	ld	a,12
+		scf
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<RAMDRV>
+	end
+;

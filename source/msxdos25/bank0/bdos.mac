@@ -1,0 +1,941 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	MSX Environment Setup and BDOS Entry Code
+;*****************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+;-----------------------------------------------------------------------------
+;
+DB_INIT::
+;
+;    This routine is called by the "INIT" module after calling  "DOSINIT"  and
+; also  when  it  is about to re-enter the disk BASIC environment.  It must be
+; entered with the RAM slot in page-2 and page-3, the BIOS ROM in  page-0  and
+; this ROM in page-1.  The RAM paging can be in any state and will be set back
+; to the basic 64k by this routine.
+;
+;    The job of this routine is to set up the callability of the 0F37Dh "BDOS"
+; entry point for the disk BASIC environment.  It allocates any buffers needed
+; for this environment including  the  "$DIRBUF"  sector  buffer  and  buffers
+; needed  by  the  BDOS  entry code.  Also it restores the jump instruction to
+; 0F37Dh and sets up the KBDOS "disk error" and "abort" vectors.
+;
+;
+		ld	a,(P0_64K##)		;Restore the basic 64k RAM
+		call	PUT_P0##		; segments to pages 0, 1
+		ld	a,(P1_64K##)		; and 2.  Page 3 must be
+		call	PUT_P1##		; correct already.
+		ld	a,(P2_64K##)
+		call	PUT_P2##
+;
+if 0
+		ld	bc,LEN_1##		;Allocate space for the
+		call	DB_PALLOC##		; three buffers for
+		ld	(BUF_1##),hl		; strings, FIBs and FCB's
+		ld	bc,LEN_2##		; in BDOS_GO.
+		call	DB_PALLOC##
+		ld	(BUF_2##),hl
+		ld	bc,LEN_3##
+		call	DB_PALLOC##
+		ld	(BUF_3##),hl
+;
+		ld	bc,64			;Allocate space for the
+		call	DB_PALLOC##		; error message buffer.
+		ld	(ERR_BUF##),hl
+;
+endif
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+KAB_ROUTINE:
+;
+;    This  is the KBDOS abort routine which is set up whenever the 0F37Dh BDOS
+; entry is active.  It is set up by  the  "KB_INIT"  routine  above  and  will
+; normally  remain  active  until  "MSXDOS2.SYS"  defines its own routine.  It
+; restores the slot switching and RAM paging to the state which it was  in  on
+; the  first  BDOS  call,  switches  back to the user's stack and jumps to the
+; user's defined "BREAKVECT" routine.
+;
+;
+		exx				;Save error code in B'
+		ld	b,a			; just for fun to BUFOUT.
+		exx
+;
+		ld	sp,(SP_BDOS##)		;Switch back to user's stack
+		ld	hl,(BREAKVECT##)	;Get the user's break vector
+		jp	JUMP_VECT		;Go to user's break routine
+;
+;
+;-----------------------------------------------------------------------------
+;
+KDSK_ROUTINE:
+;
+;    This is the KBDOS disk error routine which is set up whenever the  0F37Dh
+; BDOS  entry is active.  It is set up by the "KB_INIT" routine above and will
+; normally remain active until  "MSXDOS.SYS"  defines  its  own  routine.   It
+; restores  the  slot  switching and RAM paging to the state which it was when
+; "BDOS_GO" was called and then calls the user's "DISKVECT" routine.  If  this
+; routine  returns then the KBDOS paging is re-enabled and control returned to
+; the KBDOS.
+;
+; Entry:    A' = Old error code (passed to DISKVECT in C)
+;	    A  = New error code (passed to DISKVECT in A')
+;	    B  = Drive number (decremented & passed to DISKVECT in A)
+;	    C  = New Flags (passed to DISKVECT in B)
+;	   DE  = Sector number (passed to DISKVECT in DE)
+;(ERR_EX_SECTOR) = Sector number bit16-22 (passed to DISKVECT in L) :FAT16
+;
+		ex	af,af'
+		ld	l,c
+		ld	c,a			;C := MSX-DOS 1.0 error code
+		ld	a,b
+		dec	a			;A := drive number (0=>A: etc)
+		ld	b,l			;B := flags
+		ld	hl,(DISKVECT##)
+		call	CALL_VECT		;Go call the user's routine
+;
+		ld	a,3			;Translate the action code
+		sub	c			; for the KBDOS values.
+		ei
+		ret
+;
+;	----------------------------------------
+;
+CALL_VECT:
+		push	hl
+		ld	hl,$DOSON##		;Insure $DOSON is called before
+		ex	(sp),hl			; returning to us.
+JUMP_VECT:
+		push	hl			;Call JP_VECT after $DOSOFF.
+		ld	hl,JP_VECT##
+		ex	(sp),hl
+		jp	$DOSOFF##
+;
+;
+;-----------------------------------------------------------------------------
+;
+TIME_IRQ::
+;
+;    This routine is called by an inter-slot call  on  every  timer  interrupt
+; (50Hz  or  60Hz).   It  counts interrupts using the variable "TIM_COUNT" and
+; every "nth" interrupt (as controlled by "TIM_RATE")  it  calls  the  routine
+; KTIMI  in  the kernel code segment (which is at a fixed address specified in
+; module "DATA").  Calling this routine involves paging and slot switching to
+; ensure  that the kernal code and data segments are both available, and also
+; stack switching to make sure that the stack is in page-3.  The routine  can
+; corrupt  all  registers because these have already been saved. This routine
+; also cycles the 23-bit random number generator by one bit.
+;
+;
+		di				;Just in case
+		ld	a,1			;Set BIOS console status
+		ld	(ST_COUNT##),a		; timeout counter to force
+						; a real status check.
+;
+		ld	hl,TIM_COUNT##
+		inc	(hl)			;Bump the interrupt counter
+		ld	a,(TIM_RATE##)		;If not reached limit then
+		cp	(hl)			; don't call kernel routine.
+		jr	nz,skip_kirq		;If reached limit then reset
+		ld	(hl),0			; it to zero.
+;
+		ld	a,(CH_COUNT##)		;If character buffer timeout
+		cp	2			; counter is greater than
+		adc	a,0FFh			; 1 then decrement it, else
+		ld	(CH_COUNT##),a		; leave it unaltered.
+;
+		ld	a,(TIM_TICK##)		;If deferred UD timeout ticks
+		cp	UD_TMOUT##		; is less than UD_TMOUT
+		adc	a,0			; then increment it, else
+		ld	(TIM_TICK##),a		; leave it unaltered.
+;
+skip_kirq:	ld	hl,(RANDOM##)		;Get current random number
+		ld	a,(RANDOM##+2)		; seed.
+		ld	c,a			;Save MSB
+		rrca
+		rrca
+		rrca				;Get bit-17 into bit-22
+		xor	c			;XOR bit-17 with bit-22
+		rla
+		rla				;Get result into carry
+		adc	hl,hl			;Shift result into bit-0
+		ld	a,c
+		adc	a,a			;Shift top 7 bits
+		ld	(RANDOM##+2),a
+		ld	(RANDOM##),hl		;Store new 23-bit seed.
+;
+		ret
+;
+;
+;
+;******************************************************************************
+;
+BDOS_GO::
+;
+;   This is the BDOS entry routine which is called via an inter-slot call from
+; address 0F37Dh.  Its job is to manage the stack switching and also to record
+; the current slot and page selections.  If the stack is already in  the  BDOS
+; stack  when it is called then no stack switch is done and it is assumed that
+; the slot and page selection variables are already set up.  This ensures  the
+; re-entrancy  required  for  disk  error  routines  to  be  able  to call the
+; character I/O funtions.
+;
+;
+		LD	IX,(IX_BDOS##)		;Get parameter for IX back.
+DOS1_GO::
+		EX	AF,AF'			;Save parameters to BDOS
+		EXX				; function.
+;
+if 1
+;
+; Insure error vectors are directed to us.  Just for bad mannered applications
+; that call 0005h at one time and F37Dh at another time.  ...HF...
+;
+		ld	hl,KAB_ROUTINE		;Setup the disk vector and
+		ld	(KAB_VECT##),hl		; abort vector routines for
+		ld	hl,KDSK_ROUTINE		; MSX-DOS 1.0 compatability.
+		ld	(KDSK_VECT##),hl	;
+endif
+		LD	HL,(BDOS_STACK##)
+		OR	A			;If the current stack pointer
+		SBC	HL,SP			; value is in the "BDOS_STACK"
+		JR	C,NOT_REENT		; area,  must be a re-entrant
+		LD	BC,BDS_SZ##		; call so skip to a separate
+		SBC	HL,BC			; little calling routine.
+		JR	C,IS_REENT
+;
+NOT_REENT:	LD	(SP_BDOS##),SP		;Save user's stack and switch
+		LD	SP,(BDOS_STACK##)	; to a seperate page-3 stack.
+;
+		CALL	BDOS_GO_GO		;Call the function dispatcher
+		LD	SP,(SP_BDOS##)		;Restore user's stack
+		OR	A
+		RET				;Return to user.
+;
+;
+IS_REENT:	CALL	BDOS_GO_GO		;For a re-entrant call, call
+		OR	A			; the function dispatcher and
+		RET				; return without stack switch.
+;
+;
+;-----------------------------------------------------------------------------
+;
+BDOS_GO_GO:
+;
+;    This is the BDOS function dispatcher. It looks up the function number  in
+; a  function  table and jumps to the appropriate routine.  The called routine
+; does any necessary copying of buffers etc and also the  paging  required  to
+; call the KBDOS.
+;
+;
+		EXX				;Get BDOS parameters back.
+		PUSH	HL
+		LD	A,C			;Get function number.
+		CP	MAXFN			;If function number is too big
+		JR	C,FUNCTION_OK		; then force it into a known
+		LD	A,BADNO			; unimplemented function number
+FUNCTION_OK:
+		LD	HL,FUNTAB
+		ADD	A,A
+		ADD	A,L			;Index into the function table
+		LD	L,A			; to get the address of the
+		JR	NC,NOINC		; routine for this function.
+		INC	H
+NOINC:
+		LD	A,(HL)			;Get function routine address
+		INC	HL			; from table.
+		LD	H,(HL)
+		LD	L,A
+		EX	(SP),HL			;Save routine address, get HL
+		EX	AF,AF'			;Get paramater for A back.
+		RET				;Jump to function routine.
+;
+;
+;	----------------------------------------
+;
+;	 Function dispatch table for BDOS_GO_GO.
+;
+BADNO	EQU	1CH		;Function no. used for unimplemented fns.
+;
+FUNTAB:	DEFW	@TERM0		;Terminate program with no error.
+	DEFW	@CONIN		;Console input.
+	DEFW	@CONOUT		;Console output.
+	DEFW	@AUXIN		;Auxilliary input.
+	DEFW	@AUXOUT		;Auxilliary output.
+	DEFW	@LSTOUT		;List output.
+	DEFW	@DIRIO		;Direct console I/O.
+	DEFW	@DIRIN		;Direct console input, no echo.
+	DEFW	@INNOE		;Console input, no echo.
+	DEFW	@STROUT		;String output.
+	DEFW	@BUFIN		;Buffered line input.
+	DEFW	@CONST		;Console status.
+;
+	DEFW	@CPMVER		;Return CP/M version number.
+	DEFW	@DSKRST		;Disk reset.
+	DEFW	@SELDSK		;Select disk.
+;
+	DEFW	@FOPEN		;Open file (FCB).
+	DEFW	@FCLOSE		;Close file (FCB).
+	DEFW	@SFIRST		;Search for first (FCB).
+	DEFW	@SNEXT		;Search fir next (FCB).
+	DEFW	@FDEL		;Delete file (FCB).
+	DEFW	@RDSEQ		;Read sequential (FCB).
+	DEFW	@WRSEQ		;Write sequential (FCB).
+	DEFW	@FMAKE		;Create file (FCB).
+	DEFW	@FREN		;Rename file (FCB).
+;
+	DEFW	@LOGIN		;Get login vector.
+	DEFW	@CURDRV		;Get current drive.
+	DEFW	@SETDTA		;Set disk transfer address.
+	DEFW	@ALLOC		;Get allocation information.
+;
+	DEFW	@BADFN		;Write protect disk in CP/M.
+	DEFW	@BADFN		;Get read only vector in CP/M.
+	DEFW	@BADFN		;Set file attributes in CP/M.
+	DEFW	@BADFN		;Get Disk Parameter Block in CP/M.
+	DEFW	@BADFN		;Get/set user code in CP/M.
+;
+	DEFW	@RDRND		;Read random (FCB).
+	DEFW	@WRRND		;Write random (FCB).
+	DEFW	@FSIZE		;Get file size (FCB).
+	DEFW	@SETRND		;Set random record (FCB).
+	DEFW	@BADFN		;Undefined function in CP/M.
+	DEFW	@WRBLK		;Write random block (FCB).
+	DEFW	@RDBLK		;Read random block (FCB).
+	DEFW	@WRZER		;Write random with zero fill (FCB).
+	DEFW	@BADFN		;Unused.
+;
+	DEFW	@GDATE		;Get date.
+	DEFW	@SDATE		;Set date.
+	DEFW	@GTIME		;Get time.
+	DEFW	@STIME		;Set time.
+	DEFW	@VERIFY		;Set/reset verify flag.
+;
+	DEFW	@RDABS		;Absolute sector read.
+	DEFW	@WRABS		;Absolute sector write.
+;
+	DEFW	@DPARM		;Get disk parameters.
+;
+	DEFW	@BADFN		;Function 32h
+	DEFW	@BADFN		;Function 33h
+	DEFW	@BADFN		;Function 34h
+	DEFW	@BADFN		;Function 35h
+	DEFW	@BADFN		;Function 36h
+	DEFW	@BADFN		;Function 37h
+	DEFW	@BADFN		;Function 38h
+	DEFW	@BADFN		;Function 39h
+	DEFW	@BADFN		;Function 3Ah
+	DEFW	@BADFN		;Function 3Bh
+	DEFW	@BADFN		;Function 3Ch
+	DEFW	@BADFN		;Function 3Dh
+	DEFW	@BADFN		;Function 3Eh
+	DEFW	@BADFN		;Function 3Fh
+;
+	DEFW	@FFIRST		;Find first entry.
+	DEFW	@FNEXT		;Find next entry.
+	DEFW	@FNEW		;Find new entry.
+;
+	DEFW	@OPEN		;Open file handle.
+	DEFW	@CREATE		;Create file and open file handle.
+	DEFW	@CLOSE		;Close file handle.
+	DEFW	@ENSURE		;Ensure file handle.
+	DEFW	@DUP		;Duplicate file handle.
+	DEFW	@READ		;Read from file handle.
+	DEFW	@WRITE		;Write to file handle.
+	DEFW	@SEEK		;Seek (position file pointer).
+	DEFW	@IOCTL		;I/O control for devices.
+	DEFW	@HTEST		;Test file handle.
+;
+	DEFW	@DELETE		;Delete file or subdirectory.
+	DEFW	@RENAME		;Rename file or subdirectory.
+	DEFW	@MOVE		;Move file or subdirectory.
+	DEFW	@ATTR		;Get/set file attributes.
+	DEFW	@FTIME		;Get/set file time.
+;
+	DEFW	@HDELETE	;Delete file handle.
+	DEFW	@HRENAME	;Rename file handle.
+	DEFW	@HMOVE		;Move file handle.
+	DEFW	@HATTR		;Get/set file handle attributes.
+	DEFW	@HFTIME		;Get/set file handle time.
+;
+	DEFW	@GETDTA		;Get disk transfer address.
+	DEFW	@GETVFY		;Get verify flag setting.
+	DEFW	@GETCD		;Get current directory.
+	DEFW	@CHDIR		;Set current directory.
+	DEFW	@PARSE		;Parse pathname string.
+	DEFW	@PFILE		;Parse filename.
+	DEFW	@CHKCHR		;Check character.
+	DEFW	@WPATH		;Get whole path string.
+	DEFW	@FLUSH		;Flush disk buffers.
+;
+	DEFW	@FORK		;Fork to process.
+	DEFW	@JOIN		;Join to process.
+	DEFW	@TERM		;Terminate with error code.
+	DEFW	@BADFN		;Unused
+	DEFW	@BADFN		;Unused
+	DEFW	@ERROR		;Get previous error code.
+	DEFW	@EXPLAIN	;Explain error code.
+;
+	DEFW	@FORMAT		;Format a disk
+	DEFW	@RAMD		;Create or destroy RAMdisk.
+	DEFW	@BUFFER		;Allocate sector buffers.
+	DEFW	@ASSIGN		;Logical drive assignment.
+;
+	DEFW	@GENV		;Get environment string.
+	DEFW	@SENV		;Set environment string.
+	DEFW	@FENV		;Find environment name.
+;
+	DEFW	@DSKCHK		;Get/set disk check status
+	DEFW	@DOSVER		;Get MSX-DOS version number
+	DEFW	@REDIR		;Get/set redirection state.
+
+	DEFW	@FASTOUT	;Get/set fast STROUT.
+	DEFW	@ZSTROUT	;Zero-terminated string output.
+
+	DEFW	@RDDRV		; Absolute drive sector read.
+	DEFW	@WRDRV		; Absolute drive sector write.
+
+	DEFW	@RALLOC		; Get/set reduced allocation information mode vector
+	DEFW	@DSPACE		; Get disk space information
+
+	DEFW	@LOCK		; Lock/unlock drive
+
+	DEFW	@GDRVR		; Get driver information
+	DEFW	@GDLI		; Get drive letter information
+	DEFW	@GPART		; Get information of disk partition
+	DEFW	@CDRVR		; Call a routine in a disk driver
+	DEFW	@MAPDRV		; Map a drive letter to a drive or device/LUN/partition
+
+	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
+;
+MAXFN	EQU	($-FUNTAB)/2	;Largest function number.
+;
+;
+;*****************************************************************************
+;
+@CONIN:
+@CONOUT:
+@AUXIN:
+@AUXOUT:
+@LSTOUT:
+@DIRIO:
+@DIRIN:
+@INNOE:
+@CONST:
+@CPMVER:
+@DSKRST:
+@SELDSK:
+@SNEXT:
+@LOGIN:
+@CURDRV:
+@SETDTA:
+@VERIFY:
+	CALL	KBDOS_GO
+	LD	A,L		;Get value to return in A, L.
+	LD	B,H		;Get value to return in B, H.
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+@STROUT:
+	ld	a,(MFLAGS##)
+	and	1
+	jr	z,strout_slow	;If fast STROUT not enabled, use the slow version.
+
+	;--- STROUT, fast version
+
+	ex	de,hl
+	ld	de,($SECBUF##)
+	ld	bc,511
+	ldir
+	ld	a,"$"
+	ld	(de),a
+	ld	c,_STROUT##
+	call	KBDOS_GO
+	jr	CPMRET
+
+	;--- STROUT, slow version
+
+strout_slow:
+
+	do_strout	KBDOS_GO,CPMRET,1	;Macro defined in macros.inc
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+@ZSTROUT:
+	ld	a,(MFLAGS##)
+	and	1
+	jr	z,zstr_slow	;If fast STROUT not enabled, use the slow version.
+
+	;--- ZSTROUT, fast version
+
+	ex	de,hl
+	ld	de,($SECBUF##)
+	ld	bc,511
+	ldir
+	xor	a
+	ld	(de),a
+	ld	c,_ZSTROUT##
+	call	KBDOS_GO
+	xor	a
+	ret
+
+	;--- ZSTROUT, slow version
+
+zstr_slow:
+	LD	A,(DE)
+	INC	DE
+	or	a
+	ret	z
+	PUSH	DE
+	LD	E,A
+	LD	C,_CONOUT##
+	CALL	KBDOS_GO
+	POP	DE
+	JR	zstr_slow
+
+;
+;------------------------------------------------------------------------------
+;
+@BUFIN:	PUSH	DE
+	LD	A,(DE)		;Copy only the max. length byte at the start.
+	LD	DE,(BUF_1##)	;Use this as the input buffer.
+	LD	(DE),A
+	CALL	KBDOS_GO
+	POP	DE		;Copy the characters back again.
+	LD	A,(DE)		;Copy back the number of characters specified
+	INC	DE		; by the max. length byte+1 for the actual
+	LD	HL,(BUF_1##)	; length byte. Cannot just copy the right
+	INC	HL		; number of characters because there is a
+	LD	C,A		; CR character on the end which may or may
+	LD	B,0		; not be there.
+	INC	BC
+	LDIR
+;
+CPMRET:	XOR	A
+	LD	B,A
+	LD	L,A
+	LD	H,A
+	RET
+;
+;
+;-----------------------------------------------------------------------------
+;
+@ALLOC:	CALL	KBDOS_GO
+	LD	A,C		;Return sectors/cluster in A, not C.
+	LD	BC,512		;Sector size always 512.
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 Most of the CP/M file functions involve copying  FCBs  backwards  and
+; fowards.  For the sequential operations, 33 bytes need to by copied. For the
+; random operations, 36 bytes need to be  copied.  For  the  MSX-DOS  1  block
+; operations, either 36 or 37 bytes need to be copied depending on whether the
+; block size is greater than 63 bytes or not respectively.
+;
+;
+@FOPEN:
+@FCLOSE:
+@SFIRST:
+@FDEL:
+@RDSEQ:
+@WRSEQ:
+@FMAKE:
+@FREN:
+	LD	A,33		;Ordinary FCBs are 33 bytes long.
+	CODE	LXI H		;Skip 36 byte FCB entry point.
+;
+;
+@RDRND:
+@WRRND:
+@FSIZE:
+@SETRND:
+@WRZER:	LD	A,36		;Random FCBs are 36 bytes long.
+;
+	PUSH	DE		;Save pointer to user's FCB.
+	EXX			;Save parameters to BDOS call.
+	POP	HL		;HL -> user's FCB.
+	LD	C,A
+	LD	B,0		;BC = number of bytes in FCB.
+;
+RW:				;HL->user's FCB, BC=length, '=other params.
+	PUSH	HL		;Save it again for after the KBDOS call.
+	PUSH	BC		; Save number of bytes in FCB.
+	LD	DE,(BUF_1##)	;Copy to buffer.
+	PUSH	DE
+	LDIR
+	EXX			;Get back other parameters.
+	POP	DE		;DE -> FCB in page 3.
+	PUSH	DE
+	CALL	KBDOS_GO
+	EXX			;Save return parameters,
+	POP	HL		;HL -> FCB in page 3.
+	POP	BC		;Get number of bytes in FCB to copy.
+	POP	DE		;Get pointer to user's FCB.
+	LDIR			;Copy FCB back again.
+	EXX			;Get returned values.
+	LD	A,L
+	LD	B,H
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+@WRBLK:
+@RDBLK:	PUSH	DE		;Save user's FCB pointer for after KBDOS call.
+	EXX			;Save function number and HL.
+	POP	HL		;HL -> user's FCB.
+	PUSH	HL
+	LD	BC,14+1
+	ADD	HL,BC		;HL -> high byte of record size.
+	LD	C,36
+	LD	A,(HL)
+	OR	A
+	JR	NZ,BLK10	;Copy 36 bytes if record size >63, else 37.
+;
+	DEC	HL
+	LD	A,(HL)
+	CP	64
+	JR	NC,BLK10
+;
+	INC	C
+BLK10:	POP	HL		;HL -> user's FCB.
+	CALL	RW		;Do read/write operation, copy FCB back.
+	EX	DE,HL		;Return KBDOS's DE in HL for block functions.
+	RET
+;
+;
+;------------------------------------------------------------------------------
+;
+@GDATE:
+@GTIME:
+@SDATE:
+@STIME:	CALL	KBDOS_GO
+	LD	A,C		;Return day in A.
+	RET
+;
+;
+;-----------------------------------------------------------------------------
+;
+@DPARM:	PUSH	DE		;Save buffer pointer.
+	LD	DE,(BUF_1##)
+	CALL	KBDOS_GO	;Get disk parameters into BUF_1.
+	EX	DE,HL		;HL -> disk parameters.
+	POP	DE		;DE -> user's buffer.
+	PUSH	DE		;Return original DE uncorrupted.
+	LD	BC,32
+	LDIR			;Copy disk parameters to user's buffer.
+	POP	DE
+	RET
+;
+;
+;-----------------------------------------------------------------------------
+;
+@FFIRST:
+@FNEW:
+	CALL	?COPYDE		;Copy string or FIB at DE.
+	CALL	C,COPYHL	;Copy string at HL if DE -> FIB.
+	RET	NZ		;Ret if error.
+;
+;
+@FNEXT:
+	PUSH	IX
+	POP	HL		;HL -> user's FIB.
+	PUSH	HL
+	LD	DE,(BUF_2##)	;DE -> buffer for FIB.
+	PUSH	BC
+	LD	BC,64
+	LDIR			;Copy user's FIB for FNEXT.
+	POP	BC
+;
+	CALL	_KBDOS_GO
+	POP	DE		;DE -> user's FIB space (IX will be returned
+	LD	HL,(BUF_2##)	; pointing here because the BDOS entry code
+	LD	BC,64		; preserves IX).
+	LDIR			;Copy FIB to user's space.
+	RET
+;
+;
+@RENAME:
+@MOVE:
+	CALL	COPYHL		;Copy new filename into BUF_3.
+	LD	HL,(BUF_3##)	;Copy string at (DE), HL -> other string.
+;
+@DELETE:
+@ATTR:
+@FTIME:
+@OPEN:
+@CREATE:
+@HTEST:	EX	AF,AF'		;Save parameter passed in A.
+	PUSH	DE		;Save pointer to user's FIB.
+	CALL	?COPYDE		;Copy FIB or string at DE.
+	PUSH	AF		;Save FIB/string copied flag (Cy => FIB).
+	EX	AF,AF'		;Get back the user's A.
+	CALL	_KBSDE_GO	;Sets DE -> string, HL preserved.
+	EX	AF,AF'		;Save the error code.
+	EXX			;Save the returned registers.
+	POP	AF		;Cy set => FIB copied, must copy back.
+	POP	DE		;DE -> user's FIB.
+	JR	NC,XRET		;Return with error code if not FIB function.
+;
+	LD	HL,(BUF_1##)	;HL -> Updated FIB.
+	LD	BC,64
+	LDIR			;Update user's FIB.
+XRET:	EX	AF,AF'		;Get back error code.
+	EXX			;Get back the returned registers.
+	RET
+;
+;
+@HRENAME:
+@HMOVE:
+	EX	AF,AF'		; Save parameter passed in A.
+	CALL	COPYHL		; Copy new filename into BUF_3.
+	EX	AF,AF'
+;
+	    ;
+	    ;
+	    ;
+;------------------------------------------------------------------------------
+;
+;	 The _KBDOS_GO entry point points the registers at  the  buffers  that
+; FIBs  and  strings have been copied too, and falls through to KBDOS_GO. This
+; then does the actual calling of the real KBDOS, including all the  necessary
+; paging and slot switching.
+;
+_KBDOS_GO:
+	LD	IX,(BUF_2##)	;IX -> buffer possibly containing FIB.
+	LD	HL,(BUF_3##)	;HL -> buffer possibly containing string.
+_KBSDE_GO:
+	LD	DE,(BUF_1##)	;DE -> buffer containing FIB or string.
+;
+;
+@TERM0:
+@RDABS:
+@WRABS:
+@CLOSE:
+@ENSURE:
+@DUP:
+@READ:
+@WRITE:
+@SEEK:
+@IOCTL:
+@HDELETE:
+@HATTR:
+@HFTIME:
+@GETDTA:
+@GETVFY:
+@CHKCHR:
+@FLUSH:
+@FORK:
+@JOIN:
+@TERM:
+@FORMAT:
+@RAMD:
+@BUFFER:
+@FILES:
+@ASSIGN:
+@ERROR:
+@GENV:
+@SENV:
+@FENV:
+@DSKCHK:
+@DOSVER:
+@REDIR:
+@FASTOUT:
+@RDDRV:
+@WRDRV:
+@RALLOC:
+@DSPACE:
+@LOCK:
+@GPART:
+@Z80MODE:
+;
+@BADFN:				;Undefined functions go straight through.
+;
+KBDOS_GO:
+	JP	GO_BDOS##	;Call the KBDOS in kernel page-0 and
+				; return with all results from KBDOS intact.
+;
+;
+;------------------------------------------------------------------------------
+;
+@PARSE:	PUSH	DE
+	CALL	COPYDE		;Copy path string.
+	POP	DE
+@GETCD:
+@WPATH:	EX	DE,HL		;HL -> user's buffer.
+	PUSH	HL
+	LD	DE,(BUF_1##)	;KBDOS puts it's string here.
+	OR	A
+	SBC	HL,DE		;HL = offset from BUF_1 to user's buffer.
+	PUSH	HL
+	PUSH	DE		;Save BUF_1 address.
+	CALL	KBDOS_GO	;Get the string to BUF_1.
+	EXX			;Save the returned registers.
+	POP	HL		;BUF_1.
+	POP	BC		;Offset to user's buffer.
+	POP	DE		;User's buffer.
+	PUSH	BC		;Save offset to user's buffer.
+	LD	BC,64
+	LDIR			;Copy the string to the user's buffer.
+	EXX
+	EX	(SP),HL		;Save returned HL, get offset.
+	EX	DE,HL		;DE=offset to user's buffer.
+	ADD	HL,DE		;Adjust returned DE.
+	EX	(SP),HL		;Save adjusted DE, get returned HL.
+	ADD	HL,DE		;Adjust returned HL.
+	POP	DE		;Get back adjusted DE.
+	RET			;Return with BC and error code intact.
+;
+;
+@PFILE:	PUSH	HL		;Save pointer to user's buffer twice.
+	PUSH	HL
+	LD	L,E		;Save user's string pointer in HL.
+	LD	H,D
+	CALL	COPYDE		;Copy filename string to BUF_1.
+	LD	DE,(BUF_1##)	;Calculate offset from BUF_1 to user's string.
+	OR	A
+	SBC	HL,DE
+	EX	(SP),HL		;Save offset, get pointer to buffer.
+	PUSH	HL		;Save pointer again.
+	CALL	_KBDOS_GO	;Get the parsed filename to BUF_3.
+	EXX			;Save the returned registers.
+	POP	DE		;Get pointer to user's buffer.
+	LD	BC,11		;11 bytes in buffer.
+	LD	HL,(BUF_3##)	;Copy the updated filename buffer to the
+	LDIR			; user's buffer.
+	EXX
+	POP	HL		;Get offset to user's string, & point pointer
+	ADD	HL,DE		; to terminating character there.
+	EX	DE,HL
+	POP	HL		;Return the original pointer to user's buffer.
+	RET			;Return with BC and error code intact.
+;
+;
+@CHDIR:	CALL	COPYDE		;Copy string to BUF_1.
+	JP	_KBSDE_GO
+;
+;
+@EXPLAIN:
+	PUSH	DE		;Save pointer to user's buffer.
+	LD	DE,(ERR_BUF##)	;Get message to here.
+	CALL	KBDOS_GO
+	EX	DE,HL		;HL -> message in ERR_BUF.
+	POP	DE		;DE -> user's buffer.
+	PUSH	DE
+	PUSH	BC		;Save returned B.
+	LD	BC,64		;Copy all bytes of message buffer back.
+	LDIR
+	POP	BC		;Return B as returned from the function.
+	POP	DE		;Return DE -> message in user's buffer.
+	RET			;Error code uncorrupted.
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 These miscellaneous routines do various copying operations needed  by
+; the MSX-DOS 2 functions.
+;
+; ?COPYDE copies either a FIB or a string at DE to BUF_1. If a string, then  a
+; check  is  made that the string is not too long, and an error is returned if
+; it is. If a FIB is copied, then an error code is not returned but the  carry
+; is returned set.
+;
+; COPYDE  always copies a FIB to BUF_1 from DE, and returns with the carry set
+; as described above.
+;
+; COPYHL always copies a string from HL to BUF_3 and returns an error code.
+;
+?COPYDE:			;Copies string or FIB at DE to BUF_1.
+	LD	A,(DE)		;FIB ?
+	INC	A
+	JR	NZ,CDE10	;Copy a string if not.
+;
+COPYDE:	PUSH	HL
+	PUSH	BC
+	EX	DE,HL		;HL -> FIB/string.
+	LD	DE,(BUF_1##)
+	LD	BC,64
+	LDIR
+	POP	BC		;Restore BC and HL.
+	POP	HL
+	SCF			;Cy set => FIB copied (not string).
+	RET
+;
+CDE10:	PUSH	HL		;Save HL.
+	PUSH	BC
+	EX	DE,HL		;HL -> string.
+	LD	DE,(BUF_1##)	;Copy string to here.
+	LD	B,LEN_1##
+	CALL	STRCPY
+	POP	BC
+	POP	HL
+	RET
+;
+;
+COPYHL:	PUSH	DE		;Copies the string at HL to BUF_3.
+	PUSH	BC
+	LD	DE,(BUF_3##)
+	LD	B,LEN_3##
+	CALL	STRCPY
+	POP	BC
+	POP	DE
+	RET
+;
+;
+STRCPY:	LD	A,(HL)		;Get character from string.
+	INC	HL
+	LD	(DE),A		;Copy into buffer.
+	INC	DE
+	OR	A
+	RET	Z		;Ret with no error & NC if end of string.
+;
+	DJNZ	STRCPY		;Else copy up to 64 bytes.
+	LD	A,.PLONG##	;String too long if null not encountered.
+	RET			;Still NC.
+;
+;
+;-----------------------------------------------------------------------------
+;
+@GDRVR:
+@GDLI:
+	push	hl
+	LD	HL,(BUF_3##)
+	call	GO_BDOS##
+	pop	hl
+	or	a
+	ret	nz
+	push	hl
+	ex	de,hl
+	ld	hl,(BUF_3##)
+	ld	bc,64
+	ldir
+	pop	hl
+	ret	
+;
+;------------------------------------------------------------------------------
+;
+@CDRVR:
+@MAPDRV:
+	push	de
+	push	bc
+	ld	de,(BUF_3##)
+	ld	bc,8
+	ldir
+	pop	bc
+	pop	de
+	ld	hl,(BUF_3##)
+	jp	KBDOS_GO
+
+	finish	<BDOS>
+	end
+;

@@ -1,0 +1,69 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	Jump table for MSX-DOS 2.0 ROM bank 4 public routines
+;-----------------------------------------------------------------------------
+
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+
+
+; Jump table to routines called from outside this bank.
+; Must be at address 4100h and match the definition in data.mac.
+;
+; See KBDOS in kinit.mac, and ?CALL4 in doshead.mac.
+
+jentry	macro	name
+	jp	?&name&##
+	endm
+
+	jentry	F_GENV
+	jentry	F_SENV
+	jentry	F_FENV
+	jentry	GET_ENV
+
+	jentry	F_FOPEN
+	jentry	F_FCLOSE
+	jentry	F_SFIRST
+	jentry	F_SNEXT
+	jentry	F_RDSEQ
+	jentry	F_WRSEQ
+	jentry	F_FMAKE
+	jentry	F_FDEL
+	jentry	F_FREN
+	jentry	F_RDRND
+	jentry	F_WRRND
+	jentry	F_WRZER
+	jentry	F_FSIZE
+	jentry	F_SETRND
+	jentry	F_RDBLK
+	jentry	F_WRBLK
+
+	jentry	ALL_BK
+	jentry	FR_BK
+
+	jentry	F_GPART
+	jentry	GDRIVER
+	jentry	AUTODRV
+	jentry	MKDPB
+
+	jentry	F_GDRVR
+	jentry	F_GDLI
+	jentry	F_CDRVR
+	jentry	F_MAPDRV
+	jentry	F_Z80MODE
+
+	jentry	UNMAPALL
+
+	jentry	DOSV1
+
+	jentry	CMAPDRV
+	jentry	CLOCKDRV
+	jentry	CUSR
+	jentry	CCURDRV
+	jentry	CNEXTOR
+	jentry	CCHDRV
+	jentry	CDRVINFO
+	jentry	CDRIVERS
+
+	finish <JUMP>
+	end

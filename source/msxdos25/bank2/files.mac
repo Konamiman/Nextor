@@ -1,0 +1,961 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	File Read and Write Routines
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+;    This routine implements the read and write  operations  to  file  access
+; blocks (FABs).  It is used by all varieties of file read/write functions in
+; the system.  The variable "RW_FLAGS" is setup depending on the entry  point
+; to  control whether it is a read or write operation, and for write, whether
+; newly allocated clusters should be zeroed.  This  byte  also  contains  the
+; paging mode flag and a special flag ("RF_SIZE") which is only ever set when
+; writing zero bytes, and forces the file size to be changed.
+;
+;    If the FAB is for a device rather than a disk file then this is detected
+; here  and  the  operation  is  handled  seperately  by loops which call the
+; appropriate device driver routines.
+;
+;    The actual work of doing the transfer is done by a routine  "READ_WRITE"
+; which  this  one  calls.  This routine just sets up the variables "RW_SIZE"
+; "RW_SZ_DONE" and "RW_DTA" ready for the transfer and loads up  the  results
+; for  returning.   It  also adjusts the file pointer in the FAB for any data
+; which was transferred.
+;
+;    The case of zero bytes being requested is detected by this  routine  and
+; treated  as  a null operation unless the RF_SIZE flag is set, in which case
+; READ_WRITE is called and will do the special handling necessary  to  change
+; the file size.
+;
+; Entry:      IX = Pointer to opened FAB
+;	      BC = Number of bytes to transfer
+;	      DE = Disk transfer address
+;	       A = Paging mode flag,  00h => user TPA
+;				      FFh => current segments
+; Returns:     A = Error code (flags set appropriately)
+;	      IX = Pointer to same FAB (regardless of error)
+;	      BC = Number of bytes actually transferred
+;	      DE = Updated transfer address (DE on entry + BC returned)
+; Corrupts:   AF,BC,DE,HL,AF',BC',DE',HL'
+;
+;
+	PROC	ZWR_FAB
+		and	RFM_PG		;Preserve paging mode, clear read
+		or	RFM_ZF		; flag and set zero fill flag.
+		jr	rdwr_fab
+;
+	PROC	WR_FAB
+		and	RFM_PG		;Preserve paging mode and clear read
+		jr	rdwr_fab	; and zero fill flags.
+;
+	PROC	RD_FAB
+		and	RFM_PG		;Preserve paging mode and set
+		or	RFM_RD		; read flag.
+;
+	PROC	RDWR_FAB
+;
+		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
+		jr	nz,rdwr_device		; and writes separately.
+;
+		ld	(RW_FLAGS##),a		;Store the control flags.
+;
+		and	RFM_SZ			;If amount to transfer is zero
+		or	b			; and the RF_SIZE flag is not
+		or	c			; set then return immediately
+		ret	z			; with no error.
+;
+;===== start mod DOS2.50
+		ld	hl,0			;Zero bytes transferred
+		ld	(RW_SZ_DONE##),hl	; so far.
+;;		xor	a
+;;		ld	(RW_SZ_DONE##),a
+;;		ld	(RW_SZ_DONE##+1),a
+;===== end mod DOS2.50
+		ld	(RW_SIZE##),bc		;Store required transfer size
+		ld	(RW_DTA##),de		;Store disk transfer address
+		call	READ_WRITE		;Do the function
+		ld	bc,(RW_SZ_DONE##)	;BC := amount transferred
+		ld	de,(RW_DTA##)		;DE := updated DTA address
+;
+rdwr_dev_done:	ld	l,(ix+FAB_PTR##)	;Add the amount transferred
+		ld	h,(ix+FAB_PTR##+1)	; on to the file pointer in
+		add	hl,bc			; the FAB, remembering to
+		ld	(ix+FAB_PTR##),l	; carry into the top two
+		ld	(ix+FAB_PTR##+1),h	; bytes if required.
+		jr	nc,no_ptr_carry
+		inc	(ix+FAB_PTR##+2)
+		jr	nz,no_ptr_carry
+		inc	(ix+FAB_PTR##+3)
+no_ptr_carry:
+rdwr_error:	or	a
+		ret	nz			;Return if error
+;
+		bit	RF_SIZE,(iy+@RW_FLAGS##);Don't check for zero bytes
+		jr	nz,rdwr_ret_ok		; if "change file size"
+						; flag is set.
+;
+		ld	a,b			;If no error then return
+		or	c			; A=0 unless the amount
+		ld	a,.EOF##		; transferred was zero, in
+		jr	z,rdwr_error		; which case return an end
+rdwr_ret_ok:	xor	a			; of file error.
+		ret
+;
+;	----------------------------------------
+;
+rdwr_device:	ld	h,a			;Store the paging mode
+		and	RFM_PG			; flag in the FAB ready for
+		ld	(ix+FAB_PG##),a		; passing to GET_SEGMENT
+;
+		ld	a,b			;Do nothing if zero bytes
+		or	c			; requested
+		ret	z
+;
+		bit	RF_READ,h
+		jr	nz,read_device		;Skip if read.
+;
+		ld	l,(ix+FAB_ID##+2)	;Get device jump table
+		ld	h,(ix+FAB_ID##+3)	; address into HL and point
+		inc	hl			; to second entry which is
+		inc	hl			; the WRCH routine.
+		inc	hl
+;
+		push	bc			;Save total number of bytes
+wr_dev_loop:	push	de
+		ld	a,(ix+FAB_PG##)		;Get next byte to write from
+		pcall	GET_SEGMENT		; the correct segment as
+		ex	de,hl			; determined by the paging
+		call	RD_SEG##		; mode.
+		ei
+		ex	de,hl
+		pop	de
+;
+		bit	MD_ASC,(ix+FAB_MODE##)	;If it is ASCII mode and if
+		jr	z,write_binary		; the character is ctrl-Z
+		cp	CTRL_Z			; then stop with no error.
+		jr	z,write_stop_inc
+write_binary:	push	ix
+		push	bc
+		push	de
+		push	hl			;Call the device driver's
+		call	GET_MODE_JP_HL		; WRITE routine with character
+		pop	hl			; in A.
+		pop	de
+		pop	bc
+		pop	ix
+		or	a			;Give up if there was any
+		jr	nz,write_stop		; error from the device.
+		inc	de			;Adjust pointer and byte
+		dec	bc			; counter.
+		ld	a,b			;Loop back if there are any
+		or	c			; more characters to
+		jr	nz,wr_dev_loop		; write.
+		jr	write_stop
+;
+write_stop_inc:	xor	a			;If ctrl-Z stopped us then
+		inc	de			; count this byte as written.
+		dec	bc
+write_stop:	pop	hl			;Calculate the number of
+		or	a			; bytes written and put it
+		sbc	hl,bc			; in register BC.
+		ld	b,h
+		ld	c,l
+rdwr_dev_done2:	jr	rdwr_dev_done		;Check for BC=0 & return
+;
+;
+;
+read_device:	ld	l,(ix+FAB_ID##+2)	;HL -> first entry in jump
+		ld	h,(ix+FAB_ID##+3)	; table which is READ routine.
+;
+		push	bc			;Save total number of bytes
+if 0
+		xor	a			;If it is end-of-file (must be
+		bit	MD_EOF,(ix+FAB_MODE##)	; ASCII mode) then clear the
+		res	MD_EOF,(ix+FAB_MODE##)	; flag and jump to return
+		jr	nz,read_finished	; zero characters.
+else
+		res	MD_EOF,(ix+FAB_MODE##)	;Clear end-of-file condition.
+endif
+rd_dev_loop:	push	bc
+		push	ix
+		push	de
+		push	hl			;Call the device driver's
+		call	GET_MODE_JP_HL		; READ routine to get the
+		pop	hl			; next charcater.
+		pop	de
+		pop	ix
+		ld	c,0			;Anticipate not end of read
+		or	a			;If no error then skip to
+		jr	z,rdch_normal		; store the character.
+		cp	.EOF##			;Jump to set C=1 ie end-of-file
+		jr	z,file_end_ch		; character read.
+		cp	.EOL##			;Any other error except end-of-
+		jr	nz,read_error		; line is fatal.
+		bit	MD_CPM,(ix+FAB_MODE##)	;Ignore end-of-lines if we
+		jr	nz,rdch_normal		; are reading in CP/M mode.
+		inc	c			;C=2 => end of line
+file_end_ch:	inc	c			;C=1 => end of file
+		bit	MD_ASC,(ix+FAB_MODE##)
+		jr	nz,rdch_normal		;Ignore all end-of-lines and
+		ld	c,0			; end-of-files in binary mode.
+rdch_normal:
+		push	de
+		push	hl
+		ld	a,(ix+FAB_PG##)		;Find the address to write the
+		pcall	GET_SEGMENT		; byte to according to the
+		ex	de,hl			; paging mode and then write
+		ld	e,b			; the character there.
+		call	WR_SEG##
+		ei
+		pop	hl
+		pop	de
+;
+		ld	a,c			;A = end-of-line/file flag
+		pop	bc
+if 0
+		inc	de			;Adjust pointer and byte
+		dec	bc			; counter for one more char.
+endif
+		dec	a
+		jr	z,read_file_end		;Stop if end of file found
+if 1
+		inc	de			;Adjust pointer and byte
+		dec	bc			; counter for one more char.
+endif
+		dec	a
+		jr	z,read_finished		;Stop if end of line found
+		ld	a,b			;Loop back if there are any
+		or	c			; more characters to
+		jr	nz,rd_dev_loop		; read.
+		jr	read_finished
+;
+read_error:	pop	bc			;Fatal error, get byte count
+		jr	read_finished		; back into BC.
+;
+read_file_end:	set	MD_EOF,(ix+FAB_MODE##)	;Set flag if end-of-file.
+read_finished:	pop	hl			;Calculate the number of
+		or	a			; bytes read and put it
+		sbc	hl,bc			; in register BC.
+		ld	b,h
+		ld	c,l
+		jr	rdwr_dev_done2		;Check for BC=0 & return
+;
+;
+GET_MODE_JP_HL:	ld	c,(ix+FAB_MODE##)	;C := ASCII/binary mode
+		jp	(hl)			;Call the RDCH or WRCH routine
+;
+;------------------------------------------------------------------------------
+;
+READ_WRITE:
+;
+;    This  is  the overall controlling routine which does a file read or write
+; operation.  It first does various  checking  on  the  parameters,  detecting
+; transfers which would overflow 64k and access violations, and then validates
+; the drive.  After this is calls the routine "START_RW" which determines  the
+; logical  cluster,  sector and byte position in the file to start and handles
+; transfers which would exceed the file size, allocating extra sectors  for  a
+; write.
+;
+;    After  this it calls the routine "RW_ONE" which handles the first partial
+; sector of the transfer, and then goes round  a  loop  to  locate  sequential
+; whole  sectors  and  calls  "RW_MANY" to transfer them.  After this it again
+; calls "RW_ONE" to transfer the last partial sector.  When  it  has  finished
+; the  last  accessed  cluster  is  recorded  in  the  FAB  so  that it can be
+; re-located quickly on the next operation.
+;
+; Entry:      IX -> opened FAB
+;	      BC = Amount of file to transfer
+;		     (may only be zero if RF_SIZE flag is set.)
+; Returns:     A = Error code (flags not set up)
+; Corrupts:   AF,BC,DE,HL,AF',BC',DE',HL'
+;
+;
+		ld	a,.HDEAD##		;Don't do anything if the
+		bit	AC_DEAD,(ix+FAB_ACC##)	; file has been deleted on
+		ret	nz			; us.
+;
+		ld	a,.ACCV##
+		bit	RF_READ,(iy+@RW_FLAGS##)
+		jr	z,write_check
+		bit	AC_RD,(ix+FAB_ACC##)	;For a read operation, error
+		ret	nz			; if read inhibit access flag
+		jr	access_ok		; is set.
+;
+write_check:	bit	AC_WR,(ix+FAB_ACC##)	;For a write operation, error
+		ret	nz			; if write inhibit bit is
+		ld	a,.FILRO##		; set or if it is a read
+		bit	AT_RO,(ix+FAB_ATTR##)	; only file.
+		ret	nz
+;
+if 0
+access_ok:	ld	hl,(RW_DTA##)
+		add	hl,bc			;If transfer would go over
+		ld	a,.OV64K##		; 64k boundary then return
+		ret	c			; an error.
+else
+access_ok:	bit	0,(iy+@LAZY##)
+		jr	z,skip_ov64k
+		ld	hl,(RW_DTA##)
+		add	hl,bc			;If transfer would go over
+		ld	a,.OV64K##		; 64k boundary then return
+		ret	c			; an error.
+skip_ov64k:
+endif
+;
+		ld	c,(ix+FAB_DRV##)	;Validate the drive specified
+		ld	b,1			; in the FAB and give up if
+		pcall	VAL_FIB			; any error.
+		or	a
+		ret	nz
+;
+		call	START_RW		;Locate start of read/write
+		ret	nz			; operation & winge if error.
+;
+		ld	bc,(RW_SIZE##)		;Return immediately if whole
+		ld	a,b			; of a read was outside the
+		or	c			; the file (EOF error will be
+		ret	z			; generated by calling routine)
+;
+		ld	de,(RW_LCLU##)		;Translate logical start
+		call	LOG_PHYS_CLU		; into physical cluster and
+		ld	(RW_PCLU##),de		; error if beyond end of file.
+		ret	nz
+;
+		ld	bc,(RW_SOFF##)
+		ld	a,b			;Transfer first partial
+		or	c			; cluster unless RW_SOFF=0
+		call	nz,RW_ONE
+		ret	nz			;Give up if error
+;
+;
+whole_sec_loop:	ld	c,(iy+@RW_SIZE##+1)	;C := number of whole sectors
+		srl	c			;     left to transfer.
+		jr	z,whole_sec_done	;Jump if none left
+		call	NEXT_SEC		;Step to next sector if needed
+		ret	nz			; and return if error.
+		sub	(iy+@RW_LSEC##)		;B := number of sectors left
+		ld	b,a			;     in first cluster.
+		ld	de,(RW_PCLU##)		;DE := first cluster number
+		call	GET_PHYS_SEC		;Calculate phsyical sector
+;
+contig_loop:	ld	a,b			;Add on the number of sectors
+		add	a,(iy+@RW_MSEC##)	; in this cluster.
+		ld	b,a
+		cp	c			;Jump if all sectors left
+		jr	nc,all_contig		; are contiguous.
+;
+		push	de
+		pcall	FAT_LOOKUP		;Lookup next cluster in chain
+		ex	(sp),hl			; and test whether it is one
+		or	a			; greater than the previous
+		inc	hl			; cluster.
+		sbc	hl,de
+		jr	nz,not_contig		;Jump if not contiguous
+		inc	(iy+@RW_LCLU##)
+		jr	nz,no_clu_carry		;If contiguous then bump
+		inc	(iy+@RW_LCLU##+1)	; logical cluster number
+no_clu_carry:	pop	hl
+		jr	contig_loop		;Loop if it is contiguous
+;
+not_contig:	add	hl,de			;NOT CONTIGUOUS.  Get last
+		ex	de,hl			; physical cluster number
+		dec	de			; into DE.  Also set A so that
+		pop	hl			; RW_LSEC will be set to last
+		ld	a,(RW_MSEC##)		; sector in cluster.
+		jr	record_contig
+;
+all_contig:	ld	a,(RW_MSEC##)		;ALL CONTIGUOUS.  Calculate
+		sub	b			; sector in last cluster in
+		add	a,c			; A, and put total number of
+		ld	b,c			; sectors in B.
+record_contig:	dec	a
+		ld	(RW_LSEC##),a		;Record last sector in cluster
+		ld	(RW_PCLU##),de		;Store last physical cluster
+						; number.
+;
+		push	bc			;Read or write the sectors to
+		pcall	RW_MANY			; the TPA, adjusting RW_DTA.
+		pop	bc
+		sla	b
+		ld	c,0			;Adjust RW_SIZE and RW_SZ_DONE
+		call	SZ_ADJUST		; for these sectors
+;
+		set	RF_NEXT,(iy+@RW_FLAGS##);Flag next sector needed
+		jr	whole_sec_loop		;Loop to do more whole sectors
+;
+;
+;
+whole_sec_done:	ld	bc,0			;Transfer last partial sector,
+		call	RW_ONE			; does nothing if RW_SIZE=0.
+		ret	nz
+;
+		ld	de,(RW_PCLU##)		;Record physical cluster in
+		ld	(ix+FAB_LPC##),e	; FAB as last accessed cluster.
+		ld	(ix+FAB_LPC##+1),d
+;
+		ld	de,(RW_LCLU##)		;Record logical cluster in
+		ld	(ix+FAB_LLC##),e	; FAB as last accessed cluster.
+		ld	(ix+FAB_LLC##+1),d
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+RW_ONE:
+;
+;    This routine reads or writes the partial cluster at the start or  end  of
+; an operation.  Most of the work is actually done by "RW_SECTOR".
+;
+; Entry:        HL = Pointer to unit descriptor
+;		IX = Pointer to opened FAB
+;		BC = Start offset within sector (0...1FFh)
+; Returns:       A = Error code (flags set appropriately)
+; Corrupts:     AF,BC,DE,AF',BC',DE',HL'
+;
+;
+		push	hl
+		ld	hl,200h
+		or	a
+		sbc	hl,bc			;DE := amount to read in this
+		ex	de,hl			;      sector (1...200h)
+		ld	hl,(RW_SIZE##)		;HL := total size of transfer
+						;      left to do.
+		sbc	hl,de			;Jump if must transfer to end
+		jr	nc,rw_some_left		; of sector.
+		add	hl,de			;If transfer ends within this
+		ld	e,l			; sector, set size of transfer
+		ld	d,h			; (DE) to size left (HL).
+rw_some_left:
+		ld	a,d			;If size to transfer in this
+		or	e			; sector is zero then return
+		pop	hl			; with no error.
+		ret	z
+;
+		call	NEXT_SEC		;Step to next sector if needed
+		ret	nz			; and return if error
+;
+		call	GET_PHYS_SEC		;Set RW_PSEC to physical sector
+		pcall	RW_SECTOR		;Transfer the sector
+		set	RF_NEXT,(iy+@RW_FLAGS##);Flag need next sector
+		call	SZ_ADJUST		;Adjust RW_SIZE and RW_SZ_DONE
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+NEXT_SEC:
+;
+;    This  routine  steps onto the next logical sector of the file if this has
+; not been done already. If the RF_NEXT flag is clear then it  does  nothing,
+; else  it resets the flag and increments "RW_LSEC" and adjusts "RW_LCLU" and
+; "RW_PCLU" if necessary.  An error is returned if the  end  of  the  cluster
+; chain is encountered.
+;
+; Entry:          HL = Pointer to unit descriptor
+;		  IX = Pointer to opened FAB
+; Returns:         A = Error code (flags set accordingly)
+; Preserves:      BC,DE,HL,IX,AF',BC',DE',HL'
+;
+;
+		xor	a			;If step to next sector is
+		bit	RF_NEXT,(iy+@RW_FLAGS##); not needed then return A=0
+		ret	z			; without doing anything.
+		res	RF_NEXT,(iy+@RW_FLAGS##);Else reset flag.
+;
+		ld	a,(RW_LSEC##)
+		inc	a			;Increment "RW_LSEC" and jump
+		cp	(iy+@RW_MSEC##)		; to return if not end of
+		jr	nz,got_next_sec		; cluster.
+;
+		push	de
+		ld	de,(RW_LCLU##)		;Bump logical cluster number
+		inc	de
+		ld	(RW_LCLU##),de
+;
+		ld	de,(RW_PCLU##)		;Get next physical cluster
+		pcall	FAT_LOOKUP		; number in the chain.
+		ld	(RW_PCLU##),de
+;===== start mod FAT16 (299Bh patch)
+		ld	a,d
+		and	e
+		inc	a
+		pop	de			;Return an error if end of
+		ld	a,.FILE##		; chain is reached.
+		ret	z
+;;		bit	7,d
+;;		pop	de			;Return an error if end of
+;;		ld	a,.FILE##		; chain is reached.
+;;		ret	nz
+;===== end mod FAT16
+		xor	a
+;
+got_next_sec:	ld	(RW_LSEC##),a		;Store new "RW_LCLU" and return
+		xor	a			; without error.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+GET_PHYS_SEC:
+;
+;    This  pathetic  routine just translates the cluster/sector number defined
+; by "RW_PCLU" and "RW_LSEC" into a physical sector number in "RW_PSEC".
+;
+; Entry:        HL = Pointer to unit descriptor
+; Returns:     None
+; Corrupts:     AF
+;
+;
+		push	de
+		ld	a,(RW_LSEC##)
+		ld	de,(RW_PCLU##)
+		pcall	CLU_TO_SEC
+		ld	(RW_PSEC##),de
+;===== start add FAT16 (DOS2.50 original patch)
+		ld	(RW_EX_PSEC##),a
+;===== end add FAT16
+		pop	de
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+SZ_ADJUST:
+;
+;    This little routine just adjusts the "RW_SIZE" and "RW_SZ_DONE" variables
+; to account for a bit more of the transfer having been done.
+;
+; Entry:         BC = Size of transfer which has just been done
+; Returns:       None
+; Corrupts:    F,BC
+;
+;
+		push	hl
+		ld	hl,(RW_SZ_DONE##)
+		add	hl,bc
+		ld	(RW_SZ_DONE##),hl
+;
+		ld	hl,(RW_SIZE##)
+		sbc	hl,bc
+		ld	(RW_SIZE##),hl
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+START_RW:
+;
+;    This  routine  is  called  for a read or write operation to determine the
+; cluster, sector  and  byte  positions  for  the  operation.   The  variables
+; RW_SOFF,  RW_LSEC  and RW_LCLU are set up appropriately for the start of the
+; operation.
+;
+;    For  a  read  operation, a check is done to ensure that the transfer will
+; not go over the end of the file, as defined by the file size.  If  it  would
+; then  the  transfer size in "RW_SIZE" is adjusted appropriately.  If none of
+; the transfer is within the file then this routine  returns  immediately  and
+; the main "READ_WRITE" routine will generate a ".EOF" error.
+;
+;    For  a  write  operation,  any extra clusters required are allocated (and
+; zeroed for "write with zero fill").  If the file was  previously  null  then
+; the starting cluster number is recorded in the FAB so that it will be stored
+; in the directory entry correctly when the file is closed.  Also if the write
+; operation  will go beyond the end of file as defined by the file size in the
+; FAB, then the file size in the FAB is updated  in  anticipation.   This  can
+; happen  even  if  no  extra  clusters  are  allocated.   For any writes, the
+; "written to" flag in the FAB is set.
+;
+;    This  routine  must  only  be called with a transfer size of zero if the
+; RF_SIZE flag is set, and this flag must only be set for a transfer size  of
+; zero.   This controls the special handling necessary to alter the file size
+; including allocating or freeing clusters.
+;
+;    Note in this routine the indications such as ";LV4" refer  to  the  stack
+; level which is being manipulated since the stack handling is rather complex.
+;
+; Entry:       HL = Pointer to unit descriptor
+;	       IX = Pointer to opened FAB
+; Returns:      A = Error code (flags set appropriately)
+; Corrupts:    AF,BC,DE,AF',BC',DE',HL'
+;
+;
+		push	hl		   ;LV1
+		ld	c,(ix+FAB_PTR##)
+		ld	b,(ix+FAB_PTR##+1)
+		ld	e,(ix+FAB_PTR##+2)
+		ld	d,(ix+FAB_PTR##+3)	;Get file pointer from FAB and
+		push	de		   ;LV2	; put on stack for later.
+		push	bc		   ;LV3	;Split file pointer into
+		call	DECODE_PTR		; cluster, sector and byte.
+		jr	nz,ret_err_3_nz		;Give up if error
+;
+		ld	(RW_LCLU##),de		;Record the parameters to
+		ld	(RW_LSEC##),a		; define start of operation.
+		ld	(RW_SOFF##),bc
+;
+		pop	hl		   ;LV3
+		ld	de,(RW_SIZE##)		;Get file pointer back and
+		dec	de			; add the transfer size minus
+		add	hl,de			; one to get pointer to last
+		ex	(sp),hl		   ;LV2	; byte to be transferred.
+		pop	bc		   ;LV2	;BC := low word of end byte.
+		ex	de,hl
+		ex	(sp),hl		   ;LV1
+		push	hl		   ;LV2
+		ld	hl,0			;Do the high word of addition.
+		bit	RF_SIZE,(iy+@RW_FLAGS##); High word of (size-1) is
+		jr	z,not_zero_sz		; FFFFh if RF_SIZE flag is set
+		dec	hl			; and zero otherwise.
+not_zero_sz:	adc	hl,de
+		ex	de,hl			;DE := high word of end byte
+		bit	7,d			;Jump for special handling if
+		jr	nz,new_size_zero	; file being truncated to
+						; zero length.
+		pop	hl		   ;LV2	;Get unit descriptor back
+;
+		push	de		   ;LV2	;Save (end_pointer-1) for end
+		push	bc		   ;LV3	; of file testing.
+		call	DECODE_PTR		;Work out logical cluster for
+		jr	nz,ret_err_3_nz		; end of transfer.
+		push	de		   ;LV4	;Save final cluster number
+						; (only used for WRITE).
+;
+		ld	c,(ix+FAB_SIZE##)
+		ld	b,(ix+FAB_SIZE##+1)
+		ld	e,(ix+FAB_SIZE##+2)
+		ld	d,(ix+FAB_SIZE##+3)	;Get file size from FAB.
+		ld	a,b
+		or	c
+		dec	bc
+		jr	nz,no_dec32_carry	;Decrement it to get last
+		or	d			; allocated byte, remembering
+		or	e			; carry into top 16 bits.
+		dec	de
+no_dec32_carry:	push	de		   ;LV5	;Save (file_size-1) for end
+		push	bc		   ;LV6	; of file testing.
+;
+		call	nz,DECODE_PTR		;If file is not null then work
+						; out last logical cluster in
+						; DE (will be -1 if null file).
+;
+;
+		exx				;This section works out
+		pop	hl		   ;LV6	; whether end of file will be
+		pop	de		   ;LV5	; reached, from values on the
+		exx				; stack.  Results are as below.
+		pop	bc		   ;LV4
+ret_err_3_nz:	jr	nz,ret_err_3		;(Error if DECODE_PTR failed)
+		exx
+		pop	bc		   ;LV3	;BC = end of operation cluster
+		xor	a			;DE = end of file cluster
+		sbc	hl,bc			;DE':BC' = end_pointer - 1
+		ex	(sp),hl		   ;LV2	;HL':(SP) = file_size - end_ptr
+		ex	de,hl			;Carry'= from subtraction
+		sbc	hl,de			; Zero'= NZ if DE -ve, Z if +ve
+		exx				;    A'= 0
+		bit	7,d
+		ex	af,af'
+;
+;
+		bit	RF_READ,(iy+@RW_FLAGS##);Jump if it is a READ function
+		jp	nz,sort_out_read
+;
+		push	hl		   ;LV3
+		ld	h,b			;HL := end of write cluster
+		ld	l,c
+		inc	de			;DE := end of file cluster
+		or	a			;Subtract current last cluster
+		sbc	hl,de			; number from required one to
+		ld	c,l			; get number of clusters to
+		ld	b,h			; allocate in BC.
+		inc	bc			;Skip if more clusters need to
+		jr	nc,extend_file		; be allocated.
+		add	hl,de
+		ex	de,hl			;DE := end of write cluster
+		pop	hl		   ;LV3
+		bit	RF_SIZE,(iy+@RW_FLAGS##);Don't attempt to shorten file
+		jr	z,extend_done		; if RF_SIZE flag is not set.
+;
+					; TRUNCATE THE FILE.
+		call	LOG_PHYS_CLU		;DE := new last physical
+		jr	nz,ret_err_1		; cluster number.
+		push	de		   ;LV3
+		pcall	FAT_LOOKUP		;Lookup value of this cluster
+;===== start mod FAT16 (2A5Eh patch)
+		ld	a,d			; and free and any remaining
+		and	e			; clusters from the chain.
+		inc	a
+		pcall	nz,FR_CHAIN
+		pop	de		   ;LV3
+		ld	bc,0FFFFh		;Mark the new end of the
+;;		bit	7,d
+;;		pcall	z,FR_CHAIN
+;;		pop	de
+;;		ld	b,0FFh
+;===== end mod FAT16
+		pcall	FAT_ASET		; cluster chain.
+		ld	c,(ix+FAB_FPC##)	;Jump to reset cached cluster
+		ld	b,(ix+FAB_FPC##+1)	; to start of file in case it
+		scf				; has been freed. Set carry'
+		ex	af,af'			; to ensure that file size
+		jr	first_cluster		; is updated.
+;
+new_size_zero:	exx				;DE':BC' = -1 => file size 0
+		ex	af,af'			;Set NZ' to ensure that
+						; file size is updated later.
+		pop	hl		   ;LV2	;Get unit descriptor back
+		ld	e,(ix+FAB_FPC##)	;Free the whole cluster
+		ld	d,(ix+FAB_FPC##+1)	; chain for the file, if
+		ld	a,d			; there is one.
+		or	e
+		pcall	nz,FR_CHAIN
+		push	de		   ;LV2	;  (Only for stack balancing)
+		ld	bc,0			;Jump to zero the cluster
+		jr	first_cluster		; numbers in the FAB.
+;
+extend_file:	pop	hl		   ;LV3
+		ld	a,(iy+@RW_FLAGS##)	;Allocate required number of
+		and	RFM_ZF			; clusters, zeroing them if
+		pcall	AL_CLUSTERS		; "write with zero fill" flag
+		jr	nz,ret_err_2		; is set. Give up if disk full.
+;===== start mod FAT16 (DOS2.50 original patch)
+		ld	a,d
+		or	e
+		dec	de
+		jr	z,first_cluster
+;;		dec	de
+;;		bit	7,d
+;;		jr	nz,first_cluster
+;===== end mod FAT16
+		push	bc		   ;LV3
+		call	LOG_PHYS_CLU		;Find the last cluster of file
+		pop	bc		   ;LV3	; in order to chain the new
+		jr	nz,ret_err_2		; clusters on.
+		pcall	FAT_?SET		;Chain new clusters onto the
+		jr	extend_done		; end of the file.
+;
+;
+;
+ret_err_3:	pop	de		   ;LV3
+ret_err_2:	pop	de		   ;LV2
+ret_err_1:	pop	de		   ;LV1	;Clean up stack before
+		ret				; returning with error code
+;
+;
+;
+first_cluster:	ld	(ix+FAB_FPC##),c	;For new file, store the first
+		ld	(ix+FAB_FPC##+1),b	; cluster in FAB for writing
+						; to directory entry later.
+		xor	a
+		ld	(ix+FAB_LPC##),c	;Also store as last cluster
+		ld	(ix+FAB_LPC##+1),b	; accessed (both physical and
+		ld	(ix+FAB_LLC##),a	; logical) since file is not
+		ld	(ix+FAB_LLC##+1),a	; null any more. (A=0)
+;
+;
+extend_done:	set	AC_MOD,(ix+FAB_ACC##)	;Set the "written to" flag
+		exx
+		ex	af,af'			;If file size has not increased
+		jr	nz,do_enlarge		; at all then don't alter size.
+		jr	nc,no_enlarge		; (NZ tests for old null file)
+;
+do_enlarge:	inc	bc			;If end_pointer is bigger
+		ld	a,b			; then file_size then must set
+		or	c			; the file size to end_pointer
+		jr	nz,no_inc32_carry	; in anticipation of the
+		inc	de			; operation working.
+no_inc32_carry:	ld	(ix+FAB_SIZE##),c	;Note the 32 bit increment
+		ld	(ix+FAB_SIZE##+1),b	; first since we had the last
+		ld	(ix+FAB_SIZE##+2),e	; byte pointer, rather than
+		ld	(ix+FAB_SIZE##+3),d	; the next byte pointer.
+;
+no_enlarge:	pop	bc		   ;LV2	;CALCULATE OVERFLOW PAST EOF
+		pop	de			;Clean up stack
+		ld	a,b			;HL:BC = overrun size
+		or	c			;Decrement 32 bit overrun
+		dec	bc			; size so it will be zero if
+		jr	nz,no_over_cy		; the write stops one byte
+		dec	hl			; short of EOF.
+no_over_cy:
+		bit	7,h			;If write stops short of EOF
+		jr	z,zero_overrun		; then set RW_OVER to zero.
+		ld	a,h
+		and	l			;If write stops more than
+		inc	a			; 64k beyond EOF then set
+		ld	hl,0FFFFh		; RW_OVER to 0FFFFh to show
+		jr	nz,got_overrun		; whole transfer outside file.
+		inc	hl			;If write stops zero to 0FFFEh
+		sbc	hl,bc			; bytes past EOF then set
+		jr	nz,got_overrun		; RW_OVER to this amount + 1.
+		dec	hl			;Fiddle if transfer stops
+		jr	got_overrun		; exactly 0FFFFh bytes past EOF
+;
+zero_overrun:	ld	hl,0
+got_overrun:	ld	(RW_OVER##),hl		;Record over-run for RW_SECTOR
+;
+		exx
+		xor	a
+		ret				;WRITE DONE - Return no error
+;
+;
+;
+sort_out_read:	ex	af,af'			;READ FUNCTION
+		pop	de		   ;LV1	;Clean up stack
+		ex	(sp),hl		   ;LV1	;
+		jr	nz,read_eof		;Set size to zero if null file
+		jr	nc,read_ret		;Jump to return if no over-run
+						; on read.
+;
+		exx				;HL':DE = (size-pointer)
+		ld	a,h			;Look  at high byte of this
+		and	l			; and set size top zero if
+		inc	a			; it is not 0FFFFh since whole
+		exx				; of transfer must be out of
+		jr	nz,read_eof		; the file.
+;
+		add	hl,de			;HL := adjusted read size and
+		jr	c,read_not_eof		; set it to zero if none is
+read_eof:	ld	hl,0FFFFh		; within file.
+read_not_eof:	inc	hl
+		ld	(RW_SIZE##),hl		;Store reduced read size
+read_ret:	xor	a			;Zero error code
+		pop	hl		   ;LV1	;Restore UD pointer into HL
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+DECODE_PTR:
+;
+;   This  routine  decodes  a 32 bit file pointer into logical cluster number,
+; sector number within the cluster and byte offset  within  the  sector.   The
+; decoding  is  controlled  by  the cluster mask and cluster shift in the unit
+; descriptor.  An error is returned if the relative cluster  number  will  not
+; fit  into  15  bits (so its to bit must be zero).  The variable "RW_MSEC" is
+; set up to the number of sectors in a cluster for later use in deciding  when
+; to step on to a new cluster.
+;
+; Entry:           HL = Pointer to unit descriptor
+;	      D:E:B:C = File pointer value
+; Returns:          A = If Z-flag clear (NZ) - Error code (.FILE)
+;			   Z-flag set (Z) - Sector within cluster (0..UD_CMSK)
+;		   BC = Byte offset within sector (0...1FFh)
+;		   DE = Logical cluster number (0...07FFFh)
+; Corrupts:   AF,BC,DE
+;
+; Assumes:    UD_CSHFT=UD_CMSK+1
+;
+;
+		push	hl
+		ld	a,b
+		srl	d			;Divide by 512 to get logical
+		rr	e			; sector into (D:E:A)
+		rra
+;
+		ld	b,0			;Get top bit of byte offset
+		rl	b			; into B and save it for
+		push	bc			; returning.
+;
+		ld	bc,UD_CMSK##
+		add	hl,bc			;Get cluster mask from unit
+		push	af			; descriptor and mask with
+		and	(hl)			; logical sector to get start
+		ld	c,a			; sector within cluster into
+		ld	a,(hl)			; register C.
+		inc	a			;Store cluster mask + 1 as
+		ld	(RW_MSEC##),a		; maximum sector number.
+		pop	af
+;
+		inc	hl
+		ld	b,(hl)			;Get cluster shift count from
+if 0
+		inc	b			; unit descriptor and jump
+endif
+		jr	cshft_lp_start		; into loop.
+cshft_loop:	srl	d
+		rr	e			;Shift logical sector number
+		rra				; right enough times to get
+cshft_lp_start:	djnz	cshft_loop		; the logical cluster number.
+		inc	d
+		dec	d			;Jump to return error if
+		jr	nz,file_error_nz	; cluster greater than 65535
+		bit	7,e
+		jr	nz,file_error_nz	;Also error if > 32767
+;
+		ld	d,e			;DE := logical cluster number
+		ld	e,a
+		ld	a,c			; A := sector within cluster
+		code	lxi hl			;Skip to return no error (Z)
+file_error_nz:	ld	a,.FILE##		;Error - load up error code
+		pop	bc			;BC := byte offset
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+LOG_PHYS_CLU:
+;
+;    This  routine translates a logical cluster number in a file to a physical
+; cluster number.  An error is returned if the end of file is found before the
+; logical  cluster  is  reached.   An  error  is also returned if there are no
+; clusters allocated to the file.
+;
+; Entry:        HL = Pointer to unit descriptor
+;		IX = Pointer to opened FAB for file
+;		DE = Logical cluster number required  (0...)
+; Returns:       A = Error code (Z-flag set appropriately)
+;		DE = Physical cluster number (0....FF7h)
+; Corrupts:     AF,BC,DE
+;
+;
+		push	hl
+		ex	de,hl
+		ld	e,(ix+FAB_LPC##)	;Get last accessed physical
+		ld	d,(ix+FAB_LPC##+1)	; cluster.
+		ld	a,d			;If it is zero then the file
+		or	e			; has no clusters so jump
+		jr	z,null_file		; to return an error.
+;
+		ld	c,(ix+FAB_LLC##)	;Get last accessed logical
+		ld	b,(ix+FAB_LLC##+1)	; cluster (BC).  If required
+		sbc	hl,bc			; logical cluster (HL) is the
+		jr	nc,chain_start		; same or bigger then start
+		add	hl,bc			; here. If not then start
+		ld	e,(ix+FAB_FPC##)	; from first cluster of file.
+		ld	d,(ix+FAB_FPC##+1)
+chain_start:	ex	(sp),hl			;HL -> unit descriptor
+		pop	bc			;BC = cluster chain count
+;
+chain_lp:	ld	a,b			;Return with no error when
+		or	c			; reached required physical
+		ret	z			; cluster.
+		dec	bc
+		pcall	FAT_LOOKUP		;Get next cluster number and
+;===== start mod FAT16 (2B74h patch)
+		ld	a,d			; loop if not end of chain.
+		and	e
+		inc	a
+		jr	nz,chain_lp
+;;		bit	7,d
+;;		jr	z,chain_lp
+;===== end mod FAT16
+		code	mvi a
+null_file:	pop	hl			;Restore unit descriptor
+		ld	a,.FILE##		;Return error if premature
+		or	a			; end of chain.  File size
+		ret				; must be wrong.
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<FILES>
+	end
+;

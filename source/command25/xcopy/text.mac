@@ -1,0 +1,138 @@
+	Title   MSX-DOS 2 XCOPY - Text file
+	.Z80
+;****************************************************************************
+;
+;        This is the text file for the MSX-DOS 2 "XCOPY" utility program.   It
+; contains  all  the  text  required  by the program, so that it may easily be
+; changed to any other language.  All the text is defined using the macro MSG,
+; and  this defines an external label as a number which is accessed throughout
+; the utility.  The absolute address of the text may then be found by  passing
+; this  number in register A, to the routine GET_MSG_ADR which will return the
+; address in register HL. So that  these  labels  are  easily  distinguishable
+; elsewhere,  they  will  be  prefixed  by  '__'.  
+;
+;    The file also contains the response characters for questions which need a
+; Yes/No response.  These are stored as a string of text  for  each,  so  both
+; upper  and  lower  case  options  need  to  be  included.  The responses are
+; accessed by the  global  names  YES_CHARS;  NO_CHARS;  and  each  string  is
+; terminated by a zero.
+;
+;----------------------------------------------------------------------------
+;               Some useful EQUs.
+;
+CR              EQU     13
+LF              EQU     10
+CLEOL           EQU     19H
+QUOTE           EQU     '"'
+;
+;----------------------------------------------------------------------------
+;               The responses.
+;
+YES_CHARS::     DEFB    'Yy',0
+NO_CHARS::      DEFB    'Nn',0
+;
+;----------------------------------------------------------------------------
+;               The MSG macro.
+;
+msg_num         DEFL    0
+;
+MSG             MACRO   name,text
+__&name          EQU     msg_num
+msg_num          DEFL    msg_num+1
+		 DEFB    text,0
+		 PUBLIC  __&name
+		ENDM
+;
+;-----------------------------------------------------------------------------
+;       GET_MSG_ADR:  This routine is used to find out the absolute address of
+; a text message.
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+GET_MSG_ADR::
+if      1
+		push    af
+		push	de
+		xor	a
+		ld	de,1100h
+;
+		exx
+		ex	af,af'
+		push	af
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		push	iy
+		ex	af,af'
+		exx
+;
+		call	0FFCAh			;FCALL
+;
+		exx
+		ex	af,af'
+		pop	iy
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		ex	af,af'
+		exx
+;
+		pop	de
+		or	a
+		ld	hl,MSG_TABLE
+		jr	z,in_ank
+		ld	hl,jmsg_table##
+in_ank:
+		pop     af
+else
+		LD      HL,MSG_TABLE            ;Address of the start of the
+endif
+		OR      A                       ; message table.
+		RET     Z                       ;If first message then found.
+		PUSH    BC
+;
+		LD      B,A                     ;Message number.
+LOP_PASS_MSG:   LD      A,(HL)                  ;Bypass this message.
+		INC     HL
+		OR      A                       ;Each message is terminated
+		JR      NZ,LOP_PASS_MSG         ; by a zero.
+		DJNZ    LOP_PASS_MSG
+;
+		POP     BC
+		RET
+;
+;----------------------------------------------------------------------------
+;               The text messages.
+;
+MSG_TABLE:
+;
+MSG     WAIT,           <"Press any key to continue... ">
+;
+MSG     FIL1,           <" file">
+MSG     FIL2,           <" files">
+MSG     COP,            <" copied",CR,LF>
+;
+MSG     HID,            <"hidden">
+MSG     RD_ONLY,        <"read only">
+;
+MSG     T_DE,           <"Cannot copy onto sub-directory">
+MSG     T_SE,           <"Cannot copy onto system file">
+MSG     T_RO,           <"Cannot copy onto read only file">
+MSG     T_IN,           <"Invalid destination filename">
+MSG     T_FO,           <"Duplicate destination filename">
+MSG     TPTL,           <" - Destination path is too long",CR,LF>
+MSG     CCSD,           <" - Cannot create destination sub-directory",CR,LF>
+;
+MSG     OPT,            <"Warning: Option selected more than once">
+;
+MSG     PROMPT,         <" - Copy (Y/N)? ">
+;
+MSG     WVER,           <CR,LF,"*** Wrong version of MSX-DOS">
+;
+	END
+;

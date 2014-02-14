@@ -1,0 +1,7 @@
+;       This module must be linked last in the MSX-DOS 2 undelete program
+; since it defines the address from which general RAM usage can start.
+;
+PROG_END::
+;
+	end
+;

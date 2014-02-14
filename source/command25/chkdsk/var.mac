@@ -1,0 +1,139 @@
+	title   MSX-DOS 2 CHKDKS Program - Variables & Data Areas
+	.z80
+	INCLUDE MACROS.INC
+	INCLUDE CONST.INC
+;******************************************************************************
+;
+MULT_FLAGS::    db      0       ;   b0   - set if accessing FAT sector
+				;   b1   - set if FAT sector error found  
+				;   b2   - set to let FAT error through
+				;   b3   - set if any FAT copy written
+				;   b4   - set if error on this retry
+				;b5...b7 - clear
+;
+OPTIONS::       db      0       ;   b0   - set if "/F" option given
+				;   b1   - set if lost chains made into files
+				;b2...b7 - clear
+;
+ER_FLAGS::      db      0       ;   b0   - clear
+				;   b1   - set if any error found
+				;   b2   - set if file list is dead
+				;   b3   - set if cross linked files exist
+				;   b4   - set if path error printed
+				;   b5   - set while doing cross link check
+				;b6...b7 - clear 
+;
+VOL_FLAG::      db      0       ;   b0   - set if volume name found
+				;b1...b7 - clear
+if	1
+
+DFAT_FLAG::	db	0	; non 0 if FAT needs to be written back
+
+endif
+
+;
+;
+;------------------------------------------------------------------------------
+;
+DRIVE::         db      0               ;Logical drive used 1...26
+;
+;
+FAT::           dw      0               ;Address of start of FAT in memory
+RAM_START::     dw      0               ;Start of recursion stack memory
+RAM_BOT::       dw      0               ;Start of free memory area
+RAM_TOP::       dw      0               ;End of free memory area
+TPA_TOP::       dw      0               ;End of memory (strat of file list)
+;
+;
+FILE_PTR::      dw      0               ;Pointer to current file list item
+;
+LAST_CLU::      dw      0               ;Temporary storage for cluster number
+CH_SIZE::       dw      0               ;Temporary storage for chain length
+FREE_FLAG::     db      0               ;Free directory entry found flag
+;
+;
+;------------------------------------------------------------------------------
+;
+DIR_COUNT::     dw      0               ;Number of directories found
+DIR_CLU::       dw      0               ;Number of clusters in directories
+;
+SYS_COUNT::     dw      0               ;Number of system files found
+SYS_CLU::       dw      0               ;Number of clusters in system files
+;
+HID_COUNT::     dw      0               ;Number of hidden files found
+HID_CLU::       dw      0               ;Number of clusters in hidden files
+;
+FIL_COUNT::     dw      0               ;Number of user files found
+FIL_CLU::       dw      0               ;Number of clusters in user files
+;
+BAD_CLU::       dw      0               ;Number of bad clusters
+;
+RES_CLU::       dw      0               ;Number of reserved clusters
+;
+LST_COUNT::     dw      0               ;Number of lost cluster chains
+LST_CLU::       dw      0               ;Number of lost clusters
+;
+AVL_CLU::       dw      0               ;Number of available clusters   
+;
+FRED_CLU::      dw      0               ;Number of freed clusters       
+;
+REC_COUNT::     dw      0               ;Number of files recovered
+REC_CLU::       dw      0               ;Clusters in recovered files
+;
+;
+;------------------------------------------------------------------------------
+;
+		ds      256,0           ;I think this will just about
+STACK::                                 ; be enough stack!
+;
+;
+;       --------------------------------
+;
+;
+UD_IMAGE::                              ;Copy of MSX-DOS's disc parameters.
+		db      0               ;Physical unit (not used)
+		dw      0               ;Sector size (not used)
+SEC_CLU::       db      0               ;Sectors per cluster.
+FAT_START::     dw      0               ;First sector of FAT
+FAT_COPY::      db      0               ;Number of copies of the FAT
+RT_ENT::        dw      0               ;Number of root directory entries.
+		dw      0               ;Number of logical sectors.
+		db      0               ;Media descriptor byte.
+FAT_SIZE::      db      0               ;Size of each copy of FAT (in sectors)
+RT_START::      dw      0               ;First sector of root directory
+DATA_START::    dw      0               ;First data sector (cluster 2)
+TOT_CLU::       dw      0               ;Total number of data clusters on disk
+DIRT_FLAG::     db      0               ;Dirty disk flag (non-zero => dirty)
+VOL_ID::	dw      0,0             ;Four byte volume id. (not used)
+		ds      32-24,0         ;Reserved.
+;
+CLU_SHIFT::     db      0               ;Worked out internally.
+;
+;       --------------------------------
+;
+;
+SV_START::
+;
+DIR_START::     dw      0               ;First cluster of directory
+DIR_NEXT_CLU::  dw      0               ;Next directory cluster
+DIR_SECTOR::    dw      0               ;Current directory sector
+DIR_S_LEFT::    db      0               ;Sectors left in current dir cluster
+DIR_E_LEFT::    db      0               ;Entries left in current dir sector
+DIR_ENT::       db      0               ;Total entries in current sector
+DIR_ODD::       db      0               ;Number entries in partial sector
+DIR_PARENT::    dw      0               ;Cluster number of parent directory
+DIR_ADDR::      dw      0               ;Address of parent's file record
+;
+SV_SIZE         equ     $-DIR_START     ;Size of directory search variables
+		public  SV_SIZE
+;
+;
+SV_COPY::       ds      SV_SIZE,0       ;Space for a copy of search variables
+;
+;
+;------------------------------------------------------------------------------
+;
+;
+	finish  <VAR>
+	end
+;

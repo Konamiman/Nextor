@@ -1,0 +1,236 @@
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL	Transient CLI Variables
+;
+;
+	INCLUDE	COMMAND.INC
+;
+;
+;        This module  contains  the  variables  for  COMMAND.COM.   The  first
+; section  of  variables  are  saved  at  the top of a transient program's TPA
+; (above the BDOS jump at 5) when a transient program  is  executed,  and  are
+; restored  again afterwards. They thus tend to be variables which COMMAND.COM
+; needs to save over the whole of the time it is executing, or state variables
+; which need to outlast transient programs.
+;
+;        The second section of variables are ordinary variables which may  get
+; corrupted  during  the execution of a transient program. Most of the time IY
+; points to these variables so that they can be accessed relative to IY. These
+; are declared using the VARIY macro, instaed of the normal VAR macro.
+;
+;        The label CSUM_BOT at the start of this file marks  the  end  of  the
+; checksummed  area of the CLI, and so are not re-loaded when COMMAND re-boots
+; after running a transient program. In fact, they do not even  form  part  of
+; the  COMMAND.COM  file. Before the label are four nulls because the checksum
+; that is done is 32 bits, and the last 32-bit word  checksummed  may  include
+; bytes  beyond  the  label,  which should not be checksummed.  The four nulls
+; mean the checksum does not have to go right up  to  the  byte  before  label
+; without any harm.
+;
+		DEFS	4,0
+CSUM_BOT::
+;
+;
+;
+VARIABLES:				; Start of variables.
+;
+VAR		MACRO	NAME, SIZE
+		 CONST	NAME, ADDR+VARIABLES
+ADDR		 DEFL	ADDR+SIZE
+		ENDM
+;
+VARIY		MACRO	NAME, SIZE
+		 CONST	@&NAME, OFFSET
+OFFSET		 DEFL	OFFSET+1
+		 VAR	NAME, SIZE
+		ENDM
+;
+ADDR		DEFL	0
+OFFSET		DEFL	0
+;
+;
+if 1
+		VAR	XXX,256
+		VAR	CLI_STACK,0
+;
+endif
+		CONST	VECLEN, 8	; Define save area for page 0 stuff
+		VAR	VECTORS, VECLEN	;   at 0 and 5.
+;
+		VAR	TPA_TOP, 2	; Top+1 available for commands etc.
+;
+		VAR	OLD_REBOOT, 2	; Addr that was in the BIOS reboot JP.
+;
+		VAR	ERRF, 1		; NZ => supress error messages.
+		VAR	EXITF, 1	; NZ => exit COMMAND at end of command.
+		VAR	ERRTYPE, 1	; FF => normal, else message number.
+;
+		VAR	NXTCMD, 2	; Ptr to next command in pipe.
+		VAR	INPIPE, 1	; File handle of pipe input file.
+		VAR	OUTPIPE, 1	; File handle of pipe output file.
+		VAR	PIPEID, 1	; id after piping fork.
+		VAR	PIPFN, 12	; Last pipe temporary filename used.
+;
+		VAR	BATFIL, 1	; Batch file handle, FF => none.
+		VAR	BATID, 1	; Batch process number.
+		VAR	BATEND, 1	; NZ => end of batch file reached.
+		VAR	BATCMD, 128+2	; Saved batch file command.
+		VAR	PERC0, 2	; Ptr to %0 parameter within BATCMD.
+;
+if	0
+		VAR	XXX,256
+		VAR	CLI_STACK,0
+endif
+ifdef ver880722
+		CONST	BATCS, 512	; Size of BATBUF.
+else
+		CONST	BATCS, 256	; Size of BATBUF.
+endif
+		VAR	BATBUF, BATCS	; Buffer for reading batch file into.
+		VAR	BATC, 2		; No. chars in BATBUF, 0 => empty.
+		VAR	BATPTR, 2	; Ptr in BATBUF to current char.
+;
+		VAR	REDID, 1	; Process id of redirection fork.
+		VAR	PROGID, 1	; Process id of transient program fork.
+;
+		VAR	PTR_SAVE,2	; Saved CLI_PTR.
+;
+ifndef ver880722
+		VAR	CMDBUFF, 128+3	; Individual expanded command.
+endif
+		CONST	VAREND, ADDR+VARIABLES	; Last byte+1 of fixed
+if 1
+		CONST	VARSIZE, VAREND-CLI_STACK
+						;   variables, & no. bytes.
+else
+		CONST	VARSIZE, ADDR		;   variables, & no. bytes.
+endif
+;
+;	--------------------------------
+;
+		CONST	BLEN, 255	; Length of BUFF below.
+		CONST	B2LEN, 255	; Length of BUFF2 below.
+		CONST	B3LEN, 255	; Length of BUFF3 below.
+;
+if	0
+		VAR	XXX,256
+		VAR	CLI_STACK,0
+endif
+;
+		VAR	CMDLINE, 128+3	; Whole expanded command line.
+ifdef ver880722
+		VAR	CMDBUFF, 128+3	; Individual expanded command.
+endif
+;
+		VAR	CMDLEN, 1	; Length of first word in command.
+;
+		VAR	ERR,1		; Error from last command.
+;
+		VAR	FIB, 64		; General File Info Block number 1.
+		VAR	FIB2, 64	; And number 2.
+		VAR	FIB3, 64	; Number 3, used in COPY.
+;
+		VAR	INPTR, 2	; Ptr to input redirection filename.
+;
+		VAR	OUTPTR, 2	; Ptr to output redirection filename.
+;
+		VAR	SIZE, 4		; 32 byte buffer used mainly by DIR.
+;
+		VAR	FILES, 2	; Number of files found by FIRST/NEXT.
+;
+		VAR	DFILES,2	; Number of files done by 'DIR' & COPY.
+;
+		VAR	PLATS, 2	; ATTRIB '+' and '-' letter flags.
+;
+		VAR	OPTPTR, 2	; Ptr to table of valid '/' options.
+;
+		VAR	LAST_ITEM, 2	; Ptr to start of last item parsed.
+;
+		VAR	FIRSTFN, 2	; Ptr to first filename in command.
+;
+		VAR	NEXTFN, 2	; Pointer to next filename to search
+					;   for (FIRST) eg. may point to item
+					;   after '+' on a command line.
+;
+		VAR	DESTPTR, 2	; Pointer to destination filespec in
+					;   CONCAT and COPY.
+;
+		VAR	LASTFILE, 2	; Pointer to last source file (COPY).
+;
+		VAR	SDATE, 2	; Source file date (COPY).
+;
+		VAR	STIME, 2	; Source file time (COPY).
+;
+;
+;
+		VAR	VARS,0		; IY points here to access vars below.
+;
+		VARIY	REDFLG, 1	; NZ -> supress pipe or redirection
+		VARIY	EXEFLG, 1	; NZ -> restart from EXECOM
+		VARIY	LANG, 1		; NZ -> alternate language
+;
+		VARIY	ATTRS, 1	; / options/search attributes after
+					;   initial parse and during search for
+					;   first/next.
+		VARIY	INIATR, 1	; Value that FIRST initialises ATTRS to
+					;   for each item between '+'s. Set up
+					;   by PARSE after parsing first /s.
+;
+		VARIY	SWITCHES, 1	; / options. A permanent copy of ATTRS,
+					;   set up when FIRST is called.
+;
+		VARIY	DESTOPT, 1	; / options on destination in COPY etc.
+;
+		VARIY	PLUSES, 1	; Number of '+'s in parsed item in
+					;   PARSE and FIRST. FF => 1 filename,
+					;   0 => 2 filenames (=> 1 '+') etc.
+;
+		VARIY	FLAGS, 1	; General flags (see COMMAND.INC)
+;
+		VARIY	DRIVE, 1	; Current drive before command done.
+;
+		VARIY	PARSF, 1	; Parse flags for first filename.
+;
+		VARIY	PARSD, 1	; Drive from parse path.
+;
+		VARIY	FDRV, 1		; Drive of first filename parsed.
+;
+		VARIY	COLUMNS, 1	; Number of output columns used by DIR.
+;
+		VARIY	LINES, 1	; Line counter for /P.
+if	1
+		VARIY	WIDTH, 1	; Width of display
+		VARIY	CSRX, 1		; Current cursor position (horizontal)
+		VARIY	CHRFLG, 1	; Character flag for _CHKCHR
+endif
+;
+		VARIY	DT_FORM, 1	; Format for DATE & date printing.
+		VARIY	TM_FORM, 1	; Format for TIME and time printing.
+;
+		VARIY	SRCEH, 1	; Source file handle in CONCAT & COPY.
+;
+		VARIY	DESTH, 1	; Destination handle in CONCAT & COPY.
+;
+		VARIY	VFY, 1		; Saved verify state in CONCAT & COPY.
+;
+		VARIY	COPYID, 1	; Process id after 'fork' in COPY.
+;
+		VARIY	DESTF, 1	; Destination parse flags in COPY.
+;
+		VAR	FBUFF, 11	; Buffer for 'parse filename'.
+;
+		VAR	TPA, 0		; Start of free RAM
+;
+;
+		VAR	BUFF, BLEN	; General buffers. Since these occur at
+		VAR	BUFF2, B2LEN	;   the end of the variables BUFF
+		VAR	BUFF3, B3LEN	;   onwards may be overwritten.
+;
+;
+KBUF	equ	0F41Fh
+;
+		CONST	P3_STACK, KBUF+100h
+;
+;
+;
+		SUBTTL
+		END

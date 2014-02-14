@@ -1,0 +1,12 @@
+; MSX-DOS2 page-3 entries.
+BDOS_STACK	P0_RAM		P0_64K		P1_64K
+P2_64K		PUT_P0		PUT_P1		PUT_P2
+
+BOOT_DRV
+
+; MSX-DOS2 page-0 TPA entries.
+LOAD_FLAG
+
+; MSX-DOS1 compatible page-3 entries.
+$DOSON		RAMAD3		COUNTRY		MASTER_SLOT
+

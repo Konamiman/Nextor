@@ -1,0 +1,333 @@
+	.z80
+	;include	MACROS.INC
+ld_a_iyl	macro
+	db	0FDh
+	ld	a,l
+	endm
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
+	db	13,10
+	db	"Usage:",13,10
+	db	13,10
+	db	"MAPDRV [/L] <drive>: <partition>|<primary>-<extended>|d|u",13,10
+	db      "      [<slot>[-<subslot>][:<segment>] <device> [<LUN>]]",13,10
+	db	13,10
+	db	"Maps the drive to the specified partition of the specified device and LUN",13,10
+	db	"of the driver in the specified slot (must be a device-based driver).",13,10
+	db	13,10
+	db	"/L locks the drive immediately after doing the mapping.",13,10
+	db	13,10
+	db	"<partition> can be any number starting at 1, or 0 to map the drive directly",13,10
+	db	"to the device (needed for partitionless devices such as floppy disks).",13,10
+	db	13,10 
+	db	"<primary> can be any number from 1 to 4. <extended> must be 0 if",13,10
+	db	"the primary partition is not extended, otherwise it must be 1 or higher.",13,10
+	db	13,10
+	db	"<slot> and <subslot> must be a number from 0 to 3. <segment> must be",13,10
+	db	"omitted, or be 255, if the driver is located in ROM.",13,10
+	db	13,10
+	db	"<device> and <LUN> must be a number from 1 to 7 each one. If <LUN> is omitted,",13,10
+	db	"value 1 is assumed.",13,10
+	db	13,10
+	db	"If slot and device information are omitted, the drive is mapped to the",13,10
+	db	"specified partition of the device it is already mapped to (this works only if",13,10
+	db	"the drive is currently mapped to a device-based driver).",13,10
+	db	13,10
+	db	"'d' will revert the drive to its default mapping (the mapping at boot time).",13,10
+	db	"'u' will leave the drive unmapped. Other parameters are ignored in both cases.",13,10
+	db	1Ah
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	ld	b,.NOPAR##
+	ld	c,_TERM##
+	jp	c,5
+
+
+	;--- Get parameters
+
+	;* Check for /L
+
+	ld	iy,2
+
+	ld	a,(BUF)
+	cp	'/'
+	jr	nz,NO_LOCK
+	inc	hl
+	ld	a,(BUF+1)
+	or	32
+	cp	'l'
+	jr	nz,NO_LOCK
+
+	ld	a,-1
+	ld	(DO_LOCK),a
+
+	ld	de,buf
+	ld	a,2
+	call	EXTPAR##
+	ld	b,.NOPAR##
+	ld	c,_TERM##
+	jp	c,5
+
+	inc	iy
+NO_LOCK:
+
+	;* Drive letter
+
+	ld	hl,BUF
+	call	CHKLET##
+	dec	a
+	ld	(DRIVE),a
+
+
+	;* Partition number
+
+	ld	de,BUF
+	ld_a_iyl
+	inc	iy
+	call	EXTPAR##
+	ld	b,.NOPAR##
+	ld	c,_TERM##
+	jp	c,5
+
+	ld	a,(BUF)		;Check fo special values "d" and "u"
+	or	20h
+	cp	"d"
+	ld	b,1
+	jp	z,DO_MAP_DU
+	cp	"u"
+	ld	b,0
+	jp	z,DO_MAP_DU
+
+	ld	hl,BUF		;Get first number
+	call	EXTNUM_TERM
+	ld	(PRIMARY),a
+	ld	b,a
+	ld	a,e
+	or	a
+	jr	nz,NO_LOGICAL
+	
+	ld	a,b		;Not followed by "-": logical partition number
+	cp	2		;If 0: map to device sector 0
+	jr	c,OK_PART	;If 1: primary=1, extended=0
+	dec	a
+	ld	(EXTENDED),a	;If X>1: primary=2, extended=X-1
+	ld	a,2
+	ld	(PRIMARY),a
+	jr	OK_PART
+
+NO_LOGICAL:
+	cp	"-"		;Followed by "-": primary+extended pair
+	jp	nz,IPARM_TERM
+	inc	hl
+	call	EXTNUM_TERM
+	ld	(EXTENDED),a
+	ld	a,e
+	or	a
+	jp	nz,IPARM_TERM
+OK_PART:
+	
+	;* Slot, subslot, segment
+
+	ld	de,BUF
+	ld_a_iyl
+	inc	iy
+	call	EXTPAR##
+	jp	c,DO_MAP
+
+	ld	hl,BUF
+	call	GETSLOT##
+	ld	(SLOT),a
+	ld	a,b
+	ld	(SEGMENT),a
+
+	;* Device and LUN
+
+	ld	de,BUF
+	ld_a_iyl
+	inc	iy
+	call	EXTPAR##
+	jp	c,NOPARM_TERM
+	ld	hl,BUF
+	call	EXTNUM_TERM
+	or	a
+	jp	z,IPARM_TERM
+	cp	8
+	jp	nc,IPARM_TERM
+	ld	(DEVICE),a
+	ld	a,e
+	or	a
+	jp	nz,IPARM_TERM
+
+	ld	de,BUF
+	ld_a_iyl
+	inc	iy
+	call	EXTPAR##
+	jp	c,DO_MAP
+	ld	hl,BUF
+	call	EXTNUM_TERM
+	or	a
+	jp	z,IPARM_TERM
+	cp	8
+	jp	nc,IPARM_TERM
+	ld	(LUN),a
+	ld	a,e
+	or	a
+	jp	nz,IPARM_TERM
+
+	jr	DO_MAP
+
+
+	;--- Do the mapping to default value, or unmap the drive
+	;    Input: B=0 to unmap, B=1 to map to default value
+
+DO_MAP_DU:
+	ld	a,(DRIVE)
+	ld	c,_MAPDRV##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+
+
+	;--- Do the mapping to partition and device
+
+DO_MAP:
+
+	;* If no slot specified, get the current drive mapping
+
+	ld	a,(SLOT)
+	inc	a
+	jr	nz,OK_GETCURMAP
+
+	ld	a,(DRIVE)
+	ld	hl,BUF_LETTER
+	ld	c,_GDLI##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	ld	a,(BUF_LETTER)
+	cp	1
+	ld	b,.IDRV##
+	ld	c,_TERM##
+	jp	nz,5		;Error if not assigned to a block device
+
+	ld	a,(BUF_LETTER+4)
+	ld	(DEVICE),a
+	ld	a,(BUF_LETTER+5)
+	ld	(LUN),a
+
+	xor	a
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	e,(hl)
+	ld	hl,BUF_DRIVER
+	ld	c,_GDRVR##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	ld	a,(BUF_DRIVER+4)
+	and	1
+	ld	b,.IDRVR##
+	ld	c,_TERM##
+	jp	z,5		;Error if not assigned to a device-based driver
+
+	ld	a,(BUF_DRIVER)
+	ld	(SLOT),a
+	ld	a,(BUF_DRIVER+1)
+	ld	(SEGMENT),a
+OK_GETCURMAP:
+
+
+	;* Obtain the partition information
+
+	ld	hl,0
+	ld	de,0
+	ld	a,(PRIMARY)
+	or	a
+	jr	z,OK_PARTINFO
+	ld	ix,DRIVE
+	ld	a,(ix+3)	;Slot
+	ld	b,(ix+4)	;Segment
+	ld	d,(ix+5)	;Device
+	ld	e,(ix+6)	;LUN
+	ld	h,(ix+1)	;Primary partition
+	ld	l,(ix+2)	;Extended partition
+	ld	c,_GPART##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+OK_PARTINFO:
+
+
+	;* Finally, do the actual mapping and lock if necessary
+
+	ld	(SLOT+4),de
+	ld	(SLOT+6),hl
+	ld	a,(DRIVE)
+	ld	b,2
+	ld	hl,SLOT	;Information is already in the right order for _MAPDRV
+	ld	c,_MAPDRV##
+	call	5
+	ld	b,a
+	or	a
+	jr	nz,DO_LOCK_OK
+
+	ld	a,(DO_LOCK)
+	or	a
+	jr	z,DO_LOCK_OK
+	ld	a,(DRIVE)
+	ld	e,a
+	ld	a,1
+	ld	b,0FFh
+	ld	c,_LOCK##
+	call	5
+	ld	b,a
+DO_LOCK_OK:
+
+	ld	c,_TERM##
+	jp	5
+
+
+EXTNUM_TERM:
+	call	EXT8##
+	ret	nc
+IPARM_TERM:
+	ld	b,.IPARM##
+	ld	c,_TERM##
+	jp	5
+
+NOPARM_TERM:
+	ld	b,.NOPAR##
+	ld	c,_TERM##
+	jp	5
+
+
+DO_LOCK:	db	0
+DRIVE:	db	0
+PRIMARY:	db	0
+EXTENDED:	db	0
+SLOT:	db	-1
+SEGMENT:	db	255
+DEVICE:	db	0
+LUN:	db	1
+
+BUF:
+BUF_DRIVER:
+BUF_LETTER:
+
+	end

@@ -1,0 +1,18 @@
+
+	.z80
+	aseg
+
+	org	7FD0h
+	public	D7FD0
+
+D7FD0:	ld	(7FF0h),a	;7FD0	32 F0 7F 	2..
+	ret			;7FD3	C9		É
+
+	org	7FE0h
+	public	VDRNUM
+VDRNUM:	db	2
+
+	org	7FFFh
+	db	0FFh
+
+	END

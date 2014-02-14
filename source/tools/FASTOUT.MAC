@@ -1,0 +1,82 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+USAGE_S:
+	db	"FASTOUT - Enable or disable the fast STROUT mode",13,10
+	db	13,10
+	db	"When fast STROUT mode is enabled, MSX-DOS functions STROUT and ZSTROUT",13,10
+	db	"will print strings faster, but string length will be limited to",13,10
+	db  "511 characters (longer strings will be truncated).",13,10
+	db	13,10
+	db	"Usage: FASTOUT [ON|OFF]",13,10
+	db	1Ah
+	db	0
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	nz,FOUND_PARAMS
+	
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+FOUND_PARAMS:
+
+	;--- Set value
+
+	ld	hl,BUF
+	call	CHKONOFF##
+	ld	b,a
+	ld	a,1
+	ld	c,_FOUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	;--- Get current value
+
+DO_GET:
+	xor	a
+	ld	c,_FOUT##
+	call	5
+	ld	d,b
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+	ld	b,d
+
+	push	bc
+	ld	de,INFO_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	pop	af
+	or	a
+	ld	de,OFF_S
+	jr	z,DO_INFO
+	ld	de,ON_S
+DO_INFO:
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+
+INFO_MSG:
+	"Fast STROUT mode is currently ",0
+ON_S:	db	"ON",13,10,0
+OFF_S:	db	"OFF",13,10,0
+
+BUF:
+
+	end

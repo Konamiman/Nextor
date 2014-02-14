@@ -1,0 +1,214 @@
+	Title	MSX-DOS 2 CHKDSK Program - Text file
+	.Z80
+;****************************************************************************
+;
+;    This is the text file for the MSX-DOS 2  "CHKDSK"  utility  program.   It
+; contains  all  the  text  required  by the program, so that it may easily be
+; changed to any other language.  All the text is defined using the macro MSG,
+; and  this defines an external label as a number which is accessed throughout
+; the utility.  The absolute address of the text may then be found by  passing
+; this number in register A, to the routine GET_MSG_ADR which will return  the
+; address  in  register  HL.  So  that these labels are easily distinguishable
+; elsewhere, they will be prefixed by '__'.
+;
+;	For some messages, different forms exist such as plural versions,  or
+; conditional  versions.   These are set up by another macro PMSG, which does
+; not define a label.   It is important  that  those  versions  with a second
+; version defined, continue to do so, since the utility will assume that they
+; exist.
+;
+;        The file also contains the response characters  for  questions  which
+; need  a  Yes/No  response,  and  the Abort/Retry/Ignore response.  These are
+; stored as a string of text for each, so both upper and  lower  case  options
+; need  to  be  included.   The  responses  are  accessed  by the global names
+; YES_CHARS and NO_CHARS, and each string is terminated by a zero.
+;
+;----------------------------------------------------------------------------
+;		Some useful EQUs.
+;
+CR		EQU	13
+LF		EQU	10
+CLEOL		EQU	19H
+;
+;----------------------------------------------------------------------------
+;		The responses.
+;
+YES_CHARS::	DEFB	'Yy',0
+NO_CHARS::	DEFB	'Nn',0
+;
+;----------------------------------------------------------------------------
+;		The MSG & PMSG macros.
+;
+msg_num		DEFL	1
+;
+MSG		MACRO	name,text
+__&name&_MSG	 EQU	 msg_num
+msg_num		 DEFL	 msg_num+1
+		 DEFB	 text,0
+		 PUBLIC	 __&name&_MSG
+		ENDM
+;
+PMSG		MACRO	text
+		 DEFB	 text,0
+msg_num		 DEFL	 msg_num+1
+		ENDM
+;
+;-----------------------------------------------------------------------------
+;	GET_MSG_ADR:  This routine is used to find out the absolute address of
+; a text message.
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+GET_MSG_ADR::
+if	1
+		push	af
+		push	de
+		xor	a
+		ld	de,1100h
+;
+		exx
+		ex	af,af'
+		push	af
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		push	iy
+		ex	af,af'
+		exx
+;
+		call	0FFCAh			;FCALL
+;
+		exx
+		ex	af,af'
+		pop	iy
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		ex	af,af'
+		exx
+;
+		pop	de
+		or	a
+		ld	hl,MSG_TABLE
+		jr	z,in_ank
+		ld	hl,jmsg_table##
+in_ank:
+		pop	af
+else
+		LD      HL,MSG_TABLE            ;Address of the start of the
+endif
+		OR	A			; message table.
+		RET	Z			;If first message then found.
+		PUSH	BC
+;
+		LD	B,A			;Message number.
+LOP_PASS_MSG:	LD	A,(HL)			;Bypass this message.
+		INC	HL
+		OR	A			;Each message is terminated
+		JR	NZ,LOP_PASS_MSG		; by a zero.
+		DJNZ	LOP_PASS_MSG
+;
+		POP	BC
+		RET
+;
+;----------------------------------------------------------------------------
+;		The text messages.
+;
+MSG_TABLE:
+;
+MSG	NUL,	<0>
+;
+MSG	ND2,	<CR,LF,"Disk is not formatted by MSX-DOS2",CR,LF>
+;
+MSG	WVER,	<CR,LF,"*** Wrong version of MSX-DOS",CR,LF>
+MSG	FTL,	<CR,LF,"*** Fatal internal error",CR,LF>
+;
+MSG	RFT1,	<"Error reading FAT ">
+MSG	WFT1,	<"Error writing FAT ">
+MSG	FAT2,	<".",CR,LF>
+;
+MSG	NOFL,	<"Memory shortage, cannot store path names.",CR,LF>
+;
+MSG	NOF1,	<CR,LF,"Errors found but /F option not given.",CR,LF>
+MSG	NOF2,	<"Disk will not be corrected.",CR,LF>
+;
+MSG	QPTH,	<" (unknown path)">
+;
+MSG	CVD,	<"   Invalid sub-directory converted to file.",CR,LF>
+PMSG		<"   Invalid sub-directory would be converted to file.",CR,LF> 
+MSG	CRD,	<"   Invalid sub-directory corrected.",CR,LF>
+PMSG		<"   Invalid sub-directory would be corrected.",CR,LF>
+;
+MSG	VRT,	<"   Volume name in sub-directory deleted.",CR,LF>
+PMSG		<"   Volume name in sub-directory would be deleted.",CR,LF>
+MSG	VDUP,	<"   Duplicate volume name deleted.",CR,LF>
+PMSG		<"   Duplicate volume name would be deleted.",CR,LF>
+;
+MSG	IENT,	<"   First cluster number is invalid, entry truncated.",CR,LF>
+PMSG	<"   First cluster number is invalid, entry would be truncated.",CR,LF>
+MSG	ICLU,	<"   Contains invalid cluster, entry truncated.",CR,LF>
+PMSG		<"   Contains invalid cluster, entry would be truncated.",CR,LF>
+;
+MSG	ALOC,	<"   Allocation error, file size adjusted.",CR,LF>
+PMSG		<"   Allocation error, file size would be adjusted.",CR,LF>
+;
+MSG	LST1,	<" lost cluster found in ">
+PMSG	        <" lost clusters found in ">
+MSG	LST2,	<" chain.",CR,LF>
+PMSG		<" chains.",CR,LF>
+MSG	CONV,	<"Convert lost chain to a file (Y/N)? ">
+PMSG		<"Convert lost chains to files (Y/N)? ">
+;
+MSG	RFNM,	<" recovered, size ">
+PMSG		<" would be recovered, size ">
+;
+MSG	DRF1,	<"Root directory full, cannot recover remaining ">
+MSG	DRF2,	<"file.",CR,LF>
+PMSG		<"files.",CR,LF>
+;
+MSG	QXL,	<CR,LF,"Cross linked files exist.",CR,LF>
+;
+MSG	XLK1,	<"   Is cross linked at cluster ">
+MSG	XLK2,	<".",CR,LF>
+;
+MSG	TOT,	<" total disk space",CR,LF>
+;
+MSG	AVL,	<" available disk space",CR,LF>
+;
+MSG	FRED,	<" disk space freed",CR,LF>
+PMSG		<" disk space would be freed",CR,LF>
+;
+MSG	IN,	<" in ">			;For nK "IN" n files. 
+PMSG		<" would be in ">
+;
+MSG	LST,	<" still in lost clusters",CR,LF>
+PMSG		<" would still be in lost clusters",CR,LF>
+;
+MSG	BAD,	<" in bad clusters",CR,LF>	;For nK in bad clusters.
+;
+MSG	RES,	<" in reserved clusters",CR,LF>	;For nK in reserved clusters.
+;
+MSG	RCV,	<" recovered file",CR,LF>
+PMSG		<" recovered files",CR,LF>
+;
+MSG	USER,	<" user file",CR,LF>
+PMSG		<" user files",CR,LF>
+;
+MSG	SYS,	<" system file",CR,LF>
+PMSG		<" system files",CR,LF>
+;
+MSG	HID,	<" hidden file",CR,LF>
+PMSG		<" hidden files",CR,LF>
+;
+MSG	DIR,	<" directory",CR,LF>
+PMSG		<" directories",CR,LF>
+;
+;------------------------------------------------------------------------------
+;
+	END
+;

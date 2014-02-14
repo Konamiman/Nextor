@@ -1,0 +1,20 @@
+#!/bin/sh
+# Wed Sep 12 19:48:34 JST 1990
+set `date`
+case $2 in
+Jan) M=1;;Feb) M=2;;Mar) M=3;;Apr) M=4;;
+May) M=5;;Jun) M=6;;Jul) M=7;;Aug) M=8;;
+Sep) M=9;;Oct) M=10;;Nov) M=11;;Dec) M=12;;
+esac
+cat <<EOF
+;
+; Release Date: Jan 28, 2008
+;
+	public	R_YEAR,R_DATE
+;
+R_YEAR	equ	$6
+R_DATE	equ	`expr $M \* 100 + $3`
+;
+	end
+
+EOF

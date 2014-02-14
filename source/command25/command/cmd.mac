@@ -1,0 +1,1532 @@
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
+	SUBTTL	Non-disk Commands
+;
+;
+	INCLUDE	COMMAND.INC
+;
+;
+;        This module contains the command routines for the  assorted  commands
+; which are not directly related to the disk system eg. CLS and DATE.
+;
+;
+;
+		SUBTTL	ASSIGN
+;******************************************************************************
+;
+;        This  is  the  ASSIGN  command  routine,  which  either  sets  up  an
+; assignment,  clears all assignments or displays the current assignment for a
+; specified drive. Note that a drive can be un-assigned without affecting  the
+; other drives by assigning it to itself.
+;
+;
+@ASSIGN::	AND	(HL)		; If no parameters, then just cancel
+		LD	B,A		;   all assigns.
+		LD	D,A
+		LD	C,_ASSIGN##
+		JP	Z,_BDOS##
+;
+		CALL	PARSDR		; Parse a drive letter.
+		RET	NZ
+;
+		LD	B,D		; Save in B.
+		CALL	GETCH##
+		JR	NZ,ASN10	; Go if second drive given.
+;
+		LD	D,0FFH		; Else get current assign for this
+		LD	C,_ASSIGN##	;   drive.
+		PUSH	BC
+		CALL	_BDOS##
+		POP	BC
+		RET	NZ
+;
+		LD	HL,CRLF##	; Print CRLF at end.
+		PUSH	HL
+		CALL	DDRV		; Print drive.
+		LD	A,'='		; Print '=' and the other drive.
+		CALL	OUCH##
+		LD	B,D
+DDRV:		LD	A,B
+		ADD	A,'A'-1
+		CALL	OUCH##		; Print drive letter.
+		LD	A,':'
+		JP	OUCH##
+;
+ASN10:		CALL	PARSDR		; Get second drive.
+		RET	NZ
+;
+		CALL	GETCH##		; Make sure there's no garbage on the
+		LD	A,.INP##	;   end of the line.
+		RET	NZ
+;
+		LD	C,_ASSIGN##	; Attempt to set up new assign.
+		JP	_BDOS##
+;
+;
+PARSDR:		LD	A,(HL)		; Get drive letter.
+		CALL	UC##
+		SUB	'A'-1		; Attempt to convert to drive number.
+		JR	C,IDRV		; Invalid drive if < 'A'.
+		JR	Z,IDRV
+;
+		CP	26+1		; Invalid drive if > 'Z'.
+		JR	NC,IDRV
+;
+		LD	D,A		; Return drive in D.
+		INC	HL
+		LD	A,(HL)		; Allow a colon afterwards.
+		CP	':'
+		JR	NZ,NCOL
+;
+		INC	HL
+NCOL:		LD	A,(HL)		; Make sure drive is followed by a
+		CALL	SEP?##		;   separator character.
+		RET	Z		; OK if it is.
+;
+IDRV:		LD	A,.IDRV##
+		OR	A
+		RET
+;
+;
+;
+		SUBTTL	BASIC
+;******************************************************************************
+;
+;        The BASIC command simply transfers control to BASIC,  by  paging  the
+; entry point in and jumping to it.
+;
+;
+@BASIC::	CALL	SETCPM##	; Set up CP/M environment for BASIC.
+		RET	NZ
+;
+		LD	SP,P3_STACK##
+		CALL	$DOSON##
+		JP	4022H		; Jump to BASIC.
+;
+;
+;
+		SUBTTL	BUFFERS
+;******************************************************************************
+;
+;        This is the BUFFERS command routine. If no parameters are given, then
+; the current number of buffers is printed. Otherwise, the parameter must be a
+; number  and  an  attempt  is made to set this number of buffers. No error is
+; given if the number is too large since that it what the function does.
+;
+@BUFFERS::	AND	(HL)		; Any parameters ?
+		JR	NZ,SETBUF	; Set the number of buffers if yes.
+;
+		LD	BC,0*256+_BUFFER##
+		CALL	_BDOS##		; Get the current number of buffers.
+		RET	NZ
+;
+		PUSH	BC		; Save the current number of buffers.
+		LD	A,__BUFFS##	; Print 'BUFFERS='
+		CALL	DMESS##
+		POP	AF		; Get the number of buffers again.
+		CALL	D8##		; Print the current number.
+		JP	CRLF##
+;
+;
+SETBUF:		CALL	GET8##		; Get the number specified into E.
+		CALL	Z,CHKNO##
+		RET	NZ
+;
+		LD	A,(HL)		; Check for garbage on the end of the
+		OR	A		;   line.
+		LD	A,.INP##
+		RET	NZ		; Give error if too many parameters.
+;
+		LD	B,E		; Get specified number.
+		LD	C,_BUFFER##
+		JP	_BDOS##		; Attempt to set that number.
+;
+;
+;
+		SUBTTL	CLS
+;******************************************************************************
+;
+;       Tricky one, this !.
+;
+;
+@CLS::		AND	(HL)
+		LD	A,.INP##	; Error if any parameters.
+		RET	NZ
+;
+		LD	A,FF		; Output clear screen character.
+		JP	OUCH##
+;
+;
+;
+		SUBTTL	DATE
+;******************************************************************************
+;
+;       This is the DATE command routine.
+;
+;
+@DATE::		PUSH	HL		; Save pointer to command line.
+		CALL	DFORM##		; Set the date format variable.
+		POP	HL
+		LD	A,(HL)
+		OR	A		; Date given on command line ?
+		JR	NZ,RDAT		; Attempt to set date if yes.
+;
+		LD	C,_GDATE##	; Get the current date.
+		CALL	_BDOS##
+		PUSH	HL		; Save the year.
+		PUSH	DE		; Save the month and date.
+		PUSH	AF		; Save day of the week.
+		LD	A,__DATIS##	; Else print 'Current date is '
+		CALL	DMESS##
+		POP	BC		; B=day of week.
+		LD	C,B
+		LD	B,0
+		LD	HL,DAYTAB	; Index into DAYTAB to get the message
+		ADD	HL,BC		;   number of the day of the week.
+		LD	A,(HL)
+		CALL	DMESS##		; Print the day.
+;
+		LD	A,__DATE##	; Print message before date.
+		CALL	DMESS##
+;
+		POP	DE		; Get the month and date.
+		POP	HL		; Get the year.
+		LD	BC,-1980	; Convert to 0 => 1980, 1 => 1981 etc.
+		ADD	HL,BC
+		LD	A,D		; Convert to FIB format.
+		ADD	A,A
+		ADD	A,A
+		ADD	A,A
+		ADD	A,A
+		ADD	A,A
+		RL	L		; L = high byte of FIB format date.
+		OR	E		; A = low byte of FIB format date.
+		LD	D,L
+		LD	HL,BUFF2##+1	; Put into BUFF2 & pretend to be a FIB.
+		LD	(HL),D
+		DEC	HL
+		LD	(HL),A
+		LD	C,0FFH		; C=FF => print the century.
+		CALL	DDATE##		; Print the date pointed to by HL.
+		LD	A,__ENDAT##	; Print the end text (null in English).
+		CALL	DMESSCR##
+;
+NEWDAT:		LD	A,__ENTDAT##	; Print 'Enter new date'.
+		CALL	DMESS##
+;
+		LD	HL,DATE$##	; Get the DATE environment string.
+		CALL	GENV2##
+		JR	NZ,NDFORM	; Don't print the format if error.
+;
+		LD	A,(DE)		; DATE in the environment ?
+		OR	A
+		JR	Z,NDFORM	; Go if not.
+;
+		PUSH	DE
+		LD	A,__SFMT##	; Else print the format from the
+		CALL	DMESS##		;   environment.
+		POP	DE
+		CALL	DMS##
+		LD	A,__EFMT##
+		CALL	DMESS##
+NDFORM:		LD	A,__PRDAT##	; Print end message.
+		CALL	DMESS##
+;
+		CALL	INLI##		; Input a line.
+		JR	Z,DAT5		; Go if no error.
+;
+		CP	.EOF##
+		RET	NZ		; Return if not end of file error.
+;
+DAT5:		INC	HL		; Point passed length byte.
+		CALL	GETCH##		; Skip leading separators.
+		RET	Z		; Just return if new date not given.
+;
+RDAT:		EXX			; Hide the input line pointer.
+		LD	C,_GDATE##	; Get current date again for defaults.
+		CALL	_BDOS##
+		EXX			; Save current values, get input ptr.
+		LD	A,(IY+@DT_FORM##)
+		ADD	A,A		; Ignore top two bits.
+		ADD	A,A
+		LD	B,3		; Read 3 numbers.
+		PUSH	AF		; Save format variable.
+		JR	DAT20
+;
+DAT10:		CALL	DTSKIP##	; Skip date/time separators.
+		JR	C,BADAT		; Go if invalid.
+;
+DAT20:		CALL	GETNO##		; Get a number.
+		EXX
+		LD	B,A		; Save number.
+		SBC	A,A		; FF => invalid number, 0 => OK.
+		LD	C,A		; Save error flag.
+		POP	AF		; Get & adjust format variable for this
+		RLCA			;   iteration.
+		RLCA
+		PUSH	AF
+		INC	C		; Error ?
+		JR	Z,DAT50		; Use default value if yes.
+;
+		AND	3		; Mask out other grotty bits.
+		JR	Z,DAT50		; Go if invalid field value.
+;
+		DEC	A		; Day ?
+		JR	Z,DAT40		; Go if yes.
+;
+		DEC	A		; Month ?
+		JR	Z,DAT30		; Go if yes, else year.
+;
+		EXX
+		CALL	GETDIG##	; See if more digits of the number.
+		JR	C,NOCENT	; Go if not (century not given).
+;
+		INC	HL		; Point to next digit.
+		CALL	GNO##		; Get second digit.
+		JR	C,BADAT		; Error if invalid.
+;
+		EXX
+		SUB	80		; Convert 80-99 to offset from 1980.
+		LD	C,A		; Save year part.
+		LD	A,B		; Get century.
+		CP	19
+		JR	Z,ADD1980	; Go if 19xx with offset from 1980.
+;
+		CP	20
+		LD	A,C		; Get year.
+		JR	Z,CENT20	; Go if 20xx.
+;
+BADAT:		POP	AF		; Balance stack.
+		LD	B,.IDATE##	; Give 'Invalid date' error.
+		JR	DAT60		; Print error, re-prompt.
+;
+NOCENT:		EXX
+		LD	A,B		; Get given year.
+		SUB	80		; 80-99 -> 0-19 (offset from 1980).
+		JR	NC,CENT19	; Go if 1980-1999.
+;
+CENT20:		ADD	A,80+20		; Convert to offset into 2000..
+CENT19:		LD	C,A
+ADD1980:	LD	B,0		; BC=offset from 1980.
+		LD	HL,1980
+		ADD	HL,BC		; HL=new date.
+		LD	B,D		; Skip to DAT50.
+DAT30:		LD	D,B		; Save month.
+		CODE	MVI B
+DAT40:		LD	E,B		; Save day.
+DAT50:		EXX			; Save new date, get line ptr.
+		DJNZ	DAT10		; Get separator & next digit.
+;
+		CALL	GETCH##		; Skip trailing spaces.
+		JR	NZ,BADAT	; Error if end of line.
+;
+		POP	AF		; Balance stack.
+		EXX			; Get the new date.
+		LD	C,_SDATE##
+		CALL	_BDOS##		; Attempt to set the new date.
+		AND	.IDATE##	; .IDATE if error, else 0.
+		RET	Z		; Return if no error.
+;
+		LD	B,A
+DAT60:		LD	DE,BUFF2##	; Get message into BUFF2.
+		LD	C,_EXPLAIN##
+		CALL	_BDOS##
+		PUSH	DE		; Save message ptr.
+		CALL	CRLF##		; New line & '***'.
+		LD	A,__SPLATS##
+		CALL	DMESS##
+		POP	DE
+		CALL	DMS##		; Print actual message.
+		LD	A,__EREND##	; Followed by message after error.
+		CALL	DMESSCR##
+		JP	NEWDAT		; Prompt & input for another date.
+;
+;
+DAYTAB:		DEFB	__SUN##		; Table of day messages, 0 => Sun.
+		DEFB	__MON##
+		DEFB	__TUE##
+		DEFB	__WED##
+		DEFB	__THU##
+		DEFB	__FRI##
+		DEFB	__SAT##
+;
+;
+;
+		SUBTTL	ECHO
+;******************************************************************************
+;
+;        The ECHO command just prints it's arguments on the screen. It is used
+; for displaying comments ans messages in batch files.
+;
+;
+@ECHO::		EX	DE,HL		; DE -> arguments.
+		JP	DMSCR##		; Print rest of command line & CR,LF.
+;
+;
+;
+		SUBTTL	EXIT
+;******************************************************************************
+;
+;        The EXIT command reads an optional error number as it's argument  and
+; then  exits  this invokation of COMMAND with the error code. It restores the
+; pointers at the bottom of page 0, the BIOS re-boot jump entry point and  the
+; environment strings which COMMAND saved when it was first entered.
+;
+;
+@EXIT::		AND	(HL)
+		JR	Z,EXIT		; EXIT with no error if no parameters.
+;
+		CALL	GET8##		; Else read a number into E.
+		CALL	Z,CHKNO##	; Check for garbage after number.
+		CALL	Z,CHKEOL##	; Check for garbage on end of line.
+		RET	NZ
+;
+		LD	A,E
+EXIT::		PUSH	AF		; Save error code for returning.
+		LD	HL,VECTORS##	; Restore vectors in page 0 to what
+		LD	DE,_BIOS##	;   they were when COMMAND was invoked.
+		LD	BC,VECLEN##
+		LDIR
+;
+if 0
+		LD	HL,(PTR_SAVE##)	; Restore CLI_PTR.
+		LD	(CLI_PTR##),HL
+;
+endif
+		CP	.OKCMD##	; Restore environment strings unless
+		JR	Z,ENVDON	;   end of COMMAND <command> (eg.
+;					;   AUTOEXEC.BAT).
+		LD	DE,1		; Delete first environment string.
+DELENV:		PUSH	DE
+		CALL	FENV##		; Get name of item.
+		POP	DE
+		INC	DE
+		JR	NZ,DELENV	; Do next if error.
+;
+		OR	(HL)		; Name null (end of strings) ?
+		JR	Z,SETENV	; All deleted if yes.
+;
+		PUSH	DE
+		LD	DE,BUFF##
+		XOR	A
+		LD	(DE),A		; Set to a null string to delete.
+		LD	C,_SENV##	; Else set item to null.
+		CALL	_BDOS##
+		POP	DE		; Now the 1st string's deleted, the 2nd
+		DEC	DE		;   string's become the new first
+		JR	DELENV		;   string so DE not incremented.
+;
+SETENV:		LD	HL,(_BDOS##+1)	; Find out address of saved environment
+		DEC	HL		;   strings, and restore them.
+		DEC	HL
+		DEC	HL
+		DEC	HL
+		DEC	HL
+		DEC	HL
+		DEC	HL
+CPYENV:		LD	A,(HL)		; End of environment string list ?
+		OR	A
+		JR	Z,ENVDON
+;
+		LD	DE,BUFF2##	; Copy name of item to BUFF2.
+CNAM:		LD	A,(HL)		; Get character.
+		LD	(DE),A
+		DEC	HL
+		INC	DE
+		OR	A
+		JR	NZ,CNAM		; Copy until null at end.
+;
+		LD	DE,BUFF##	; Copy saved value of item to BUFF.
+CSTR:		LD	A,(HL)
+		LD	(DE),A
+		DEC	HL
+		INC	DE
+		OR	A
+		JR	NZ,CSTR		; Copy until null at end.
+;
+		PUSH	HL
+		CALL	SENV##		; Set value.
+		POP	HL		; HL -> next string.
+		JR	CPYENV
+;
+ENVDON:		LD	HL,(_BIOS##+1)
+		INC	HL
+		LD	DE,(OLD_REBOOT##)	; Restore re-boot BIOS jump
+		LD	(HL),E			;   table entry point.
+		INC	HL
+		LD	(HL),D
+;
+		LD	DE,0		; Un-define abort routine.
+		LD	C,_DEFAB##
+		CALL	_BDOS##		;   (error ignored)
+;
+		POP	BC		; Restore error code in B.
+		LD	C,_TERM##
+		JP	_BDOS##		; Terminate with error code.
+;
+;
+;
+		SUBTTL	FORMAT
+;******************************************************************************
+;
+;        This is the FORMAT command routine. It simply takes an optional drive
+; letter and passes this to the format BDOS function.
+;
+;
+@FORMAT::	AND	(HL)
+		LD	B,A		; Use default drive if none specified.
+if 1 ;;v2.30
+		jr	nz,FMT_HAS_ARG	;
+;
+		ld	l,0
+		ld	bc,8*256+_FORMAT##
+FMT_CHK_DRIVE:
+		add	hl,hl
+		push	hl
+		push	bc
+		xor	a		;See if format is supported by
+		call	_BDOS##		; drive [B].
+		pop	bc
+		pop	hl
+		jr	nz,FMT_NO_DRIVE	;Any error means drive does not exist
+					; or does not support format.
+		inc	hl		;Add to the selection list.
+FMT_NO_DRIVE:
+		djnz	FMT_CHK_DRIVE
+;
+		ld	a,l		;If nothing remains, no way to proceed.
+		or	a		;
+		ld	a,.IDRV##	;
+		ret	z		;
+;
+		ld	a,l
+		dec	a
+		and	l
+		ld	a,l		;If only one drive,
+		jr	z,FMT_1DRIVE	; no need to ask for drive name
+;
+		push	hl		;Save drive list.
+		ld	a,__FMT1##
+		call	DMESS##		;"Drive name? (".
+		pop	hl
+		push	hl
+		ld	a,"A"-1
+FMT_ASK_LOOP:
+		inc	a		;Try next drive
+		srl	l
+		jr	nc,FMT_SKIPDRV
+		push	af
+		call	OUCH##		;Print drive name.
+		pop	af
+		push	af
+		ld	a,","
+		call	nz,OUCH##	;Print separator if something remain.
+		pop	af
+FMT_SKIPDRV:
+		jr	nz,FMT_ASK_LOOP
+;
+		ld	a,__FMT2##
+		call	DMESS##		;") " after drive name list.
+		pop	hl		;Restore drive list
+
+FMT_ASKAGAIN:
+		push	hl
+		LD	C,_CONST##	; Get a character, gobbling up chars
+		CALL	_BDOS##		;   in the keyboard buffer.
+		PUSH	AF
+		LD	C,_INNOE##
+		CALL	_BDOS##
+		LD	C,A
+		POP	AF
+		pop	hl
+		JR	NZ,FMT_ASKAGAIN
+		ld	a,c
+;
+		call	UC##		;Force to upper case
+		ld	c,a
+		sub	"A"
+		cp	8
+		jr	nc,FMT_ASKAGAIN	;Invalid drive name.
+;
+		ld	b,a
+		inc	b
+		xor	a
+		scf
+FMT_GETMASK:
+		rla
+		djnz	FMT_GETMASK
+		and	l
+		jr	z,FMT_ASKAGAIN	;Drive does not exist
+					; or does not support format.
+		push	af
+		ld	a,c
+		call	OUCH##		;Echo to the console.
+		call	CRLF##
+		pop	af
+
+FMT_1DRIVE:				;Always comes here with B=0.
+FMT_GETDRIVE:
+		inc	b		;Convert bit mask back to drive number.
+		rrca			;
+		jr	nc,FMT_GETDRIVE
+		jr	NFDRV
+FMT_HAS_ARG:
+else
+		JR	Z,NFDRV
+endif
+;
+		INC	HL		; Else check a ':' is given.
+		LD	A,(HL)
+		CP	':'
+		LD	A,.IPARM##
+		RET	NZ
+;
+		INC	HL
+		LD	A,(HL)		; Make sure drive is followed by a
+		CALL	SEP?##		;   separator.
+		LD	A,.IPARM##
+		RET	NZ		; 'Invalid parameter' if it's not.
+;
+		CALL	GETCH##		; Check for garbage on end of line.
+		LD	A,.INP##	; 'Too many parameters' if not end of
+		RET	NZ		;   line.
+;
+		LD	A,B		; Get drive letter.
+		CALL	UC##
+		CP	'Z'+1		; Error if > 'Z'.
+		JR	NC,NCIDRV
+;
+		SUB	'A'		; Error if < 'A'.
+		LD	B,A		; B=drive number-1.
+		CCF
+NCIDRV:		LD	A,.IDRV##
+		RET	NC
+;
+		INC	B
+NFDRV:		LD	A,B
+		EXX			; Save drive in B'.
+		LD	B,A
+		LD	C,_FORMAT##
+		XOR	A		; Get pointer to prompt string.
+		CALL	_BDOS##
+		RET	NZ
+;
+		LD	A,H
+		OR	L
+		JR	Z,NSTR		; Go if no prompt string (A=0).
+;
+GETCHR:		LD	A,B		; Get slot number.
+		PUSH	BC
+		CALL	RDSLT##		; A=character from string.
+		POP	BC
+		OR	A
+		JR	Z,DONSTR	; Go if string has been printed.
+;
+		INC	HL		; Next character.
+		CALL	OUCH##		; Print character.
+		JR	GETCHR		; Do next character.
+;
+DONSTR:		LD	A,'?'		; Output '? '.
+		CALL	OUCH##
+		CALL	SPACE##
+INCHAR:		LD	C,_CONST##	; Get a character, gobbling up chars
+		CALL	_BDOS##		;   in the keyboard buffer.
+		PUSH	AF
+		LD	C,_INNOE##
+		CALL	_BDOS##
+		LD	C,A
+		POP	AF
+		JR	NZ,INCHAR
+;
+		LD	A,C
+		CP	'9'+1		; If not '1' to '9' to get another.
+		JR	NC,INCHAR
+;
+		SUB	'0'+1
+		JR	C,INCHAR
+;
+		PUSH	AF		; Save choice.
+		LD	A,C		; Echo it.
+		CALL	OUCH##
+		CALL	CRLF##
+		POP	AF
+;
+NSTR:		INC	A		; A=choice.
+		PUSH	AF		; Save choice.
+		CALL	CRLF		; Print warning message.
+		LD	A,__FMTDR##	; Print 'All data on drive '.
+		CALL	DMESS##
+		EXX
+		LD	A,B
+		EXX
+		DEC	A		; 0 => A: etc.
+		LD	C,_CURDRV##
+		CALL	M,_BDOS##	; Use current if no drive specified.
+		ADD	A,'A'		; Convert to ASCII and print it.
+		CALL	OUCH##
+		LD	A,__DSTRY##	; Print ': will be destroyed'.
+		CALL	DMESSCR##
+		CALL	PAUSE		; Print 'Press any key to contnue... '.
+		POP	AF		; A=choice.
+		EXX			; B=drive.
+		LD	DE,TPA##	; Start of FORMAT buffer.
+		LD	HL,(TPA_TOP##)	; End of buffer.
+		OR	A
+		SBC	HL,DE		; HL = size of buffer.
+		EX	DE,HL		; HL -> buffer, DE = size.
+		LD	C,_FORMAT##
+		JP	_BDOS##
+;
+;
+;
+		SUBTTL	IF
+;******************************************************************************
+;
+;        This is the IF command routine, 
+;
+;	NZ     => error
+;	Z & NC => execute command
+;	Z & C  => skip
+;		HL -> command string.
+;
+@IF::
+		CALL	COND		; Test condition
+		RET	NZ		; Return if error.
+		JP	NC,DO_CMD##	; Go if test successful.
+		XOR	A		; Otherwise return no error.
+		RET
+;
+;
+COND:
+		LD	BC,BUFF##	; Get first item here, uppercased.
+		PUSH	BC
+		CALL	CPYSTR
+		POP	BC
+		RET	NZ		; Return if error
+;
+		EX	DE,HL
+		LD	HL,$NOT
+		CALL	STRCMP
+		EX	DE,HL
+		JR	NZ,EXIST?
+;
+		CALL	COND10
+		CCF			; Reverse GO condition
+		RET
+;
+;
+COND10:		CALL	GETCH##
+		LD	BC,BUFF##	; Get next item here, uppercased.
+		CALL	CPYSTR
+		RET	NZ		; Return if error.
+EXIST?:
+		LD	BC,BUFF##
+		EX	DE,HL
+		LD	HL,$EXIST
+		CALL	STRCMP
+		EX	DE,HL
+		JR	NZ,EQUAL?
+;
+		CALL	GETCH##
+		CALL	PRS##		; Get path string.
+		RET	NZ		; Return if error.
+;
+		.BIT	$FN,B		; "file not found" if blank filename.
+		LD	A,.NOFIL##
+		JR	Z,EX10
+;
+		LD	C,(HL)		; Save terminating char.
+		LD	(HL),0		; Terminate path.
+		PUSH	HL
+		PUSH	BC
+		LD	IX,FIB##
+		LD	BC,256*(ATHID OR ATSYS)+_FFIRST##
+		CALL	_BDOS
+		POP	BC		; Restore terminating char.
+		POP	HL		;   in case this was the end of line.
+		LD	(HL),C
+;
+EX10:		OR	A
+		RET	Z		; Z & NC => if no error
+		CP	.NODIR##
+		SCF
+		RET	Z		; Z & C => if directory not found
+		CP	.NOFIL##
+		SCF			; Z & C => if file not found,
+		RET			; NZ otherwise.
+;
+;
+EQUAL?:
+		CALL	STRIP##		; Skip leading blanks.
+		CALL	CHKEQ		; Check braindead syntax "==".
+		CALL	CHKEQ
+		CALL	STRIP##		; Skip trailing blanks.
+;
+		LD	BC,BUFF##+128
+		PUSH	BC
+		CALL	CPYSTR		; Copy & upper case second item.
+		POP	BC
+		RET	NZ		; Return if error
+;
+		EX	DE,HL
+		LD	HL,BUFF##	; HL -> first item.
+		CALL	STRCMP
+		EX	DE,HL		; HL -> next item (i.e. command)
+;
+		RET	Z		; Z & NC => if match.
+		CP	A		; Z & C  => if no match.
+		SCF
+		RET
+;
+STRCMP:
+SC10:		LD	A,(BC)
+		CP	(HL)
+		RET	NZ
+		INC	BC
+		INC	HL
+		OR	A
+		JR	NZ,SC10
+		RET
+;
+CHKEQ:		LD	A,(HL)
+		INC	HL
+		CP	"="
+		RET	Z
+		POP	HL		;discard return address
+BADIF:		LD	A,.IPARM##
+		RET
+;
+$NOT:		DB	"NOT",0
+$EXIST:		DB	"EXIST",0
+;
+;
+;
+		SUBTTL	MODE
+;******************************************************************************
+;
+;        This is the MODE command routine, which simply takes  the  number  of
+; columns  on the screen required (1-80) and changes to the appropraite screen
+; mode.
+;
+;
+@MODE::		AND	(HL)
+		LD	A,.NOPARM##
+		RET	Z
+;
+		CALL	GET8##		; Get numbere of columns.
+		CALL	Z,CHKNO##
+		CALL	Z,CHKEOL##
+		RET	NZ
+;
+		OR	E
+		JR	Z,IPARM		; MODE 0 is not allowed.
+;
+		CP	81
+		JR	NC,IPARM	; Nor is MODE >80.
+;
+		LD	IX,INITXT	; Assume hi-res text mode.
+		LD	HL,LINL40
+		CP	33		; 33-80 columns ?
+		JR	NC,GOTCOLS	; Go if yes.
+;
+		LD	IX,INIT32	; Else lo-res text mode.
+		INC	HL
+GOTCOLS:	LD	(HL),A		; Save no. columns required.
+		LD	IY,(EXPTBL##-1)	; Get slot address of main ROM.
+		LD	HL,0
+		ADD	HL,SP		; Save SP.
+		LD	SP,P3_STACK##	; Use a tempory stack in
+		PUSH	HL		;   page 3.
+		CALL	CALSLT##	; Call main ROM to change screen mode.
+		POP	HL
+		LD	SP,HL
+		XOR	A		; No error.
+		RET
+;
+IPARM:		LD	A,.IPARM##
+		RET
+;
+;
+;
+		SUBTTL	PATH
+;******************************************************************************
+;
+;        This is the PATH command routine. If no parameters  are  given,  then
+; the  current PATH is got from the environment and printed (ie. is equivalent
+; to SET PATH). If a list of path names is given, then the current PATH in the
+; environment  is  set  to this list (ie. PATH <pathname> is equivalent to SET
+; PATH=<pathname>).  If  the  parameter  is  of  the  form  -<pathname>,  then
+; <pathname>  is  deleted  from  the  current  path,  an  error being given if
+; <pathname> did not already exist in the string. If the parameter is  of  the
+; form  +<pathname> then <pathname> is added to the string, any old occurences
+; of <pathname> being deleted first.
+;
+;        When a string is being appended, the original string is at BUFF.  The
+; appended  string  may  overflow  this  in  to  BUFF2,  so  these two must be
+; consecutive. The actual BDOS function will then give  a  'string  too  long'
+; error.
+;
+;
+@PATH::		PUSH	HL		; Save pointer to parameter.
+		LD	HL,PATH$##	; Get the current PATH string from the
+		CALL	GENV2##		;   environment.
+		POP	HL		; HL -> parameters.
+		RET	NZ		; Return if error.
+;
+		OR	(HL)		; Parameters given ?
+		JP	Z,?DMSCR	; Print current PATH if not.
+;
+		INC	HL		; Point passed '+' or '-' if given.
+		CP	'-'		; Delete existing path from string ?
+		JR	Z,DELP		; Go if yes.
+;
+		CP	'+'		; Append path to existing string ?
+		JR	Z,ADDP		; Go if yes.
+;
+		XOR	A		; Else convert current string to a null
+		LD	(DE),A		;   string and then do an append.
+		DEC	HL		; Adjust for INC above.
+ADDP:		EX	DE,HL		; HL -> current PATH string.
+		PUSH	HL		; If only separators there, then set
+		CALL	GETCH##		;   the PATH string to a null string.
+		POP	HL		;   This fiddle is done because the
+		JR	NZ,PTH10	;   PATH string is initialised to '; '.
+;
+		LD	(HL),A
+PTH10:		EX	DE,HL
+AP10:		CALL	GETCH##		; Skip separators.
+		JR	Z,SPATH		; Set new path if end of user's items.
+;
+		LD	BC,BUFF3##
+		PUSH	BC
+		CALL	CPYSTR		; Copy & uppercase item, HL -> next.
+;
+		PUSH	HL		; Save ptr to next item in user string.
+		CALL	NC,DELSTR	; Delete item if it exists.
+		POP	HL
+		POP	BC		; BC -> item copied to BUFF3.
+		RET	C		; Return if error.
+;
+		LD	DE,BUFF##-1	; Find end of current PATH string,
+AP20:		INC	DE		;   then append separator and the new
+		LD	A,(DE)		;   item.
+		OR	A
+		JR	NZ,AP20
+;
+		LD	A,';'		; Add separator to PATH string.
+		LD	(DE),A
+		INC	DE
+		LD	A,' '
+		LD	(DE),A
+AP30:		INC	DE
+		LD	A,(BC)		; Get character from user's item.
+		INC	BC
+		LD	(DE),A		; Add onto and of PATH string.
+		OR	A
+		JR	NZ,AP30
+;
+		JR	AP10		; Repeat for next item in user string.
+;
+SPATH:		LD	HL,PATH$##	; Attempt to set new path.
+		JP	SENV2##
+;
+;
+DELP:		CALL	GETCH##		; Skip separators.
+		JR	Z,SPATH		; Attempt to set PATH if end of items.
+;
+		LD	BC,BUFF3##	; Else copy to BUFF3 & upper case.
+		CALL	CPYSTR		; HL -> start of next item.
+;
+		PUSH	HL		; Save pointer to next item.
+		CALL	NC,DELSTR	; Attempt to delete item from string.
+		POP	HL
+		RET	C		; Return if error.
+;
+		LD	A,.IPATH##	; Return .IPATH if item not found.
+		RET	Z
+;
+		JR	DELP		; Repeat for next item.
+;
+;
+DELSTR:					; Delete string at BUFF3 from BUFF.
+		LD	HL,BUFF##	; Point to current PATH string.
+;
+DS5:		PUSH	HL		; Save start of this item.
+		POP	IX
+		CALL	GETCH##		; Skip leading separators.
+		RET	Z		; Return with Z if user item not found.
+;
+		LD	BC,BUFF3##+128	; Copy item to BUFF3+128 & upper case.
+		PUSH	BC
+		CALL	CPYSTR		; Leaves HL -> next item.
+		POP	BC
+		RET	C
+;
+		LD	DE,BUFF3##	; Compare with string at BUFF3.
+;
+DS10:		LD	A,(BC)		; Get character from item from PATH.
+		EX	DE,HL		; HL -> user's item in BUFF3.
+		CP	(HL)		; Characters from strings match ?
+		EX	DE,HL
+		JR	NZ,DS5		; Check next if not.
+;
+		INC	DE		; Else check next character.
+		INC	BC
+		OR	A		; End of string ?
+		JR	NZ,DS10		; Go if not, else strings match.
+;
+		PUSH	IX		; Get back start of item, HL -> next.
+		POP	DE
+DS20:		LD	A,(HL)		; Get character from next item.
+		LDI			; Copy over current to delete it.
+		OR	A
+		JR	NZ,DS20		; Copy rest of string.
+;
+		INC	A		; NZ,NC => string found.
+		RET
+;
+;
+CPYSTR::	LD	D,0		; Zero character flags.
+CS10:		LD	E,(HL)		; Get character.
+		PUSH	BC
+		PUSH	HL
+		LD	C,_CHKCHR##
+		CALL	_BDOS##		; Upper-case & check character.
+		POP	HL
+		POP	BC
+		SCF
+		RET	NZ		; Ret with C if error.
+;
+		LD	(BC),A		; Assume end if string initially.
+		BIT	1,D		; First char of 16-bit character ?
+		JR	NZ,CS20		; Put into buffer if yes.
+;
+		OR	E		; Ret no error if end (just in case 2nd
+		RET	Z		;   half of 16-bit character = 0).
+;
+		BIT	2,D		; 2nd byte of 16-bit character ?
+		JR	NZ,CS20		; Put into buffer if yes.
+;
+		CALL	SEP?##		; Check for separator ending path.
+		RET	Z		; Retrun if end of item.
+;
+CS20:		LD	A,E		; Get upper-cased character.
+		LD	(BC),A		; Put character into buffer.
+		INC	BC		; Next buffer position.
+		INC	HL		; Next character in string.
+		JR	CS10
+;
+;
+;
+		SUBTTL	PAUSE
+;******************************************************************************
+;
+;        The  PAUSE  command is similar to the ECHO command, except that after
+; printing the message on the reast of the command line, it prompts for a  key
+; to be pressed.  This is used in batch file processing  to  prompt  for,  for
+; example,  the user to change disks. The entry point PAUSE is called from the
+; character output routine OUTCH at the end of a screenful ot text if /P is in
+; effect.
+;
+;
+@PAUSE::	EX	DE,HL		; DE -> command arguments.
+		CALL	?DMSCR		; Print arguments & CR,LF if non-null.
+PAUSE::		LD	A,__PRAK##	; Then prompt for a keypress.
+		CALL	DMESS##
+		JP	INCH##		; Wait for a key to be pressed.
+;
+;
+;
+		SUBTTL	RAMDISK
+;******************************************************************************
+;
+;        This is the RAMDISK command routine. If no parameters are given, then
+; the  current  size  is  printed in K. Otherwwise, if a /D parameter is given
+; then the current RAMDISK will be destroyed. If a number is given, then  that
+; number  of  K  will be allocated for the RAM disk if possible, rounded up to
+; the next 16K.
+;
+;
+@RAMDISK::	AND	(HL)
+		JR	NZ,SETRAM	; Go if parameters given.
+;
+		LD	BC,0FFH*256+_RAMD##
+		CALL	_BDOS##		; Else get & print current size.
+		RET	NZ
+;
+		LD	H,A		; H=0 for later.
+		OR	B		; 'No RAM disk' if 0.
+		LD	A,.NRAMD##
+		RET	Z
+;
+		LD	L,B		; HL = no. 16K segments in RAM disk.
+		ADD	HL,HL		; *16 for no. K.
+		ADD	HL,HL
+		ADD	HL,HL
+		ADD	HL,HL
+		LD	A,__RAMD##
+		CALL	DMESS##		; Print 'RAMDISK='.
+		CALL	D16##		; Print No. K.
+		LD	A,'K'
+		CALL	OUCH##
+		JP	CRLF##
+;
+SETRAM:		EX	AF,AF'		; AF' = NZ if /D not given.
+		CALL	CHKD		; Check for /D.
+		RET	NZ		; Ret if error.
+;
+		EX	AF,AF'		; /D given ?
+		JR	NZ,ND		; Go if not.
+;
+		OR	(HL)		; Any number given ?
+		LD	B,A
+		JR	Z,NRAM		; Just delete RAM disk if not.
+;
+		XOR	A		; Else AF' = Z again, get number.
+ND:		EX	AF,AF'
+		CALL	GET16##		; Get size of RAM disk required.
+		RET	NZ
+;
+		LD	A,(HL)		; Allow 'K' to be given after number.
+		CALL	UC##
+		CP	'K'
+		JR	NZ,NK
+;
+		INC	HL		; Skip passed K if given.
+NK:		LD	A,(HL)		; Get character after number.
+		CP	'/'		; Start of /D ?
+		CALL	NZ,CHKNO##	; Check for garbage if not.
+		CALL	Z,CHKD		; Check for /D if no error.
+		RET	NZ		;   if not.
+;
+		CALL	GETCH##		; Check for garbage on end of line.
+		LD	A,.INP##	; 'Too many parameters' if not eol.
+		RET	NZ
+;
+		LD	B,4
+		LD	HL,15		; Round up to next 16K boundary.
+		ADD	HL,DE
+DIV16:		SRL	H		; Divide by 16 for no. segments.
+		RR	L
+		DJNZ	DIV16
+;
+		LD	A,.IPARM##	; If > 254 16K segments, then give
+		INC	H		;   error.
+		DEC	H
+		RET	NZ
+;
+		LD	B,L		; B=no. segments in new RAM disk.
+		INC	L
+		RET	Z		; Ret if 255 segments specified.
+;
+		EXX			; Save new size in B'.
+		EX	AF,AF'		; /D given ?
+		JR	Z,DELRAM	; Destroy existing RAM disk if yes.
+;
+		LD	BC,0FFH*256+_RAMD##
+		CALL	_BDOS##		; See if RAM disk already exists.
+		RET	NZ		; Return any errors.
+;
+		OR	B		; NZ => RAM disk currently exists.
+		JR	Z,NEWRAM	; Create one if one doesn't exist.
+;
+		LD	A,__DELRAM##
+		CALL	YN##		; Prompt with 'Delete RAM disk (Y/N) ?'
+		LD	A,0
+		RET	Z		; Ret with no error if 'N' pressed.
+;
+DELRAM:		LD	BC,0*256+_RAMD##; Delete current RAM disk.
+		CALL	_BDOS##
+		RET	NZ
+;
+NEWRAM:		EXX			; B=size of new RAM disk.
+NRAM:		LD	C,_RAMD##	; Create new RAM disk.
+		JP	_BDOS##
+;
+;
+CHKD:		LD	A,(HL)		; Start of option ?
+		CP	'/'
+		JR	NZ,OKRET	; Return no error if not.
+;
+		INC	HL
+		LD	A,(HL)		; Else get option character.
+		CALL	UC##
+		CP	'D'		; /D ?
+		LD	A,.IOPT##
+		RET	NZ		; Return 'invalid option' error if not.
+;
+		INC	HL
+		XOR	A
+		EX	AF,AF'		; AF' = Z => /D given.
+		CALL	GETCH##		; Skip following separators.
+		JR	CHKD		; Repeat so invalid /s give .IOPT.
+;
+OKRET:		XOR	A
+		RET
+;
+;
+;
+		SUBTTL	SET
+;******************************************************************************
+;
+;        This is the SET command routine.  SET  alone  prints  out  the  whole
+; environment,  SET followed by a name prints out the string for that name and
+; SET followed by a name, separator and string sets that environment  name  to
+; the string.
+;
+;
+@SET::		AND	(HL)		; Any name given ?
+		JR	NZ,SETNAME	; Go if yes, else print environment.
+;
+		LD	HL,1		; Initialise item number.
+DENV:		PUSH	HL		; Save item number.
+		EX	DE,HL
+		CALL	FENV##		; Get name of item.
+		JR	NZ,NXTENV	; Ignore this item if error.
+;
+		POP	BC
+		OR	(HL)		; Null name ?
+		RET	Z		; Done if yes.
+;
+		PUSH	BC
+		CALL	GENV##		; Get string value of this name.
+		JR	NZ,NXTENV	; Ignore this item if error.
+;
+		EX	DE,HL		; DE -> name.
+		CALL	DMS##		; Print name of string.
+		LD	A,'='
+		CALL	OUCH##		; Print '='.
+		EX	DE,HL		; DE -> value of name.
+		CALL	DMSCR##		; Followed by the string & CR,LF.
+NXTENV:		POP	HL		; Get back current item number.
+		INC	HL		; Next item.
+		JR	DENV
+;
+SETNAME:				; HL -> start of name.
+		PUSH	HL		; Save start of name pointer.
+		LD	D,0		; Zero character flags.
+		DEC	HL
+;
+NXTCHR:		INC	HL
+		LD	E,(HL)		; Get character.
+		PUSH	HL
+		LD	C,_CHKCHR##
+		CALL	_BDOS##		; Check character.
+		POP	HL
+		POP	BC
+		RET	NZ		; Return if error.
+;
+		PUSH	BC
+		BIT	1,D		; First byte of 16 bit character ?
+		JR	NZ,NXTCHR	; Check next if yes.
+;
+		OR	E		; End of line ?
+		JR	Z,DSTR		; Print value of name if yes.
+;
+		BIT	2,D		; Second byte of 16 bit character ?
+		JR	NZ,NXTCHR	; Check next character if yes.
+;
+		CALL	SEP?##		; End of name ?
+		JR	NZ,NXTCHR	; Check next character if not.
+;
+		PUSH	HL		; Save end of name ptr.
+		CALL	STRIP##		; Skip spaces, Z if end of line.
+		POP	HL
+		LD	(HL),0		; Terminate string with a null.
+		JR	Z,DSTR		; If just name then get & print string.
+;
+		INC	HL		; Point passed separator found.
+		CALL	GETCH##		; Skip separators.
+		EX	DE,HL
+		POP	HL
+;
+		LD	C,_SENV##	; Set new value, HL -> name, DE ->
+		JP	_BDOS##		;   new string.
+;
+DSTR:		POP	HL		; HL -> start of name.
+		CALL	GENV2##
+		RET	NZ
+;
+?DMSCR:		LD	A,(DE)
+		OR	A		; Don't print anything if null.
+		RET	Z
+;
+		JP	DMSCR##		; Else print string & CR, LF.
+;
+;
+;
+		SUBTTL	TIME
+;******************************************************************************
+;
+;        This is the TIME command routine. The time is  printed  using  DTIME,
+; which  prints  the  time  as  printed  by DIR ie. excluding seconds, so this
+; routine prints seconds afterwards. DTIME  prints  the  time  in  the  format
+; defined  by  the  TIME environment string, but this routine does not need to
+; know about this since the time can be input in either format  unambiguously.
+; Although  100ths  of  a  second  are  not  printed,  they  are accepted when
+; inputting the time.
+;
+;
+@TIME::		PUSH	HL		; Save pointer to command line.
+		CALL	TFORM##		; Set up TM_FORM, the time format var.
+		POP	HL
+		LD	A,(HL)
+		OR	A		; New time given on command line ?
+		JR	NZ,RTIM		; Attempt to set new time if yes.
+;
+		LD	A,__TIMIS##	; Print 'Current time is'
+		CALL	DMESS##
+		LD	C,_GTIME##	; Get current time for printing.
+		CALL	_BDOS##
+		PUSH	DE		; Save seconds in D.
+		LD	A,L		; Convert hours & mins to FIB format.
+		ADD	A,A
+		ADD	A,A
+		LD	B,3
+TIM2:		ADD	A,A
+		RL	H
+		DJNZ	TIM2
+;
+		LD	C,H
+		LD	HL,BUFF2##
+		LD	(HL),A		; Save rest of minutes.
+		INC	HL
+		LD	(HL),C		; Save hours & 3 bits of mins.
+		CALL	DTIME##		; Print hours and minutes.
+		POP	BC		; Get seconds back again.
+		PUSH	AF		; Save 'a' or 'p' to print.
+		LD	A,':'		; Print separator before seconds.
+		CALL	OUCH##
+		LD	A,B
+		LD	D,0FFH		; D <> '0'-'9' => print leading zeros.
+		CALL	DDT##		; Print seconds (100ths not printed).
+		POP	AF		; Print 'a' or 'p' if necessary.
+		CP	' '		; A=space => 24 hour mode.
+		CALL	NZ,OUCH##
+		LD	A,__ENDTIM##	; Print end message.
+		CALL	DMESSCR##
+;
+NEWTIM:		LD	A,__ENTIM##	; Print 'Enter new time:'.
+		CALL	DMESS##
+		CALL	INLI##		; Input a line.
+		JR	Z,TIM5		; Go if no error.
+;
+		CP	.EOF##
+		RET	NZ		; Return if not end of file error.
+;
+TIM5:		INC	HL		; Point passed length byte.
+		CALL	GETCH##		; Skip leading separators.
+		RET	Z		; Just return if new time not given.
+;
+RTIM:		EXX			; Hide the input line pointer.
+		LD	C,_GTIME##	; Get current values for defaults.
+		CALL	_BDOS##
+		EXX			; Save current values, get input ptr.
+		CALL	GETNO##		; Get hours.
+		JR	C,TIM10		; Go if invalid number.
+;
+		EXX
+		LD	H,A		; Else save new hours.
+		EXX
+TIM10:		CALL	DTSKIP##	; Skip separators.
+		CALL	NC,GETNO##	; Get minutes.
+		JR	C,TIM20		; Go if invalid number.
+;
+		EXX
+		LD	L,A		; Else save new minutes.
+		EXX
+TIM20:		CALL	DTSKIP##	; Skip separators.
+		CALL	NC,GETNO##	; Get seconds.
+		JR	C,TIM30		; Go if invalid number.
+;
+		EXX
+		LD	D,A		; Else save new number.
+		EXX
+TIM30:		CALL	DTSKIP##	; Skip separators.
+		CALL	NC,GETNO##	; Get 100ths.
+		JR	C,TIM35		; Go if invalid number.
+;
+		EXX
+		LD	E,A		; Else save new 100ths second.
+		EXX
+TIM35:		CALL	GETCH##		; Strip spaces etc.
+		CALL	UC##		; Upper case next character.
+		CP	'A'		; am. indicator ?
+		JR	Z,TIM40		; Go if yes, NC => am.
+;
+		CP	'P'		; pm. indicator ?
+		SCF
+		JR	Z,TIM40		; Go if yes, C => pm.
+;
+		OR	A		; Else end of line ?
+		EXX
+		JR	Z,SETIME	; Set new time if yes.
+;
+		CODE	MVI A		; Else give error.
+PBADTIM:	POP	AF		; Balance stack.
+BADTIM:		LD	B,.ITIME##
+		JR	TIM60		; Print error & re-prompt.
+;
+;
+TIM40:		PUSH	AF		; Save am/pm indicator.
+		INC	HL		; Skip passed a/p.
+		CALL	GETCH##		; Ignore trailing spaces etc.
+		JR	NZ,PBADTIM	; Give error if not end of line.
+;
+		POP	AF		; Get am/pm flag again.
+		EXX			; Get time values.
+		LD	B,12		; For comparisons etc.
+		LD	A,H		; Get hours.
+		JR	C,TIM50		; Go if pm.
+;
+		CP	B		; 12:xx ?
+		JR	Z,TIM45		; Go if yes.
+		JR	NC,BADTIM	; Else error if 24 hour number given.
+;
+		CODE	JNC		; Skip to SETIME.
+TIM45:		LD	H,0		; 12:xx am in 12 hour = 00:xx in 24 hr.
+		JR	SETIME		; Set the time.
+;
+TIM50:		OR	A		; Hour=0 pm is invalid.
+		JR	Z,BADTIM
+;
+		CP	B		; Convert to 24 hour hours.
+		JR	NC,TIM55	;   (no change if >12)
+;
+		ADD	A,B
+TIM55:		LD	H,A		; H=new hours.
+SETIME:		LD	C,_STIME##
+		CALL	_BDOS##		; Attempt to set the new time.
+		AND	.ITIME##	; 0 => OK, else .ITIME => invalid time.
+		RET	Z		; Return if no error.
+;
+		LD	B,A		; B=error code.
+TIM60:		LD	DE,BUFF2##	; Get message into BUFF2.
+		LD	C,_EXPLAIN##
+		CALL	_BDOS##
+		PUSH	DE		; Save message ptr.
+		CALL	CRLF##		; New line & '***'.
+		LD	A,__SPLATS##
+		CALL	DMESS##
+		POP	DE
+		CALL	DMS##		; Print actual message.
+		LD	A,__EREND##	; Followed by message after error.
+		CALL	DMESSCR##
+		JP	NEWTIM		; Prompt & input for another date.
+;
+;
+;
+		SUBTTL	VER
+;******************************************************************************
+;
+;       The VER command simply prints the version number.
+;
+;
+@VER::		AND	(HL)
+		LD	A,.INP##	; Error if any parameters.
+		RET	NZ
+;
+		LD	HL,4039H	; Read address of KBDOS's version
+		CALL	_RDSLT		;   message.
+		PUSH	AF
+		DEC	HL
+		CALL	_RDSLT
+		POP	HL
+		LD	L,A		; HL -> message in KBDOS ROM.
+		SCF			; Skip printing first time round.
+VER10:		CALL	NC,OUCH##	; Print character from message.
+		CALL	_RDSLT		; Read a character from the message.
+		INC	HL
+		OR	A
+		JR	NZ,VER10	; Go with character and NC if not end.
+;
+		CALL	CRLF##
+		LD	HL,(_BIOS##+1)	; Get pointer to MSXDOS.SYS's message.
+		LD	DE,30H
+		ADD	HL,DE
+		LD	E,(HL)
+		INC	HL
+		LD	D,(HL)		; DE -> message.
+		CALL	DMSCR##		; Print message and CRLF.
+		LD	DE,VERMSG	; Finally print COMMAND.COM's message.
+		JP	DMSCR##
+;
+;
+_RDSLT:		LD	A,(MASTER_SLOT##)
+		JP	RDSLT##		; Read byte.
+;
+;
+VERMSG:		DEFB	'COMMAND2.COM version '
+		DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0'
+		DEFB	CR,LF
+		DEFB	'Copyright '
+		DEFB	CRYEAR##/1000 MOD 10 +'0'
+		DEFB	CRYEAR##/ 100 MOD 10 +'0'
+		DEFB	CRYEAR##/  10 MOD 10 +'0'
+		DEFB	CRYEAR##      MOD 10 +'0'
+		DEFB	' ASCII Corporation'
+		DEFB	0
+;
+;
+;
+		SUBTTL	VERIFY
+;******************************************************************************
+;
+;        This  is  the  VERIFY  command   routine.   It   simply   sets   disk
+; verify-after-write ON or OFF.
+;
+;
+@VERIFY::	AND	(HL)
+		JR	NZ,SETVFY	; Go & set verify if parameters given.
+;
+		LD	C,_GETVFY##	; Else get & print verify state.
+		CALL	_BDOS##
+		LD	HL,OFF$+1	; Assume disabled.
+		INC	B
+		DEC	B		; 0 => disabled, else enabled.
+		JR	Z,GOTVFY
+;
+		LD	HL,ON$+1
+GOTVFY:		LD	A,__VERFY##	; Print 'VERIFY='.
+		CALL	DMESS##
+		EX	DE,HL		; DE -> ON/OFF string.
+		JP	DMSCR##		; Print verify state.
+;
+SETVFY:		EX	DE,HL		; DE -> parameter.
+		DEC	DE		; Pretend DE -> length byte.
+		LD	HL,ON$		; Check for ON.
+		LD	B,(HL)		; Length of 'ON'.
+		LD	C,0FFH		; NZ => ON.
+		CALL	COMPARE##
+		JR	NC,VFY10
+;
+		INC	B		; Ready for OFF check.
+		INC	C		; 0 => OFF.
+		INC	HL		; Point passed null at end of ON.
+		CALL	C,COMPARE##	; Check for OFF if not ON.
+		LD	A,.IPARM##	; 'Invalid parameter' if not ON or OFF.
+		RET	C
+;
+VFY10:		INC	DE		; Skip passed ON/OFF.
+		DJNZ	VFY10
+;
+		INC	DE		; Allow for initial DEC DE above.
+		EX	DE,HL
+		LD	A,(HL)
+		CALL	SEP?##		; Check ON/OFF ends in a separator.
+		LD	A,.IPARM##	; 'Invalid parameter' if not.
+		RET	NZ
+;
+		CALL	GETCH##		; Check for gerbage on end of line.
+		LD	A,.INP##	; 'Too many parameters' if not end.
+		RET	NZ
+;
+		LD	E,C		; E = 0=>OFF, FF=>ON.
+		LD	C,_VERIFY##
+		JP	_BDOS##		; Attempt to set verify flag.
+;
+ON$:		DEFB	2,'ON',0
+OFF$:		DEFB	3,'OFF',0
+;
+;
+		SUBTTL
+		END

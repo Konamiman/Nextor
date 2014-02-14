@@ -1,0 +1,1610 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	Pathname String Handling
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	PAR_PATH
+;
+;    This routine has the  job  of  parsing  a  "drive/path/file"  string  to
+; seperate  the  drive,  directory  names  and  filename  components from the
+; string. It also has a separate entry point at "PAR_FNM" which just parses a
+; filename  string  without drive or path.  A series of flags are returned in
+; register B to indicate various useful things about  the  string.   It  also
+; builds  up a "whole path string" in an internal buffer ("WPTH_BUF").  It is
+; awfully complicated and impossible to explain because it has to do so  many
+; different things such as testing for device names, volume name and  so  on.
+; The flags passed in register C control its behaviour in myriad bizzare ways
+;
+; Entry:       C = PC_DISK - Set if disk accessing required.
+;		   PC_ERR  - Set to suppress errors from "ADD_WPTH"
+;		   PC_NULL - Set to replace last item in string with "*.*"
+;		   PC_LAST - Set if last item to be included in path string.
+;		   PC_NDRV - Set if must be the drive in register A.
+;	       B = Search attributes for FIB
+;	      DE = Address of string
+;	      IX = Address of space for new FIB.
+;	      HL = Address of validated unit descriptor (for PAR_FNM only)
+;	       A = Drive to use if none specified in string (0=>default)
+; Returns:     A = Error code (flags set by "OR A")
+;	       C = Terminating character (0 if end of string)
+;	       B = Parse flags (see CODES.INC for bit assignments)
+;	 STR_PTR = Pointer to terminating character
+;	STR2_PTR = Pointer to start of last item (may be terminator)
+;	      HL = Address of validated unit descriptor (if PC_DISK set and
+;		   if MD_DEV flag clear)
+;		 = Address of device descriptor if MD_DEV flag set.
+; Corrupts:   AF,BC,DE,HL,BC',DE',HL'
+;
+;
+		ld	(ix+FIB_FLG##),0FFh	;Make sure FIB is flagged
+		ld	(ix+FIB_SA##),b		;Record search attributes
+		ld	(iy+@PC_FLAGS##),c	;Store parse control flags.
+		ld	(STR_PTR##),de		;Initialise string pointer
+;
+		or	a			;Set D=default drive to use
+		jr	nz,given_default	; if none in string, which is
+		ld	a,(CUR_DRV##)		; the current drive if A=0.
+given_default:	ld	d,a
+		call	PAR_DRIVE		;Look for drive at start of
+		or	a			; string and use default if
+		jr	z,default_drive		; none given, or if the one
+		cp	d			; given was same as default.
+		jr	z,default_drive
+		ld	d,a			;If different drive was given
+		bit	PC_NDRV,(iy+@PC_FLAGS##); then give an error if NDRV
+		ld	a,.IDRV##		; flag was set, otherwise use
+		ret	nz			; the specified drive.
+default_drive:	ld	(ix+FIB_DRV##),d
+;
+		bit	AT_VOL,(ix+FIB_SA##)	;If volume name flag is set
+		jr	nz,force_root		; then force root directory.
+;
+		call	GET_CHAR		;If first character after drive
+		jr	z,no_rootdir		; is a "\" then set a flag to
+		cp	"\"			; indicate that must start at
+		jr	nz,no_rootdir		; root directory.
+		set	PF_ANY,b		;Flag something after drive
+		set	PF_DIR,b		;Flag some directory given
+force_root:	set	PC_ROOT,(iy+@PC_FLAGS##);Flag root directory
+		xor	a
+no_rootdir:	call	nz,UNGET_CHAR		;If not "\" then put char back
+;
+;
+				;LOOP TO EXTRACT DIRECTORY NAME COMPONENTS
+;
+		ld	de,(STR_PTR##)		;Initialise "last item"
+		ld	(STR2_PTR##),de		; pointer.
+		call	INIT_WPTH		;Initialise whole path string
+;
+;
+		bit	AT_VOL,(ix+FIB_SA##)	;If volume name flag was set
+		jr	z,item_loop		; then use separate parsing
+		ld	de,FNAME_BUF##		; routine and don't check for
+		call	PAR_VOL			; device names.
+		jr	process_last
+;
+;
+item_loop:	ld	de,FNAME_BUF##		;Parse next item out of string
+		call	PAR_ITEM		; into FNAME_BUF.
+		cp	"\"			;If terminator was not "\" then
+		jr	nz,last_item		; jump to process last item.
+;
+		set	PF_DIR,b		;Flag some directory path found
+		call	GET_CHAR		;Skip past the "\" character
+		ld	de,(STR_PTR##)		;Update the "last item"
+		ld	(STR2_PTR##),de		; pointer.
+;
+		ld	de,FNAME_BUF##		;Process the next item as a
+		call	NEXT_ITEM		; sub-directory and give up if
+		jr	nz,par_path_err		; any error.
+;
+		ld	de,FNAME_BUF##		;Add the item to the whole path
+		call	ADD_WPTH		; string and loop for next on
+		jr	z,item_loop		; unless there was an error
+		jr	par_path_err
+;
+;
+;
+;	+++++  ENTRY POINT FOR PARSING JUST A FILENAME  +++++
+;
+	PROC	PAR_FNM
+;
+		ld	(ix+FIB_FLG##),0FFh	;Make sure FIB is flagged
+		ld	(ix+FIB_SA##),b		;Record search attributes
+		ld	(ix+FIB_DRV##),a	;Record logical drive number
+		ld	(iy+@PC_FLAGS##),c	;Store parse control flags
+		ld	(STR_PTR##),de		;Initialise string pointer
+		ld	(STR2_PTR##),de		; and last item pointer.
+;
+		ld	b,0			;Clear parse flags
+		ld	de,FNAME_BUF##		;Parse the filename string
+		call	PAR_ITEM		; into FNAME_BUF.
+;
+;
+last_item:	ld	a,b			;Skip if the last item is not
+		and	PFM_F+PFM_E		; null or if the flag asking
+		jr	nz,not_null_item	; us to replace null last
+		bit	PC_NULL,(iy+@PC_FLAGS##); items with "*.*" is clear.
+		jr	z,not_null_item
+;
+		push	hl
+		push	bc
+		ld	hl,STAR_DOT_STAR	;If last item is null, and the
+		ld	de,FNAME_BUF##		; NULL flag is set then
+		ld	bc,8+3			; replace last item with "*.*"
+		ldir				; and update parse flags to
+		pop	af			; reflect this.
+		or	PFM_AM+PFM_F+PFM_E+PFM_A
+		ld	b,a
+		pop	hl
+not_null_item:
+;
+		xor	a			;If last item is not to be
+		bit	PC_LAST,(iy+@PC_FLAGS##); treated as a sub-directory
+		ld	de,FNAME_BUF##		; then check if it is a device
+		call	z,CHK_DEVICE		; name and if so, jump with
+		or	a			; HL -> device descriptor
+		jr	nz,par_path_dev		; and A=device flags (b7 set)
+;
+process_last:	set	PC_END,(iy+@PC_FLAGS##)	;Flag that this is last item
+		ld	de,FNAME_BUF##		; and process it.
+		call	NEXT_ITEM
+		jr	nz,par_path_err		;A=0 if no error
+;
+par_path_dev:	ld	(ix+FIB_MODE##),a	;Record device flags.
+		ld	de,FNAME_BUF##		;Add the last item to the
+		call	ADD_WPTH		; whole path string.
+;
+par_path_err:	push	af			;Get terminating character
+		call	GET_CHAR		; from string into C but
+		call	nz,UNGET_CHAR		; leave string pointer
+		ld	c,a			; pointing at it.
+		pop	af
+		or	a			;Set flags according to
+		ret				; error and return.
+;
+;
+STAR_DOT_STAR:	db	"????????","???"
+;
+;
+;-----------------------------------------------------------------------------
+;
+PAR_DRIVE:
+;
+;    This routine parses an optional drive name from  a  string.   The  string
+; must  be  pointed  to  by  "STR_PTR", which will be updated to the character
+; after the ":" if a drive name is present.  Any letter will be accepted as  a
+; drive, without checking whether the drive exists or not.
+;
+; Entry:      STR_PTR = String pointer for GET_CHAR
+; Returns:    STR_PTR = Pointer to terminating character
+;		    A = Drive number 1...26,  0=>no drive name
+;		    B = Parse flags (only PF_DRV may be set)
+; Corrupts:    AF,BC
+;
+;
+		ld	(iy+@CH_FLAGS##),0	;Allow upper-casing and
+						; clear 16-bit flags.
+		call	GET_CHAR		;Get first character and
+		jr	z,no_drive_0		; exit if end of string
+		bit	CF_16B,(iy+@CH_FLAGS##)	;Can't be a drive if it is
+		jr	nz,no_drive_1		; first byte of 16-bit char.
+		sub	"A"
+		jr	c,no_drive_1		;Not drive if below "A"
+		cp	"Z"+1-"A"
+		jr	nc,no_drive_1		;... or if above "Z"
+		inc	a
+		ld	b,a			;B := possible drive number
+;
+		call	GET_CHAR		;Get next character and
+		jr	z,no_drive_1		; reject if end of string.
+		cp	":"			;If character is ":" then
+		ld	a,b			; return the drive name
+		ld	b,PFM_DR		; in register A and parse
+		ret	z			; flags in register B.
+;
+		call	UNGET_CHAR		;No drive given so put back
+no_drive_1:	call	UNGET_CHAR		; any characters which were
+no_drive_0:	xor	a			; read and return A=B=0.
+		ld	b,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+PAR_VOL:
+;
+;   This routine is called to parse a volume name from a string. The string is
+; pointed to by "STR_PTR" and it returns with this variable updated  to  point
+; to  the  first  character  which  it  cannot handle (may be a null at end of
+; string).  The terminating character will also be returned in register A. The
+; volume name is expanded into an 11 byte buffer pointed to by DE, and will be
+; padded  with  spaces.  A different set of terminating characters is used for
+; volume names and the characters are not upper-cased.
+;
+; Entry:      STR_PTR = String pointer for GET_CHAR
+;		  DE -> 11 byte buffer for volume name
+;		   B  = Parse flags (all except PF_ANY, PF_DIR and PF_DRV
+;				     will be cleared)
+; Returns:    STR_PTR = Pointer to terminating character
+;		   A  = Terminating character (0 if end of string)
+;		   B  = Updated parse flags (PF_FILE and PF_ANY may be set)
+; Corrupts:    AF,BC,DE
+;
+;
+		push	hl
+;
+		ex	de,hl			;HL -> volume name buffer
+		ld	a,b			;Clear all of the parse
+		and	PFM_A+PFM_DI+PFM_DR	; flags which relate only
+		ld	b,a			; to a single item
+		ld	(iy+@CH_FLAGS##),CFM_UP+CFM_VOL
+						;Suppress upper-casing, set
+						; volume name flag and clear
+						; 16-bit character flags.
+;
+		ld	c,11
+		call	PAR_NAME		;Parse filename into buffer
+		dec	d			;If any charcaters were
+		jr	nz,v_not_parsed		; copied then set the flag
+		set	PF_FILE,b		; to indicate name given.
+v_not_parsed:
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	PAR_ITEM
+;
+;   This routine is called to parse a single filename component from a string.
+; The string is pointed to by "STR_PTR" and  it  returns  with  this  variable
+; updated  to  point  to  the first character which it cannot handle (may be a
+; null at end of string).  The terminating character will also be returned  in
+; register A.
+;
+;   The  filename will be expanded into an 11 byte buffer pointed to by DE and
+; a series of flags are returned in register B to indicate some  useful  facts
+; about  the filename. "PF_EXT" and "PF_FILE" will be set if an extension or a
+; filename respectively was specified. "PF_AMB" will be set if  any  ambiguous
+; character  "*"  or  "?"  is included.  The special cases of "." and ".." are
+; accepted as filenames with the "PF_DOT" flag being set if it  is  either  of
+; these  ("PF_FILE" will also be set), and "PF_2DOT" being  set if it is.  The
+; "PF_ANY" flag will be set if any characters at all are parsed.
+;
+;    Most of the work of this routine is done by "PAR_NAME" which is called to
+; handle the filename and the extension separately.
+;
+; Entry:      STR_PTR = String pointer for GET_CHAR
+;		  DE -> 11 byte buffer for filename name
+;		   B  = Parse flags (all except PF_ANY, PF_DIR and PF_DRV
+;				     will be cleared)
+; Returns:    STR_PTR = Pointer to terminating character
+;		   A  = Terminating character (0 if end of string)
+;		   B  = Updated parse flags (PF_ANY, PF_AMB, PF_FILE, PF_EXT,
+;					     PF_DOT and PF_2DOT may be set)
+; Corrupts:    AF,BC,DE
+;
+;
+		push	hl
+;
+		ex	de,hl			;HL -> filename buffer
+		ld	a,b			;Clear all of the parse
+		and	PFM_A+PFM_DI+PFM_DR	; flags which relate only
+		ld	b,a			; to a single item
+		ld	(iy+@CH_FLAGS##),0	;Allow upper-casing and clear
+						; 16-bit character flags and
+						; volume name flag.
+;
+		ld	c,8			;Filename character counter
+		call	GET_CHAR		;Get first character and skip
+		jr	z,not_dot_0		; if end of string or not a
+		cp	"."			; "." character.
+		jr	nz,not_dot_1
+;
+		ld	d,1			;Count one "." found and get
+		call	GET_CHAR		; next character.  If end of
+		jr	z,got_dots_0		; string then accept ".".
+		bit	CF_TE,(iy+@CH_FLAGS##)	;If next char is not a valid
+		jr	z,not_dot_2		; terminator then reject, else
+		cp	"."			; accept "." unless next char
+		jr	nz,got_dots_1		; is also a ".".
+;
+		set	PF_2DOT,b		;Flag ".." in anticipation
+		inc	d			;Count two "." found and get
+		call	GET_CHAR		; next character.  If end of
+		jr	z,got_dots_0		; string then accept "..".
+		bit	CF_TE,(iy+@CH_FLAGS##)	;Accept ".." if next char is
+		jr	z,not_dot_3		; any terminator other than
+		cp	"."			; a "." charcter.
+		jr	z,not_dot_3
+;
+got_dots_1:	call	UNGET_CHAR		;Restore terminating character
+got_dots_0:	ld	(hl),"."
+		inc	hl			;Loop to copy the required
+		dec	c			; number of "." characters
+		dec	d			; into the buffer (defined by
+		jr	nz,got_dots_0		; count in D).  Also adjusts
+		set	PF_DOT,b		; the remaining filename length
+		set	PF_FILE,b		; in C, and sets the PF_DOT,
+		set	PF_ANY,b		; PF_FILE and PF_ANY flags.
+		jr	not_dot_0
+;
+not_dot_3:	res	PF_2DOT,b		;Clear the ".." flag.
+		call	UNGET_CHAR
+not_dot_2:	call	UNGET_CHAR		;Put back any characters read
+not_dot_1:	call	UNGET_CHAR		; during the "." processing.
+not_dot_0:
+;
+;
+		call	PAR_NAME		;Parse filename into buffer
+		dec	d			;If any charcaters were
+		jr	nz,nowt_parsed		; copied then set the flag
+		set	PF_FILE,b		; to indicate filename given.
+nowt_parsed:
+		cp	"."			;If filename terminator was "."
+		jr	nz,no_file_ext		; then set the PF_EXT flag to
+		set	PF_EXT,b		; indicate extension given.
+		call	GET_CHAR		;Skip past the "." character
+no_file_ext:	ld	c,3			;Get three characters of file
+		call	PAR_NAME		; extension into buffer.
+;
+		pop	hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+PAR_NAME:
+;
+;   This  routine  is called by "PAR_ITEM"  to  parse  a  single  filename  or
+; filename  extension  component  into  a buffer pointed to by HL.  Register C
+; specifies the size of field  to  be  parsed,  and  excatly  this  number  of
+; characters  will  always  be  put  into  the  buffer, padding with spaces or
+; truncating the name if necessary.  The terminating character will have  been
+; un-read  so  the  next  call to "GET_CHAR" will get the same character as is
+; returned in A.
+;
+;    If the "CF_VOL" flag is not set then the "*" and "?" characters  will  be
+; treated specially.  A "*" character will be expanded to fill the rest of the
+; buffer with "?".  If either a "?" or a "*" character occurs (any "CF_VOL" is
+; clear) then the "PF_AMB" flag will be set to indicate an ambiguous filename.
+; If the name is too long to fit in the buffer then the extra characters  will
+; be  thrown  away.  If a 16-bit character would overlap the end of the buffer
+; then it will be thrown away and a space put in the last position.
+;
+;    The  parse  flags  returned in register B will have had the "PF_AMB" flag
+; set if appropriate and the "PF_ANY" flag set if any characters  at  all  are
+; parsed.   All other flags will be unchanged.  In addition register D returns
+; the value one if any characters were parsed and  zero  otherwise.   This  is
+; used  when  this  routine  is  parsing  the  filename  component  to set the
+; "PF_FILE" flag after returning.
+;
+; Entry:    STR_PTR = String pointer for GET_CHAR
+;		 B  = Parse flags
+;		 C  = Number of characters in name field
+;		HL  = Address of buffer to put name into
+; Returns:       A  = Character which terminated name (0 if end of string)
+;		 B  = Updated parse flags (PF_AMB and PF_ANY may be set)
+;		 D  = Zero if all spaces, One otherwise.
+;		HL  = HL+C (ie points to next space in buffer)
+;	    STR_PTR = Pointer to terminating character
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		ld	d,0
+if 1 ;HF
+		inc	c
+		call	GET_CHAR
+		jr	z,name_end
+		call	UNGET_CHAR		;Leading space is a terminator
+		cp	" "			; anyway.
+		jr	z,name_end
+		dec	c
+endif
+p_name_loop_1:	inc	c
+p_name_loop:	call	GET_CHAR		;Get a character and jump to
+		jr	z,name_end		; exit if end of string.
+		bit	CF_16B,(iy+@CH_FLAGS##)
+		jr	z,not_1st_of_16
+		dec	c			;If byte is the first of a
+		dec	c			; 16-bit character then
+		jr	nz,not_16b_over		; then check if it is at the
+		ld	a," "			; end of the buffer and if so
+not_16b_over:	inc	c			; replace it with a " ".
+		inc	c
+not_1st_of_16:
+		bit	CF_TE,(iy+@CH_FLAGS##)	;If next char is a terminator
+		jr	nz,got_terminator	; then skip.
+;
+		bit	CF_VOL,(iy+@CH_FLAGS##)	;If doing volume name then
+		jr	nz,not_question		; "*" and "?" are ordinary.
+		bit	CF_2ND,(iy+@CH_FLAGS##)	;Also don't test second byte
+		jr	nz,not_question		; of 16-bit character.
+		cp	"*"			;Skip to pad out with "?" if
+		jr	z,got_asterisk		; char is "*".
+		cp	"?"			;If it is a "?" then treat like
+		jr	nz,not_question		; a normal name character but
+ambig_char:	set	PF_AMB,b		; set the PF_AMB flag.
+not_question:
+		set	PF_ANY,b
+		ld	d,1			;Flag characters copied
+		dec	c			;If reached end of name field
+		jr	z,p_name_loop_1		; already then just ignore char
+		ld	(hl),a			;Store the new character and
+		inc	hl			; bump buffer pointer.
+		jr	p_name_loop
+;
+got_asterisk:	ld	a,c			;If character is "*" then pad
+asterisk_loop:	ld	c,a			; out to end of buffer with
+		dec	a			; "?" characters and then jump
+		jr	z,ambig_char		; back to continue scanning
+		ld	(hl),"?"		; name.
+		inc	hl
+		jr	asterisk_loop
+;
+;
+got_terminator:	call	UNGET_CHAR		;Put terminating character back
+name_end:
+pad_loop:	dec	c			;Pad out to end of buffer with
+		ret	z			; spaces and return.
+		ld	(hl)," "
+		inc	hl
+		jr	pad_loop
+;
+;
+;-----------------------------------------------------------------------------
+;
+NEXT_ITEM:
+;
+;    This  routine  is called by "PAR_PATH" when it has an item which it knows
+; is not a device name.  If the disk  access  flag  "PC_DISK"  is  clear  then
+; nothing  is done.  Otherwise, if the disk has not yet been validated (PC_VAL
+; flag clear) then it will be validated and "FIRST_DIR" called to  locate  the
+; start  directory  depending  on  the  PC_ROOT  flag.  "FIRST_DIR" calls this
+; routine recursively for each item in the current directory  (if  PC_ROOT  is
+; clear).
+;
+;    The  specified  name  will  then  be  located  on disk as a subdirectory.
+; However if this is the last item ("PC_END" flag set) then it  will  only  be
+; located if the "PC_LAST" flag is set and if it is not a totally null item.
+
+;
+; Entry:     IX = Pointer to fileinfo block (FIB_DRV accessed)
+;	     DE = Pointer to filename in buffer
+;	     HL = Pointer to validated unit descriptor (if PC_VAL
+;		  and PC_DISK flags are both set)
+;	      B = Parse flags for this item
+; Returns:    A = Error code (Z-flag set appropriately)
+;	     HL = Validated unit desctiptor
+; Corrupts:  AF,DE,HL
+;
+;
+		xor	a
+		bit	PC_DISK,(iy+@PC_FLAGS##);Don't access disk if
+		ret	z			; the flag is clear
+;
+		push	de
+		bit	PC_VAL,(iy+@PC_FLAGS##)	;If disk not validated yet
+		set	PC_VAL,(iy+@PC_FLAGS##)	; then call FIRST_DIR to do
+		call	z,FIRST_DIR		; so and locate starting dir.
+		pop	de
+		or	a
+		ret	nz
+;
+		bit	PC_END,(iy+@PC_FLAGS##)	;Always locate it if it is
+		jr	z,next_not_last		; not the last item.
+		bit	PC_LAST,(iy+@PC_FLAGS##);Don't locate last item if
+		ret	z			; PF_LAST flag is not set.
+		ld	a,b			;Also don't locate last
+		and	PFM_F+PFM_E		; item if it is a totally
+		ret	z			; null item.
+next_not_last:	call	NEXT_DIR
+		or	a
+		ret				;Return with error in A
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	CHK_DEVICE
+;
+;    This routine checks if the name pointed to by DE is a valid  device  name
+; and if so it returns with the device descriptor pointer in HL, otherwise  HL
+; is  preserved, since it may be a unit descriptor pointer.  It must be passed
+; a pointer to the fileinfo block so that it can store the device  descriptor
+; and  device entry table address at "FIB_ID" if a device match is found.  It
+; is a global routine because "find_new"  must  use  it  after  applying  its
+; template filename in case this gives a device name.
+;
+; Entry:     DE = Address of 11 byte filename buffer.
+;	     IX = Pointer to fileinfo block
+; Returns:    A = Device flags,  00h => device not found
+;	     HL = Address of device descriptor (preserved if A=00h)
+; Corrupts:  AF,DE,HL
+;
+;
+		push	bc
+		push	hl
+		call	TST_DEV_NAME		;Test if the name is a
+		ld	a,0			; device name and skip
+		jr	nc,check_not_dev	; with A=0 if it is not.
+;
+		pop	af
+		ld	(ix+FIB_ID##),l		;Store the device descriptor
+		ld	(ix+FIB_ID##+1),h	; pointer in the FIB.
+		push	hl
+		ld	bc,DD_ADDR##
+		add	hl,bc			;Also get the jump table
+		ld	c,(hl)			; address from the descriptor
+		inc	hl			; and store it in the FIB
+		ld	b,(hl)			; as well.
+		ld	(ix+FIB_ID##+2),c
+		ld	(ix+FIB_ID##+3),b
+		ld	bc,DD_MODE##-(DD_ADDR##+1) ;Get device flags from
+		add	hl,bc			   ; the device descriptor
+		ld	a,(hl)
+;
+check_not_dev:	pop	hl
+		pop	bc
+		ret
+;
+;
+;=============================================================================
+;
+FIRST_DIR:
+;
+;    This  routine  is  called by "NEXT_ITEM" to validate the drive and locate
+; the starting directory for the pathname.  It is only  called  if  the  "disk
+; access"  flag  is  set.   If the PC_ROOT flag is set then it will locate the
+; root directory, otherwise it will try to locate the  current  directory  for
+; this  drive.   If there is no current directory defined then it will use the
+; root directory and if the current directory cannot be found  it  will  clear
+; the current directory setting and use the root directory.  It simply records
+; the first cluster of the directory (which will be -ve  if  it  is  the  root
+; directory) in the variable "DE_START".
+;
+; Entry:       IX = Address of fileinfo block (FIB_DRV must be set up)
+; Returns:      A = Error code (flags not set)
+;	       HL = Address of validated unit descriptor
+; Corrupts:   AF,DE,HL
+;
+; Assumes:     UD_PATH=UD_CDIR+2
+;
+;
+		push	bc
+		ld	c,(ix+FIB_DRV##)	;Validate the drive in
+		ld	b,0			; question and give up
+		pcall	VAL_FIB			; if there was any error.
+		pop	bc
+		or	a
+		ret	nz
+;
+		push	bc
+		push	hl
+		bit	PC_ROOT,(iy+@PC_FLAGS##);Skip if root directory
+		jr	nz,start_root_nz	; is required.
+;
+		ld	de,UD_CDIR##		;Get current directory cluster
+		add	hl,de			; number from unit descriptor.
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+
+;===== start mod FAT16 (CLST_1 patch)
+		ld	a,d			;If cluster number is -ve then
+		and	e			; no current directory path so
+		inc	a			; jump to use root directory.
+		jr	z,start_root_nz
+;;		bit	7,d
+;;		jr	nz,start_root_nz
+;===== end mod FAT16
+;
+;
+				;CURRENT DIRECTORY IS DEFINED
+;
+		ld	bc,(STR_PTR##)		;Save string pointer
+		push	bc
+		push	hl			;Save UD_CDIR pointer
+;
+		ld	a,d			;If cluster is known (<>0) then
+		or	e			; clear flag to suppress disk
+		jr	z,relocate_dir		; access while we are in
+		res	PC_DISK,(iy+@PC_FLAGS##); this routine.
+relocate_dir:
+		inc	hl			;Set string pointer to point
+		ld	(STR_PTR##),hl		; to current directory string.
+		ld	bc,-UD_PATH##
+		add	hl,bc			;Point back at unit descr.
+		push	de
+		call	start_root		;Start at root directory
+		pop	de
+;
+;
+		ld	b,0			;Zero temporary parse flags
+cur_path_loop:	push	de
+		ld	de,CDIR_BUF##		;Get next current directory
+		call	PAR_ITEM		; item into a buffer
+;
+		bit	PC_DISK,(iy+@PC_FLAGS##);If we are really checking
+		jr	z,cur_no_access		; the current directory then
+		ld	de,CDIR_BUF##		; locate this next item
+		call	NEXT_DIR		; and jump to kill current
+		or	a			; directory if error.
+		jr	nz,cur_dir_err
+		pop	af
+		push	de			;Update directory cluster
+cur_no_access:
+		ld	de,CDIR_BUF##		;Add the new directory item
+		call	ADD_WPTH		; to the whole path string
+		jr	nz,cur_dir_err		; & kill cuurent dir. if error.
+;
+		pop	de
+		call	GET_CHAR		;Get separator and loop if
+		jr	nz,cur_path_loop	; it is not end of string.
+		jr	got_cdir_clu		;Jump with DE=cluster
+;
+cur_dir_err:	pop	de			;Error so set cluster back
+		ld	de,0FFFFh		; to the root.
+got_cdir_clu:	pop	hl
+		ld	(hl),d			;Store the new cluster
+		dec	hl			; number in unit descr.
+		ld	(hl),e
+		pop	bc
+		ld	(STR_PTR##),bc		;Restore string pointer
+		set	PC_DISK,(iy+@PC_FLAGS##);Restore disk access flag
+;
+;===== start mod FAT16 (CLST_2 patch)
+		ld	a,d
+		and	e
+		inc	a			;If cluster is -ve then we
+		jr	nz,dont_zap_path	; have switched back to the
+		inc	hl			; root directory so make
+		inc	hl			; the string null.
+		ld	(hl),0
+start_root_nz:	pop	hl
+		pop	bc
+start_root:	call	INIT_WPTH		; appropriate, re-initialising
+		pcall	DI_ROOT			; whole path string if root.
+		ret
+dont_zap_path:	pop	hl
+		pop	bc
+		pcall	DI_SUB			;Initialise start cluster for
+		ret				; root or sub-directory as
+;;		bit	7,d
+;;		jr	z,dont_zap_path
+;;		inc	hl
+;;		inc	hl
+;;		ld	(hl),0
+;;dont_zap_path:
+;;start_root_nz:pop	hl
+;;		pop	bc
+;;		jr	nz,start_root
+;;		pcall	DI_SUB
+;;		ret
+;;start_root:	call	INIT_WPTH
+;;		pcall	DI_ROOT
+;;		ret
+;===== end mod FAT16
+;
+;
+;------------------------------------------------------------------------------
+;
+NEXT_DIR:
+;
+;    This  routine is called with a directory cluster set up in "DE_START" and
+; a sub-directory pointed to by DE.  The parse flags in  register  B  will  be
+; checked  and  an  error returned if it is ambiguous or no filename component
+; was specified. The directory will then be  searched  for  on  disk  and  the
+; variable  "DE_START" is set up for the new directory.  If it cannot find the
+; directory then a ".NODIR" error is returned.
+;
+; Entry:          HL  = Address of unit descriptor
+;		  DE  = Pointer to 11 byte directory name
+;		   B  = Parse flags (only tested not altered)
+; Returns:         A  = Error code, flags not set.
+;		  DE  = Located directory cluster
+; Corrupts:    AF,DE
+;
+;
+;
+		ld	a,.IPATH##
+		bit	PF_FILE,b		;Error if no filename
+		ret	z			; component, or if the name
+		bit	PF_AMB,b		; was ambiguous.
+		ret	nz
+;
+;
+		push	de
+		pcall	DI_FIRST		;Get first directory entry
+dir_name_loop:	jr	z,next_dir_err		;Exit if entry never been used
+		ex	(sp),hl			;HL -> name buffer & save HL
+		push	hl			;Save name buffer pointer
+		push	bc
+		xor	a
+		call	CMP_NAME		;Compare with directory entry
+		pop	bc
+		pop	hl
+		ex	(sp),hl
+		jr	nc,not_dir_name		;If it is correct, and the
+		bit	AT_DIR,a		; sub-directory attribute bit
+		jr	nz,got_sub_dir		; is set then jump.
+not_dir_name:	pcall	DI_NEXT			;Get next entry and loop back
+		jr	nc,dir_name_loop	; if not end of directory
+;
+next_dir_err:	pop	de			;Clean stack
+		ld	a,.NODIR##		;Return an error if directory
+		ret				; is not found.
+;
+got_sub_dir:	pop	af			;Clean stack
+		pcall	DI_INIT			;Extract its start cluster
+		ret				; number to DE_START.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	CMP_NAME
+;
+;    This routine is compares the name in a directory entry pointed to  by  DE
+; with  the  name pointed to by HL.  Any "?" characters in the name pointed to
+; by HL will match any character in the directory  entry,  and  if  the  first
+; character  in  the  directory entry is 05h then it will be compared as 0E5h.
+; The routine returns C if the names do match, and NC if they don't (or if the
+; entry  is  not in use).  If the names match (C) the the attributes byte from
+; the directory entry is also returned.
+;
+;    A  flag  is  passed in register A which determines whether it is a volume
+; name which is being compared.  If it is a volume name (A=ATM_VOL), then  the
+; names  will  be assumed to match without any comparison as long as the entry
+; is a volume name entry otherwise they will not match.  If it is not a volume
+; name (A=0) then a match with a volume name directory entry will be rejected.
+; This ensures that no higher level code needs to worry about volume names and
+; we can have a filename the same as the volume name.
+;
+;    As usual, there is fiddling about with 16-bit characters so that  "?"  as
+; the second byte of one will not be treated as an ambiguous match character.
+;
+; Entry:      DE =  Address of directory entry
+;	      HL =  Address of filename to compare with (may be ambiguous)
+;	       A =     0    => not volume name
+;		    ATM_VOL => volume name
+; Returns:     C => Names match OK (Z always set), A=attributes byte from entry
+;	      NC => NZ => Names do not match
+;		     Z => Entry not in use (A=0 or A=E5h)
+; Corrupts:   AF,BC,HL
+;
+;
+		and	CFM_VOL			;Zero 16-bit character flags
+		ld	c,a			; and setup volume name flag
+						; (note CFM_VOL=ATM_VOL)
+;
+		ld	a,(de)			;Return NC if entry has
+		or	a			; never been used.
+		ret	z
+		cp	0E5h			;Also return NC if entry has
+		ret	z			; been deleted.
+;
+		push	de
+		ld	b,8+3			;Loop count
+;
+		cp	05h			;If first character of entry
+		jr	nz,not_e5_fiddle	; is 05h then turn it into
+		ld	a,0E5h			; 0E5h for comparison.
+not_e5_fiddle:
+;
+cmp_name_loop:	push	af			;Check the next character
+		ld	a,(hl)			; from comparison filename
+		call	CHK_CHAR		; for 16-bit character and
+		pop	af			; set flags in C.
+;
+		bit	CF_VOL,c		;If looking for volume name
+		jr	nz,char_match		; then match all characters.
+		sub	(hl)			;Compare the two characters.
+		jr	z,char_match		;Skip if they match
+;
+		bit	CF_2ND,c		;Second byte of 16-bit char
+		jr	nz,no_name_match	; is not considered ambiguous.
+		ld	a,(hl)			;If filename character is a
+		sub	"?"			; "?" then match any directory
+		jr	nz,no_name_match	; entry character.
+char_match:	inc	hl
+		inc	de
+		ld	a,(de)			;Prepare next character for
+		djnz	cmp_name_loop		; comparison & loop 'til done
+;
+		ex	de,hl			;NAMES MATCH.  Get AT_VOL bit
+		ld	a,c			; of search attributes and
+		xor	(hl)			; compare with bit from the
+		and	CFM_VOL			; directory entry.  Reject
+		jr	nz,no_name_match	; match if not the same.
+;
+		ld	a,(hl)			;Get attributes from entry and
+		scf				; set carry flag to show match.
+		code	mvi b
+no_name_match:	or	a			;No match - set NC and NZ
+		pop	de
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	MRG_NAME
+;
+;    This routine takes two expanded filenames,  one  of  which  (HL)  may  be
+; ambiguous,  and  merges  them  into a single filename in a third buffer.  No
+; checks  on  validity  of  the  resulting  filename  are  done   here.    The
+; non-ambigous  filename  is  treated  as  a  directory entry, so if its first
+; character is 05h, it will be treated as 0E5h, and  remain  as  0E5h  in  the
+; result.
+;
+; Entry:      HL = Pointer to first filename (may be ambiguous)
+;	      DE = Pointer to second filename (may not be ambiguous)
+;	      BC = Pointer to buffer for resulting filename
+; Returns:    BC,DE,HL all incremented by 11
+; Corrupts:   AF,BC,DE,HL
+;
+;
+		push	bc			;Put new name pointer in
+		ex	(sp),ix			; IX, saving old IX.
+;
+		ld	bc,256*(8+3)+0		;Loop count & 16-bit flags
+		ld	a,(de)			;Get first character and
+		cp	05h			; if it is 05h then turn
+		jr	nz,mrg_not_05h		; it into 0E5h.
+		ld	a,0E5h
+mrg_not_05h:
+mrg_name_loop:	push	de
+		ld	d,a			;D := character from (DE)
+		ld	a,(hl)			;Get character from (HL) and
+		call	CHK_CHAR		; check for 16-bit char.
+		bit	CF_2ND,c
+		jr	nz,mrg_use_hl		;If (HL) charcter is a "?" then
+		cp	"?"			; use the character from (DE)
+		jr	nz,mrg_use_hl		; otherwise use (HL) character.
+		ld	a,d
+mrg_use_hl:	ld	(ix+0),a		;Store the new character
+		pop	de
+		inc	de			;Bump all three buffer
+		inc	hl			; pointers and get next
+		inc	ix			; character from the (DE)
+		ld	a,(de)			; filename
+		djnz	mrg_name_loop		;Loop 'til done whole name
+;
+		ex	(sp),ix
+		pop	bc			;Return with IX intact.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	TST_NAME
+;
+;    This routine tests an expanded filename in a buffer pointed to by  DE  to
+; make  sure  that  it is a valid filename.  It is used whenever a "create" or
+; "rename" function is done, to avoid creating illegal filenames.  It is  also
+; passed  a  pointer  to a fileinfo block which is only used for examining the
+; "volume name" bit of the search attributes.  This ensures that volume  names
+; will  be  handled  correctly.   A  filename  may  not contain any terminator
+; characters or "?" or  "*",  or  any  embedded  spaces.   Also  the  filename
+; component  must  not be completely null.  The filename in the buffer will be
+; upper cased.  If A<>0 on entry then an extra test is done for device  names
+; and  a  matching device name will be rejected as invalid.  The "." and ".."
+; names are accepted as valid since these must be rejected in a different way
+; to other invalid filenames.
+;
+; Entry:       IX -> FIB containing search attributes
+;	       DE -> 11 byte filename
+;		A =  0 => Device names are allowed
+;		  <> 0 => Device names are rejected as invalid
+; Returns:      A =  0 (and Z-set) if filename is valid
+;		A = .IFNM (and Z-clear) if filename is not valid
+; Corrupts:    AF,BC,DE
+;
+;
+		push	af
+		pcall	TST_DOT			;Always accept "." and ".."
+		pop	bc			; names as valid.
+		jr	nc,not_dot_name
+		xor	a
+		ret
+;
+not_dot_name:	push	hl
+		push	de
+		ld	a,b
+		or	a			;If A<>0 then check for a
+		call	nz,TST_DEV_NAME		; device name and return
+		pop	hl			; an error if it is one.
+		ld	a,.IDEV##
+		jr	c,tst_name_ret
+;
+		ld	bc,11*256+CFM_UP+CFM_VOL;If volume name bit set then
+		bit	AT_VOL,(ix+FIB_SA##)	; treat all 11 bytes as
+		jr	nz,tst_vol_name		; one name.
+;
+		ld	bc,8*256+0		;Check that 8 character
+		ld	a,' '			; filename is valid and
+		call	TST_PART		; return with error if not.
+		jr	nz,tst_name_ret
+;
+		ld	bc,3*256+0		;Now check extension (or
+tst_vol_name:	xor	a			; volume name) and return
+		call	TST_PART		; the error or zero.
+tst_name_ret:	pop	hl
+		or	a
+		ret
+;
+;	----------------------------------------
+;
+TST_PART:	cp	(hl)			;Reject space as first char
+		jr	z,tst_bad_name		; of filename.
+;
+tst_name_loop:	ld	a,(hl)			;Get next character, upper
+		call	CHK_CHAR		; case it and check for 16-bit
+		ld	(hl),a			; characters.
+		inc	hl
+;
+		bit	CF_TE,c			;Terminator - jump to check for
+		jr	nz,tst_got_term		; trailing spaces.
+		bit	CF_2ND,c		;2nd byte of 16-bit character
+		jr	nz,tst_char_ok		; is always OK.
+		bit	CF_VOL,c
+		jr	nz,tst_char_ok		;Reject "?" and "*" unless
+		cp	'?'			; we are checking a volume
+		jr	z,tst_bad_name		; name.
+		cp	'*'
+		jr	z,tst_bad_name
+tst_char_ok:
+		djnz	tst_name_loop		;Loop til tested all characters
+		jr	tst_name_ok		;Jump to return success
+;
+;
+tst_space_loop:	ld	a,(hl)			;Check that all remaining
+		inc	hl			; characters are spaces and
+tst_got_term:	cp	" "			; jump to give error if not.
+		jr	nz,tst_bad_name
+		djnz	tst_space_loop
+;
+tst_name_ok:	xor	a			;Return with no error if
+		ret				; name appears to be OK.
+;
+;
+tst_bad_name:	ld	a,.IFNM##		;Invalid filename so get error
+		or	a			; code and return NZ.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+TST_DEV_NAME:
+;
+;    This routine checks if the name pointed to by DE is a valid  device  name
+; and  returns  a  flag  to indicate whether it is or not.  It only checks the
+; first 8 characters since device names can have any extension.
+;
+; Entry:     DE = Address of 11 byte filename buffer.
+; Returns:   Carry flag set   => it is a device name
+;	     Carry flag clear => it is not a device name
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	hl,(DEV_CHAIN##)	;Start at beginning of
+		push	hl			; device chain
+tst_dev_loop:	pop	hl
+		ld	a,h			;If we have reached end of
+		or	l			; list then it is clearly
+		ret	z			; not a device so return NC.
+;
+		ld	c,(hl)
+		inc	hl			;Get next device descriptor
+		ld	b,(hl)			; from chain and save it on
+		inc	hl			; the stack in case this is
+		push	bc			; not the one we want.
+;
+		push	hl
+		push	de
+		ld	bc,DD_NAME##
+		add	hl,bc			;Compare the name in the
+		ld	b,8			; device descriptor with
+cmp_dev_loop:	ld	a,(de)			; the 8 bytes of the given
+		cp	(hl)			; filename to see if it is
+		jr	nz,not_this_dev		; this device.
+		inc	de
+		inc	hl
+		djnz	cmp_dev_loop		;Loop 'til done 8 characters
+not_this_dev:	pop	de
+		pop	hl			;Try next device if this
+		jr	nz,tst_dev_loop		; one did not match.
+		pop	bc
+		scf				;Return carry set to indicate
+		ret				; device name match.
+;
+;
+;=============================================================================
+;
+INIT_WPTH:
+;
+;    This routine initialises the internal "whole path  string"  buffer  ready
+; for "ADD_WPTH" to be called to add items to it.  The flag "WP_ERR" is set to
+; zero to indicate that the whole path string is  valid.   This  will  be  set
+; non-zero  if an error occurs.  The string is initially terminated by storing
+; two  zeroes,  and  an  entry  point ("TERM_WPTH")  is  provided  which  will
+; re-terminate  at  the  current  position  (this is used by "ADD_WPTH").  Two
+; zeroes are necessary because of the special case of a  totally  null  string
+; with  no  leading  "\".   Care  is  taken to make sure that the nulls do not
+; overwrite the 02h which marks the end of the buffer, and if the  first  null
+; would do so then an error (".PLONG") is returned.
+;
+; Entry:     None
+; Returns:   A = Error code (flags set)
+; Corrupts:  AF
+;
+;
+		push	hl			;Put an 02h at the end of the
+		ld	hl,WPTH_BUF##+66	; PATH_BUF to allow checking
+		ld	(hl),02h		; for overflow, and a zero
+		ld	hl,WPTH_BUF##		; at the beginning to check
+		ld	(hl),0			; for underflow.
+		inc	hl
+		ld	(WPTH_PTR##),hl		;Setup pointer to buffer.
+		pop	hl
+		ld	(iy+@WP_ERR##),0	;Clear error flag
+;
+TERM_WPTH:	push	hl
+		ld	a,02h
+		ld	hl,(WPTH_PTR##)		;Put two nulls at the end
+		cp	(hl)			; of the whole path string
+		jr	z,dont_term_err		; but make sure we don't
+		ld	(hl),0			; overwrite the 02h which
+		inc	hl			; marks the end of the
+		cp	(hl)			; buffer.  Only error if
+		jr	z,dont_term_zero	; the first null would
+		ld	(hl),0			; over-write.
+dont_term_zero:	ld	a,-(.PLONG##-02h)
+dont_term_err:	add	a,.PLONG##-02h
+		pop	hl
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+ADD_WPTH:
+;
+;    This  routine adds a new item pointed to by DE onto the whole path string
+; in "WPTH_BUF".  It must also be passed a suitable set  of  parse  flags  for
+; this  item.  If the new item is totally null (PF_FILE and PF_EXT both clear)
+; then it does not add anything to the string.  If the new item is "." or ".."
+; then  it will be resolved appropriately and an error will be returned if the
+; buffer overflows or underflows.  If such an error does occur then  the  flag
+; "WP_ERR"  is  set to indicate that the whole path string should no longer be
+; considered valid, and will not be used.  If the "PC_ERR" flag is set and  an
+; error  occurs,  then  the  error flag will be set, but this routine will not
+; return an error.  If the  routine  is  succesful  then  the  new  string  is
+; terminated  with  two  nulls  by  calling  "TERM_WPTH".   For  normal names,
+; "SQ_NAME" is called to convert the name into an ASCIIZ string  in  a  buffer
+; before adding it to the whole path string.
+
+; Entry:     IX -> Fileinfo block, (only FIB_SA examined)
+;	     DE -> New item to be added (11 byte buffer)
+;	      B =  Parse flags for this item (PF_DOT and PF_2DOT are tested)
+; Returns:    A =  Error code if overflow or underflow (flags set)
+; Corrupts:  AF,DE
+;
+;
+		push	bc
+		push	hl
+		ld	hl,(WPTH_PTR##)		;Get current pointer
+;
+		ld	a,b			;If not filename or extension
+		and	PFM_E+PFM_F		; then moan about invalid
+		jr	z,wpth_ret		; path string.
+;
+		bit	PF_DOT,b		;Jump if neither "." or ".."
+		jr	z,add_wpth_name
+		bit	PF_2DOT,b		;If name is "." then ignore it
+		jr	z,wpth_done		; in whole path string.
+;
+dot_dot_loop:	dec	hl			;If name is ".." then strip
+		ld	a,(hl)			; characters off the string
+		cp	01h			; until we get to a 01h.
+		jr	z,wpth_done
+		or	a			;If we find the null byte then
+		jr	nz,dot_dot_loop		; give a .IPATH error.
+		ld	a,.IPATH##
+		jr	wpth_error
+;
+;
+add_wpth_name:	push	hl
+		ld	hl,SQN_BUF##
+		push	hl			;Convert name into an
+		ld	(hl),01h		; ASCIIZ string with an 01h
+		inc	hl			; before it to represent
+		ld	a,(de)			; the "\" separator.
+		call	SQ_NAME
+;
+		pop	de
+		pop	hl			;Copy the filename (with a
+add_wpth_loop:	ld	a,(hl)			; "\" before it, from the
+		cp	02h			; fixed buffer onto the end
+		ld	a,.PLONG##		; of the whole path string,
+		jr	z,wpth_error		; giving an error if it
+		ld	a,(de)			; would overwrite the
+		ld	(hl),a			; 02h overflow marker.
+		inc	hl
+		inc	de
+		or	a
+		jr	nz,add_wpth_loop
+		dec	hl			;HL -> null terminator.
+;
+wpth_done:	ld	(WPTH_PTR##),hl		;Store new pointer, and re-
+		call	TERM_WPTH		; terminate the string.
+		jr	z,wpth_ret		;Jump to return with no error.
+;
+wpth_error:	ld	(iy+@WP_ERR##),0FFh	;Mark whole path buffer as
+wpth_ret:	pop	hl			; dead if an error occurred.
+		pop	bc
+;
+		bit	PC_ERR,(iy+@PC_FLAGS##)	;If this flag is set then
+		jr	z,allow_errors		; never return an error
+		xor	a			; (used when extending the
+allow_errors:	or	a			; whole path string with
+		ret				; fileinfo blocks).
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	SQ_NAME
+;
+;    This routine takes an expanded 11 byte filename or volume name pointed to
+; by  DE and squashes it into an ASCIIZ string at an address pointed to by HL.
+; The first character of the filename is passed in register A rather  than  at
+; (DE)  to  allow for the special 05h fiddle if the filename is in a directory
+; entry. A pointer to a fileinfo block must also be passed in register IX, and
+; this is only used to look at the search attributes ("FIB_SA" field)  to  see
+; whether it is a volume name or not.  The buffer is pre filled wil nulls just
+; to keep things nice and tidy.
+;
+; Entry:     DE -> Expanded 11 byte filename
+;	     HL -> Space for ASCIIZ string (13 bytes)
+;	      A =  First character of filename
+;	     IX -> Fileinfo block (only FIB_SA is used)
+; Returns:   DE =  DE+11
+;	     HL -> Terminating null of ASCIIZ string
+; Corrupts:  AF,DE,HL
+;
+;
+		push	bc
+		push	hl
+		ld	b,13			;Pre-fill the string buffer
+sq_zero_loop:	ld	(hl),0			; with nulls for neatness'
+		inc	hl			; sake and for termination.
+		djnz	sq_zero_loop
+		pop	hl
+;
+		ld	bc,11*256+CFM_UP+CFM_VOL;If volume name flag is set
+		bit	AT_VOL,(ix+FIB_SA##)	; then treat whole 11 bytes
+		jr	nz,sq_volume_name	; as one name & don't upper
+						; case it.
+;
+		ld	bc,8*256+0
+		call	SQ_PART			;Squash first 8 bytes of
+		ld	(hl),"."		; the filename and add a
+		inc	hl			; "." character to the end.
+;
+		ld	a,(de)
+		ld	bc,3*256+0		;Now squash the filename
+sq_volume_name:	call	SQ_PART			; extension (or volume name)
+		bit	7,c
+		jr	nz,not_null_ext		;If the filename extension
+		bit	CF_UP,c			; was null, and if it was
+		jr	nz,not_null_ext		; not a volume name then
+		dec	hl			; remove the "." character.
+		ld	(hl),0
+not_null_ext:	pop	bc
+		ret
+;
+;	----------------------------------------
+;
+SQ_PART:
+sq_part_loop:	inc	de			;Upper case (if required) and
+		call	CHK_CHAR		; check for 16-bit character.
+		bit	CF_2ND,c		;Always leave 2nd byte of
+		jr	nz,sq_char_ok		; 16-bit character alone.
+		bit	CF_VOL,c
+		jr	nz,sq_char_ok		;If we are not doing volume
+		cp	" "			; name and it is a space then
+		jr	z,sq_part_space		; don't put it into string.
+sq_char_ok:	set	7,c
+		ld	(hl),a			;Otherwise put it into the
+		inc	hl			; string and set a flag.
+sq_part_space:	ld	a,(de)
+		djnz	sq_part_loop		;Loop for next character
+		ret
+;
+;
+;=============================================================================
+;
+GET_CHAR:
+;
+;   This routine gets the next character from the string  being  parsed.   The
+; string  pointer  is  in  "STR_PTR".   It returns A=0 and Z if the end of the
+; string is encountered, and A<>0 and NZ if not.  The charcater is checked for
+; being a 16-bit character and upper cased if required, depending on the flags
+; in "CH_FLAGS".
+;
+; Entry:     STR_PTR = String pointer
+;	    CH_FLAGS - CF_UP  = set to suppress upper-casing
+;		       CF_16B = set if last byte was first of a 16-bit char.
+; Returns:    Z-flag -  set  => end of string (A=0)
+;		     - clear => not end of string (A=character)
+;	     STR_PTR = Incremented by one character unless end of string
+;	    CH_FLAGS = CF_16B = set if this byte is 1st of 16-bit
+;		       CF_2ND = set if this byte is 2nd of 16-bit
+;		       CF_TE  = set if this byte is a terminator
+;		       Other bits un-modified
+; Corrupts:   AF
+;
+;
+		push	hl
+		ld	hl,(STR_PTR##)		;Get character from string and
+		ld	a,(hl)			; and jump if end of string.
+		or	a
+		jr	z,end_of_string
+		inc	hl			;Not end of string so bump
+		ld	(STR_PTR##),hl		; the pointer.
+end_of_string:	pop	hl
+;
+		push	bc			;Check for 16-bit characters
+		ld	c,(iy+@CH_FLAGS##)	; and upper-case as necessary
+		call	CHK_CHAR		; passing flags in register C.
+		ld	(iy+@CH_FLAGS##),c
+		pop	bc
+		or	a			;Set or clear Z-flag.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+UNGET_CHAR:
+;
+;   This  routine  can  be called after a GET_CHAR to step the pointer back by
+; one character.  Since it clears both "CF_16B" and  "CF_2ND",  care  must  be
+; taken with ungetting 16-bit characters.  The first byte can be "ungot" quite
+; happilly, but if the second byte is "ungot" then the first one must also  be
+; ungot by an immediate call to this routine.
+;
+; Entry:     STR_PTR = String pointer
+; Returns:   STR_PTR = updated (decremented by one)
+; Corrupts:  None
+;
+;
+		push	hl
+		ld	hl,(STR_PTR##)
+		dec	hl
+		ld	(STR_PTR##),hl
+		res	CF_16B,(iy+@CH_FLAGS##)
+		res	CF_2ND,(iy+@CH_FLAGS##)
+		pop	hl
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	CHK_CHAR
+;
+;    This routine checks a byte for being part of a  16-bit  character,  upper
+; cases  it  if  required,  and  checks  whether  it  is a filename terminator
+; charcater as controlled by flags passed  in  register  C.  This  routine  is
+; called by "GET_CHAR" above and also by the "CHKCHR" KBDOS function.
+;
+; Entry:      A = Character
+;	      C - CF_UP  = set to suppress upper-casing
+;		  CF_16B = set if last byte was first of a 16-bit char.
+;		  CF_VOL = set if parsing volume name.
+; Returns:    A = character, upper cased if CF_UP clear.  Z-flag set if 0
+;	      C - CF_16B = set if this byte is 1st of 16-bit
+;		  CF_2ND = set if this byte is 2nd of 16-bit
+;		  CF_TE  = set if this byte is a filename terminator
+;		  Other bits un-modified
+; Corrupts:   AF,C
+;
+;
+		res	CF_TE,c			;Anticipate not terminator
+;
+		set	CF_2ND,c		;Anticipate that it is 2nd
+		bit	CF_16B,c		; byte of 16-bit character
+		res	CF_16B,c		; and jump it that is the case.
+		jr	nz,chk_char_ret
+		res	CF_2ND,c		;Flag not second of 16-bit
+;
+		set	CF_16B,c		;Check for first byte of a
+if 0
+		call	CHK_16_CHAR		; 16-bit character and set
+else
+		call	CHK_16_CHAR_K		; 16-bit character and set
+endif
+		jr	c,chk_char_ret		; the flag if it is, else
+		res	CF_16B,c		; clear it.
+;
+		bit	CF_UP,c			;Upper case the character
+		call	z,UPPER_CASE		; unless this is suppressed.
+;
+		bit	CF_VOL,c
+		call	CHK_TERM		;Check for a terminator
+		jr	nc,chk_char_ret		; character and set the flag
+		set	CF_TE,c			; if it is.
+chk_char_ret:	or	a			;Ensure Z-flag is correct.
+		ret	nz
+;
+		set	CF_TE,c			;Ensure that null is always
+		ret				; a terminator, even if it
+						; is 2nd byte of 16-bit char.
+if 1
+;
+;    Kernel's idea of 16-bit character, that is different from console
+; driver.  As this is the quick hack, there's no country verification.
+;
+CHK_16_CHAR_K:
+		push	hl
+		ld	hl,KKANJTBL
+		jr	CHK_16_CHAR + 7
+;
+KKANJTBL:
+		db	080h,0A0h
+		db	0E0h,0FDh
+endif
+;
+;
+;----------------------------------------------------------------------------
+;
+	PROC	CHK_16_CHAR
+;
+;    This routine checks whether a given byte is the first byte  of  a  16-bit
+; character,  and  returns  the  result  in the carry flag.  The four bytes at
+; "KANJTABLE" specify two pairs of limits  for  the  first  bytes  of  16  bit
+; characters. A hook in system RAM is called first to allow expansion.
+;
+; Entry:      A = Character to be tested
+; Returns:    A = Unchanged
+;	      Carry-flag -  set  => "yes" (it is first byte of 16-bit char)
+;			   clear => "no"  (not first byte of 16-bit char)
+;	      Z-flag - set according to character (with "OR A")
+; Corrupts:   F
+;
+;
+		call	H_16CH##		;Call a hook in system RAM
+;
+		push	hl
+		ld	hl,KANJTABLE##
+if 0
+		inc	(hl)			;Look at first pair of limits
+		dec	(hl)			; and exit if zero.
+		jr	z,not_16bit_2
+endif
+		cp	(hl)
+		inc	hl			;Skip if character is below
+		jr	c,not_16bit_1		; the lower limit.
+		cp	(hl)
+		jr	c,is_16bit		;Jump if it is within limits
+;
+not_16bit_1:	inc	hl
+if 0
+		inc	(hl)			;Test second pair of limits
+		dec	(hl)			; and skip if it is zero
+		jr	z,not_16bit_2		; (no limits).
+endif
+		cp	(hl)
+		jr	c,not_16bit_2		;Skip if character is below
+		inc	hl			; lower limit.
+		cp	(hl)
+		jr	nc,not_16bit_2		;Skip if above upper limit.
+;
+is_16bit:	or	a
+		scf				;If character is within either
+		pop	hl			; pair of limits then return
+		ret				; with carry set.
+;
+not_16bit_2:	or	a			;If character is not within
+		pop	hl			; limits then return carry
+		ret				; clear.
+;
+;
+;-----------------------------------------------------------------------------
+;
+UPPER_CASE:
+;
+;    This  routine  upper  cases a character passed in register A.  It behaves
+; differently for  different  country  versions,  depending  on  the  type  of
+; character generator which is specified at address 0002Bh in the main ROM and
+; copied to the variable "CH_TYPE"  in  system  RAM  at  initialisation  time.
+; Currently it supports the following codes (which must be checked):
+;
+;		0 - Japanese
+;		1 - International
+;		2 - Korean
+;		3 - Russian
+;
+; Entry:      A = character to be uppercased
+; Returns:    A = suitable upper case character
+; Corrupts:   AF
+;
+;
+if 0
+		call	H_UP##			;Call hook in system RAM
+;
+		push	hl
+		push	bc
+		push	af			;Find out the character
+		ld	a,(CH_TYPE##)		; generator type and use
+		and	00000011b		; it to index into a table
+		add	a,a			; of pointers.
+		ld	c,a
+		ld	b,0
+		ld	hl,UP_CASE_TABLE
+		add	hl,bc
+		ld	a,(hl)
+		inc	hl			;HL := pointer for the
+		ld	h,(hl)			; correct version.
+		ld	l,a
+;
+		pop	af
+		ld	b,(hl)			;B := entry counter
+		inc	hl
+up_test_loop:	cp	(hl)
+		inc	hl			;Compare with this lower limit
+		jr	c,up_too_low		; and if OK then compare with
+		cp	(hl)			; upper limit and skip if
+		jr	c,up_in_range		; that is OK as well.
+up_too_low:	inc	hl
+		inc	hl			;Point to next entry and loop
+		djnz	up_test_loop		; back until tried all entries
+;
+		cp	080h			;If character is in range
+		jr	c,up_case_ret		; 080h...0BFh then must look
+		cp	0C0h			; up in a conversion table.
+		jr	nc,up_case_ret
+		ld	c,(hl)			;Get address of conversion
+		inc	hl			; table for this country.
+		ld	h,(hl)
+		ld	l,c
+		ld	c,a			;Index into the table
+		add	hl,bc
+		ld	a,(hl)			;Get upper-case code from
+		jr	up_case_ret		; the table and return it.
+;
+up_in_range:	inc	hl			;Add offset to turn character
+		add	a,(hl)			; into upper case.
+up_case_ret:	pop	bc
+		pop	hl			;Restore registers and return
+		ret
+;
+;	----------------------------------------
+;
+UP_CASE_TABLE:	dw	up_case_japan
+		dw	up_case_inter
+		dw	up_case_korea
+		dw	up_case_russia
+;
+;	----------------------------------------
+;
+up_case_japan:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	no_conv_table
+;
+;
+up_case_inter:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	inter_conv_table		;Table for 80h...BFh
+;
+;
+up_case_korea:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	no_conv_table
+;
+;
+up_case_russia:	db	2
+		db	"a",  "z"+1,  "A"-"a"
+		db	0C0h, 0DEh+1, 0C0h-0E0h		;Cyrillic alphabet
+		dw	no_conv_table
+;
+;
+no_conv_table	equ	$-080h
+		db	080h,081h,082h,083h,084h,085h,086h,087h
+		db	088h,089h,08Ah,08Bh,08Ch,08Dh,08Eh,08Fh
+		db	090h,091h,092h,093h,094h,095h,096h,097h
+		db	098h,099h,09Ah,09Bh,09Ch,09Dh,09Eh,09Fh
+		db	0A0h,0A1h,0A2h,0A3h,0A4h,0A5h,0A6h,0A7h
+		db	0A8h,0A9h,0AAh,0ABh,0ACh,0ADh,0AEh,0AFh
+		db	0B0h,0B1h,0B2h,0B3h,0B4h,0B5h,0B6h,0B7h
+		db	0B8h,0B9h,0BAh,0BBh,0BCh,0BDh,0BEh,0BFh
+;
+;
+inter_conv_table equ	$-080h
+		db	080h,09Ah,"E", "A", 8Eh, "A", 08Fh,080h
+		db	"E", "E", "E", "I", "I", "I", 08Eh,08Fh
+		db	090h,092h,092h,"O" ,099h,"O" ,"U" ,"U"
+		db	"Y" ,099h,09Ah,09Bh,09Ch,09Dh,09Eh,09Fh
+		db	"A" ,"I" ,"O" ,"U" ,0A5h,0A5h,0A6h,0A7h
+		db	0A8h,0A9h,0AAh,0ABh,0ACh,0ADh,0AEh,0AFh
+		db	0B0h,0B0h,0B2h,0B2h,0B4h,0B4h,0B6h,0B6h
+		db	0B8h,0B8h,0BAh,0BBh,0BCh,0BDh,0BEh,0BFh
+else
+		push	hl
+		ld	hl,UC_TAB##
+;
+		call	H_UP##			;Call hook in system RAM
+;
+		push	bc
+		ld	b,0
+		ld	c,a			;Index into the table
+		add	hl,bc			;Get upper case code from
+		ld	a,(hl)			; the table and return it.
+		pop	bc
+		pop	hl			;Restore registers and return
+		ret
+endif
+;
+;
+;------------------------------------------------------------------------------
+;
+CHK_TERM:
+;
+;    This  routine  checks  whether  a specified character is a valid filename
+; character or a  terminator  character.   It  is  only  ever  called  by  the
+; "CHK_CHAR" routine above.  Terminators include all  control  characters  and
+; certain  other characters in the table below.  It is never called for either
+; byte of a 16-bit character since these  are  never  treated  as  terminators
+; (there  is  a  special test in "CHK_CHAR" for a null as the second byte of a
+; 16-bit character.  It is passed a flag to indicate  whether  it  should  use
+; normal filename terminator checking or volume name checking.  The difference
+; allows more characters in volume names.
+;
+; Entry:          A = Character to be tested
+;	     Z-flag =  Set  => not volume name
+;		      Clear => volume name.
+; Returns:        A = Unchanged
+;	      Carry =  set  => terminator character
+;		      clear => filename character
+; Corrupts:       F
+;
+;
+		push	hl
+		push	bc			;Get pointer to terminator
+		ld	bc,term_length		; list and also length of
+		ld	hl,term_list		; the list which is different
+		jr	z,not_vol_term		; for volume names and
+		ld	bc,vol_term_length	; filenames.
+not_vol_term:
+		cp	20h			;Control characters are
+		jr	c,is_terminator		; always terminators.
+;
+		cpir				;Search the list and set carry
+		jr	nz,not_terminator	; flag if the character is
+is_terminator:	scf				; in the list.
+not_terminator:	pop	bc
+		pop	hl
+		ret
+;
+;
+if 0
+term_list:	db	"/<>|()",07Fh,0FFh
+else
+term_list:
+		db	07Fh,"|"
+;;term_list:
+		db	"<>/",0FFh
+endif
+vol_term_length equ	$-term_list
+		db	" :;.,=+\""[]"
+term_length	equ	$-term_list
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<PATH>
+	end
+;

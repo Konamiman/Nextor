@@ -1,0 +1,199 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"DRIVERS - displays information about the disk drivers present in the system",13,10
+	db	13,10
+	db	"Usage: DRIVERS",13,10
+	db	1Ah
+
+START:
+	call	CHK250##
+
+	ld	a,1
+	ld	(INDEX),a
+
+
+	;--- Loop for all available drivers, until GDRVR returns error
+
+MAIN_LOOP:
+	ld	a,(INDEX)
+	ld	hl,BUF
+	ld	c,_GDRVR##
+	call	5
+	ld	b,0
+	ld	c,_TERM##
+	jp	nz,5
+	ld	ix,BUF
+
+
+	;* Print driver name and version number
+
+	bit	7,(ix+4)
+	jr	z,IS_LEGACY
+
+	ld	hl,BUF+8
+	ld	bc,32
+	call	PRPAD##
+
+	ld	e," "
+	ld	c,_CONOUT##
+	call	5
+	ld	e,"v"
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+5)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Main version number
+
+	ld	e,"."
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+6)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Secondary version number
+
+	ld	a,(ix+7)
+	or	a
+	jr	z,OK_NAME
+
+	ld	e,"."
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+7)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Revision number, only if not zero
+
+	jr	OK_NAME
+
+IS_LEGACY:
+	ld	de,LEGACY_MSG
+	ld	c,_ZSTROUT##
+	call	5
+OK_NAME:
+
+
+	;* Print slot number
+
+	ld	de,ONSLOT_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,(ix)
+	ld	b,(ix+1)
+	call	PRSLOT##
+
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+
+	;* Print driver type
+
+	bit	7,(ix+4)
+	jr	z,IS_LEGACY_2
+
+	ld	de,DEVBASED_MSG
+	bit	0,(ix+4)
+	jr	nz,PRINT_TYPE
+	ld	de,DRVBASED_MSG
+PRINT_TYPE:
+	ld	c,_ZSTROUT##
+	call	5
+IS_LEGACY_2:
+
+
+	;* Print number of assigned drives
+
+	ld	a,(ix+2)
+	or	a
+	jr	nz,HAS_DRIVES
+
+	ld	de,NODRIVES_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	jr	OK_PRINT_DRIVES
+HAS_DRIVES:
+
+	cp	1
+	jr	nz,HAS_MANY_DRIVES
+	ld	a,(ix+3)
+	add	a,"A"
+	ld	(ONEDRIVE),a
+	ld	de,ONEDRIVE_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	jr	OK_PRINT_DRIVES
+
+HAS_MANY_DRIVES:
+	ld	b,a
+	add	a,"0"
+	ld	(NUMDRIVES),a
+
+	ld	a,(ix+3)
+	add	a,"A"
+	ld	c,a
+	ld	(FIRSTDRIVE),a
+
+	ld	a,b
+	add	a,c
+	dec	a
+	ld	(LASTDRIVE),a
+
+	ld	de,DRVASSIGN_MSG
+	ld	c,_ZSTROUT##
+	call	5
+OK_PRINT_DRIVES:
+
+
+	;* Go to the next driver
+
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	hl,INDEX
+	inc	(hl)
+	jp	MAIN_LOOP
+
+
+DEVBASED_MSG:
+	db	"Type: device-based",13,10,0
+DRVBASED_MSG:
+	db	"Type: drive-based",13,10,0
+LEGACY_MSG:
+	db	"Legacy driver",0
+ONSLOT_S:
+	db	" on slot ",0
+NODRIVES_MSG:
+	db	"No drives assigned at boot time",13,10,0
+ONEDRIVE_MSG:
+	db	"Drives assigned at boot time: 1, "
+ONEDRIVE:
+	db	"A:",13,10,0
+DRVASSIGN_MSG:
+	db	"Drives assigned at boot time: "
+NUMDRIVES:
+	db	"0, from "
+FIRSTDRIVE:
+	"A: to "
+LASTDRIVE:
+	"Z:"
+CRLF:
+	db	13,10,0
+		
+INDEX:	db	0
+BUF:
+
+	end

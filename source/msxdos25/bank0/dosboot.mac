@@ -1,0 +1,380 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	MSX-DOS Booting up code
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+;-----------------------------------------------------------------------------
+;
+;   This is the code which attempts to boot up MSX-DOS 2.0.  It has two  entry
+; points, "TRYBOOT" which is called at the first automatic attempt to boot up,
+; and "REBOOT" which is called on subsequent attempts (presumably as a  result
+; of  the "SYSTEM" command from Disk BASIC).  "TRYBOOT" first attempts to read
+; a  boot  sector and if successful, calls it with carry clear to start up any
+; MSX environment application which the disk may contain.
+;
+; Entry:  B = boot drive.
+;	  HL = null terminated command line pointer.
+;
+TRYBOOT::	ld	b,a
+		ld	a,(CUR_DRV##)		;Save default drive for
+		push	af			; restoring afterwards.
+		push	bc
+		push	hl			;Save command pointer
+;
+		ld	hl,(HIMSAV##)		;Space for MSX-DOS2.SYS starts
+		ld	(DOSHIM##),hl		; at this address.
+;
+		di
+		ld	a,(P0_64K##)		;Page basic 64K of RAM in as
+		call	PUT_P0##		; the initial TPA for MSX-DOS.
+		ld	a,(P1_64K##)
+		call	PUT_P1##
+		ld	a,(P2_64K##)
+		call	PUT_P2##
+;
+		ld	a,(RAMAD3##)
+		ld	h,80h			;Enable RAM slot in page-2
+		call	ENASLT##
+		call	P0_RAM##		;Enable RAM slot in page-0
+;
+		ld	hl,0			;Zero the bottom 256 bytes
+zero_p0_loop:	ld	(hl),h			; of the TPA RAM area.
+		inc	l
+		jr	nz,zero_p0_loop
+;
+		ld	hl,JUMP_TABLE		;Loop to set up the jumps
+jump_tab_loop:	ld	e,(hl)			; in the page-0 TPA segment.
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	a,d
+		or	e
+		jr	z,jump_tab_done
+		ld	a,0C3h
+		ld	(de),a
+		inc	de
+		ldi
+		ldi
+		jr	jump_tab_loop
+jump_tab_done:
+;
+		call	GET_P2##		;Page the kernel code segment
+		ex	af,af'			; into page-2 and copy the
+		ld	a,(CODE_SEG##)		; secondary slot switching
+		call	PUT_P2##		; from there into the correct
+		ld	hl,SSLOT##+8000h	; place in the page-0 TPA
+		ld	de,SSLOT##		; segment.
+		ld	bc,SSLSZ##
+		ldir
+		ex	af,af'			;Put page-2 TPA segment
+		call	PUT_P2##		; back in.
+		ei
+;
+;
+		pop	hl
+		ld	de,0081h
+		ld	b,0FFh			;Copy the command pointed to
+setup_cmd_loop:	ld	a,(hl)			; by HL to the buffer at
+		ld	(de),a			; 80h, putting a length
+		inc	hl			; byte at the start.
+		inc	de
+		inc	b
+		or	a
+		jr	nz,setup_cmd_loop
+		ld	a,b
+		ld	(0080h),a
+;
+;
+		pop	af			;If a boot drive was specified
+		or	a			; in register A then try that
+		call	nz,TRY_MSX_DOS		; one.
+;
+if 1
+		pop	af			;If that drive failed then
+		call	TRY_MSX_DOS		; try default drive.
+		ret
+else
+		ld	b,MAX_UNITS##
+		ld	c,1
+try_dos_loop:	push	bc			;If that drive failed then
+		ld	a,c			; try each drive in turn
+		call	TRY_MSX_DOS		; starting from drive "A:".
+		pop	bc
+		inc	c
+		djnz	try_dos_loop
+;
+		pop	af			;If it all failed then restore
+		ld	(CUR_DRV##),a		; default drive and jump to
+		ret				; disk BASIC in disgrace.
+endif
+;
+;
+JUMP_TABLE:	dw	RDSLT##,   $RDSLT##	;Jumps in page-0
+		dw	WRSLT##,   $WRSLT##
+		dw	CALSLT##,  $CALSLT##
+		dw	ENASLT##,  $ENASLT##
+		dw	CALLF##,   $CALLF##
+		dw	INTRPT##,  $IRQ##
+		dw	0
+;
+;
+;-----------------------------------------------------------------------------
+;
+READ_BOOT_SEC::
+;
+;    This routine attempts to read the boot  sector  into  memory  at  address
+; 0C000h.  The sector is actually read into the $SECBUF buffer and only copied
+; to 0C000h if successful, and only the first 100h bytes  of  the  sector  are
+; copied  because  the  stack  may  be at 0C200h and it is not very helpful to
+; over-write this.
+;
+;    Each drive in turn is tried for reading the boot sector,  with  an  error
+; routine  defined  to abort any disk errors back to this routine.  If no boot
+; sector could be read then this routine returns A=0, otherwise it returns the
+; logical drive number in A.  Also the default drive will be set to this drive
+; number.
+;
+; Entry:     None
+; Returns:   A = drive number for boot sector, 0 => none.
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	hl,BOOT_DISKVECT	;Setup disk error and break
+		ld	(DISKVECT##),hl		; vector for trapping
+		ld	hl,BOOT_BREAKVECT	; errors while booting.
+		ld	(BREAKVECT##),hl
+;
+		ld	de,($SECBUF##)		;Set the DTA address ready
+		ld	c,_SETDTA##		; for reading the boot
+		call	BOOT_BDOS		; sector in.
+;
+		ld	c,1			;Start at drive "A:"
+		ld	b,MAX_UNITS##		;Try all drives
+try_boot_loop:	push	bc
+		ld	a,c
+		dec	a			;Adjust drive for 0=A:
+		ld	b,1			;Attempt to read the
+		ld	de,0			; boot sector in.
+		ld	hl,0
+		ld	c,_RDDRV##
+if 1
+		call	PPAT1
+endif
+		call	BOOT_BDOS
+if 1
+		call	PPAT2
+endif
+		pop	bc			;Jump if we managed to
+		jr	nz,try_boot_next	; read the boot sector OK
+		ld	hl,($SECBUF##)		; and the first byte of it has
+		ld	a,(hl)			; an 8086 jump instruction.
+		or	0EBh xor 0E9h
+		cp	0EBh
+		jr	z,read_boot_ok
+try_boot_next:
+		inc	c
+		djnz	try_boot_loop		;Loop to try next drive and
+		xor	a			; return with A=0 if we
+		ret				; have tried them all.
+;
+;
+read_boot_ok:	ld	a,c			;Set current drive to the
+		ld	(CUR_DRV##),a		; one we loaded from.
+;
+		ld	hl,($SECBUF##)		;Copy the first 100h bytes
+		ld	de,0C000h		; of the sector to 0C000h
+		ld	bc,100h			; ready for executing it.
+		ldir
+		or	a
+		ret
+;
+if 1
+PPAT1:
+		push	hl
+;===== start mod DOS2.50 (avoid assembler bug)
+		ld	l,0C3h	;JP
+		ld	(H.PROMPT##),hl
+		ld	hl,PCODE1
+		ld	(H.PROMPT##+1),hl
+;;		ld	hl,H.PROMPT##
+;;		code	MVI M
+;;		code	JMP
+;;		inc	hl
+;;		ld	(hl),low PCODE1
+;;		inc	hl
+;;		ld	(hl),high PCODE1
+;;		inc	hl
+;===== end mod DOS2.50
+		pop	hl
+		ret
+PCODE1:
+		ex	(sp),hl
+		ld	hl,H.PROMPT##
+		code	MVI M
+		code	RET
+		pop	hl
+		ret
+PPAT2:
+		push	af
+		push	hl
+		ld	hl,H.PROMPT##
+		ld	a,(hl)
+		code	CPI
+		code	RET
+		jr	nz,PP30
+		code	MVI M
+		code	JMP
+		push	hl
+		push	de
+		push	bc
+		ld	hl,DRVTBL##
+		ld	a,(TARGET##)
+		ld	b,a
+		xor	a
+PP10:		add	a,(hl)
+		cp	b
+		jr	nc,PP20
+		inc	hl
+		inc	hl
+		jr	PP10
+PP20:
+		sub	(hl)
+;
+		ld	l,a
+		ld	h,1
+		ld	de,0
+		ld	c,_RDABS##
+		call	BOOT_BDOS
+;
+		pop	bc
+		pop	de
+		pop	hl
+PP30:
+		code	MVI M
+		code	RET
+		inc	hl
+		code	MVI M
+		code	RET
+		inc	hl
+		code	MVI M
+		code	RET
+		pop	hl
+		pop	af
+		ret
+endif
+;
+;-----------------------------------------------------------------------------
+;
+TRY_MSX_DOS::
+;
+;    This routine attempts to  load  the  "MSXDOS.SYS"  file  from  the  drive
+; specified  in  register  A, and if successful starts it up, with the default
+; drive set to this drive number.  If the load  is  not  successful  then  the
+; routine  returns  if it is the first attempt to boot (NOTFIRST=0), otherwise
+; it prints up an error, prompts the user and then tries again.
+;
+; Entry:     A = Logical drive number
+; Returns:   None
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	(CUR_DRV##),a		;Setup default drive.
+
+		;push	af
+		;ld	a,(NOTFIRST##)
+		;or	a
+		;jr	nz,NOBOOT
+		;ld	e,a
+		;ld	a,1
+		;ld	bc,0FF00h + _LOCK##
+		;call	BOOT_BDOS
+		;ld	hl,MFLAGS##
+		;set	1,(hl)
+
+NOBOOT:
+		;pop	af
+
+		ld	hl,BOOT_DISKVECT	;Setup disk error and break
+		ld	(DISKVECT##),hl		; vector for trapping
+		ld	hl,BOOT_BREAKVECT	; errors while booting.
+		ld	(BREAKVECT##),hl
+;
+		ld	b,0			;Unassign all drives (does
+		ld	d,b			; not waste very much time)
+		ld	c,_ASSIGN##
+		call	BOOT_BDOS
+
+		ld	d,a
+		call	TO_BASIC_REQUIRED##
+		ld	a,d
+		jr	z,msxdos_fail
+;
+retry_dos:
+		ld	de,BOOT_NAME		;Try to open the "MSXDOS.SYS"
+		xor	a			; file on the default drive.
+		ld	c,_OPEN##
+		call	BOOT_BDOS
+		jr	nz,msxdos_fail		;Jump if file not found
+;
+
+		ld	de,100h
+		ld	hl,3F00h		;Try to read the file in at
+		ld	c,_READ##		; 100h up to the top of
+		push	bc			; page-0.
+		call	BOOT_BDOS
+		pop	bc
+		push	af
+		ld	c,_CLOSE##
+		call	BOOT_BDOS		;Close the file handle
+		ld	hl,MFLAGS##
+		res 1,(hl)
+		pop	af
+		jr	nz,msxdos_fail		;Jump if the read was no good
+;
+		ld	a,(CUR_DRV##)		;Record the drive in case
+		ld	(BOOT_DRV##),a		; we ever need to reboot.
+if 1
+		ld	a,0C3h
+		ld	($DOSON##),a		;Activate these routines.
+		ld	($DOSOFF##),a		;
+		ld	(XFER##),a		;
+endif
+		
+		jp	100h			;Start up MSXDOS.SYS
+;
+msxdos_fail:
+		ld	hl,MFLAGS##
+		res	1,(hl)
+		ret
+;
+;
+BOOT_NAME:	db	"\NEXTOR.SYS",0
+;
+;
+;-----------------------------------------------------------------------------
+;
+BOOT_BDOS:	call	BDOS##			;Routine for calling BDOS.
+		cp	.ABORT##
+		jr	nz,not_abort_err	;If we have an aborted disk
+		ld	a,b			; error then return the
+not_abort_err:	or	a			; original error code in A.
+		ret
+;
+;
+BOOT_DISK:	ld	c,2			;During boot, always abort
+BOOT_BREAK:	ret				; and return the error code of
+						; disk errors.
+;
+;
+BOOT_DISKVECT:	dw	BOOT_DISK		;Pointers to disk error and
+BOOT_BREAKVECT:	dw	BOOT_BREAK		; abort routines for booting.
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<DOSBOOT>
+	end
+;

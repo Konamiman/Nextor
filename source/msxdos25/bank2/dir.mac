@@ -1,0 +1,316 @@
+	.z80
+	TITLE	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	SUBTTL	Directory Entry and Fileinfo Block Handling
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	DI_INIT
+;
+;    This routine sets up the "DE_START" variable with the cluster number of a
+; new  directory.   A  subsequent call to "DI_FIRST" will then start a scan of
+; this directory.  If it is entered at "DI_INIT"  then  DE  must  point  to  a
+; directory  entry  from which the cluster number will be extracted.  If it is
+; entered at "DI_SUB" then register DE must already contain the cluster number
+; and  if  called  at  "DI_ROOT"  then  the root directory will always be used
+; (cluster 0FFFFh).  In all cases the cluster number is returned in DE. If the
+; cluster  number  is  the  same as that stored at "CHK_CLU" then the "SE_ERR"
+; flag will be set.  This is used by the MOVE routine to detect invalid  moves
+; of sub-directories.
+;
+; Entry:      DE = Address of directory entry (if called at DI_INIT)
+;		 = Cluster number (if called at DI_SUB)
+;		 = don't care (if called at DI_ROOT)
+; Returns:    DE = Cluster number of this directory.
+;	       A = 0 (flags not set)
+; Corrupts:   AF,DE
+;
+;
+		push	hl
+		ld	hl,DR_CLU##		;Get start cluster number from
+		add	hl,de			; directory entry and jump to
+		ld	e,(hl)			; START_DIR to store it in the
+		inc	hl			; DE_START variable.
+		ld	d,(hl)
+		pop	hl
+;
+		ld	a,d			;If cluster number is zero
+		or	e			; then start root directory
+		jr	nz,DI_SUB		; else start sub-directory
+;
+	PROC	DI_ROOT
+;
+		ld	de,0FFFFh		;Flag root directory.
+;
+	PROC	DI_SUB
+;
+		ld	(DE_START##),de		;Record cluster number
+;
+		push	hl			;If cluster of this directory
+		ld	hl,(CHK_CLU##)		; is the same as the one
+		xor	a			; stored at "CHK_CLU" then
+		sbc	hl,de			; set the "SE_ERR" flag.  This
+		jr	nz,no_chk_clu		; is used to detect illegal
+		set	SE_ERR,(iy+@SE_FLAGS##)	; sub-directory MOVEs.
+no_chk_clu:	pop	hl
+		ret				;A is always zero.
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	DI_FIRST
+;
+;    This  routine  must  be called to get the first entry of a directory, and
+; then "DI_NEXT" should be called to get subsequent entries. The directory  is
+; specified  by  a cluster number in "DE_START" which will be -ve if it is the
+; root directory.  This  variable  is  not  altered  by  this  routine  or  by
+; "DI_NEXT"  and  so  this  routine  can be called again later to start at the
+; first entry again.  Note that this routine jumps into "DI_NEXT"  to  set  up
+; the variables.
+;
+; Entry:       HL = Address of unit descriptor
+; Returns:     DE = Address of first directory entry
+;		A = First byte of directory entry
+;		    Z => entry has never been used (A=0)
+;		   NZ => entry in use, or deleted
+; Corrupts:    AF,DE
+;
+; Assumes:     UD_WDS=UD_ODE+1    UD_SDIR=UD_WDS+2
+;
+;
+						;Get first directory cluster
+		ld	de,(DE_START##)		; and if it is +ve then jump
+;===== start mod FAT16 (CLST_4 patch)
+		ld	a,d
+		and	e
+		inc	a			; into DE_NEXT to set up
+		jr	nz,SUB_DI_FIRST		; for this new cluster.
+;;		bit	7,d
+;;		jr	z,SUB_DI_FIRST
+;===== end mod FAT16
+;
+;
+				;ROOT DIRECTORY
+;===== start add FAT16 (support GETSUB patch)
+		;assume A=0
+		ld	(DE_EX_SECTOR##),a	;first directory sector number (bit16-22)
+;===== end add FAT16
+		push	bc			;Save user's BC
+		push	hl
+		ld	bc,UD_ODE##
+		add	hl,bc
+		ld	c,(hl)			;C := number of odd entries
+		inc	hl			;     in last directory sector
+		ld	a,(hl)			;A := number of whole root
+		inc	hl			;     directory sectors
+		inc	hl
+		ld	e,(hl)
+		inc	hl			;DE := first directory sector
+		ld	d,(hl)			;      number
+;===== start mod FAT16 (support CLST_1 ~ CLST_A patch)
+		ld	hl,0FFFFh		;Set current cluster and next
+		ex	(sp),hl			; cluster (both on stack) -ve
+		push	hl			; to flag root directory and
+		ld	hl,0FFFFh		; restore unit descriptor ptr.
+		ex	(sp),hl
+;;		pop	hl
+;;		ld	b,0FFh
+;;		push	bc
+;;		push	bc
+;===== end mod FAT16
+		jr	ROOT_DI_FIRST		; jump to setup variables.
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	DI_SAME
+;
+		push	hl			;If HL -> device descriptor
+		ld	de,DD_MODE##		; then just return DE pointing
+		add	hl,de			; to the directory entry in
+		bit	MD_DEV,(hl)		; the device descriptor
+		ex	de,hl			; without any more ado.
+		inc	de
+		pop	hl
+		jp	nz,got_dev_entry
+;
+		set	FF_DBUF,(iy+@FAT_FLAGS##)
+		inc	(iy+@DE_E_LEFT##)	;Step back to last entry so
+		push	bc			; that when we jump into
+		ld	bc,0			; DI_NEXT, it will return the
+		jr	di_next_2		; same entry as before.
+;
+	PROC	DI_NEXT
+;
+;    This  routine  is  called to get a pointer to the next directory entry in
+; the currently selected directory.  It must not be  called  until  "DI_FIRST"
+; has  been called to initialise the variables.  It must be passed the pointer
+; to the last directory entry in DE and will return a new one in DE  with  the
+; carry flag clear, or the carry flag set if the end of the directory has been
+; reached.  The "directory buffer" flag (FF_DBUF of  "FAT_FLAGS")  is  cleared
+; when  a  directory  sector  is  read  and  will  be set whenever a buffer is
+; deallocated by "BF_FLUSH".  If the flag is not set then the directory  entry
+; can be assumed to be at the same address as previously.
+;
+;    Whenever it steps on to a new directory sector, it first  puts  the  last
+; directory  sector  buffer  on  the  start of the chain so that this will get
+; reused.  This improves performence on accessing sub-directories because  the
+; directory  search  will  only use one buffer, allowing FAT sectors to remain
+; resident in another buffer.
+;
+;    The entry points "SUB_DI_FIRST" and "ROOT_DI_FIRST" are provided only  to
+; be jumped to from "DI_FIRST", they should not be called otherwise.
+;
+; Entry:          HL = Address of unit descriptor
+;		  DE = Address of last directory entry (if FF_DBUF clear)
+; Returns:     Carry   Clear => next directory entry pointed to be DE
+;			 Set => end of directory reached
+;		  DE = Address of next directory entry (only if NC)
+;		   A = First byte of directory entry (only if NC)
+;		       Z => entry has never been used (A=0/only if NC)
+;		      NZ => entry is in use, or deleted (only if NC)
+; Corrupts:    AF,DE
+;
+;
+		push	bc			;Point HL at DE+32 which is
+		ld	bc,32			; next directory entry. Also
+di_next_2:	push	hl			; sets B=0 for BF_SECTOR below
+		ex	de,hl
+		add	hl,bc
+;
+		ld	de,(DE_SECTOR##)	;Get current directory sector
+						; in anticipation.
+;
+		ld	a,(DE_E_LEFT##)		 ;Decrement count of entries
+		dec	a			 ; in sector and skip if need
+		jr	z,new_sector		 ; a new sector.
+		bit	FF_DBUF,(iy+@FAT_FLAGS##);Jump to GOT_ENTRY if buffer
+		jp	z,got_entry		 ; is still usable, else jump
+		jr	get_dir_sector		 ; to re-buffer sector.
+;
+new_sector:
+;		ex	(sp),ix			;Get buffer for current sector
+;		pcall	BF_SECTOR		; number, without reading from
+;		pcall	BF_START		; disk (B=0), and put it on
+;		ex	(sp),ix			; start of chain so that read
+		pop	hl			; of next sector will re-use
+						; the same buffer.
+;
+		inc	de			;Bump sector no in anticipation
+;===== start add FAT16 (SUB_16 patch)
+		ld	a,d
+		or	e
+		jr	nz,new_sector_not_carry
+		inc	(iy+@DE_EX_SECTOR##)
+new_sector_not_carry:
+;===== end add FAT16
+		ld	a,(DE_S_LEFT##)		;If there are any whole sectors
+		dec	a			; left to do then jump to start
+		jr	nz,same_cluster		; next sector of cluster.
+;
+		cp	(iy+@DE_ODD##)		;If there is a partial sector
+		jr	nz,odd_sector		; (DE_ODD<>0) then jump do it.
+;
+						;Get next cluster number and
+		ld	de,(DE_NEXT_CLU##)	; return with carry set if it
+;===== start mod FAT16 (CLST_9 patch)
+		ld	a,d			; is -ve which means end of
+		and	e			; directory has been reached.
+		inc	a			;Return with carry-flag set
+		scf				; if end of directory.
+		pop	bc
+		ret	z
+;;		bit	7,d
+;;		scf
+;;		pop	bc
+;;		ret	nz
+;===== end mod FAT16
+;
+SUB_DI_FIRST:	push	bc
+		push	de			;Remember new cluster number
+		pcall	FAT_LOOKUP		;Get next cluster number
+		ld	b,d			; and remember it in BC.
+		ld	c,e
+		pop	de
+		push	de			;Keep current cluster on stack
+		xor	a			;Get sector number for first
+		pcall	CLU_TO_SEC		; sector of this cluster and
+		push	de			; shove that on the stack also
+;===== start add FAT16 (GETSUB patch)
+		ld	(DE_EX_SECTOR##),a	;Record new sector number bit16-22
+;===== end add FAT16
+;
+		ex	de,hl
+		ld	hl,UD_CMSK##		;Get UD_CMSK+1 from unit
+		add	hl,de			; descriptor which will be
+		ld	a,(hl)			; recorded as number of sectors
+		inc	a			; in this cluster.
+		ex	de,hl
+;
+;
+		pop	de			;Rescue new sector number
+		push	bc			;Save next cluster on stack
+		ld	c,0			;Flag no partial sector.
+;
+ROOT_DI_FIRST:	ld	(iy+@DE_ODD##),c	;Record number of odd entries
+		pop	bc
+		ld	(DE_NEXT_CLU##),bc	;Record next cluster number
+		pop	bc
+		ld	(DE_CLUSTER##),bc	;Record current cluster number
+;
+;
+same_cluster:	ld	b,512/32		;Entries in a whole sector
+odd_sector:	or	a			;If sectors left is zero then
+		jr	nz,not_odd_sec		; must be doing an odd last
+		ld	b,(iy+@DE_ODD##)	; sector so get number of odd
+		ld	(DE_ODD##),a		; entries and set DE_ODD to
+		inc	a			; zero for next time.  Set
+not_odd_sec:					; sectors left back to 1.
+;
+		ld	(DE_S_LEFT##),a		;Record sectors left in cluster
+		ld	(DE_SECTOR##),de	;Record new sector number
+		ld	(iy+@DE_ENT##),b	;Record entries in this sector
+		ld	a,b			;A := entries in this sector
+		push	hl
+get_dir_sector:	ex	(sp),ix			;IX -> unit descriptor
+		push	af
+		ld	b,1
+;===== start add FAT16 (BUF_4 patch)
+		ld	a,(DE_EX_SECTOR##)
+;===== end add FAT16
+		pcall	BF_SECTOR		;Get sector into a buffer.
+		pop	bc			;Get DE_E_LEFT value into B
+		ex	(sp),ix			;Restore IX
+;
+		ld	de,BD_DATA##-32		;Point to appropriate entry
+		add	hl,de			; within this segment, which
+		ld	a,(DE_ENT##)		; will be the first unless
+		inc	a			; we are re-reading a sector
+		sub	b			; because of the FF_DBUF flag.
+		ld	de,32
+dir_ent_loop:	add	hl,de
+		dec	a
+		jr	nz,dir_ent_loop
+;
+		ld	a,b			 ;Get value for DE_E_LEFT
+		res	FF_DBUF,(iy+@FAT_FLAGS##);Clear directory buffer flag
+;
+got_entry:	ld	(DE_E_LEFT##),a		;Record number of entries left
+;
+		ex	de,hl			;Get entry address into DE and
+		pop	hl			; restore HL & BC.
+		pop	bc
+got_dev_entry:	ld	a,(de)			;Get first byte of entry
+		or	a
+		ret				;Return Z if never been used
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<DIR>
+	end
+;

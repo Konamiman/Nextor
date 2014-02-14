@@ -1,0 +1,133 @@
+	TITLE	MSX-DOS 2 - MSX-DOS.SYS copyright (1986) IS Systems Ltd.
+
+	SUBTTL	Booting Up Relocation
+;
+	.Z80
+;
+;
+LF	EQU	0AH
+CR	EQU	0DH
+;
+;
+;        This file is the first to be linked  when  linking  MSX2-DOS.SYS.  It
+; gets  loaded  at 100H and gets control when MSX2-DOS is due to start up. The
+; first thing it needs to do is re-locate MSX2-DOS to the top of memory. It is
+; not  as  simple  as  this  of course because MSX2-DOS needs certain parts of
+; itself to be on 256-byte page boundaries for CP/M compatibility.
+;
+;        When  MSX2-DOS  is  linked,  the  code  that is relocated (in SYS) is
+; actually linked twice.  Since this module is a multiple of  256-bytes  long,
+; and the two copies are linked consecutively, any differences between the two
+; sets of linked object code are  the  high  bytes  of  addresses  which  need
+; re-locating.  This  module thus looks through both copies of SYS, relocating
+; the high bytes as necessary at the same time  as  copying  the  code  up  in
+; memory.
+;
+;	The actual L80 command line is:
+;
+;		/P:100, RELOC, VERSION, REF, SYS, REAL, SYS, MESSAGES, END
+;
+;        Since this module is a multiple of 256 bytes and  starts  on  a  page
+; boundary,  so  do  both  copies of SYS. The modules REF and REAL just define
+; global labels that are the start addresses of the  SYS  modules.  Note  that
+; because  SYS  is  linked twice, it must not contain any global declarations.
+; Also  it  must  not  contain  references  to  external  symbols  that   need
+; re-locating. The module END just defines another label which, by subtracting
+; the start address of the MESSAGES messages file (which is  the  end  of  the
+; second  SYS), allows RELOC to calculate the size of the messages file, which
+; is  necessary  to  ensure  that  SYS  starts  on  a  page  boundary.    This
+; complication in RELOC saves the producers of the MESSAGES file, which may be
+; an some external OEM, from having to bother about  making  MESSAGES  also  a
+; multiple of 256 bytes long.
+;
+;        The equation REAL-REF is used more than once below to give  the  size
+; of the SYS modules.
+;
+;        After  relocating  the  code and copying the messages, MSX-DOS.SYS in
+; finally executed by jumping to the first entry point in the BIOS jump table.
+;
+;        At offset 3 within the MSX-DOS.SYS file is a four byte serial number.
+; This may be patched if required by the duplicators of MSX-DOS.SYS. It serves
+; no purpose other than to be copied to just below the destination of the BDOS
+; jump at 5. This is an undocumented feature of CP/M.
+;
+;
+START:	JP	INIT
+;
+SERIAL::DEFB	0,0,0,0		; Serial number, may be patched by OEM.
+;
+	DEFB	CR ;,LF				; Message at file start in case
+MSG:
+	DEFB	'NEXTOR.SYS version '		;   someone TYPEs the file.
+	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+
+	DEFB	'Copyright ('
+	DEFB	CRYEAR##/1000 MOD 10 +'0'
+	DEFB	CRYEAR##/ 100 MOD 10 +'0'
+	DEFB	CRYEAR##/  10 MOD 10 +'0'
+	DEFB	CRYEAR##      MOD 10 +'0'
+	DEFB	') Konamiman',CR,LF
+	DEFB	CR,LF
+	DEFB	1AH
+;
+;
+INIT:
+	ld	hl,MSG
+INITP:
+	ld	a,(hl)
+	cp	1Ah
+	jr	z,INITPEND
+
+	push	hl
+	LD	E,A
+	LD	C,_CONOUT##
+	call	0F37Dh
+	pop	hl
+	inc	hl
+	jr	INITP
+
+INITPEND:
+
+	LD	HL,(DOSHIM##)	; Get lowest address used by system.
+	LD	DE,-(END##-REAL##+1)	; Size in memory+1.
+	ADD	HL,DE		; HL = first address that it is possible to use
+	LD	L,0		;   for MSX2-DOS.SYS, truncated to page start.
+	PUSH	HL		; Save addr of start of code for jumping to it.
+	LD	DE,REAL##	; DE -> start of code to copy and relocate.
+	LD	A,H		; Calculate page offset from current code
+	SUB	D		;   address to destination code address for
+	EXX			;   re-locating address high bytes.
+	LD	C,A		; C=offset to add on to differing bytes.
+	LD	HL,REF##	; HL -> other copy of code.
+	EXX
+	LD	BC,REAL##-REF##	; Size of code to copy and re-locate.
+;
+RELOC:	LD	A,(DE)		; Get byte from code, compare with other copy,
+	INC	DE		;   and copy it if the same.
+	EXX
+	CP	(HL)
+	INC	HL
+	JR	Z,COPY
+;
+	ADD	A,C		; Else convert to new value.
+COPY:	EXX
+	LD	(HL),A
+	CPI			; INC HL, DEC BC, set flags.
+	JP	PE,RELOC
+;
+	EX	DE,HL
+	LD	BC,END##-(REAL##+(REAL##-REF##)); BC = no. bytes in messages.
+	LDIR			; Copy messages to immediately after code.
+;
+	RET			; Jump to start of re-located code.
+;
+;
+SIZE	EQU	$-START
+	IF	LOW (256-LOW SIZE)
+	 DEFS	256-LOW SIZE,0	; Pad out to 256 byte page.
+	ENDIF
+;
+;
+;
+	SUBTTL
+	END

@@ -1,0 +1,184 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"RALLOC - Enable or disable the reduced allocation information mode for a drive",13,10
+	db	13,10
+	db	"When the reduced allocation information mode for a drive is enabled,",13,10
+	db	"MSX-DOS function ALLOC will return the total and/or free space information",13,10
+	db  "for that drive reduced if necessary, so that the sector count fits in 16 bits",13,10
+	db  "(that is, the space information returned will be smaller than 32MB).",13,10
+	db	13,10
+	db	"Usage: RALLOC [<drive letter>: ON|OFF]",13,10
+	db	1Ah
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	c,DO_GET
+
+	;--- Set value
+
+	;* Get drive letter as a bit mask
+	;  (1=A, 10b=B, 100b=C ...)
+
+	ld	hl,BUF
+	call	CHKL2##
+	cp	.IPARM##
+	ld	b,a
+	jp	z,DO_TERM
+	dec	a
+	ld	b,a
+	ld	a,1
+	jr	z,LET_OK
+LET_LOOP:
+	rlca
+	djnz	LET_LOOP
+LET_OK:
+	push	af
+
+	;* Get ON/OFF switch
+
+	ld	a,2
+	ld	hl,BUF
+	call	EXTPAR
+	ld	b,.NOPAR##
+	jp	c,DO_TERM
+
+	ld	hl,BUF
+	call	CHKONOFF##
+	push	af
+
+	;* Get current RALLOC vector
+
+	xor	a
+	ld	c,_RALLOC
+	call	5
+	ld	b,a
+	jp	nz,DO_TERM
+
+	pop	af	;A=0 for OFF, FFh for ON
+	pop	bc	;B=Drive letter mask
+	or	a
+	jr	z,DO_OFF
+
+	;* Set ON
+
+	ld	a,l	;L=Current mask
+	or	b
+	jr	DO_SET
+
+	;* Set OFF
+
+DO_OFF:	ld	a,b
+	cpl
+	and	l
+	
+	;* Write new vector
+
+DO_SET:
+	ld	l,a
+	ld	a,1
+	ld	c,_RALLOC##
+	call	5
+	ld	b,a
+	jp	nz,DO_TERM
+
+
+	;--- Get current vector and print it
+
+DO_GET:
+	xor	a
+	ld	c,_RALLOC##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	ld	a,l
+	or	a
+	jr	nz,DO_PRINT
+
+	;* No drives in RALLOC mode
+
+	ld	de,NORALLOC_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+DO_PRINT:
+
+	;* There are drives in RALLOC mode: print them
+
+	push	hl
+	ld	de,RALLOC_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	pop	hl
+
+	ld	b,8
+	ld	h,"A"
+PRINT_LOOP:
+	rr 	l
+	jr	nc,PRINT_NEXT
+
+	push	hl
+	push	bc
+	ld	a,h
+	ld	(DRIVE_MSG),a
+	ld	de,DRIVE_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	pop	bc
+	pop	hl
+
+PRINT_NEXT:
+	inc	h
+	djnz	PRINT_LOOP
+
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+
+DO_TERM:
+	ld	a,b
+	or	a
+	ld	c,_TERM##
+	jp	z,5
+
+	push	bc
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	pop	bc
+	ld	c,_TERM##
+	jp	5
+
+USAGE_S:
+	db	"Usage: RALLOC [<drive letter>: ON|OFF]",13,10
+	db	13,10
+	db	"TYPE RALLOC.COM for more details.",13,10
+	db	0
+
+NORALLOC_MSG:
+	db	"There are no drives in reduced allocation information mode."
+CRLF:	db	13,10,0
+
+RALLOC_MSG:
+	db	"The following drives are in reduced allocation information mode:",13,10,0
+DRIVE_MSG:
+	db	"A: ",0
+
+BUF:
+
+	end

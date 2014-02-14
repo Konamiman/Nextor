@@ -1,0 +1,46 @@
+all:
+	@echo 'This is not a top-level Makefile'; exit 1
+
+#########################################
+#	Common Library			#
+#########################################
+LIBS=	../codes.rel ../data.rel
+
+#########################################
+#	Ruleset for Dummy MSXDOS.SYS	#
+#########################################
+LDRELS=	loader.rel endload.rel
+
+msxdos.sys: $(LIBS) $(LDRELS)
+	cp $(LIBS) .
+	l80 codes,data,/p:c000,loader,endload,msxdos.sys/n/e
+	rm codes.rel data.rel
+
+#########################################
+#	Ruleset for MSXDOS2.SYS		#
+#########################################
+SYRELS= ver.rel reloc.rel ref.rel real.rel sys.rel messages.rel kmsg.rel end.rel
+
+# NOTE:	sys.rel is linked twice
+msxdos2.sys: $(LIBS) $(SYRELS)
+	xl80 -p100 $(LIBS) ver.rel reloc.rel ref.rel sys.rel real.rel \
+		sys.rel messages.rel kmsg.rel end.rel -o msxdos2.sys
+
+#########################################
+#	Ruleset for COMMAND2.COM	#
+#########################################
+CMRELS= ver.rel start.rel cli.rel cmd.rel files.rel dirs.rel copy.rel \
+	io.rel misc.rel messages.rel jtext.rel var.rel
+
+command2.com: $(LIBS) $(CMRELS)
+	xl80 -p100 $(LIBS) $(CMRELS) -o command2.com -y command2.sym
+
+start.rel:	command.inc
+cli.rel:	command.inc
+cmd.rel:	command.inc
+files.rel:	command.inc
+dirs.rel:	command.inc
+copy.rel:	command.inc
+io.rel:		command.inc
+misc.rel:	command.inc
+var.rel:	command.inc

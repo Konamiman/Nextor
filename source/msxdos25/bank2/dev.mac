@@ -1,0 +1,271 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Character devices
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+;   Here  are  the  CON,  AUX,  LST  (and PRN)  and NUL devices.  They are all
+; fairly trivial except for  CON  since  they  just  call  the  relevent  BIOS
+; routines  and  return  appropriate  end  of  file indications to the calling
+; routine.  The CON device is more complex because it must  handle  ASCII  and
+; binary   mode  separately,   allowing  line  editing  in  ASCII  mode.   The
+; specification of the device routines is as follows:
+;
+; RDCH -  Parameters:   IX -> FAB for device (not normally used)
+;			 C =  ASCII/binary mode (MD_ASC bit)
+;	  Results:       A =  Error code (.EOL and .EOF ignored in
+;					  binary mode)
+;			 B =  Chracater (if A=0, .EOL or .EOF)
+;	  Corrupts:      AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+; WRCH -  Parameters:   IX -> FAB for device (not normally used)
+;			 A =  Character to be written
+;			 C =  ASCII/binary mode (MD_ASC bit)
+;	  Results:       A =  Error code
+;	  Corrupts:      AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+; RDST -  Parameters:   IX -> FAB for device (not normally used)
+;			 C =  ASCII/binary mode (MD_ASC bit)
+;	  Results:       A =  Error code
+;			 E =  00h => not ready for input
+;			      FFh => ready for input
+;	  Corrupts:      AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+; WRST -  Parameters:   IX -> FAB for device (not normally used)
+;			 C =  ASCII/binary mode (MD_ASC bit)
+;	  Results:       A =  Error code
+;			 E =  00h => not ready for output
+;			      FFh => ready for output
+;	  Corrupts:      AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+; SCRSZ - Parameters:   IX -> FAB for device (not normally used)
+;	  Results:       A =  Error code
+;			 E =  Number of columns (0 => no limit)
+;			 D =  Number of rows (0 => no limit)
+;	  Corrupts:      AF,BC,DE,HL,IX,AF',BC',DE',HL'
+;
+;------------------------------------------------------------------------------
+;
+;    This is the CON device.  It handles all console input and output which is
+; done to file handles or FCBs, including the standard input, output and error
+; file  handles  if  they are not redirected.  Console I/O which is done using
+; the CP/M character function calls (01h...0Bh)  does  not  go  through  these
+; device routines, but is handled entirely within the "CHAR" module.
+;
+;    In binary mode, input and output is done directly to  the  BIOS  routines
+; thus bypassing all cursor position handling, control character detection and
+; printer echo. ASCII mode is more complicated because it involves interaction
+; with the CP/M character I/O and so it calls back to routines in  the  "CHAR"
+; module.
+;
+;    The ASCII mode output routine calls the "CN_ST" routine to check for  the
+; special control characters and then calls "CN_OUT" to actually write out the
+; character.  This routine will handle expansion of TABs updating  the  cursor
+; position and printer echo as required.
+;
+;    ASCII mode input uses the "LN_BUF" buffer to handle line  by  line  input
+; using  the  "CN_LINE"  input  routine.   If  there are any characters in the
+; buffer already then one is returned immediately and the pointer is adjusted.
+; If  the  character  is  an  LF then an end-of-line error is returned and the
+; buffer  will  be marked as empty for next time.  If the buffer is empty then
+; "CN_LINE" is called to read a line of input into this buffer, allowing  full
+; editing  facilities and re-entry of previous lines.  When this returns an LF
+; is echoed via the "CN_OUT" routine.  If the first character of the buffer is
+; Ctrl-Z  then  it  is  returned  with  an end-of-file error and the buffer is
+; flushed, otherwise the first character in the buffer  is  returned  with  no
+; error.
+;
+PROC	DEV_CON
+	jp	con_rdch
+	jp	con_wrch
+	jp	con_rdst
+	jp	nul_status		;Always ready for output
+	jp	con_screen_sz
+;
+;
+;
+con_rdch:	bit	MD_ASC,c		;If we are in binary mode then
+		jr	nz,ascii_con_rdch	; just use the BIOS console
+		pcall	CHR_IN			; input routine directly.
+		ld	b,a
+		xor	a
+		ret
+;
+ascii_con_rdch:	ld	hl,(LN_PTR##)		;In ASCII mode, get next
+		ld	a,(hl)			; character from buffer and
+		or	a			; jump to return it if it is
+		jr	nz,ascii_gotch		; not NULL (buffer empty).
+;
+		ld	de,LN_BUF##		;If there is nothing in the
+		ld	a,LNB_SZ##		; buffer then call CN_LINE
+		ld	(de),a			; to read a line into the
+		ld	a,0FFh			; buffer (A=FFh ensures that
+		pcall	CN_LINE			; output is echoed to the
+		ld	a,LF			; screen.)
+		pcall	CN_OUT			;Echo a line feed
+		ld	hl,LN_BUF##+1
+		ld	e,(hl)			;DE := length of line
+		ld	d,0
+		inc	hl
+		ex	de,hl
+		add	hl,de
+		ld	(hl),CR			;Put a CR-LF-NULL sequence
+		inc	hl			; on the end of the line to
+		ld	(hl),LF			; make it look like a text
+		inc	hl			; file.
+		ld	(hl),0
+		ex	de,hl			;HL -> first char of line
+;
+		ld	a,(hl)			;If first character in buffer
+		cp	CTRL_Z			; is a Ctrl-Z then jump to
+		jr	z,ascii_con_eof		; return end-of-file.
+;
+ascii_gotch:	inc	hl			;Bump buffer pointer and store
+		ld	(LN_PTR##),hl		; it for next time.
+		ld	b,a
+		cp	LF			;Return character in B, with
+		ld	a,.EOL##		; an end-of-line error code
+		ret	z			; if it is LF and no error
+		xor	a			; otherwise.
+		ret
+;
+ascii_con_eof:	ld	b,a			;Ctrl-Z at start of the buffer
+		ld	(hl),0			; so point HL at a NULL to
+		ld	(LN_PTR##),hl		; indicate buffer empty and
+		ld	a,.EOF##		; return the CTRL_Z with an
+		ret				; end-of-file error.
+;
+;
+;
+con_wrch:	bit	MD_ASC,c		;In binary mode just write
+		jr	nz,ascii_con_wrch	; the character direct to
+		pcall	CHR_OUT			; the BIOS console output
+		xor	a			; routine.
+		ret
+;
+ascii_con_wrch:	push	af			;In ASCII mode do a console
+		pcall	CN_ST			; status check to trap special
+		pop	af			; control characrters and then
+		pcall	CN_OUT			; write the character to the
+		xor	a			; ASCII console output routine.
+		ret
+;
+;
+;
+con_rdst:	bit	MD_ASC,c
+		jr	nz,ascii_con_rdst	;Input status in binary mode
+		pcall	CHR_ST			; just ask the BIOS directly
+		ld	e,a			; and return the result.
+		xor	a
+		ret
+;
+ascii_con_rdst:	pcall	CN_ST			;In ASCII mode use the CN_ST
+		ld	e,a			; routine so that control
+		xor	a			; characters get handled
+		ret				; correctly.
+;
+;
+;
+con_screen_sz:	pcall	SCR_SZ			;Find out the screen size
+		xor	a			; from the BIOS routine.
+		ret
+;
+;
+;	----------------------------------------
+;
+	PROC	CHL_KILL
+;
+		ld	hl,LN_BUF##+2		;Point the ASCII mode device
+		ld	(LN_PTR##),hl		; input line buffer pointer
+		ld	(hl),0			; to a null => buffer empty.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+PROC	DEV_AUX
+	jp	aux_rdch
+	jp	aux_wrch
+	jp	nul_status
+	jp	nul_status
+	jp	nul_screen_sz
+;
+;
+aux_rdch:	pcall	AUX_IN			;Get a character from the AUX
+		ld	b,a			; BIOS routine into B.
+		cp	CTRL_Z
+		jr	z,rdch_eof_ret		;End of file if Ctrl-Z
+		cp	CR
+		ld	a,.EOL##		;End of line if CR
+		ret	z
+		xor	a			;Otherwise return the character
+		ret				; with no error.
+;
+;
+aux_wrch:	pcall	AUX_OUT			;For output, just send the
+		xor	a			; character to the AUX BIOS
+		ret				; routine.
+;
+;
+;------------------------------------------------------------------------------
+;
+PROC	DEV_LST
+	jp	nul_rdch			;LST device does not do input
+	jp	lst_wrch
+	jp	nul_status
+	jp	lst_status
+	jp	nul_screen_sz
+;
+;
+lst_wrch:	pcall	LST_OUT			;Just send output characters
+if 0
+		xor	a			; to the printer BIOS routine.
+		ret
+else
+		jr	nc,nul_wrch
+		res	0,(iy+@PR_ECHO##)	;Disable possible printer echo.
+		ld	a,.STOP##
+		ret
+endif
+;
+lst_status:	pcall	LST_ST			;Find out if the printer is
+		ld	e,a			; ready for output and return
+		xor	a			; the result in E.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+PROC	DEV_NUL
+	jp	nul_rdch
+	jp	nul_wrch
+	jp	nul_status
+	jp	nul_status
+	jp	nul_screen_sz
+;
+;
+nul_rdch:	ld	b,CTRL_Z		;NUL device always returns
+rdch_eof_ret:	ld	a,.EOF##		; end of file on input.
+		ret
+;
+;
+nul_screen_sz:	ld	de,0
+nul_wrch:	xor	a			;NULL device throws any output
+		ret				; away.
+;
+;
+nul_status:	ld	e,0FFh			;Always ready for I/O
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<DEV>
+	end
+;

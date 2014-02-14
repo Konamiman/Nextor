@@ -1,0 +1,587 @@
+CR		EQU	0DH			; Carriage Return.
+LF		EQU	0AH			; Line Feed.
+;
+JMESSAGES::					; Start of messages.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The first two pieces of text below are not printed, but  contain  the
+; valid  characters  for 'Y' and 'N' responses from prompts such as 'Erase all
+; files (Y/N)?' (from the ERASE command). These strings may contain any number
+; of  possible characters for each response.  No upper casing is done, so both
+; upper and lower case versions of the characters  must  be  included  in  the
+; strings.
+;
+	db	"Yy",0				; Valid 'Y' (yes) responses.
+	db	"Nn",0				; Valid 'N' (no) responses.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The text for the 'DIR' command follows. This text should be near  the
+; start  of  the  messages  file  so  that they are found quickly by the 'DIR'
+; command. If they are near the bottom then the speed of 'DIR' may  be  slowed
+; down noticably.
+;
+;        The DIR command prints first the volume name as in the  VOL  command,
+; and then prints the directory whose files are being listed. This is simply a
+; string of the form:
+;
+;	 Directory of A:\
+;	\            /\ /
+;	  ----a-----   b
+;
+;
+;        Part  (a)  is  just  the  simple  message  DIROF below, and part B is
+; printed by the DIR command. Part (a), and the 'Volume in..' message  printed
+; by the VOL command both begin with a space. This is so that if the output of
+; the DIR command is put  through  a  sorting  program  (to  obtain  a  sorted
+; directory listing) these two lines remain at the top of the file, instead of
+; appearing half way through the sorted directory listing.
+;
+;
+	db	" ディレクトリ ",0		; Part (a), one leading space.
+;
+;
+;
+;        When a sub-directory entry is printed, the file size is replaced by a
+; string  indicating sub-directories ('dir',0 in English). This string must be 8
+; characters long to be the same size as the file size  that  is  printed  for
+; files.
+;
+	db	"  <dir> ",0
+;
+;
+;        After the files have been listed, another line is printed  indicating
+; the  number  of bytes total in the listed files and the amount of disk space
+; free. This line is quite complicated because the  number  of  bytes  can  be
+; printed  either  in  bytes  or  in  K, and if the number printed is 1 then a
+; singular version of the message is displayed. The printing of the plurals is
+; useful in most languages, but if not required the messages can be phrased so
+; that the same message is printed for both singular and the plural numbers.
+;
+;        The message printed at the bottom of the DIR command output takes the
+; basic form:
+;
+;	  19K in 18 files   17K free
+;	\/   \  /  \       /   \   /
+;	a   b  c     --d--    b  e
+;
+;
+;	Where the number of bytes is printed in K, if the number is less than
+; 1024 then the actual number of bytes will be printed, in the form:
+;
+;	  16 bytes in 15 files   14 bytes free
+;	\/  \    /\  /  \       /  \    /\   /
+;	a      f    c     --d--       f    e
+;
+;
+;        Parts  (b),  (d) and (f) also have singular versions of the messages.
+; In the standard English version, the plural of part (b) is the same  as  the
+; singular ('K'). The message may thus take the form:
+;
+;	  1 byte in 1 file   1 byte free
+;	\/ \   /\  / \      / \   /\   /
+;	a    g    c    --h-     g    e
+;
+;
+;        It  is  just possible that if all three numbers have many digits, the
+; line will be longer than the 38 characters that the rest of the DIR  command
+; has  been  designed  to  fit  within.  It  is therfore desirable to keep the
+; message length and the spacing reasonably short. In normal use the  standard
+; English messages given here fit within the line quite well.
+;
+	db	" ",0			; Part (a) is one space in English.
+	db	"を",0			; Part (c), 1 leading, 1 ending space.
+	db	"が使用可能です.",0	; Part (e), one leading space.
+;
+;
+	db	"Kバイト",0		; Part (b).
+	db	"Kバイト",0		; Plural of (b), the same in English.
+	db	"個のファイルで使用中",CR,LF
+	db	" ",0
+					; Part (h), 1 leading, 3 ending spaces.
+	db	"個のファイルで使用中",CR,LF
+	db	" ",0
+					; Part (d), 1 leading, 3 ending spaces.
+	db	"バイト",0		; Part (g), one leading space.
+	db	"バイト",0		; Part (f), one leading space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        SPLATS below is printed just before an error message  when  an  error
+; occurs from an internal or external command. It can also be printed during a
+; DATE or TIME command when an invalid date or time is input, when  the  error
+; message is printed by the command before re-prompting rather than by the CLI
+; when the command terminates.
+;
+;        After printing SPLATS and the actual error message, EREND is printed.
+; In the standard English messages given here, this is just null.
+;
+;
+	db	"*** ",0			; Three asterisks and a space.
+	db	0				; Message after error message
+;
+;
+;
+;-----------------------------------------------------------------------------
+;
+;        PRAK  below  is  printed in several places when a key press in waited
+; for before continuing. The PAUSE command, for example,  prints  it,  and  it
+; gets printed when the 'DIR /P' command has printed a screen full of text.
+;
+	db	"何かキーを押してください.",0	; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The following text is for the stuff printed by the 'VOL' command, and
+; by  the  'DIR' at the start of the files listed. The message has two formats
+; and is split up in the following way:
+;
+;
+;       Volume in drive B: has no name
+;      \              / \/\          /
+;        -----a------   b   ----c---
+;
+;
+;      Volume in drive B: is UTILITIES
+;     \              / \/\ /
+;       ------a-----   b  d
+;
+;
+;        Note that part (a) begins with a space  to  be  compatible  with  the
+; 'Directory of...' part of the text printed by DIR.
+;
+;
+	db	" ドライブ",0			; Part (a), one leading,
+						;   one trailing space.
+	db	":のディスク",0			; Part (b), one trailing space.
+	db	"にはボリューム名がありません",0
+						; Part (c).
+	db	"のボリューム名は ",0		; Part (d), one trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The following message is printed by the ERASE (DEL, ERA) command.
+;
+;        ERALL is a prompt printed if the filename given is totally  ambiguous
+; ie.  *.*,  and  a  Y/N (yes/no) response is expected.  The actual characters
+; accepted for 'yes' and 'no' responses are specified by the messages Y and  N
+; elsewhere in the MESSAGES file.
+;
+;        It is recommended that this message attempts to describe  the  action
+; that  is going to be taken, as this is more useful to the user. For example,
+; the 'Erase all files (Y/N)' message here is prefered to MS-DOS  and  MSX-DOS
+; 1's message 'Are you sure '(Y/N)'.
+;
+;
+	db	"全てのファイルを消去しますか (Y/N)? ",0
+						; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When commands such as ERASE, MOVE and RENAME fail on a function call,
+; the  filename of the file is printed followed by HYPHS below followed by the
+; actual error message obtained from the EXPLAIN BDOS call. Currently HYPHS is
+; just two hyphens with a space on either side.
+;
+;
+	db	" -- ",0
+
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The following text is printed by the DATE command. The format of  the
+; date command messages is, for example:
+;
+;	Current date is Wed   15-4-85
+;	\              /\ /\/\      /\/
+;	  -----a------   b c   -d--  e
+;
+;
+;        DATIS (Part (a)) is printed before the current date.  Part  (b),  the
+; current day, is printed from the messages SUN, MON, TUE, WED, THU, FRI, SAT.
+; After printing the day, DATE (part (c)) is printed, which is  just  null  in
+; the standard English text.  The actual date (part (d))  is  printed  with  a
+; leading  space  by  the system according to the format specified by the DATE
+; environment string, followed by ENDAT (part (e)) which is just a null string
+; in the Standard Enlish messages given here.
+;
+;        Following this, a prompt is printed for the new date to  be  printed.
+; This  may  be in one of two forms, depending on whether the DATE environment
+; item is defined. If it is not defined, then the prompt is in  the  following
+; form:
+;
+;	Enter new date:
+;	\            /\/
+;	  -----f----  g
+;
+;        If  however  the  DATE  environment  item is defined, then the prompt
+; takes the form:
+;
+;	Enter new date (yy-mm-dd) :
+;	\            /\/\      /\/\/
+;	  -----f----  h   -i--  j g
+;
+;
+;        ENTDAT (part (f)) is always printed first, and PRDAT  (part  (g))  is
+; always printed last. SFMT (part (h)), part (i), and EFMT (part (j)) are only
+; printed if the DATE environment item is defined (as it is  by  default  when
+; COMMAND  starts  up).  Part  (i)  is  printed by the DATE command and is the
+; actual DATE environment string.
+;
+;
+	db	"現在の日付は (",0		; Part (a), one trailing space.
+;
+	db	"日",0				; Texts for part (b).
+	db	"月",0
+	db	"火",0
+	db	"水",0
+	db	"木",0
+	db	"金",0
+	db	"土",0
+;
+	db	")",0				; Part (c),
+	db	"です",0			; Part (e),
+	db	"新しい日付を入力して下さい",0	; Part (f).
+	db	": ",0				; Part (g), one trailing space.
+;
+	db	" (",0				; Part (h), one leading space.
+	db	") ",0				; Part (j).
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The first message printed by the TIME command is TIMIS below, and  it
+; prints the current time. It takes the form:
+;
+;	Current time is 2:45:01.03p
+;	\             /\          /\/
+;	  -----a-----    ----b---  c
+;
+;        TIMIS (part (a)) is printed first, and then the  system  prints  part
+; (b)  with  a  leading  space. ENDTIM (part (c)) is printed at the end of the
+; line, and is null in the standard English version given here.
+;
+;        The prompt for the new time is printed after the next message, and is
+; just a single message called ENTIM.
+;
+;
+	db	"現在の時刻は",0		; Part (a).
+	db	"です",0			; Part (c),
+;
+	db	"新しい時刻を入力して下さい: ",0
+						; Prompt, one trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When  the  BUFFERS  command prints the current number of buffers, the
+; message BUFFS below is printed first. Ideally this  message  should  not  be
+; changed,  since  the  output  has  been  arranged such that exactly the same
+; format and wording could be typed in as a command.
+
+;
+;
+	db	"BUFFERS=",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When the VERIFY command prints the current verify state, the  message
+; VERFY  below  is  printed first. Ideally this message should not be changed,
+; since the output has been arranged such that exactly  the  same  format  and
+; wording could be typed in as a command.
+
+;
+;
+	db	"VERIFY=",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When the RAMDISK command  prints  the  current  RAM  disk  size,  the
+; message  RAMD  is printed first. Ideally this message should not be changed,
+; since the output has been arranged such that exactly  the  same  format  and
+; wording could be typed in as a command.
+;
+;
+	db	"RAMDISK=",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	The FORMAT command first issues the prompt and reads the reply required
+; by MSX disk drivers. The following text is then printed:
+;
+;	All data on drive A: will be destroyed
+;	\                / \                 /
+;	  -------a------     -------c-------
+;
+;	and will be followed by the 'PAUSE' message PRAK defined elsewhere.
+;
+;        FMTDR (part (a)) will first be printed, followed  by  part  (b)  (the
+; drive that is about to be formatted), followed by DSTRY (part (c)).
+;
+;
+if 1;;v2.30
+	db	"ドライブ名は? (",0
+	db	") ",0
+;
+endif
+	db	"ドライブ ",0			; Part (a), one trailing space.
+	db	":上の全てのデータは消去されます",0
+						; Part (c).
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The COPY command, after copying the files, prints the number of files
+; copied. This message takes the form:
+;
+;	  10 files copied
+;	\/\/\           /
+;	a b   ----c----
+;
+;        COPD (part (a)) is printed first, and is just spaces in the  standard
+; English  version  given  here.  Part  (b)  is  the number of files that were
+; copied.  Part (c) is printed after the number, and has two forms. CPF is the
+; singular  form and is printed if the number printed is 1. Otherwise, CPFS is
+; printed.
+;
+;
+	db	"      ",0			; Part (a), six spaces.
+;
+	db	"個のファイルをコピーしました",0
+						; Part (c), one trailing space.
+;
+	db	"個のファイルをコピーしました",0
+						; Plural version.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        If a HELP command is given with no parameters, then the message  HELP
+; below is printed, instead of getting the text from a disk file. If this HELP
+; message is longer than a screenful, then the normal PAUSE message is printed
+; at the end of the screen (as in other commands when /P is given).
+;
+;        It  is  recommended that this message contains at least a list of the
+; standard commands that can be given, and instructions on how to get help  on
+; any of the specific commands listed. In the standard English  message  given
+; here,  the  list of commands is followed by a brief explaination of what the
+; command does. For any commands and HELP subjects mentioned here  there  must
+; of course be a help file.
+;
+;
+if	1
+	db	"このコマンドは横64文字以上表示できる画面モードで使用して下さい.",CR,LF
+endif
+	db	"以下の項目に対する説明が用意されています.",CR,LF
+	db	"特定のコマンドに関する詳しい説明を表示させるには",CR,LF
+	db	"   HELP  command name",CR,LF
+	db	"と入力して下さい.",CR,LF
+	db	CR,LF
+	db	"ASSIGN ... ドライブの割当",CR,LF
+	db	"ATDIR .... ディレクトリの属性の変更",CR,LF
+	db	"ATTRIB ... ファイルの属性の変更",CR,LF
+	db	"BASIC .... MSX disk BASICの起動",CR,LF
+	db	"BUFFERS .. ディスクバッファ数の表示/設定",CR,LF
+	db	"CD ....... CHDIRの省略形",CR,LF
+	db	"CHDIR .... ディフォルトディレクトリの表示/設定",CR,LF
+	db	"CHKDSK ... ディスク内容のチェック",CR,LF
+	db	"CLS ...... 画面表示の消去",CR,LF
+	db	"CONCAT ... ファイルの結合",CR,LF
+	db	"COPY ..... ファイルのコピー",CR,LF
+	db	"DATE ..... 日付の表示/設定",CR,LF
+	db	"DEL ...... ERASEと同じ",CR,LF
+	db	"DIR ...... ディスク上のファイル名の表示",CR,LF
+	db	"DISKCOPY . ディスクの全データのコピー",CR,LF
+	db	"ECHO ..... 文字列の表示",CR,LF
+;
+	db	"ERA ...... ERASEの省略形",CR,LF
+	db	"ERASE .... ファイルの消去",CR,LF
+	db	"EXIT ..... COMMAND2.COMの終了",CR,LF
+	db	"FIXDISK .. MSX-DOS1のディスクをMSX-DOS2用に変更",CR,LF
+	db	"FORMAT ... ディスクの初期化",CR,LF
+	db	"HELP ..... コマンドの説明",CR,LF
+	db	"KMODE .... 漢字モードの変更",CR,LF
+	db	"MD ....... MKDIRの省略形",CR,LF
+	db	"MKDIR .... サブディレクトリの作成",CR,LF
+	db	"MODE ..... スクリーンモードの変更",CR,LF
+	db	"MOVE ..... ファイルの移動",CR,LF
+	db	"MVDIR .... サブディレクトリの移動",CR,LF
+	db	"PATH ..... コマンドサーチパスの表示/設定",CR,LF
+	db	"PAUSE .... 一時停止",CR,LF
+	db	"RAMDISK .. RAMディスクサイズの表示/設定",CR,LF
+	db	"RD ....... RMDIRの省略形",CR,LF
+	db	"REM ...... 注釈",CR,LF
+	db	"REN ...... RENAMEの省略形",CR,LF
+	db	"RENAME ... ファイル名の変更",CR,LF
+	db	"RMDIR .... サブディレクトリの消去",CR,LF
+	db	"RNDIR .... サブディレクトリ名の変更",CR,LF
+	db	"SET ...... 環境変数の表示/設定",CR,LF
+	db	"TIME ..... 時刻の表示/設定",CR,LF
+;
+	db	"TYPE ..... ファイル内容の表示",CR,LF
+	db	"UNDEL .... 消去したファイルの復活",CR,LF
+	db	"VER ...... バージョン番号の表示",CR,LF
+	db	"VERIFY ... ベリファイフラグの表示/設定",CR,LF
+	db	"VOL ...... ボリューム名の表示/設定",CR,LF
+	db	"XCOPY .... COPYの拡張版",CR,LF
+	db	"XDIR ..... DIRの拡張版",CR,LF
+	db	CR,LF
+	db	"MSX-DOS2の全般的機能に関する説明は以下の通りです.",CR,LF
+	db	CR,LF
+	db	"BATCH .... バッチ処理",CR,LF
+	db	"EDITING .. コマンド行の編集",CR,LF
+	db	"ENV ...... 環境変数",CR,LF
+	db	"ERRORS ... エラーメッセージ",CR,LF
+	db	"IO ....... リダイレクト,パイプ,標準入出力",CR,LF
+	db	"SYNTAX ... コマンドの説明に使われる記法",CR,LF
+	db	0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        After running a transient program, COMMAND.COM may  need  to  re-load
+; itself  off  disk. If an error occurs or if the file is not found (specified
+; by the SHELL environment string) then a  prompt  is  printed.   The  message
+; INSERT  is printed, followed by the drive name, followed by INSDRV, which is
+; just a colon (:) in the standard English messages given here.
+;
+;        After printing the text as described above, the prompt  message  PRAK
+; is printed. This message is elsewhere in this file.
+;
+;        Note  that  MSX-DOS.SYS  goes  through a similar procedure when it is
+; trying to load COMMAND.COM for the first time,  and  it  is  desirable  that
+; these messages are similar.
+;
+;
+	db	"COMMAND2.COMの入ったディスクをドライブ ",0
+	db	": に入れて",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;       The following message is printed by the RAMDISK command.
+;
+;        DELRAM is printed when a new RAM disk is  specified  without  the  /D
+; option  and  a  RAM  disk  already  exists,  and  a Y/N (yes/no) response is
+; expected.  The  actual  characters accepted for 'yes' and 'no' responses are
+; specified by the messages Y and N elsewhere in the MESSAGES file.
+;
+;        It  is  recommended that this message attempts to describe the action
+; that is going to be taken, as this is more useful to the user. For  example,
+; 'Destroy all data on RAM disk (Y/N)?' is preferable to a vague 'Are you sure
+; (Y/N)?'.
+;
+;
+	db	"RAMディスク上の全てのデータを消去しますか (Y/N)? ",0
+						; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        The message BADVER below is printed when COMMAND2.COM starts  up  and
+; finds that MSX-DOS is not version 2.00 or later.
+;
+;        After printing this message,  COMMAND2.COM  just  halts  the  system,
+; since  it  cannot  do  much  else (re-booting back to MSX-DOS.SYS would just
+; cause  it  to  be  re-loaded). This message should therefore inform the user
+; that the system has been halted.
+;
+;
+	db	"MSX-DOSのバージョンが違います.システムは停止しました",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When a program that is executing in a  batch  file  is  automatically
+; aborted  (eg. by an 'abort' response from an Abort, Retry error or by a 'End
+; of file on standard input' error), the prompt TERM is  printed,  which  asks
+; the  user whether he/she wants to terminate the batch file. A 'Y/N' (yes/no)
+; response is expected. The actual characters  accepted  for  'yes'  and  'no'
+; responses  are  specified  by the messages Y and N elsewhere in the MESSAGES
+; file.
+;
+	db	"バッチ処理を中止しますか (Y/N)? ",0
+						; One trailing space.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When COMMAND2.COM attempts to read a command  froma  batch  file,  it
+; defines a disk error routine and traps 'Wrong file' and 'Wrong disk' errors.
+; These are converted to prompts which prompt for the insertion of  the  batch
+; file disk.
+;
+;        INSBAT is printed first, followed by the drive from which  the  batch
+; file  is  being  read.  Then BATDRV is printed, which is just a colon in the
+; standard English version given here.
+;
+;        The  prompt  PRAK  is  then  printed (as in the PAUSE command) before
+; COMMAND.COM tries again to read from the batch file.
+;
+;
+	db	"バッチファイルの入ったディスクをドライブ ",0
+						; One trailing space.
+	db	":に入れて下さい",0
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;        When an error occurs and COMMAND2.COM prints an error message, it may
+; also  print  an 'error type'. These indicate from where the error came from.
+; For example, it will print:
+;
+;		*** Redirection error: Invalid filename
+;
+; instead of just 'invalid filename' if the filename that is  invalid  is  one
+; following > or < symbols.
+;
+;        REDER is printed for redirection errors, PIPER is printed for  piping
+; errors,  BATER  is  printed  for  errors whilst reading from batch files and
+; INPER and OUTER are printed for errors on  the  standard  input  and  output
+; respectively.
+;
+;
+	db	"リダイレクトエラー: ",0	; One trailing space.
+;
+	db	"パイプエラー: ",0		; One trailing space.
+;
+	db	"バッチファイルエラー: ",0	; One trailing space.
+;
+	db	"標準入力エラー: ",0		; One trailing space.
+;
+	db	"標準出力エラー: ",0		; One trailing space.
+;
+;
+;
+	END

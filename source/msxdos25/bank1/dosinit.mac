@@ -1,0 +1,2100 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	ROM Resident Part of Kernel Initialisation
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	INCLUDE	CONDASM.INC
+
+MAXDRV	equ	8		;max number of drives supported by disk
+DRVTBL	equ	0FB21h	
+
+;
+;-----------------------------------------------------------------------------
+;
+DOSINIT::
+;
+;    This module is the ROM resident part of the DOS Kernel initialisation. It
+; is  called  by  the main disk ROM "INIT" module once at initialisation time.
+; Its main functions are as follows:
+;
+;	1.  Initialise the mapper support routines, including allocating
+;	    the kernel RAM segment and initialising allocation variables
+;	    within it.
+;	2.  Download the RAM resident code and set up the jumps to it.
+;	3.  Allocate the kernel code segment and copy code into it.
+;	4.  Patch an interrupt routine into the timer interrupt hook.
+;	5.  Call the KBDOS initialisation code in the code segment.
+;
+;    Must be entered with the following slots enabled, and these will
+; be preserved on return:
+;		page-0 - BIOS ROM
+;		page-1 - Master disk ROM (this code)
+;		page-2 - RAM slot - system page-2 segment
+;		page-3 - RAM slot - system page-3 segment
+;
+; Entry:  A = current page-2 slot for MAP_INIT routine.
+; Output: Cy=1 and A=Error code on error
+
+		di
+
+		call	MAP_INIT##		;Initialise mapper routines
+		ld	a,1
+		ret	c			;Abort if any error.
+;
+		call	DOWNLOAD_CODE		;Download page-3 RAM code
+		ld	a,2
+		ret	c			;Abort if any error
+;
+		ld	a,1			;Set default drive to "A:"
+		ld	(CUR_DRV##),a		; initially.
+;
+		ld	a,(ID_BYTE##)		;Extract interrupt frequency
+		rlca				; and record it as a counter
+		sbc	a,a			; for every 10-th second
+		add	a,6			; timer interrupt
+		ld	(TIM_RATE##),a		; through to the kernel.
+		ld	(RANDOM##),a		;Initialise random number
+						; seed (any non-zero value
+						; will do).
+;
+		ld	hl,P0_64K##		;Set the four TPA segments to
+		ld	de,P0_TPA##		; the initial 64k of RAM.
+		ld	bc,4
+		ldir				;Leaves B=0
+;
+		ld	a,(DATA_SEG##)		;Put kernel data segment in
+		call	PUT_P2##		; page-2.
+;
+if 1
+		call	BUILD_UC_TAB		;Build upper casing table there
+endif
+
+		ld	hl,$DPBLIST##		;Set the default media bytes table
+		ld	ix,MB_DEF##
+		ld	b,MAXDRV
+DEFMBYTE_LOOP:
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	a,d
+		or	e
+		ld	a,0
+		jr	z,DEFMBYTE_SET
+
+		inc	de
+		ld	a,(de)
+
+DEFMBYTE_SET:
+		ld	(ix),a
+		inc	ix
+		djnz	DEFMBYTE_LOOP
+
+MSXVER	equ	002Dh
+
+		ld	a,(EXPTBL##)
+		ld	hl,MSXVER
+		call	RDSLT##
+		cp	3
+		jr	c,NEEDZ80_DONE
+
+		ld	ix,TURBO_VECT##		;Build the table of drivers that need Z80 mode
+		ld	hl,DRVTBL		;enabled to work in Turbo-R, initially
+		ld	b,4			;with the slots of all the legacy drivers found
+NEEDZ80_LOOP:
+		ld	a,(hl)
+		or	a
+		jr	z,NEEDZ80_DONE
+
+		inc	hl
+		ld	c,(hl)
+		ld	de,(KER250##)
+		ld	a,d
+		and	10001111b
+		cp	c
+		jr	z,NEEDZ80_NEXT
+		ld	a,e
+		and	10001111b
+		cp	c
+		jr	z,NEEDZ80_NEXT
+		ld	de,(KER250##+2)
+		ld	a,d
+		and	10001111b
+		cp	c
+		jr	z,NEEDZ80_NEXT
+		ld	a,e
+		and	10001111b
+		cp	c
+		jr	z,NEEDZ80_NEXT
+
+		ld	(ix),c
+		inc	ix
+
+NEEDZ80_NEXT:
+		inc	hl
+		djnz	NEEDZ80_LOOP
+NEEDZ80_DONE:
+
+;
+if 0
+		ld	a,1
+		call	ALL_SEG##		;Allocate a system segment
+		ld	h,a
+		ld	a,3
+		ret	c			; for the code segment.
+		ld	a,h
+		ld	(CODE_SEG##),a
+		call	PUT_P0##		;Put it in page-0.
+else
+		ld	a,(CODE_SEG##)		;Put kernel code segment in
+		call	PUT_P0##		; page-0.
+endif
+;
+if 1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Transfer kernel code to mapper RAM
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;   At the moment...    (H.F., JeyS)
+;
+		code	lxi h			;Build following routine on
+		pop	af			; the stack.
+		ret				;
+		push	hl			;   LDIR
+		code	lxi h			;   POP AF
+		ldir				;   RET
+		push	hl			;
+		ld	hl,copy_done		;Where to return in this bank.
+		push	hl
+		ld	hl,CHGBNK##		;Where to call before return.
+		push	hl
+		ld	a,(BNK_ID##)		;What to pop after LDIR
+		push	af
+		ld	hl,6
+		add	hl,sp
+		push	hl			;Where to go
+;
+		call	P0_RAM##		;Enable RAM in page-0
+		ld	hl,OFFSET
+		ld	de,0			;Copy 16k of kernel code
+if 1
+		ld	bc,7FF0h - OFFSET
+else
+		ld	bc,-OFFSET and 3FFFh	; from ROM into RAM.
+endif
+;
+		ld	a,B.KERNEL##		;Switch to bank of kernel code
+		jp	CHGBNK##		;
+;
+copy_done:	pop	hl
+		pop	hl
+else
+		ld	a,(MASTER_SLOT##)	;Enable disk ROM into page-2
+		ld	h,80h			; (contains kernel code)
+		call	ENASLT##
+		call	P0_RAM##		;Enable RAM in page-0
+		ld	hl,8000h
+		ld	de,0			;Copy 16k of kernel code
+		ld	bc,4000h		; from ROM into RAM.
+		ldir
+		ld	a,(RAMAD3##)		;Put RAM back into page-2
+		ld	h,80h			; (will use new version of
+		call	ENASLT##		;  ENASLT in downloaded code)
+endif
+;
+if 0
+		ld	hl,GO_DRV_ROUTINE	;Record address of routine
+		ld	(GO_DRV##),hl		; to call disk drivers.
+		ld	hl,ERR_MSG##		;Record address of error
+		ld	($ERR_MSG##),hl		; message routine.
+;
+		ld	hl,H.TIMI##
+		push	hl
+		ld	de,TIMI_SAVE##		;Save the current setting of
+		ld	bc,5			; the timer interrupt hook
+		ldir				; in our data area.
+		pop	hl
+		ld	(hl),0F7h
+		inc	hl
+		ld	a,(MASTER_SLOT##)	;Now set up an inter-slot call
+		ld	(hl),a			; to our timer interrupt
+		inc	hl			; routine in this ROM page.
+		ld	(hl),LOW TIME_IRQ##
+		inc	hl
+		ld	(hl),HIGH TIME_IRQ##
+		inc	hl
+		ld	(hl),0C9h
+;
+endif
+		call	KINIT##			;Call main kernel init routine
+		ex	af,af'			; in downloaded code.
+;
+		di
+		ld	a,(EXPTBL##)
+		ld	h,0
+		call	ENASLT##		;Re-enable BIOS ROM in page-0
+		ld	a,(P2_TPA##)
+		call	PUT_P2##		;Restore original RAM segments
+		ld	a,(P0_TPA##)		; to page-0 and page-2.
+		call	PUT_P0##
+		ei
+;
+		ex	af,af'			;Return with carry flag from
+		ret				; KINIT to indicate success
+						; or failure.
+if 1
+BUILD_UC_TAB:
+		ld	a,(ID_BYTE##)		;Extract and record character
+		and	00001111b		; generator type for upper
+		ld	(CH_TYPE##),a		; casing routine.
+;
+		ld	hl,UC_TAB##
+		xor	a
+		ld	b,a
+buc_loop:	push	af
+		call	UPPER_CASE
+		ld	(hl),a
+		pop	af
+		inc	a
+		inc	hl
+		djnz	buc_loop
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+UPPER_CASE:
+;
+;    This  routine  upper  cases a character passed in register A.  It behaves
+; differently for  different  country  versions,  depending  on  the  type  of
+; character generator which is specified at address 0002Bh in the main ROM and
+; copied to the variable "CH_TYPE"  in  system  RAM  at  initialisation  time.
+; Currently it supports the following codes (which must be checked):
+;
+;		0 - Japanese
+;		1 - International
+;		2 - Korean
+;		3 - Russian
+;
+; Entry:      A = character to be uppercased
+; Returns:    A = suitable upper case character
+; Corrupts:   AF
+;
+		push	hl
+		push	bc
+		push	af			;Find out the character
+		ld	a,(CH_TYPE##)		; generator type and use
+		and	00000011b		; it to index into a table
+		add	a,a			; of pointers.
+		ld	c,a
+		ld	b,0
+		ld	hl,UP_CASE_TABLE
+		add	hl,bc
+		ld	a,(hl)
+		inc	hl			;HL := pointer for the
+		ld	h,(hl)			; correct version.
+		ld	l,a
+;
+		pop	af
+		ld	b,(hl)			;B := entry counter
+		inc	hl
+up_test_loop:	cp	(hl)
+		inc	hl			;Compare with this lower limit
+		jr	c,up_too_low		; and if OK then compare with
+		cp	(hl)			; upper limit and skip if
+		jr	c,up_in_range		; that is OK as well.
+up_too_low:	inc	hl
+		inc	hl			;Point to next entry and loop
+		djnz	up_test_loop		; back until tried all entries
+;
+		cp	080h			;If character is in range
+		jr	c,up_case_ret		; 080h...0BFh then must look
+		cp	0C0h			; up in a conversion table.
+		jr	nc,up_case_ret
+		ld	c,(hl)			;Get address of conversion
+		inc	hl			; table for this country.
+		ld	h,(hl)
+		ld	l,c
+		ld	c,a			;Index into the table
+		add	hl,bc
+		ld	a,(hl)			;Get upper-case code from
+		jr	up_case_ret		; the table and return it.
+;
+up_in_range:	inc	hl			;Add offset to turn character
+		add	a,(hl)			; into upper case.
+up_case_ret:	pop	bc
+		pop	hl			;Restore registers and return
+		ret
+;
+;	----------------------------------------
+;
+UP_CASE_TABLE:	dw	up_case_japan
+		dw	up_case_inter
+		dw	up_case_korea
+		dw	up_case_russia
+;
+;	----------------------------------------
+;
+up_case_japan:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	no_conv_table
+;
+;
+up_case_inter:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	inter_conv_table		;Table for 80h...BFh
+;
+;
+up_case_korea:	db	1
+		db	"a",  "z"+1,  "A"-"a"
+		dw	no_conv_table
+;
+;
+up_case_russia:	db	2
+		db	"a",  "z"+1,  "A"-"a"
+		db	0C0h, 0DEh+1, 0C0h-0E0h		;Cyrillic alphabet
+		dw	no_conv_table
+;
+;
+no_conv_table	equ	$-080h
+		db	080h,081h,082h,083h,084h,085h,086h,087h
+		db	088h,089h,08Ah,08Bh,08Ch,08Dh,08Eh,08Fh
+		db	090h,091h,092h,093h,094h,095h,096h,097h
+		db	098h,099h,09Ah,09Bh,09Ch,09Dh,09Eh,09Fh
+		db	0A0h,0A1h,0A2h,0A3h,0A4h,0A5h,0A6h,0A7h
+		db	0A8h,0A9h,0AAh,0ABh,0ACh,0ADh,0AEh,0AFh
+		db	0B0h,0B1h,0B2h,0B3h,0B4h,0B5h,0B6h,0B7h
+		db	0B8h,0B9h,0BAh,0BBh,0BCh,0BDh,0BEh,0BFh
+;
+;
+inter_conv_table equ	$-080h
+		db	080h,09Ah,"E", "A", 8Eh, "A", 08Fh,080h
+		db	"E", "E", "E", "I", "I", "I", 08Eh,08Fh
+		db	090h,092h,092h,"O" ,099h,"O" ,"U" ,"U"
+		db	"Y" ,099h,09Ah,09Bh,09Ch,09Dh,09Eh,09Fh
+		db	"A" ,"I" ,"O" ,"U" ,0A5h,0A5h,0A6h,0A7h
+		db	0A8h,0A9h,0AAh,0ABh,0ACh,0ADh,0AEh,0AFh
+		db	0B0h,0B0h,0B2h,0B2h,0B4h,0B4h,0B6h,0B6h
+		db	0B8h,0B8h,0BAh,0BBh,0BCh,0BDh,0BEh,0BFh
+;
+endif
+;
+;-----------------------------------------------------------------------------
+;
+DOWNLOAD_CODE:
+;
+;    This routine downloads all the RAM resident code which must be in page-3,
+; does  any necessary patching and initialisation of it, and sets up the jumps
+; to the routines in page-3.  The downloaded code includes the mapper  support
+; routines,  page-0  and  general  slot switching routines and interrupt entry
+; code.
+;
+;
+		ld	hl,IRQS_SZ##+BDS_SZ##+P3_RAM_SIZE
+		call	ALLOC##			;Allocate memory for the
+		ret	c			; stack and downloaded code.
+;
+;	+++++  ALLOCATE INTERRUPT STACK  +++++
+;
+		ld	(hl),0			;Zero the whole of the stack
+		ld	e,l			; to make checking for stack
+		ld	d,h			; overflow easier.
+		inc	de
+		ld	bc,IRQS_SZ##
+		ldir
+		ld	(IRQ_STACK##),hl	;Set up a pointer to the
+						; top of the stack.
+;
+;	+++++  ALLOCATE STACK FOR CALLING BDOS  +++++
+;
+		ld	bc,BDS_SZ##
+		ldir
+		ld	(BDOS_STACK##),hl	;Set up a pointer to the
+						; top of the stack.
+;
+		ex	de,hl
+		ld	hl,P3_RAM_START		;Copy RAM resident code
+		push	de			; into the new RAM.
+		ld	bc,P3_RAM_SIZE
+		ldir
+;
+;	+++++  CREATE THE JUMP TABLE IN PAGE-3  +++++
+;
+		ld	bc,JUMPBASE##
+		ld	hl,P3_OFFSET_TAB
+map_jump_loop:	ld	e,(hl)			;Get next offset from table
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	a,d
+		or	e
+		jr	z,map_jumps_done	;Exit at end of table
+		ex	(sp),hl
+		ex	de,hl			;Add address of start of
+		add	hl,de			; RAM code (in (SP)) to
+		ex	de,hl			; this offset in DE.
+		ex	(sp),hl
+		ld	a,0C3h			;Put a jump instruction in
+		ld	(bc),a
+		inc	bc
+		ld	a,e
+		ld	(bc),a			;Put the destination address
+		inc	bc			; of the jump in.
+		ld	a,d
+		ld	(bc),a
+		inc	bc
+		jr	map_jump_loop		;Loop for next one.
+;
+map_jumps_done:	pop	de			;Get RAM code address back
+;
+;	+++++  ADJUST ALL ABSOLUTE REFERENCES  +++++
+;
+		ld	hl,P3_ADJUST_TAB
+adjust_loop:	ld	c,(hl)			;Loop to adjust all absolute
+		inc	hl			; references within the
+		ld	b,(hl)			; downloaded code.
+		inc	hl
+		ld	a,b			;BC := offset of next to adjust
+		or	c
+		jr	z,adjust_done		;Zero => end of table
+		push	hl
+		ld	h,b
+		ld	l,c
+		add	hl,de			;HL := address to adjust
+		ld	a,(hl)
+		add	a,e			;Add the start address onto
+		ld	(hl),a			; the offset which is already
+		inc	hl			; at this address.
+		ld	a,(hl)
+		adc	a,d
+		ld	(hl),a
+		pop	hl
+		jr	adjust_loop		;Loop for next entry.
+;
+adjust_done:
+if 1 ;[HF] an interim solution while kernel is paged in.
+		ld	a,(CODE_SEG##)
+		ld	hl,_patch_53+1		;Patch segment number of
+		add	hl,de			; kernel code int IRQ.
+		ld	(hl),a
+;
+endif
+;
+;	+++++  PATCH P0_RAM SWITCHING ROUTINE  +++++
+;
+		ld	a,(RAMAD3##)
+		and	00000011b		;Patch primary RAM slot
+		ld	hl,_patch_15+1		; number into P0_RAM code
+		add	hl,de
+		ld	(hl),a
+		ld	c,a			;Save primary slot number
+		ld	b,0			; in BC.
+if 1
+		rlca
+		rlca
+		rlca
+		rlca
+		or	c
+		ld	hl,_patch_65+1		;Patch primary RAM slot
+		add	hl,de			; number into PUT_BDOS
+		ld	(hl),a
+endif
+;
+		ld	a,(RAMAD3##)
+		bit	7,a			;Skip if RAM slot is not
+		jr	z,ram_not_exp		; expanded.
+		ld	hl,_patch_11
+		add	hl,de
+		ld	(hl),b			;If RAM slot is expanded then
+		inc	hl			; patch out the relative jump.
+		ld	(hl),b
+if 1
+		ld	hl,_patch_60
+		add	hl,de
+		ld	(hl),b
+		inc	hl
+		ld	(hl),b
+		ld	hl,_patch_62
+		add	hl,de
+		ld	(hl),b
+		inc	hl
+		ld	(hl),b
+;
+		ld	hl,_patch_16
+		add	hl,de
+		code	mvi m			;Patch the RET at RE_RAM.
+		 code	sta
+endif
+;
+		rrca
+		rrca				;Patch secondary RAM slot
+		and	00000011b		; number into the P0_RAM
+		ld	hl,_patch_13+1		; code.
+		add	hl,de
+		ld	(hl),a
+if 1
+		ld	l,a
+		rlca
+		rlca
+		rlca
+		rlca
+		or	l
+		ld	hl,_patch_63+1		;Patch secondary RAM slot
+		add	hl,de			; number into PUT_BDOS
+		ld	(hl),a
+endif
+;
+		push	de
+		ld	hl,SLTTBL##		;Work out the address of the
+		add	hl,bc			; correct secondary slot reg
+		ex	de,hl			; image variable depending
+if 0
+		ld	bc,_patch_12+1		; on the primary RAM slot.
+		add	hl,bc
+		ld	(hl),e			;Patch this address into
+		inc	hl			; the P0_RAM code in both
+		ld	(hl),d			; places where it occurs
+		ld	bc,_patch_14-_patch_12-1
+else
+		ld	bc,_patch_14+1
+endif
+		add	hl,bc
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		ld	bc,_patch_16-_patch_14-1;... also patch it into
+		add	hl,bc			; the RE_RAM code.
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+if 1
+		ld	bc,_patch_61-_patch_16-1
+		add	hl,bc
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		ld	bc,_patch_64-_patch_61-1
+		add	hl,bc
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+endif
+		pop	de
+;
+ram_not_exp:
+;
+;	+++++  PATCH P0_BIOS SWITCHING ROUTINE & other bits  +++++
+;
+		ld	a,(EXPTBL##)
+		and	00000011b		;Patch primary BIOS slot
+		ld	hl,_patch_25+1		; number into P0_BIOS code
+		add	hl,de
+		ld	(hl),a
+		ld	c,a			;Save primary slot number
+		ld	b,0			; in BC.
+;
+		rrca				;Patch primary BIOS slot
+		rrca				; number in page-3 position
+		ld	hl,_patch_52+1		; into RE_BIOS routine.
+		add	hl,de
+		ld	(hl),a
+;
+		ld	a,(EXPTBL##)
+		bit	7,a			;Skip if BIOS slot is not
+		jr	z,bios_not_exp		; expanded.
+		ld	hl,_patch_20
+		add	hl,de
+		ld	(hl),b			;If BIOS slot is expanded then
+		inc	hl			; patch out the relative jump.
+		ld	(hl),b
+;
+		rrca
+		rrca				;Patch secondary BIOS slot
+		and	00000011b		; number into the P0_BIOS
+		ld	hl,_patch_23+1		; code.
+		add	hl,de
+		ld	(hl),a
+;
+		ld	a,(RAMAD3##)		;If BIOS is in same primary
+		xor	c			; slot as RAM then patch out
+		and	00000011b		; a jump to enable special
+		jr	nz,bios_not_ram		; case code to directly
+		ld	hl,_patch_26		; access the secondary slot
+		add	hl,de			; register in page-3.
+if 0
+		ld	(hl),b
+		inc	hl
+		ld	(hl),b
+else
+		code	mvi m
+		 code	sta
+		inc	hl
+		ld	(hl),0FFh
+		inc	hl
+		ld	(hl),0FFh
+endif
+		jr	bios_is_ram
+;
+bios_not_ram:	code	mvi a			;If BIOS slot is expanded and
+		 code	push psw		; is in a different primary
+		ld	hl,_patch_30		; slot from the RAM then
+		add	hl,de			; enable the saving of the BIOS
+		ld	(hl),a			; secondary slot register.
+		ld	hl,_patch_40		;Put a "PUSH AF" in "P0_CALL"
+		add	hl,de
+		ld	(hl),a			;.... also in "FLUSH"
+		ld	hl,_patch_50
+		add	hl,de
+		ld	(hl),a			;.... also in "GO_IRQ"
+		ld	hl,_patch_51
+		add	hl,de			;Change "JP P0_RAM" into a
+		code	mvi m			; "CALL" in "GO_IRQ"
+		 code	call
+		ld	hl,_patch_31
+		add	hl,de			;Patch the "JR" out of
+		ld	(hl),b			; "P0_CALL"
+		inc	hl
+		ld	(hl),b
+		ld	hl,_patch_41
+		add	hl,de			;.... also patch it out
+		ld	(hl),b			; of "FLUSH"
+		inc	hl
+		ld	(hl),b
+;
+bios_is_ram:	push	de
+		ld	hl,SLTTBL##		;Work out the address of the
+		add	hl,bc			; correct secondary slot reg
+		ex	de,hl			; image variable depending
+		ld	bc,_patch_22+1		; on the primary BIOS slot.
+		add	hl,bc
+		ld	(hl),e			;Patch this address into
+		inc	hl			; the P0_BIOS code in both
+		ld	(hl),d			; places where it occurs.
+		ld	bc,_patch_24-_patch_22
+		add	hl,bc
+		ld	(hl),d
+		dec	hl
+		ld	(hl),e
+		pop	de
+;
+bios_not_exp:
+;===== start add DOS2.50 (build type)
+;
+;	+++++  SET UP SUPPORT SUPER TURBO MODE RUTINE  +++++
+;
+if STURBO
+
+	;This code has been removed in Nextor.
+	;Now the Z80 mode will be enabled for disk access
+	;only on legacy drivers that have the Z80 mode enabled.
+	;This mode is enabled by default for all legacy drivers,
+	;and can be disabled by using the Z80MODE function call.
+
+if 0
+
+		ld	a,(002Dh)		;VERSION
+		cp	3
+		jr	c,bios_not_superturbo
+		ld	hl,_patch_70
+		add	hl,de
+		ld	(hl),0			;set nop * 2
+		inc	hl
+		ld	(hl),0
+		ld	hl,_patch_71
+		add	hl,de
+		ld	(hl),0			;set nop * 2
+		inc	hl
+		ld	(hl),0
+
+endif
+
+;
+bios_not_superturbo:
+endif
+;===== end add DOS2.50
+;
+;	+++++  SET UP AUXIN, AUXOUT AND BDOS JUMPS  +++++
+;
+if 0
+		ld	a,(MASTER_SLOT##)
+		ld	hl,_patch_01		;Patch our slot number into
+		add	hl,de			; the BDOS jump code.
+		ld	(hl),a
+endif
+;
+		ld	hl,P3_JUMP_TABLE	;Loop to set up the page-3
+jump_tab_loop:	ld	c,(hl)			; fixed jumps.
+		inc	hl
+		ld	b,(hl)
+		inc	hl
+		ld	a,b
+		or	c			;Exit if address of jump is
+		jr	z,jump_tab_done		; zero.
+		ld	a,0C3h
+		ld	(bc),a			;Put the jump instruction in.
+		inc	bc
+		push	de
+		ld	e,(hl)
+		inc	hl			;Get offset into downloaded
+		ld	d,(hl)			; code.
+		inc	hl
+		ex	(sp),hl
+		ex	de,hl
+		bit	7,h			;If this is the page-3 entry
+		jr	nz,absolute_jump	; it it an absolute address.
+		add	hl,de			;Add on base address to get
+absolute_jump:	ld	a,l			; actual destination address.
+		ld	(bc),a
+		inc	bc			;Store destination address as
+		ld	a,h			; destination of jump.
+		ld	(bc),a
+		pop	hl
+		jr	jump_tab_loop
+jump_tab_done:
+		or	a
+		ret				;Return NC to indicate success
+;
+;
+P3_JUMP_TABLE:	dw	$DOSON##,  _$DOSON
+		dw	$DOSOFF##, _$DOSOFF
+		dw	XFER##,    _XFER
+		dw	$AUXIN##,  AUXBODY##
+		dw	$AUXOUT##, AUXBODY##+5
+		dw	GO_BIOS##, _GO_BIOS
+		dw	GO_BDOS##, _GO_BDOS
+		dw	BDOS##,    _BDOS_JUMP
+		dw	0
+;
+;
+;*****************************************************************************
+;
+P3_RAM_START:
+;
+	.PHASE	0
+;
+SLOT_REG	equ	0A8h
+P0_REG		equ	0FCh
+P1_REG		equ	0FDh
+P2_REG		equ	0FEh
+P3_REG		equ	0FFh
+;
+;
+adjlbl		MACRO	label,inst
+_adjust_&label:  inst
+		ENDM
+;
+_adjust_label	defl	0
+;
+...		MACRO	inst
+_adjust_label	 defl	_adjust_label+1
+		 adjlbl	%_adjust_label,<inst>
+		ENDM
+;
+;
+;-----------------------------------------------------------------------------
+;
+;    These are the routines which switch page-1 between the  master  disk  ROM
+; and  the  page-1 TPA RAM segment.  They are provided for use by disk drivers
+; for compatability with MSX-DOS 1.0.
+;
+_$DOSON:	push	af
+		ld	a,i
+		push	af
+		ld	a,(MASTER_SLOT##)	;Get master cartridge slot
+		jr	_dos_on_off		; address.
+;
+_$DOSOFF:	push	af
+		ld	a,i
+		push	af
+if 0
+		ld	a,(RAMAD3##)		;Get RAM slot address
+else
+		ld	a,(RAMAD1##)		;Get RAM slot address
+endif
+;
+_dos_on_off:	push	hl
+		push	de
+		push	bc
+		ld	h,040h			;Enable either the master
+		call	ENASLT##		; cartridge or the RAM slot
+		pop	bc			; in page-1.
+		pop	de
+		pop	hl
+		pop	af
+...	      < jp	pe,_doson_was_ei >
+		ei
+_doson_was_ei:	pop	af
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_XFER:
+;
+;    This is the routine which does an LDIR into user's RAM in page-1.  It  is
+; provided  for  compatability with earlier versions of the system although it
+; should  not  really be needed for disk drivers running under the new system
+; since all transfers are done to page-2.  It contains a gross  hack  to  get
+; around the secondary slot problems (the extra call to $DOSON).
+;
+		push	af
+		push	hl
+		push	de
+		push	bc
+		call	GETSLOT##		;Find our current slot
+		push	af			; address.
+if 0
+		ld	a,(RAMAD3##)
+else
+		ld	a,(RAMAD1##)
+endif
+		ld	h,040h
+		call	ENASLT##		;Enable RAM slot in page-1
+		pop	af
+		pop	bc
+		pop	de
+		pop	hl
+		ldir				;Do the transfer
+		push	hl
+		push	de
+		push	bc
+if 0
+		call	$DOSON##		;Secondary slot bug fix.
+endif
+		ld	h,040h			;Re-enable the original
+		call	ENASLT##		; slot in page-1.
+		pop	bc
+		pop	de
+		pop	hl
+		pop	af
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_RD_LDIR:
+;
+;    This routine is used by the RAMdisk device in order to copy data to  and
+; from  segments  in  non-primary  mapper  slots.   The required segment will
+; already be paged in so this routine just selects the required slot,  copies
+; the  data in the appropriate direction and then restore the master disk ROM
+; slot and returns.  Note that this process can corrupt  the  secondary  slot
+; register of the RAM slot and so the secondary slot  registers must be saved
+; before calling this function and restored afterwards.
+;
+;
+		push	de
+		push	hl
+		ld	a,b
+		ld	h,040h			;Select required slot into
+		call	ENASLT##		; page-1.
+if 1
+;
+; Unless we enable interrupt here, interrupt will be disabled for about  105ms
+; in  the  worst  (full  page  transfer)  case.   This  is  too  much  for the
+; communication devices.  [HF]
+;
+		ei
+endif
+		pop	de
+		pop	bc
+		ld	hl,(RD_ADDR##)
+		ex	af,af'
+		jr	c,write_noswap		;Swap source and destination
+if 0 ;;R800-BUG
+		push	de
+		ex	(sp),hl
+		pop	de
+else
+		ex	de,hl			; addresses if reading.
+endif
+write_noswap:	ex	af,af'
+		ldir				;Copy the data
+		ld	a,(MASTER_SLOT##)
+		ld	h,040h			;Restore master disk ROM to
+if 1
+		call	ENASLT##		; page-1 and return
+		ei
+		ret
+else
+		jp	ENASLT##		; page-1 and return
+endif
+;
+;
+;-----------------------------------------------------------------------------
+;
+if 0 ;[HF]
+_AUXIN_JUMP:	ld	a,CTRL_Z	;AUXIN code, simply returns an
+		ret			; EOF character.
+		db	0,0
+;
+_AUXOUT_JUMP:	ret			;AUXOUT code, simply returns
+		db	0,0,0,0		; without doing anything.
+;
+_BDOS_JUMP:	ld	(IX_BDOS##),ix	;IX doesn't survive inter-slot call
+		rst	30h		;Inter-slot jump for BDOS entry from
+_patch_01:	db	0		; F37Dh, to call the routine below.
+		dw	BDOS_GO##	; Slot number is patched into this
+		ret			; when it is copied to system RAM.
+else
+_BDOS_JUMP:	ld	(IX_BDOS##),ix	;IX doesn't survive inter-slot call.
+		ld	iy,(MASTER_SLOT##-1)
+		ld	ix,($BDOS##)
+		jp	CALSLT##
+endif
+;
+;
+;-----------------------------------------------------------------------------
+;
+; These routines are used by MSX-DOS version 1 simulator.
+;
+_JP_VECT:	ei
+		push	de
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		ex	de,hl
+		pop	de
+;===== start mod DOS2.50
+		push	hl
+		ld	hl,(ERR_EX_SECTOR##)
+		ret
+;;		jp	(hl)
+;===== end mod DOS2.50
+;
+;
+;-----------------------------------------------------------------------------
+;
+_GO_DRV:
+;
+; I don't like these routines loose sync.  [HF]
+;
+		ex	af,af'
+...	      < call	_drv_prompt >
+;===== start mod DOS2.50 (build type)
+if STURBO
+;;if 1 ;;HYBRID
+;===== end mod DOS2.50
+;===== start add DOS2.50 (support build type)
+_patch_70:	jr	_go_drv_skip1_super_turbo
+;===== end add DOS2.50
+		push	ix
+		ld	ix,0183h	;GETCPU
+		call	P0_CALL##
+		push	af
+		xor	a
+		ld	ix,0180h	;CHGCPU
+		call	P0_CALL##
+		pop	af
+		pop	ix
+		push	af
+_go_drv_skip1_super_turbo:
+endif
+		ex	af,af'
+;
+		call	CALSLT##
+;===== start mod DOS2.50 (build type)
+if STURBO
+;;if 1 ;;HYBRID
+;===== end mod DOS2.50
+;===== start add DOS2.50 (support build type)
+_patch_71:	jr	_go_drv_skip2_super_turbo
+;===== end add DOS2.50
+		ex	af,af'
+		pop	af
+		push	ix
+		ld	ix,0180h	;CHGCPU
+		call	P0_CALL##
+		pop	ix
+		ex	af,af'
+_go_drv_skip2_super_turbo:
+endif
+;
+_app_prompt:	ex	af,af'
+		ld	a,($DOSOFF##)	;Restore $DOSON routine.
+...	      < call	_swap_prompt >
+		ex	af,af'
+		ret
+;
+;	--------------------------------
+;
+_PROMPT:
+		pop	af		;Prepare to return direct to the disk
+					; driver, i.e. skip prompt routine of
+					; slave.
+;
+...	      <	call	_app_prompt >
+;
+if 1 ;PANABUG
+		push	iy
+		push	de
+endif
+		call	GETSLOT##
+		push	af
+...	      < call	_GET_P2 >
+		push	af
+...	      < call	_PUT_USER >
+;
+		ld	iy,(MASTER_SLOT##-1)
+		ld	ix,($PROMPT##)	;Call prompt routine with user hook
+		call	CALSLT##	; active.
+;
+...	      < call	_PUT_BDOS >
+		pop	af
+...	      < call	_PUT_P2 >
+		pop	af
+		ld	h,40h
+		call	ENASLT##
+if 1 ;PANABUG
+		pop	de
+		pop	iy
+endif
+;
+_drv_prompt:	code	mvi a		;Kill $DOSON routine while disk driver
+		 code	ret		; is active.
+;
+_swap_prompt:	ld	($DOSON##),a
+		exx
+		ld	hl,H.PROMPT##
+...	      < ld	de,_prompt_save >
+		ld	b,3
+_swap_loop:	ld	c,(hl)
+		ld	a,(de)
+		ld	(hl),a
+		ld	a,c
+		ld	(de),a
+		inc	hl
+		inc	de
+		djnz	_swap_loop
+		exx
+		ret
+;
+_prompt_save:
+...	      < jp	_PROMPT >
+;
+;
+;-----------------------------------------------------------------------------
+;
+; This routine enables the kernel code and its data segments into  page-0  and
+; page-2 place regardless of which slot is in page-0 and page-2 currently.
+; This also saves current slots and segments in fixed work area.
+;
+; Corrupts: None
+;
+_GO_BIOS:
+...	      < call	_PUT_BDOS >
+		call	_JP_HL
+		jr	_PUT_USER
+;
+;	----------------------------------------
+;
+_GO_BDOS:
+...	      < call	_PUT_BDOS >
+		call	KBDOS##
+;
+;	----------------------------------------
+;
+_PUT_USER:	di
+		push	af
+_patch_60:	jr	_ram_not_exp1
+;
+		ld	a,(SS_BDOS##)		;Select the original slots
+_patch_61:	ld	(??????),a		; into page-0 and page-2.
+		ld	(0FFFFh),a		;
+;
+_ram_not_exp1:	ld	a,(PS_BDOS##)
+		out	(SLOT_REG),a
+;
+		ld	a,(P0_TPA##)		;Restore the original segments
+...	      < call	_PUT_P0 >		; into page-0 & page-2.
+		ld	a,(P2_TPA##)
+...	      < call	_PUT_P2 >
+		pop	af
+		ei
+_at_the_moment:
+		ret
+;
+;	----------------------------------------
+;
+_PUT_BDOS:
+		di
+		push	af
+_patch_62:	jr	_ram_not_exp2
+		ld	a,(0FFFFh)		;Get current RAM secondary
+		cpl				; slot and save it in SS_BDOS.
+		ld	(SS_BDOS##),a
+		and	11001100b		;Page the RAM secondary slot
+_patch_63:	or	??????			; in page-0 and page-2.
+_patch_64:	ld	(??????),a
+		ld	(0FFFFh),a
+;
+_ram_not_exp2:	in	a,(SLOT_REG)		;Get current primary slot
+		ld	(PS_BDOS##),a		; and save it in PS_BDOS.
+		and	11001100b		;Page the RAM primary slot
+_patch_65:	or	??????			; in page-0 and page-2.
+		out	(SLOT_REG),a
+;
+...	      < call	_GET_P0 >		;Save current paging state
+		ld	(P0_TPA##),a		; (page 3 should never change
+...	      < call	_GET_P1 >		; and P3_TPA should already
+		ld	(P1_TPA##),a		; be set up).
+...	      < call	_GET_P2 >
+		ld	(P2_TPA##),a
+;
+		ld	a,(CODE_SEG##)		;Page the KBDOS segment into
+...	      < call	_PUT_P0 >		; page-0 and it's data segment
+		ld	a,(DATA_SEG##)		; into page-2.
+...	      < call	_PUT_P2 >
+		pop	af
+		ei
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_P0_LDIR:
+;
+;    This routine is used by the read/write code in FISH to copy data  between
+; disk  buffers  and  DTA segments.  The DTA segment number will be paged into
+; page-0 and so the addresses passed must be set appropriately.   It  disables
+; interrupts  since  it  is paging out the interrupt entry jump at 38h, and it
+; always restores the kernel  code  segment  to  page-0  afterwards  and  then
+; re-anables interrupts.
+;
+; Entry:      A = DTA segment number
+;	     BC,DE,HL = LDIR parameters
+; Returns:   BC,DE,HL = results from LDIR
+; Corrupts:  BC,DE,HL
+;
+		push	af
+		di				;Put required segment
+...	      < call	_PUT_P0 >		; into page-0.
+		ldir				;Do the transfer.
+		ld	a,(CODE_SEG##)		;Restore the KBDOS code
+...	      < call	_PUT_P0 >		; segment to page-0.
+		ei
+		pop	af
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_P0_CALL:
+;
+;    This routine calls an MSX BIOS routine at an address  specified  in  (IX)
+; (must be in page-0), from the kernel code segment.  All registers apart from
+; AF' are passed to and returned from the called routine.  AF'  is  preserved.
+; The  same  effect could be achieved by the "CALSLT" routine but this is very
+; much quicker because it is not general purpose.
+;
+		ex	af,af'
+		push	af			;Enable the BIOS ROM in page-0
+...	      < call	_P0_BIOS >		; and save old secondary slot
+_patch_30:	nop				; register if BIOS slot is
+						; expanded.
+if 1
+;
+; We  set  the  mapper  segments to the TPA segments, in anticipation that the
+; called BIOS is hooked and the hook calls/refers/modifies the  page-0  and/or
+; page-2  RAM.  Unless we switch the mapper, they are not the application RAM.
+; However, this still encounters a problem  when  the  application  ROM  (i.e.
+; other  than  RAM  slot) had been enabled in page-2 and the hook is JUMPED to
+; it.
+; This  should  be made AFTER calling P0_BIOS with interrupt disabled, because
+; slot switching routine or interrupt vector may not be in the TPA segment.
+; [HF]
+;
+;===== start mod DOS2.50 (build type)
+if BUILTIN
+;;if 1 ;;HYBRID
+;===== end mod DOS2.50
+...	      <	call	_GET_P2 >
+		push	af
+...	      <	call	_GET_P0>
+		push	af
+endif
+		ld	a,(P0_TPA##)		;Put the application segments
+...	      < call	_PUT_P0 >		; into page-0 and page-2.
+		ld	a,(P2_TPA##)
+...	      < call	_PUT_P2 >
+		ei
+endif
+		ex	af,af'
+		call	_JP_IX			;Call the routine
+		ex	af,af'
+...	      < call	_P0_RAM >
+if 1 ;[HF]
+;===== start mod DOS2.50 (build type)
+if BUILTIN
+;;if 1 ;;HYBRID
+;===== end mod DOS2.50
+		pop	af
+...	      <	call	_PUT_P0 >
+		pop	af
+...	      <	call	_PUT_P2 >
+else
+		ld	a,(CODE_SEG##)		;Restore page-0 & page-2 to
+...	      < call	_PUT_P0 >		; kernel segments.
+		ld	a,(DATA_SEG##)
+...	      < call	_PUT_P2 >
+endif
+endif
+_patch_31:	jr	_bios_not_exp2		;If BIOS slot is expanded then
+		pop	af			; restore the secondary slot
+...	      < call	_RE_BIOS >		; register for it.
+_bios_not_exp2:	pop	af
+		ex	af,af'
+		ei
+		ret
+;
+;-----------------------------------------------------------------------------
+;
+_FLUSH:
+;
+;    This routine is used by the KBIOS to flush the screen output buffer.  It
+; is  passed  a  pointer to the buffer in HL and a count in B (which is never
+; zero).  It enables the BIOS slot in page-0 and then calls the  BIOS  output
+; routine  for  each  character  in turn and finally restores the RAM slot to
+; page-0.  This avoid having to do slot switching on each character and so is
+; faster.
+; ------
+; Same problem arises as the P0_CALL routine.  [HF]
+; ------
+;
+...	      < call	_P0_BIOS >		;Put the MSX BIOS ROM in and
+_patch_40:	nop				; save old secondary slot
+						; value if expanded
+if 1
+		ld	a,(P0_TPA##)		;Put the application segments
+...	      < call	_PUT_P0 >		; into page-0 and page-2.
+endif
+_flush_loop:	push	hl			;Loop to write out each
+		push	bc			; character from the buffer
+if 1
+		ld	b,(hl)			; in turn using the CHPUT
+		ld	a,(P2_TPA##)
+...	      < call	_PUT_P2 >
+		ld	a,b
+		ei
+else
+		ld	a,(hl)			; in turn using the CHPUT
+endif
+		call	000A2h			; routine in the MSX BIOS
+if 1
+		di
+		ld	a,(DATA_SEG##)
+...	      < call	_PUT_P2 >
+endif
+		pop	bc			; ROM.
+		pop	hl
+		inc	hl
+		djnz	_flush_loop
+;
+if 1
+		ld	a,(CODE_SEG##)		;Restore page-0 to kernel
+...	      < call	_PUT_P0 >		; segment.
+endif
+...	      < call	_P0_RAM >		;Re-enable mapper RAM in page-0
+_patch_41:	jr	_bios_not_exp3		;If BIOS slot is expanded then
+		pop	af			; restore the secondary slot
+...	      < call	_RE_BIOS >		; register for it.
+_bios_not_exp3:	ei
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_IRQ:
+;
+;    This is the interrupt entry routine which is  called  when  an  interrupt
+; occurs  with the kernel code segment or the TPA page-0 segment in page-0. It
+; does a stack switch to the interrupt stack in page-3 unless  this  stack  is
+; already active.  After this it calls the normal MSX interrupt routine at 38h
+; in the BIOS ROM and restores the stack if required.
+;
+;
+		di				;For fail safe
+		push	af			;Must preserve everything
+		push	hl
+		push	bc
+;
+		ld	hl,(IRQ_STACK##)	;If the stack is already
+		or	a			; in the IRQ_STACK area then
+		sbc	hl,sp			; must not do another stack
+		jr	c,_irq_do_switch	; switch so skip.
+		ld	bc,IRQS_SZ##
+		sbc	hl,bc
+		jr	c,_irq_no_switch
+;
+_irq_do_switch:	ld	(SP_IRQ##),sp		;Switch to the IRQ stack
+		ld	sp,(IRQ_STACK##)	; in page-3.
+...	      < call	_GO_IRQ >		;Call the interrupt handler.
+		ld	sp,(SP_IRQ##)		;Restore user's stack and
+		jr	_irq_return		; jump to return.
+;
+_irq_no_switch:
+...	      < call	_GO_IRQ >		;Call the interrupt handler.
+_irq_return:	pop	bc
+		pop	hl			;Restore registers and return
+		pop	af			; with interrupts enabled.
+		ei
+		ret
+;
+;	--------------------------------
+;
+_GO_IRQ:
+...	      < call	_P0_BIOS >	;Enable BIOS ROM slot in page-0 &
+_patch_50:	nop			; save sec. slot register if expanded
+if 1
+;
+; We  set  the  mapper  segments  to the application, in anticipation that the
+; interrupts are hooked and are directed to the application  RAM.   This  will
+; not  solve  the  problem when the application ROM (i.e. other than RAM slot)
+; had been enabled into page-2 and the hook is JUMPED to it.  [HF]
+;
+...	      < call	_GET_P0 >	;Remember page-0 and page-2 segments
+;
+_patch_53:	cp	??????		;If page-0 was not the kernel segment
+		jr	nz,_tpa_irq	; leave segments untouched because
+					; Px_TPA values are not up to date.
+					; I DO WANT MORE ELEGANT WAY.
+;
+		push	af
+...	      < call	_GET_P1 >
+		push	af		; and set them to the application.
+...	      < call	_GET_P2 >	; This should be made AFTER the call
+		push	af		; to P0_BIOS above, because we are not
+		ld	a,(P2_TPA##)	; sure that page-0 slot switching
+...	      < call	_PUT_P2 >	; routine, which may be called by
+		ld	a,(P1_TPA##)
+...	      < call	_PUT_P1 >
+		ld	a,(P0_TPA##)	; P0_BIOS, is in the TPA segment.
+...	      < call	_PUT_P0 >	;
+;
+		call	INTRPT##	;Call main interrupt routine (38h)
+;
+		di
+		pop	af		;Restore the page-2 segment
+...	      < call	_PUT_P2 >
+		pop	af
+...	      < call	_PUT_P1 >
+		pop	af		;Restore the page-0 segment
+...	      < call	_PUT_P0 >
+		jr	_p0_not_kernel
+_tpa_irq:
+endif
+		call	INTRPT##	;Call main interrupt routine (38h)
+;
+_p0_not_kernel:
+_patch_51:
+...	      < jp	_P0_RAM >	;Restore RAM slot to page-0 (patched
+					; to a CALL if BIOS slot expanded).
+		pop	af		;Restore old secondary slot register
+		 ;	;
+		 ;	;
+;	--------------------------------
+;
+;    Restores the BIOS secondary slot register to the value in  A.   This  is
+; only  called  if the BIOS slot is expanded, and is a different primary slot
+; from the mapper RAM slot.
+;
+_RE_BIOS:	push	bc			;Must only corrupt AF.
+		push	de
+		ld	e,a			;E := old value to restore
+		in	a,(SLOT_REG)
+		ld	b,a			;B=current primary slot
+		and	00111111b		;A=temporary primary slot value
+_patch_52:	or	??????			; to select BIOS slot in page-3
+		call	SSLOTE##		;Call RAM routine to write
+		pop	de			; register E out to the
+		pop	bc			; secondary slot register.
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_P0_BIOS:
+;
+;    This routine enables the  MSX  BIOS  ROM  slot  in  page-0.   It  uses  a
+; secondary  slot switching routine in page-0 and so will only work if this is
+; present in the current page-0 which effectively means that it must be either
+; the  normal  page-0 RAM segment (only allowed if MSX-DOS is running), or the
+; MSX-DOS kernel code RAM segment.  There is a special  case  handled  if  the
+; BIOS  ROM  and the RAM slot are both in the same primary slot, in which case
+; the page-0 routine cannot be called, but the secondary slot register can  be
+; accessed directly in page-3.
+;
+;    If  the  BIOS ROM is in a secondary slot then it returns the old setting
+; of the secondary slot register in register A so that  it  can  be  restored
+; afterwards because of the MSX secondary slot problems.
+;
+;
+		di				;This jump will be patched
+_patch_20:	jr	_bios_not_exp		; out if the slot is expanded.
+;
+_patch_22:	ld	a,(??????)		;Get current secondary slot
+		ld	(SS_TEMP##),a		; register image variable,
+		and	11111100b		; save it for return and put
+_patch_23:	or	??????			; BIOS secondary slot number
+_patch_24:	ld	(??????),a		; in page-0.
+;
+_patch_26:
+if 0
+		jr	_bios_not_ram		;If BIOS is in same primary
+		ld	(0FFFFh),a		; slot as RAM then write direct
+		jr	_bios_not_exp		; to secondary slot register.
+;
+_bios_not_ram:
+endif
+...	      < call	_RE_BIOS >		;Patched to "ld (0FFFFh),a" if
+						; BIOS is in same primary
+						; slot as RAM.
+;
+_bios_not_exp:	in	a,(SLOT_REG)
+		and	11111100b		;Select required primary slot
+_patch_25:	or	??????			; in primary slot register.
+		out	(SLOT_REG),a
+		ld	a,(SS_TEMP##)		;A := old secondary slot value
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_P0_RAM:
+;
+;    This routine enables the RAM slot in page-0.  It will work regardless  of
+; which  slot  is in page-0 currently and it makes no attempt to remember this
+; slot number.  It is shorter than you would expect because it knows that  the
+; correct  slot is already in page-3 (since this code is in RAM) and so it can
+; access the secondary slot register directly.
+;
+;    If the RAM is in a secondary slot then it returns the old setting of the
+; secondary slot register in register A so that it can be restored afterwards
+; because of the MSX secondary slot problems.  The routine "_RE_RAM" which is
+; also here is called to restore the secondary slot register.
+;
+;
+		di				;This jump will be patched
+_patch_11:	jr	_ram_not_exp3		; out if slot is expanded.
+;
+if 0
+_patch_12:	ld	a,(??????)		;Get secondary slot register
+else
+		ld	a,(0FFFFh)		;Get secondary slot register
+		cpl
+endif
+		ld	(SS_TEMP##),a		; image variable, remember it
+		and	11111100b		; for returning and insert
+_patch_13:	or	??????			; required slot in page-0.
+_patch_14:	ld	(??????),a
+		ld	(0FFFFh),a		;Write it to the register.
+;
+_ram_not_exp3:	in	a,(SLOT_REG)
+		and	11111100b		;Select required primary slot
+_patch_15:	or	??????			; in primary slot register.
+		out	(SLOT_REG),a
+		ld	a,(SS_TEMP##)		;A := old secondary slot value
+		ret
+;
+;	----------------------------------------
+;
+_RE_RAM:
+_patch_16:	ret				;Patched to "ld (??????),a"
+						; if RAM slot is expanded.
+		dw	??????			;Just write the value to the
+		ld	(0FFFFh),a		; register and the image
+		ret				; variable.
+;
+;
+;-----------------------------------------------------------------------------
+;
+;   The "ALL_SEG" and "FRE_SEG" routine  are in the disk ROM slot and  so  are
+; called from here with inter-slot calls, after preserving loads of registers.
+; They  can be called with any slot and page selection, but the current page-0
+; must have a "CALSLT" entry point.  These  routines  return  with  interrupts
+; disabled.
+; The "ALL_SEG" and "FRE_SEG" routine are  moved to the  kernel code  and  are
+; called through normal BIOS calling procedure.  [HF]
+;
+_ALL_SEG:	push	hl
+		ld	hl,$ALL_SEG##		;HL := address of "allocate
+		jr	_all_fre_go		; segment" routine in kernel.
+;
+_FRE_SEG:	push	hl			;HL := address of "free
+		ld	hl,$FRE_SEG##		; segment" routine in kernel.
+;
+_all_fre_go:	push	de			;Must preserve everything
+						; (however, other registers
+						; are not altered).
+		call	GO_BIOS##
+		pop	de
+		pop	hl
+		ret
+
+; Page 2 block memory allocation routines
+
+_FR_BK:		ld	ix,FR_BK##
+		jr	_bk_go
+_ALL_BK:	ld	ix,ALL_BK##
+
+_bk_go:		ld	(BK4_ADD##),ix
+		ld	iy,(MASTER_SLOT##-1)
+		ld	ix,?CALL4##
+		jp	CALSLT##
+
+;
+;-----------------------------------------------------------------------------
+;
+;    These are the inter-segment read and write routines.  They must be called
+; with  the RAM slot in page-2.  This ensures that they can be reasonably fast
+; because no slot switching is necessary.  Interrupts are  disabled  by  these
+; routines and not enabled again.  All registers except AF are preserved.
+;
+_RD_SEG:	di
+		push	hl
+		push	bc
+		ld	b,a
+...	      < call	_GET_P2 >		;Get current page-2 segment
+		ld	c,a			; number and save it in C.
+		ld	a,b
+...	      < call	_PUT_P2 >		;Put required segment into
+		res	6,h			; page-2 and force address
+		set	7,h			; to page-2.
+		ld	b,(hl)			;Get the byte.
+		ld	a,c
+...	      < call	_PUT_P2 >		;Restore original page-2
+		ld	a,b			;A := byte value read
+		pop	bc
+		pop	hl
+		ret
+;
+;
+_WR_SEG:	di
+		push	hl
+		push	bc
+		ld	b,a
+...	      < call	_GET_P2 >		;Get the current page-2
+		ld	c,a			; segment & save it in C.
+		ld	a,b
+...	      < call	_PUT_P2 >		;Put the required segment
+		res	6,h			; in page-2 and force the
+		set	7,h			; address into page-2.
+		ld	(hl),e			;Store the byte.
+		ld	a,c
+...	      < call	_PUT_P2 >		;Restore original segment
+		pop	bc			; to page-2.
+		pop	hl
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+;    These are the routines for doing inter-segment calls.   They  are  almost
+; identical  to  the  inter-slot  call  routines  except that they use segment
+; switching routines rather than slot switching routines.  They can be used to
+; call  any  segment  in  any page (except page-3).  However the RAM slot must
+; already be selected in the desired page since these routines do not  do  any
+; slot switching at all in order to keep them fast.
+;
+;
+_CALLS:		exx
+		ex	(sp),hl
+		ld	d,(hl)
+		inc	hl			;Extract parameters from in-
+		push	de			; line after the "CALL CALLS"
+		pop	iy			; instruction, and adjust
+		ld	e,(hl)			; the return address.
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		push	de
+		pop	ix
+		ex	(sp),hl
+		exx
+;
+_CAL_SEG:	exx				;Preserve main register set.
+		ex	af,af'
+		push	ix
+		pop	hl			;HL := address to call and get
+...	      < call	_GET_PH >		; current segment for this page
+		push	af			; and save it for return.
+		push	hl
+		push	iy
+		pop	af			;Enable required segment for
+...	      < call	_PUT_PH >		; this address.
+		ex	af,af'
+		exx
+		call	_JP_IX			;Call the routine via IX
+		exx
+		ex	af,af'
+		pop	hl			;Restore the original
+		pop	af			; segment to the appropriate
+...	      < call	_PUT_PH >		; page.
+		ex	af,af'
+		exx
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_PUT_PH:	bit	7,h			;Jump to appropriate "PUT_Pn"
+		jr	nz,_put_p2_or_p3	; routine, depending on the
+		bit	6,h			; top two bits of H.
+		jr	z,_put_p0
+		jr	_put_p1
+_put_p2_or_p3:	bit	6,h
+		jr	z,_put_p2
+		jr	_put_p3
+;
+_GET_PH:	bit	7,h			;Jump to appropriate "GET_Pn"
+		jr	nz,_get_p2_or_p3	; routine, depending on the
+		bit	6,h			; top two bits of H.
+		jr	z,_get_p0
+		jr	_get_p1
+_get_p2_or_p3:	bit	6,h
+		jr	z,_get_p2
+		jr	_get_p3
+;
+;
+_PUT_P0:	ld	(P0_SEG##),a
+		out	(P0_REG),a
+		ret
+_GET_P0:	ld	a,(P0_SEG##)
+		ret
+;
+;
+_PUT_P1:	ld	(P1_SEG##),a
+		out	(P1_REG),a
+		ret
+_GET_P1:	ld	a,(P1_SEG##)
+		ret
+;
+;
+_PUT_P2:	ld	(P2_SEG##),a
+		out	(P2_REG),a
+		ret
+_GET_P2:	ld	a,(P2_SEG##)
+		ret
+;
+;
+_GET_P3:	ld	a,(P3_SEG##)		;Cannot alter page-3.
+_PUT_P3:	ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+;    These are the inter-slot read and write routines.  They  are  compatible
+; with  the  standard  MSX  BIOS  ROM routines although they work differently
+; internally.  WRSLT and RDSLT are done by the same routine, with a  flag  to
+; control  the  whether  the  value  is  read  or  written.  Both primary and
+; secondary slots are handled and the routine is very similar in principle to
+; the CALSLT routine.
+;
+; RDSLT - Entry:      A = Slot number
+;		     HL = Address within slot
+;	  Returns:    A = Value
+;	  Corrupts:  AF,BC,DE
+;
+; WRSLT - Entry:      A = Slot number
+;		     HL = Address within slot
+;		      E = Value to write
+;	  Returns:    None
+;	  Corrupts:  AF,BC,D
+;
+;
+RDPRIM	equ	0F380h		;Inter-slot read, write and call primitives
+WRPRIM	equ	0F385h		; in the MSX data area.
+CLPRIM	equ	0F38Ch
+_JP_IX	equ	CLPRIM+12	;Where "JP (IX)" instruction is stored
+_JP_HL	equ	_JP_IX+1	;Where "JP (HL)" instruction is stored
+;
+;
+_RDSLT:		res	6,d			;Set or clear the WRSLT flag
+		jr	_rdslt_wrslt		; appropriately.
+_WRSLT:		set	6,d
+_rdslt_wrslt:	di
+;
+...	      < ld	(_rdwrslt_addr+1),hl >	;Store address for later
+if 0 ;;R800-BUG
+		push	de
+		ex	(sp),hl
+		pop	de
+else
+		ex	de,hl
+endif
+...	      < ld	(_rdwrslt_value+1),hl >	;Store WRSLT flag & value
+		ld	c,a			;C := slot number
+		ld	b,d			;B := page number
+...	      < call	_GET_SLT_MASK >		;Get AND/OR mask and skip
+		bit	7,c			; if the slot is expanded.
+		jr	z,_rdwrslt_prim
+;
+_rdwrslt_exp:
+...	      < call	_2NDARY_SLOT >		;Enable secondary slot
+		push	de			;Save all required information
+		push	bc			; for restoring secondary slot
+		push	af			; after doing the read/write.
+;
+...	      < call	_rdwrslt_prim >		;Do the inter-slot read/write
+		ld	c,a			;C := result temporarily
+;
+		pop	af			;Z flag set => RAM slot
+						;A = primary slot setting for
+						;    accessing secondary slot.
+		pop	de			;E = secondary slot value
+		ld	b,d			;B = primary slot setting
+		ex	(sp),hl			;HL -> image variable
+		jr	nz,_not_ram_slot1	;Restore secondary slot
+		ld	a,e			; register setting directly if
+		ld	(0FFFFh),a		; RAM primary slot, or with
+_not_ram_slot1:	call	nz,SSLOTE##		; page-0 routine if not.
+		ld	(hl),e			;Restore image variable
+;
+		pop	hl			;Must preserve HL
+		ld	a,c			;Return with result in both
+		ld	e,c			; register A and E.
+		ret
+;
+;
+_rdwrslt_prim:	in	a,(SLOT_REG)
+		ld	b,a			;Save current primary slot.
+		and	(hl)
+		inc	hl			;Mask required slot into the
+		or	(hl)			; correct page,
+		di
+_rdwrslt_addr:	ld	hl,??????		;Get address back
+_rdwrslt_value:	ld	de,??????		;Get WRSLT flag & value back
+		bit	6,d			;Test whether read or write
+		ld	d,b
+		jp	nz,WRPRIM		;Do the primitive read or
+		call	RDPRIM			; write operation.
+		ld	a,e
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+;   This routine does an inter-slot call and is compatible with the  standard
+; MSX  routine  including the amount of stack which it uses.  CALLF is passed
+; the parameters in line after the call, and CALSLT is passed the  parameters
+; in IX and IYh.  The routine "GET_SLT_MASK" is used to find the AND/OR masks
+; from  a table depending on the slot and page number.  For an expanded slot,
+; "2NDARY_SLOT" is used to enable the secondary slot and this returns  enough
+; information to allow the original value to be easily restored.
+;
+_CALLF:		exx
+		ex	af,af'
+		pop	hl			;Extract parameters from in-
+		ld	a,(hl)			; line after the "RST 30h"
+		inc	hl			; instruction, and adjust
+		ld	c,(hl)			; the return address.
+		inc	hl
+		ld	b,(hl)
+		inc	hl
+		push	hl
+		push	bc
+		pop	ix			;IX := BC = address to call
+		jr	_calslt_join
+;
+_CALSLT:	exx
+		ex	af,af'
+		push	ix
+		pop	bc			;BC := address to call
+		push	iy
+		pop	af			; A := slot number to call
+;
+_calslt_join:	ld	c,a			;C := slot number to call
+...	      < call	_GET_SLT_MASK >		;Find AND/OR mask for slot
+		bit	7,c			;Skip to handle secondary
+		jr	z,_calslt_prim		; slot register if expanded.
+;
+_calslt_exp:
+...	      < call	_2NDARY_SLOT >		;Enable secondary slot
+		push	bc			;Save all required information
+		push	de			; for restoring secondary slot
+		push	af			; after doing the call.
+;
+...	      < call	_calslt_prim >		;Do the inter-slot call.
+		exx
+		ex	af,af'			;Save results
+;
+if 1
+		pop	bc
+else
+		pop	af			;Z flag set => RAM slot
+						;A = primary slot setting for
+						;    accessing secondary slot.
+endif
+		pop	hl			;HL -> image variable
+if 1
+		ld	a,i			;Get current interrupt flag.
+		di
+endif
+		pop	de			;E = secondary slot value
+if 1
+		push	af			;A = primary slot setting for
+		ld	a,b			;    accessing secondary slot.
+		cp	d			;Z flag set => RAM slot
+endif
+		ld	b,d			;B = primary slot setting
+		jr	nz,_not_ram_slt2	;Restore secondary slot
+		ld	a,e			; register setting directly if
+		ld	(0FFFFh),a		; RAM primary slot, or with
+_not_ram_slt2:	call	nz,SSLOTE##		; page-0 routine if not.
+		ld	(hl),e			;Restore image variable
+;
+if 1
+		pop	af			;Restore interrupt flag.
+...	      < jp	po,_calslt_was_di >
+		ei
+_calslt_was_di:
+endif
+		ex	af,af'			;Restore results to main
+		exx				; registers.
+		ret
+;
+;
+_calslt_prim:	in	a,(SLOT_REG)
+		push	af			;Save current primary slot.
+		and	(hl)
+		inc	hl			;Mask required slot into the
+		or	(hl)			; correct page,
+		exx
+		di
+		jp	CLPRIM			;Jump to the call primitive
+;
+;
+;-----------------------------------------------------------------------------
+;
+_ENASLT:
+;
+;    This general routine enables a specified slot into a specified page.  It
+; will work with any slot, expanded or not, but should not be used  to  alter
+; page-3  (although  it will have a go).  It does not check the parameters at
+; all.  It is table driven to keep the code as quick as possible.
+;
+; Entry:    A = Slot number required -   b7   - set if expanded slot
+;				       b6..b4 - ignored
+;				       b3..b2 - secondary slot number
+;				       b1..b0 - primary slot number
+;	    H = Required page - b7..b6 - specify page
+;				b5..b0 - Ignored
+; Returns:  None
+; Corrupts: AF,BC,DE
+;
+;
+		push	hl			;Must preserve HL
+		ld	c,a			;C := slot number to enable
+		ld	b,h			;B := page number to enable
+...	      < call	_GET_SLT_MASK >		;Find AND/OR mask for slot
+		bit	7,c			;Enable the secondary slot
+...	      < call	nz,_2NDARY_SLOT >	; if it is expanded.
+;
+		in	a,(SLOT_REG)
+		and	(hl)
+		inc	hl			;Mask required slot into the
+		or	(hl)			; correct page.
+		di
+		out	(SLOT_REG),a		;Select the new slot.
+		pop	hl
+		ret				;Return with HL intact
+;
+;
+;-----------------------------------------------------------------------------
+;
+_2NDARY_SLOT:
+;
+;    This is an internal routine which is used by the "ENASLT" and "CALSLT"
+; routines to enable a particular secondary slot.  Enough information is
+; returned to allow "CALSLT" to easily restore the the old secondary
+; slot register.
+;
+; Entry:          C = Slot number (b0,1=primary, b2,3=sec, b4...7=undefined)
+;		  A = Primary slot number (b0,1=primary, b2...7=undefined))
+;		  B = Page number to be called
+;		  D = 0
+; Returns:        A = Primary slot setting required to access secondary slot
+;	    Z-flag - set => secondary slot register can be accessed directly
+;		  B = Current primary slot setting
+;		  C = Value to restore secondary slot register to
+;		 DE = Address of secondary slot register image variable
+; Corrupts:   AF,BC,DE
+;
+;
+		push	hl			;Save primary slot pointer
+		and	00000011b
+		ld	e,a			;Find the correct secondary
+		ld	hl,SLTTBL##		; slot image variable for
+		add	hl,de			; the primary slot and
+		push	hl			; save its address.
+;
+		ld	a,c
+		rrca				;Find the AND/OR masks for
+		rrca				; the secondary slot number
+		ld	c,a			;C bits 6 & 7 = primary slot
+...	      < call	_GET_SLT_MASK >
+		di
+		pop	de			;DE -> secondary slot reg.
+		ld	a,(de)			;Get current setting of the
+		ld	(SS_TEMP##),a		; seconadry slot register,
+		and	(hl)			; save it and mask required
+		inc	hl			; slot into the correct page.
+		or	(hl)
+		ld	(de),a			;Update image variable
+		ld	l,a			;L := new secondary slot value
+;
+		in	a,(SLOT_REG)		;Save current main slot
+		ld	b,a			; register in register B
+		xor	c
+		and	00111111b		;Mask the required slot into
+		xor	c			; page-3 in A, and put in H
+		ld	h,a			; for later.
+		cp	b			;If the result is the same as
+		jr	nz,_not_ram_slt		; the current setting then can
+		ld	a,l			; access the secondary slot
+		ld	(0FFFFh),a		; register directly, otherwise
+_not_ram_slt:	call	nz,SSLOTL##		; call a little routine in
+						; page-0 to do it.
+;
+		ld	a,(SS_TEMP##)		;C := secondary slot register
+		ld	c,a			;     value to restore
+		ld	a,h			;A := primary slot setting for
+						;     accesing secondary slot.
+		pop	hl
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+_GET_SLT_MASK:
+;
+;    This routine is used by the slot handling routines to find  the  correct
+; entry  in  SLOT_TABLE  for  a particular slot/page combination.  It returns
+; with HL pointing at the AND mask, and (HL+1) will be the OR mask.
+;
+; Entry:          A =  Slot number required (bits 0 & 1)
+;		  B =  Required page (bits 6 & 7)
+; Returns:       HL -> AND/OR masks for this combination.
+;		E=A =  Index into SLOT_TABLE - b0,1 = slot number
+;					       b2,3 = page number
+;		  D =  0
+; Corrupts:   AF,DE,HL
+;
+		and	00000011b		;Save slot number in
+		ld	d,a			; register D.
+		ld	a,b
+		rrca
+		rrca				;Get page number from top
+		rrca				; two bits of B into bits
+		rrca				; 2 & 3.
+		and	00001100b
+		or	d			;Insert primary slot number
+		ld	e,a			; in bits 0 & 1.
+		ld	d,0
+...	      < ld	hl,_SLOT_TABLE >	;Index into SLOT_TABLE and
+		add	hl,de			; return pointer to the
+		add	hl,de			; AND/OR mask for this
+		ret				; page/slot combination.
+;
+;
+_SLOT_TABLE:	db	0FCh,000h,0FCh,001h,0FCh,002h,0FCh,003h	;Page-0
+		db	0F3h,000h,0F3h,004h,0F3h,008h,0F3h,00Ch	;Page-1
+		db	0CFh,000h,0CFh,010h,0CFh,020h,0CFh,030h	;Page-2
+		db	03Fh,000h,03Fh,040h,03Fh,080h,03Fh,0C0h	;Page-3
+;
+;
+;-----------------------------------------------------------------------------
+;
+	.DEPHASE
+;
+P3_RAM_SIZE	equ	$-P3_RAM_START
+		pr_dec	<Size of page-3 RAM code is>,%P3_RAM_SIZE,<bytes>
+;
+P3_OFFSET_TAB:
+		defw	_RD_LDIR
+		defw	_P0_LDIR
+		defw	_P0_CALL
+		defw	_FLUSH
+		defw	_GO_DRV
+		defw	_JP_VECT
+;
+		defw	_IRQ
+;
+		defw	_RDSLT
+		defw	_WRSLT
+		defw	_CALSLT
+		defw	_ENASLT
+		defw	_CALLF
+;
+		defw	_PUT_BDOS
+		defw	_PUT_USER
+		defw	_P0_RAM
+;
+		defw	_ALL_SEG
+		defw	_FRE_SEG
+		defw	_RD_SEG
+		defw	_WR_SEG
+		defw	_CAL_SEG
+		defw	_CALLS
+;
+		defw	_PUT_PH
+		defw	_GET_PH
+		defw	_PUT_P0
+		defw	_GET_P0
+		defw	_PUT_P1
+		defw	_GET_P1
+		defw	_PUT_P2
+		defw	_GET_P2
+		defw	_PUT_P3
+		defw	_GET_P3
+
+		defw	_ALL_BK
+		defw	_FR_BK
+;
+		dw	0
+		dw	0
+;
+;	----------------------------------------
+;
+adjtab		MACRO	label
+		 dw	 _adjust_&label&+1
+		ENDM
+;
+_adjtab		defl	0
+;
+P3_ADJUST_TAB:
+		REPT	_adjust_label		;Addresses within the
+_adjtab		 defl	 _adjtab+1		; downloaded code which need
+		 adjtab  %_adjtab		; to be adjusted (absolute
+		ENDM				; references).
+;
+		dw	0
+;
+if 0
+;
+;-----------------------------------------------------------------------------
+;
+GO_DRV_ROUTINE:
+;
+;    This pathetic little routine is called via an  interslot  call  from  the
+; kernel  code  segment,  and  simply  does  another inter-slot call to a disk
+; driver ROM.  It is necessary to go through the master ROM so that  the  slot
+; switching  bug  fix  in  old  disk drivers will work.  This bug fix involves
+; extra calls to "$DOSON" before re-enabling the disk driver ROM in page-1.
+;
+;
+		ld	ix,(DRV_ADDR##)
+		ld	iy,(DRV_SLOT##-1)
+		jp	CALSLT##
+;
+endif
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<DOSINIT>
+	end
+;

@@ -1,0 +1,11 @@
+	TITLE	FIXDISK Utility - MSX-DOS.SYS copyright (1986) IS Systems Ltd
+	SUBTTL	End of Program
+;
+;
+;
+; This file just declares a label at the end.
+;
+END::
+;
+;
+	END

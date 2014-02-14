@@ -1,0 +1,83 @@
+	.z80
+;
+;	l80 code,data,/p:c000,loader,end,msxdos.sys/n/e
+;
+	aseg
+	org	0C000h
+;
+LOADER:
+;
+STACK	equ	LOADER+512
+	ld	sp,STACK		;Set stack to safe place
+;
+	ld	c,_DOSVER##		;Get the kernel version
+	call	BDOS##			; and jump to start up
+	ld	a,b			; Disk-BASIC if it is
+	cp	2			; pre MSX-DOS2.
+	jr	c,msxdos_fail
+;
+	ld	hl,BOOT_DISKVECT	;Setup disk error and break
+	ld	(DISKVECT##),hl		; vector for trapping
+	ld	hl,BOOT_BREAKVECT	; errors while booting.
+	ld	(BREAKVECT##),hl
+;
+	ld	de,BOOT_NAME		;Try to open the "MSXDOS.SYS"
+	xor	a			; file on the default drive.
+	ld	c,_OPEN##
+	call	BOOT_BDOS
+	jr	nz,msxdos_fail		;Jump if file not found
+;
+	ld	de,100h
+	ld	hl,3F00h		;Try to read the file in at
+	ld	c,_READ##		; 100h up to the top of
+	push	bc			; page-0.
+	call	BOOT_BDOS
+	pop	bc
+	push	af
+	ld	c,_CLOSE##
+	call	BOOT_BDOS		;Close the file handle
+	pop	af
+	jr	nz,msxdos_fail		;Jump if the read was no good
+;
+	ld	a,(CUR_DRV##)		;Record the drive in case
+	ld	(BOOT_DRV##),a		; we ever need to reboot.
+;
+	jp	100h			;Start up MSXDOS.SYS
+;
+msxdos_fail:
+	jp	4022h			;Start up Disk-BASIC.
+;
+;
+BOOT_NAME:
+	db	"\MSXDOS2.SYS",0
+;
+;
+;-----------------------------------------------------------------------------
+;
+BOOT_BDOS:
+	call	BDOS##			;Routine for calling BDOS.
+	cp	.ABORT##
+	jr	nz,not_abort_err	;If we have an aborted disk
+	ld	a,b			; error then return the
+not_abort_err:
+	or	a			; original error code in A.
+	ret
+;
+;
+BOOT_DISK:
+	ld	c,2			;During boot, always abort
+BOOT_BREAK:				; and return the error code of
+	ret				; disk errors.
+;
+;
+BOOT_DISKVECT:
+	dw	BOOT_DISK		;Pointers to disk error and
+BOOT_BREAKVECT:
+	dw	BOOT_BREAK		; abort routines for booting.
+;
+;
+if	(STACK-$) lt 256
+	error	"Stack Too Small"
+endif
+;
+	end	LOADER

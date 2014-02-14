@@ -1,0 +1,13 @@
+﻿	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	
+	include b4rdlabs.inc
+
+	jp	R4_1
+	jp	R4_2
+	jp	R4_3
+	jp	R4_4
+	jp	R4_5
+
+	finish	<RAMDRVH>
+	end

@@ -1,0 +1,54 @@
+﻿	.z80
+
+RAMENT	equ	4080h
+CALLB0	equ	403Fh
+
+
+; RAM DISK DRIVER ENTRY POINTS
+;
+; In DOSHEAD.MAC there is a jump table for RAM disk related IO routines.
+; This jump table assumes that bank 0 is switched, but this is not true
+; when invoking FCB related function calls over the RAM disk
+; (FCB related code is in bank 4).
+;
+; To solve this, we put here routines that redirect the calls to bank 0,
+; and define a new jump table that calls these routines (RAMDRVH.MAC).
+; The compilation script overwrites the old jump table in bank 4 at the 
+; appropriate place (RAMENT) with the new table.
+
+R4_1::
+		push	hl
+		ld	hl,RAMENT
+		ld	(BK4_ADD##),hl
+		pop	hl
+		jp	CALLB0
+
+R4_2::
+		push	hl
+		ld	hl,RAMENT+3
+		ld	(BK4_ADD##),hl
+		pop	hl
+		jp	CALLB0
+
+R4_3::
+		push	hl
+		ld	hl,RAMENT+6
+		ld	(BK4_ADD##),hl
+		pop	hl
+		jp	CALLB0
+
+R4_4::
+		push	hl
+		ld	hl,RAMENT+9
+		ld	(BK4_ADD##),hl
+		pop	hl
+		jp	CALLB0
+
+R4_5::
+		push	hl
+		ld	hl,RAMENT+12
+		ld	(BK4_ADD##),hl
+		pop	hl
+		jp	CALLB0
+
+		end

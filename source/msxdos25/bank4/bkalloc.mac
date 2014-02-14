@@ -1,0 +1,244 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Block memory allocation
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+
+	const	BK_PTR,0BFFEh
+
+;-----------------------------------------------------------------------------
+
+; These routines are for block memory allocation withing a segment.
+; They act always on the segment currently switched on page 2, no check
+; is done for the segment being actually allocated so they can actually
+; be used on any type of RAM, not only mapped RAM.
+;
+; ALL_BK and FR_BK are identical to ALL_P2 and FR_P2 on kinit.mac,
+; the only difference being that BK_PTR is used instead of RAM_PTR.
+; The code is duplicated, instead of ALL_P2 and FR_P2 being patched,
+; because it is more convenient to run these routines from ROM,
+; as we need page 2 untouched when routines are entered
+; (when code in code segment is executed, data segment is switched on page 2).
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	ALL_BK
+;
+;    This routine attempts to allocate a block of page-2 RAM  of  a  specified
+; size  and returns a pointer to it.  If insufficient memory is available then
+; it returns with an error.  If successful then  the  allocated  RAM  will  be
+; zeroed  before  returning.   It  first looks down the free chain for a large
+; enough block, using a first fit algorithm, and if that fails, tries to  move
+; "BK_PTR" down to use more of the segment.
+;
+; Note that the maximum block size allocatable is 16378 bytes.
+;
+;
+; Entry:      HL = Size of RAM required (must not be zero).
+; Returns:     A = 0 (and Z-flag set) => success, HL = address of RAM
+;	       A <>0 (and Z-flag clear) => error,  A = error code, HL = 0.
+; Corrupts:   AF,HL
+;
+		push	de
+		push	bc
+		inc	hl			;Round the request up to
+		res	0,l			; an even number of bytes
+		ld	b,h			; and put the value in BC.
+		ld	c,l
+;
+		ld	hl,(BK_PTR)		;Point to start of chain
+fr_chain_loop:	ld	e,(hl)
+		inc	hl			;DE := size of this block
+		ld	d,(hl)
+		inc	hl
+		ld	a,d
+		or	e			;Exit loop if size=0 which
+		jr	z,fr_chain_end		; indicates end of chain.
+		bit	0,e
+		jr	nz,fr_chain_next	;Loop if block is allocated
+		ex	de,hl			;If block is free then see if
+		sbc	hl,bc			; it is big enough and if not
+		jr	nc,fr_chain_fit		; then loop to try next one
+;
+		add	hl,bc			;Gt this block size back
+		ex	de,hl			; into DE.
+fr_chain_next:	res	0,e
+		add	hl,de			;HL -> next block and loop
+		jr	fr_chain_loop		;      to try this one.
+;
+;
+fr_chain_fit:	ex	de,hl
+		dec	hl
+		dec	hl
+		jr	z,init_new_block	;Skip if fit is exact
+		dec	de
+		dec	de			;Subtract 2 from extra size
+		ld	a,d			; to account for new size
+		or	e			; entry and skip if it is zero
+		jr	z,near_exact_fit	; (zero block not allowed)
+;
+		ld	(hl),e			;Store the extra size as the
+		inc	hl			; size of the remaining
+		ld	(hl),d			; free block block.
+		inc	hl			;HL -> start of new block
+		add	hl,de
+		jr	init_new_block		;Jump to zero the block.
+;
+near_exact_fit:	inc	bc			;If only 2 extra bytes then
+		inc	bc			; increase the block size
+		jr	init_new_block		; to include them.
+;
+;
+fr_chain_end:	ld	a,.NORAM##		;Anticipate error code
+		inc	bc			;Allow space for the block
+		inc	bc			; size to be stored.
+;
+		ld	hl,(BK_PTR)		;Get current RAM limit
+		or	a			;Work out what new limit
+		sbc	hl,bc			; would be after allocation.
+		jr	c,not_enuf_ram		;Moan if below zero.
+		jp	p,not_enuf_ram		;Also moan if below 8000h.
+;
+		ld	(BK_PTR),hl		;OK so record new limit
+		dec	bc
+		dec	bc			;Adjust block size back
+;
+;
+init_new_block:	ld	(hl),c			;Store the block size in the
+		set	0,(hl)			; first word of the newly
+		inc	hl			; allocated block, and set
+		ld	(hl),b			; the bottom bit to mark it
+		inc	hl			; as allocated.
+;
+		push	hl
+zero_ram_loop:	ld	(hl),0			;Zero the allocated RAM.
+		inc	hl
+		dec	bc
+		ld	a,b
+		or	c
+		jr	nz,zero_ram_loop	;Loop will exit with A=0
+		pop	hl			; which becomes return code.
+;
+not_enuf_ram:	pop	bc
+		pop	de
+		or	a			;Set success/fail flag
+
+		;--- ALL_P2 has a single RET here,
+		;    so on error, a random HL is returned;
+		;    we return HL=0 instead.
+
+		ret	z
+		ld	hl,0
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	FR_BK
+;
+;    This routine frees up a block of RAM in page-2.  It does no checking  for
+; valid  memory  block  addresses, but it does check for amalgamating adjacent
+; free blocks and for raising "BK_PTR" whenever possible.  Note that the last
+; block in the chain must NEVER bee freed or this routine will not work.  This
+; should not matter as the last block is always the special block
+; containing BK_PTR.
+;
+;    If HL=0 is passed, then the whole segment is erased. This is necessary
+; before performing any memory assignment on a segment.
+;
+; Entry:     HL = Address of block to free
+; Returns:   None
+; Corrupts:  AF,HL
+;
+		ld	a,h
+		or	l
+		jr	z,PREP_BK
+
+		dec	hl			;Mark the memory block as
+		dec	hl			; free now.
+		res	0,(hl)
+;
+		push	de
+		push	bc
+		ld	hl,(BK_PTR)		;Start at beginning of
+ram_ptr_loop:	ld	c,(hl)			; memory block chain and
+		bit	0,c			; walk through it util we
+		jr	nz,first_alloc_blk	; find the first block which
+		inc	hl			; is allocated.
+		ld	b,(hl)
+		inc	hl
+		add	hl,bc
+		jr	ram_ptr_loop
+;
+first_alloc_blk:ld	(BK_PTR),hl		;Record new start address
+;
+chk_blk_loop:	ld	e,(hl)
+		inc	hl			;Get size of next block in
+		ld	d,(hl)			; the chain.
+		inc	hl
+		ld	a,d
+		or	e			;Exit if end of chain.
+		jr	z,free_p2_ret
+		bit	0,e			;Don't try to join together
+		jr	nz,chk_next_blk		; if block is allocated.
+;
+join_blk_loop:	push	hl			;Record start address of block
+		add	hl,de
+		ld	c,(hl)			;Point to next block and get
+		inc	hl			; its size into BC.
+		ld	b,(hl)
+		pop	hl			;Restore main block pointer
+		bit	0,c
+		jr	nz,not_free_blk		;Jump if new block is not free
+		inc	bc			;New block is free so add its
+		inc	bc			; size onto the size of the
+		ex	de,hl			; main block in DE, and add
+		add	hl,bc			; 2 extra bytes for size word.
+		ex	de,hl
+		jr	join_blk_loop		;Loop for next block.
+;
+not_free_blk:	dec	hl			;Record new size of the main
+		ld	(hl),d			; block at its start.
+		dec	hl
+		ld	(hl),e
+		inc	hl
+		inc	hl
+;
+chk_next_blk:	res	0,e			;Add size of this block to
+		add	hl,de			; get pointer to next one
+		jr	chk_blk_loop		; and loop back.
+;
+;
+free_p2_ret:	pop	bc
+		pop	de
+		ret
+;
+
+; This routine prepares the segment for doing memory allocations on it.
+; It must be executed once before doing any allocation on a segment.
+;
+; It zeroes the whole segment, then creates a 2 byte block at the end
+; to store the last block pointer, and makes this pointer point to itself.
+
+PREP_BK:
+	ld	hl,8000h
+	ld	de,8000h+1
+	ld	bc,4000h-1
+	ld	(hl),0
+	ldir
+
+	ld	hl,3	;2 byte block, bit 0 set to mark allocated block
+	ld	(BK_PTR-2),hl
+	ld	hl,BK_PTR-2
+	ld	(BK_PTR),hl
+	ret
+
+;------------------------------------------------------------------------------
+;
+	finish	<BKALLOC>
+	end
+;

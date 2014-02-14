@@ -1,0 +1,153 @@
+﻿	.z80
+
+	jp	START
+
+    ;   -------------------------------------------------------------------------------
+	db	13
+	db	"NSYSVER - Change the NEXTOR.SYS version number",13,10
+	db	13,10
+	db	"Some command line programs will refuse to work if the NEXTOR.SYS version",13,10
+	db	"is too small. This program allows to change the NEXTOR.SYS version",13,10
+	db  "reported by the system (the value returned in DE by the DOSVER function call).",13,10
+	db	"The value displayed by the VER command will not change.",13,10
+	db	13,10
+	db	"Usage: NSYSVER <major version number>.<minor version number>",13,10
+	db	1Ah
+
+USAGE_S:
+	db	"NSYSVER - Change the NEXTOR.SYS version number",13,10
+	db	13,10
+	db	"Usage: NSYSVER <major version number>.<minor version number>",13,10
+	db	13,10
+	db	"TYPE NSYSVER.COM for more details.",13,10
+	db	0
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	nz,FOUND_PARAMS
+	
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,CURVER_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	call	GET_VER_ADD
+	ld	a,(ix+1)
+	call	PRINT_DIGIT
+	ld	e,'.'
+	call	PRINT_CHAR
+	ld	a,(ix)
+	rrca
+	rrca
+	rrca
+	rrca
+	and	00001111b
+	call	PRINT_DIGIT
+	ld	a,(ix)
+	and	00001111b
+	call	PRINT_DIGIT
+	ld	e,13
+	call	PRINT_CHAR
+	ld	e,10
+	call	PRINT_CHAR
+
+	xor	a
+	ld	c,_TERM##
+	jp	5
+FOUND_PARAMS:
+
+	ld	a,(BUF)
+	call	PARSE_DIGIT
+	jp	c,BAD_PARAM
+	ld	d,a
+
+	ld	a,(BUF+1)
+	cp	'.'
+	jp	nz,BAD_PARAM
+
+	ld	a,(BUF+2)
+	call	PARSE_DIGIT
+	jp	c,BAD_PARAM
+	rlca
+	rlca
+	rlca
+	rlca
+	and	11110000b
+	ld	e,a
+
+	ld	a,(BUF+3)
+	call	PARSE_DIGIT
+	jp	c,BAD_PARAM
+	or	e
+	ld	e,a
+
+	call	GET_VER_ADD
+	ld	(ix),e
+	ld	(ix+1),d
+
+	ld	de,OK_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	xor	a
+	ld	c,_TERM##
+	jp	5
+
+	ret
+
+;Get in IX the address of NEXTOR.SYS version
+GET_VER_ADD:
+	ld	ix,(0001h)
+	ld	bc,32h
+	add	ix,bc
+	ret
+
+;Print 1 digit number passed in A
+PRINT_DIGIT:
+	add a,'0'
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5
+	ret
+
+;Print char passed in E
+PRINT_CHAR:
+	ld	c,_CONOUT##
+	jp	5
+
+;Parse number passed in ASCII in A, return it in A
+;Returns Cy=1 if no valid number
+
+PARSE_DIGIT:
+	cp	'0'
+	ret	c
+	cp	'9'+1
+	ccf
+	ret	c
+	sub	'0'
+	ret
+
+BAD_PARAM:
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	b,.IPARM##
+	ld	c,_TERM##
+	jp	5
+
+OK_S:
+	db	"NEXTOR.SYS version changed successfully.",13,10,0
+
+CURVER_S:
+	db	13,10
+	db	"Current NEXTOR.SYS version: ",0
+
+BUF:
+	end

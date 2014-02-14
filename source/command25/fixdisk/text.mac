@@ -1,0 +1,85 @@
+	TITLE	FIXDISK Utility - MSX-DOS.SYS copyright (1986) IS Systems Ltd
+	SUBTTL	Sample Messages File (English)
+;
+	.Z80
+;
+;
+;        This is a sample messages file for the FIXDISK utility.  It  contains
+; messages  and  text  in  English  in the format required by the FIXDISK .REL
+; files.
+;
+;        Care  should be taken when changing this file that spaces within each
+; message are preserved. Any of the messages may be changed to a null string.
+;
+;
+;        These messages are used by TPA by looking for the 'n'th string, where
+; n  is  the  number  corresponding to the string required.  In all cases, the
+; actual value of 'n' is defined by  a  label  defined  as  external  in  this
+; module,  so  the  messages  can  be in any order. The strings themselves are
+; ordinary ASCII strings terminated by a null (0).
+;
+;        A macro MSG is used here to define  the  strings  and  the  external
+; lables.   It is used in the form: 1) MSG NAME,"<STRING>" or 2) MSG NAME. In
+; the former case, an external lable of the for __NAME  with  an  appropriate
+; value  is  declared,  and the string is defined with DEFBs with the null on
+; the end. In the latter case, the label is still  defined  but  no  text  is
+; defined.   This  allows following DEFBs to define the text, which may be on
+; more than one line. Don't forget a DEFB 0 at the end though !.
+;
+;       The global symbol MESSAGES is the start of the messages.
+;
+;
+MSG	MACRO	NAME,TEXT
+__&NAME	 EQU	MSGNO		;; Define message number label.
+GLOBAL	 __&NAME		;; And declare it public.
+MSGNO	 DEFL	MSGNO+1
+	 IFNB	<TEXT>		;; Define the text, if given.
+	  DEFB	TEXT,0
+	 ENDIF
+	ENDM
+;
+MSGNO	DEFL	0		;; First message must be number 0.
+;
+MESSAGES::			; Start of the messages.
+;
+LF	equ	10
+CR	equ	13
+;
+;------------------------------------------------------------------------------
+;
+;        Before  performing  it's operation on a disk, FIXDISK prints a prompt
+; in the form:
+;
+;		Disk in drive A: will only be able to boot MSX-DOS 2
+;		\            / \                                   /
+;		  ----a-----  b  --------------c------------------
+;
+;        DISK (part (a)) is printed first, followed by the drive letter  (part
+; (b) of the disk which is to be updated. Then ONLY (part (c)) is printed.
+;
+;
+	MSG	DISK,<"Disk in drive ">			; One trailing space.
+;
+	MSG	ONLY,<": will only be able to boot MSX-DOS">
+;
+;
+;
+;        Following the above text, the message PRAK below will be printed, and
+; a key press waited for. This message is the same as that  used  for  similar
+; prompting throughout the command interpreter and for the PAUSE command.
+;
+;
+	MSG	PRAK,<"Press any key to continue... ">	; One trailing space.
+;
+;
+;------------------------------------------------------------------------------
+;
+;        BADVER below is printed by FIXDISK if the DOS version is pre-2.00. It
+; is designed to be in the same format as normal CLI errors.
+;
+;
+	MSG	BADVER,<CR,LF,"*** Wrong version of MSX-DOS",CR,LF>
+;
+;
+;
+	END

@@ -1,0 +1,38 @@
+	title	MSX-DOS 2 UNDEL Program - Non-debugging Routines
+	.z80
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;******************************************************************************
+;
+MSG_DEBUG::
+;
+FD_DEBUG::
+;
+GU_DEBUG::
+;
+LF_DEBUG::
+;
+SF_DEBUG::
+;
+ENT_DEBUG::
+SD_DEBUG::
+;
+NC_ENT_DEBUG::
+NC_DEBUG::
+;
+CC_1ENT_DEBUG::
+CC_2ENT_DEBUG::
+CC_REJ_DEBUG::
+CC_ACC_DEBUG::
+CC_DEBUG::
+;
+MD_DEBUG::
+;
+SV_DEBUG::
+		ret
+;
+;------------------------------------------------------------------------------
+;
+	finish	<NODEBUG>
+	end
+;

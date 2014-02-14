@@ -1,0 +1,13 @@
+#
+# Default Make Rules
+#
+.SUFFIXES:
+.SUFFIXES: .sys .com .sym .rel .mac .c
+
+.c.rel:
+	c80 -m -s500 -c3000 -d3000 $*.mac=$*.c
+	m80 =$*.mac
+	rm $*.mac
+
+.mac.rel:
+	m80 =$*.mac

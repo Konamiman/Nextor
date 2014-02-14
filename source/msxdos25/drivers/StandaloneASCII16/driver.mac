@@ -1,0 +1,200 @@
+	.z80
+	title	MSX-DOS 2 Copyright (1986)  IS Systems Ltd.
+	subttl	Dummy driver bank for standalone kernel
+
+;-----------------------------------------------------------------------------
+
+; This is a dummy driver that allows using the kernel as a standalone cartridge
+; without any associated hardware.
+;
+
+;-----------------------------------------------------------------------------
+
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+	; Routines available on kernel page 0
+
+;* Get in A the current slot for page 1. Corrupts F.
+;  Must be called by using CALBNK to bank 0:
+;  xor a
+;  ld ix,GSLOT1
+;  call CALBNK
+
+GSLOT1	equ	402Dh
+
+;* This routine reads a byte from another bank.
+;  Must be called by using CALBNK to the desired bank,
+;  passing the address to be read in HL:
+;  ld a,bank
+;  ld hl,address
+;  ld ix,RDBANK
+;  call CALBNK
+
+RDBANK	equ	403Ch
+
+;* This routine temporarily switches kernel bank 0, then jumps to CALBAS in MSX BIOS.
+;  This is necessary so that kernel bank is correct in case of BASIC error.
+
+CALBAS	equ	403Fh	;On kernel page 0, not in MSX BIOS
+
+;* This calls a routine in another bank.
+;  Must be used if the driver spawns across more than one bank.
+;  Input: A = bank
+;         IX = routine address
+;         AF' = AF for the routine
+;         BC, DE, HL, IY = input for the routine
+
+CALBNK	equ	4042h
+
+;* Get in IX the work area address for the slot passed in A.
+;  If A=0, then it uses the slot currently switched in page 1.
+;  Returns A=current slot for page 1, if A=0 was passed.
+;  Corrupts F.
+;  Must be called by using CALBNK to bank 0:
+;  ld a,slot
+;  ex af,af'
+;  xor a
+;  ld ix,GWORK
+;  call CALBNK
+
+GWORK	equ	4045h
+
+	; Data locations on kernel banks 0 and 3
+
+null_message	equ	741Fh
+single_double	equ	7420h
+
+	; Rules for disk driver code:
+
+	;- This must be compiled at 4100h.
+	;- Respect the jump table described below.
+	;- Kernel page 0 (first 255 bytes) must be available at 4000h
+	;  (must be available in all banks actually).
+	;- Bank ID (starting at 5 for the disk driver) must be available at 40FFh.
+	;- Bank switching code must be available at 7FD0h
+	;  (must be available in all banks actually).
+
+
+	;***************************
+	;***  DUMMY DRIVER CODE  ***
+	;***************************
+
+	db	"NEXTOR_DRIVER",0	;Mandatory signature
+	db	0	;Reserved
+	db	0	;Reserved
+	db	"Standalone DOS kernel           "	;Driver name, 32 characters
+
+	;* Timer interrupt routine
+
+	ret	;TIMER_INT	
+	ret
+	ret
+	
+	;* Get driver version
+
+	jp	DV_VERSION
+
+	;* Drive initialization, it is called twice:
+	;  1) With A=0, B=number of available drives, and HL=available page 3 space.
+        ;     It must return HL=required page 3 space, A=number of required drives,
+        ;     and Cy=1 if timer interrupt routine is to be executed.
+	;  2) With A=1 and B=number of allocated drives,
+        ;     only if the required page 3 space was effectively allocated
+
+	jp	DV_INIT
+	
+	;* BASIC expanded statement ("CALL") handler.
+	;  Works the expected way, except that CALBAS in kernel page 0
+	;  must be called instead of CALBAS in MSX BIOS.
+
+	scf	;STATEMENT
+	ret
+	ret
+
+	;* BASIC expanded device handler.
+	;  Works the expected way, but see CALBAS exception for STATEMENT.
+
+	scf	;BASDEV
+	ret
+	ret
+
+	;* Extended BIOS hook.
+	;  Works the expected way, except that it must return
+	;  D'=1 if the old hook must be called, D'=0 otherwise.
+	;  It is entered with D'=1.
+
+	ret	;EXTBIO
+	ret
+	ret
+
+	;* Direct calls entry points.
+	;  There is a jump table at address 7450h in pages 0 and 3,
+	;  that will be redirected here.
+
+	ret	;DIRECT0
+	ret
+	ret
+	ret	;DIRECT1
+	ret
+	ret
+	ret	;DIRECT2
+	ret
+	ret
+	ret	;DIRECT3
+	ret
+	ret
+	ret	;DIRECT4
+	ret
+	ret
+
+	ds	15	;Reserved
+
+	;* Disk routines, redirected here from the standard jump table at 4010h.
+	;  Works at expected, except that if CHOICE needs to return anything
+	;  other than zero (one single choice), a null string
+	;  (disk can't be formatted, can return 741Fh) or the
+	;  "Single side/double side" string (can return 7420h),
+	;  the kernel code must be patched to contain the desired string
+	;  (in both kernel bank 0 and 3).
+
+	jp	DSKIO		;Sector read/write
+	jp	DSKCHG		;Disk change detection
+	jp	GETDPB		;Get disk parameter block
+	jp	CHOICE		;Get format choice string
+	jp	DSKFMT		;Format a disk
+	jp	MTOFF		;Turn motor off
+
+	;* End of standard driver jump table
+
+	; Dummy Disk routines
+
+DSKIO:
+DSKCHG:
+GETDPB:	ld	a,12
+	scf
+MTOFF:	ret
+
+CHOICE:	ld	hl,null_message
+	ret
+
+DSKFMT:	ld	a,16
+	scf
+	ret
+
+	; Dummy init routine
+
+DV_INIT:
+	ld	hl,0
+	xor	a
+	ret
+
+
+	; Driver version routine
+
+DV_VERSION:
+	ld	a,1
+	ld	bc,0
+	ret
+
+	end

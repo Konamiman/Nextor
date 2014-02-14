@@ -1,0 +1,138 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"Z80MODE - Enable or disable Z80 access mode for a legacy driver",13,10
+	db	13,10
+	db	"By default, MSX-DOS will enable the Z80 access mode for all legacy drivers",13,10
+	db	"when running on MSX Turbo-R computers. When this mode is enabled, Z80 CPU is",13,10
+	db  "switched prior to every access to any drive on the driver. This function",13,10
+	db  "allows to disable the Z80 access mode for any legacy driver, so drives on",13,10
+	db	"these drivers can be accessed in R800 mode; and to re-enable it.",13,10
+	db	13,10
+	db	"Z80 mode applies to legacy drivers only. MSX-DOS will never switch to Z80",13,10
+	db	"CPU when accessing MSX-DOS 2.50 drivers (both device-based and drive-based).",13,10
+	db	13,10
+	db	"Note that this program will work on MSX Turbo-R computers only.",13,10
+	db	13,10
+	db	"Usage: Z80MODE <slot>[-<subslot>]|0 [ON|OFF]",13,10
+	db	13,10
+	db	"If 0 is specified, the primary disk controller slot is assumed",13,10
+	db	1Ah
+
+USAGE_S:
+	db	"Z80MODE - Enable or disable Z80 access mode for a legacy driver",13,10
+	db	13,10
+	db	"Usage: Z80MODE <slot>[-<subslot>]|0 [ON|OFF]",13,10
+	db	13,10
+	db	"TYPE Z80MODE.COM for more details.",13,10
+	db	0
+
+START:
+	call	CHK250##
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	jr	nz,FOUND_PARAMS
+	
+	ld	de,USAGE_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+FOUND_PARAMS:
+
+	;--- Get slot number
+
+	ld	hl,BUF
+	call	GETSLOT##
+	or	a
+	jr	nz,NO_PRIMARY
+	ld	a,(0F348h)
+NO_PRIMARY:
+	ld	(SLOT),a
+	ld	a,b
+	inc	a
+	ld	b,.IDRVR##
+	ld	c,_TERM##
+	jp	nz,5
+
+
+	;--- Get ON/OFF switch
+
+	ld	a,2
+	ld	de,BUF2
+	call	EXTPAR
+	jr	c,DO_GET
+
+	ld	hl,BUF2
+	call	CHKONOFF##
+
+
+	;--- Set value
+
+	ld	d,a
+	ld	a,(SLOT)
+	ld	b,1
+	ld	c,_Z80MODE##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+
+	;--- Get current value and print it
+
+DO_GET:
+	ld	a,(SLOT)
+	ld	b,0
+	ld	c,_Z80MODE##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+	push	de
+	ld	de,MODE_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,BUF
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,IS_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	pop	af
+	ld	de,OFF_MSG
+	or	a
+	jr	z,DO_GET2
+	ld	de,ON_MSG
+DO_GET2:
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
+
+
+MODE_MSG:
+	db	"Z80 access mode for driver in slot ",0
+IS_MSG:
+	db	" is ",0
+ON_MSG:
+	db	"ON",13,10,0
+OFF_MSG:
+	db	"OFF",13,10,0
+
+SLOT:
+	db	0
+BUF:
+BUF2	equ	BUF+16
+
+	end

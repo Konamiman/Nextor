@@ -1,0 +1,2174 @@
+;**************************************************************************
+;***									***
+;***									***
+;***        MSX  DISK  DRIVE  ROUTINE  OF  MATSUSHITA  VERSION          ***
+;***   			(FDC:TC8566F*******) 				***
+;***									***
+;***			BY  M.HIRONAKA	DATE  05/29/1987		***
+;***					DATE  07/06/1987		***
+;***					DATE  09/13/1987		***
+;***					DATE  04/06/1988		***
+;***					DATE  05/25/1988		***
+;***									***
+;**************************************************************************
+;
+;   This software is control software of FDC ( uPD765A/TC8566F ).
+;   Hardware must support image (page 2) and ready/busy from FDD.
+;   Software can ignore ready/busy from FDD,too (always ready) .
+;
+	.Z80
+
+ROMDISK	EQU	1		;ROM/SRAM disk driver version (by ASCII)
+
+if	ROMDISK
+	extrn	a_dskio
+	extrn	a_drives
+	extrn	a_inienv
+	extrn	a_dskchg
+	extrn	a_getdpb
+	extrn	a_choice
+	extrn	a_dskfmt
+
+	extrn	is_romdisk
+endif
+;
+;	MSX system specific constants
+;
+CR	EQU	0DH
+LF	EQU	0AH
+;
+;	external symbols
+;
+	PUBLIC	PHYDRV,PRVDRV
+	EXTRN	PROMPT
+	EXTRN	GETSLOT		;get slot  address  (i.e.,  where  I am)
+				;in [A]
+	EXTRN	GETWRK		;get base  of  work  area  in  [IX]  and
+				;[HL]
+	EXTRN	DIV16		;[BC] =  [BC]/[DE],  remainder  in  [HL]
+	EXTRN	XFER		;block transfer routine
+	EXTRN	$SECBUF		;pointer to  sector  buffer for physical
+				;driver
+	EXTRN	RAMAD0,RAMAD1,RAMAD2,RAMAD3
+	EXTRN	ENASLT
+	EXTRN	RAWFLG		;read after write flag
+	EXTRN	SETINT,PRVINT
+	EXTRN	DISINT,ENAINT	;interrupt handler
+	;
+	EXTRN	$DOSON		;60/5/30 modify
+	;
+FUNC	EQU	0F37DH
+PROCNM	EQU	0FD89H
+RTRYAD	EQU	0FD09H+31	;<<< CAUTION >>>
+;
+;
+;	definition of my own work area (offset from top)
+;
+MOTCNT	EQU	0		;motor stop counter
+LAST0	EQU	MOTCNT+1	;last access counter for drive 0
+LAST1	EQU	LAST0+1		;last access counter for drive 1
+PRVDRV	EQU	LAST1+1		;previously specified drive
+VFLAG	EQU	PRVDRV+1	;0---NON,1---VERIFY
+RWFLAG	EQU	VFLAG+1		;b0=0--read,b0=1--write
+VRFLAG	EQU	RWFLAG		;b1=0--read b1=1--verify
+MOTSWT	EQU	RWFLAG+1	;b5=1--driveB motor on
+				;b4=1--driveA motot on
+PHYDRV	EQU	MOTSWT+1	;number of physical drives
+;CMDBUF0	EQU   	PHYDRV+1	;area for setting command
+CMDBUF0	EQU	MOTCNT+10	;for format
+CMDBUF1 EQU 	CMDBUF0+1	;area for setting command
+CMDBUF2	EQU	CMDBUF0+2	;area for setting command
+CMDBUF3	EQU	CMDBUF0+3	;area for setting command
+CMDBUF4	EQU	CMDBUF0+4	;area for setting command
+CMDBUF5	EQU	CMDBUF0+5	;area for setting command
+CMDBUF6	EQU	CMDBUF0+6	;area for setting command
+CMDBUF7	EQU	CMDBUF0+7	;area for setting command
+CMDBUF8	EQU	CMDBUF0+8	;area for setting command
+RSTBUF0	EQU	CMDBUF0+9	;area for receiving result
+RSTBUF1	EQU	RSTBUF0+1	;area for receiving result
+RSTBUF2	EQU	RSTBUF0+2	;area for receiving result
+RSTBUF3	EQU	RSTBUF0+3	;area for receiving result
+RSTBUF4	EQU	RSTBUF0+4	;area for receiving result
+RSTBUF5	EQU	RSTBUF0+5	;area for receiving result
+RSTBUF6	EQU	RSTBUF0+6	;area for receiving result
+
+if	romdisk
+	public	fdnum, flags, map_control_save, map_save, map_exp_save
+flags			equ	rstbuf6+1
+	opt_rom			equ	7	; 1 if optional ROM exists
+	patch_rom		equ	6	; 1 if patch ROM exists
+						; bit 0..2 =
+						;	000 if table is in C0
+						;	001 if table is in C4
+						;	010 if table is in C8
+						;	011 if table is in CC
+						;	100 if table is in D0
+						;	101 if table is in D4
+						;	110 if table is in D8
+						;	111 if table is in DC
+map_control_save	equ	flags+1
+map_save		equ	flags+2
+map_exp_save		equ	flags+3
+fdnum			equ	flags+4
+endif
+
+WRKLEN1	EQU	PHYDRV+1
+
+if	romdisk
+wrklen	equ	fdnum+1
+else
+WRKLEN	EQU	RSTBUF6+1
+endif
+
+;
+;	symbols internally defined
+;
+	PUBLIC	MYSIZE
+MYSIZE	EQU	WRKLEN		;work area size for this cartridge
+;
+	PUBLIC	SECLEN
+SECLEN	EQU	512		;maximum sector size supported  by  this
+				;cartridge
+;
+$$DRIVE::
+;
+;	drive parameters supported by this cartridge
+;
+DPBTBL:
+;
+;	double track, single side, 9sectors
+;
+DPBF8:	DEFB	0F8H		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	1		;CLUSMSK
+	DEFB 	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	12		;FIRREC
+	DEFW	355		;MAXCLUS
+	DEFB	2		;FATSIZ
+	DEFW	5		;FIRDIR
+;
+;	double  track, double side, 9sectors
+;
+DPBF9:	DEFB	0F9H		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	1		;CLUMSK
+	DEFB	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	14		;FIRREC
+	DEFW	714		;MAXCLUS
+	DEFB	3		;FATSIZ
+	DEFW	7		;FIRDIR
+;
+;
+;	double track, single side, 8sectors
+;
+DPBFA:	DEFB	0FAH		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B 	;DIRMSK
+	DEFB	4		;DIRSHFT
+ 	DEFB	1		;CLUSMSK
+	DEFB	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	10		;FIRREC
+	DEFW	316		;MAXCLUS
+	DEFB	1		;FATSIZ
+	DEFW	3		;FIRDIR
+;
+;	double track, double side, 8sector
+;
+DPBFB:	DEFB	0FBH		;MADIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	1		;CLUSMSK
+	DEFB	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	12		;FIRREC
+	DEFW	635		;MAXCLUS
+	DEFB	2		;FATSIZ
+	DEFW	5		;FIRDIR
+;
+;	single side, 9 sectors
+;
+DPBFC:	DEFB	0FCH		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	0		;CLUSMSK
+	DEFB	1		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	64		;MAXENT
+	DEFW	9		;FIRREC
+	DEFW	352		;MAXCLUS
+	DEFB	2		;FATSIZ
+	DEFW	5		;FIRDIR
+;
+;	double side, 9 sectors
+;
+DPBFD:	DEFB	0FDH		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	1		;CLUSMSK
+	DEFB	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	12		;FIRREC
+	DEFW	355		;MAXCLUS
+	DEFB	2		;FATSIZ
+	DEFW	5		;FIRDIR
+;
+;	single side, 8 sectors
+;
+DPBFE:	DEFB	0FEH		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	0		;CLUSMSK
+	DEFB	1		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	64		;MAXENT
+	DEFW	7		;FIRREC
+	DEFW	314		;MAXCLUS
+	DEFB	1		;FATSIZ
+	DEFW	3		;FIRDIR
+;
+;	double side, 8 sectors
+;
+DPBFF:	DEFB	0FFH		;MEDIA
+	DEFW	512		;SECSIZ
+	DEFB	00001111B	;DIRMSK
+	DEFB	4		;DIRSHFT
+	DEFB	1		;CLUSMSK
+	DEFB	2		;CLUSSHFT
+	DEFW	1		;FIRFAT
+	DEFB	2		;FATCNT
+	DEFB	112		;MAXENT
+	DEFW	10		;FIRREC
+	DEFW	316		;MAXCLUS
+	DEFB	1		;FATSIZ
+	DEFW	3		;FIRDIR
+;
+;	default drive parameter for this cartridge
+;
+	PUBLIC	DEFDPB
+DEFDPB	EQU	DPBF9
+;
+;	drive capability definition
+;
+MOTOR_TIME	EQU	4*60	;time to stop the motor ### 86/7/4 ###
+USER_TIME	EQU	1*60	;time within  which  the  user  may  not
+				;be able to change disks
+RETRIES		EQU	11	;number of  retries  (better   be   odd)
+SRT		EQU	0DH	;step rate time
+HUT		EQU	0FH	;head unload time (max 480ms)
+;; modify : HLT data 06/15/88
+;HLT		EQU	04H	;head load time
+HLT		EQU	01H	;head load time (minimum 4ms)
+ND		EQU	01B	;non-DMA mode
+N		EQU	02	;record length
+EOT		EQU	09	;end of time
+GPL		EQU	50H	;gap length
+DTL		EQU	0FFH	;data length
+NCN		EQU	6	;new cylinder number
+LEDON		EQU	10000000B  ;LED on
+LEDOFF		EQU	11000000B  ;LED off
+STLTIME		EQU	1907	;setling time 16mS
+STLSW		EQU	1	;after seek ,wait time
+TESTSW0		EQU	0	;no verify transaction
+				;OEMSTATEMENT transaction
+TESTSW1		EQU	1	;read CRC check
+A1FSW		EQU	1	;when escape , motor off
+M1SW		equ	1	;M1 modify 
+;
+;	Command definition
+;
+SPECIFY_CMD	EQU	03H
+RECALIBRATE_CMD EQU	07H
+SENSE_CMD	EQU	08H
+SENSEDV_CMD	EQU	04H
+SEEK_CMD	EQU	0FH
+READ_CMD	EQU	46H
+WRITE_CMD	EQU	45H
+;
+;	I/O port definition
+;
+;FD_STT	EQU	7FFAH		;FDC status 
+;FD_CM0	EQU	7FF8H		;FDC control register #0
+;FD_CM1	EQU	7FF9H		;FDC control register #1
+;FD_DAT	EQU	7FFBH		;FDC data register
+;*** MSX-Turbo System mapping 1990/5/7 ***
+FD_STT	EQU	7FF4H
+FD_CM0	EQU	7FF2H
+FD_CM1	EQU	7FF3H
+FD_DAT	EQU	7FF5H
+FD_CHG	equ	7ff1h		;D-CHG;
+;
+;	Error condition definition
+;
+;	write sector
+;
+;	read sector
+;
+;	FD_SEL definition
+;
+;	FD_REQ definition
+;
+
+        SUBTTL  write
+
+;
+;	DSKIO entry
+;
+	PUBLIC	DSKIO
+DSKIO:
+        EI                      ;make sure interrupt is enabled (60/2/23)
+if	romdisk
+	push	af		; save carry flag
+	call	is_romdisk	; is ROM disk?
+	jp	nc,a_dskio	; yes
+	pop	af		; restore carry flag
+endif
+	PUSH    AF              ;remember specified drive number(60/2/23)
+        JP      NC,READ         ;if no carry, we should read
+;
+;       Write a sector
+;
+; inputs:
+;       [A]  = drive number ( 0 based )
+;       [B]  = sector count to write
+;       [C]  = media descriptor
+;       [DE] = logical sector number
+;       [HL] = transfer address
+;
+; outputs:
+;       if successful, return with carry flag reset
+;       otherwise,     return with carry flag set,
+;                      error code in [A],
+;		       [A]=00 write protected disk
+;		       	  =02 drive not ready
+;			  =04 CRC error
+;			  =08 record not found
+;			  =10 write fault
+;			  =12 other error
+;                      number of sectors remaining in [B]
+;
+;       AF, BC, DE and HL can be modified
+;
+   IF	TESTSW1
+	PUSH	AF		;for read CRC check
+	PUSH	BC		;for read CRC check
+	PUSH	DE		;for read CRC check
+	PUSH	HL		;for read CRC check
+   ENDIF
+        CALL    WRMAIN          ;perform write operation
+   IF   TESTSW1
+	POP	HL		;for read CRC check
+	POP	DE		;for read CRC check
+	POP	BC		;for read CRC check
+	JR	C,RWEND0	;for read CRC check
+	LD	(IX+VRFLAG),00000010B  ;read flag on & verify flag on
+
+VERIFY:	POP	AF		;for read CRC check get drive No.
+	AND	A		;for read CRC check CY reset
+	CALL	RDMAIN		;for read CRC check
+	RES	1,(IX+VRFLAG)	;for read CRC check 
+	PUSH	DE		;pummy PUSH
+RWEND0:	POP	DE		;for read CRC check
+   ENDIF
+;
+	PUBLIC	RWEND
+RWEND:  EI                              
+	POP     DE                      
+        PUSH    AF		;save returned status
+        LD      C,USER_TIME	;assume no errors detected
+        JR      NC,NOERR	;good assumption
+        LD      C,0		;error detected, do not take
+				;this as 'disk access'
+NOERR:
+;M1;	LD	(IX+MOTCNT),MOTOR_TIME	;tell interrupt handler to
+				;stop the motor after MOTOR_TIME
+        LD      A,D		;which drive has been accessed?
+        AND     A		; drive 0 /1 ?
+	CALL	MOTOR_OFF	;a <- 04h  (FD_CM0) <- a
+	JR	NZ,RWEND1	;drive 1
+	LD	(IX+LAST0),C	;say disk access  just  occurred on drive 0
+	POP	AF		;restore returned status
+	RET
+;
+RWEND1: LD      (IX+LAST1),C	;say disk  access  just occurred on drive 1
+        POP     AF		;restore returned status
+        RET
+
+WRMAIN: CALL    SELDRV          ;Select drive, track and sector
+        RET     C
+;
+;       register usage:
+;
+;       [B]     sector counter
+;       [C]     current track
+;       [D]     current status of FD_SEL in lower 4 bits
+;               bit 7 set if 8 sectors, reset if 9 sectors
+;               bit 6 set if double side, reset if single side
+;       [HL]    target address
+;
+        CALL    DISINT          
+        DI                                              
+        PUSH    HL              ;STORE ADR ^ENAINT^   
+        LD      HL,ENAINT                              
+        EX      (SP),HL         
+        LD      A,H
+ 	AND	A		;write from RAM above 8000H ?
+       	JP	M,WRITE_DIRECT	;yes, write directly
+	SCF			;indicate write transaction for RELOCATE 
+        CALL    RELOCATE    	;relocate for write operation
+        RET     C               ;write error
+        INC     B               ;done all sectors?
+        DEC     B
+	RET     Z		;yes
+        LD      A,H
+	AND	A		;Write from RAM above 8000H ?
+        JP      M,WRITE_DIRECT 	;yes, write directly
+;
+;       Here when we cannot write directly
+;
+        PUSH    HL             	;save real target address
+        PUSH    DE             	;save FD_SEL content
+        PUSH    BC             	;save sector count and media type
+        LD      DE,($SECBUF)   	;move target to $SECBUF
+        PUSH    DE
+        LD      BC,512
+        CALL    XFER
+        POP     HL             	;restore address of $SECBUF
+        POP     BC             	;restore parameters
+        POP     DE
+	CALL    WR_SECT        	;write a sector from $SECBUF
+        POP     HL             	;restore real target address
+        JR      MORE_WRITE
+WR_SECT:
+	CALL	RDYENA		;enable ready/busy from FDD
+        CALL    WRSECT
+	JP	RD_SECT1
+;
+;       Here when we can write directly from the source RAM
+;
+WRITE_DIRECT:
+        CALL    WR_SECT
+MORE_WRITE:
+        RET     C               ;write error
+        DEC     B               ;done with all sectors specified?
+        RET     Z               ;yes, return with carry flag reset
+        CALL    UPDATE          ;prepare for next write
+        JR      WRITE_DIRECT    ;go and write next sector
+;
+;       Routine which actually performs write operation
+;
+;       [E]     retry counter
+;
+WRSECT:
+
+	LD      E,RETRIES 	;set retry count
+WRRTRY:
+WRITE2: PUSH    HL              ;save target address
+        PUSH    DE              ;save media type and retry count
+        PUSH    BC              ;save sector count and target track
+        LD      DE,WRDONE       ;set where to jump when occurred error
+        PUSH    DE
+	LD	DE,WAIT_E_PHASE	;set where to jump when occurred error
+	PUSH	DE		
+ 
+	LD	(IX+CMDBUF0),WRITE_CMD  ;set WRITE command to buffer
+	LD	B,9		;set command length
+	CALL	SETCM		;excuse C-phase
+
+        LD      DE,FD_STT	
+	LD	B,0		;counter 256 bytes
+WRLOOP: LD      A,(DE)          ;get main status
+        ADD     A,A		;sense b7
+	JP 	NC,WRLOOP	;NC:RQM=0
+	ADD	A,A		;RQM=1 sense b5
+	RET	P		;P:NDM=0 occur error
+	LD	A,(HL)		;set 1byte data
+	LD	(FD_DAT),A	
+	INC	HL		
+	DJNZ	WRLOOP		
+
+;;;;;;  LD	B,0		;next counter 256 bytes
+WRLOOP1:
+	LD	A,(DE)		
+	ADD	A,A		
+	JP	NC,WRLOOP1	
+	ADD	A,A		
+	RET	P		
+	LD	A,(HL)	 	
+	LD	(FD_DAT),A	
+	INC	HL		
+	DJNZ	WRLOOP1		
+	POP	BC		;dummy pop
+	POP	BC		;dummy pop
+;
+WRDONE:
+	CALL	TCSEND		;send TC 
+	CALL	RSTRD		;get result status
+ 
+        POP     BC              ;restore sector count and target track
+        POP     DE              ;restore media type and retry count
+        POP     HL              ;restore target address
+	LD	A,(IX+RSTBUF0)	;sense ST0
+	AND	11001000B	;write complete ?
+	RET	Z		;yes,return
+	AND	00001000B	;ready ?
+	JP	NZ,WRITE_NOTRDY	;no,'NOT READY'
+	BIT	1,(IX+RSTBUF1)	;write protected ?
+	JR	NZ,WRTPRT	;yes,'WRITE PROTECTED'
+;
+;       here when retry might be necessary
+;
+;;;;;;  PUSH    AF              ;save error code
+        CALL    RESEEK          ;restore and re-seek head if necessary
+;;;;;;  POP     AF              ;restore error code
+        DEC     E               ;should retry?
+        JR      NZ,WRRTRY       ;yes
+;
+;       no more retries, report errors to the caller
+;
+        SCF                     ;set carry to indicate error occurred
+	BIT	4,(IX+RSTBUF0)	;write fault?
+        LD      A,10		;
+        RET     NZ              ;yes
+	JP	ERRHNDL
+;
+;   WRITE PROTECTED
+WRTPRT:
+	XOR	A
+	SCF
+	RET			;WRITE PROTECTED ERROR
+;
+;       here when 'not-ready' error occurred
+;
+WRITE_NOTRDY:
+        LD      A,2             ;ID for 'drive not ready'
+        SCF
+        RET
+
+        SUBTTL  read
+
+;
+;       Read sectors
+;
+; inputs:
+;       [A]  = drive number ( 0 based )
+;       [B]  = sector count to read
+;       [C]  = media descriptor
+;       [DE] = logical sector number
+;       [HL] = transfer address
+;
+; outputs:
+;       if successful, return with carry flag reset
+;       otherwise,     return with carry flag set,
+;                      error code in [A],
+;		       [A]=02 drive not ready
+;			  =04 CRC error
+;			  =08 record not found
+;			  =12 other error
+;                      number of sectors remaining in [B]
+;
+;       AF, BC, DE and HL can be modified
+;
+READ:   CALL    RDMAIN		;perform read operation
+        JP      RWEND           
+;
+RDMAIN: CALL    SELDRV          ;select drive, track and sector
+        RET     C
+;
+;       register usage:
+;
+;       [B]     sector counter
+;       [C]     current track
+;       [D]     current status of FD_SEL in lower 4 bits
+;               bit 7 set if 8 sectors, reset if 9 sectors
+;               bit 6 set if double side, reset if single side
+;       [HL]    target address
+;
+        CALL    DISINT          
+        DI                                              
+        PUSH    HL              ;STORE ADR ^ENAINT^   
+        LD      HL,ENAINT                              
+        EX      (SP),HL         
+        LD      A,H
+ 	AND	A		;write from RAM above 8000H ?
+	JP      M,READ_DIRECT   ;yes, read directly to destination
+				;(CY)=0 indicate read transaction for RELOCATE
+        CALL    RELOCATE	;relocate for read operation
+        RET     C               ;read error
+        INC     B               ;done all sectors?
+        DEC     B
+        RET     Z               ;yes
+        LD      A,H
+        AND     A               ;read to RAM above 8000H?
+        JP      M,READ_DIRECT   ;yes, read directly to destination
+;
+;       Here when we cannot read directly to the destination RAM
+;
+   IF   TESTSW1
+	BIT	1,(IX+VRFLAG)	;for read CRC check
+	JR	NZ,VERIFY_TRN	;for read CRC check
+   ENDIF
+        PUSH    HL		;save real target address
+        LD      HL,($SECBUF)
+        CALL    RD_SECT		;read a sector to $SECBUF
+        POP     HL		;restore real target address
+        RET     C		;read error
+        PUSH    HL
+        PUSH    DE
+        PUSH    BC
+	LD	DE,($SECBUF)
+        EX      DE,HL		;move target address to [DE]
+        LD      BC,512
+        CALL    XFER
+        POP     BC		;restore parameters
+        POP     DE
+        POP     HL
+;;;;;;	AND     A		;make sure carry is cleared
+        JR      MORE_READ
+   IF	TESTSW1
+VERIFY_TRN:
+	CALL	VF_SECT		;for read CRC check
+	RET	C		;for read CRC check
+	JR	MORE_READ	;for read CRC check
+VF_SECT:
+	CALL	RDYENA		;for read CRC check
+	CALL	VFSECT		;for read CRC check
+	JR	RD_SECT1	;for read CRC check
+   ENDIF
+RD_SECT:
+	CALL	RDYENA		;enable ready/busy from FDD
+        CALL    RDSECT
+RD_SECT1:
+	PUSH	AF		;store CY and error code
+	CALL 	RDYALW		;always ready from FDD
+	POP	AF		;restore CY
+	RET
+;
+;       Here when we can read directly to the destination RAM
+;
+READ_DIRECT:
+   IF	TESTSW1
+	BIT	1,(IX+VRFLAG)	;for read CRC check
+	JR	Z,RJUMP		;for read CRC check
+VJUMP:	CALL	VF_SECT		;for read CRC check
+	JR	VNEXT		;for read CRC check
+   ENDIF
+RJUMP:	CALL    RD_SECT
+VNEXT:	RET	C		;read error
+MORE_READ:
+        DEC     B               ;done with all sectors specified?
+        RET     Z               ;yes, return with carry flag reset
+        CALL    UPDATE          ;prepare for next read
+        JR      READ_DIRECT     ;go and read next sector
+;
+;       Routine which actually performs read operation
+;
+;       [E]     retry counter
+;
+RDSECT: 
+VFSECT:
+	LD      E,RETRIES       ;set retry count
+RDRTRY:
+   IF	TESTSW1
+	BIT	1,(IX+VRFLAG)	;for read CRC error
+	JR	Z,RJUMP1	;for read CRC error
+	CALL	VERIFYSEC	;for read CRC error
+	JR	VJUMP1		;for read CRC error
+RJUMP1:
+   ENDIF
+	CALL	READSEC		;(HL),(DE),(BC) reserve
+VJUMP1:	LD	A,(IX+RSTBUF0)	;sense ST0
+	AND	11001000B	;read complete ?
+        RET     Z               ;yes,return
+	AND	00001000B	;ready ?
+        JP      NZ,WRITE_NOTRDY ;no,'NOT READY'
+;
+;       here when retry might be necessary
+;
+VEND:
+;;;;;;	PUSH	AF	        ;save error code
+	CALL	RESEEK	        ;restore and re-seek head if necessary
+;;;;;;  POP     AF              ;restore error code
+        DEC     E               ;should retry?
+	JR	NZ,RDRTRY	;yes
+;
+;       no more retries, report errors to the  caller  with  carry  flag
+;       set and [B] containing # of sectors remaining
+;
+        SCF                     ;set carry to indicate error occurred
+	JP	ERRHNDL		;
+;
+;--------------------------------------------------------
+
+        SUBTTL  select proper drive
+;
+;       Select drive, track and sector
+;
+;   Input   (A),(BC),(DE)   
+;   Output  (D):media & drive imformation   (C):track No.
+;           (IX):work area
+;           (CY):result of OK/NG
+;   Reserve (B),(HL)
+;
+SELDRV: PUSH    AF
+        PUSH    BC
+        PUSH    HL
+        CALL    GETWRK          ;get base of work area in [IX]
+        POP     HL
+        POP     BC
+        POP     AF
+	RES	0,(IX+RWFLAG)	;if read then b0=0
+	JR	NC,SELDRV_JUMP
+	SET	0,(IX+RWFLAG)	;as write,b0=1
+SELDRV_JUMP:
+        CP      2               ;is drive number in proper range?
+        JR      C,SLDRV1        ;yes
+BADPRM: LD      A,12            ;maybe internal malfunction
+        SCF
+        RET
+;
+SLDRV1: PUSH    AF
+        LD      A,C             ;get media descriptor byte
+        CP      0F8H            ;within proper range? ( 0F8H .. 0FFH )
+        JR      NC,SLDRV2       ;yes
+        POP     AF
+        JR      BADPRM          ;bad parameter specified
+;
+SLDRV2:
+	POP	AF		;RETURN DRIVE NO
+	PUSH	IX
+	PUSH	BC
+	PUSH	DE
+	PUSH	AF
+;
+	LD	A,(IX+PHYDRV)	;HOW MANY DRIVES
+	DEC	A		;TWO DRIVES ?
+	JR	NZ,PASSEL	;IF SO THEN PASS
+;
+	POP	AF
+	LD	B,0
+	PUSH	BC		;ALWAYS DRIVE IS 0
+;
+	CP	(IX+PRVDRV)	;WHICH IS THE LAST ACCESS DRIVE
+	JR	Z,PASSEL	;IF SAME ONE THEN PASS
+	LD	(IX+PRVDRV),A	;SET NEW DRIVE
+;M1;	XOR	A
+;M1;	LD	(IX+MOTCNT),A	;RESET MOTOR COUNTER
+	CALL	MOTOR_OFF	; a <- 04   (FD_CM0) <- a
+	PUSH	HL		;SAVE TRANSFER ADDRESS
+	CALL	PROMPT
+	POP	HL		;RETURN TRANSFER ADRESS
+;
+PASSEL:	POP	AF
+	POP	DE
+	POP	BC
+	POP	IX
+	LD	(IX+CMDBUF5),N	 
+	LD	(IX+CMDBUF6),EOT 
+	LD	(IX+CMDBUF7),GPL 
+	LD	(IX+CMDBUF8),DTL 
+;
+	PUSH	HL		;save transfer address
+	PUSH	AF		;save drive number
+        PUSH    BC              ;save sector count and media type
+        BIT     1,C             ;8 sectors or 9 sectors per track?
+        LD      C,E             ;move logical  sector  number  to   [BC]
+        LD      B,D             ;for DIV16
+        LD      DE,8            ;assume 8 sectors
+        JR      NZ,SEL8S        ;good assumption
+        INC     DE              ;9 sectors per track
+SEL8S:  CALL    DIV16           ;[BC] = [BC] / [DE], [HL] = remainder
+                                ;now [BC] = track, [HL] = sector - 1
+        INC     L		;
+	LD	(IX+CMDBUF4),L	;
+        LD      L,C             ;move track to [L]
+        POP     BC              ;restore sector count and media type
+        POP     AF              ;restore drive number
+;;;;;;; LD      H,A             ;remember specified drive
+	LD	(IX+CMDBUF1),A	;
+	AND	A		;
+	LD	A,00010100B	;
+	JR	Z,SELDRV3	;
+	LD	A,00100101B	;
+SELDRV3:
+	LD	H,A		;### 765 ###
+;;;;;;;	PUSH	AF		;### 765 ###
+	LD	D,A		;### 765 ###
+	BIT	0,C		;### 765 ###
+	JR	Z,SIDE0		;### 765 ###
+	SRL	L		;### 765 ###
+	JR	NC,SIDE0	;### 765 ###
+	SET	2,(IX+CMDBUF1)	;### 765 ###
+	LD	(IX+CMDBUF3),1	;### 765 ###
+	JR	SELDRV4		;### 765 ###
+SIDE0:	RES 	2,(IX+CMDBUF1)	;### 765 ###
+	LD	(IX+CMDBUF3),0	;### 765 ###
+SELDRV4:
+	LD	A,C		;### 765 ###
+	RRCA			;### 765 ### (D)
+	RRCA			;### 765 ###   b7,b6  media descriptor
+	AND	11000000B	;### 765 ###   b5,b4  motor on/off
+	OR	D		;### 765 ###   b3     side0/side1
+	LD	D,A		;### 765 ###   b2     1
+;;;;;;;	POP	AF		;### 765 ###   b1,b0  drive 0/1
+
+        DI
+;M0;	LD	A,(IX+MOTSWT)
+;M0;	OR	H
+	ld	a,h		;M0;
+	LD	(FD_CM0),A 	;motor on
+;M0;	AND	00110000B
+;M0;	LD	(IX+MOTSWT),A
+;M1;	LD	(IX+MOTCNT),0FFH	;tell interrupt handler not
+				;to stop the motor
+        EI
+	LD	C,L		;(C) target track No.
+	CALL	RDYENA		;enable ready/busy
+	CALL	RDYCHK		;
+	PUSH	AF		;(A)=ST3
+	CALL	RDYALW		;always ready
+	POP	AF
+	JR	C,SELDRV_ERR	
+	BIT	6,A
+	JR	Z,NOWAIT	;no protected 
+	BIT	0,(IX+RWFLAG)	;b0=0 read / b0=1 write
+	JR	Z,NOWAIT	;can read protected disk
+	POP	HL
+	XOR	A		;write protect error
+	SCF
+	RET
+NOWAIT: 
+;;;;;;;	CALL	WAITMOT		;400/200 ms wait 
+				;modify register (AF)
+	inc	c		; target cyln # = 0 ?
+	dec	c
+	jr	nz,SELDRV_SEEK	; no
+	push	bc		; save real cyln #
+	ld	c,NCN		; dummy seek
+	call	SEEKC
+	call	RECAL		; error ignore ( as check read/write )
+	pop	bc
+  if 0  ;--------------------------------------------------
+	PUSH	BC		;store target cylinder No.
+	INC	C		;(C)=(C)+1
+	LD	A,79
+	CP	C
+	JR	NC,INCCLYN
+DECCLYN:
+	DEC	C	
+	DEC	C		;(C)=78
+INCCLYN:
+	CALL	SEEKC		;dummy seek
+	POP	BC
+  endif ;--------------------------------------------------
+
+SELDRV_SEEK:
+	CALL	SEEKC		;real seek transaction
+        POP     HL              ;restore target address
+        RET
+SELDRV_ERR:
+	POP	HL		;
+	LD	A,2		;drive not ready
+  	RET			;
+
+
+	PUBLIC	WAITMOT
+WAITMOT:
+	PUSH	BC		;wait until 512 ms
+	LD	BC,52709	;68*0.279*52709  = 1 S
+WAITMOT1:
+	EX	(SP),HL		;kill time
+	EX	(SP),HL
+	DEC	BC
+	LD	A,B
+	OR	C
+	JP	NZ,WAITMOT1
+	POP	BC	
+	RET
+
+
+	PUBLIC	RDYCHK
+RDYCHK:
+	LD	(IX+CMDBUF0),SENSEDV_CMD  
+	PUSH	BC		
+	LD	HL,5000		
+RDYCHK1:
+        DEC     HL		
+        LD      A,L		
+        OR      H		
+        JR      Z,NOTRDY_ERR	
+	LD	B,2		
+	CALL	SETCM		
+	CALL	RSTRD		
+	LD	A,(IX+RSTBUF0)
+	BIT	5,A		;check RDY-flag of ST3
+	JR	Z,RDYCHK1	
+	POP	BC		
+	AND	A		;(CY)=0 FDD ready
+	RET			
+NOTRDY_ERR:
+	POP	BC		;
+	SCF			;(CY)=1 FDD not ready
+	RET			;
+
+        SUBTTL  initialization
+
+;
+;       Initialize hardware only
+;
+;       All registers may be affected
+;
+        PUBLIC  INIHRD
+INIHRD:
+	LD	HL,0		;keep area for command excution
+	ADD	HL,SP		;
+	PUSH	HL		;
+	POP	IY		;reserve current SP
+	LD	DE,16		;
+	XOR	A		;
+	SBC	HL,DE		;
+	LD	SP,HL		;set new SP
+	INC	HL		;
+	LD	DE,CMDBUF0	;
+	XOR	A		;
+	SBC	HL,DE		;
+	PUSH	HL		;
+	POP	IX		;set dummy area into stack area
+
+	CALL	FDCRES		;(A)=0
+;;	LD	A,00000100B	;05/28/88 drive 0 select & motor off
+	LD	A,00010100B	;05/28/88 drive 0 select & motor on
+	CALL	INIHRD1		;### 765 ###
+	LD	SP,IY		;set previous SP
+	
+        PUBLIC  MTOFF           
+MTOFF:                          
+	jp	MOTOR_OFF	;M0;
+;M0;	CALL	MOTOR_OFF
+;M0;	LD	(IX+MOTSWT),A
+;M0;	RET
+
+	PUBLIC	FDCRES
+FDCRES:
+	LD	(FD_CM0),A	;### 765 ### FDC reset
+	LD	A,11111010B	;### 765 ### LED off / FDC ready
+	LD	(FD_CM1),A	;### 765 ###
+	CALL	FDCSET		;for FDC set 05/28/88
+
+  	LD	(IX+CMDBUF0),SPECIFY_CMD     ;### 765 ###
+	LD	(IX+CMDBUF1),SRT*16+HUT      ;### 765 ###
+	LD	(IX+CMDBUF2),HLT*2+ND        ;### 765 ###
+
+	LD	B,3		;### 765 ###
+	JP	SETCM		;### 765 ###
+;
+	PUBLIC	INIHR
+INIHR:
+INIHRD1:
+	LD	(FD_CM0),A	;### 765 ###
+;;	AND	11111011B
+;;	AND	00000011B	;05/28/88
+	LD	(IX+CMDBUF1),A	;set drive No. (DS0,DS1)
+;;;;;;;	LD	(IX+CMDBUF0),SEEK_CMD	      ;for MACO,CHINON drive
+;;;;;;;	LD	(IX+CMDBUF2),NCN	      ;for MACO,CHINON drive
+;;;;;;;	CALL	WAITMOT		;05/28/88 512 ms wait
+	CALL	WAITMOT		;05/28/88 512 ms wait
+;;;;;;;	LD	B,3		;for MACO,CHINON drive
+;;;;;;;	CALL	SETCM		;for MACO,CHINON drive
+;;;;;;;	CALL	SEEKING		;for MACO,CHINON drive
+;;;;	RET	C		;for MACO drive
+
+	PUBLIC	RECAL
+RECAL:
+	LD	(IX+CMDBUF0),RECALIBRATE_CMD  ;### 765 ###
+	LD	B,2		;### 765 ###
+	CALL	SETCM		;### 765 ###
+;;;;;	RET	C		;### 765 ###
+	JP	SEEKING		;### 765 ###
+;
+;	get number of drives to [L]
+;
+;	[HL] can be modified
+;
+	PUBLIC  DRIVES
+DRIVES:	PUSH	BC		;MODIFY 60/11/29 
+	PUSH	AF
+	CALL	GETWRK
+;;	LD	A,00000101B	;05/28/88 drive 1 select & motor off
+	LD	A,00100101B	;05/28/88 drive 1 select & motor on
+	CALL	INIHRD1
+	LD	L,1		;### 765 ###
+	JR	NC,HAVTWO	;TRANSACTION FOR TWO DRIVE SYSTEM
+	LD	(IX+PHYDRV),L
+	CALL	MOTOR_OFF
+	POP	AF
+	JR	Z,FORCE1
+	INC	L		;### 765 ###
+FORCE1: POP	BC
+if	romdisk
+	call	a_drives
+endif
+	RET
+
+HAVTWO:	INC	L		;<TWO DRIVE SYSTEM>
+	LD	(IX+PHYDRV),L
+	CALL	MOTOR_OFF
+	POP	AF
+	JR	NZ,FORCE1
+	DEC	L
+	JR	FORCE1
+
+;
+;	Initialize environments
+;
+;	All registers may be affected
+;
+	PUBLIC  INIENV
+	extrn	@DRVINT
+INIENV:
+	LD	A,1
+	LD	(RAWFLG),A	;SET READ AFTER WRITE FLAG
+	CALL	GETWRK		;get base of work area to [IX] and [HL]
+	XOR	A		;clear out all variables except PHYDRV
+	LD	B,WRKLEN1-1
+INILOP:	LD	(HL),A
+	INC	HL
+	DJNZ	INILOP
+if	romdisk
+	call	a_inienv
+endif
+;;;;	LD	HL,INTRPT
+	ld	hl,@DRVINT
+	JP	SETINT		;save previous hook and set my own
+
+        SUBTTL  interrupt handler
+
+;
+;	interrupt handler
+;
+	public	DRVINT
+DRVINT	equ	$
+INTRPT: PUSH	AF		;[A] must be preserved  for  'ON  SPRITE
+				;GOSUB'
+	CALL	GETWRK		;get base of work area in [HL]
+
+   if	M1SW-1
+	LD	A,(HL)		;get current motor count
+	AND	A		;stopping?
+	JR	Z,INTR1		;yes, do nothing
+	CP	0FFH		;currently working with disks?
+	JR	Z,INTR1		;yes, do nothing
+	DEC	A		;update it
+	LD	(HL),A
+	JR	NZ,INTR1	;motor time not elapsed
+;;;;	CALL	MOTOR_OFF	;a <- 04h   (FD_CM0) <- a
+;M0;	LD	A,04H
+;M0;	LD	(IX+MOTSWT),A
+  endif
+
+INTR1:	INC	HL
+	LD	A,(HL)		;get 'last   disk  access'  counter  for
+				;drive 0
+	AND	A		;already 0?
+	JR	Z,INTR2		;yes, do nothing
+	DEC	(HL)		;update it
+INTR2:  INC	HL
+	LD	A,(HL)		;get 'last   disk  access'  counter  for
+				;drive 1
+	AND	A		;already 0?
+	JR	Z,INTR3		;yes, do nothing
+	DEC	(HL)		;update it
+INTR3:	POP	AF
+	JP	PRVINT		;jump to previous hook
+
+        SUBTTL  disk change handlers
+
+;
+;	See if disk has been possibly changed
+;
+; inputs:
+;       [A]  = drive number ( 0 based )
+;       [B]  = 0
+;       [C]  = media descriptor
+;       [HL] = base address of DPB
+;
+        PUBLIC  DSKCHG
+DSKCHG:
+        EI                      ;make sure interrupt is enabled
+                                ;^(60/2/23 modify)
+if	romdisk
+	call	is_romdisk
+	jp	nc,a_dskchg
+endif
+        PUSH    HL              ;save address of DPB
+        PUSH    BC              ;save media ID
+        PUSH    AF              ;save drive number
+        CALL    GETWRK          ;get base of work area in [IX]
+        POP     AF              ;restore drive number
+        POP     BC              ;restore media ID
+        POP     HL              ;restore address of DPB
+;;;;;	and	011b		;D-CHG;
+
+	;*** check two drive system *************************
+	ld	b,(ix+PHYDRV)	;D-CHG; how many drives
+	dec	b		;D-CHG; two drives ?
+	jr	nz,DSKCHG_0	;D-CHG; if so then pass
+
+	;*** one drive system *******************************
+	cp	(ix+PRVDRV)	;D-CHG; which is the last access drive
+	jr	z,DSKCHG_PASS	;D-CHG; if same one then pass
+	ld	b,0		;D-CHG; unknown
+	and	a		;D-CHG; CY=0
+	ret			;D-CHG; 
+DSKCHG_PASS:
+	xor	a		;D-CHG; one drive system
+
+	;*** make mask data & set command *******************
+DSKCHG_0:
+	and	a		;D-CHG;
+	ld	b,00010000b	;D-CHG; mask data for CHG0
+	jr	z,DSKCHG_1	;D-CHG;
+	ld	b,00100000b	;D-CHG; mask data for CHG1
+DSKCHG_1:
+	ld	(ix+CMDBUF1),a	;D-CHG;
+	ld	(ix+CMDBUF0),SENSEDV_CMD	;D-CHG;
+
+	;*** send command ***********************************
+	call	RDYENA		;D-CHG; enable ready/busy from FDD
+	push	bc		;D-CHG;
+	ld	b,2		;D-CHG;
+	call	SETCM		;D-CHG:
+	pop	bc		;D-CHG;
+	jr	c,DSKCHG_E0	;D-CHG;
+
+	;*** FDC status check *******************************
+DSKCHG_10:
+	ld	a,(FD_STT)	;D-CHG; C-phase end ?
+	add	a,a		;D-CHG;
+	jr	nc,DSKCHG_10	;D-CHG;
+
+	;*** read FDD disk-change ***************************
+	ld	a,(FD_CHG)	;D-CHG; get disk-change status
+	and	b		;D-CHG; mask
+	ld	b,a		;D-CHG; store disk-change status
+				;	b5=0 ... FDD1 changed
+				;	b4=0 ... FDD0 changed
+
+	;*** get result status ******************************
+	call	RSTRD		;D-CHG;
+;;;;;	bit	5,(ix+RSTBUF0)	;ignore RDY flag
+;;;;;	jr	z,DSKCHG_E1	;  as motor stop , but disk-change ena
+
+	;*** check FDD disk-change **************************
+	ld	a,b		;D-CHG;
+	and	a		;D-CHG;
+	ld	b,-1		;D-CHG; changed
+	jr	z,DSKCHG_2	;D-CHG;
+	ld	b,1		;D-CHG; not changed
+DSKCHG_2:
+	xor	a		;D-CHG; CY reset
+	jr	DSKCHG_END	;D-CHG;
+
+	;*** program end ************************************
+DSKCHG_E0:
+;;DSKCHG_E1:
+	ld	b,0		;D-CHG; unknown
+	and	a		;D-CHG; CY reset
+DSKCHG_END:
+	push	af		;D-CHG;
+	call	RDYALW		;D-CHG; always ready from FDD
+	pop	af		;D-CHG;
+	ret			;D-CHG;
+
+
+;
+;       Build a new DPB for the specified  drive.   Since  our  hardware
+;       is assumed  to  be  5inch  IBM  disk  compatible, all we have to
+;       do is to check the first byte of  FAT  passed  from  the  caller
+;       and return one of the possible 8 DPBs.
+;
+        PUBLIC  GETDPB
+GETDPB:
+        EI                      ;make sure interrupt is enabled 
+                                ;^(60/2/23 modify)
+if	romdisk
+	call	is_romdisk
+	jp	nc,a_getdpb
+endif
+        EX      DE,HL           ;move DPB address to [DE]
+        INC     DE              ;skip DRVNUM entry
+        LD      A,B
+        SUB     0F8H            ;get rid of offset
+        RET     C               ;something is wrong
+        LD      L,A             ;[HL] = [HL] * 18
+        LD      H,0
+        ADD     HL,HL
+        LD      C,L
+        LD      B,H
+        ADD     HL,HL
+        ADD     HL,HL
+        ADD     HL,HL
+        ADD     HL,BC
+        LD      BC,DPBTBL
+        ADD     HL,BC
+        LD      BC,18
+        LDIR
+        RET
+
+        SUBTTL  disk formatter
+
+        PUBLIC  CHOICE
+CHOICE:
+if	romdisk
+	call	is_romdisk
+	jp	nc,a_choice
+endif
+	LD      HL,CHOMSG
+        RET
+;
+CHOMSG:
+	DEFB    CR,LF
+	DEFB	'1 - 1 side, double track',CR,LF
+	DEFB	'2 - 2 sides,double track',CR,LF
+;;;	DEFB	'1 - 1DD',CR,LF
+;;;	DEFB	'2 - 2DD',CR,LF
+        DEFB    CR,LF
+        DEFB    0
+;
+        SUBTTL  expanded statements for OEM
+
+        PUBLIC  OEMSTATEMENT
+OEMSTATEMENT:
+   IF   TESTSW0			;### 765 ###
+	PUSH	HL		;SAVE TEXT POINTER
+ 	LD	DE,VDATA1	;CHECK VERIFY ON
+	CALL	COMPST		;COMPARE STATEMENT
+	LD	E,1
+	JR	Z,V_ON 	        ;VERIFY ON
+	LD	DE,VDATA2	;CHECK VERIFY OFF
+	CALL	COMPST		;
+	LD	E,0		;VERIFY OFF
+	JR	NZ,RETS	    	;RETURN TO SYSTEM
+V_ON:	LD	C,2EH		;FUNCTION CALL ,VERIFY SET
+        CALL	FUNC		;CALL BDOS
+	XOR	A		;RESET CARRY
+	POP	HL
+	RET
+RETS:
+	POP	HL
+	SCF
+	RET
+;
+COMPST:		;COMPARE STATEMENT
+	LD  	HL,PROCNM       ;SET BUFFER ADDRESS
+CNEXT:	LD	A,(DE)		;GET DATA
+	AND	A		;END ?
+	JR	Z,CHKEND	;CHECK END OF STATEMENT
+	CP	(HL)		;COMPARE WITH BUFFER
+	RET	NZ              ;IF NOT FIND THEN RET
+	INC	HL		;INC BUFFER
+	INC	DE		;INC DATA
+	JR	CNEXT		;CHECK NEXT  STATEMENT
+CHKEND:
+	LD	A,(HL)		;GET A CHARACTER FROM BUFFER
+	AND	A		;END TOO ?
+	RET	Z		;YES , RETURN
+	INC	HL		;INCRIMENT POINTER
+	CP	' '		;IF 'SPACE'
+	JR	Z,CHKEND	;THEN CHECK NEXT
+	RET			;IF NOT ,THEN UNNORMAL DATA EXIST
+ 
+VDATA1:	DEFB	'VERIFY ON'
+	DEFB	0
+VDATA2:	DEFB	'VERIFY OFF'
+	DEFB	0
+   ENDIF			;### 765 ###
+   IF	TESTSW0+1		;### 765 ###
+	SCF			;### 765 ###
+	RET			;### 765 ###
+   ENDIF			;### 765 ###
+
+;  =======================================================
+;       SUBROUTINE  FOR 765
+;  =======================================================
+;  +----------------------------+
+;  |    RDYENA			|
+;  +----------------------------+
+	PUBLIC	RDYENA
+RDYENA:	LD	A,00100000B
+	JR	SET_CM1_REG
+;;;	LD	(FD_CM1),A
+;;;	RET
+;  +----------------------------+
+;  |    RDYALW			|
+;  +----------------------------+
+	PUBLIC	RDYALW
+RDYALW:	LD	A,00110000B
+	JR	SET_CM1_REG
+;;;	LD	(FD_CM1),A
+;;;	RET
+;  +----------------------------+
+;  |    MOTOR_OFF		|
+;  +----------------------------+
+	PUBLIC	MOTSTP
+FDCSET:
+MOTSTP:
+MOTOR_OFF:
+	LD	A,00000100B
+	LD	(FD_CM0),A
+	RET
+
+;  +----------------------------+
+;  |    LED_ON			|
+;  +----------------------------+
+   IF	A1FSW-1
+	PUBLIC	LED_ON
+LED_ON:	LD	A,10000000B
+	JR	SET_CM1_REG
+;;;	LD	(FD_CM1),A
+;;;	RET
+   ENDIF
+;  +----------------------------+
+;  |    LED_OFF			|
+;  +----------------------------+
+   IF	A1FSW-1
+	PUBLIC	LED_OFF
+LED_OFF:
+	LD	A,11000000B
+   ENDIF
+SET_CM1_REG:
+	LD	(FD_CM1),A
+	RET
+;  +----------------------------+
+;  |    VERIFYSEC		|
+;  +----------------------------+
+   IF	TESTSW1
+VERIFYSEC:
+ 	PUSH    HL              ;save target address
+        PUSH    DE              ;save media type and retry counte     
+	PUSH    BC              ;save sector count and target track
+	LD      DE,VFDONE       ;set where to jump when occtrred error
+        PUSH    DE		;    
+	LD	DE,WAIT_E_PHASE ;set where to jump when occurred error
+	PUSH	DE		;
+	LD	(IX+CMDBUF0),READ_CMD  ;set READ command to buffer
+	LD	B,9		;set command length
+	CALL	SETCM		;excuse C-phase
+
+	LD	DE,FD_STT	;
+	LD	B,0		;counter 256 bytes
+VFLOOP:	LD	A,(DE)		;get main status
+	ADD	A,A		;sense b7
+	JP	NC,VFLOOP	;NC:RQM=0
+	ADD	A,A		;RQM=1 sense b5
+	RET	P		;P:NDM=0 occur error
+	LD	A,(FD_DAT)	;get 1byte data
+;;;;;	LD	(HL),A		;for read CRC check
+;;;;;	INC	HL		;for read CRC check
+	DJNZ	VFLOOP		;
+
+VFLOOP1:	
+	LD	A,(DE)		;
+	ADD	A,A		;
+	JP	NC,VFLOOP1	;
+	ADD	A,A		;
+	RET	P		;
+	LD	A,(FD_DAT)	;
+;;;;;	LD	(HL),A		;for read CRC check
+;;;;;	INC	HL		;for read CRC check
+	DJNZ	VFLOOP1		;
+	POP	BC		;dummy pop
+	POP	BC		;dummy pop
+VFDONE:	CALL	TCSEND		;send TC
+	CALL	RSTRD		;get result status
+        POP     BC              ;restore sector count and target track
+        POP     DE              ;restore media type and retry count
+        POP     HL              ;restore target address
+	RET
+   ENDIF
+
+
+RELOCSUB_ADR	EQU	$
+;  +----------------------------+
+;  |    UPDATE			|
+;  +----------------------------+
+;
+;       Update sector, side, and track for multi sector read/write
+;
+;  Input   (H),(D),(C)
+;  Output  (H),(C)
+;  Modify  (A)
+;
+UPDATE: INC     H               ;advance memory address by 512 bytes
+        INC     H
+	LD	A,(IX+CMDBUF4)	;### 765 ###
+	INC	A		;### 765 ###
+	LD	(IX+CMDBUF4),A	;### 765 ###
+        BIT     7,D             ;8 or 9 sectors?
+        JR      NZ,UPD8S        ;8 sectors
+        CP      9+1             ;need to wrap to next side or track?
+        RET     C               ;no
+UPD8S:  CP      8+1             ;need to wrap to next side or track?
+        RET     C               ;no
+	LD	(IX+CMDBUF4),1	;start from sector 1
+        BIT     6,D             ;single sided drive?
+        JR      Z,NXTTRK        ;yes, always go to next track
+
+	LD	A,(IX+CMDBUF3)	;### 765 ### change side
+	XOR	1		;### 765 ###
+	LD	(IX+CMDBUF3),A	;### 765 ###
+	JR	Z,NXTTRK0	;### 765 ###
+	SET 	2,(IX+CMDBUF1)	;### 765 ###
+	RET			;### 765 ###
+NXTTRK0:
+	RES	2,(IX+CMDBUF1)	;### 765 ###
+NXTTRK:
+        INC     C               ;advance target sector
+	JR	SEEKC		;### 765 ###
+;;SL01:	CALL 	SEEKC		;### 765 ###
+;;;;;;;	RET			;### 765 ###
+;  +----------------------------+
+;  |    RESEEK			|
+;  +----------------------------+
+;
+;       Re-calibrate then re-seek
+;
+RESEEK: BIT     0,E             ;re-seek only on even retry counts
+;;;;;	SCF			;### 765 ###
+;;;;;	CCF			;### 765 ###
+        RET     NZ
+
+	PUSH	BC
+	LD	(IX+CMDBUF0),SEEK_CMD ;dummy seek
+	LD	(IX+CMDBUF2),NCN
+	LD	B,3
+SL010:	CALL	SETCM
+SL011:	CALL	SEEKING
+
+	LD	(IX+CMDBUF0),RECALIBRATE_CMD
+	LD	B,2
+SL02:	CALL	SETCM
+SL03:	CALL	SEEKING
+	POP	BC
+
+;  +----------------------------+
+;  |    SEEKC 			|
+;  +----------------------------+
+;       Seek track specified by [C]
+;
+;  Input   (C)
+;  Output  (CY)
+;  Modify  (A)
+;
+	PUBLIC  SEEKC		;### 765 ###
+SEEKC:	PUSH	BC		;### 765 ###
+	;  wait for seek 
+;; modify : counter 06/15/88 
+;;	LD	B,106		;wait 1.6ms
+	LD	B,119		;wait 1.8ms for high speed clock
+SEEKC_TIMER:
+	EX 	(SP),HL		;54*.279=15.066us
+	EX	(SP),HL		;15.066*106=1.6ms
+	DJNZ	SEEKC_TIMER
+	;
+	LD	(IX+CMDBUF0),SEEK_CMD
+	LD	(IX+CMDBUF2),C	;### 765 ###
+	LD	B,3		;### 765 ###
+SL04:	CALL	SETCM		;### 765 ###
+;;;;	JR	C,SEEKERR	;### 765 ###
+SL05:	CALL	SEEKING		;### 765 ###
+;;;; 	JR	C,SEEKERR	;### 765 ###
+   IF	STLSW
+	LD	BC,STLTIME	;settling time
+SEEKC_WAIT:
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,SEEKC_WAIT
+   ENDIF
+	POP	BC		;### 765 ###
+	XOR	A		;### 765 ###
+	RET			;### 765 ###
+;SEEKERR:
+;;;;	POP	BC		;### 765 ###
+;;;;	SCF			;### 765 ###
+;;;;  	RET			;### 765 ###
+;  +----------------------------+
+;  |    SETCM			|
+;  +----------------------------+
+;  Input   (B)
+;  Output  (CY)
+;  Modify  (A)
+;
+	PUBLIC  SETCM		;### 765 ###	
+SETCM:	PUSH	HL		;### 765 ###
+	LD	HL,2000		;### 765 ###
+SETCM0:
+UL01:	LD	A,(FD_STT)	;### 765 ###
+	AND	00010000B	;### 765 ### CB-flag on ?
+	JR	Z,SETCM01	;### 765 ### yes,jump
+	DEC	HL		;### 765 ###
+	LD	A,H		;### 765 ###
+	OR	L		;### 765 ###
+	JR	NZ,SETCM0	;### 765 ###
+	POP	HL		;### 765 ###
+	SCF			;### 765 ###
+	RET			;### 765 ###
+SETCM01:
+	PUSH	DE		;### 765 ###
+	PUSH	IX		;### 765 ###
+	LD	DE,CMDBUF0	;### 765 ###
+	ADD	IX,DE		;### 765 ###
+	PUSH	IX		;### 765 ###
+	POP	HL		;### 765 ###
+	POP	IX		;### 765 ###
+	POP	DE		;### 765 ###	
+SETCM1:
+UL02:	LD	A,(FD_STT)	;### 765 ###
+	AND	11000000B	;### 765 ###
+	CP	10000000B	;### 765 ### RQM=1 DIO=0 ?
+	JR	NZ,SETCM1	;### 765 ###
+	
+	LD	A,(HL)		;### 765 ###
+UL03:	LD	(FD_DAT),A	;### 765 ###
+	INC	HL		;### 765 ###
+	DJNZ	SETCM1		;### 765 ###
+
+	POP	HL		;### 765 ###
+	XOR	A		;### 765 ###
+	RET			;### 765 ###
+;  +----------------------------+
+;  |    SEEKING			|
+;  +----------------------------+
+;  Input   none
+;  Output  (CY)
+;  Modify  (A)
+;
+SEEKING:
+CBCHK:
+UL04:	LD	A,(FD_STT)	;### 765 ###
+	AND	00010000B	;### 765 ### CB-flag on ?
+	JR	NZ,CBCHK	;### 765 ### no,wait until CB-on
+SEEK1:
+SL06:	CALL	SENSEINT	;### 765 ###
+;;;;	RET	C		;### 765 ###
+	LD	A,(IX+RSTBUF0)	;### 765 ###
+	BIT	5,A		;### 765 ### SE-flag on ?
+	JR	Z,SEEK1		;### 765 ### no
+	AND	11000000B	;### 765 ###
+	RET	Z		;### 765 ### IC=NT,(CY)=0 seek complete
+	SCF			;### 765 ### IC=AT,(CY)=1 not ready
+	RET			;### 765 ###
+;;;;;	SCF			;### 765 ###
+;;;;;	RET	NZ		;### 765 ###
+;;;;;	LD	A,(IX+RSTBUF1)	;### 765 ###
+;;;;;	LD	(IX+RSTBUF3),A	;### 765 ###
+;;;;;	XOR	A		;### 765 ###
+;;;;;	RET			;### 765 ###
+;  +----------------------------+
+;  |    SENSEINT		|
+;  +----------------------------+
+;  Input   none
+;  Output  (CY)
+;  Modify  (A)
+;
+SENSEINT:
+	PUSH	BC		;### 765 ###
+	LD	(IX+CMDBUF0),SENSE_CMD  ;### 765 ###
+	LD	B,1		;### 765 ###
+SL07:	CALL	SETCM		;### 765 ###
+;;;;;	RET	C		;### 765 ###
+SL08:	CALL	RSTRD		;### 765 ###
+	XOR	A		;### 765 ###
+	POP	BC		;### 765 ###
+	RET			;### 765 ###
+;  +----------------------------+
+;  |    RSTRD			|
+;  +----------------------------+
+;  Input   none
+;  Output  none
+;  Modify  (A)
+;
+	PUBLIC	RSTRD		;### 765 ###
+RSTRD:	PUSH	IX		;### 765 ###
+RSTRD0:
+UL05:	LD	A,(FD_STT)	;### 765 ###
+	ADD	A,A		;### 765 ###
+	JR	NC,RSTRD0	;### 765 ###
+SL09:	JP	P,RSTRDEND	;### 765 ###
+UL06:	LD	A,(FD_DAT)	;### 765 ###
+	LD	(IX+RSTBUF0),A	;### 765 ###
+	INC	IX		;### 765 ###
+	JR	RSTRD0		;### 765 ###
+RSTRDEND:
+       	POP	IX		;### 765 ###
+	RET			;### 765 ###
+;  +----------------------------+
+;  |    WAIT_E_PHASE		|
+;  +----------------------------+
+	PUBLIC	WAIT_E_PHASE
+WAIT_E_PHASE:
+	LD	BC,1960		;### 765 ### 512*30=15360uS
+WAIT_LOOP:
+	DEC	BC		;### 765 ###
+	LD	A,B		;### 765 ###
+	OR	C		;### 765 ###
+	JR	NZ,WAIT_LOOP	;### 765 ###
+	RET			;### 765 ###
+;  +----------------------------+
+;  |    TCSEND			|
+;  +----------------------------+
+	PUBLIC	TCSEND		;### 765 ###
+TCSEND:	LD	A,02		;### 765 ### TC off
+UL07:	LD	(FD_CM1),A	;### 765 ###
+	INC	A		;### 765 ### TC on
+UL08:	LD	(FD_CM1),A	;### 765 ###
+	NOP			;### 765 ###
+	DEC	A		;### 765 ### TC off again
+UL09:	LD	(FD_CM1),A	;### 765 ###
+	RET			;### 765 ###
+;  +----------------------------+
+;  |    ERRHNDL			|
+;  +----------------------------+
+ERRHNDL:
+	LD	E,(IX+RSTBUF1)	;
+        BIT     2,E             ;record not found?
+        LD      A,8		;
+        RET     NZ              ;yes
+        BIT     5,E             ;CRC error?
+        LD      A,4		;
+        RET     NZ              ; yes
+        LD      A,12            ;treat as 'other error'
+        RET
+RELOCSUB_W_LEN	EQU	$-RELOCSUB_ADR
+;  +----------------------------+
+;  |    READSEC			|
+;  +----------------------------+
+	PUBLIC	READSEC
+READSEC:
+ 	PUSH    HL              ;save target address
+        PUSH    DE              ;save media type and retry counte     
+	PUSH    BC              ;save sector count and target track
+SL10:	LD      DE,RDDONE       ;set where to jump when occtrred error
+        PUSH    DE		;    
+SL11:	LD	DE,WAIT_E_PHASE ;set where to jump when occurred error
+	PUSH	DE		;
+	LD	(IX+CMDBUF0),READ_CMD  ;set READ command to buffer
+	LD	B,9		;set command length
+SL12:	CALL	SETCM		;excuse C-phase
+
+UL10:	LD	DE,FD_STT	;
+	LD	B,0		;counter 256 bytes
+RDLOOP:	LD	A,(DE)		;get main status
+	ADD	A,A		;sense b7
+SL13:	JP	NC,RDLOOP	;NC:RQM=0
+	ADD	A,A		;RQM=1 sense b5
+	RET	P		;P:NDM=0 occur error
+UL11:	LD	A,(FD_DAT)	;get 1byte data
+ZR01:	LD	(HL),A		;
+ZR02:	INC	HL		;
+	DJNZ	RDLOOP		;
+
+RDLOOP1:	
+	LD	A,(DE)		;
+	ADD	A,A		;
+SL14:	JP	NC,RDLOOP1	;
+	ADD	A,A		;
+	RET	P		;
+UL12:	LD	A,(FD_DAT)	;
+ZR03:	LD	(HL),A		;
+ZR04:	INC	HL		;
+	DJNZ	RDLOOP1		;
+	POP	BC		;dummy pop
+	POP	BC		;dummy pop
+SL15:
+RDDONE:	CALL	TCSEND		;send TC
+SL16:	CALL	RSTRD		;get result status
+        POP     BC              ;restore sector count and target track
+        POP     DE              ;restore media type and retry count
+        POP     HL              ;restore target address
+	RET
+RELOCSUB_R_LEN	EQU	$-RELOCSUB_ADR
+
+        SUBTTL  relocation of read/write routines
+
+;  =======================================================
+;       RELOCATION OF READ/WRITE ROUTINE
+;  =======================================================
+RELOCATE:
+        PUSH    HL		;store register
+	PUSH	IY
+        PUSH    DE
+        PUSH    BC
+
+REL_PHASE1:
+	PUSH	AF		;store read/write flag (CY=0 then read)
+	LD	DE,RL_DATA
+	LD	HL,READDATA
+	LD	BC,PR_LEN
+	JR	NC,REL1	
+	LD	DE,WL_DATA
+	LD	HL,WRITEDATA
+	LD	BC,PW_LEN
+REL1: 	PUSH	DE
+	LD	DE,($SECBUF)
+	LDIR  
+	POP	HL
+	PUSH	DE		;address of storing sub module
+	
+REL_PHASE2:
+	LD	E,(HL)		
+	INC	HL		
+	LD	D,(HL)		
+	INC	HL		
+	LD	A,D		
+	OR	E		
+	JR	Z,REL_PHASE3	
+	PUSH	HL		
+	LD	HL,($SECBUF)	
+	ADD	HL,DE		
+	INC	HL		
+	LD	C,(HL)		
+	INC	HL		
+	LD	B,(HL)		
+	EX	DE,HL		
+	LD	HL,($SECBUF)	
+	ADD	HL,BC		
+	EX	DE,HL		
+	LD	(HL),D		
+	DEC	HL		
+	LD	(HL),E		
+	POP	HL		
+	JR	REL_PHASE2	
+
+REL_PHASE3:
+	POP	DE		
+	POP	AF
+	PUSH	AF
+	PUSH	DE
+	LD	HL,RELOCSUB_ADR
+	LD	BC,RELOCSUB_R_LEN
+	JR	NC,REL3
+	LD	BC,RELOCSUB_W_LEN
+REL3:	LDIR
+
+REL_PHASE4:
+	POP	IY
+	PUSH	AF
+	POP	AF
+ 	LD	HL,SL_DATA
+	LD	B,SL_R_LEN/2
+	JR	NC,REL4
+	LD	B,SL_W_LEN/2
+REL4:	PUSH	BC
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	PUSH	HL
+	PUSH	IY
+	POP	HL
+	ADD	HL,DE
+	INC	HL
+	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)
+	PUSH	HL
+	PUSH	IY
+	POP	HL
+	LD	DE,RELOCSUB_ADR	
+	XOR	A	
+	SBC	HL,DE	
+	POP	DE	
+	ADD	HL,BC	
+	EX	DE,HL	
+	LD	(HL),D	
+	DEC	HL	
+	LD	(HL),E	
+	POP	HL	
+	POP	BC
+	DJNZ	REL4
+REL_PHASE5:
+	POP	AF
+   IF	TESTSW1
+	PUSH	AF
+   ENDIF
+	LD	HL,UL_DATA
+	LD	B,UL_R_LEN/2
+	JR	NC,REL5
+	LD	B,UL_W_LEN/2
+REL5:	PUSH	BC
+	LD	E,(HL)
+	INC	HL	
+	LD	D,(HL)	
+	INC	HL	
+	PUSH	HL
+	PUSH	IY
+	POP	HL
+	ADD	HL,DE
+	INC	HL
+	INC	HL
+	LD	(HL),0BFH
+	POP	HL
+	POP	BC
+	DJNZ	REL5
+
+   IF	TESTSW1
+REL_PHASE6:
+	POP	AF
+	JR	C,REL_PHASE_END  ;for read CRC check if write then jump
+	BIT	1,(IX+VRFLAG)	 ;for read CRC check
+	JR	Z,REL_PHASE_END  ;for read CRC check if read then jump
+	LD	HL,ZR_DATA	;for read CRC check
+REL6:
+	LD	E,(HL)		;for read CRC check
+	INC	HL		;for read CRC check
+	LD	D,(HL)		;for read CRC check
+	INC	HL		;for read CRC check
+	LD	A,D		;for read CRC check
+	OR	E		;for read CRC check
+	JR	Z,REL_PHASE_END ;for read CRC check
+	PUSH	HL		;for read CRC check
+	PUSH	IY		;for read CRC check
+	POP	HL		;for read CRC check
+	ADD	HL,DE		;for read CRC check
+	LD	(HL),0		;for read CRC check
+	POP	HL		;for read CRC check
+	JR	REL6		;for read CRC check
+   ENDIF
+
+REL_PHASE_END:
+	POP     BC		;restore register
+        POP     DE		;  and jump ($SECBUF)
+	POP	IY
+        LD      HL,($SECBUF)
+        EX      (SP),HL
+        RET
+;
+;
+RL_DATA:
+	DEFW	RL01		;### 765 ###
+	DEFW	RL02		;### 765 ###
+	DEFW	RLL01		;### 765 ###
+	DEFW	RLL05		;### 765 ###
+	DEFW	RLL06		;### 765 ###
+	DEFW	RLL07
+	DEFW	0		;### 765 ###
+WL_DATA:
+	DEFW	WL01		;### 765 ###
+	DEFW	WL02		;### 765 ###
+	DEFW	WL03		;### 765 ###
+	DEFW	WL04		;### 765 ###
+	DEFW	WL05		;### 765 ###
+	DEFW	WLL01		;### 765 ###
+	DEFW	WLL02		;### 765 ###
+	DEFW	WLL03		;### 765 ###
+	DEFW	WLL04		;### 765 ###
+	DEFW	WLL05		;### 765 ###
+	DEFW	WLL06		;### 765 ###
+	DEFW	WLL07
+	DEFW	0		;### 765 ###
+SL_DATA:
+;;;;;;;	DEFW	SL01-RELOCSUB_ADR
+	DEFW	SL010-RELOCSUB_ADR
+	DEFW	SL011-RELOCSUB_ADR
+	DEFW	SL02-RELOCSUB_ADR
+	DEFW	SL03-RELOCSUB_ADR
+	DEFW	SL04-RELOCSUB_ADR
+	DEFW	SL05-RELOCSUB_ADR
+	DEFW	SL06-RELOCSUB_ADR
+	DEFW	SL07-RELOCSUB_ADR
+	DEFW	SL08-RELOCSUB_ADR
+	DEFW	SL09-RELOCSUB_ADR
+SL_W_LEN  EQU   $-SL_DATA
+	DEFW	SL10-RELOCSUB_ADR
+	DEFW	SL11-RELOCSUB_ADR
+	DEFW	SL12-RELOCSUB_ADR
+	DEFW	SL13-RELOCSUB_ADR
+	DEFW	SL14-RELOCSUB_ADR
+	DEFW	SL15-RELOCSUB_ADR
+	DEFW	SL16-RELOCSUB_ADR
+SL_R_LEN  EQU	$-SL_DATA
+UL_DATA:
+	DEFW	UL01-RELOCSUB_ADR
+	DEFW	UL02-RELOCSUB_ADR
+	DEFW	UL03-RELOCSUB_ADR
+	DEFW	UL04-RELOCSUB_ADR
+	DEFW	UL05-RELOCSUB_ADR
+	DEFW	UL06-RELOCSUB_ADR
+	DEFW	UL07-RELOCSUB_ADR
+	DEFW	UL08-RELOCSUB_ADR
+	DEFW	UL09-RELOCSUB_ADR
+UL_W_LEN  EQU	$-UL_DATA
+	DEFW	UL10-RELOCSUB_ADR
+	DEFW	UL11-RELOCSUB_ADR
+	DEFW	UL12-RELOCSUB_ADR
+UL_R_LEN  EQU 	$-UL_DATA
+   IF	TESTSW1
+ZR_DATA:
+	DEFW	ZR01-RELOCSUB_ADR
+	DEFW	ZR02-RELOCSUB_ADR
+	DEFW	ZR03-RELOCSUB_ADR
+	DEFW	ZR04-RELOCSUB_ADR
+	DEFW	0
+   ENDIF
+;
+PRINTRD MACRO   VALUE
+        IF1
+        .PRINTX * READ  RELOCATION SIZE = VALUE *
+        ENDIF
+        ENDM
+PRINTWR MACRO   VALUE
+        IF1
+        .PRINTX * WRITE RELOCATION SIZE = VALUE *
+        ENDIF
+        ENDM
+PRINTSB0  MACRO   VALUE
+        IF1
+        .PRINTX *       SUB (READ)  RELOCATION SIZE = VALUE *
+        ENDIF
+        ENDM
+PRINTSB1  MACRO	  VALUE
+	IF1
+	.PRINTX *       SUB (WRITE)  RELOCATION SIZE = VALUE *
+	ENDIF
+	ENDM
+;   *******************************************************
+;     "Read routine" data which is transfered to $SECBUF
+;   *******************************************************
+READDATA:
+        .PHASE  0
+        PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        CALL    GETSLOT         ;get where I am
+RL01:   LD      (PR_DUMMY+1),A  ;to return to original slot
+        LD      H,80H           ;set page 2 to FDC
+        CALL    ENASLT
+        LD      A,(RAMAD1)      ;set page 1 to RAM
+        LD      H,40H
+        CALL    ENASLT
+        POP     BC
+        POP     DE
+        POP     HL
+;
+PR_SECT:   
+        DEC     HL
+	LD	A,H
+        ADD     A,2
+	INC	HL
+RL02:	JP	M,PR_END	;transfer address is above 8000h
+	LD	E,RETRIES	;SET retry counter
+;
+;    READ ROUTINE
+;
+PR_RDRTRY:
+PR_READ2:
+	LD	A,00100000B	;enable ready/busy from FDD
+	LD	(FD_CM1+4000H),A  
+RLL01:	CALL	READSEC-RELOCSUB_ADR+PR_LEN
+	LD	A,00110000B	;always ready from FDD
+	LD	(FD_CM1+4000H),A
+
+	LD	A,(IX+RSTBUF0)	
+	AND	11001000B	
+	JR	NZ,PR_RDERR	
+        DEC     B               ;done all sectors?
+	JR      Z,PR_END        ;yes
+RLL05:  CALL    UPDATE-RELOCSUB_ADR+PR_LEN		;update parameters
+	JR	PR_SECT		;continue
+;
+PR_RDERR:
+	AND	00001000B	
+     	JR	NZ,PR_NOTRDY	  
+;;;;;;  PUSH    AF              ;save error code
+RLL06:  CALL    RESEEK-RELOCSUB_ADR+PR_LEN		;restore and re-seek head if necessary
+;;;;;;  POP     AF              ;restore error code
+        DEC     E               ;should retry?
+        JR      NZ,PR_RDRTRY    ;yes
+ 
+RLL07:	CALL	ERRHNDL-RELOCSUB_ADR+PR_LEN
+        JR      PR_ERR
+
+PR_NOTRDY:
+        LD      A,2             ;ID for 'drive not ready'
+PR_ERR: SCF
+PR_END: PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        PUSH    AF
+        LD      A,(RAMAD2)      ;change page 2 to RAM
+        LD      H,80H
+        CALL    ENASLT
+        CALL    $DOSON          
+PR_DUMMY:
+        LD      A,0             ;where I was
+        LD      H,40H
+        CALL    ENASLT
+        POP     AF
+        POP     BC
+        POP     DE
+        POP     HL
+	RET			;RETURN TO MAIN SYSTEM
+PR_LEN	EQU	$
+;;;;;;	.RADIX	16
+;;;;;;	.RADIX	10
+	.DEPHASE
+;   *******************************************************
+;     "Write routine" data which is transfered to $SECBUF
+;   *******************************************************
+WRITEDATA:
+        .PHASE  0
+        PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        CALL    GETSLOT         ;get where I am
+WL01:   LD      (PW_DUMMY+1),A  ;to return to original slot
+        LD      H,80H           ;set page 2 to FDC
+        CALL    ENASLT
+        LD      A,(RAMAD1)      ;set page 1 to RAM
+        LD      H,40H
+        CALL    ENASLT
+        POP     BC
+        POP     DE
+        POP     HL
+;
+PW_SECT:   
+        DEC     HL
+	LD	A,H
+        ADD     A,2
+	INC	HL
+WL02:	JP	M,PW_END	;transfer address is above 8000h
+	LD	E,RETRIES	;SET retry counter
+;
+;    WRITE ROUTINE
+;
+PW_WRRTRY:
+        PUSH    HL              ;save target address
+        PUSH    DE              ;save FD_SEL content and retry count
+        PUSH    BC              ;save sector count and target track
+	LD	A,00100000B	  ;enable ready/busy
+	LD	(FD_CM1+4000H),A  
+WL03:   LD      DE,PW_WRDONE    ;set where to jump when done
+        PUSH    DE		
+WLL01:	LD	DE,WAIT_E_PHASE-RELOCSUB_ADR+PW_LEN
+	PUSH	DE
+	LD	(IX+CMDBUF0),WRITE_CMD
+	LD	B,9
+WLL02:	CALL	SETCM-RELOCSUB_ADR+PW_LEN
+
+	LD	DE,FD_STT+4000H
+	LD	B,0
+PW_WRLOOP:
+	LD	A,(DE)
+	ADD	A,A
+WL04:	JP	NC,PW_WRLOOP
+	ADD	A,A
+	RET	P
+	LD	A,(HL)
+	LD	(FD_DAT+4000H),A
+	INC	HL
+	DJNZ	PW_WRLOOP
+;;;;;;	LD	B,0
+PW_WRLOOP1:
+	LD	A,(DE)
+	ADD	A,A
+WL05:	JP	NC,PW_WRLOOP1
+	ADD	A,A
+	RET	P
+	LD	A,(HL)
+	LD	(FD_DAT+4000H),A
+	INC	HL
+	DJNZ	PW_WRLOOP1
+	POP	BC		;dummy pop
+	POP	BC		;dummy pop
+
+PW_WRDONE:
+WLL03:	CALL	TCSEND-RELOCSUB_ADR+PW_LEN
+	LD	A,00110000B	  ;always ready
+	LD	(FD_CM1+4000H),A  
+WLL04:	CALL	RSTRD-RELOCSUB_ADR+PW_LEN
+        POP     BC              ;restore sector count and target track
+        POP     DE              ;restore current FD_SEL and retry count
+        POP     HL              ;restore target address
+	LD	A,(IX+RSTBUF0)	
+	AND	11001000B	
+        JR      NZ,PW_WRERR     ;yes
+        DEC     B               ;done all sectors?
+        JR      Z,PW_END        ;yes
+WLL05:  CALL    UPDATE-RELOCSUB_ADR+PW_LEN		;update parameters
+	JR      PW_SECT         ;continue
+;
+PW_WRERR:
+	AND	00001000B	
+	JR	NZ,PW_NOTRDY	
+	BIT	1,(IX+RSTBUF1)	
+        JR      NZ,PW_WRTPRT    ;yes, do not retry
+;;;;;   PUSH    AF              ;save error code
+WLL06:  CALL    RESEEK-RELOCSUB_ADR+PW_LEN		;restore and re-seek head if necessary
+;;;;;   POP     AF              ;restore error code
+        DEC     E               ;should retry?
+        JR      NZ,PW_WRRTRY    ;yes
+
+        BIT     4,(IX+RSTBUF0)  ;write fault?
+        LD      A,10
+        JR      NZ,PW_ERR       ;yes
+
+WLL07:	CALL	ERRHNDL-RELOCSUB_ADR+PW_LEN
+        JR      PW_ERR
+;
+PW_WRTPRT:
+        XOR     A            ;ID for 'disk write protected'
+	JR	PW_ERR
+PW_NOTRDY:
+        LD      A,2             ;ID for 'drive not ready'
+PW_ERR: SCF
+PW_END: PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        PUSH    AF
+        LD      A,(RAMAD2)      ;change page 2 to RAM
+        LD      H,80H
+        CALL    ENASLT
+        CALL    $DOSON          
+PW_DUMMY:
+        LD      A,0             ;where I was
+        LD      H,40H
+        CALL    ENASLT
+        POP     AF
+        POP     BC
+        POP     DE
+        POP     HL
+	RET			;RETURN TO MAIN SYSTEM
+PW_LEN	EQU	$
+;;;;;;;	.RADIX	16
+;;;;;;;	.RADIX	10
+	.DEPHASE
+	PRINTRD  %PR_LEN
+        PRINTSB0 %RELOCSUB_R_LEN
+	PRINTWR  %PW_LEN
+	PRINTSB1 %RELOCSUB_W_LEN
+	END
+

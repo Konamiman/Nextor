@@ -1,0 +1,15 @@
+	TITLE	MSX-DOS 2 - MSX-DOS.SYS copyright (1986) IS Systems Ltd.
+	SUBTTL	End Module
+;
+	.Z80
+;
+;
+;        This file is linked right at the end of the MSX2-DOS.SYS  files,  and
+; just defines a global label to mark the end of the file.
+;
+;
+END::
+;
+;
+;
+	END

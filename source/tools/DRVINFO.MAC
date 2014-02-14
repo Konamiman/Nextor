@@ -1,0 +1,213 @@
+	.z80
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+	db	"DRVINFO - displays information about the driver and drive/device/LUN",13,10
+	db	"for all drive letters",13,10
+	db	13,10
+	db	"Usage: DRVINFO",13,10
+	db	1Ah
+
+START:
+	call	CHK250##
+
+	xor	a
+	ld	(DRVINDEX),a
+
+
+	;--- Loop for all drive letters
+
+MAIN_LOOP:
+	ld	a,(DRVINDEX)
+	ld	hl,BUF_LETTER
+	ld	c,_GDLI##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+
+
+	;* Skip if unassigned drive
+
+	ld	a,(BUF_LETTER)
+	or	a
+	jp	z,NEXT_DRIVE
+
+	ld	a,(DRVINDEX)
+	add	a,"A"
+	ld	(DRIVE_MSG),a
+	ld	de,DRIVEIS_MSG
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,(BUF_LETTER)
+	cp	4
+	jr	nz,NORDISK
+	ld	de,RAMDISK_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	jp	NEXT_DRIVE
+NORDISK:
+
+
+	;* Get information about the associated driver
+
+	ld	ix,BUF_LETTER
+	ld	d,(ix+1)
+	ld	e,(ix+2)
+	ld	ix,BUF_DRIVER
+	ld	h,(ix)
+	ld	l,(ix+1)
+	or	a
+	sbc	hl,de		;Do not get info again
+	jr	z,OK_INFO	;if it is the same driver as previous drive
+
+	xor	a
+	ld	hl,BUF_DRIVER
+	ld	c,_GDRVR##
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	nz,5
+OK_INFO:
+
+	;* Print driver name and version number
+
+	bit	7,(ix+4)
+	jr	z,IS_LEGACY
+
+	ld	hl,BUF_DRIVER+8
+	ld	bc,32
+	call	PRPAD##
+
+	ld	e," "
+	ld	c,_CONOUT##
+	call	5
+	ld	e,"v"
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+5)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Main version number
+
+	ld	e,"."
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+6)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Secondary version number
+
+	ld	a,(ix+7)
+	or	a
+	jr	z,OK_NAME
+
+	ld	e,"."
+	ld	c,_CONOUT##
+	call	5
+
+	ld	a,(ix+7)
+	add	a,"0"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5		;Revision number, only if not zero
+
+	jr	OK_NAME
+
+IS_LEGACY:
+	ld	de,LEGACY_MSG
+	ld	c,_ZSTROUT##
+	call	5
+OK_NAME:
+
+
+	;* Print slot number
+
+	ld	de,ONSLOT_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,(ix)
+	ld	b,(ix+1)
+	call	PRSLOT##
+
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+
+	;* Print relative unit number or device+LUN
+
+	ld	ix,BUF_LETTER
+	ld	a,(BUF_DRIVER+4)
+	and	1
+	jr	z,SHOW_REL
+	
+	ld	a,(ix+4)
+	add	a,"0"
+	ld	(DEVICE),a
+	ld	a,(ix+5)
+	add	a,"0"
+	ld	(LUN),a
+	ld	de,DEVLUN_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	jr	OK_DEVLUN
+
+SHOW_REL:
+	ld	a,(ix+3)
+	add	a,"0"
+	ld	(RELUNIT),a
+	ld	de,RELUNIT_MSG
+	ld	c,_ZSTROUT##
+	call	5
+OK_DEVLUN:
+
+
+	;* Go to the next drive
+
+NEXT_DRIVE:
+	ld	a,(DRVINDEX)
+	inc	a
+	ld	(DRVINDEX),a
+	cp	8
+	jp	c,MAIN_LOOP
+
+	ld	bc,_TERM##
+	jp	5
+
+RAMDISK_MSG:
+	db	"RAM disk",13,10,10,0
+DEVLUN_MSG:
+	db	"Device "
+DEVICE:
+	db	"0, LUN "
+LUN:
+	db	"0",13,10,10,0
+RELUNIT_MSG:
+	db	"Relative unit "
+RELUNIT:
+	db	"0",13,10,10,0
+LEGACY_MSG:
+	db	"Legacy driver",0
+DRIVEIS_MSG:
+	db	"Drive "
+DRIVE_MSG:
+	db	"A: is assigned to:",13,10,0
+ONSLOT_S:
+	db	" on slot ",0
+CRLF:
+	db	13,10,0
+		
+DRVINDEX:	db	0
+BUF_DRIVER:	ds	64
+BUF_LETTER:
+
+	end

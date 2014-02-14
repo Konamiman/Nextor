@@ -1,0 +1,773 @@
+	title   MSX-DOS 2 CHKDSK Program - Miscellaneous Routines
+	.z80
+	INCLUDE MACROS.INC
+	INCLUDE CONST.INC
+;******************************************************************************
+;
+G_FAT_BUFF::    call    GET_BUFF                ;Get a sector buffer
+		ld      a,(BUFFER_FLAG)
+		set     1,a                     ;Mark this buffer as being
+		ld      (BUFFER_FLAG),a         ; for a FAT sector.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+R_FAT_SECT::
+;
+;    This routine is called just as if it  was  "READ_SECT".   However  if  an
+; error  occurs  in reading the sector then an error is printed and it goes on
+; to  the  next  FAT  copy and so on.  The errors occur as "disk errors" which
+; will be trapped by the "ERV_ROUTINE" which will ignore the  error  but  also
+; set a flag which this routine detects.  If all FAT copies fail then they are
+; tried  again  but  with  a  flag  set  to  allow  the first error through to
+; MSX-DOS's normal Abort/Retry/Ignore handling.  This allows the user a chance
+; to retry the whole read, or to abort (ignore is rather dangerous).
+;
+; Entry:     DE = Logical sector number required 
+; Returns:   DE = Preserved
+;            HL = Address of first byte of sector in buffer
+; Corrupts:  AF,BC,HL
+;
+;
+fat_retry_loop: push    de                      ;Remember FAT sector number
+		ld      c,0                     ;Initial FAT copy number
+;
+fat_sect_loop:  ld      hl,MULT_FLAGS##         ;Set multi-sector read flag
+		set     0,(hl)                  ; and clear multi-sector error
+		res     1,(hl)                  ; flag. 
+		push    bc
+		call    READ_SECT               ;Try reading a FAT copy
+		pop     bc
+;
+		ld      a,(MULT_FLAGS##)
+		bit     1,a                     ;Finish if this copy of the
+		jr      z,fat_read_ok           ; FAT was read OK.
+;
+		bit     4,a                     ;If this is the first error on
+		set     4,a                     ; this sector then set the flag
+		call    z,WR_CRLF               ; and print a blank line.
+		ld      a,__RFT1_MSG##          ;Print a message saying
+		call    WR_MSG                  ; "Error reading FAT ".
+		inc     c               
+		ld      a,c                     ;Increment the FAT number and
+		call    WR_BYTE                 ; display it. 
+		ld      a,__FAT2_MSG##
+		call    WR_MSG
+;
+		ld      a,(FAT_COPY##)          ;If tried all FAT copies then
+		cp      c                       ; jump to retry letting the
+		jr      z,last_fat_fail         ; error through to the user.
+;
+		ld      a,(FAT_SIZE##)
+		ld      l,a                     ;Add on the size of a FAT
+		ld      h,0                     ; to the sector number to get
+		add     hl,de                   ; sector number of next copy.
+		ex      de,hl
+		jr      fat_sect_loop           ;Loop to do next FAT copy.
+;
+;
+last_fat_fail:  pop     de                      ;All FAT Copies failed. Set
+		ld      hl,MULT_FLAGS##         ; DE back to first sector again
+		set     2,(hl)                  ; and retry with a flag set to
+		jr      fat_retry_loop          ; let the first error through
+						; to the user.
+;
+;
+fat_read_ok:    pop     de                      ;Restore sector number
+		xor     a                       ;Switch off error interception
+		ld      (MULT_FLAGS##),a        ; for normal reads & writes.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+READ_SECT::
+;
+;    This  is the general purpose sector read routine.  If the required sector
+; is already in the buffer then a pointer to it is  returned.   Otherwise  the
+; old sector in the buffer is written out if required and the new one read in.
+; Any  error  from  MSX-DOS will terminate the program, returning the error to
+; COMMAND.COM.
+;
+; Entry:     DE = Logical sector number required 
+; Returns:   DE = Preserved
+;            HL = Address of first byte of sector in buffer
+; Corrupts:  AF,BC,HL
+;
+;
+		ld      hl,(BUFFER_SECT)        ;If required sector is already
+		xor     a                       ; in the buffer then just
+		sbc     hl,de                   ; return a pointer to it.
+		jr      z,got_sector_ret
+;
+		call    FLUSH_BUF               ;Clear out old buffer
+;
+		push    de                      ;Save sector number
+		ld      (BUFFER_SECT),de        ;Record new bufferred sector
+		push    de                      ;Need to set up the DTA in
+		ld      de,BUFFER               ; order to read a sector.
+		ld      c,_SETDTA##
+		call    MSX_DOS
+		pop     de                      ;Sector number to read.
+;
+		ld      a,(DRIVE##)
+		dec     a                       ;Convert drive to 0=A:
+		ld      l,a     
+		ld      h,1                     ;Call to read one sector
+		ld      c,_RDABS##              ; from the disc.
+		call    MSX_DOS
+		jp      nz,EXIT##               ;Give up if error
+		pop     de                      ;Restore sector number
+;
+got_sector_ret: ld      hl,BUFFER               ;Point HL at the buffer.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+GET_BUFF::
+;
+;    This routine is just like "READ_SECT" but does not actually read the
+; sector from disc, it just returns a buffer for the sector.
+;
+; Entry:     DE = Logical sector number required 
+; Returns:   DE = Preserved
+;            HL = Address of first byte of sector in buffer
+; Corrupts:  AF,BC,HL
+;
+;
+		ld      hl,(BUFFER_SECT)        ;If required sector is already
+		xor     a                       ; in the buffer then just
+		sbc     hl,de                   ; return a pointer to it.
+		jr      z,get_buff_ret
+;
+		call    FLUSH_BUF               ;Clear out old buffer
+		ld      (BUFFER_SECT),de        ;Record new bufferred sector
+;
+get_buff_ret:   ld      hl,BUFFER               ;Point HL at the buffer.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+DIRTY_BUFFER::
+;
+;    This is an external routine which simply marks the sector buffer as dirty
+; so it will get written out.  It will need to be modified if multiple buffers
+; buffers are implemented.
+;
+; Entry:      None
+; Corrupts:   AF
+;
+		ld      a,(BUFFER_FLAG)         ;Just mark sector buffer as
+		set     0,a                     ; dirty.  
+		ld      (BUFFER_FLAG),a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+FLUSH::
+;
+;    "FLUSH"  is  an external entry point which will flush all sector buffers.
+; Currently it is identical to FLUSH_BUF which is an internal routine  but  if
+; multiple  buffers  are  implemented  it  will  have  to  be  different.  Its
+; operation is complicated by the  handling  of  FAT  sectors  which  must  be
+; flushed out with multiple copies.  
+;
+; Corrupts:    AF,BC,HL
+;
+FLUSH_BUF:      ld      a,(BUFFER_FLAG)         ;Do nothing if buffer does
+		bit     0,a                     ; not need writing out.
+		ret     z               
+		res     0,a                     ;Clear the "dirty buffer" flag
+		ld      (BUFFER_FLAG),a
+;
+		ld      hl,OPTIONS##            ;If /F flag not specified then
+		bit     0,(hl)                  ; don't actually write anything
+		ret     z                       ; out.
+;
+		push    ix
+		push    de                      ;Save DE for no real reason
+		ld      b,0                     ;Set bit-0 of B if it is a FAT
+		bit     1,a                     ; sector and clear it other-
+		jr      z,not_fat_flush         ; wise, to allow multiple 
+		set     0,b                     ; copies to be written.
+not_fat_flush:
+;
+flsh_fat_retry: ld      c,0                     ;Initial FAT copy number
+		ld      de,(BUFFER_SECT)        ;DE = bufferred sector number
+flush_fat_loop: ld      a,b                     ;Setup required error 
+		ld      (MULT_FLAGS##),a        ; interception flags.
+;
+		push    bc
+		push    de                      ;Before writing, we need to
+		ld      de,BUFFER               ; set up the DTA.
+		ld      c,_SETDTA##
+		call    MSX_DOS
+		pop     de                      ;Restore sector number.
+;
+		ld      a,(DRIVE##)
+		dec     a                       ;Convert drive to 0=A: 
+		ld      l,a     
+		ld      h,1                     ;Call to write the sector
+		ld      c,_WRABS##              ; from the buffer to disc.
+		push    de
+		call    MSX_DOS
+		jp      nz,EXIT##               ;Give up if error.
+		pop     de                      ;Restore sector number
+		pop     bc
+		ld      a,(MULT_FLAGS##)
+		bit     0,a                     ;Exit if it was not a FAT
+		jr      z,flush_ret             ; sector.
+;
+		inc     c                       ;Increment FAT copy number.
+		bit     1,a                     ;Skip if this copy of the FAT
+		jr      z,no_fat_error          ; was written out OK.
+		bit     4,b                     ;Leave a blank line if this
+		set     4,b                     ; is the first error on this
+		call    z,WR_CRLF               ; FAT sector.
+		ld      a,__WFT1_MSG##          ;Display a message saying
+		call    WR_MSG                  ; "Error writing FAT ".
+		ld      a,c
+		call    WR_BYTE                 ;Display the FAT number.
+		ld      a,__FAT2_MSG##
+		call    WR_MSG
+		jr      wr_fat_error                            
+;
+no_fat_error:   set     3,b                     ;Flag one FAT copy written OK
+wr_fat_error:   res     2,b                     ;Don't let any more errors thru
+		ld      a,(FAT_SIZE##)
+		ld      l,a                     ;Add on the size of a FAT
+		ld      h,0                     ; to the sector number to get
+		add     hl,de                   ; sector number of next copy.
+		ex      de,hl
+;
+		ld      a,(FAT_COPY##)          ;If not done all FAT copies
+		cp      c                       ; yet then loop back to do
+		jr      nz,flush_fat_loop       ; next one.
+;
+		bit     3,b                     ;If no FAT copies were written
+		set     2,b                     ; then retry the whole lot with
+		jr      z,flsh_fat_retry        ; a flag set to allow errors
+						; through to the user.  
+;
+;
+flush_ret:      pop     de
+		pop     ix
+		xor     a                       ;Clear multi-sector flags to
+		ld      (MULT_FLAGS##),a        ; allow normal read/writes.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+;
+BUFFER_SECT:    dw      0               ;Current sector number in buffer
+BUFFER_FLAG:    db      0               ;b0 - set => buffer is dirty
+					;b1 - set => FAT sector 
+BUFFER:         ds      512,0           ;Single sector buffer   
+;
+;
+;******************************************************************************
+;
+GET_YN::
+;
+;    This routine just gets  a  yes/no  response  from  the  user.   A  single
+; character  is  read and flags returned to indicate if it is a valid response
+; or not.  Any character other than a control character is echoed.
+;
+; Entry:      None
+; Returns:  Cy-flag clear => valid response received
+;                            Z-flag  set  => YES
+;                                   clear => NO 
+;                    set  => invalid response received.
+; Corrupts:  AF,HL
+;
+;
+;
+		push    bc
+		push    de
+;
+		ld      c,_INNOE##
+		call    MSX_DOS                 ;Get a character and echo
+		ld      b,a                     ; it if it is not a control
+		cp      " "                     ; character.
+		call    nc,WR_CHAR
+		call    WR_CRLF                 ;Go to a new line
+;
+		ld      de,YES_CHARS##          ;Check for a valid YES
+yes_loop:       ld      a,(de)                  ; response by looking
+		or      a                       ; through the table.
+		jr      z,not_y_response
+		sub     b
+		jr      z,yes_response          ;Jump if got YES response 
+		inc     de
+		jr      yes_loop
+;
+not_y_response: ld      de,NO_CHAR##            ;If not YES then look for
+no_loop:        ld      a,(de)                  ; a NO response.
+		or      a
+		jr      z,not_n_response
+		sub     b
+		jr      z,no_response
+		inc     de
+		jr      no_loop
+;
+not_n_response: scf                             ;Anything else set carry to
+		jr      got_response            ; indicate error.       
+;
+no_response:    inc     a                       ;Clear Z-flag if NO.
+yes_response:
+got_response:   pop     de
+		pop     bc
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+;    This routine prints an error message and the associated filename.  If the
+; "/F" option was not given then before the first  error  a  message  will  be
+; printed  warning  the  user that corrections will not be written to disk. If
+; the message number is "NUL_MSG" then nothing will be printed except the "/F"
+; warning message if required.
+;
+; Entry:       A = Error message number
+; Corrupts:  AF,HL
+;
+;
+ER_MSG::        call    ER_MSG2
+		jp      nz,WR_MSG
+		ret
+;
+QER_MSG::       call    ER_MSG2
+		jp      nz,QWR_MSG
+		ret
+;
+ER_MSG2:        push    af                      ;Save message number
+		ld      hl,ER_FLAGS##
+		bit     1,(hl)                  ;Flag error now found and
+		set     1,(hl)                  ; skip if this was not the
+		jr      nz,not_1st_error        ; first.        
+		bit     5,(hl)                  ;Don't print warning if
+		jr      nz,not_1st_error        ; doing cross linked files.
+		ld      hl,OPTIONS##
+		bit     0,(hl)                  ;If first error, and if no /F
+		jr      nz,not_1st_error        ; was specified then print a
+		ld      a,__NOF1_MSG##          ; warning message.
+		call    WR_MSG                  ;The warning message is in
+		ld      a,__NOF2_MSG##          ; two parts for ease of coding
+		call    WR_MSG                  ; the definition macros.
+not_1st_error:
+;
+		pop     af                      ;If message is null then don't
+		cp      __NUL_MSG##             ; print anything else.
+		ret     z
+		push    af
+		call    WR_PATH                 ;Print the curent path and
+		call    WR_CRLF                 ; filename followd by new line
+		pop     af                      ;Print out the error message.
+		ret                             ;With NZ.
+;
+;
+;------------------------------------------------------------------------------
+;
+WR_PATH::
+;
+;    This  recursive  routine prints out the current pathname by chaining back
+; up the file list using the parent address field in each record.   The  names
+; are  printed  on  the  way back down the recursion.  If the file list is not
+; being maintained due to memory shortage then no recursion  is  done,  and  a
+; message  is  printed after the filename warning the user, unless the file is
+; in the root directory.  If the item to be printed is a volume name  then  it
+; is printed as one rather than like a filename.
+;
+; Entry:     None
+; Returns:   None
+; Corrupts:  AF,HL
+;
+;
+		ld      hl,ER_FLAGS##           ;If this is the first path
+		bit     4,(hl)                  ; in a group then leave a
+		set     4,(hl)                  ; blank line.
+		call    z,WR_CRLF
+;
+		ld      hl,(FILE_PTR##)         ;Start at current file record
+;
+WR_PTH2::       push    de                      ;Must preserve DE & BC
+		push    bc
+		ld      c,(hl)                  ;Get attributes for volume
+		inc     hl                      ; name testing later.
+		inc     hl
+		inc     hl
+		ld      e,(hl)
+		inc     hl                      ;Get address of parent record
+		ld      d,(hl)                  ; from this record ready for
+		inc     hl                      ; recursing below. 
+		ex      de,hl                   ;Leave DE -> file name
+;
+		ld      a,h                     ;If this file is in the root
+		or      l                       ; then always print the
+		jr      z,path_root             ; "\" character.        
+		ld      a,(ER_FLAGS##)          ;If file list is not being
+		bit     2,a                     ; maintained then skip the
+		jr      nz,dont_do_path         ; recursive bit.        
+		call    WR_PTH2                 ;Print out the path for this
+						; record recursively.
+path_root:      ld      a,"\"                   ;Print the "\" directory
+		call    WR_CHAR                 ; separator character.
+		xor     a                       ;Flag path name printed.
+;
+dont_do_path:   push    af                      ;Save "path name printed" flag
+		ld      b,11                    ;Filename character count
+		ld      a,(de)
+		cp      05h                     ;If first character is 05h
+		jr      nz,no_e5_fiddle         ; turn it into 0E5h.
+		ld      a,0E5h
+no_e5_fiddle:
+		bit     AT_VOL,c                ;If it is a volume name then
+		jr      nz,wr_vol_name          ; write it differently.
+;
+wr_file_name:   cp      " "                     ;Print filename character 
+		call    nz,WR_CHAR              ; unless it is a space.
+		inc     de
+		ld      a,b
+		cp      3+1                     ;If three characters left
+		jr      nz,not_ext_start        ; then are just about to
+		ld      a,(de)                  ; start filename extension
+		cp      " "                     ; so look at first character
+		jr      z,fname_written         ; and stop if it is " ".
+		ld      a,"."                   ;If extension is not null
+		call    WR_CHAR                 ; then print a "." 
+not_ext_start:  ld      a,(de)
+		djnz    wr_file_name            ;Loop 'til done 11 characters
+		jr      fname_written
+;
+wr_vol_name:    call    WR_CHAR                 ;If item is a volume name
+		inc     de                      ; then just print all 11
+		ld      a,(de)                  ; characters directly.
+		djnz    wr_vol_name
+;
+fname_written:  pop     af                      ;If path name was not printed
+		ld      a,__QPTH_MSG##          ; then print "(unknown path)"
+		call    nz,WR_MSG               ; message after the name.
+;
+		pop     bc
+		pop     de
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+WR_CLU::
+;
+;    This  routine prints out a number of clusters.  It is actually printed as
+; a number of kilobytes, possibly with a ".5"  if  the  cluster  size  is  one
+; sector.
+;
+; Entry:     HL = Number of clusters to print
+;             A = Zero suppression flag as for WR_32
+; Returns:   None
+; Corrupts:  AF,HL
+;
+;
+		push    bc
+		push    de
+		ld      c,a                     ;Save zero supression flag
+		ld      a,(CLU_SHIFT##)
+		or      a                       
+		jr      z,no_k_shift            ;Skip if 0.5K clusters
+		ld      b,a
+		xor     a                       ;Multiply clusters by the
+k_shift_loop:   add     hl,hl                   ; cluster size to get
+		adc     a,a                     ; number of 0.5K's to print.
+		djnz    k_shift_loop
+		inc     b                       ;Set NZ => not 0.5K clusters
+no_k_shift:     push    af                      ;Save 0.5K cluster flag.
+;
+		srl     a                       ;Divide number of 0.5K's
+		rr      h                       ; by 2 to get number of K
+		rr      l                       ; to print.
+		push    af                      ;Save 0.5K flag 
+		ld      e,a
+		ld      d,0                     ;Print the number of K
+		ld      a,c                     ; with the correct zero
+		call    WR_32                   ; supression flag in A.
+;
+		pop     af                      ;Print either ".5K"
+		ld      hl,HALF_STR             ;             "K  "     
+		jr      c,write_end             ;          or "K"       
+		pop     af                      ;The last one is printed if
+		ld      hl,WHOLE_STR            ; the cluster size was a
+		jr      nz,write_end_1          ; whole multiple of K so 
+		ld      hl,WHOLE_SP_STR         ; there can be no 0.5Ks.
+write_end_1:    push    af                      ;The first two are used if
+write_end:      pop     af                      ; there is a posibility of
+		call    WR_STRING               ; 0.5Ks to enuse alignment.
+;
+		pop     de
+		pop     bc
+		ret
+;
+;
+HALF_STR:       db      ".5K",0
+WHOLE_SP_STR:   db      "K  ",0
+WHOLE_STR:      db      "K",0
+;
+;
+;------------------------------------------------------------------------------
+;
+WR_BYTE::
+;
+;    This  routine  simply prints a single byte in decimal with leading zeroes
+; supressed.  It uses the 32 bit number printing routine below. 
+;
+; Entry:      A = Number to be printed
+; Returns:   None
+; Corrupts:   AF
+;
+;
+		push    de
+		push    hl
+		ld      de,0                    ;Expand number to 32 bits
+		ld      h,0                     ; in registers DE:HL 
+		ld      l,a
+		xor     a
+		call    WR_32                   ;Print the 32 bit number
+		pop     hl
+		pop     de
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+WR_16::         ld      de,0
+WR_32::
+;
+;    This routine prints a 32 bit number from  DE:HL.   On  entry  register  A
+; contains  the  lead  charcater which will be printed in place of all leading
+; zeroes.  If this is zero then leading zeroes will be suppressed.  The number
+; is  stored  in  a  buffer  and printed from there by simple division using a
+; 32-bit power of 10 table.  The number will be printed in a field width of 10
+; characters.
+;
+; Entry:    DE:HL = 32 bit number to be printed
+;               A = Lead character (usually null, " " or "0")
+; Returns:   None
+; Corrupts:    AF 
+;
+;
+		ld      (NUMBER),hl             ;Store number in a buffer
+		ld      (NUMBER+2),de   
+		ld      (ZERO_CHAR),a           ;Store lead character   
+		push    hl
+		push    de                      ;Save a few registers
+		push    bc
+		ld      hl,POWER_TAB            ;HL -> power of 10 table
+		ld      de,NUMBER               ;DE -> number to be printed
+;
+wr_32_loop:     ld      a,(hl)                  ;If we are at last entry in
+		dec     a                       ; the table then force the
+		jr      nz,not_last_char        ; lead character to be "0"
+		ld      a,"0"                   ; to ensure that zero gets
+		ld      (ZERO_CHAR),a           ; printed.
+not_last_char:  
+		ld      c,0                     ;Divide by 32 bit subtraction
+subtract_loop:  call    SUB_32                  ; and add last one back on to
+		inc     c                       ; keep result +ve.
+		jr      nc,subtract_loop
+		call    ADD_32
+;
+		dec     c                       ;If the digit is zero then
+		ld      a,(ZERO_CHAR)           ; use the lead character.
+		jr      z,use_lead_char         ;If non-zero then set lead
+		ld      a,"0"                   ; character to "0" for future
+		ld      (ZERO_CHAR),a           ; zeroes and convert digit
+		add     a,c                     ; to ASCII. 
+use_lead_char:  or      a                       ;Print the character unless
+		call    nz,WR_CHAR              ; it is null.
+;
+		ld      a,(hl)                  ;Test whether last entry in
+		dec     a                       ; table yet.
+		inc     hl
+		inc     hl
+		inc     hl                      ;Point HL at next entry
+		inc     hl
+		jr      nz,wr_32_loop           ;Loop 'til end of table
+;
+		pop     bc
+		pop     de                      ;Restore registers and
+		pop     hl                      ; return. 
+		ret
+;
+;
+POWER_TAB:
+;               dw      0CA00h, 3B9Ah           ;1,000,000,000
+;               dw      0E100h,  5F5h           ;  100,000,000
+;
+		dw       9680h,   98h           ;   10,000,000
+		dw       4240h,   0Fh           ;    1,000,000
+		dw       86A0h,    1h           ;      100,000
+		dw       2710h,    0h           ;       10,000
+		dw        3E8h,    0h           ;        1,000
+		dw         64h,    0h           ;          100
+		dw         0Ah,    0h           ;           10
+		dw          1h,    0h           ;            1
+;
+;
+NUMBER:         dw      0,0             ;Buffer for number calculation  
+ZERO_CHAR:      db      0               ;Character for leading zeroes
+;
+;
+;------------------------------------------------------------------------------
+;
+;    These two routines are almost identical.  They simply add or subtract the
+; 32 bit number pointed to by HL to the 32 bit number pointed to by  DE.   All
+; registers  are  preserved  except  for  AF,  and  the carry flag will be set
+; correctly for the result.  The number at (HL) is not modified.
+;
+ADD_32:         push    hl
+		push    de
+		push    bc
+		ld      b,4
+		or      a
+add_32_loop:    ld      a,(de)
+		adc     a,(hl)
+		ld      (de),a
+		inc     hl
+		inc     de
+		djnz    add_32_loop
+		pop     bc
+		pop     de
+		pop     hl
+		ret
+;
+;
+SUB_32:         push    hl
+		push    de
+		push    bc
+		ld      b,4
+		or      a
+sub_32_loop:    ld      a,(de)
+		sbc     a,(hl)
+		ld      (de),a
+		inc     hl
+		inc     de
+		djnz    sub_32_loop
+		pop     bc
+		pop     de
+		pop     hl
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+;    These are the standard output routines.  All console output  produced  by
+; the   program   goes  through  these  routines.   "PR_CHAR",  "PR_CRLF"  and
+; "PR_STRING" simply do the obvious functions, the string must be  pointed  to
+; by  HL  and  terminated  by  a  null.  "WR_MSG" is used to print the correct
+; language version of a specified  message  number  (passed  in  register  A).
+; "WR_PLURAL"  prints  the singular or plural version of the message depending
+; on the number in HL.
+;
+; Corrupts:   AF,HL
+;
+;
+QWR_MSG::       ld      hl,OPTIONS##            ;Print the specified message
+		bit     0,(hl)                  ; or the next one depending
+		jr      nz,singular_msg         ; on whether the "/F" option
+		jr      plural_msg              ; was given.
+;
+;
+;
+WR_PLURAL::     dec     l
+		jr      nz,plural_msg           ;If number passed in HL is
+		inc     h                       ; exactly one then leave the
+		dec     h                       ; message number alone, else
+		jr      z,singular_msg          ; increment it to select teh
+plural_msg:     inc     a                       ; plural version.
+singular_msg:
+;
+;
+;
+WR_MSG::        CALL    GET_MSG_ADR##           ;Find absolute address of text.
+						;Fall through to WR_STRING.
+;
+;
+;
+WR_STRING::     ld      a,(hl)                  ;Loop to write characters
+		or      a                       ; from the string until a
+		ret     z                       ; zero is reached.
+		inc     hl
+		call    WR_CHAR
+		jr      wr_string
+;
+;
+WR_CRLF::       ld      a,CR                    ;Send a CR-LF sequence to
+		call    WR_CHAR                 ; the default channel.
+		ld      a,LF
+;
+WR_CHAR::       push    hl
+		push    de
+		push    bc
+		ld      e,a
+		ld      c,_CONOUT##
+		call    MSX_DOS
+		pop     bc
+		pop     de
+		pop     hl
+		ret
+;
+;
+;
+;******************************************************************************
+;
+ERV_ROUTINE::
+;
+;    This is the "user error routine" which MSX-DOS will call whenever a  disk
+; error  occurs.   If  bit-0  of  "MULT_FLAGS"  is  clear, or if ignore is not
+; allowed, then it returns the error to MSX-DOS's normal error  handling.   If
+; bit-2  is  set  then  it  is  cleared and the error let through to MSX-DOS's
+; normal handling.  This ensures that the user  is  given  the  opertunity  of
+; retrying totally failed FAT accesses.
+;
+;    Assuming  that  bit-0  is  set  and bit-2 is clear then the error will be
+; ignored (returns A=3) but a flag (bit-1) is set first so  that  the  calling
+; routine in CHKDSK will realise that the error has occurred.
+;
+; Entry:       A =  Error code
+;              B =  Physical drive number
+;              C =  b1 - clear => IGNORE allowed
+;                         set  => IGNORE not allowed
+; Returns:     A =  0 if IGNORE not allowed, bit-0 clear or bit-2 set.
+;                   3 if IGNORE allowed, bit-0 set and bit-2 clear.
+;
+;
+;
+		bit     1,c                     ;If IGNORE is not allowed then
+		jr      nz,normal_error         ; do MSX-DOS's normal error.
+;
+		ld      hl,MULT_FLAGS##         ;If multi-copy flag is clear 
+		bit     0,(hl)                  ; then do normal MSX-DOS error.
+		jr      z,normal_error
+;
+		bit     2,(hl)                  ;If flag to let the error
+		res     2,(hl)                  ; through is set then clear
+		jr      nz,normal_error         ; it and do normal error
+;
+		set     1,(hl)                  ;If error interception required
+		ld      a,3                     ; then set the error flag and
+		ret                             ; ignore this error.
+;
+normal_error:   xor     a                       ;Return A=0 to go on with 
+		ret                             ; MSXDOS normal error handling.
+;
+;
+;
+;******************************************************************************
+;
+;
+	finish  <MISC>
+	end
+;

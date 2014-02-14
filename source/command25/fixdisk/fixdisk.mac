@@ -1,0 +1,299 @@
+	TITLE	FIXDISK Utility - MSX-DOS.SYS copyright (1986) IS Systems Ltd
+	SUBTTL	Main Routine
+;
+;
+	.Z80
+;
+;
+;	 This is a small utility program for MSX-DOS 2 which prints a  warning
+; prompt  and updates an MSX-DOS 1 (or other non-MSX-DOS 2) disk to an MSX-DOS
+; 2 disk, ensuring that the boot sector is valid and putting on a  volume  id.
+; etc. to allow undeletion.
+;
+_BIOS	EQU	0
+_BDOS	EQU	_BIOS+5
+;
+TAB	EQU	9
+LF	EQU	0AH
+CR	EQU	0DH
+EOF	EQU	1AH
+;
+;
+	JR	START		; Jump to start of program.
+;
+	DEFB	CR,LF
+	DEFB	'MSX-DOS 2 FIXDISK program',CR,LF
+	DEFB	'Version '
+	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+	DEFB	'Copyright ('
+	DEFB	CRYEAR##/1000 MOD 10 +'0'
+	DEFB	CRYEAR##/ 100 MOD 10 +'0'
+	DEFB	CRYEAR##/  10 MOD 10 +'0'
+	DEFB	CRYEAR##      MOD 10 +'0'
+	DEFB	') ASCII Corporation',CR,LF
+	DEFB	CR,LF
+	DEFB	EOF			; Stops a TYPE command.
+;
+;
+START:	LD	SP,END##+100	; Stack at end of program.
+	CALL	FIXDISK		; Perform the actual FIXDISK operation.
+	PUSH	AF
+	CP	1		;If error code is 1 (bad version) then
+	LD	A,__BADVER##	; print a message since the system may
+	CALL	Z,DMESS		; ignore error codes.
+	POP	BC
+	LD	C,_TERM##	;Terminate with error code in B
+	CALL	_BDOS
+	JP	_BIOS		;Emergency exit if _TERM returns
+;
+;
+;
+FIXDISK:LD	C,_DOSVER##	; Get DOS's version numbers.
+	CALL	_BDOS
+	RET	NZ
+;
+	INC	A		; Make sure kernel & MSX-DOS.SYS's versions
+	CP	B		;   are >1.  If not then abort with error
+	RET	NC		;   code = 1.
+	CP	D
+	RET	NC
+;
+	LD	HL,81H		; Look at command line.
+	CALL	GETCH		; Ignore separators.
+	LD	B,A		; Save the drive letter if any.
+	JR	Z,NODRV		; Go with B=0 (default) if no drive specified.
+;
+	SUB	'/'		; Go with A=0 (defalut) if this is the switch.
+	JR	Z,SWONLY
+;
+	INC	HL
+	LD	A,(HL)		; See if a ':' follows the drive.
+	CP	':'
+	LD	A,.IPARM##	; 'Invalid parameter' if not.
+	RET	NZ
+;
+	INC	HL
+	LD	A,(HL)		; Get charater after drive letter.
+	CP	'/'
+	CALL	NZ,SEP?		; Make sure separator follows d:.
+	LD	A,.IPARM##
+	RET	NZ		; 'Invalid parameter' if not.
+;
+	LD	A,B		; Get drive letter.
+	CP	'Z'+1		; Make sure it's a valid drive letter.
+	JR	NC,IDRV
+;
+	SUB	'A'		; Cy => invalid drive.
+	INC	A		; 1 => A: etc.
+;
+SWONLY:	LD	B,A
+	CCF
+IDRV:	LD	A,.IDRV##
+	RET	NC
+;
+	CALL	GETCH		; Ignore separators.
+	JR	Z,NODRV		; Go with Carry set if no switch specified.
+	CP	'/'
+	LD	A,.IPARM##	; 'Invalid parameter' if not switch.
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	CALL	UC
+	CP	'S'
+	LD	A,.IPARM##	; 'Invalid parameter' if 'S' not follows.
+	RET	NZ
+	INC	HL
+	CALL	GETCH		; Ignore trailing spaces etc.
+	LD	A,.INP##
+	RET	NZ		; 'Too many parameters' if not end of line.
+;
+	OR	A		; Fall through with Carry clear.
+;
+;
+NODRV:	SBC	A,A		; Make format choice
+	DEC	A		;  Carry set   -> FEh (UPB only)
+	LD	C,A		;  Carry clear -> FFh (DOS2 boot)
+;
+	PUSH	BC
+	LD	A,B		; Get drive.
+	DEC	A		; 0 => A: etc.
+	LD	C,_CURDRV##
+	CALL	M,_BDOS		; Get current drive if no drive specified.
+	INC	A		; 1 => A: etc.
+	POP	BC
+	LD	B,A
+;
+	PUSH	BC		; Save drive.
+	LD	C,_LOGIN##	; See if the drive exists.
+	CALL	_BDOS
+	POP	BC		; B=drive.
+;
+	PUSH	BC
+CHKDRV:	SRL	H		; Shift out bit for drive.
+	RR	L
+	DJNZ	CHKDRV
+	POP	BC
+;
+	LD	A,.IDRV##	; Return 'Invalid drive' error if drive does
+	RET	NC		;   not exist.
+;
+	PUSH	BC
+	XOR	A		;Do a "get choice string" BDOS call to
+	LD	C,_FORMAT##	; make sure that the drive is formattable.
+	CALL	_BDOS
+	POP	BC
+	RET	NZ		;Error if drive is not formattable.
+;
+	PUSH	BC		; Save drive in B.
+	LD	A,__DISK##	; Print 'Disk in drive '.
+	CALL	DMESS
+	POP	BC
+	PUSH	BC
+	LD	A,B		; Get drive.
+	ADD	A,'A'-1
+	CALL	OUCH		; Print drive letter.
+	LD	A,__ONLY##	; Print ' will only boot MSX-DOS 2'.
+	CALL	DMESS
+	CALL	CRLF
+	LD	A,__PRAK##	; Print 'Press any key to continue... '.
+	CALL	DMESS
+	CALL	INCH		; Read a character, print CRLF.
+	POP	BC		; Get back drive to do in B.
+	LD	A,C		; A := choice code
+	LD	C,_FORMAT##	; FORMAT with A=FF or FE => update boot sector.
+	JP	_BDOS
+;
+;
+;
+	SUBTTL	I/O
+
+;******************************************************************************
+;
+DMESS:	CALL	GETMSG
+DMS:	LD	A,(DE)
+	OR	A
+	RET	Z		; Ret if end of string.
+;
+	INC	DE
+	CALL	OUCH
+	JR	DMS
+;
+;
+GETMSG:
+if	1
+	push	af
+	xor	a
+	ld	de,1100h
+;
+	exx
+	ex	af,af'
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	ix
+	push	iy
+	ex	af,af'
+	exx
+;
+	call	0FFCAh			;FCALL
+;
+	exx
+	ex	af,af'
+	pop	iy
+	pop	ix
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ex	af,af'
+	exx
+;
+	or	a
+	ld	de,messages##
+	jr	z,in_ank
+	ld	de,jmessages##
+in_ank:
+	pop	af
+else
+	LD	DE,MESSAGES##
+endif
+	LD	B,A		; Save message number.
+	INC	B
+GMS:	DEC	B
+	RET	Z
+;
+NXTM:	LD	A,(DE)
+	INC	DE
+	OR	A
+	JR	Z,GMS
+	JR	NXTM
+;
+;
+IC0:	LD	C,_INNOE##	; Get character with no echo.
+	CALL	_BDOS
+;
+INCH:	LD	C,_CONST##	; See if a key is pressed.
+	CALL	_BDOS
+	JR	NZ,IC0		; If yes, then gobble it up.
+;
+	LD	C,_CONIN##	; Else wait for and echo another key.
+	CALL	_BDOS
+;
+;
+CRLF:	LD	A,CR
+	CALL	OUCH
+	LD	A,LF
+;
+;
+OUCH:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A
+	LD	C,_CONOUT##
+	CALL	_BDOS
+	POP	BC
+	POP	DE
+	POP	HL
+	RET
+;
+;
+SEP?:	CP	','		; Comma is OK.
+	RET	Z
+;
+	CP	';'		; Semi-colon is OK.
+	RET	Z
+;
+	CP	'='		; Equals is OK.
+	RET	Z
+;
+	CP	' '		; Space is OK.
+	RET	Z
+;
+	CP	TAB		; Tab is OK.
+	RET	Z
+;
+	OR	A		; Null (end of line) is OK, nothing else is.
+	SCF
+	RET
+;
+;
+GCH0:	INC	HL
+GETCH:	LD	A,(HL)		; Get character.
+	CALL	UC		; Upper case it.
+	CALL	SEP?
+	JR	NC,GCH0		; Skip if a valid separator character.
+;
+	RET			; Else return with Z if end of line.
+;
+;
+UC:	CP	'a'
+	RET	C
+	CP	'z'+1
+	RET	NC
+	AND	NOT ('a'-'A')	; Make it upper cased.
+	RET
+;
+;
+;
+	END

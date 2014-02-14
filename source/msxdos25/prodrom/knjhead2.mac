@@ -1,0 +1,375 @@
+	.z80
+
+	include	KANJI.INC
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	This is a kanji driver header for DOS2 cartridge
+;	and is expected to be linked at 40C0h.
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+BANKNO	equ	3
+CHGBNK	equ	4092h
+KNJWORK	equ	0F247h	;!!!!!!!!!!!!!! TENTATIVE !!!!!!!!!!!!!!
+
+	extrn	X.TOTEXT
+	extrn	X.CHPUT
+	extrn	X.DSPCSR
+	extrn	X.ERACSR
+	extrn	X.ERAFNK
+	extrn	X.DSPFNK
+	extrn	X.PINLIN
+	extrn	X.INLIN
+	extrn	X.LPTOUT
+	extrn	X.CHGET
+	extrn	X.WIDTH
+	extrn	X.SCREEN
+
+	extrn	GETSLOT
+	extrn	STTMNT
+
+	public	STKDEPTH
+STKDEPTH	equ	14
+;
+;
+;	Jump table to handlers.
+;
+;	Be sure that no codes are placed before this!
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Following are the hook entries when bank #2 is being revealed.
+;	Stack level must be adjusted correctly.
+;
+	public	KNJVECT		;;just for .SYM file
+KNJVECT:
+	call	CALLRET		; TOTEXT
+	call	CALLRET		; CHPUT
+	call	CALLRET		; DSPCSR
+	call	CALLRET		; ERACSR
+	call	CALLRET		; ERAFNK
+	call	CALLRET		; DSPFNK
+	call	CALLRET		; PINLIN
+	call	CALLRET		; INLIN
+	call	CALLRET		; LPTOUT
+	call	CALLRET		; CHGET
+	call	CALLRET		; WIDTH
+	call	CALLRET		; SCREEN
+CALLRET:
+	ld	ix,RET
+	ex	(sp),ix
+	exx
+	ex	af,af'
+	ld	bc,REALJUMP-KNJVECT-3
+	add	ix,bc
+	ex	af,af'
+	exx
+	jp	(ix)
+
+RET:	ret
+
+	defs	KNJVECT+63-$,0
+
+BNK_ID:	defb	BANKNO
+
+	public	$LOCAL		;;just for .SYM file
+$LOCAL:
+;
+;	Following are the hook entries when bank #0 is being revealed.
+;	Indirectly CALLed from bank #0.
+;
+REALJUMP:
+	jp	X.TOTEXT
+	jp	X.CHPUT
+	jp	X.DSPCSR
+	jp	X.ERACSR
+	jp	X.ERAFNK
+	jp	X.DSPFNK
+	jp	X.PINLIN
+	jp	X.INLIN
+	jp	X.LPTOUT
+	jp	X.CHGET
+	jp	X.WIDTH
+	jp	X.SCREEN
+;
+	jp	X.STTMNT
+	jp	EXTBIO
+	jp	INTRPT
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	BASIC statement handler.
+;
+VERSION		equ	0002Dh
+MASTER_SLOT	equ	0F348h
+;
+X.STTMNT:
+	ld	a,(VERSION)	;If BIOS ROM version is 2 or later
+	cp	2		; don't attempt to install our Kanji Driver
+	ccf			; because advanced version is the standard
+	ret	c		; option (hopefully).
+;
+	ld	a,(H.PHYD)	;Also, don't attempt to proceed
+	cp	0C9h		; unless we are the master ROM.
+	scf
+	ret	z
+	push	hl
+	push	bc
+	call	GETSLOT
+	pop	bc
+	ld	hl,MASTER_SLOT
+	cp	(hl)
+	pop	hl
+	scf
+	ret	nz
+;
+	jp	STTMNT
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Extended BIOS entry.
+;	Will never be called unless we are the DOS2 master.
+;
+KNJ_DEV		equ	11h
+;
+EXTBIO:
+	push	af
+	ld	a,d
+	cp	KNJ_DEV		;Is this Kanji BIOS request?
+	jr	nz,END_BIO	; no.
+;
+	call	GETWORK
+	ld	a,(ix+TRUMOD)	;Are we ever initialized?
+	or	a
+	jr	z,END_BIO	; no, it's not my job.
+;
+	ld	a,e
+GET_MODE:
+	or	a
+	jr	nz,SET_MODE
+;
+	pop	af		;Discard saved AF.
+	xor	a
+	bit	CONMOD,(ix+MODSAV)
+	ret	z		;Say we are in ANK mode.
+	ld	a,(ix+TRUMOD)	;Get current Kanji mode.
+	rlca
+	rlca
+	and	3
+	inc	a		;Say we are in KANJI mode (1..4).
+	ret
+;
+SET_MODE:
+	dec	a
+	jr	nz,END_BIO
+;
+	pop	af		;Get back new mode.
+	cp	4+1		;In valid range (0..4)?
+	ret	nc
+	push	af
+	push	bc
+	push	de
+	push	hl
+	call	SET_AK		;Set/reset kanji mode.
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ret
+;
+END_BIO:
+	pop	af
+	ret
+
+SET_AK:
+	dec	a
+	jp	m,ANK##
+	rrca
+	rrca
+	jp	KANJI##
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Timer interrupt entry.
+;	Will never be called unless we are the DOS2 master.
+;
+SCNCNT	equ	0F3F6h
+	extrn	INT_DO
+;
+INTRPT:
+	push	af
+	call	GETWORK
+	bit	CONMOD,(ix+MODSAV)
+	jr	z,int_ret
+	call	INT_DO
+	ld	hl,SCNCNT
+	inc	(hl)
+int_ret:
+	pop	af
+	ret
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Runtime routines.
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;
+;	Set hooks.
+;
+	public	SETHOK
+SETHOK:
+	push	hl
+	call	GETSLOT
+	ld	c,a
+	pop	hl
+	ld	ix,KNJVECT	; get start of jump table
+sethok_loop:
+	ld	e,(hl)		; get address of hook
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,e		; end of table?
+	or	d
+	ret	z		; yes
+	ld	a,0F7h		; RST 30h
+	ld	(de),a
+	inc	de
+	ld	a,c		; slot address
+	ld	(de),a
+	inc	de
+	push	ix
+	ex	(sp),hl		; HL = pointer to jump entry
+				; TOS = pointer to hook address table
+	ld	a,l
+	ld	(de),a
+	inc	de
+	ld	a,h
+	ld	(de),a
+	inc	de
+	inc	hl		; add 3 to point to next jump entry
+	inc	hl
+	inc	hl
+	ex	(sp),hl		; HL = pointer to hook address table
+				; TOS = pointer to jump entry (updated)
+	pop	ix
+	ld	a,0C9h		; return
+	ld	(de),a
+	jr	sethok_loop	; go set next
+
+;
+;	Reset hooks.
+;
+	public	RESHOK
+RESHOK:
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,e
+	or	d
+	ret	z
+	ld	a,0C9h
+	ld	(de),a
+	inc	de
+	ld	(de),a
+	inc	de
+	ld	(de),a
+	inc	de
+	ld	(de),a
+	inc	de
+	ld	(de),a
+	jr	reshok
+
+;
+;	Hooks used to for kanji driver.
+;
+	public	HOKTBL
+HOKTBL:
+	defw	H.TOTE
+	defw	H.CHPU
+	defw	H.DSPC
+	defw	H.ERAC
+	defw	H.ERAF
+	defw	H.DSPF
+	defw	H.PINL
+	defw	H.INLI
+	defw	H.LPTO
+	defw	H.CHGE
+	defw	H.WIDT
+	defw	H.SCRE
+	defw	0
+
+;
+;	Get pointer to work area for this cartridge in IX.
+;	Very simple becase we are always in DOS2 master slot.
+;
+	public	GETWORK
+GETWORK:
+	ld	ix,KNJWORK
+	ret
+
+;
+;	Call BASIC routine.
+;
+	public	JPBAS
+JPBAS:
+	exx
+	ex	af,af'
+	ld	hl,-ramsize
+	add	hl,sp
+	ld	sp,hl
+	push	hl
+	ex	de,hl
+	ld	hl,ramcode
+	ld	bc,ramsize
+	ldir
+	pop	hl		; get back where to jump
+	push	de		; save old stack
+;
+	call	JPHL		; go do the function.
+;
+	pop	hl
+	ld	sp,hl
+	ex	af,af'
+	exx
+	ret
+
+JPHL:	jp	(hl)
+
+ramcode:
+	xor	a		; switch to Disk-BASIC bank.
+	call	CHGBNK		;
+	exx
+	ex	af,af'
+	call	CALBAS		; go do the function.
+	ex	af,af'
+	exx
+	ld	a,BANKNO	; switch back to our bank.
+	jp	CHGBNK		;
+
+ramsize	equ	$-ramcode
+
+;
+;	Call Extended BIOS.
+;
+	public	JPFCALL
+
+JPFCALL	equ	FCALL
+
+
+	public	SETTIM
+SETTIM:
+	public	RSTTIM
+RSTTIM:
+	public	SETEXT
+SETEXT:
+	ret
+
+	end

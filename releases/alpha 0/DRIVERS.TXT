@@ -1,0 +1,771 @@
+MSX-DOS 2.50 alpha 1 Driver Development Guide
+
+
+This document is a guide for developers that want to create a disk driver for a massive storage controller hardware with MSX-DOS 2.50 embedded in the cartridge.
+
+NOTE: This information is provisional. MSX-DOS 2.50 is still under development.
+
+
+    1. Introduction
+
+The MSX-DOS kernel code in ROM consists of manily two parts:
+
+- The kernel itself. It contains the hardware-independent code, such as the code for all the function calls or the FAT filesystem management code. Most of the code in the ROM accounts for this part.
+
+- The disk driver. This is the code that physically accesses the massive storage devices, mainly to read and write disk sectors, as requested by the kernel when necessary. It consists of a series of routines with standarized input and output parameters.
+
+In the past (when the MSX computers were sold at the stores), the only way to obtain a MSX-DOS kernel was having it already embedded in the disk controller (always floppy disk controllers at that time) when buying one such controller or when buying a MSX computer with disk drive included; or later, to buy a MSX-DOS 2 standalone cartridge with no massive storage controller associated. The kernel code, and the information about how to develop a disk driver was made available only to floppy disk controller manufacturers; this made sense since normal users were not expected to develop their own massive storage controlling hardware. 
+
+Time passed and the manufacturing of MSX computers and MSX compatible hardware stopped. However a significant number of people kept using their MSX computers, and some of them even developed their own massive storage controller hardware, mostly to provide MSX computers with the ability to use hard disks. These controllers needed to have the MSX-DOS kernel to work, as it happened with the old floppy disk controllers. However since there was no information about how to develop the disk driver part, nor there was information about how to embed this driver in the whole kernel ROM code, developers were forced to resort to reverse engineer the kernel ROM code to guess how to do things, and then to appropriately patch the kernel ROM code.
+
+This has changed in MSX-DOS 2.50. Now there is explicit support for developing disk drivers for massive storage controller hardware, this support is implemented in two ways:
+
+a) The routines that the driver must have, their entry point addresses, their input and output parameters, and the way they must behave, are explicitly defined and documented.
+
+b) The procedure to combine the MSX-DOS kernel code with the driver code, in order to build a ROM file suitable for embedding withing massive storage controllers, is specified with detail. Moreover, there is an utility, MKDOSROM, that does this work. The source code of MKDOSROM is available as well. (The executable for MKDOSROM is available only for Windows at the time alpha 1 is published).
+
+MSX-DOS 2.50 is provided in two files:
+
+- DOS250BA.DAT, the kernel base file. This code won't work by itself, it needs to be combined with a disk driver, either manually (how to do this is detailed below) or by using the MKDOSROM utility.
+
+- DOS250.ROM, a complete kernel file with a dummy driver appended. This file can be burned in a ROM cartridge with no associated massive storage controller, so that the new features of MSX-DOS 2.50 other than the disk driver development support can be used with other MSX-DOS 1 or MSX-DOS 2.20/2.3x controllers.
+
+Two versions of DOS250.ROM are provided, one for hardware supporting the ASCII8 mapper and other for hardware supporting the ASCII16 mapper. If a different mapping is required, the file can be patched manually or by using the MKDOSROM utility. The DOS250BA.DAT file uses the ASCII16 mapper; if a different mapper is required, the appropriate mapping code must be combined as well when combining the file with the driver code.
+
+
+    2. Architecture of the MSX-DOS kernel
+
+This section explains the overall organization of the past and present versions of MSX-DOS. Only the information needed in order to develop disk drivers is given.
+
+MSX-DOS version 1 kernel consisted on a single 16K ROM that was visible on Z80 page 1, and contained the disk driver code following the kernel code itself. See Figure 1.
+
+
+4000h +---------------------+
+      |                     |
+      |                     |
+      |                     |
+      |     Kernel code     |
+      |                     |
+      |                     |
+      |                     |
+7405h +---------------------+
+      |                     |
+      |     Disk driver     |
+      |                     |
+7FFFh +---------------------+
+
+      Figure 1 - MSX-DOS 1 kernel
+
+
+MSX-DOS versions 2.20 and 2.3x consist of 64K of code and data, divided in four 16K banks. Only one bank is visible at the same time, always at Z80 page 1. The first and the last bank contained the disk driver; in the 2.3x kernel, the last bank is the old MSX-DOS 1 kernel code, it is left switched when booting in DOS 1 compatible mode. See Figure 2.
+
+
+               Bank 0                Bank 1                Bank 2                Bank 3
+4000h +---------------------+---------------------+---------------------+---------------------+
+      |     Page 0 code     |     Page 0 code     |     Page 0 code     |                     |
+40FFh +---------------------+---------------------+---------------------+                     |
+      |     0 (bank ID)     |     1 (bank ID)     |     2 (bank ID)     |                     |
+4100h +---------------------+---------------------+---------------------+                     |
+      |                     |                     |                     |                     |
+      |       Bank 0        |       Bank 1        |       Bank 2        |       Bank 3        |
+      |     kernel code     |     kernel code     |     kernel code     |     kernel code     |
+      |                     |                     |                     |  (MSX-DOS 1 kernel) |
+      |                     |                     |                     |                     |
+7405h +---------------------+                     |                     |---------------------+
+      |                     |                     |                     |                     |
+      |     Disk driver     |                     |                     |     Disk driver     |
+      |                     |                     |                     |                     |
+7FD0h +---------------------+---------------------+---------------------+---------------------+
+      | Bank switching code | Bank switching code | Bank switching code | Bank switching code |
+7FFFh +---------------------+---------------------+---------------------+---------------------+
+
+                                   Figure 2 - MSX-DOS 2.3x kernel
+
+
+There are three parts that are common to all banks (bank 3 contains the bank switching code only):
+
+- The page 0 code is 255 bytes long and contains an entry point for the timer interrupt routine, a routine for calling code on another bank, and other useful utility code.
+
+- The bank ID is just one byte with the bank number, it is needed for doing inter-bank calls.
+
+- The bank switching code is needed for changing the visible bank. The exact code placed here depends on the ROM mapper type used.
+
+When booting in DOS 2 mode, bank 0 is permanently switched, and other banks are only temporarily switched when bank 0 code needs to call a routine or access data on one of these banks. When booting in DOS 1 mode, bank 3 is switched at boot time, and it remains switched forever.
+
+
+MSX-DOS 2.50 kernel has the same architecture as version 2.3x, with the following changes:
+
+- One extra bank is added for additional kernel code (bank number 4), thus making the kernel code 80K in size.
+
+- One extra bank consisting on the disk driver is appended at the end of the kernel base file (which has banks 0 to 4 only), this bank has number 5. If needed, extra banks can be appended (bank 6 onwards), in case that the disk driver needs more than 16K for code or data.
+
+- The old disk driver code on banks 0 and 3 is replaced by code that redirects the disk driver calls to the driver bank.
+
+- The page 0 and bank ID sections are added to the MSX-DOS 1 kernel as well, since it now does calls to the driver bank.
+
+See Figure 3.
+
+
+             Banks 0-4              Bank 5         Banks 6-... (optional)
+4000h +---------------------+---------------------+---------------------+---...
+      |     Page 0 code     |     Page 0 code     |     Page 0 code     |
+      +---------------------+---------------------+---------------------+---...
+40FFh |       Bank ID       |     5 (bank ID)     |       Bank ID       |
+4100h +---------------------+---------------------+---------------------+---...
+      |                     |                     |                     |
+      |        Bank         |                     |     Additional      |
+      |     kernel code     |     Driver code     |     driver code     |
+      |                     |                     |                     |
+      |                     |                     |                     |
+      |                     |                     |                     |
+7BD0h +---------------------+                     |                     |
+      |   Available space   |                     |                     |
+      |  (on banks 0 and 3) |                     |                     |
+7FD0h +---------------------+---------------------+---------------------+---...
+      | Bank switching code | Bank switching code | Bank switching code |
+7FFFh +---------------------+---------------------+---------------------+---...
+
+      Figure 3 - MSX-DOS 2.50 kernel (kernel base file has banks 0 to 4 only)
+
+
+There is a 1K unused space at banks 0 and 3 (7BD0h to 7FCFh). This space can be used to put any code or data that is required by the driver to be here. In particular, there are three cases in which it is necessary to patch this area:
+
+- When a format choice string other than a null string (for devices that can't be formatted) or the "Single side / Double side" string (in case of driving a legacy MSX floppy disk driver) is to be returned by the CHOICE or DEV_FORMAT routines. These two strings are already provided by the kernel, other strings must be explicitly placed in this available area.
+
+- When other data that is to be readed by user software by using RDSLT is needed (for example, an UNAPI implementation identifier).
+
+- When a hook other than the timer interrupt hook or the extended BIOS hook is to be patched. In this case, code that performs an inter-bank call to the driver code should be placed in this area, and the hook should be set to do an inter-slot call to this code in the kernel slot.
+
+Note that whatever is placed in this area, it must be identical in both banks 0 and 3, so that everything will work correctly in both DOS 1 and DOS 2 modes.
+
+
+    3. How to create a kernel with embedded driver
+
+The procedure for creating a ROM file that contains the MSX-DOS 2.50 kernel code and a disk driver consists basically on appending the driver code the the kernel base file, and then patching the resulting file with the appropriate bank switching code. Here are the detailed steps (they assume that the first file position is 0):
+
+a) Start with the kernel base file (DOS250BA.DAT).
+
+b) Append the page 0 code at the end of the file. This code can be simply copied from the first 255 bytes of the kernel base file itself.
+
+c) Append one byte with value 5 at the end of the resulting file (this is the bank ID).
+
+d) Develop the driver code by appending the routines and following the rules explained in the next section. Append the result (which must be exatcly 16080 bytes long, otherwise padding is required) at the end of the file obtained in c).
+
+e) Append the bank switching code at the end of the resulting file. If a file suitable for hardware supporting the ASCII16 mapper is desired, then this code can be simply copied from the last 48 bytes of the kernel base file itself. Otherwise, custom mapping code must be provided.
+
+f) If the driver code does not fit in one single bank, repeat steps b)-e) to append extra banks, increasing the bank ID for each bank as appropriate.
+
+h) If necessary, patch the resulting file to add a formatting choice string or other data that must be directly visible on the DOS kernel slot. Put the information twice, at positions 3BD0h and FBD0h in the file.
+
+i) If the mapper type of the target hardware is not ASCII16, patch the bank switching code of the kernel banks (the last 48 bytes of the first five 16K block of the resulting file) with custom bank switching code.
+
+j) If the mapper type of the target hardware is not ASCII16, read the two byte value at position 2 of the resulting file. Then substract 16378 bytes from the obtained value. In the file position given from the previous operation, put the same custom bank switching code used in steps e) and i).
+
+The MKDOSROM utility performs all these steps for you.
+
+The custom mapping code must follow these rules:
+
+- At most 48 bytes long.
+- Must switch in page 1 of the ROM slot the 16K bank whose number is passed in register A. First bank has number zero.
+- Can corrupt only register pair AF.
+- Must run at any address.
+
+The next sections explain how to develop the driver code. 
+
+
+    4. Drive-based drivers vs device-based drivers
+
+When developing a driver for embedding with the MSX-DOS 2.50 kernel, you have two choices: develop a drive-based driver or develop a device-based driver.
+
+- Drive-based drivers mimic the behavior of the old-school drivers embedded within the kernel code of older versions of MSX-DOS in ROM. In these drivers, the driver itself decides how many drive letters are allocated for itself at boot time, as well as how these drives are mapped to physical devices and disk partitions. The user can gain control about drive-to-device and drive-to-partition only through the use of external utilities supplied by the driver developer.
+
+- Device-based drivers provide direct access to the drived devices, and it is MSX-DOS (on behalf of the user) who decides how to map drives to devices and to disk partitions. Two drive letters are always initially assigned to these drivers at boot time.
+
+Device-based drivers benefit from the following new features of MSX-DOS:
+
+- OS handled assignment of drive letters to devices and disk partitions. The driver must simply provide access to the device as a whole, it does not need to know which drive is assigned to which device nor worry about disk partitions.
+
+- Built-in FDISK utility for creating partitions on block devices. The driver developer does not need to build its own partitioning utility. (Not implemented in alpha 1)
+
+- The driver may optionally implement support for direct filesystem management, that is, it is the driver itself who manages creating, opening, reading, writing and deleting files and directories for a given device. This is useful for non-block devices (such as CD-ROM readers) and for block devices with no FAT12/16 filesystems (such as FAT32). (Not implemented in alpha 1)
+
+- Support for hot-plug buses such as USB. MSX-DOS will detect when a device is disconnected or reconnected and react appropriately. (Not implemented in alpha 1)
+
+Drive-based drivers are appropriate when only driving very simple devices which do not support partitionning (such as floppy disk drives), and for quickly converting an existing driver which is embedded with an older version of the MSX-DOS kernel. But in general, it is advisable to develop a device-based driver instead.
+
+
+    5. Routines available at kernel page 0
+
+The kernel page 0 code is needed by the kernel itself for proper operation, however it also provides some useful routines for disk driver code. This section explains these routines.
+
+
+    * GSLOT1 (402Dh)
+
+Obtains the slot currently switched on page 1 (that is, the slot of current driver code).
+
+Input:    -
+Output:   A = Slot currently switched on page 1
+Corrupts: F
+
+Note: This routine can't be called directly. It must be called via an inter-bank call to bank 0, in this way:
+
+XOR A
+LD IX,GSLOT1
+CALL CALBNK
+
+
+    * RDBANK (403Ch)
+
+This routine reads a byte from another bank. It must be called via an inter-bank call to the bank to be read, passing the address to be read in HL:
+
+LD A,bank
+LD HL,address (must be a page 1 address)
+LD IX,RDBANK
+CALL CALBNK
+
+It returns the readed byte in A and preserves all other registers except F.
+
+
+    * CALBAS (403Fh)
+
+This routine temporarily switches bank 0 (in DOS 2 mode) or bank 3 (in DOS 1 mode), then calls the CALBAS routine in MSX BIOS (0159h), then restores the driver bank and returns. Input and output parameters are the same as the original CALBAS routine in BIOS.
+
+If the driver implements BASIC extended statements ("CALLs") or BASIC extended devices, it must use this entry instead of the original MSX BIOS routine, in order to make use of the routines that the MSX BASIC interpreter provides for managing the command parameters. This is because in case of using the original routine, if a BASIC error is thrown while parsing parameters the driver bank would remain switched instead of the kernel bank, and the system would crash.
+
+
+    * CALBNK (4042h)
+
+Calls a routine in another bank. This is useful if the driver spawns across two or more banks, and is needed for using the GSLOT1, GWORK and RDBANK routines.
+
+Input:    A  = Bank number
+          IX = Routine address (must be a page 1 address)
+          AF' = Input parameter for the called routine
+                (will be passed as AF)
+          BC, DE, HL, IY = Input parameters for the called routine
+Output:   AF, BC, DE, HL, IX, IY = Output parameters from the called routine
+
+
+    * GWORK (4045h)
+
+Gets the address of the SLTWRK entry for the passed slot, or for the current slot in page 1.
+
+Input:    A  = Slot number
+               (0, for the current slot in page 1)
+Output:   A  = Current slot switched on page 1 (if 0 at input)
+               Unchanged (if not 0 at input)
+          IX = Address of work area in page 3 for the specified slot
+               (0, if no page 3 space is allocated for the specified slot)
+Corrupts: F
+
+Please see the description of DRV_INIT routine for an explanationa about how to use this routine and the SLTWRK area.
+
+Note: This routine can't be called directly. It must be called via an inter-bank call to bank 0, in this way:
+
+LD A,slot
+EX AF,AF'
+XOR A
+LD IX,GWORK
+CALL CALBNK
+
+
+    * CALDRV (4048h)
+
+Calls a routine in the driver bank. This routine is the same as CALBNK, except that the routine address is passed in address BK4_ADD (#F84C) instead of IX, and the bank number is always 5. This is useful when used in combination with CALSLT to call a driver routine from outside the driver itself.
+
+Note that register IX can't be used as input parameter, it is corrupted before reaching the invoked code (actually, CBNKHL simply copies HL' to IX and the jumps to CALBNK).
+
+Input:    (BK4_ADD) = Routine address (must be a page 1 address)
+          AF, BC, DE, HL, IY = Input parameters for the called routine
+Output:   AF, BC, DE, HL, IX, IY = Output parameters from the called routine
+
+
+    * CHGBNK (7FD0h)
+
+This is not strictly a page 0 routine, but is provided by kernel and available on all banks as well. It will simply make the specified bank visible on Z80 page 1. Usually, driver code will not need to use this routine, but will use CALBNK instead.
+
+Input:    A = Bank number
+Output:   -
+Corrupts: AF only
+
+
+    6. Routines and data for the driver
+
+The driver consists of a mandatory jump table at the beginning, followed by the code that implements the required routines. The driver part must be exactly 16080 bytes long, that is, the 16K of Z80 page 1 minus the space for the kernel page 0 code, the bank ID and the bank switching code; it will be visible at addresses 4100h to 7FCFh. If the driver spawns across two banks or more, this applies to each bank.
+
+Below is the list of the required routines and data, including their entry addresses and their input and output parameters. Unless otherwise stated, these routines work the same way in both DOS 1 and DOS 2 mode, and the driver does not need to worry about the actual mode in which the MSX is working.
+
+
+    6.1. Common routines and data
+
+The following set of routines and data must be present on all drivers, regardless of its type (drive-based or device-based).
+
+
+    * DRV_SIGN (4100h)
+
+This is the valid driver signature, it is used by the kernel code at boot time to check that the driver bank effectively contains a valid driver. It consists of the verbatim string "MSXDOS_DRIVER", zero-terminated, and uppercased.
+
+
+    * DRV_FLAGS (410Eh)
+
+Provides information about the driver capabilities:
+
+bit 0: 0 = drive-base driver
+       1 = device-based driver
+bit 1: 0 = the driver does NOT support device hot-plug
+       1 = the driver supports device hot-plug (not supported in alpha 1)
+bit 2-7: Reserved, must be zero
+
+Device hot-plug menas that it is possible to add and remove devices to/from the bus once the system has booted, without having to turn off the computer. An example of bus supporting device hot-plug is the USB bus.
+
+Note that device hot-plug is available for device-based drivers only. Bit 1 is ignored for drive-base drivers.
+
+
+    * 410Fh
+
+Reserved, must be zero.
+
+
+    * DRV_NAME (4110h)
+
+This is a string containing the driver name. It must consist of 32 printable ASCII characters (ASCII codes 32 to 126). The string must be left justified and padded at the right with spaces.
+
+
+    * DRV_TIMI (4130h)
+
+This is the entry point for the timer interrupt routine of the driver, it will be called 50 or 60 times per second depending on the VDP frequency selected. If the driver does not need to handle the timer interrupt, it should fill this entry with RETs.
+
+Note that this entry will only called if DRV_INIT returns Cy=1 on its first execution. See the description of DRV_INIT for more details.
+
+
+    * DRV_VERSION (4133h)
+
+This routine returns the driver version. Three version numbers must be returned, one byte each: main version number, secondary version number, and revision number.
+
+Input:  -
+Output:
+     A = Main version number
+     B = Secondary version number
+     C = Revision number
+
+
+    * DRV_INIT (4136h)
+
+This is the driver initialization routine. It will be called by the kernel twice:
+
+1) First execution, for information gathering.
+
+Input:
+     A = 0
+     B = Number of available drives
+     HL = Maximum size of allocatable work area in page 3
+Output:
+     A = Number of required drives (for drive-based drivers only; device-based drivers have always two drives assigned at boot time)
+     HL = Size of required work area in page 3
+     Cy = 1 if DRV_TIMI must be hooked to the timer interrupt, 0 otherwise
+
+2) Second execution, for work area and hardware initialization.
+
+Input:
+     A = 1
+     B = Number of drives actually allocated for this controller
+
+Starting at the second execution of this routine, the GWORK routine can be used at any time to obtain the address of the space reserved for the current slot at SLTWRK. The driver should act as follows regarding the page 3 work area:
+
+- If 8 bytes or less are required, this routine should return HL=0 on its first execution, and the 8 byte space reserved by the system for this slot at SLTWRK should be used as work area:
+
+XOR A
+EX AF,AF'
+XOR A
+LD IX,GWORK
+CALL CALBNK
+;Use the 8 byte space pointed by IX as work area
+
+- If more than 8 bytes are required, this routine should return the required space in HL, and should obtain the pointer to the allocated space from the first two bytes of the space reserved by the system for this slot at SLTWRK:
+
+XOR A
+EX AF,AF'
+XOR A
+LD IX,GWORK
+CALL CALBNK
+LD L,(IX)
+LD H,(IX+1)
+;Use the space pointed by HL as work area
+
+Plase note also the following:
+
+- If the first execution requests more page 3 work area than available, the second execution will not be done, no drives will be allocated and DRV_TIMI will not be hooked to the timer interrupt; in other words, MSX-DOS will ignore the involved controller. The size of the work area required should always be within the available limits.
+
+- For drive-based drivers, if the first execution requests more drives than available, as many drives as possible will be allocated, and the initialization procedure will continue the normal way. This applies to device-based drivers too, except that MSX-DOS will always try to allocate two drives for these drivers.
+
+- Unlike previous versions of MSX-DOS, the timer interrupt routine will be executed (if requested) even if no drives are requested by the driver code.
+
+
+    * DRV_BASSTAT (4139h)
+
+This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see MSX2 Technical Handbook, chapter 2, for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS can't be used to invoke the MSX BASIC interpreter helper routines; instead, the CALBAS entry in kernel page 0 must be used.
+
+If the driver does not handle BASIC extended statements, it must simply set the carry flag and return.
+
+
+    * DRV_BASDEV (413Ch)
+
+This is the entry for the BASIC extended devices handler. It works the same way as the standard handlers (see MSX2 Technical Handbook, chapter 2, for details), but see the note on DRV_BASSTAT about CALBAS.
+
+If the driver does not handle BASIC extended devices, it must simply set the carry flag and return.
+
+
+    * DRV_EXTBIO (413Fh)
+
+This is the extended BIOS handler. It works the same way as the standard handlers, except that it must return a value in D' (D in the alternative registers set) that tells the kernel what to do after the driver handler has finished:
+
+D'=0: Return immediately.
+D'=1: Execute the kernel and/or the system extended BIOS handler.
+
+The driver extended BIOS handler is always entered with D'=1. Therefore, if the driver does not handle extended BIOS at all, it can simply fill this entry point with RETs.
+
+
+    * DRV_DIRECT0 (4142h)
+    * DRV_DIRECT1 (4145h)
+    * DRV_DIRECT2 (4148h)
+    * DRV_DIRECT3 (414Bh)
+    * DRV_DIRECT4 (413Eh)
+
+These are the entries for direct calls to the driver. Calls to any of the five entry points available at addresses 7450h to 745Ch in the kernel ROM (bank 0 or bank 3) will be mapped to a call to the corresponding DRV_DIRECT entry point. This is useful when the driver wants to provide extra functionality for configuration, returning information, or other purposes. When these routines are entered, paging state will be the same as when the bank 0/3 entry was invoked, except of course that the driver bank will be switched on page 1 instead of the kernel bank. All registers except IX and AF' are passed unmodified from the caller.
+
+If the driver does not implement direct call code, it can simply fill these entry points with RETs.
+
+
+    * 4152h to 415Fh
+
+Reserved for future expansion, must be zero.
+
+
+    6.1. Routines and data for drive-based drivers
+
+The following set of routines must be present on drive-based drivers.
+
+
+    * DRV_DSKIO (4160h)
+
+Reads or writes disk sectors from a massive storage device.
+
+Input:    A  = Drive number, starting at 0
+          Cy = 0 for reading sectors, 1 for writing sectors
+          B  = Number of sectors to read/write
+          DE = First sector number to read/write
+          HL = source/destination address for the transfer
+Output:   Cy = 0 on success, 1 on error
+          A  = Error code (on error only):
+               0   Write protected
+               2   Not ready
+               4   Data (CRC) error
+               6   Seek error
+               8   Record not found
+               10  Write fault
+               12  Other errors
+          B = Number of sectors actually read (in case of error only)
+
+Note that unlike its counterpart in the old-style MSX-DOS 1/2.3x drivers, this routine will never receive a request to transfer data from/to page 1. If the kernel code requires data to be transferred to page 1, it will split the transfer in several 1 sector transfers and use a temporary buffer in page 3; the driver code does not need to worry about this and can do always direct transfers to memory.
+
+
+    * DRV_DSKCHG (4163h)
+
+Returns information about the disk change status for the disk.
+
+Input:    A  = Drive number, starting at 0
+          B  = C = Media descriptor
+          HL = Base address for DPB -1
+Output:   Cy = 0 on success, 1 on error
+          A  = Error code (on error only)
+               Same codes as DRV_DSKIO
+          B  = Disk status (on success only)
+               1  Disk not changed
+               0  Unknown
+              -1  Disk changed
+
+If the disk status is "Changed" or "Unknown", the routine must generate a DPB for the disk and copy it to the address passed in HL plus one. See DRV_GETDPB for the format of the DPB.
+
+
+    * DRV_GETDPB (4166h)
+
+Gets a DPB (Drive Parameters Block) for the specified disk.
+
+Input:    A  = Drive number, starting at 0
+          B  = C = Media descriptor
+          HL = Base address for DPB -1
+Output:   -
+
+The format of the 18 byte DPB is as follows:
+
++00:  Media type (F0..FF)
++01:  Sector size (2 bytes), must be a power of two
++03:  Directory mask, (sector size /32)-1
++04:  Directory shift, Number of one bits in the directory mask
++05:  Cluster mask, (sectors per cluster)-1
++06:  Cluster shift, (number of one bits in cluster mask)+1
++07:  Sector number of first FAT
++08:  Number of FATs
++0A:  Number of directory entries (maximum 254)
++0B:  First data sector number (2 bytes)
++0D:  Maximum cluster number (number of clusters +1) (2 bytes)
++0F:  Total number of sectors
++10:  First sector number of root directory
+
+The DPB must be copied to the address passed in HL plus one.
+
+
+    * DRV_CHOICE (4169h)
+
+Returns a format choice string for a disk.
+
+Input:   -
+Output:  HL = Address of the choice string in the kernel slot
+
+This routine is called by the kernel code when a FORMAT command is executed, in order to show the formatting options to the user (in MSX-DOS 2, it is also called by the CHOICE function call). There are three cases that are supported without any modification needed in the kernel base code:
+
+- If the disk supports only one kind of formatting (that is, there is actually no choice), it must return HL = 0.
+
+- If the disk does not support formatting (the most common case), it must return HL = 741Fh. This is the address of a null string available in the kernel banks 0 and 3.
+
+- If the device is a legacy MSX floppy disk drive that handles single sided and double sided disks, it must return HL = 7420h. This is the address of a "Single sided / Double sided" string available in the kernel banks 0 and 3.
+
+If any other string is to be returned, then the kernel file must be patched with the required string. There is 1K of available space at address 3BD0h of both bank 0 and bank 3 (this will be seen as 7BD0h, since kernel is accessed at page 1) for this purpose. Both bank 0 and bank 3 must contain exactly the same information at the same address in case that patching is done.
+
+
+    * DRV_FORMAT (416Ch)
+
+Formats a disk and initializes its boot sector, FAT and root directory.
+
+Input:   A  = Formatting choice, from 1 to 9 (see DRV_CHOICE).
+         D  = Drive number, starting at 0
+         HL = Address of work area in memory
+         DE = Size of work area
+Output:  Cy = 0 on success, 1 on error
+         A  = Error code (on error only):
+              0   Write protected
+              2   Not ready
+              4   Data (CRC) error
+              6   Seek error
+              8   Record not found
+              10  Write fault
+              12  Bad parameter
+              14  Insufficient memory
+              16  Other errors
+
+The "work area" is a space provided by the caller that can be freely used by the formatting routine if necessary.
+
+
+    * DRV_MTOFF (416Fh)
+
+Stops the motor of all the managed drives. This routine makes sense for floppy disk drives only.
+
+Input:   -
+Output:  -
+
+
+    6.2. Routines and data for device-based drivers
+
+The following set of routines must be present on device-based drivers.
+
+
+    * DEV_RW (4160h)
+
+Read or write logical sectors from/to a logical unit.
+
+Input:    Cy=0 to read sectors
+             1 to write sectors
+          A = Device number, 1 to 7
+          B = Number of sectors to read or write
+          C = Logical unit number, 1 to 7
+          HL = Source or destination non-page 1 memory address for the transfer
+          DE = Non-page 1 memory address where the 4 byte sector number is stored
+Output:   A = Error code:
+              0: Ok
+              .IDEVL: Invalid device or logical unit number
+              .NRDY: Not ready
+              .DISK: General unknown disk error
+              .DATA: CRC error when reading
+              .RNF: Sector not found
+              .UFORM: Unformatted disk
+              .WPROT: Write protected media, or read-only logical unit
+              .WRERR: Write error
+              .NCOMP: Incompatible disk
+              .SEEK: Seek error
+          B = Number of sectors actually read (in case of error only)
+
+This routine allows reading and writing physical sectors from/to a device. Note that it refers to absolute device sectors, not partition sectors. The driver does not need to know anywthing about disk partitionning.
+
+The available sector numbers must range from zero to the number of available sectors (as reported by LUN_INFO) minus one. If LUN_INFO reports zero available sectors, then the range of available sectors is undefined unless the driver developer explicitly documents it.
+
+This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
+
+The error codes are the same used by MSX-DOS, in the category "Disk errors". See the MSX-DOS 2 Program Interface Specification for details.
+
+
+    * DEV_INFO (4163h)
+
+Returns information about a device.
+
+Input:   A = Device index, 1 to 7
+         B = Information to return:
+             0: Basic information
+             1: Manufacturer name string
+             2: Device name string
+             3: Serial number string
+         HL = Pointer to a buffer in non-page 1 RAM
+Output:  A = Error code:
+             0: Ok
+             1: Information not available, or invalid information index
+
+A device-based driver may handle up to 7 devices, each one havin from 1 to 7 logical units. For example, a multimedia card reader with several slots could expose each slot as a sepparate logical unit.
+
+When basic information is requested, the buffer supplied in HL is filled with the following information:
+
++0 (1): Numer of logical units, from 1 to 8.
+        1 if the device has no logical units (which is functionally equivalent to having only one).
++1 (1): Removable device/logical unit flags:
+           bit 0: The device supports hot-plug
+                  (ignored if hot-plug bit in DRV_FLAGS is zero)
+           bit 1: Logical unit 1 is removable
+           ...
+           bit 7: Logical unit 7 is removable
+
+The hot plug support bit must be set to one if it is possible to remove the device from the bus without turning off the computer (for example an USB device). (Not supported in alpha 1)
+
+The strings returned must be printable ASCII string (ASCII codes 32 to 126), left justified and padded with spaces. All the strings are optional, if a given string is not available, an error must be returned.
+
+If a string is provided by the device in binary format, the driver should return it as an hexadecimal, upper-cased string, preceded by the prefix "0x".
+
+The maximum length for a string is 64 characters. If the string is actually longer, the leftmost 64 characters must be provided.
+
+In the case of the serial number string, the same general rules for the strings apply, except that it must be provided right-justified, and if it is too long, the rightmost characters must be provided, not the leftmost.
+
+The driver must never provide the same combination of manufacturer name, device name and serial number for two different devices. Hardcoded serial numbers should never be returned; if the driver is not able to obtain a serial number from the device itself, it should return no serial number at all.
+
+
+    * DEV_STATUS (4166h)
+
+Obtain the availability and change status for a device or logical unit.
+
+Input:   A = Device index, 1 to 7
+         B = Logical unit number, 1 to 7
+             0 to return the status of the device itself
+Output:  A = Status for the specified logical unit, or for the whole device if 0 was specified:
+             0: The device or logical unit is not available, or the device or logical unit number supplied is invalid.
+             1: The device or logical unit is available and has not changed since the last status request.
+             2: The device or logical unit is available and has changed since the last status request
+                (for devices, the device has been unplugged and a different device has been plugged which has been assigned the same device index;
+                 for logical units, the media has been changed).
+             3: The device or logical unit is available, but it is not possible to determine whether it has been changed or not since the last status request.
+
+Devices not supporting hot-plugging must always return status value 1. Non removable logical units may return values 0 and 1.
+
+In case of hot-plug devices, this routine may return 2 if a device is unplugged and then the same device is plugged again. MSX-DOS will detect by itself whether the device is the same or not, by using the manufacturer, device and serial number strings.
+
+
+    * LUN_INFO (4169h)
+
+Obtain information for a logical unit.
+
+Input:   A  = Device index, 1 to 7
+         B  = Logical unit number, 1 to 7
+         HL = Pointer to buffer in non-page 1 RAM
+Output:  A = 0: Ok, buffer filled with information
+             1: Error, device or logical unit not available, or invalid device index or logical unit number supplied
+
+This routine returns information about the given logical unit for a device. Note that all devices have at least one logical unit.
+
+The information returned is as follows:
+
++0 (1): Medium type:
+        0: Block device
+        1: CD or DVD reader or recorder
+        2-254: Unused (reserved for future use)
+        255: Other type
++1 (2): Sector size, 0 if this information does not apply or is not available
++3 (4): Total number of available sectors, 0 if this information does not apply or is not available
++7 (1): Flags:
+	bit 0: 1 if the medium is removable
+        bit 1: 1 if the medium is read only
+        bit 2: 1 if the logical unit is a floppy disk drive
++8 (2): Number of cylinders
++10 (1): Number of heads
++11 (1): Number of sectors per track
+
+"Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disk, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via the DEV_RW routine.
+
+Note that MSX-DOS will refuse to work with a device that is reported as a non-block device or having a sector size different from 512 bytes, unless the driver supports direct filesystem access for that device (not supported in alpha 1).
+
+The information about cylinders, heads and sectors per tracks apply only for hard disks. For other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is used by FDISK in order to properly align partitions on the disk.
+
+The "read only" flags should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dinamically write protected and write enabled should not be reported as a read-only device.
+
+MSX-DOS will allow formatting a device via the MSX-DOS "FORMAT" command or the MSX-BASIC "CALL FORMAT" command only if the floppy disk drive flag is set.
+
+
+    * DEV_FORMAT (416Ch)
+
+(This routine is not used by MSX-DOS in alpha 1)
+
+Perform physical format on a logical unit.
+
+Input:   A = Device index, 1 to 7
+         B = Logical unit number, 1 to 7
+         C = Format choice, 0 to return choice string
+
+Output:
+        When C=0 at input:
+        A = 0: Ok, address of choice string returned
+            .IFORM: Invalid device or logical unit number, or device not formattable
+        HL = Address of format choice string (in bank 0 or 3), only if A=0 returned.
+             Zero, if only one choice is available.
+
+        When C<>0 at input:
+        A = 0: Ok, device formatted
+            Other: error code, same as DEV_RW plus:
+            .IPARM: Invalid format choice
+            .IFORM: Invalid device or logical unit number, or device not formattable
+        B = Media ID if the device is a floppy disk, zero otherwise
+            (only if A=0 is returned)
+
+This routine performs physical format on a device. It is intended mainly for floppy disks but may be used on any other type of device as well.
+
+When called with C=0, the routine should return either A=.IFORM (if the device is not formattable), A=0 and HL=0 (if the device is formattable but there is only one formatting option), or A=0 and HL pointing to a zero-terminated string with the format options. This string must be embedded in the same address of the kernel banks 0 and 3.
+
+MSX-DOS provides the built-in string "Single sided / Double sided" at address 7420h. If a different string is needed, then the kernel file must be patched with the appropriate string. See the "Architecture of the MSX-DOS kernel" and "How to create a kernel with embedded driver" sections for details.
+
+If the media is a floppy disk, the driver must return is type after successful formatting, so that MSX-DOS can appropriately initialize its boot sector, FAT and root directory. The disk type is returned in the form of a media ID byte, with the following possible values:
+
+F0h: 3.5" Double Sided, 80 tracks per side, 18 sectors per track (1.44MB)
+F8h: 3.5" Single sided, 80 tracks per side, 9 sectors per track (360K)
+F9h: 3.5" Double sided, 80 tracks per side, 9 sectors per track (720K)
+FAh: 5.25" Single sided, 80 tracks per side, 8 sectors per track (320K)
+FBh: 3.5" Double sided, 80 tracks per side, 8 sectors per track (640K)
+FCh: 5.25" Single sided, 40 tracks per side, 9 sectors per track (180K)
+FDh: 5.25" Double sided, 40 tracks per side, 9 sectors per track (360K)
+FEh: 5.25" Single sided, 40 tracks per side, 8 sectors per track (160K)
+FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
+
+
+    * DEV_CMD (416Fh)
+
+Executes a direct command on a device.
+
+Input:    A = Device number, 1 to 7
+          B = Logical unit number, 1 to 7 (if applicable)
+          HL = Address of the non-page 1 input buffer
+          DE = Address of non-page 1 output buffer, 0 if not necessary
+Output:   Output buffer appropriately filled (if applicable)
+          A = Error code:
+              0: Ok
+              1: Invalid device number or logical unit number, or device not ready
+              2: Invalid or unknown command
+              3: Insufficient output buffer space
+              4-15: Reserved for future use
+              16-255: Device specific error codes
+
+This routine provides a passthrough mechanism so that the user can execute commands directly on the devices; MSX-DOS does never use this routine. Which commands are available, what does each command, the format and contents of the input and output buffers, and the error codes returned (if errors in the range 16-255 are returned), depend on the specific technology and devices used, and must be documented by the developer of the driver.
+
+The first two bytes of the input and output buffers must contain the size of the buffer, not incuding the size bytes themselves. For example, if 16 bytes are needed for a buffer, then 18 bytes must be allocated, and the first two bytes of the buffer must be 16, 0.
+
+If the driver does not support the execution of direct commands in any case, then this routine must simply return A=2 always.

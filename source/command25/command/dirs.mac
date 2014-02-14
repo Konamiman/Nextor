@@ -1,0 +1,330 @@
+	SUBTTL  Directory Commands
+	SUBTTL  Directory Commands
+;
+;
+	INCLUDE COMMAND.INC
+;
+;        This module contains the command routines for the commands which deal
+; with  sub-directories  on  the  disk, such as CHDIR, RMDIR, RNDIR, MVDIR and
+; ATDIR. These routines have much in common with the 'file'  versions  of  the
+; commands  such  as RENAME and ATTR, and so these commands are in this module
+; too.
+;
+;
+		SUBTTL  ATDIR
+;******************************************************************************
+;
+;       The following entry points are for ATDIR and ATTRIB.
+;
+;
+@ATDIR::        SCF                     ; Cy => directories only, else files.
+@ATTRIB::       EX      AF,AF'          ; Save directories/files flag.
+		LD      DE,0            ; Initialise + and - letter flags
+		LD      (PLATS##),DE    ;   ('+' <- 0, '-' <- FF).
+		CALL    PARSAT          ; Parse R and H attributes.
+		RET     NZ
+;
+if 1    ;(Hal_F)
+		EXX                     ; Save text pointer.
+		LD      HL,PLATS##      ; Give error if both + and - letter
+		LD      A,(HL)          ;   given.
+		LD      C,A
+		INC     HL
+		AND     (HL)
+		LD      A,.IATTR##
+		RET     NZ
+;
+		LD      A,C             ; Give error if no attributes
+		OR      (HL)            ;   specified to set or reset.
+		LD      A,.NOPARM##
+		RET     Z
+;
+		LD      A,(HL)          ; Convert '-' flags into mask.
+		CPL
+		LD      (HL),A
+		EXX
+;
+		EX      AF,AF'          ; Get back directoies/files flag.
+		LD      DE,ATOPTS##     ; DE -> table of valid / options.
+		CALL    PARSE##
+		CALL    Z,CHKPAR##
+		CALL    Z,CHKEOL##
+		RET     NZ
+else
+		EX      AF,AF'          ; Get back directoies/files flag.
+		LD      DE,ATOPTS##     ; DE -> table of valid / options.
+		CALL    PARSE##
+		CALL    Z,CHKPAR##
+		CALL    Z,CHKEOL##
+		RET     NZ
+;
+		LD      HL,PLATS##      ; Give error if both + and - letter
+		LD      A,(HL)          ;   given.
+		LD      C,A
+		INC     HL
+		AND     (HL)
+		LD      A,.IATTR##
+		RET     NZ
+;
+		LD      A,C             ; Give error if no attributes
+		OR      (HL)            ;   specified to set or reset.
+		LD      A,.NOPARM##
+		RET     Z
+;
+		LD      A,(HL)          ; Convert '-' flags into mask.
+		CPL
+		LD      (HL),A
+endif
+		CALL    FIRST##
+;
+AT10:           RET     C               ; Ret if done.
+;
+		LD      A,(FIB##+FIB_AT); Get current attributes.
+		LD      HL,PLATS##
+		OR      (HL)            ; Set '+' attributes.
+		INC     HL
+		AND     (HL)            ; Clear '-' attributes.
+		LD      L,A             ; L=new attributes.
+		LD      DE,FIB##
+		LD      C,_ATTR##
+		LD      A,1             ; A=1 => set attributes.
+		CALL    _BDOS##         ; Attempt to change attributes.
+		CALL    NZ,DBADFIL      ; Print filename & error if error.
+		CALL    NEXT##          ; Look for next file.
+		JR      AT10
+;
+;
+GETAT:          CALL    GETCH##
+PARSAT:         LD      BC,PLATS##      ; BC -> + letter flags.
+		LD      A,(HL)
+		CP      '+'             ; '+' attribute ?
+		JR      Z,GOTPL         ; Go if yes.
+;
+		INC     BC              ; Point to - letter flags.
+		CP      '-'             ; '-' attribute ?
+		JR      NZ,XORET        ; Return no error if not.
+;
+GOTPL:          INC     HL              ; Point to letter.
+		LD      A,(HL)          ; Get letter & upper case.
+		INC     HL
+		CALL    UC##
+		CP      'R'             ; R ?
+		JR      NZ,NMR          ; Go if not.
+;
+		EX      AF,AF'          ; Only allow 'R' if not ATDIR (dir-
+		PUSH    AF              ;   ectories can't be read only).
+		EX      AF,AF'
+		POP     AF
+		SBC     A,A
+		AND     .IATTRS##
+		RET     NZ
+;
+		LD      A,(BC)
+		.SET    ATRO,A          ; Else set appropriate R flag.
+		LD      (BC),A
+		JR      GETAT           ; Check for next + or - letter.
+
+NMR:            CP      'H'             ; H ?
+		LD      A,.IATTR##      ; Invalid attribute letter if not.
+		RET     NZ
+;
+		LD      A,(BC)
+		.SET    ATHID,A         ; Set appropriate H flag.
+		LD      (BC),A
+		JR      GETAT           ; Check for next + or - letter.
+;
+XORET:          XOR     A
+		RET
+;
+;
+;
+		SUBTTL  RMDIR
+;******************************************************************************
+;
+;       Below are the entry points for RMDIR and ERASE.
+;
+;        If the search filename is totally ambiguous ie. *.*, then an 'Are you
+; sure  ?'  prompt  is printed. This test is made by checking the last item of
+; the whole path string for ????????.???, which is a lot easier  than  testing
+; the user's string.
+;
+;
+@RMDIR::        SCF                     ; Cy => directories only, else files.
+@ERASE::        LD      DE,ERAOPTS##    ; DE -> table of valid / options.
+		CALL    PARSE##         ; Parse filenames.
+		CALL    Z,CHKPAR##      ; Check something was parsed.
+		CALL    Z,CHKEOL##      ; Check for garbage.
+		CALL    Z,FIRST##       ; Find the first file to delete.
+		LD      DE,BUFF##       ; Get the whole path string for *.*
+		LD      C,_WPATH##      ;   testing.
+		CALL    Z,_BDOS##
+		RET     NZ              ; Return if any errors from above.
+;
+		.BIT    ATDIR,(IY+@FLAGS##)     ; If ERASE (not RMDIR) then
+		JR      NZ,DELOOP               ;    print a prompt if *.*.
+;
+		CALL    AMBIG?          ; Check for total ambiguity.
+		LD      A,__ERALL##
+		CALL    Z,YN            ; 'Are you sure ?' if *.*.
+		LD      A,0
+		RET     Z               ; Return with no error if not sure.
+;
+DELOOP:         LD      DE,FIB##        ; DE -> FIB for found file.
+		LD      C,_DELETE##
+		CALL    _BDOS##         ; Attempt to delete file.
+		CALL    NZ,DBADFIL      ; Print filename & error if failed.
+		CALL    NEXT##          ; Look for next file.
+		JR      NC,DELOOP       ; Delete it if found.
+		RET                     ; Else return.
+;
+;
+AMBIG?:         LD      B,8             ; First check for 8 '?'s.
+		CALL    CHKAMB
+		RET     NZ              ; Return if filename not '????????'.
+;
+		LD      A,(HL)
+		CP      '.'
+		RET     NZ              ; Return if not '.' after filename.
+;
+		INC     HL
+		LD      B,3             ; Check extension is ambiguous.
+CHKAMB:         LD      A,(HL)          ; Get character from filename.
+		CP      '?'             ; Check it's a '?'.
+		RET     NZ              ; Return with NZ if it's not.
+;
+		INC     HL              ; Else check next.
+		DJNZ    CHKAMB
+		RET                     ; Ret with Z if all '?'s.
+;
+;
+;
+		SUBTTL  YN
+;******************************************************************************
+;
+;       This subroutine is called to get a 'Y/N' response.
+;
+; On entry, A contains a message number to be printed first.
+; On exit, Z is set if the response was not 'Y'.
+;
+;
+YN::            LD      C,A             ; Save message number.
+DYN:            CALL    DMESS##         ; Print message first.
+		PUSH    BC
+		CALL    INCH##          ; Get a character in L, print CRLF.
+		POP     BC
+		LD      A,__N##
+		CALL    CHKCHR          ; Check response for 'N'.
+		RET     C               ; Return with Z and C if 'N'.
+;
+		LD      A,__Y##
+		CALL    CHKCHR          ; Check response for 'Y'.
+		SBC     A,A             ; Return with NZ and C if 'Y'.
+		RET     C
+;
+		LD      A,C             ; Get initial message again.
+		JR      DYN
+;
+;
+CHKCHR:         CALL    GETMSG##        ; DE -> string of valid characters.
+CHK:            LD      A,(DE)          ; Get character from string.
+		OR      A
+		RET     Z               ; Ret with NC if end of string.
+;
+		INC     DE
+		CP      L               ; Same as user's response ?
+		JR      NZ,CHK          ; Check next character if not.
+;
+		SCF                     ; Else return C and Z.
+		RET
+;
+;
+;
+		SUBTTL  DBADFIL
+;******************************************************************************
+;
+;        When a command such as ERASE gets an error  from  the  function  call
+; that  performs the function (eg. the DELETE function call) then this routine
+; is called to print out the filename and the error.
+;
+;        The entry point DBADF is called from COPY, in which  case  the  error
+; code  is in C (normally in A) and the filename is pointed to by DE (normally
+; in FIB).
+;
+; On entry, A contains the error code from the erroneous function call.
+;
+DBADFIL::       LD      C,A             ; Save the error code.
+		LD      DE,FIB##+FIB_FN ; Print out the filename.
+;
+DBADF::         CALL    DMS##
+;
+		LD      A,__HYPHS##     ; Followed by hyphens.
+		CALL    DMESS##
+;
+		LD      B,C             ; Get message for error.
+		LD      C,_EXPLAIN##
+		LD      DE,BUFF##
+		CALL    _BDOS##
+		CALL    DMS##           ; Print the error message.
+		JP      CRLF##          ; Followed by CR,LF.
+;
+;
+;
+		SUBTTL  RNDIR/MVDIR
+;******************************************************************************
+;
+;        These are the move and rename command  routines.  The  parameters  to
+; MOVE,  MVDIR, RENAME and RNDIR are all very similar, and so they all use the
+; same routine.
+;
+;
+@MVDIR::        SCF                     ; C => find directories, else files.
+@MOVE::         INC     A               ; Z => move, else rename.
+		CODE    MVI B           ; Skip RNDIR entry point.
+@RNDIR::        SCF
+@RENAME::       PUSH    AF              ; Save RENAME/RNDIR/MOVE/MVDIR flags.
+		LD      DE,RNOPTS##
+		CALL    PARSE##         ; Parse source filename.
+		CALL    Z,CHKPAR##      ; Check something was parsed.
+		EX      AF,AF'
+		POP     AF
+		EX      AF,AF'
+		RET     NZ
+;
+		EX      AF,AF'
+		LD      A,_MOVE##       ; Assume MOVE.
+		JR      Z,MV10          ; Go if MOVE or MVDIR.
+;
+		LD      A,_RENAME##     ; Else RENAME or RNDIR.
+		EX      AF,AF'
+		OR      (HL)            ; Else check that the second parameter
+		LD      A,.NOPARM##     ;   to rename was given.
+		RET     Z
+;
+		EX      AF,AF'
+MV10:           EX      AF,AF'
+		CALL    PRS##           ; Parse second item.
+		CALL    Z,GCHKEOL##     ; Check for garbage on end of line.
+		RET     NZ
+;
+		LD      (HL),A          ; Terminate second parameter.
+		PUSH    DE              ; Save ptr to second item.
+		CALL    FIRST##
+		POP     HL
+;
+MV20:           RET     C               ; Ret if all done.
+;
+		PUSH    HL              ; Save pointer to second parameter.
+		LD      DE,FIB##
+		EX      AF,AF'
+		LD      C,A             ; Get function code for MOVE/RENAME.
+		EX      AF,AF'
+		CALL    _BDOS##         ; Attempt to do the move/rename.
+		CALL    NZ,DBADFIL      ; Print filename & error if any.
+		CALL    NEXT##
+		POP     HL
+		JR      MV20
+;
+;
+;
+		SUBTTL
+		END

@@ -1,0 +1,478 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	Messages for disk ROM
+;-----------------------------------------------------------------------------
+;
+;    This file contains all the  text  messages  used  by  the  ROM  resident
+; sections  of  code,  and  the RAM resident DOS kernel.  The messages may be
+; changed for another language.  All of the messages are accessed by  calling
+; the  routines  "ERR_MSG"  (for  error messages) or "ROM_MSG" (for all other
+; messages), and these routines may be changed  provided  that  the  function
+; remains the same.
+;
+;    The specification of these routines is:
+;
+; Parameters:    A = Message number (for ROM_MSG)
+;		     Error code (for ERR_MSG)
+;		DE = Pointer to message buffer
+; Results:       A = 00h if match was found (Z-flag set)
+;		     HL = Pointer to terminating null byte of copied ASCIIZ
+;			  message string
+;		   = unchanged if no match was found (Z-flag clear)
+;		     HL = Undefined for ROM_MSG
+;			= Pointer to terminating null byte of copied "System
+;			  error " or "User error " message string for ERR_MSG.
+; Corrupts:     AF,HL
+;
+;
+;-----------------------------------------------------------------------------
+;
+KNJMSG	equ	1	;; English/Kanji(Japanese) bilingual version
+;
+ERR_MSG::	ld	hl,ERR_MSG_TABLE	;Look error code up in the
+		call	get_message		; table and return if message
+		ret	z			; is found.
+;
+		push	af			;If no message is found then
+		cp	40h			; return "System error "
+		ld	a,__SYS_ER		; for codes above 3Fh and
+		jr	nc,default_err		; "User error " for 3Fh
+		ld	a,__USR_ER		; and below.
+default_err:	call	ROM_MSG
+		pop	af
+		ret
+;
+;
+;
+ROM_MSG::	ld	hl,ROM_MSG_TABLE
+get_message:	push	bc
+		push	de
+		ld	e,a
+if KNJMSG
+		ld	a,(KANJTABLE##)		;!!!! AT THE MOMENT !!!!
+		or	a			;In Kanji mode?
+		jr	z,message_loop		;No
+;
+		dec	hl			;Chain on to the next
+		ld	a,(hl)			; message table (Kanji)
+		dec	hl
+		ld	l,(hl)
+		ld	h,a
+;
+endif
+message_loop:	ld	a,(hl)			;Look at next item in
+		or	a			; the table.
+		ld	a,e
+		jr	z,msg_not_found		;Exit if end of table.
+		sub	(hl)
+		inc	hl
+		ld	c,(hl)
+		ld	b,0
+		inc	hl			;HL -> start of string
+		jr	z,got_message		;Exit if numbers match
+		add	hl,bc			;Step past this message to
+		jr	message_loop		; next one in the table.
+;
+got_message:	pop	de
+		push	de			;Copy down this message and
+		ldir				; leave HL pointing past the
+		ex	de,hl			; terminating null byte.
+msg_not_found:	pop	de			;Return A unchanged if failed
+		pop	bc
+		or	a			;Set Z-flag if found
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+msg_num defl	0
+;
+msg	macro	name,text
+	 local	 length,start		;;Macro to assign mesage numbers,
+msg_num  defl	 msg_num+1		;; declare them external, and add the
+__&name  equ	 msg_num		;; message to the message table.
+	 public  __&name
+	 defb	 __&name
+	 defb	 length
+start:	 defb	 text
+	 defb	 0
+length	 equ	 $-start
+	endm
+;
+;	----------------------------------------
+;
+	defw	ROM_KMSG_TABLE
+ROM_MSG_TABLE:
+;
+	;msg	NORAM,	<"Not enough memory">
+	msg	TOOMD,	<"Driver table is corrupted:",13,10,"Too many drives allocated">
+	msg	NOEMP,	<"Driver table is corrupted:",13,10,"Unexpected non-empty",13,10,"entry found">
+	msg	BADDI,	<"Boot error: disk controller",13,10,"ID does not match size of",13,10,"driver table">
+	msg	INITE,	<"Boot error:",13,10,"Kernel initialization code",13,10,"failed, code: ">
+	msg	BHIM,   <"Boot error:",13,10,"Not enough memory for",13,10,"BASIC variables">
+;
+	msg	FMT1,	<"Drive name? (">
+	msg	FMT2,	<") ">
+	msg	STRIKE,	<"Strike a key when ready ">
+	msg	ABORT,	<"Aborted">
+	msg	FORMAT,	<"Format complete">
+;
+	msg	PRM1,	<"Insert disk for drive ">
+	msg	PRM2,	<":">
+	msg	PRM3,	<"and strike a key when ready ">
+;
+	msg	ASTS,	<"*** ">
+;
+	msg	SYS_ER,	<"System error ">
+	msg	USR_ER,	<"User error ">
+;
+	defb	0		;End of table
+;
+;
+;-----------------------------------------------------------------------------
+;
+warn	macro	text
+	 if1
+	  .printx % text
+	 endif
+	endm
+;
+;
+err	macro	code,text
+	 local	 start,length
+	 defb	 code&##
+	 defb	 length
+start:	 defb	 text
+	 defb	 0
+length	 equ	 $-start
+	 if1
+	  if	  length gt 64
+	   warn    <Error message for '&code' is too long>
+	  endif
+	 endif
+	endm
+;
+;	----------------------------------------
+;
+	defw	ERR_KMSG_TABLE
+ERR_MSG_TABLE:
+;
+;    The following errors are those which a disk error  routine  may  normally
+; expect  to  be  passed,  although such a routine should be general enough to
+; handle any error code.
+;
+	err	.NCOMP,	<"Incompatible disk">
+	err	.WRERR,	<"Write error">
+	err	.DISK,	<"Disk error">
+	err	.NRDY,	<"Not ready">
+	err	.VERFY,	<"Verify error">
+	err	.DATA,	<"Data error">
+	err	.RNF,	<"Sector not found">
+	err	.WPROT,	<"Write protected disk">
+	err	.UFORM,	<"Unformatted disk">
+	err	.NDOS,	<"Not a DOS disk">
+	err	.WDISK,	<"Wrong disk">
+	err	.WFILE,	<"Wrong disk for file">
+	err	.SEEK,	<"Seek error">
+	err	.IFAT,	<"Bad file allocation table">
+	err	.IFORM,	<"Cannot format this drive">
+;
+;
+;    The following errors are those which may be returned by KBDOS functions.
+;
+	err	.INTER,	<"Internal error">
+;
+	err	.NORAM,	<"Not enough memory">
+	err	.IBDOS,	<"Invalid MSX-DOS call">
+;
+	err	.IDRV,	<"Invalid drive">
+	err	.IFNM,	<"Invalid filename">
+	err	.IPATH,	<"Invalid pathname">
+	err	.PLONG,	<"Pathname too long">
+;
+	err	.NOFIL,	<"File not found">
+	err	.NODIR,	<"Directory not found">
+	err	.DRFUL,	<"Root directory full">
+	err	.DKFUL,	<"Disk full">
+	err	.DUPF,	<"Duplicate filename">
+	err	.DIRE,	<"Invalid directory move">
+	err	.FILRO,	<"Read only file">
+	err	.DIRNE,	<"Directory not empty">
+	err	.IATTR,	<"Invalid attributes">
+	err	.DOT,	<"Invalid . or .. operation">
+	err	.SYSX,	<"System file exists">
+	err	.DIRX,	<"Directory exists">
+	err	.FILEX,	<"File exists">
+	err	.FOPEN,	<"File is already in use">
+;
+	err	.OV64K,	<"Cannot transfer above 64k">
+	err	.FILE,	<"File allocation error">
+	err	.EOF,	<"End of file">
+	err	.ACCV,	<"File access violation">
+;
+	err	.IPROC,	<"Invalid process id">
+	err	.NHAND,	<"No spare file handles">
+	err	.IHAND,	<"Invalid file handle">
+	err	.NOPEN,	<"File handle not open">
+	err	.IDEV,	<"Invalid device operation">
+;
+	err	.IENV,	<"Invalid environment string">
+	err	.ELONG,	<"Environment string too long">
+;
+	err	.IDATE,	<"Invalid date">
+	err	.ITIME,	<"Invalid time">
+;
+	err	.RAMDX,	<"RAM disk (drive H:) already exists">
+	err	.NRAMD,	<"RAM disk does not exist">
+;
+	err	.HDEAD,	<"File handle has been deleted">
+	err	.ISBFN,	<"Invalid sub-function number">
+	err	.IFCB,	<"Invalid File Control Block">
+
+	err	.IDRVR, <"Invalid disk driver">
+	err	.IDEVL, <"Invalid device or logical unit">
+	err	.IPART, <"Invalid partition number">
+	err	.PUSED, <"Partition is already in use">
+;
+;
+;    The following are errors which the KBDOS may pass to the  ABORT  routine.
+; Of  cource  a  user  abort routine may see any other error but these are the
+; ones which are generated internally and may require special case handling.
+;
+	err	.STOP,	<"Ctrl-STOP pressed">
+	err	.CTRLC,	<"Ctrl-C pressed">
+	err	.ABORT,	<"Disk operation aborted">
+	err	.OUTERR,<"Error on standard output">
+	err	.INERR,	<"Error on standard input">
+;
+;
+;    The following errors are those generated by COMMAND2.COM.  These will not
+; be  returned from KBDOS functions, but user application programs may find it
+; useful to return some of these errors.
+;
+	err	.BADCOM,<"Wrong version of command">
+	err	.BADCM,	<"Unrecognized command">
+	err	.BUFUL,	<"Command too long">
+;
+	err	.IPARM,	<"Invalid parameter">
+	err	.INP,	<"Too many parameters">
+	err	.NOPAR,	<"Missing parameter">
+	err	.IOPT,	<"Invalid option">
+	err	.BADNO,	<"Invalid number">
+;
+	err	.NOHELP,<"File for HELP not found">
+	err	.BADVER,<"Wrong version of MSX-DOS">
+;
+	err	.NOCAT,	<"Cannot concatenate destination file">
+	err	.BADEST,<"Cannot create destination file">
+	err	.COPY,	<"File cannot be copied onto itself">
+	err	.OVDEST,<"Cannot overwrite previous destination file">
+;
+	err	.INSDSK,<"Insert MSX-DOS2 disk in drive ",7,":">
+	err	.PRAK,	<"Press any key to continue... ">
+
+	defb	0		;End of table
+;
+;
+;-----------------------------------------------------------------------------
+;
+msg_num defl	0
+;
+msg	macro	name,text
+	 local	 length,start		;;Macro to assign mesage numbers,
+msg_num  defl	 msg_num+1		;; declare them external, and add the
+__&name  equ	 msg_num		;; message to the message table.
+	 public  __&name
+	 defb	 __&name
+	 defb	 length
+start:	 defb	 text
+	 defb	 0
+length	 equ	 $-start
+	endm
+;
+;	----------------------------------------
+;
+ROM_KMSG_TABLE:
+;
+	;msg	NORAM,	<"メモリが足りません">
+	;msg	TOOMD,	<"Driver table is corrupted:",13,10,"Too many drives allocated">
+	 msg	TOOMD,	<"ドライバのテーブルが壊れています:",13,10,"ドライブの割り当てが多すぎます">
+
+	;msg	NOEMP,	<"Driver table is corrupted:",13,10,"Unexpected non-empty",13,10,"entry found">
+	 msg	NOEMP,	<"ドライバのテーブルが壊れています:",13,10,"予想外の非空のエントリが見つかりました">
+	;msg	BADDI,	<"Boot error: disk controller",13,10,"ID does not match size of",13,10,"driver table">
+	 msg	BADDI,	<"起動エラー：",13,10,"ディスクコントローラ番号ドライバーテーブルのサイズと一致しません">
+	;msg	INITE,	<"Boot error:",13,10,"Kernel initialization code",13,10,"failed, code: ">
+	 msg	INITE,	<"起動エラー：",13,10,"カーネルの初期化コードに失敗しました。 コード: ">
+	;msg	BHIM,   <"Boot error:",13,10,"Not enough memory for",13,10,"BASIC variables">
+	 msg	BHIM,   <"起動エラー：",13,10,"BASIC変数のメモリが足りません">
+
+;
+	msg	FMT1,	<"ドライブ名は? (">
+	msg	FMT2,	<") ">
+	msg	STRIKE,	<"何かキーを押して下さい ">
+	msg	ABORT,	<"打ち切られました">
+	msg	FORMAT,	<"フォーマットが完了しました">
+;
+	msg	PRM1,	<"ドライブ">
+	msg	PRM2,	<":用のディスクを入れて">
+	msg	PRM3,	<"何かキーを押して下さい">
+;
+	msg	ASTS,	<"*** ">
+;
+	msg	SYS_ER,	<"システムエラー ">
+	msg	USR_ER,	<"ユーザーエラー ">
+;
+	defb	0		;End of table
+;
+;
+;-----------------------------------------------------------------------------
+;
+warn	macro	text
+	 if1
+	  .printx % text
+	 endif
+	endm
+;
+;
+err	macro	code,text
+	 local	 start,length
+	 defb	 code&##
+	 defb	 length
+start:	 defb	 text
+	 defb	 0
+length	 equ	 $-start
+	 if1
+	  if	  length gt 64
+	   warn	   <Error message for '&code' is too long>
+	  endif
+	 endif
+	endm
+;
+;	----------------------------------------
+;
+ERR_KMSG_TABLE:
+;
+;    The following errors are those which a disk error  routine  may  normally
+; expect  to  be  passed,  although such a routine should be general enough to
+; handle any error code.
+;
+	err	.NCOMP,	<"このディスクは使用できません">
+	err	.WRERR,	<"書き込み異常です">
+	err	.DISK,	<"ディスクが異常です">
+	err	.NRDY,	<"ディスクが入っていません">
+	err	.VERFY,	<"正しく書き込まれませんでした">
+	err	.DATA,	<"ディスクのデータが異常です">
+	err	.RNF,	<"セクターが見つかりません">
+	err	.WPROT,	<"ディスクが書き込み保護されています">
+	err	.UFORM,	<"ディスクがフォーマットされていません">
+	err	.NDOS,	<"MSX-DOSディスクではありません">
+	err	.WDISK,	<"ディスクが違います">
+	err	.WFILE,	<"このファイル用のディスクではありません">
+	err	.SEEK,	<"シークエラーです">
+	err	.IFAT,	<"FAT異常です">
+	err	.IFORM,	<"このドライブはフォーマットできません">
+;
+;
+;    The following errors are those which may be returned by KBDOS functions.
+;
+	err	.INTER,	<"DOSが異常です">
+;
+	err	.NORAM,	<"メモリー不足です">
+	err	.IBDOS,	<"無効なMSX-DOSファンクション番号です">
+;
+	err	.IDRV,	<"無効なドライブ名です">
+	err	.IFNM,	<"不正なファイル名です">
+	err	.IPATH,	<"無効なパス名です">
+	err	.PLONG,	<"パス名が長過ぎます">
+;
+	err	.NOFIL,	<"ファイルが見つかりません">
+	err	.NODIR,	<"ディレクトリが見つかりません">
+	err	.DRFUL,	<"ルートディレクトリがいっぱいです">
+	err	.DKFUL,	<"ディスクがいっぱいです">
+	err	.DUPF,	<"ファイル名が重複しています">
+	err	.DIRE,	<"ディレクトリが移動できません">
+	err	.FILRO,	<"ファイルが読み出し専用です">
+	err	.DIRNE,	<"ディレクトリが空ではありません">
+	err	.IATTR,	<"無効な属性です">
+	err	.DOT,	<".や..に対しては操作できません">
+	err	.SYSX,	<"システムファイルが既にあります">
+	err	.DIRX,	<"ディレクトリが既にあります">
+	err	.FILEX,	<"ファイルが既にあります">
+	err	.FOPEN,	<"ファイルが使用中です">
+;
+	err	.OV64K,	<"64Kを越える転送はできません">
+	err	.FILE,	<"ファイルの割当異常です">
+	err	.EOF,	<"ファイルの終わりです">
+	err	.ACCV,	<"ファイルアクセス異常です">
+;
+	err	.IPROC,	<"無効なプロセスIDです">
+	err	.NHAND,	<"ファイルハンドルが足りません">
+	err	.IHAND,	<"無効なファイルハンドルです">
+	err	.NOPEN,	<"ファイルハンドルがオープンされていません">
+	err	.IDEV,	<"無効なデバイスオペレーションです">
+;
+	err	.IENV,	<"無効な環境変数です">
+	err	.ELONG,	<"環境変数が長過ぎます">
+;
+	err	.IDATE,	<"無効な日付けです">
+	err	.ITIME,	<"無効な時間です">
+;
+	err	.RAMDX,	<"RAM DISK(ドライブH:)は既にあります">
+	err	.NRAMD,	<"RAM DISKがありません">
+;
+	err	.HDEAD,	<"ファイルが消去されています">
+	err	.ISBFN,	<"無効なサブファンクション番号です">
+	err	.IFCB,	<"無効なFCBです">
+
+	;TODO: Check these translations
+	err	.IDRVR, <"無効なディスクドライバです">	;<"Invalid disk driver">
+	err	.IDEVL,  <"無効なデバイスまたは論理ユニットです">	;<"Invalid device or logical unit">
+	err	.IPART, <"無効なパーティション番号">	;<"Invalid partition number">
+	err	.PUSED, <"パーティションが使用中です">	;<"Partition is already in use">
+
+;
+;
+;    The following are errors which the KBDOS may pass to the  ABORT  routine.
+; Of  cource  a  user  abort routine may see any other error but these are the
+; ones which are generated internally and may require special case handling.
+;
+	err	.STOP,	<"Ctrl-STOPが押されました">
+	err	.CTRLC,	<"Ctrl-Cが押されました">
+	err	.ABORT,	<"ディスク入出力が打ち切られました">
+	err	.OUTERR,<"標準出力でエラーが起きました">
+	err	.INERR,	<"標準入力でエラーが起きました">
+;
+;
+;    The following errors are those generated by COMMAND.COM.  These will  not
+; be  returned from KBDOS functions, but user application programs may find it
+; useful to return some of these errors.
+;
+	err	.BADCOM,<"コマンドのバージョンが違います">
+	err	.BADCMD,<"コマンドが違います">
+	err	.BUFUL,	<"コマンドが長すぎます">
+;
+	err	.IPARM,	<"無効なパラメータです">
+	err	.INP,	<"パラメータが多すぎます">
+	err	.NOPAR,	<"パラメータが不足しています">
+	err	.IOPT,	<"無効なオプション指定です">
+	err	.BADNO,	<"無効な数値です">
+;
+	err	.NOHELP,<"HELPファイルが見つかりません">
+	err	.BADVER,<"MSX-DOSのバージョンが違います">
+;
+	err	.NOCAT,	<"複写先ファイルは結合できません">
+	err	.BADEST,<"ファイルを作成できません">
+	err	.COPY,	<"自分自身にはコピーできません">
+	err	.OVDEST,<"ファイルの重ね書きができません">
+;
+	err	.INSDSK,<"MSX-DOS2 のディスクをドライブ ",7,": に入れて">
+	err	.PRAK,	<"何かキーを押して下さい ">
+;
+	defb	0		;End of table
+;
+;
+;-----------------------------------------------------------------------------
+;
+	end
+;

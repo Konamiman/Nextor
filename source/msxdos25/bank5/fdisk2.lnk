@@ -1,0 +1,11 @@
+-mjx
+-i fdisk2.ihx
+-b _CODE = 0x4120
+-b _DATA = 0xa000
+-k C:\Program Files (x86)\SDCC\bin\..\lib\z80
+-l msxchar.lib
+-l z80
+fdisk2.rel
+fdisk_crt0.rel
+
+-e

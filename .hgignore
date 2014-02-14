@@ -1,0 +1,21 @@
+syntax: glob
+
+bin/**
+*.sym
+*.SYM
+*.lst
+*.map
+*.noi
+*.rel
+*.hex
+*.bin
+info/*.pdf
+source/msxdos25/bank*/**.inc
+source/msxdos25/drivers/**.inc
+source/command25/msxdos/**.inc
+source/command25/msxdos/codes.mac
+source/command25/msxdos/data.mac
+source/tools/**.inc
+source/tools/codes.mac
+source/tools/data.mac
+*conflicto*.*

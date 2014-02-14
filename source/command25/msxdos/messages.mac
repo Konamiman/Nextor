@@ -1,0 +1,229 @@
+	TITLE	MSX-DOS 2 - MSX-DOS.SYS copyright (1986) IS Systems Ltd.
+	SUBTTL	Sample Messages File (English)
+;
+	.Z80
+;
+;
+;	 This is a sample messages file for MSX2-DOS.SYS. It contains messages
+; and text in English in the format required by the MSX2-DOS .REL files.
+;
+;	 Care  should be taken when changing this file that spaces within each
+; message  are preserved. Any of the messages may be changed to a null string,
+; and indeed in the standard English messages given  here  some  messages  are
+; already null.
+;
+;
+;	 These  messages  are  used  by  MSX-DOS.SYS  by looking for the 'n'th
+; string, where n is the number corresponding to the string required.  In  all
+; cases, the actual value of 'n' is defined by a label defined as external  in
+; this module, so the messages can be in any order. The strings themselves are
+; ordinary ASCII strings terminated by a null (0).
+;
+;	 A macro MSG is used here to  define  the  strings  and  the  external
+; lables.  It is used in the form: 1) MSG NAME,<STRING> or 2) MSG NAME. In the
+; former case, an external lable of the for __NAME with an  appropriate  value
+; is  declared, and the string is defined with DEFBs with the null on the end.
+; In the latter case, the label is still defined but no text is defined.  This
+; allows  following  DEFBs  to  define the text, which may be on more than one
+; line. Don't forget a DEFB 0 at the end though !.
+;
+;
+MSG	MACRO	NAME,TEXT
+__&NAME	 EQU	MSGNO		;; Define message number label.
+GLOBAL	 __&NAME		;; And declare it public.
+MSGNO	 DEFL	MSGNO+1
+	 IFNB	<TEXT>		;; Define the text, if given.
+	  DEFB	'&TEXT',0
+	 ENDIF
+	ENDM
+;
+MSGNO	DEFL	0		;; First message must be number 0.
+;
+;
+; Some useful constants.
+;
+CTRL_C	EQU	3
+LF	EQU	0AH
+CR	EQU	0DH
+;
+if 1
+	DEFW	END_MSG-$
+endif
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 The first three messages are not actually printed at all, but contain
+; the  valid  responses  to  the 'Abort, Retry, Ignore' disk error prompts. No
+; upper casing is performed by the disk error routine, so both the  upper  and
+; the lower case versions of the characters must be included in these strings.
+;
+;
+	MSG	ABORT
+	 DEFB	'Aa', CTRL_C, 0		; Abort characters.
+;
+	MSG	RETRY, <Rr>		; Retry characters.
+;
+	MSG	IGNORE, <Ii>,		; Ignore characters.
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 Disk  error  prompts  ('Abort,  Retry'  messages)  are printed in two
+; lines. The first line is printed in the following form:
+;
+;	  Not ready reading drive A:
+;	\/\       /\      /\     / \/
+;	a   --b--    --c-    -e-   f
+;
+;	  Not ready writing drive A:
+;	\/\       /\      /\     / \/
+;	a   --b--    --d-    -e-   f
+;
+;
+;	 Part (b) is an error message returned by the BDOS, and is not part of
+; this messages file. Part (a)  is  null  in  the  English  versions,  but  is
+; included  for greater flexibility in providing messages for other languages.
+; Part (f) is printed immediately after the drive letter, and is just a  colon
+; (:)  in  English. For other languages it could be replaced by a longer piece
+; of text. At the end of the message, a CR, LF is printed by  the  disk  error
+; routine.
+;
+;
+	MSG	PRERR			; Part (a) printed before disk error.
+	 DEFB	0			;   (null in English)
+;
+	MSG	READING, < reading>	; Part (c), one leading space.
+;
+	MSG	WRITING, < writing>	; Part (d), one leading psace.
+;
+	MSG	DRIVE, < drive >	; Part (e), 1 leading & trailing space.
+;
+	MSG	ARIDRV, <:>		; Printed after the drive letter.
+;
+;
+;
+;	 The  second  line  of  the disk error message has two forms, the form
+; actually printed depending on whether 'ignore' is considered  dangerous.  In
+; the English messages, if 'ignore'  is  not  recommended  then  the  'ignore'
+; option is not printed, although it will still be accepted as a response. The
+; messages are straight forward, and are not split into different sections.
+;
+;
+
+if 0
+	MSG	AR		; Message for when 'ignore' is not recommended.
+	 DEFB	'AR '		; One trailing space.
+	 DEFB	0
+;
+	MSG	ARI		; Message for when 'ignore' isn't so dangerous.
+	 DEFB	'ARI '	; One trailing space.
+	 DEFB	0
+else
+	MSG	AR		; Message for when 'ignore' is not recommended.
+	 DEFB	'Abort or Retry (A/R)? '		; One trailing space.
+	 DEFB	0
+;
+	MSG	ARI		; Message for when 'ignore' isn't so dangerous.
+	 DEFB	'Abort, Retry or Ignore (A/R/I)? '	; One trailing space.
+	 DEFB	0
+endif
+
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 When  COMMAND.COM  is  loaded by MSX-DOS.SYS (ie.  before it has been
+; loaded for the first time) a prompt will be printed if COMMAND.COM cannot be
+; found  on  disk or if an error occurs. If an error does occur, then an error
+; message will be printed before the prompt.
+;
+; The error message takes the form:
+;
+;	*** Disk operation aborted
+;	\  /\                    /\/
+;	 a    --------b---------  c
+;
+;
+; The actual prompt is printed in two lines and takes the form:
+;
+;	Insert COMMAND.COM disk in drive A:
+;	\                               /\/
+;	  --------------d--------------  e
+;
+;	Press any key to continue...
+;	\                           /
+;	  ------------f------------
+;
+;
+;	 Part  (c) is null in English, but is included for greater flexibility
+; in converting  the  messages  to  other  languages.   Part  (e)  is  printed
+; immediately after the drive letter, and in English is just a colon (:),  but
+; could  be a longer text message. Part (b) is not defined in this module, but
+; is the message returned by the BDOS in the MSX-DOS.SYS. Part (f) is  similar
+; to the message printed by the 'PAUSE' command in COMMAND.COM. After both the
+; messages above, a CR, LF is printed by MSX-DOS.SYS.
+;
+;	 Note that COMMAND.COM itself  prints  similar  messages  when  it  is
+; trying  to  re-load  itself  from  disk  after  running a program, and it is
+; desirable that the messages here and in COMMAND.COM are similar.
+;
+;	 A special variation of the error message printing occurs  when  there
+; is not enough memory for  MSX-DOS.SYS  to  start  up  (it  needs  to  reside
+; entirely in page 3). In this case, the message NOMEM is printed as the error
+; message, and the system then just halts. Is useful if this  message  informs
+; the user of this (as the standard English message given here  does),  rather
+; than  the  machine  just  dying. Similarly, the message BADVER is printed if
+; MSXDOS.SYS is run under a pre-2.00 version of the system.
+;
+;
+
+if 1
+	MSG	SPLATS, <*** >				; Part (a), one
+							;   trailing space.
+;
+	MSG	EREND					; Part (c)
+	 DEFB	0					;   (null in English).
+;
+	MSG	INSERT, <I >	; Part (d),
+							;   one trailing space.
+;
+	MSG	INSDRV, <:>				; Part (e).
+;
+	MSG	PAUSE, <P >	; Part (f), one
+							;   trailing space.
+;
+	MSG	NOMEM, <N>
+;
+	MSG	BADVER, <W>
+;
+
+else
+
+	MSG	SPLATS, <*** >				; Part (a), one
+							;   trailing space.
+;
+	MSG	EREND					; Part (c)
+	 DEFB	0					;   (null in English).
+;
+	MSG	INSERT, <Insert COMMAND2.COM disk in drive >	; Part (d),
+							;   one trailing space.
+;
+	MSG	INSDRV, <:>				; Part (e).
+;
+	MSG	PAUSE, <Press any key to continue... >	; Part (f), one
+							;   trailing space.
+;
+	MSG	NOMEM, <Not enough memory, system halted>
+;
+	MSG	BADVER, <Wrong version of MSX-DOS, system halted>
+;
+endif
+
+if 1
+END_MSG:
+endif
+;
+;
+	END
