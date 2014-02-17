@@ -7,11 +7,15 @@ bin/**
 *.map
 *.noi
 *.rel
+*.REL
 *.hex
+*.HEX
 *.bin
 info/*.pdf
 source/msxdos25/bank*/**.inc
 source/msxdos25/drivers/**.inc
+source/msxdos25/bank5/**.dat
+source/msxdos25/bank5/**.asm
 source/command25/msxdos/**.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac

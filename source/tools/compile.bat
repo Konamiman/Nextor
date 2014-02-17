@@ -15,6 +15,8 @@ set files=*.mac
 set files=%1.mac
 )
 
+if not exist ..\..\bin\tools md ..\..\bin\tools
+
 for /r %%f in (%files%) do (
 
 if not %%~nf==SHARED (

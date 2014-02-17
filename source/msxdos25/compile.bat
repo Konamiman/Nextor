@@ -7,6 +7,8 @@ echo ***  COMMON  ***
 echo ****************
 echo .
 
+if not exist ..\..\bin\kernels md ..\..\bin\kernels
+
 copy *.inc bank0\
 copy *.inc bank1\
 copy *.inc bank2\

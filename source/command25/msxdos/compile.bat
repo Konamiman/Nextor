@@ -13,5 +13,6 @@ del *.bin
 del *.hex
 del *.rel
 del *.sym
+if not exist ..\..\..\bin\tools md ..\..\..\bin\tools
 copy NEXTOR.SYS ..\..\..\bin\tools
 
