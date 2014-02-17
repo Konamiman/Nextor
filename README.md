@@ -7,7 +7,7 @@ Nextor is a disk operating system for MSX computers. It is built on top of the s
 You need:
 
 1. A Windows machine (if you succeed in building Nextor from a Linux machine, please let me know!)
-2. SDCC (http://sdcc.sourceforge.net), targetting the Z80 processor   
+2. SDCC ([http://sdcc.sourceforge.net](http://sdcc.sourceforge.net)), targetting the Z80 processor   
 3. .NET Framework 2.0 or higher (for the `SymToEqus` tool in the `wintools` folder)
 4. The `wintools` folder must be added to the `PATH` environment variable
 
