@@ -128,6 +128,13 @@ echo ****************
 echo .
 
 cd ..\bank5
+
+if not exist fdisk.bat (
+echo !!! FDISK is not compiled!
+call compfdsk.bat
+echo !!! FDISK compiled. Resuming kernel compilation now...
+)
+
 copy ..\codes.rel
 copy ..\kvar.rel
 copy ..\data.rel

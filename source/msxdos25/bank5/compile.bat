@@ -1,21 +1,13 @@
 @echo off
 cls
-sdasz80 -o fdisk_crt0.rel fdisk_crt0.s
 
-sdcc --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 --no-std-crt0 fdisk_crt0.rel msxchar.lib fdisk.c
+call compfdsk.bat
 if errorlevel 1 goto :end
-hex2bin -e dat fdisk.ihx
 
-sdcc --code-loc 0x4120 --data-loc 0xA000 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 --no-std-crt0 fdisk_crt0.rel msxchar.lib fdisk2.c
-if errorlevel 1 goto :end
-hex2bin -e dat fdisk2.ihx
+for /R %%I in (..\..\..\bin\kernels\*.*) do (
+dd if=fdisk.dat of=%%I bs=1 count=16000 seek=82176
+dd if=fdisk2.dat of=%%I bs=1 count=8000 seek=98560
+)
 
-rem goto :end
-
-echo -----------------------------------------
-echo Ready to compile kernel, press any key...
-pause > nul
-cd ..
-call compile
-cd bank5
 :end
+
