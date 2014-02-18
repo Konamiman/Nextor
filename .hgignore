@@ -20,6 +20,11 @@ source/command25/msxdos/**.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac
 source/tools/**.inc
+source/tools/*.com
+source/tools/*.COM
 source/tools/codes.mac
 source/tools/data.mac
 *conflicto*.*
+*.sln
+*.suo
+
