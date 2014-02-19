@@ -5,6 +5,8 @@ ld_a_iyl	macro
 	ld	a,l
 	endm
 
+FIB	equ	3000h
+
 	jp	START
 
       ; -------------------------------------------------------------------------------
@@ -52,10 +54,10 @@ ld_a_iyl	macro
 
 USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
-	db  "         or mount a file on a drive"
+	db  "         or mount a file on a drive",13,10
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
-	db  "MAPDRV <drive>: <filename> [/ro]"
+	db  "MAPDRV <drive>: <filename> [/ro]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
@@ -125,11 +127,8 @@ NO_LOCK:
 	ld	de,BUF
 	ld	ix,FIB
 	call	5
-	jr	nz,NO_FILE
-	ld	a,255
-	ld	(IS_FILE),a
+	jp	z,IS_FILE
 
-NO_FILE:
 	ld	a,(BUF)		;Check fo special values "d" and "u"
 	or	20h
 	cp	"d"
@@ -360,6 +359,45 @@ DO_LOCK_OK:
 	ld	c,_TERM##
 	jp	5
 
+	;--- Do the mapping to a file.
+	;    FIB is appropriately filled already.
+
+IS_FILE:
+
+	call	CHKNEX21
+
+	; * First, extract "/ro" parameter if present
+
+	ld	de,FIB+64
+	ld	a,3
+	call	EXTPAR##
+	ld	d,0
+	jp	c,DO_FILE
+
+	ld	a,(FIB+64)
+	cp	'/'
+	jp	nz,IPARM_TERM
+	ld	a,(FIB+65)
+	or	32
+	cp	'r'
+	jp	nz,IPARM_TERM
+	ld	a,(FIB+66)
+	or	32
+	cp	'o'
+	jp	nz,IPARM_TERM
+	ld	a,(FIB+67)
+	or	a
+	jp	nz,IPARM_TERM
+	ld	d,1
+
+DO_FILE:
+	ld	a,(DRIVE)
+	ld	bc,_MAPDRV##+3*256
+	ld	hl,FIB
+	call	5
+	ld	b,a
+	ld	c,_TERM##
+	jp	5
 
 EXTNUM_TERM:
 	call	EXT8##
@@ -374,6 +412,44 @@ NOPARM_TERM:
 	ld	c,_TERM##
 	jp	5
 
+
+CHKNEX21:
+	ld	b,05Ah
+	ld	hl,01234h
+	ld	de,0ABCDh
+	ld	c,_DOSVER##
+	ld	ix,0
+	call	5
+
+	ld	a,b
+	cp	2
+	jr	c,CHK21_ERR
+	push	ix
+	pop	bc
+	ld	a,b
+	cp	1	;NEXTOR_ID
+	jr	nz,CHK21_ERR
+	ld	a,c
+	cp	2
+	jr	c,CHK21_ERR
+
+	push	iy
+	pop	bc
+	ld	a,b
+	or	a
+	ret	nz
+
+CHK21_ERR:
+	ld	de,BADKER21_MSG
+	ld	c,_STROUT##
+	call	5
+	ld	c,_TERM0##
+	jp	5
+
+BADKER21_MSG:
+	db	"*** File mounting requires Nextor 2.1 or later",13,10,"$"
+
+
 PARTITION:	db	0
 DO_LOCK:	db	0
 DRIVE:	db	0
@@ -383,11 +459,10 @@ SLOT:	db	-1
 SEGMENT:	db	255
 DEVICE:	db	0
 LUN:	db	1
-IS_FILE:	db	0
+FILE_FLAGS:	db	0
 
 BUF:
 BUF_DRIVER:
 BUF_LETTER:
-FIB:
 
 	end

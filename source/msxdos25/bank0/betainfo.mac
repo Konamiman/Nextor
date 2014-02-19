@@ -1,5 +1,5 @@
 if ALPHA gt 0
-	defb	" alpha ",ALPHA+"0","b "
+	defb	" alpha ",ALPHA+"0"," "
 endif
 
 if BETA gt 0

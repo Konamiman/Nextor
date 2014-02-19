@@ -11,6 +11,10 @@ bin/**
 *.hex
 *.HEX
 *.bin
+*.ihx
+*.IHX
+*.lk
+*.LK
 info/*.pdf
 source/msxdos25/bank*/**.inc
 source/msxdos25/drivers/**.inc

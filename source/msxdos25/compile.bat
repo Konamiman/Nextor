@@ -129,7 +129,7 @@ echo .
 
 cd ..\bank5
 
-if not exist fdisk.bat (
+if not exist fdisk.dat (
 echo !!! FDISK is not compiled!
 call compfdsk.bat
 echo !!! FDISK compiled. Resuming kernel compilation now...

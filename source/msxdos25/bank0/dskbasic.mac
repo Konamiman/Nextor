@@ -26,11 +26,11 @@ NEWSTT	equ	04601h
 
 	public	BASVER,BASV_HI,BASV_LO
 BASVER	equ	2
-BASV_HI	equ	0
+BASV_HI	equ	1
 ifdef VER890508
 BASV_LO	equ	0
 else
-BASV_LO	equ	1
+BASV_LO	equ	0
 endif
 ;
 ;	MACRO
