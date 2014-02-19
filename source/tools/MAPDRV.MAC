@@ -9,11 +9,13 @@ ld_a_iyl	macro
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
+	db	"MAPDRV - map a drive to a driver, device, LUN and partition,",13,10
+	db  "         or mounts a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
+	db  "MAPDRV <drive>: <filename> [/ro]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device and LUN",13,10
 	db	"of the driver in the specified slot (must be a device-based driver).",13,10
@@ -42,12 +44,18 @@ ld_a_iyl	macro
 	db	13,10
 	db	"'d' will revert the drive to its default mapping (the mapping at boot time).",13,10
 	db	"'u' will leave the drive unmapped. Other parameters are ignored in both cases.",13,10
+	db	13,10
+	db	"If a valid filename is supplied after <drive>, the specified file will be",13,10
+	db  "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
+	db  "that contains a file that has been mapped."
 	db	1Ah
 
 USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
+	db  "         or mount a file on a drive"
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
+	db  "MAPDRV <drive>: <filename> [/ro]"
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
@@ -103,7 +111,7 @@ NO_LOCK:
 	dec	a
 	ld	(DRIVE),a
 
-	;* Partition number
+	;* Partition number or file name
 
 	ld	de,BUF
 	ld_a_iyl
@@ -113,6 +121,15 @@ NO_LOCK:
 	ld	c,_TERM##
 	jp	c,5
 
+	ld	bc,_FFIRST##
+	ld	de,BUF
+	ld	ix,FIB
+	call	5
+	jr	nz,NO_FILE
+	ld	a,255
+	ld	(IS_FILE),a
+
+NO_FILE:
 	ld	a,(BUF)		;Check fo special values "d" and "u"
 	or	20h
 	cp	"d"
@@ -366,9 +383,11 @@ SLOT:	db	-1
 SEGMENT:	db	255
 DEVICE:	db	0
 LUN:	db	1
+IS_FILE:	db	0
 
 BUF:
 BUF_DRIVER:
 BUF_LETTER:
+FIB:
 
 	end
