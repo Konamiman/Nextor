@@ -157,6 +157,7 @@ size	macro	name
 				;        bit 3: reduced allocation information mode is enabled
 				;        bit 4: unit is locked
 				;	     bit 5: unit needs to be accessed in Z80 mode
+				;        bit 6: unit is mounted to a file
 	field	1,UD_DFLAGS	;More flags for the unit:
 				;        bit 0: unit is associated to a device in a device-based driver
 				;               (if zero, all other bits are meaningless)
@@ -203,8 +204,18 @@ size	macro	name
 
 	field	2,UD_CHKSUM
 ;
-	size	UD_SZ		;Total size of unit descriptor
-;
+	;--- Extra fields used when mounting files
+	;    This extra space should NOT be allocated unless a file is mounted to the drive
+
+	field 1,UD_FH       ;File Handle of mounted file
+    field 1,UD_MFLAGS   ;Flags. Bit 0: read-only mount
+    field 1,UD_DRV      ;Drive where the mounted file is
+    field 13,UD_FNAME   ;Printable filename, zero terminated
+
+	size	UD_MSZ		;Total size of unit descriptor including extra fields
+
+	const	UD_SZ,UD_MSZ-16	;Total size of unit descriptor without extra fields
+
 ;
 ;-----------------------------------------------------------------------------
 ;

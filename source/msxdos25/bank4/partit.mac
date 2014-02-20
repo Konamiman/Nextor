@@ -2464,6 +2464,7 @@ MAP_FOUND:
 	call	MAP_UNMAP	;To free buffers, close file handles, etc
 	pop	hl
 	push	hl
+	or	a
 	call	CREATE_UD
 	pop	hl
 	pop	de
@@ -2747,8 +2748,9 @@ MAP_DRV_UNCH:
 	pop	hl
 
 	;* Create unit descriptor
-CRUD:
+
 	push	iy
+	or	a
 	call	CREATE_UD
 	pop	iy
 	ret	nz
@@ -2789,9 +2791,13 @@ MAP_IDEVL_END:
 ;This subroutine creates an empty unit descriptor
 ;Entry:  C = Drive letter (0 = A:, etc)
 ;        HL = Address of unit descriptor pointer in UNIT_TAB
+;        Cy = 1 to allocate extra space for mounted file info
 ;Output: IX = Address of unit descriptor
 ;        A = .NORAM (and NZ) if can't create new unit descriptor
 ;The unit descriptor will have filled: UD_PHYS, UD_CDIR, UD_DPB, UD_SEG, UD_DPB.
+;
+;NOTE: Assumes that no unit descriptor is currently allocated
+;      (that is, address of unit descriptor pointed by HL is zero)
 
 CREATE_UD:
 	push	hl
@@ -2800,26 +2806,18 @@ CREATE_UD:
 	ld	e,(ix)
 	ld	d,(ix+1)	;DE = Address of unit descriptor
 
-	;* Allocate the memory for the unit descriptor, if necessary
+	ld	hl,UD_SZ##
+	jr	nc,CRUD2
+	ld	hl,UD_MSZ##
+CRUD2:
 
-	ld	a,d
-	or	e
-	jr	nz,CREATE_UD_NOALL
+	;* Allocate the memory for the unit descriptor
 
 	ld	hl,UD_SZ##
 	pcall	ALL_P2
 	ret	nz
 	ld	(ix),l
 	ld	(ix+1),h
-	jr	CREATE_UD_OKALL
-
-CREATE_UD_NOALL:
-	ex	de,hl	;If unit descriptor existed already,
-	call	CLOSE_HANDLES
-	pcall	FL_UD	;get rid of any pending buffer
-	pcall	INV_UD
-
-CREATE_UD_OKALL:
 	push	hl
 	pop	ix	;IX = Address of unit descriptor
 
