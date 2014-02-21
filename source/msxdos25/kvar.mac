@@ -210,11 +210,12 @@ size	macro	name
 	field 1,UD_FH       ;File Handle of mounted file
     field 1,UD_MFLAGS   ;Flags. Bit 0: read-only mount
     field 1,UD_DRV      ;Drive where the mounted file is
+	field 2,UD_MXS		;Maximum sector number
     field 13,UD_FNAME   ;Printable filename, zero terminated
 
 	size	UD_MSZ		;Total size of unit descriptor including extra fields
 
-	const	UD_SZ,UD_MSZ-16	;Total size of unit descriptor without extra fields
+	const	UD_SZ,UD_MSZ-18	;Total size of unit descriptor without extra fields
 
 ;
 ;-----------------------------------------------------------------------------
