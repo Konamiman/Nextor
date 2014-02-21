@@ -1434,7 +1434,7 @@ KBDOS:
 	push	de
 	push	bc
 	ld	de,BUFF3
-	ld	bc,8
+	ld	bc,64
 	ldir
 	pop	bc
 	pop	de

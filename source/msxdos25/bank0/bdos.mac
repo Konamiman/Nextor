@@ -929,7 +929,7 @@ STRCPY:	LD	A,(HL)		;Get character from string.
 	push	de
 	push	bc
 	ld	de,(BUF_3##)
-	ld	bc,8
+	ld	bc,64
 	ldir
 	pop	bc
 	pop	de

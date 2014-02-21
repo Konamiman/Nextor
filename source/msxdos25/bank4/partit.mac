@@ -2817,13 +2817,13 @@ MAP_IDEVL_END:
 	;           IXh = Flags: bit 0 = mount in readonly mode
 	;           IXl = Target drive
 
-MOUNT_FILE:
+MOUNT_FILE:  ;578D
 
 	push	ix
 
-	;* If HL points to a filename, generate a proper FIB
+	;* If DE points to a filename, generate a proper FIB
 
-	ld	a,(hl)
+	ld	a,(de)
 	cp	0FFh
 	jr	z,MF_IS_FIB
 
@@ -2879,7 +2879,7 @@ MF_NO_RO:
 
 	xor	a
 	push	hl
-	PCALL	F_OPEN
+	PCALL	F_OPEN	;@57D3h
 	pop	hl
 	or	a
 	jp	nz,POPIX_RET
@@ -2917,13 +2917,13 @@ MF_UD_OK:
 
 	;* Fill the UD parameters appropriately
 
-	pop	hl	;H=flags
+	pop	hl	;H=flags	;@57FB
 	ld	(ix+UD_FH##),b
 	ld	a,h
 	and	1
 	ld	(ix+UD_MFLAGS##),a
 
-	ex	de,hl	;Now HL = FIB
+	ex	de,hl	;Now HL = FIB	(NO! FIB is lost!! WIP...)
 
 	;Filename (warning: ugly code ahead)
 
