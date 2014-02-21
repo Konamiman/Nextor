@@ -2411,6 +2411,22 @@ MAP_UNMAP:
 	or	e
 	jp	z,SETNUMDRV	;Do nothing if drive already unmapped
 
+	push	ix	;If the drive has a file mounted, close its file handle
+	push	hl
+	pop	ix
+	ld	a,(ix+UD_FLAGS##)
+	and	01000000b
+	jr	z,UNM_NOFILE
+
+	ld	b,(ix+UD_FH##)
+	push	hl
+	push	de
+	PCALL	CLOSE
+	pop	de
+	pop	hl
+UNM_NOFILE:
+	pop	ix
+
 	ex	de,hl
 	call	CLOSE_HANDLES
 	pcall	FL_UD
@@ -2977,8 +2993,12 @@ MF_UD_OK:
 	ld	a,(hl)
 	ld	(ix+UD_DRV##),a
 
+	;Other parameters
 
-	;WIP...
+	ld	a,01000000b
+	ld	(ix+UD_FLAGS##),a
+
+	;--- All done
 
 	xor	a
 	jp	SETNUMDRV
@@ -2994,7 +3014,7 @@ POPIX_RET:
 ;        Cy = 1 to allocate extra space for mounted file info
 ;Output: IX = Address of unit descriptor
 ;        A = .NORAM (and NZ) if can't create new unit descriptor
-;The unit descriptor will have filled: UD_PHYS, UD_CDIR, UD_DPB, UD_SEG, UD_DPB.
+;The unit descriptor will have filled: UD_PHYS, UD_CDIR, UD_DPB, UD_SEG.
 ;
 ;NOTE: Assumes that no unit descriptor is currently allocated
 ;      (that is, address of unit descriptor pointed by HL is zero)
