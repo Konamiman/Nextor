@@ -2337,6 +2337,7 @@ UNMAP_NEXT2:
 ;                  0: Unmap the drive
 ;                  1: Map the drive to default state
 ;                  2: Map the drive to specific device
+;                  3: Mount a file
 ;             HL = Address of a buffer with mapping information (if B=2)
 ;                  Mapping information is:
 ;                    +0: Driver slot
@@ -2344,6 +2345,8 @@ UNMAP_NEXT2:
 ;                    +2: Device index
 ;                    +3: LUN index
 ;                    +4..+7: Device start sector (for block devices only)
+;             HL = Pointer to filename or FIB (if B=3)
+;             D  = Flags (if B=3): bit 0 = mount in readonly mode
 ; Returns:    A = Error code
 
 	push	ix
@@ -2354,7 +2357,6 @@ UNMAP_NEXT2:
 	ret
 
 F_MAPDRV_GO:
-
 	ld	a,c
 	cp	MAX_UNITS##
 	ld	a,.IDRV##
@@ -2374,6 +2376,10 @@ F_MAPDRV_GO:
 	ret
 MAP_NORDISK:
 
+	ld	e,c
+	push	de
+	pop	ix
+
 	push	hl
 	ld	hl,UNIT_TAB##+2
 	ld	e,c
@@ -2391,6 +2397,8 @@ MAP_NORDISK:
 	jr	z,MAP_DEFAULT
 	dec	a
 	jp	z,MAP_SPECIFIC
+	dec	a
+	jp	z,MOUNT_FILE
 
 	;--- Unmap the drive
 
@@ -2787,6 +2795,198 @@ MAP_IDEVL_END:
 	ld	a,.IDEVL##
 	jp	SETNUMDRV
 
+	;--- Mount a file
+	;    Input: DE  = Pointer to filename or FIB
+	;	    HL  = Address of pointer to unit descriptor
+	;           IXh = Flags: bit 0 = mount in readonly mode
+	;           IXl = Target drive
+
+MOUNT_FILE:
+
+	push	ix
+
+	;* If HL points to a filename, generate a proper FIB
+
+	ld	a,(hl)
+	cp	0FFh
+	jr	z,MF_IS_FIB
+
+	ld	ix,($SECBUF##)
+	ld	b,0
+	push	hl
+	PCALL	F_FFIRST
+	pop	hl
+	or	a
+	jp	nz,POPIX_RET
+	push	ix
+	pop	de
+MF_IS_FIB:
+
+	;* Check that the file is not a directory, a device, or the volume name
+
+	push	de
+	pop	ix
+
+	ld	a,(ix+14)
+	ld	b,a
+	and	10011000b
+	ld	a,.IATTR##
+	jp	nz,POPIX_RET
+
+	;* Check if the file has the readonly attribute set
+
+	bit	0,b
+	jr	z,MF_NO_RO
+	pop	af
+	or	1
+	push	af
+MF_NO_RO:
+
+	;* Check if the target drive is the same as the file drive
+
+	pop	bc
+	push	bc
+	ld	a,(ix+25)
+	cp	c
+	ld	a,.IDRV##
+	jp	z,POPIX_RET
+
+	;* Check if the file size is >32MB
+
+	ld	a,(ix+24)
+	cp	2
+	ld	a,.INTER##	;TODO: Define a better error code
+	jp	nc,POPIX_RET
+
+	;* All the validations passed!
+	;  Now open the file
+
+	xor	a
+	push	hl
+	PCALL	F_OPEN
+	pop	hl
+	or	a
+	jp	nz,POPIX_RET
+
+	;* Destroy the previous unit descriptor
+	;  and allocate a new one
+
+	pop	af
+	ld	c,a	;Target drive
+	push	af
+
+	push	bc	;B=File handle
+
+	push	hl
+	push	de
+	call	MAP_UNMAP
+	pop	de
+	pop	hl
+	scf
+	push	de
+	call	CREATE_UD
+	pop	de
+
+	pop	bc
+	jp	z,MF_UD_OK
+
+	;UD allocation failed: close file
+
+	push	af
+	PCALL	F_CLOSE
+	pop	af
+	call	SETNUMDRV
+	jp	POPIX_RET
+MF_UD_OK:
+
+	;* Fill the UD parameters appropriately
+
+	pop	hl	;H=flags
+	ld	(ix+UD_FH##),b
+	ld	a,h
+	and	1
+	ld	(ix+UD_MFLAGS##),a
+
+	ex	de,hl	;Now HL = FIB
+
+	;Filename (warning: ugly code ahead)
+
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+1),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+2),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+3),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+4),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+5),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+6),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+7),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+8),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+9),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+10),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+11),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_FNAME##+12),a
+	inc	hl
+
+	;Maximum sector count = (File size / 512) - 1
+
+	ld	bc,10
+	add	hl,bc	;Now HL points to 4th byte of file size in FIB
+	ld	e,(hl)
+	rr	e
+	dec	hl
+	ld	e,(hl)
+	rr	e
+	dec	hl
+	ld	d,(hl)
+	rr	d
+	dec	de
+	ld	(ix+UD_MXS##),e
+	ld	(ix+UD_MXS##+1),d
+
+	;Drive
+
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_DRV##),a
+
+
+	;WIP...
+
+	xor	a
+	jp	SETNUMDRV
+
+POPIX_RET:
+	pop	ix
+	ret
+
 
 ;This subroutine creates an empty unit descriptor
 ;Entry:  C = Drive letter (0 = A:, etc)
@@ -2857,6 +3057,11 @@ CRUD2:
 	;>>> DOS 1 version of MAPDRV
 
 MAPDRV_DOS1:
+	
+	ld	a,b	;File mounting is not supported in DOS 1 mode
+	cp	3
+	ld	a,.IDRV##
+	ret	z
 
 	;--- Check that the drive is assigned to a Nextor device-based driver
 
