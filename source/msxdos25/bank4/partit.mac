@@ -2819,7 +2819,7 @@ MAP_IDEVL_END:
 
 MOUNT_FILE:  ;578D
 
-	push	ix
+	push	ix	;Save flags and target drive for later
 
 	;* If DE points to a filename, generate a proper FIB
 
@@ -2841,7 +2841,7 @@ MF_IS_FIB:
 	;* Check that the file is not a directory, a device, or the volume name
 
 	push	de
-	pop	ix
+	pop	ix	;Now IX = Pointer to FIB
 
 	ld	a,(ix+14)
 	ld	b,a
@@ -2863,6 +2863,7 @@ MF_NO_RO:
 	pop	bc
 	push	bc
 	ld	a,(ix+25)
+	dec	a
 	cp	c
 	ld	a,.IDRV##
 	jp	z,POPIX_RET
@@ -2879,7 +2880,9 @@ MF_NO_RO:
 
 	xor	a
 	push	hl
-	PCALL	F_OPEN	;@57D3h
+	push	ix
+	PCALL	F_OPEN	;@57D6h
+	pop	ix
 	pop	hl
 	or	a
 	jp	nz,POPIX_RET
@@ -2887,21 +2890,15 @@ MF_NO_RO:
 	;* Destroy the previous unit descriptor
 	;  and allocate a new one
 
-	pop	af
-	ld	c,a	;Target drive
-	push	af
-
 	push	bc	;B=File handle
 
 	push	hl
-	push	de
 	call	MAP_UNMAP
-	pop	de
 	pop	hl
 	scf
-	push	de
+	push	ix
 	call	CREATE_UD
-	pop	de
+	pop	de	;Now DE = Pointer to FIB
 
 	pop	bc
 	jp	z,MF_UD_OK
@@ -2917,13 +2914,13 @@ MF_UD_OK:
 
 	;* Fill the UD parameters appropriately
 
-	pop	hl	;H=flags	;@57FB
+	pop	hl	;H=flags
 	ld	(ix+UD_FH##),b
 	ld	a,h
 	and	1
 	ld	(ix+UD_MFLAGS##),a
 
-	ex	de,hl	;Now HL = FIB	(NO! FIB is lost!! WIP...)
+	ex	de,hl	;Now HL = FIB
 
 	;Filename (warning: ugly code ahead)
 
@@ -2972,14 +2969,14 @@ MF_UD_OK:
 
 	ld	bc,10
 	add	hl,bc	;Now HL points to 4th byte of file size in FIB
-	ld	e,(hl)
-	rr	e
-	dec	hl
-	ld	e,(hl)
-	rr	e
+	ld	a,(hl)
+	rra
 	dec	hl
 	ld	d,(hl)
 	rr	d
+	dec	hl
+	ld	e,(hl)
+	rr	e
 	dec	de
 	ld	(ix+UD_MXS##),e
 	ld	(ix+UD_MXS##+1),d
@@ -2989,8 +2986,8 @@ MF_UD_OK:
 	inc	hl
 	inc	hl
 	inc	hl
-	inc	hl
 	ld	a,(hl)
+	dec	a
 	ld	(ix+UD_DRV##),a
 
 	;Other parameters
