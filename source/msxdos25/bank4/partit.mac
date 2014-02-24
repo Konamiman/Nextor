@@ -2817,7 +2817,7 @@ MAP_IDEVL_END:
 	;           IXh = Flags: bit 0 = mount in readonly mode
 	;           IXl = Target drive
 
-MOUNT_FILE:  ;578D
+MOUNT_FILE:  ;@578D
 
 	push	ix	;Save flags and target drive for later
 
@@ -2900,7 +2900,7 @@ MF_OK_SIZE:
 	xor	a
 	push	hl
 	push	ix
-	PCALL	F_OPEN	;@57D6h
+	PCALL	F_OPEN	;@57F9
 	pop	ix
 	pop	hl
 	or	a
@@ -2912,7 +2912,9 @@ MF_OK_SIZE:
 	push	bc	;B=File handle
 
 	push	hl
+	push	ix
 	call	MAP_UNMAP
+	pop		ix
 	pop	hl
 	scf
 	push	ix
