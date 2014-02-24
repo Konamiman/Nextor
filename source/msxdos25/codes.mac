@@ -230,7 +230,9 @@ name	 equ	 (value)		;; constants.
 	const	.IDEVL, 0B5h	;Invalid device or LUN
 	const	.IPART, 0B4h	;Invalid partition number
 	const	.PUSED, 0B3h	;Partition is already in use
-				;0B2h \
+	const	.FMNT,  0B2h	;File is mounted
+	const	.BFSZ,  0B1h    ;Bad file size
+				;0B0h \
 				; ..   > Reserved for future use
 				;0A0h /
 ;

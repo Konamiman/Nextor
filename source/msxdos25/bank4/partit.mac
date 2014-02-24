@@ -2868,12 +2868,31 @@ MF_NO_RO:
 	ld	a,.IDRV##
 	jp	z,POPIX_RET
 
-	;* Check if the file size is >32MB
+	;* Check if the file size is <512B or >32MB
 
 	ld	a,(ix+24)
+	cp	3
+	jp	nc,BFSZ_RET	;>32MB
+
 	cp	2
-	ld	a,.INTER##	;TODO: Define a better error code
-	jp	nc,POPIX_RET
+	jr	nz,MF_NO_32M
+	ld	a,(ix+23)
+	or	(ix+22)
+	or	(ix+21)
+	jr	z,MF_OK_SIZE	;Exactly 32MB
+	jp	BFSZ_RET	;>32MB
+
+MF_NO_32M:
+	or	a
+	jr	nz,MF_OK_SIZE
+	ld	a,(ix+23)
+	or	a
+	jr	nz,MF_OK_SIZE
+	ld	a,(ix+22)
+	cp	2
+	ld	a,.BFSZ##	;<512B
+	jp	c,POPIX_RET
+MF_OK_SIZE:
 
 	;* All the validations passed!
 	;  Now open the file
@@ -3000,6 +3019,8 @@ MF_UD_OK:
 	xor	a
 	jp	SETNUMDRV
 
+BFSZ_RET:
+	ld	a,.BFSZ##
 POPIX_RET:
 	pop	ix
 	ret

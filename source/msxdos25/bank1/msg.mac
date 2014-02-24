@@ -233,6 +233,8 @@ ERR_MSG_TABLE:
 	err	.IDEVL, <"Invalid device or logical unit">
 	err	.IPART, <"Invalid partition number">
 	err	.PUSED, <"Partition is already in use">
+	err .FMNT,  <"File is mounted">
+	err .BFSZ,  <"Bad file size">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.
