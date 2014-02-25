@@ -2828,7 +2828,7 @@ MOUNT_FILE:  ;@578D
 	jr	z,MF_IS_FIB
 
 	ld	ix,($SECBUF##)
-	ld	b,0
+	ld	b,110b	;Include hidden and system files
 	push	hl
 	PCALL	F_FFIRST
 	pop	hl
@@ -2897,10 +2897,10 @@ MF_OK_SIZE:
 	;* All the validations passed!
 	;  Now open the file
 
-	xor	a
+	ld	a,100b	;Inheritable
 	push	hl
 	push	ix
-	PCALL	F_OPEN	;@57F9
+	PCALL	F_OPEN
 	pop	ix
 	pop	hl
 	or	a
@@ -3053,7 +3053,6 @@ CRUD2:
 
 	;* Allocate the memory for the unit descriptor
 
-	ld	hl,UD_SZ##
 	pcall	ALL_P2
 	ret	nz
 	ld	(ix),l
