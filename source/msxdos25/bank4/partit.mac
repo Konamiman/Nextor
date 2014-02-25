@@ -2402,7 +2402,7 @@ MAP_NORDISK:
 
 	;--- Unmap the drive
 
-MAP_UNMAP:
+MAP_UNMAP::
 	ld	e,(hl)
 	inc	hl
 	ld	d,(hl)	;DE = Address of unit descriptor
@@ -2412,7 +2412,7 @@ MAP_UNMAP:
 	jp	z,SETNUMDRV	;Do nothing if drive already unmapped
 
 	push	ix	;If the drive has a file mounted, close its file handle
-	push	hl
+	push	de
 	pop	ix
 	ld	a,(ix+UD_FLAGS##)
 	and	01000000b
@@ -2421,7 +2421,7 @@ MAP_UNMAP:
 	ld	b,(ix+UD_FH##)
 	push	hl
 	push	de
-	PCALL	CLOSE
+	PCALL	F_CLOSE
 	pop	de
 	pop	hl
 UNM_NOFILE:
