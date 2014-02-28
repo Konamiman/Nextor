@@ -2897,7 +2897,10 @@ MF_OK_SIZE:
 	;* All the validations passed!
 	;  Now open the file
 
-	ld	a,100b	;Inheritable
+	ex	(sp),hl
+	ld	a,h	;Read only flag: open as no-write
+	and	1
+	ex	(sp),hl
 	push	hl
 	push	ix
 	PCALL	F_OPEN

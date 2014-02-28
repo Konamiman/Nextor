@@ -12,7 +12,7 @@ FIB	equ	3000h
       ; -------------------------------------------------------------------------------
 	db	13
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition,",13,10
-	db  "         or mounts a file on a drive"
+	db  "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
@@ -123,7 +123,8 @@ NO_LOCK:
 	ld	c,_TERM##
 	jp	c,5
 
-	ld	bc,_FFIRST##
+	ld	b,10110b	;Include directories, hidden and system files
+	ld	c,_FFIRST##
 	ld	de,BUF
 	ld	ix,FIB
 	call	5
