@@ -2310,9 +2310,130 @@ CALL_UNIT:
 ;
 ;
 		cp	number_of_cmds		;Reject if command code is
-		jr	nc,bad_unit_cmd		; not a sensible value.
+		jp	nc,bad_unit_cmd		; not a sensible value.
 ;
 		push	iy
+		push	af
+		push	hl
+		pop	iy
+		ld	a,(iy+UD_FLAGS##)
+		and	01000000b
+		jp	z,CUN_NO_MOUNT
+
+		;--- Unit with a file mounted
+
+		call	CUN_FILE
+		pop	iy
+		ret
+
+		;* Treat non-read or write commands
+
+CUN_FILE:
+		pop	af
+		ld	c,a
+
+		cp	MC_CMD	;Check media change: return never changed
+		ld	a,0
+		scf
+		ccf
+		ld	b,1
+		ret	z
+
+		ld	c,a
+		cp	DP_CMD	;Get disk parameters: do nothing
+		ld	a,0
+		ret	z
+
+		ld	c,a
+		cp	CH_CMD
+		ld	hl,781Fh	;Format choice: return null string (can't format drive)
+		ld	a,0
+		ret	z
+
+		ld	c,a
+		cp	FMT_CMD
+		ld	a,.IFORM##
+		scf
+		ret	z
+
+		;>>> C = Command (RD_CMD or WR_CMD), 
+		;    B = sector count
+		;    DE = First sector
+		;    HL = Destination
+		;    IY = Unit descriptor
+
+		;* Check sector number
+
+		ld	a,(DIO_EX_SECTOR##)
+		or	a
+		ld	a,.RNF##
+		ret	nz
+
+		ld	a,(iy+UD_MXS##+1)
+		cp	h
+		ld	a,.RNF##
+		ret	c
+		jr	nc,CUN_OKSEC
+		ld	a,(iy+UD_MXS##)
+		cp	l
+		ld	a,.RNF##
+		ret	c
+CUN_OKSEC:
+
+		;* Perform a seek to sector number * 512
+
+		push	bc
+		push	hl
+		ld	b,(iy+UD_FH##)
+		xor	a
+		ld	e,d
+		ld	h,e
+		ld	l,0
+		ld	d,0	;Now DE:HL = DE * 256...
+		sla	h
+		rl	e
+		rl	d	;...and we multiply DE:HL by 2.
+		PCALL	F_SEEK
+		pop	hl
+		pop	bc
+		or	a
+		ret	nz	;TODO: Convert to "disk error"?
+
+		;* Now perform the read or write!
+
+		ex	de,hl	;DE = transfer address
+		ld	h,b
+		ld	l,0
+		sla	h		;H = sectors * 512 = bytes to transfer
+
+		ld	b,(iy+UD_FH##)
+		ld	a,c
+		cp	WR_CMD
+		jr	z,CUN_WRITE
+CUN_READ:
+		PCALL	F_READ
+		jr	CUN_NEXT
+CUN_WRITE:
+		PCALL	F_WRITE
+CUN_NEXT:
+
+		or	a	;TODO: Convert error to "disk error"?
+		ret	nz
+
+		;* Flush buffers for the file
+
+		ld	b,(iy+UD_FH##)
+		PCALL	F_ENSURE
+
+		or	a	;TODO: Convert error to "disk error"?
+		ret
+
+
+		;--- Regular unit (not mounted)
+
+CUN_NO_MOUNT:
+		pop	af
+		;push	iy
 		push	hl
 		push	hl			;Save lots of registers and
 		ex	(sp),ix			; get IX (DTA address) into
