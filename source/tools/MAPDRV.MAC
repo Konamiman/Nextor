@@ -113,7 +113,7 @@ NO_LOCK:
 	dec	a
 	ld	(DRIVE),a
 
-	;* Partition number or file name
+	;* Partition number, or "d", "u", or file name
 
 	ld	de,BUF
 	ld_a_iyl
@@ -123,13 +123,13 @@ NO_LOCK:
 	ld	c,_TERM##
 	jp	c,5
 
-	ld	b,10110b	;Include directories, hidden and system files
-	ld	c,_FFIRST##
-	ld	de,BUF
-	ld	ix,FIB
-	call	5
-	jp	z,IS_FILE
+	ld	hl,BUF	;Try to get first parameter as a number
+	call	EXT8##
+	jr	nc,IS_PART
 
+	ld	a,(BUF+1)
+	or	a
+	jp	nz,IS_FILE
 	ld	a,(BUF)		;Check fo special values "d" and "u"
 	or	20h
 	cp	"d"
@@ -138,9 +138,9 @@ NO_LOCK:
 	cp	"u"
 	ld	b,0
 	jp	z,DO_MAP_DU
+	jp	IS_FILE
 
-	ld	hl,BUF		;Get first number
-	call	EXTNUM_TERM
+IS_PART:
 	ld	(PARTITION),a
 
 	;* Device, LUN
@@ -364,6 +364,12 @@ DO_LOCK_OK:
 	;    FIB is appropriately filled already.
 
 IS_FILE:
+	ld	b,10110b	;Include directories, hidden and system files
+	ld	c,_FFIRST##
+	ld	de,BUF
+	ld	ix,FIB
+	call	5
+	jp	nz,DO_TERM
 
 	call	CHKNEX21
 
@@ -396,6 +402,7 @@ DO_FILE:
 	ld	bc,_MAPDRV##+3*256
 	ld	hl,FIB
 	call	5
+DO_TERM:
 	ld	b,a
 	ld	c,_TERM##
 	jp	5

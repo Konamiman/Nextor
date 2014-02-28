@@ -2817,7 +2817,7 @@ MAP_IDEVL_END:
 	;           IXh = Flags: bit 0 = mount in readonly mode
 	;           IXl = Target drive
 
-MOUNT_FILE:  ;@578D
+MOUNT_FILE:
 
 	push	ix	;Save flags and target drive for later
 
@@ -2846,7 +2846,7 @@ MF_IS_FIB:
 	ld	a,(ix+14)
 	ld	b,a
 	and	10011000b
-	ld	a,.IATTR##
+	ld	a,.NOFIL##
 	jp	nz,POPIX_RET
 
 	;* Check if the file has the readonly attribute set
