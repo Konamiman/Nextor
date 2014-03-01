@@ -1,0 +1,420 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Date and Time KBDOS functions
+;*****************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	;RAMMOD		;Removed since now this code is ran from bank 4 of ROM
+;
+;-----------------------------------------------------------------------------
+;
+CLOCK_ADDR	equ	0B4h		;I/O ports for the clock chip
+CLOCK_DATA	equ	0B5h
+;
+CLKOUT	MACRO	addr,data		;;Macro to write a byte to
+	 ld	 a,addr			;; a clock chip regsiter.
+	 out	 (CLOCK_ADDR),a
+	 ld	 a,data
+	 out	 (CLOCK_DATA),a
+	ENDM
+;
+CLKIN	MACRO	addr			;;Macro to read a byte from
+	 ld	 a,addr			;; a clock chip register.
+	 out	 (CLOCK_ADDR),a
+	 in	 a,(CLOCK_DATA)
+	ENDM
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_GDATE
+;
+;    This is the KBDOS "get date" function.  Most of the work is done  by  the
+; "GT_DATE_TIME" routine, this function routine just gets the results into the
+; correct registers and also works out the day of the week.  The day  of  week
+; algorithm  is  correct  for  1980...2079 and since the year is stored in the
+; clock chip as a single BCD byte it cannot be outside this range.
+;
+; Entry:     None
+; Returns:    HL = Year  (1980...2079)
+;              D = Month (1=Jan....12=Dec)
+;              E = Day of month (1....31)
+;              C = Day of week (0=Sun...6=Sat)
+;              A = 0 (error code)
+;
+		call	GT_DATE_TIME		;Get date from clock chip
+;
+		ld	c,d			;BC := year (0=>1980)
+		ld	b,0
+		ld	e,l			; E := day of month
+		ld	d,h			; D := month
+		ld	hl,1980
+		add	hl,bc			;HL := year
+;
+		ld	a,d			;Get year number and if month
+		cp	3			; is JAN or FEB then count it
+		ld	a,c			; as previous year.  The -4
+		sbc	a,-4			; ensures that result stays +ve
+		and	11111100b		;Divide this year number by 4
+		rrca				; to give number of leap days
+		rrca				; since JAN ist 1980.
+		add	a,c			;Add actual year number to give
+						; effective 1st day of year.
+;
+		push	hl			;Use month number to index into
+		ld	hl,month_off_tab-1	; a table of month offsets and
+		ld	c,d			; add the appropriate offset
+		add	hl,bc			; onto start of year day.  This
+		add	a,(hl)			; gives first day of month.
+		pop	hl
+;
+		add	a,e			;Add on day of month to give
+mod_7_loop:	sub	7			; actual day and reduce
+		jr	nc,mod_7_loop		; modulo 7 to get final day
+		add	a,7			; of week 0...6.
+;
+		ld	c,a			;Return day of week in C.
+		xor	a
+		ret				;Return with no error
+;
+;
+month_off_tab:	db	1+0	;January	Table of offsets of the first
+		db	1+3	;February	day of each month from the
+		db	1+3	;March		first day of the year, in a
+		db	1+6	;April		non-leap year.	The offset of
+		db	1+8	;May		"1" forces 1-Jan-1980 to be
+		db	1+11	;June		a Tuesday.
+		db	1+13	;July
+		db	1+16	;August
+		db	1+19	;September
+		db	1+21	;October
+		db	1+24	;November
+		db	1+26	;December
+
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_SDATE
+;
+;    This is the KBDOS "set date"  function.   It  checks  it  parameters  for
+; validity and if they seem reasonable then it calls SET_DATE to store them in
+; the clock chip. The check for validity includes checking for the  number  of
+; days in each month and for leap years.
+;
+; Entry:      HL = Year  (1980...2079)
+;              D = Month (1=Jan....12=Dec)
+;              E = Day of month (1....31)
+; Returns:     A = Error code
+;              C = 00h if successful, 0FFh if error
+;
+;
+		ld	bc,-1980		;Subtract the 1980 offset from
+		add	hl,bc			; the year and error if it
+		jr	nc,bad_date		; was before 1980.
+		ld	a,h
+		or	a			;Also error if it was after
+		jr	nz,bad_date		; 2079 since this is the
+		ld	a,l			; latest year we can cope
+		cp	2080-1980		; with.
+		jr	nc,bad_date
+		ld	b,a			;B := year (0...99)
+;
+		ld	a,d			;Check that month is in the
+		dec	a			; range 1...12 and error if
+		cp	12			; it isn't.
+		jr	nc,bad_date
+;
+		ld	hl,month_len_tab	;Point to a byte for the
+		add	a,l			; length of the month.
+		ld	l,a
+		jr	nc,no_month_carry
+		inc	h
+no_month_carry:	cp	LOW (month_len_tab+1)	;If the month is february, and
+		jr	nz,no_leap_fix		; if it is a leap year then
+		ld	a,b			; use the alternate length
+		and	00000011b		; of 29.
+		jr	nz,no_leap_fix
+		ld	hl,leap_february
+no_leap_fix:
+		ld	a,e			;Check that the day of month
+		dec	a			; is 1...n where "n" is the
+		cp	(hl)			; number of days in the month
+		jr	nc,bad_date		; and error if not.
+;
+;
+		ld	l,e			;Date is valid so get year
+		ld	h,d			; into D, month into H, day
+		ld	d,b			; into L.
+		call	SET_DATE		;Set the new date and return
+		xor	a			; with no error.
+		ld	c,a
+		ret
+;
+;
+bad_date:	ld	c,0FFh			;If date was invalid then
+		ld	a,.IDATE##		; return an error.
+		ret
+;
+;
+;
+month_len_tab:	db	31	;January
+		db	28	;February (non-leap year)
+		db	31	;March
+		db	30	;April
+		db	31	;May
+		db	30	;June
+		db	31	;July
+		db	31	;August
+		db	30	;September
+		db	31	;October
+		db	30	;November
+		db	31	;December
+leap_february:	db	29	;February (leap year)
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_GTIME
+;
+;    This is the KBDOS "get time" function.  All  the  work  is  done  by  the
+; "GT_DATE_TIME" routine, this function routine  simply  juggles  the  results
+; into the correct registers.
+;
+; Entry:      None
+; Returns:     H = Hours  (0...23)
+;              L = Minutes (0...59)
+;              D = Seconds (0...59)
+;              E = Cent-seconds (always zero)
+;              A = 0 (error code)
+;
+;
+		call	GT_DATE_TIME
+;
+		ld	h,b			;Hours
+		ld	l,c			;Minutes
+		ld	d,e			;Seconds
+		ld	e,0			;Centi-seconds
+		xor	a			;No error code
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_STIME
+;
+;   This is the KBDOS "set time" function routine.  It  checks  that  the  new
+; time  is  valid  and  if  so calls teh routine "SET_TIME" to store it in the
+; clock chip.  The centi-seconds value is ignored.
+;
+; Entry:       H = Hours  (0...23)
+;              L = Minutes (0...59)
+;              D = Seconds (0...59)
+;              E = Centi-seconds (ignored)
+;              A = 0 (error code)
+; Returns:     A = Error code
+;              C = 00h if successful, 0FFh if error
+;
+;
+		ld	a,h			;Error if hours >= 24
+		cp	24
+		jr	nc,bad_time
+;
+		ld	a,l			;Error if minutes >= 60
+		cp	60
+		jr	nc,bad_time
+;
+		ld	a,d			;Error if seconds >= 60
+		cp	60
+		jr	nc,bad_time
+;
+		ld	b,h			;B := hours
+		ld	c,l			;C := minutes
+		ld	e,d			;E := seconds
+		call	SET_TIME		;Set the new time into the
+		xor	a			; clock chip and return with
+		ld	c,a			; no error.
+		ret
+;
+;
+bad_time:	ld	c,0FFh			;Return an error if the
+		ld	a,.ITIME##		; new time was invalid.
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	CLK_INIT
+;
+;    This routine is called at initialisation time to set up the clock chip.
+;
+; Entry:     None
+; Returns:   None
+; Corrupts:   AF
+;
+;
+if 1
+		CLKIN	0Dh			;leave alarm bit
+		and	0100b			;
+		ld	b,a
+		inc	a			;select alarm bank
+		out	(CLOCK_DATA),a		;
+		CLKOUT	0Ah,01h			;insure 24-hour mode
+		CLKOUT	0Dh,b
+else
+		CLKOUT	0Dh,0Ah
+		CLKOUT	0Dh,09h
+		CLKOUT	0Ah,01h
+		CLKOUT	0Dh,00h
+endif
+;
+		ld	bc,0D00h
+clk_loop_1:	CLKIN	c
+		push	af
+		inc	c
+		djnz	clk_loop_1
+;
+		CLKOUT	0Eh,00h
+;
+		ld	b,0Dh
+clk_loop_2:	dec	c
+		pop	de
+		CLKOUT	c,d
+		djnz	clk_loop_2
+;
+;
+CLK_END:	CLKIN	0Dh
+		or	08h
+		out	(CLOCK_DATA),a
+		ret
+;
+;
+if 1
+CLK_START:	CLKIN	0Dh
+else
+CLK_START:	call	CLK_END
+endif
+		and	04h
+		out	(CLOCK_DATA),a
+		ret
+;
+;
+;=============================================================================
+;
+	PROC	GT_DATE_TIME
+;
+;    This routine gets the current date and time from the clock/calander chip.
+; The results are all returned in registers.
+;
+; Entry:      None
+; Returns:     E = Seconds
+;              C = Minutes
+;              B = Hours
+;              L = Day of month
+;              H = Month
+;              D = Year
+;
+;
+		call	CLK_START
+		ld	e,0Dh
+		call	CLK_GET_BYTE
+		ld	d,a			;D := year
+		call	CLK_GET_BYTE
+		ld	h,a			;H := month
+		call	CLK_GET_BYTE
+		ld	l,a			;L := day of month
+;
+		dec	e
+		call	CLK_GET_BYTE
+		ld	b,a			;B := hours
+		call	CLK_GET_BYTE
+		ld	c,a			;C := minutes
+		call	CLK_GET_BYTE
+		ld	e,a			;E := seconds
+		jp	CLK_END
+;
+;
+;
+CLK_GET_BYTE:	push	bc
+		call	CLK_GET_NYBBLE
+		ld	b,a
+		add	a,a
+		add	a,a
+		add	a,b
+		add	a,a
+		ld	b,a
+		call	CLK_GET_NYBBLE
+		add	a,b
+		pop	bc
+		ret
+;
+;
+CLK_GET_NYBBLE:	dec	e
+		CLKIN	e
+		and	0Fh
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+;    These two routines set the date or time in the clock  chip  according  to
+; values passed in registers.
+;
+; Entry:       E = Seconds        \
+;              C = Minutes         >  only for SET_TIME
+;              B = Hours          /
+;              L = Day of month   \
+;              H = Month           >  only for SET_DATE
+;              D = Year           /
+;
+;
+SET_TIME:	ld	l,e
+		ld	h,c
+		ld	d,b
+		call	CLK_START
+		CLKOUT	0Fh,02h
+		ld	e,0
+		jr	set_date_time
+;
+SET_DATE:
+if 1
+		call	CLK_START
+		or	0001b			;select alarm bank
+		out	(CLOCK_DATA),a		;
+		CLKOUT	0Bh,d			;set leap-year counter
+		call	CLK_START
+endif
+		call	CLK_START
+		ld	e,7
+set_date_time:	ld	a,l
+		call	CLK_PUT_BYTE
+		ld	a,h
+		call	CLK_PUT_BYTE
+		ld	a,d
+		call	CLK_PUT_BYTE
+		jp	CLK_END
+;
+;
+;
+CLK_PUT_BYTE:	ld	c,a
+		xor	a
+		ld	b,8
+bcd_loop:	rlc	c
+		adc	a,a
+		daa
+		djnz	bcd_loop
+		call	CLK_PUT_NYBBLE
+		rrca
+		rrca
+		rrca
+		rrca
+CLK_PUT_NYBBLE:	ld	b,a
+		CLKOUT	e,b
+		inc	e
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	finish	<TIME>
+	end
+;

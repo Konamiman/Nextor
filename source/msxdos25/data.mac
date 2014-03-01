@@ -511,6 +511,10 @@ ram_ad	defl	4100h
 	var3	CDRVINFO
 	var3	CDRIVERS
 
+	var3	F_GDATE
+	var3	F_SDATE
+	var3	F_GTIME
+	var3	F_STIME
 
 ;-----------------------------------------------------------------------------
 ;

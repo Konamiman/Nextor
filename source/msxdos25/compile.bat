@@ -69,8 +69,8 @@ copy ..\kvar.rel
 copy ..\data.rel
 copy ..\chgbnk.rel
 copy ..\bank0\b0labels.inc
-for %%A in (KINIT,CHAR,DEV,KBIOS,MISC,TIME,SEG,PATH,FIND,DIR,HANDLES,DEL,RW,FILES,BUF,FAT,VAL,ERR,B2) do cpm32 M80 =%%A
-cpm32 LIB80 TEMP21=char.rel,dev.rel,kbios.rel,misc.rel,time.rel,seg.rel/E
+for %%A in (KINIT,CHAR,DEV,KBIOS,MISC,SEG,PATH,FIND,DIR,HANDLES,DEL,RW,FILES,BUF,FAT,VAL,ERR,B2) do cpm32 M80 =%%A
+cpm32 LIB80 TEMP21=char.rel,dev.rel,kbios.rel,misc.rel,seg.rel/E
 cpm32 LIB80 TEMP22=path.rel,find.rel,dir.rel,handles.rel,del.rel,rw.rel,files.rel/E
 cpm32 LIB80 TEMP23=buf.rel,fat.rel,val.rel,err.rel/E
 cpm32 L80 /P:40FF,CODES,KVAR,DATA,B2,KINIT,TEMP21,TEMP22,TEMP23,/p:7fd0,chgbnk,B2/N/X/Y/E
@@ -113,8 +113,8 @@ copy ..\data.rel
 copy ..\chgbnk.rel
 copy ..\bank2\b2labels.inc
 copy ..\bank0\b0labels.inc
-for %%A in (B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV) do cpm32 M80 =%%A
-cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV,/p:7fd0,chgbnk,B4/N/X/Y/E
+for %%A in (B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV,TIME) do cpm32 M80 =%%A
+cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV,TIME,/p:7fd0,chgbnk,B4/N/X/Y/E
 hex2bin -s 4000 b4.hex
 ..\SymToEqus b4.sym b4rdlabs.inc "R4_[1-9]"
 for %%A in (RAMDRVH) do cpm32 M80 =%%A

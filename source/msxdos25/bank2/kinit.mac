@@ -700,11 +700,11 @@ kbdos_table:
 	dw	F_WRZER## 		;Write random with zero fill (FCB)
 	dw	f_invalid		;Function 29h
 ;
-	dw	?F_GDATE## -OFFSET	;Get date
-	dw	?F_SDATE## -OFFSET	;Set date
-	dw	?F_GTIME## -OFFSET	;Get time
-	dw	?F_STIME## -OFFSET	;Set time
-	dw	?F_VERIFY##-OFFSET	;Set/reset verify flag
+	dw	F_GDATE## 	;Get date
+	dw	F_SDATE## 	;Set date
+	dw	F_GTIME## 	;Get time
+	dw	F_STIME## 	;Set time
+	dw	?F_VERIFY## -OFFSET	;Set/reset verify flag
 ;
 	dw	?F_RDABS## -OFFSET	;Absolute sector read
 	dw	?F_WRABS## -OFFSET	;Absolute sector write

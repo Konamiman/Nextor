@@ -65,5 +65,10 @@ jentry	macro	name
 	jentry	CDRVINFO
 	jentry	CDRIVERS
 
+	jentry	F_GDATE
+	jentry	F_SDATE
+	jentry	F_GTIME
+	jentry	F_STIME
+
 	finish <JUMP>
 	end
