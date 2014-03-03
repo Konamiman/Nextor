@@ -516,6 +516,8 @@ ram_ad	defl	4100h
 	var3	F_GTIME
 	var3	F_STIME
 
+	var3	CLK_INIT
+
 ;-----------------------------------------------------------------------------
 ;
 ;	Routines on ROM page 0 and on disk drivers

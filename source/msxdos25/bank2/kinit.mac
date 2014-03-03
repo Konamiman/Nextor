@@ -242,7 +242,15 @@ endif
 ;
 		ld	(iy+@BUF_UNIT##),0FFh	;Nothing in file buffer
 ;
-		pcall	CLK_INIT		;Initialise clock chip
+
+uep::	push	iy
+	ld	ix,CLK_INIT##
+	ld	(BK4_ADD##),ix
+	ld	ix,?CALL4##
+	ld	iy,(MASTER_SLOT##-1)
+	call	CALSLT##
+	pop	iy
+		;pcall	CLK_INIT		;Initialise clock chip
 ;
 		or	a			;Return with carry clear to
 		ret				; indicate success.

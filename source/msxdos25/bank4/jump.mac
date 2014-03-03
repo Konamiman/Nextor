@@ -69,6 +69,7 @@ jentry	macro	name
 	jentry	F_SDATE
 	jentry	F_GTIME
 	jentry	F_STIME
+	jentry	CLK_INIT
 
 	finish <JUMP>
 	end
