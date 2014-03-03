@@ -905,7 +905,24 @@ not_root:	ld	bc,-4			;Point back at start cluster
 		ld	hl,DR_TIME##		;Point HL at TIME field in
 		add	hl,de			; the directory entry and get
 		push	hl			; current date and time.
-		pcall	GT_DATE_TIME
+		
+		push	ix
+		push	iy
+		ex	af,af'
+		push af
+		ex af,af'
+		ld	ix,GT_DATE_TIME##
+		ld	(BK4_ADD##),ix
+		ld	ix,?C4PBK##
+		ld	iy,(MASTER_SLOT##-1)
+		call	CALSLT##
+		ex	af,af'
+		pop af
+		ex af,af'
+		pop	iy
+		pop	ix
+		
+		;pcall	GT_DATE_TIME
 		ex	(sp),hl
 ;
 		ld	a,c
