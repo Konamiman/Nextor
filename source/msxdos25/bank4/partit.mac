@@ -2717,7 +2717,7 @@ MAP_DRV_CHECK_NEXT:
 	;* Ask the driver for change status.
 	;  If the device has changed, unmap all other drives
 	;  mapped to the same device
-abc::
+
 	push	bc
 	push	hl
 	push	iy
@@ -2900,10 +2900,11 @@ MF_OK_SIZE:
 	ex	(sp),hl
 	ld	a,h	;Read only flag: open as no-write
 	and	1
+	or	100b	;Inheritable
 	ex	(sp),hl
 	push	hl
 	push	ix
-	PCALL	F_OPEN
+ush2::	PCALL	F_OPEN
 	pop	ix
 	pop	hl
 	or	a
@@ -2939,7 +2940,7 @@ MF_UD_OK:
 	;* Fill the UD parameters appropriately
 
 	pop	hl	;H=flags
-	ld	(ix+UD_FH##),b
+uep::	ld	(ix+UD_FH##),b
 	ld	a,h
 	and	1
 	ld	(ix+UD_MFLAGS##),a
@@ -3018,6 +3019,8 @@ MF_UD_OK:
 
 	ld	a,01000000b
 	ld	(ix+UD_FLAGS##),a
+	ld	a,1
+	ld	(ix+UD_DFLAGS##),a
 
 	;--- All done
 

@@ -2283,7 +2283,7 @@ READ_UNIT:	;B  = Number of sectors
 		ld	a,RD_CMD
 
 ;===== end add DOS2.50
-CALL_UNIT:	;@3AE3
+CALL_UNIT:	;@398A
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
 ; driver is specified by a unit handler pointed to by HL, and the function  by
@@ -2322,14 +2322,10 @@ CALL_UNIT:	;@3AE3
 
 		;--- Unit with a file mounted
 
-		call	CUN_FILE
-		pop	iy
-		ret
-
 		;* Treat non-read or write commands
 
-CUN_FILE:
 		pop	af
+		pop	iy
 		ld	c,a
 
 		cp	MC_CMD	;Check media change: return never changed
@@ -2339,22 +2335,39 @@ CUN_FILE:
 		ld	b,1
 		ret	z
 
-		ld	c,a
+		ld	a,c
 		cp	DP_CMD	;Get disk parameters: do nothing
 		ld	a,0
 		ret	z
 
-		ld	c,a
+		ld	a,c
 		cp	CH_CMD
-		ld	hl,781Fh	;Format choice: return null string (can't format drive)
+		;ld	hl,781Fh	;Format choice: return null string (can't format drive)
 		ld	a,0
 		ret	z
 
-		ld	c,a
+		ld	a,c
 		cp	FMT_CMD
 		ld	a,.IFORM##
 		scf
 		ret	z
+
+		;* It is a read or write command
+
+		push	ix	;@39C0
+		push	iy
+
+		push	hl
+		pop	iy
+		push	ix
+		pop	hl
+
+		call	CUN_FILE
+		pop	iy
+		pop	ix
+		ld	b,0	;Needed in case of error, ignored if success
+		ret
+CUN_FILE:
 
 		;>>> C = Command (RD_CMD or WR_CMD), 
 		;    B = sector count
@@ -2370,12 +2383,12 @@ CUN_FILE:
 		ret	nz
 
 		ld	a,(iy+UD_MXS##+1)
-		cp	h
+		cp	d
 		ld	a,.RNF##
 		ret	c
 		jr	nc,CUN_OKSEC
 		ld	a,(iy+UD_MXS##)
-		cp	l
+		cp	e
 		ld	a,.RNF##
 		ret	c
 CUN_OKSEC:
