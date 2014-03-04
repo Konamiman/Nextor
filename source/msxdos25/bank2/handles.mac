@@ -334,7 +334,9 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 ; Returns:   A = Error code
 ;	    HL = Number of bytes read
 ;
-;
+;	
+	bit	7,b	;WIP...
+	jr	nz,XXXX
 		push	de
 		push	hl
 		call	FIND_HANDLE_B		;Find the file handle and
@@ -344,6 +346,21 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		ret	z
 ;
 		xor	a
+		pcall	RD_FAB			;Do the read operation and
+		push	bc			; return with number of bytes
+		pop	hl			; read in HL.
+		ret
+
+XXXX:		res	7,b
+		push	de
+		push	hl
+		call	FIND_HANDLE_B		;Find the file handle and
+		pop	bc			; moan if it is invalid
+		pop	de			; or not open.
+		ret	nc
+		ret	z
+;
+		ld	a,0FFH
 		pcall	RD_FAB			;Do the read operation and
 		push	bc			; return with number of bytes
 		pop	hl			; read in HL.

@@ -2421,7 +2421,13 @@ MAP_UNMAP::
 	ld	b,(ix+UD_FH##)
 	push	hl
 	push	de
+	ld	de,(HANDLES##)
+	push	de
+	ld	de,MHANDLES##-2
+	ld	(HANDLES##),de
 	PCALL	F_CLOSE
+	pop	de
+	ld	(HANDLES##),de
 	pop	de
 	pop	hl
 UNM_NOFILE:
@@ -2818,6 +2824,15 @@ MAP_IDEVL_END:
 	;           IXl = Target drive
 
 MOUNT_FILE:
+	ld	bc,(HANDLES##)
+	push	bc
+	ld	bc,MHANDLES##-2
+	ld	(HANDLES##),bc
+	call	MOUNT_FILE2
+	pop	bc
+	ld	(HANDLES##),bc
+	ret
+MOUNT_FILE2:
 
 	push	ix	;Save flags and target drive for later
 
@@ -3019,7 +3034,7 @@ uep::	ld	(ix+UD_FH##),b
 
 	ld	a,01000000b
 	ld	(ix+UD_FLAGS##),a
-	ld	a,1
+	xor	a
 	ld	(ix+UD_DFLAGS##),a
 
 	;--- All done

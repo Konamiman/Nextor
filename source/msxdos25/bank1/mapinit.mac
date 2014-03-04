@@ -224,6 +224,11 @@ zero_p2_loop:	ld	(hl),0			; data segment up to the
 		ld	(RAM_PTR##),hl		; to point to an end of chain
 						; marker at the bottom of all
 						; the fixed variables.
+		ld	hl,0
+		ld	(MHANDLES##),hl
+		ld	(MHANDLES##+2),hl
+		ld	(MHANDLES##+4),hl
+		ld	(MHANDLES##+6),hl
 ;
 ;
 ;    *****  SETUP MAP_TBL AND SEGMENT LISTS IN PAGE-2  *****
