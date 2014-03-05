@@ -2322,6 +2322,11 @@ CALL_UNIT:	;@398A
 
 		;--- Unit with a file mounted
 
+		cp	RD_CMD
+		jr	z,CUN_RW
+		cp	WR_CMD
+		jr	z,CUN_RW
+
 		;* Treat non-read or write commands
 
 		pop	af
@@ -2340,18 +2345,19 @@ CALL_UNIT:	;@398A
 		ld	a,0
 		ret	z
 
-		ld	a,c
-		cp	CH_CMD
-		jr	nz,M_NOCH
-		ld	hl,781Fh	;Format choice: return null string (can't format drive)
-		jp	RET_IFORM
-M_NOCH:
-
-		ld	a,c
-		cp	FMT_CMD
-		jp	z,RET_IFORM
+		ld	a,.IFORM##	;Format or get format choice string
+		or	a
+		scf
+		ret
 
 		;* It is a read or write command
+
+CUN_RW:
+		ld	a,c
+		call	PUT_P2##
+
+		pop	af
+		pop	iy
 
 		push	ix	;@39C1
 		push	iy
@@ -2361,29 +2367,16 @@ M_NOCH:
 		push	ix
 		pop	hl
 
-		ld	ix,(HANDLES##)
-		push	ix
-		ld	ix,MHANDLES##-2
-		ld	(HANDLES##),ix
-
-		push	bc
 		call	CUN_FILE
-		pop	bc
 
-		pop	ix
-		ld	(HANDLES##),ix
+		push	af
+		ld	a,(DATA_SEG##)
+		call	PUT_P2##
+		pop	af
 
 		pop	iy
 		pop	ix
-		or	a
-		ret	z
 		ld	b,0	;Needed in case of error
-		ret
-
-RET_IFORM:
-		ld	a,.IFORM##
-		or	a
-		scf
 		ret
 
 CUN_FILE:

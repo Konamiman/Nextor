@@ -277,7 +277,7 @@ open_ret_1:	pop	hl			;Return with error code
 		ret	nc			; error if it is invalid
 		ret	z			; or not open.
 ;
-	PROC	M_ENSURE:
+
 do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		ld	a,(ix+FAB_DRV##)	;Flush any dirty buffers for
 		pcall	FL_LOG			; this drive.

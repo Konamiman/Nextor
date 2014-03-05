@@ -3034,9 +3034,6 @@ MFOP_FOUND:
 		xor	11b
 		ld	b,a
 		dec	hl
-
-		;call	FIND_NEW_HANDLE		;Find a file handle to use
-		;jr	nz,open_ret_1		; and give up if none free.
 ;
 		push	hl			;Allocate a new FAB and set
 		pcall	NFAB			; up its reference count.
@@ -3071,9 +3068,8 @@ MFOP_FOUND:
 		pop	hl
 		ex	af,af'			;Get access mode byte back
 		pcall	OPEN_FAB		;Open the file access block
-		;pcall	CHECK_REDIR		; and return with no error
-open_directory:	xor	a			; after updating standard
-		ret				; I/O redirection flags.
+open_directory:	xor	a
+		ret
 ;
 ;
 open_ret_2:	pop	hl

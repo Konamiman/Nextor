@@ -214,7 +214,7 @@ size	macro	name
 
 	size	UD_MSZ		;Total size of unit descriptor including extra fields
 
-	const	UD_SZ,UD_MSZ-18	;Total size of unit descriptor without extra fields
+	const	UD_SZ,UD_MSZ-5	;Total size of unit descriptor without extra fields
 
 ;
 ;-----------------------------------------------------------------------------
