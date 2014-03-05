@@ -2411,32 +2411,38 @@ MAP_UNMAP::
 	or	e
 	jp	z,SETNUMDRV	;Do nothing if drive already unmapped
 
-	push	ix	;If the drive has a file mounted, close its file handle
+	push	ix
 	push	de
-	pop	ix
-	ld	a,(ix+UD_FLAGS##)
-	and	01000000b
-	jr	z,UNM_NOFILE
-
-	ld	b,(ix+UD_FH##)
-	push	hl
-	push	de
-	ld	de,(HANDLES##)
-	push	de
-	ld	de,MHANDLES##-2
-	ld	(HANDLES##),de
-	PCALL	F_CLOSE
-	pop	de
-	ld	(HANDLES##),de
-	pop	de
-	pop	hl
-UNM_NOFILE:
-	pop	ix
 
 	ex	de,hl
 	call	CLOSE_HANDLES
 	pcall	FL_UD
 	pcall	INV_UD
+
+	pop	ix
+	ld	a,(ix+UD_FLAGS##)
+	and	01000000b
+	jr	z,UNM_NOFILE	;If the drive has a file mounted, close its file handle
+
+uep2::	push	hl
+	push	de
+	ld	hl,MHANDLES##
+	ld	e,(ix+UD_FH##)
+	ld	d,0
+	add	hl,de
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	dec	hl
+	push	de
+	pop	ix
+	PCALL	CLOSE_FAB
+	pop	de
+	pop	hl
+UNM_NOFILE:
+	pop	ix
+
 	pcall	FR_P2
 	xor	a
 	ld	(de),a
@@ -2824,16 +2830,6 @@ MAP_IDEVL_END:
 	;           IXl = Target drive
 
 MOUNT_FILE:
-	ld	bc,(HANDLES##)
-	push	bc
-	ld	bc,MHANDLES##-2
-	ld	(HANDLES##),bc
-	call	MOUNT_FILE2
-	pop	bc
-	ld	(HANDLES##),bc
-	ret
-MOUNT_FILE2:
-
 	push	ix	;Save flags and target drive for later
 
 	;* If DE points to a filename, generate a proper FIB
@@ -2919,7 +2915,7 @@ MF_OK_SIZE:
 	ex	(sp),hl
 	push	hl
 	push	ix
-ush2::	PCALL	F_OPEN
+uep::	call	MF_OPEN
 	pop	ix
 	pop	hl
 	or	a
@@ -2955,59 +2951,16 @@ MF_UD_OK:
 	;* Fill the UD parameters appropriately
 
 	pop	hl	;H=flags
-uep::	ld	(ix+UD_FH##),b
+	ld	(ix+UD_FH##),b
 	ld	a,h
 	and	1
 	ld	(ix+UD_MFLAGS##),a
 
 	ex	de,hl	;Now HL = FIB
 
-	;Filename (warning: ugly code ahead)
-
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+1),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+2),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+3),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+4),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+5),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+6),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+7),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+8),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+9),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+10),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+11),a
-	inc	hl
-	ld	a,(hl)
-	ld	(ix+UD_FNAME##+12),a
-	inc	hl
-
 	;Maximum sector count = (File size / 512) - 1
 
-	ld	bc,10
+	ld	bc,24
 	add	hl,bc	;Now HL points to 4th byte of file size in FIB
 	ld	a,(hl)
 	rra
@@ -3047,6 +3000,85 @@ BFSZ_RET:
 POPIX_RET:
 	pop	ix
 	ret
+
+
+;This routine opens a file to be mounted.
+;It is almost a clone of F_OPEN in handles.mac,
+;but registers the FAB pointer in the MHANDLES vector instead of
+;using the standard HANDLES, and skips the file attribute checking
+;as it has been already done. It also skips redirection
+;state checking.
+
+MF_OPEN:
+		ex	af,af'			;Save access mode byte
+		pcall	LOC_FIB			;Find the directory entry
+		ret	nz			;Give up if error
+;
+		push	hl			;Save unit descriptor address
+
+		ld	hl,MHANDLES##	;Find a free entry in MHANDLES
+		ld	b,4
+MFOP_SRCH:
+		ld	a,(hl)
+		inc	hl
+		or	(hl)
+		jr	z,MFOP_FOUND
+		inc	hl
+		djnz	MFOP_SRCH
+		ld	a,.NHAND##
+		or	a
+		jr	open_ret_1
+MFOP_FOUND:
+		dec	b	;Convert B to the MHANDLES table entry index
+		ld	a,b
+		xor	11b
+		ld	b,a
+		dec	hl
+
+		;call	FIND_NEW_HANDLE		;Find a file handle to use
+		;jr	nz,open_ret_1		; and give up if none free.
+;
+		push	hl			;Allocate a new FAB and set
+		pcall	NFAB			; up its reference count.
+		jr	nz,open_ret_2		;Error if out of memory.
+;
+		ex	de,hl
+		ex	(sp),hl			;Save directory entry pointer
+		ld	(hl),e			;Store the pointer to the
+		inc	hl			; new FAB in the file
+		ld	(hl),d			; handle table
+;
+		push	bc
+		push	de			;Copy the compatible portion
+		ex	(sp),ix			; of the FIB into the new
+		pop	hl			; FAB as a start for
+		ld	bc,FAB_FIB##		; setting it up.
+		ldir
+		pop	bc			;Get file handle back
+		pop	de			;DE -> directory entry
+;
+		ld	(ix+FAB_SA##),ATM_HID+ATM_SYS ;Set search attributes
+						      ; so that any file, but
+						      ; no sub-directories
+						      ; will be found.
+;
+		xor	a
+		ld	(ix+FAB_PTR##),a	;Set the four byte file
+		ld	(ix+FAB_PTR##+1),a	; pointer to zero in the
+		ld	(ix+FAB_PTR##+2),a	; file access block.
+		ld	(ix+FAB_PTR##+3),a
+;
+		pop	hl
+		ex	af,af'			;Get access mode byte back
+		pcall	OPEN_FAB		;Open the file access block
+		;pcall	CHECK_REDIR		; and return with no error
+open_directory:	xor	a			; after updating standard
+		ret				; I/O redirection flags.
+;
+;
+open_ret_2:	pop	hl
+open_ret_1:	pop	hl			;Return with error code
+		ret
 
 
 ;This subroutine creates an empty unit descriptor
