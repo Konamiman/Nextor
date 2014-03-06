@@ -2322,6 +2322,7 @@ CALL_UNIT:	;@398A
 
 		;--- Unit with a file mounted
 
+		pop	af
 		cp	RD_CMD
 		jr	z,CUN_RW
 		cp	WR_CMD
@@ -2329,7 +2330,6 @@ CALL_UNIT:	;@398A
 
 		;* Treat non-read or write commands
 
-		pop	af
 		pop	iy
 		ld	c,a
 
@@ -2353,13 +2353,15 @@ CALL_UNIT:	;@398A
 		;* It is a read or write command
 
 CUN_RW:
+		push	af
 		ld	a,c
 		call	PUT_P2##
 
 		pop	af
 		pop	iy
 
-		push	ix	;@39C1
+		push	hl
+		push	ix
 		push	iy
 
 		push	hl
@@ -2367,7 +2369,7 @@ CUN_RW:
 		push	ix
 		pop	hl
 
-		call	CUN_FILE
+		call	CUN_RW2
 
 		push	af
 		ld	a,(DATA_SEG##)
@@ -2376,10 +2378,11 @@ CUN_RW:
 
 		pop	iy
 		pop	ix
+		pop	hl
 		ld	b,0	;Needed in case of error
 		ret
 
-CUN_FILE:
+CUN_RW2:
 
 		;>>> C = Command (RD_CMD or WR_CMD), 
 		;    B = sector count
@@ -2405,9 +2408,18 @@ CUN_FILE:
 		ret	c
 CUN_OKSEC:
 
-		;* Perform a seek to sector number * 512
+		;* Calculate FAB address from pseudo-file handle number
 
 		push	bc
+		ld	b,(iy+UD_FH##)
+		ld	ix,MHANDLES##
+		ld	c,b
+		ld	b,0
+		add	ix,bc
+		add	ix,bc
+
+		;* Perform a seek to sector number * 512
+
 		push	hl
 		ld	b,(iy+UD_FH##)
 		xor	a
@@ -2418,7 +2430,9 @@ CUN_OKSEC:
 		sla	h
 		rl	e
 		rl	d	;...and we multiply DE:HL by 2.
-		PCALL	F_SEEK
+		push	ix
+		PCALL	M_SEEK
+		pop	ix
 		pop	hl
 		pop	bc
 		or	a
@@ -2431,29 +2445,30 @@ CUN_OKSEC:
 		ld	l,0
 		sla	h		;H = sectors * 512 = bytes to transfer
 
+		push	ix
 		ld	b,(iy+UD_FH##)
 		set	7,b	;WIP...
 		ld	a,c
 		cp	WR_CMD
+		ld	a,0FFh	;Read/Write to the current segment
 		jr	z,CUN_WRITE
 CUN_READ:
-		xor	a	;PCALL	F_READ
+		PCALL	RD_FAB
 		jr	CUN_NEXT
 CUN_WRITE:
-		PCALL	F_WRITE
+		PCALL	WR_FAB
 CUN_NEXT:
+		pop	ix
 
 		or	a	;TODO: Convert error to "disk error"?
 		ret	nz
 
 		;* Flush buffers for the file
 
-		ld	b,(iy+UD_FH##)
-		PCALL	F_ENSURE
+		PCALL	M_ENSURE
 
 		or	a	;TODO: Convert error to "disk error"?
 		ret
-
 
 		;--- Regular unit (not mounted)
 

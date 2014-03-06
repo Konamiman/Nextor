@@ -278,6 +278,7 @@ open_ret_1:	pop	hl			;Return with error code
 		ret	z			; or not open.
 ;
 
+		PROC	M_ENSURE
 do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		ld	a,(ix+FAB_DRV##)	;Flush any dirty buffers for
 		pcall	FL_LOG			; this drive.
@@ -408,7 +409,9 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		ret	nc
 		ret	z
 		ex	af,af'
-;
+
+		PROC	M_SEEK
+
 		push	hl			;Save high word of offset.
 		ld	hl,0
 		ld	bc,0			;Jump with BC:HL=0 if offset
