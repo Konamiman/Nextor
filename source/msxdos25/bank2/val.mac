@@ -1870,7 +1870,10 @@ _NEW_UPB:
 
 		ld	bc,UD_FLAGS##		;HL -> start of parameter
 		add	hl,bc			; variables in unit descriptor
-		ld	(hl),UFM_F2		;Assume first a FAT12 drive
+		ld	a,(hl)
+		and	01000000b	;Preserve mounted file flag
+		or	UFM_F2
+		ld	(hl),a		;Assume first a FAT12 drive
 
 		ld	bc,UD_CMSK##-UD_FLAGS##
 		add	hl,bc
@@ -2354,29 +2357,46 @@ CALL_UNIT:	;@398A
 
 CUN_RW:
 		push	af
+		call	GET_P2##
+		ld	(SEG_SAVE##),a
 		ld	a,c
 		call	PUT_P2##
 
 		pop	af
 		pop	iy
+		ld	(IY_SAVE##),iy
 
 		push	hl
 		push	ix
-		push	iy
 
 		push	hl
 		pop	iy
+
+		push	de
+		push	bc
+		ld	hl,RW_OVER##
+		ld	de,RW_SAVE##
+		ld	bc,20
+		ldir ;!!!
+		pop	bc
+		pop	de
+
 		push	ix
 		pop	hl
 
 		call	CUN_RW2
 
 		push	af
-		ld	a,(DATA_SEG##)
+		ld	a,(SEG_SAVE##)
 		call	PUT_P2##
 		pop	af
 
-		pop	iy
+		ld	hl,RW_SAVE##
+		ld	de,RW_OVER##
+		ld	bc,20
+		ldir	;!!!
+
+		ld	iy,(IY_SAVE##)
 		pop	ix
 		pop	hl
 		ld	b,0	;Needed in case of error
@@ -2449,6 +2469,7 @@ CUN_OKSEC:
 		ld	l,0
 		sla	h		;H = sectors * 512 = bytes to transfer
 
+		ld	iy,(IY_SAVE##)
 		push	ix
 		ld	a,c
 		cp	WR_CMD
@@ -2469,7 +2490,8 @@ CUN_NEXT:
 
 		;* Flush buffers for the file
 
-		PCALL	M_ENSURE
+		ld	iy,(IY_SAVE##)
+		;PCALL	M_ENSURE
 
 		or	a	;TODO: Convert error to "disk error"?
 		ret

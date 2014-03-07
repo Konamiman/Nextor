@@ -2987,8 +2987,13 @@ MF_UD_OK:
 
 	ld	a,01000000b
 	ld	(ix+UD_FLAGS##),a
-	xor	a
+	ld	a,10001b	;First sector is already valid
 	ld	(ix+UD_DFLAGS##),a
+	xor	a
+	ld	(ix+UD_FSEC##),a
+	ld	(ix+UD_FSEC##+1),a
+	ld	(ix+UD_FSEC##+2),a
+	ld	(ix+UD_FSEC##+3),a
 
 	;--- All done
 

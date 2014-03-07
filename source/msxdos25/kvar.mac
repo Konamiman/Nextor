@@ -495,14 +495,16 @@ if 1
 	var	RD_LIST,0100h*2		;RAM disk segment/slot list
 	var1	RD_COUNT		;RAM disk segment count
 	var	RD_BOOT,UPB_SPARE	;RAM disk boot sector start
-	var	MHANDLES,8			;Pseudo-file handles table for mounted filed (4 entries)
 else
 	var	RD_LIST,255*2		;RAM disk segment/slot list
 	var1	RD_SPARE
 	var1	RD_COUNT		;RAM disk segment count
 	var	RD_BOOT,512		;RAM disk boot sector start
-	var	MHANDLES,8			;Pseudo-file handles table for mounted filed (4 entries)
 endif
+	var	MHANDLES,8			;Pseudo-file handles table for mounted filed (4 entries)
+	var	RW_SAVE,20		;To temporarily save RW_* variables
+	var	IY_SAVE,2
+	var	SEG_SAVE,1
 ;
 ;       ---------------------------------
 ;
