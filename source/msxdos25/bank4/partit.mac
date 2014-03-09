@@ -2825,12 +2825,15 @@ MAP_IDEVL_END:
 
 	;--- Mount a file
 	;    Input: DE  = Pointer to filename or FIB
-	;	    HL  = Address of pointer to unit descriptor
+	;	        HL  = Address of pointer to unit descriptor
 	;           IXh = Flags: bit 0 = mount in readonly mode
 	;           IXl = Target drive
+	;           C   = Drive number
 
 MOUNT_FILE:
 	push	ix	;Save flags and target drive for later
+	ld	a,c
+	ld	(IY_SAVE##),a
 
 	;* If DE points to a filename, generate a proper FIB
 
@@ -2933,6 +2936,8 @@ uep::	call	MF_OPEN
 	pop	hl
 	scf
 	push	ix
+	ld	a,(IY_SAVE##)
+	ld	c,a
 	call	CREATE_UD
 	pop	de	;Now DE = Pointer to FIB
 

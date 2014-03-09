@@ -2286,7 +2286,7 @@ READ_UNIT:	;B  = Number of sectors
 		ld	a,RD_CMD
 
 ;===== end add DOS2.50
-CALL_UNIT:	;@398A
+CALL_UNIT:	;@398E
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
 ; driver is specified by a unit handler pointed to by HL, and the function  by
@@ -2357,10 +2357,8 @@ CALL_UNIT:	;@398A
 
 CUN_RW:
 		push	af
-		call	GET_P2##
-		ld	(SEG_SAVE##),a
 		ld	a,c
-		call	PUT_P2##
+		ld	(SEG_SAVE##),a	;Required segment
 
 		pop	af
 		pop	iy
@@ -2385,11 +2383,6 @@ CUN_RW:
 		pop	hl
 
 		call	CUN_RW2
-
-		push	af
-		ld	a,(SEG_SAVE##)
-		call	PUT_P2##
-		pop	af
 
 		ld	hl,RW_SAVE##
 		ld	de,RW_OVER##
@@ -2422,7 +2415,7 @@ CUN_RW2:
 		cp	d
 		ld	a,.RNF##
 		ret	c
-		jr	nc,CUN_OKSEC
+		jr	nz,CUN_OKSEC
 		ld	a,(iy+UD_MXS##)
 		cp	e
 		ld	a,.RNF##
@@ -2447,13 +2440,14 @@ CUN_OKSEC:
 
 		push	hl
 		xor	a
-		ld	e,d
 		ld	h,e
+		ld	e,d
 		ld	l,0
 		ld	d,0	;Now DE:HL = DE * 256...
 		sla	h
 		rl	e
 		rl	d	;...and we multiply DE:HL by 2.
+		ex	de,hl
 		push	ix
 		PCALL	M_SEEK
 		pop	ix
@@ -2469,6 +2463,23 @@ CUN_OKSEC:
 		ld	l,0
 		sla	h		;H = sectors * 512 = bytes to transfer
 
+		ld	a,(DATA_SEG##)
+		ld	b,a
+		ld	a,(SEG_SAVE##)
+		cp	b
+		ld	a,0FFh
+		jr	z,ASDFG
+		inc	a
+	ASDFG:
+		push	af
+
+		ld	a,(SEG_SAVE##)
+		ld	b,a
+		call	GET_P2##
+		ld	(SEG_SAVE##),a
+		ld	a,b
+		call	PUT_P2##
+
 		ld	iy,(IY_SAVE##)
 		push	ix
 		ld	a,c
@@ -2481,9 +2492,14 @@ CUN_READ:
 		PCALL	RD_FAB
 		jr	CUN_NEXT
 CUN_WRITE:
-		ld	a,.RNF##	;PCALL	WR_FAB
+		PCALL	WR_FAB
 CUN_NEXT:
 		pop	ix
+
+		push	af
+		ld	a,(SEG_SAVE##)
+		call	PUT_P2##
+		pop	af
 
 		or	a	;TODO: Convert error to "disk error"?
 		ret	nz
