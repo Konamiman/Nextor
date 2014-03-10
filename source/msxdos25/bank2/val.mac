@@ -2370,28 +2370,32 @@ CUN_RW:
 		push	hl
 		pop	iy
 
-		push	de
-		push	bc
-		ld	hl,RW_OVER##
-		ld	de,RW_SAVE##
-		ld	bc,20
-		ldir ;!!!
-		pop	bc
-		pop	de
+		;push	de
+		;push	bc
+		;ld	hl,RW_OVER##
+		;ld	de,RW_SAVE##
+		;ld	bc,20
+		;ldir ;!!!
+		;pop	bc
+		;pop	de
 
 		push	ix
 		pop	hl
 
+		push	bc
 		call	CUN_RW2
+		pop	bc
 
-		ld	hl,RW_SAVE##
-		ld	de,RW_OVER##
-		ld	bc,20
-		ldir	;!!!
+		;ld	hl,RW_SAVE##
+		;ld	de,RW_OVER##
+		;ld	bc,20
+		;ldir	;!!!
 
 		ld	iy,(IY_SAVE##)
 		pop	ix
 		pop	hl
+		or	a
+		ret	z
 		ld	b,0	;Needed in case of error
 		ret
 
@@ -2406,7 +2410,7 @@ CUN_RW2:
 
 		;* Check sector number
 
-		ld	a,(DIO_EX_SECTOR##)
+		ld	a,(DIO_EX_SECTOR##)	;@39E7
 		or	a
 		ld	a,.RNF##
 		ret	nz
@@ -2471,22 +2475,23 @@ CUN_OKSEC:
 		jr	z,ASDFG
 		inc	a
 	ASDFG:
-		push	af
-
-		ld	a,(SEG_SAVE##)
 		ld	b,a
-		call	GET_P2##
-		ld	(SEG_SAVE##),a
-		ld	a,b
-		call	PUT_P2##
+
+		;ld	a,(SEG_SAVE##)
+		;ld	b,a
+		;call	GET_P2##
+		;ld	(SEG_SAVE##),a
+		;ld	a,b
+		;call	PUT_P2##
 
 		ld	iy,(IY_SAVE##)
 		push	ix
 		ld	a,c
 		cp	WR_CMD
+		ld	a,b
 		push	hl
 		pop	bc
-		ld	a,0FFh	;Read/Write to the current segment
+		;ld	a,0FFh	;Read/Write to the current segment
 		jr	z,CUN_WRITE
 CUN_READ:
 		PCALL	RD_FAB
@@ -2496,10 +2501,10 @@ CUN_WRITE:
 CUN_NEXT:
 		pop	ix
 
-		push	af
-		ld	a,(SEG_SAVE##)
-		call	PUT_P2##
-		pop	af
+		;push	af
+		;ld	a,(SEG_SAVE##)
+		;call	PUT_P2##
+		;pop	af
 
 		or	a	;TODO: Convert error to "disk error"?
 		ret	nz
