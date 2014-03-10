@@ -2451,10 +2451,16 @@ CUN_OKSEC:
 		sla	h
 		rl	e
 		rl	d	;...and we multiply DE:HL by 2.
-		ex	de,hl
-		push	ix
-		PCALL	M_SEEK
-		pop	ix
+		;ex	de,hl
+		;push	ix
+		;ld	iy,(IY_SAVE##)
+		;PCALL	M_SEEK
+		ld	(ix+FAB_PTR##),l
+		ld	(ix+FAB_PTR##+1),h
+		ld	(ix+FAB_PTR##+2),e
+		ld	(ix+FAB_PTR##+3),d
+		
+		;pop	ix
 		pop	hl
 		pop	bc
 		or	a
