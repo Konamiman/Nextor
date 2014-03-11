@@ -2358,7 +2358,7 @@ CALL_UNIT:	;@398E
 CUN_RW:
 		push	af
 		ld	a,c
-		ld	(SEG_SAVE##),a	;Required segment
+		;ld	(SEG_SAVE##),a	;Required segment
 
 		pop	af
 		pop	iy
@@ -2370,14 +2370,14 @@ CUN_RW:
 		push	hl
 		pop	iy
 
-		;push	de
-		;push	bc
-		;ld	hl,RW_OVER##
-		;ld	de,RW_SAVE##
-		;ld	bc,20
-		;ldir ;!!!
-		;pop	bc
-		;pop	de
+		push	de
+		push	bc
+		ld	hl,RW_OVER##
+		ld	de,RW_SAVE##
+		ld	bc,20
+		ldir ;!!!
+		pop	bc
+		pop	de
 
 		push	ix
 		pop	hl
@@ -2386,14 +2386,21 @@ CUN_RW:
 		call	CUN_RW2
 		pop	bc
 
-		;ld	hl,RW_SAVE##
-		;ld	de,RW_OVER##
-		;ld	bc,20
-		;ldir	;!!!
+		push	de
+		push	bc
+		ld	hl,RW_SAVE##
+		ld	de,RW_OVER##
+		ld	bc,20
+		ldir	;!!!
+		pop	bc
+		pop	de
 
 		ld	iy,(IY_SAVE##)
 		pop	ix
 		pop	hl
+		push	af
+		PCALL	FL_UD
+		pop	af
 		or	a
 		ret	z
 		ld	b,0	;Needed in case of error
@@ -2473,15 +2480,15 @@ CUN_OKSEC:
 		ld	l,0
 		sla	h		;H = sectors * 512 = bytes to transfer
 
-		ld	a,(DATA_SEG##)
-		ld	b,a
-		ld	a,(SEG_SAVE##)
-		cp	b
-		ld	a,0FFh
-		jr	z,ASDFG
-		inc	a
-	ASDFG:
-		ld	b,a
+		;ld	a,(DATA_SEG##)
+		;ld	b,a
+		;ld	a,(SEG_SAVE##)
+		;cp	b
+		;ld	a,0FFh
+		;jr	z,ASDFG
+		;inc	a
+	;ASDFG:
+		;ld	b,a
 
 		;ld	a,(SEG_SAVE##)
 		;ld	b,a
@@ -2492,10 +2499,17 @@ CUN_OKSEC:
 
 		ld	iy,(IY_SAVE##)
 		push	ix
+		
+		push	hl
+		ld	a,(MFLAGS##)
+		and	10000000b
+		ld	b,0
+		jr nz,ASDFG
+		dec	b
+ASDFG:
 		ld	a,c
 		cp	WR_CMD
 		ld	a,b
-		push	hl
 		pop	bc
 		;ld	a,0FFh	;Read/Write to the current segment
 		jr	z,CUN_WRITE

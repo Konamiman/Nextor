@@ -339,6 +339,8 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 ;	
 		push	de
 		push	hl
+		ld	hl,MFLAGS##
+		set	7,(hl)
 		call	FIND_HANDLE_B		;Find the file handle and
 		pop	bc			; moan if it is invalid
 		pop	de			; or not open.
@@ -348,6 +350,8 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		xor	a
 		pcall	RD_FAB			;Do the read operation and
 		push	bc			; return with number of bytes
+		ld	hl,MFLAGS##
+		res	7,(hl)
 		pop	hl			; read in HL.
 		ret
 ;
@@ -370,6 +374,8 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 ;
 		push	de
 		push	hl
+		ld	hl,MFLAGS##
+		set	7,(hl)
 		call	FIND_HANDLE_B		;Find the file handle and
 		pop	bc			; moan if it is invalid
 		pop	de			; or not open.
@@ -379,6 +385,8 @@ do_ensure:	call	ENSURE_FAB		;Update dir entry if required
 		xor	a
 		pcall	WR_FAB			;Do the write operation and
 		push	bc			; return with number of bytes
+		ld	hl,MFLAGS##
+		res	7,(hl)
 		pop	hl			; written in HL.
 		ret
 ;
