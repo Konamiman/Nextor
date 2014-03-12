@@ -504,7 +504,7 @@ endif
 	var	MHANDLES,8			;Pseudo-file handles table for mounted filed (4 entries)
 	var	RW_SAVE,20		;To temporarily save RW_* variables
 	var	IY_SAVE,2
-	;var	SEG_SAVE,1
+	var	LZY_SAVE,1
 ;
 ;       ---------------------------------
 ;

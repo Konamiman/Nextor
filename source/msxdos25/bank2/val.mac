@@ -2372,10 +2372,14 @@ CUN_RW:
 
 		push	de
 		push	bc
+		push	af
 		ld	hl,RW_OVER##
 		ld	de,RW_SAVE##
 		ld	bc,20
 		ldir ;!!!
+		ld	a,(LAZY##)
+		ld	(LZY_SAVE##),a
+		pop	af
 		pop	bc
 		pop	de
 
@@ -2388,10 +2392,14 @@ CUN_RW:
 
 		push	de
 		push	bc
+		push	af
 		ld	hl,RW_SAVE##
 		ld	de,RW_OVER##
 		ld	bc,20
 		ldir	;!!!
+		ld	a,(LZY_SAVE##)
+		ld	(LAZY##),a
+		pop	af
 		pop	bc
 		pop	de
 
