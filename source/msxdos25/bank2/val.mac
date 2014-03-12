@@ -2386,9 +2386,25 @@ CUN_RW:
 		push	ix
 		pop	hl
 
+		ex	af,af'
+		push	af
+		ex	af,af'
+		exx
+		push	hl
+		push	de
+		push	bc
+		exx
 		push	bc
 		call	CUN_RW2
 		pop	bc
+		exx
+		pop	bc
+		pop	de
+		pop	hl
+		exx
+		ex	af,af'
+		pop	af
+		ex	af,af'
 
 		push	de
 		push	bc
