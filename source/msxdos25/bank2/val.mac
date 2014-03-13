@@ -2358,7 +2358,7 @@ CALL_UNIT:	;@39A2
 CUN_RW:
 		push	af
 		ld	a,c
-		;ld	(SEG_SAVE##),a	;Required segment
+		ld	(SEG_SAVE##),a	;Required segment
 
 		pop	af
 		pop	iy
@@ -2423,7 +2423,8 @@ CUN_RW:
 		pop	ix
 		pop	hl
 		push	af
-		PCALL	FL_UD
+		;PCALL	FL_UD
+		;PCALL	INV_UD
 		pop	af
 		or	a
 		ret	z
@@ -2504,15 +2505,15 @@ CUN_OKSEC:
 		ld	l,0
 		sla	h		;H = sectors * 512 = bytes to transfer
 
-		;ld	a,(DATA_SEG##)
-		;ld	b,a
-		;ld	a,(SEG_SAVE##)
-		;cp	b
-		;ld	a,0FFh
-		;jr	z,ASDFG
-		;inc	a
-	;ASDFG:
-		;ld	b,a
+		ld	a,(DATA_SEG##)
+		ld	b,a
+		ld	a,(SEG_SAVE##)
+		cp	b
+		ld	a,0FFh
+		jr	z,ASDFG
+		inc	a
+	ASDFG:
+		ld	b,a
 
 		;ld	a,(SEG_SAVE##)
 		;ld	b,a
@@ -2525,12 +2526,12 @@ CUN_OKSEC:
 		push	ix
 		
 		push	hl
-		ld	a,(MFLAGS##)
-		and	10000000b
-		ld	b,0
-		jr nz,ASDFG
-		dec	b
-ASDFG:
+		;ld	a,(MFLAGS##)
+		;and	10000000b
+		;ld	b,0
+		;jr nz,ASDFG
+		;dec	b
+;ASDFG:
 		ld	a,c
 		cp	WR_CMD
 		ld	a,b
@@ -2541,7 +2542,7 @@ CUN_READ:
 		PCALL	RD_FAB
 		jr	CUN_NEXT
 CUN_WRITE:
-		PCALL	WR_FAB
+		PCALL	WR_FAB	;@3AAB
 CUN_NEXT:
 		pop	ix
 
