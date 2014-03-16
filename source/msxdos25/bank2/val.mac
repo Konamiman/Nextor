@@ -2286,7 +2286,7 @@ READ_UNIT:	;B  = Number of sectors
 		ld	a,RD_CMD
 
 ;===== end add DOS2.50
-CALL_UNIT:	;@39A2
+CALL_UNIT:	;@3A21	;@39A2
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
 ; driver is specified by a unit handler pointed to by HL, and the function  by
@@ -2370,18 +2370,18 @@ CUN_RW:
 		push	hl
 		pop	iy
 
-		push	de
-		push	bc
-		push	af
-		ld	hl,RW_OVER##
-		ld	de,RW_SAVE##
-		ld	bc,20
-		ldir ;!!!
-		ld	a,(LAZY##)
-		ld	(LZY_SAVE##),a
-		pop	af
-		pop	bc
-		pop	de
+		;push	de
+		;push	bc
+		;push	af
+		;ld	hl,RW_OVER##
+		;ld	de,RW_SAVE##
+		;ld	bc,20
+		;ldir ;!!!
+		;ld	a,(LAZY##)
+		;ld	(LZY_SAVE##),a
+		;pop	af
+		;pop	bc
+		;pop	de
 
 		push	ix
 		pop	hl
@@ -2406,18 +2406,18 @@ CUN_RW:
 		pop	af
 		ex	af,af'
 
-		push	de
-		push	bc
-		push	af
-		ld	hl,RW_SAVE##
-		ld	de,RW_OVER##
-		ld	bc,20
-		ldir	;!!!
-		ld	a,(LZY_SAVE##)
-		ld	(LAZY##),a
-		pop	af
-		pop	bc
-		pop	de
+		;push	de
+		;push	bc
+		;push	af
+		;ld	hl,RW_SAVE##
+		;ld	de,RW_OVER##
+		;ld	bc,20
+		;ldir	;!!!
+		;ld	a,(LZY_SAVE##)
+		;ld	(LAZY##),a
+		;pop	af
+		;pop	bc
+		;pop	de
 
 		ld	iy,(IY_SAVE##)
 		pop	ix
@@ -2439,6 +2439,44 @@ CUN_RW2:
 		;    DE = First sector
 		;    HL = Destination
 		;    IY = Unit descriptor
+
+		;* Convert destination address according to the required segment
+		;  (the reverse of what GET_SEGMENT does) if it is a TPA segment.
+		;  This is necessary to prevent the actual sector access
+		;  (for the unit that host the image file) to target the wrong segment.
+
+		push	de
+		push	bc
+		push	hl
+
+		ld	a,(SEG_SAVE##)
+		ld	c,a
+		ld	b,4
+		ld	d,0
+		ld	hl,P0_TPA##
+xxx:
+		ld	a,(hl)
+		cp	c
+		jr	z,xxx2
+		ld	a,d
+		add	a,40h
+		ld	d,a
+		inc	hl
+		djnz	xxx
+		jr	xxx3
+
+xxx2:
+		pop	hl
+		ld	a,h
+		and	00111111b
+		or	d
+		ld	h,a
+		jr	xxx4
+xxx3:
+		pop	hl
+xxx4:
+		pop	bc
+		pop	de
 
 		;* Check sector number
 
