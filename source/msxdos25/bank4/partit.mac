@@ -2867,9 +2867,9 @@ MF_IS_FIB:
 
 	bit	0,b
 	jr	z,MF_NO_RO
-	pop	af
-	or	1
-	push	af
+	pop	bc
+	set	0,b
+	push	bc
 MF_NO_RO:
 
 	;* Check if the target drive is the same as the file drive

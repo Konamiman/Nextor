@@ -2370,19 +2370,6 @@ CUN_RW:
 		push	hl
 		pop	iy
 
-		;push	de
-		;push	bc
-		;push	af
-		;ld	hl,RW_OVER##
-		;ld	de,RW_SAVE##
-		;ld	bc,20
-		;ldir ;!!!
-		;ld	a,(LAZY##)
-		;ld	(LZY_SAVE##),a
-		;pop	af
-		;pop	bc
-		;pop	de
-
 		push	ix
 		pop	hl
 
@@ -2406,26 +2393,9 @@ CUN_RW:
 		pop	af
 		ex	af,af'
 
-		;push	de
-		;push	bc
-		;push	af
-		;ld	hl,RW_SAVE##
-		;ld	de,RW_OVER##
-		;ld	bc,20
-		;ldir	;!!!
-		;ld	a,(LZY_SAVE##)
-		;ld	(LAZY##),a
-		;pop	af
-		;pop	bc
-		;pop	de
-
 		ld	iy,(IY_SAVE##)
 		pop	ix
 		pop	hl
-		push	af
-		;PCALL	FL_UD
-		;PCALL	INV_UD
-		pop	af
 		or	a
 		ret	z
 		ld	b,0	;Needed in case of error
@@ -2521,16 +2491,11 @@ CUN_OKSEC:
 		sla	h
 		rl	e
 		rl	d	;...and we multiply DE:HL by 2.
-		;ex	de,hl
-		;push	ix
-		;ld	iy,(IY_SAVE##)
-		;PCALL	M_SEEK
 		ld	(ix+FAB_PTR##),l
 		ld	(ix+FAB_PTR##+1),h
 		ld	(ix+FAB_PTR##+2),e
 		ld	(ix+FAB_PTR##+3),d
 		
-		;pop	ix
 		pop	hl
 		pop	bc
 		or	a
@@ -2553,28 +2518,14 @@ CUN_OKSEC:
 	ASDFG:
 		ld	b,a
 
-		;ld	a,(SEG_SAVE##)
-		;ld	b,a
-		;call	GET_P2##
-		;ld	(SEG_SAVE##),a
-		;ld	a,b
-		;call	PUT_P2##
-
 		ld	iy,(IY_SAVE##)
 		push	ix
 		
 		push	hl
-		;ld	a,(MFLAGS##)
-		;and	10000000b
-		;ld	b,0
-		;jr nz,ASDFG
-		;dec	b
-;ASDFG:
 		ld	a,c
 		cp	WR_CMD
-		ld	a,b
+		ld	a,b		;0 for TPA, FFh for current segment
 		pop	bc
-		;ld	a,0FFh	;Read/Write to the current segment
 		jr	z,CUN_WRITE
 CUN_READ:
 		PCALL	RD_FAB
@@ -2584,20 +2535,13 @@ CUN_WRITE:
 CUN_NEXT:
 		pop	ix
 
-		;push	af
-		;ld	a,(SEG_SAVE##)
-		;call	PUT_P2##
-		;pop	af
-
-		or	a	;TODO: Convert error to "disk error"?
-		ret	nz
-
-		;* Flush buffers for the file
+		cp	.ACCV##
+		jr	nz,CUN_NOACCV
+		ld	a,.WPROT##
+CUN_NOACCV:
 
 		ld	iy,(IY_SAVE##)
-		;PCALL	M_ENSURE
-
-		or	a	;TODO: Convert error to "disk error"?
+		or	a
 		ret
 
 		;--- Regular unit (not mounted)

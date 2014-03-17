@@ -59,6 +59,7 @@
 ;
 	PROC	RDWR_FAB
 ;
+if 1
 		ld	hl,(RW_OVER##)
 		push	hl
 		ld	hl,(RW_OVER##+2)
@@ -79,16 +80,9 @@
 		push	hl
 		ld	hl,(RW_OVER##+18)
 		push	hl
-		ld	hl,(PHYS_UNIT##)
-		push	hl
-		ld	hl,(FAT_OSECT##)
-		push	hl
-		ld	hl,(FAT_HACK##)
-		push	hl
-		ld	hl,(FAT_CHAIN##)
-		push	hl
-		ld	hl,(FAT_FLAGS##)
-		push	hl
+		;ld	hl,(PHYS_UNIT##)
+		;push	hl
+endif
 
 		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
 		jp	nz,rdwr_device		; and writes separately.
@@ -137,21 +131,12 @@ rdwr_error:	or	a
 rdwr_ret_ok:	xor	a			; of file error.
 		
 RDWR_END:
-		ex	af,af'
-		;bit	MD_DEV,(ix+FAB_MODE##)
-		;jr	nz,RDWR_END2
 
-		pop	hl
-		ld	(FAT_FLAGS##),hl
-		pop	hl
-		ld	(FAT_CHAIN##),hl
-		pop	hl
-		ld	(FAT_HACK##),hl
-		pop	hl
-		ld	(FAT_OSECT##),hl
-		pop	hl
-		ld	a,l
-		ld	(PHYS_UNIT##),a
+if 1
+		;ex	af,af'
+		;pop	hl
+		;ld	a,l
+		;ld	(PHYS_UNIT##),a
 		pop	hl
 		ld	(RW_OVER##+18),hl
 		pop	hl
@@ -172,9 +157,10 @@ RDWR_END:
 		ld	(RW_OVER##+2),hl
 		pop	hl
 		ld	(RW_OVER##),hl
+		;ex	af,af'
+endif
 
 RDWR_END2:
-		ex	af,af'
 		ret
 ;
 ;	----------------------------------------
