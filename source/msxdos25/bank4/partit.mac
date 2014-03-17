@@ -2421,7 +2421,7 @@ MAP_UNMAP::
 
 	pop	ix
 	ld	a,(ix+UD_FLAGS##)
-	and	01000000b
+	and	UFM_MT
 	jr	z,UNM_NOFILE	;If the drive has a file mounted, close its file handle
 
 uep2::	push	hl
@@ -2990,7 +2990,7 @@ MF_UD_OK:
 
 	;Other parameters
 
-	ld	a,01000000b
+	ld	a,UFM_MT	;A file is mounted
 	ld	(ix+UD_FLAGS##),a
 	ld	a,10001b	;First sector is already valid
 	ld	(ix+UD_DFLAGS##),a

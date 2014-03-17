@@ -221,6 +221,7 @@ UF_UNDL equ     2       ;Set => disk supports undeleting
 UF_RALL	equ	3	;Set => reduced allocation information mode
 UF_LCK	equ	4	;Set => drive is locked
 UF_Z80	equ	5	;Set => drive needs Z80 mode
+UF_MNT	equ	6	;Set => a file is mounted in the drive
 ;
 ;
 ;         MASKS FOR "UD_FLAGS" BITS
@@ -229,8 +230,9 @@ UFM_F2  equ     (1 SHL UF_F12)
 UFM_F6  equ     (1 SHL UF_F16)
 UFM_UN  equ     (1 SHL UF_UNDL)
 UFM_RA  equ     (1 SHL UF_RALL)
-UFM_MT  equ     (1 SHL UF_LCK)
-UFM_Z8	equ	(1 SHL UF_Z80)
+UFM_LK  equ     (1 SHL UF_LCK)
+UFM_Z8	equ		(1 SHL UF_Z80)
+UFM_MT	equ		(1 SHL UF_MNT)
 ;
 ;
 ;                 BITS IN "UD_DFLAGS" VARIABLE

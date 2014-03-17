@@ -760,6 +760,8 @@ if 1
 endif
 		call	CHECK_LOCK		;Assume disk unchanged
 		jr	nz,got_old_volid	;if drive is locked
+		call	CHECK_MNT		;or mounted
+		jr	nz,got_old_volid
 
 		call	MEDIA_CHECK		;Do a media check call.
 		jr	c,not_sure		;If "not sure" or "changed"
@@ -815,10 +817,17 @@ no_dos_disk:	pop	ix			;Restore FIB pointer
 ; Corrupts: none
 
 CHECK_LOCK:
-
 		push	hl
 		ex	(sp),ix
 		bit	UF_LCK,(ix+UD_FLAGS##)
+		ex	(sp),ix
+		pop	hl
+		ret
+
+CHECK_MNT:
+		push	hl
+		ex	(sp),ix
+		bit	UF_MNT,(ix+UD_FLAGS##)
 		ex	(sp),ix
 		pop	hl
 		ret
@@ -2286,7 +2295,7 @@ READ_UNIT:	;B  = Number of sectors
 		ld	a,RD_CMD
 
 ;===== end add DOS2.50
-CALL_UNIT:	;@3A21	;@39A2
+CALL_UNIT:	;@3A06
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
 ; driver is specified by a unit handler pointed to by HL, and the function  by
@@ -2320,7 +2329,7 @@ CALL_UNIT:	;@3A21	;@39A2
 		push	hl
 		pop	iy
 		ld	a,(iy+UD_FLAGS##)
-		and	01000000b
+		and	UFM_MT
 		jp	z,CUN_NO_MOUNT
 
 		;--- Unit with a file mounted
