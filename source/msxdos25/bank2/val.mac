@@ -2450,21 +2450,31 @@ xxx4:
 
 		;* Check sector number
 
-		ld	a,(DIO_EX_SECTOR##)	;@39E7
+		ld	a,(DIO_EX_SECTOR##)
 		or	a
 		ld	a,.RNF##
 		ret	nz
 
+		push	de
+		push	bc
+		exx
+		pop	bc
+		pop	hl
+		ld	c,b
+		ld	b,0
+		add	hl,bc
+		dec	hl	;HL = Last sector to access
 		ld	a,(iy+UD_MXS##+1)
-		cp	d
+		cp	h
 		ld	a,.RNF##
 		ret	c
 		jr	nz,CUN_OKSEC
 		ld	a,(iy+UD_MXS##)
-		cp	e
+		cp	l
 		ld	a,.RNF##
 		ret	c
 CUN_OKSEC:
+		exx
 
 		;* Calculate FAB address from pseudo-file handle number
 
