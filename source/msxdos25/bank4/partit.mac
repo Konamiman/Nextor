@@ -2424,7 +2424,7 @@ MAP_UNMAP::
 	and	UFM_MT
 	jr	z,UNM_NOFILE	;If the drive has a file mounted, close its file handle
 
-uep2::	push	hl
+	push	hl
 	push	de
 	ld	hl,MHANDLES##
 	ld	e,(ix+UD_FH##)
@@ -2904,11 +2904,11 @@ MF_CHK_INCEPTION:
 
 	;* Error if the file is already mounted to another drive
 
-if 0	;WIP...
+	push	de
+	push	hl
 	push	iy
 	push	bc
 	push	ix
-	push	hl
 	ld	iy,UNIT_TAB##+2
 	ld	b,8
 MF_CHK_ALRMNT:
@@ -2916,38 +2916,41 @@ MF_CHK_ALRMNT:
 	ld	h,(iy+1)
 	ld	a,h
 	or	l
-	jr	z,MF_ALRMNT_NEXT
+	jr	z,MF_ALRMNT_NEXT2
 	push	hl
-	pop	ix
-	pop	hl
-	push	hl
-	push	bc
-	push	de
-	push	iy
-	call	M_HTEST
-	pop	iy
-	pop	de
-	ld	a,b
-	pop	bc
-	or	a
-	jr	z,MF_ALRMNT_NEXT
+	pop	ix	;IX = Unit descriptor
+	ex	(sp),iy	;Now IY = FIB of file to mount
 
-	pop	hl
+	ld	a,(iy+25)
+	inc a
+	cp	(ix+UD_PHYS##)
+	jr	nz,MF_ALRMNT_NEXT
+
+	ld	a,(iy+19)
+	cp	(ix+UD_SCLUS##)
+	jr	nz,MF_ALRMNT_NEXT
+	ld	a,(iy+20)
+	cp	(ix+UD_SCLUS##+1)
+	jr	nz,MF_ALRMNT_NEXT
+
 	pop	ix
 	pop	bc
 	pop	iy
+	pop	hl
+	pop	de
 	ld	a,.FMNT##
 	jp	POPIX_RET
 MF_ALRMNT_NEXT:
+	ex	(sp),iy
+MF_ALRMNT_NEXT2:
 	inc	iy
 	inc	iy
 	djnz	MF_CHK_ALRMNT
 
-	pop	hl
 	pop	ix
 	pop	bc
 	pop	iy
-endif
+	pop	hl
 
 	;* Check if the file size is <512B or >32MB
 
@@ -2985,7 +2988,7 @@ MF_OK_SIZE:
 	ex	(sp),hl
 	push	hl
 	push	ix
-uep::	call	MF_OPEN
+	call	MF_OPEN
 	pop	ix
 	pop	hl
 	or	a
@@ -3030,9 +3033,19 @@ MF_UD_OK:
 
 	ex	de,hl	;Now HL = FIB
 
+	;Start cluster
+
+	ld	bc,19
+	add	hl,bc	;Now HL points to start cluster in FIB
+	ld	a,(hl)
+	ld	(ix+UD_SCLU##),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+UD_SCLU##+1),a
+
 	;Maximum sector count = (File size / 512) - 1
 
-	ld	bc,24
+	ld	bc,4
 	add	hl,bc	;Now HL points to 4th byte of file size in FIB
 	ld	a,(hl)
 	rra
