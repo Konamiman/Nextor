@@ -1820,7 +1820,7 @@ no_fab_match:	push	bc
 ;
 ;-----------------------------------------------------------------------------
 ;
-CMP_FAB:
+	PROC	CMP_FAB
 ;
 ;    This routine tests whether the FAB pointed to by IX refers to the current
 ; directory  entry  defined by the directory variables and the unit descriptor
