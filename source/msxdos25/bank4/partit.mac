@@ -2882,6 +2882,26 @@ MF_NO_RO:
 	ld	a,.IDRV##
 	jp	z,POPIX_RET
 
+	;* Error if the hosting drive is a mounted file
+
+	push	iy
+	push	bc
+	ld	b,(ix+25)
+	ld	iy,UNIT_TAB##
+MF_CHK_INCEPTION:
+	inc	iy
+	inc	iy
+	djnz	MF_CHK_INCEPTION
+	ld	c,(iy)
+	ld	b,(iy+1)
+	push	bc
+	pop	iy
+	bit	UF_MNT,(iy+UD_FLAGS##)
+	pop	bc
+	pop	iy
+	ld	a,.FMNT##
+	jp	nz,POPIX_RET
+
 	;* Check if the file size is <512B or >32MB
 
 	ld	a,(ix+24)
