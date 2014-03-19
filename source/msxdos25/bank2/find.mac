@@ -412,6 +412,60 @@ not_05h_fiddle:	pcall	SQ_NAME			; it into the fileinfo block.
 		ret
 ;
 ;
+; This routine does the same as LOC_FIB but returns an error
+; if the file is mounted to a drive.
+
+	PROC	MOC_FIB
+if 0
+	call	LOC_FIB
+	ret	nz
+
+	push	iy
+	push	de
+	ld	b,8
+	ld	iy,UNIT_TAB##+2
+MOCF_LOOP:
+	ld	l,(iy)
+	ld	h,(iy+1)
+	ld	a,h
+	or	l
+	jr	z,MOCF_NEXT2
+
+	push	iy
+	push	hl
+	pop	iy		;IY = Unit descriptor
+	bit	UF_MNT,(iy+UD_FLAGS##)
+	jr	z,MOCF_NEXT
+	ld	a,(iy+UD_PHYS##)
+	dec	a
+	cp	(ix+25)
+	jr	nz,MOCF_NEXT
+	ld	a,(iy+UD_SCLU##)
+	cp	(ix+19)
+	jr	nz,MOCF_NEXT
+	ld	a,(iy+UD_SCLU##+1)
+	cp	(ix+20)
+	jr	nz,MOCF_NEXT
+
+	pop	iy
+	pop	de
+	pop	iy
+	ld	a,.FMNT##
+	or	a
+	ret
+
+MOCF_NEXT:
+	pop	iy
+MOCF_NEXT2:
+	inc	iy
+	inc	iy
+	djnz	MOCF_LOOP
+
+	pop	de
+	pop	iy
+	xor	a
+	ret
+endif
 ;-----------------------------------------------------------------------------
 ;
 	PROC	LOC_FIB

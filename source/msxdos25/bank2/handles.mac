@@ -169,7 +169,7 @@ endif
 ;
 	PROC	F_OPEN
 		ex	af,af'			;Save access mode byte
-		pcall	LOC_FIB			;Find the directory entry
+		pcall	MOC_FIB			;Find the directory entry
 if 0
 ;
 f_create_open:	ret	nz			;Give up if error

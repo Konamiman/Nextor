@@ -2376,6 +2376,48 @@ F_MAPDRV_GO:
 	ret
 MAP_NORDISK:
 
+	;Check if any file hosted in this drive is mounted
+
+if 1
+	push	hl
+	push	bc
+	push	ix
+	push	iy
+	ld	ix,UNIT_TAB##+2
+	ld	b,8
+ISMNT:
+	ld	l,(ix)
+	ld	h,(ix+1)
+	ld	a,h
+	or	l
+	jr	z,ISMNT_NEXT
+	push	hl
+	pop	iy
+	bit	UF_MNT,(iy+UD_FLAGS##)
+	jr	z,ISMNT_NEXT
+	ld	a,(iy+UD_DRV##)
+	cp	c
+	jr	nz,ISMNT_NEXT
+
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	hl
+	ld	a,.FMNT##
+	ret
+
+ISMNT_NEXT:
+	inc	ix
+	inc	ix
+	djnz	ISMNT
+
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	hl
+endif
+	;
+
 	ld	e,c
 	push	de
 	pop	ix
@@ -2951,6 +2993,7 @@ MF_ALRMNT_NEXT2:
 	pop	bc
 	pop	iy
 	pop	hl
+	pop	de
 
 	;* Check if the file size is <512B or >32MB
 
@@ -3230,42 +3273,6 @@ CRUD2:
 
 	xor	a
 	ret
-
-
-; This function is the equivalent and very similar to F_HTEST in handles.mac,
-; but it accepts a FAB in IX instead of a file handle in B.
-;
-; Entry:       IX = Pointer to FAB
-;	      DE = ASCIIZ string or fileinfo block pointer
-;		  HL = Unit descriptor address for the FAB
-; Returns:     A = Error code
-;	       B = 00h => not the same file
-;		   FFh => they are the same file
-;
-;
-M_HTEST:
-
-		push	hl
-		push	ix
-		push	bc			;Locate the directory entry
-		pcall	LOC_FIB			; for the ASCIIZ string or
-		pop	bc			; FIB.
-		pop	ix
-		pop	hl
-		ret	nz
-;
-		push	ix
-		pop	de
-
-		ld	b,0FFh			;Compare the FAB with the
-		pcall	CMP_FAB			; located directory entry
-		ret	z			; and return A=0 & B=FFh
-						; if they are the same.
-;
-no_handle_match:xor	a			;If there is no match then
-		ld	b,a			; return A=B=0.
-		ret
-
 
 	;>>> DOS 1 version of MAPDRV
 
