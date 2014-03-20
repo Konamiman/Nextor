@@ -506,6 +506,7 @@ endif
 	var RW_LEVEL,1
 	var	RW_SAVE,60		;To temporarily save RW_* variables
 	var	IY_SAVE,2
+	var IYE_SAVE,2
 	var	SEG_SAVE,1
 ;
 ;       ---------------------------------
