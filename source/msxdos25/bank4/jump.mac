@@ -73,8 +73,5 @@ jentry	macro	name
 	jentry	CLK_INIT
 	jentry	GT_DATE_TIME
 
-	jentry	DKERR
-	jentry	GOEXIT
-
 	finish <JUMP>
 	end

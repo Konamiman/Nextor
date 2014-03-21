@@ -416,7 +416,7 @@ not_05h_fiddle:	pcall	SQ_NAME			; it into the fileinfo block.
 ; if the file is mounted to a drive.
 
 	PROC	MOC_FIB
-if 1
+if 0
 	call	LOC_FIB
 	ret	nz
 

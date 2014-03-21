@@ -519,9 +519,6 @@ ram_ad	defl	4100h
 	var3	CLK_INIT
 	var3	GT_DATE_TIME
 
-	var3	DKERR
-	var3	GOEXIT
-
 ;-----------------------------------------------------------------------------
 ;
 ;	Routines on ROM page 0 and on disk drivers
