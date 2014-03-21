@@ -73,5 +73,10 @@ jentry	macro	name
 	jentry	CLK_INIT
 	jentry	GT_DATE_TIME
 
+	jentry	ALLSEG
+	jentry	FRESEG
+	jentry	FREUSEG
+
+
 	finish <JUMP>
 	end

@@ -7,320 +7,56 @@
 	INCLUDE CONST.INC
 	RAMMOD
 ;
-P0_REG		equ	0FCh
-P1_REG		equ	0FDh
-P2_REG		equ	0FEh
-P3_REG		equ	0FFh
-;
-;
 ;-----------------------------------------------------------------------------
 ;
+; This module has been moved to bank 4.
+; Here we just keep the entry points that call the real code.
+;
+
 	PROC	ALL_SEG
-;
-;    This routine allocates a RAM segment if there is one free.  It is called
-; by  an  inter-slot  call  from  a  page-3 entry routine which preserves the
-; alternate and index registers.  It is  passed  a  flag  in  register  A  to
-; indicate whether the segment should be allocated as a user segment (A=0) or
-; a system segment (A=1).  User segments are allocated from  the  lowest  end
-; first  and  system segments from the highest end.  An error is indicated by
-; returning with the carry flag set if there are no free segments to allocate
-;
-;
-		or	a			;Get type flag into Z-flag
-		ld	a,(PROC_ID##)		;Set A to the process who
-		jr	z,alloc_user		; will own this segment.
-		ld	a,0FFh			; System segments are owned
-alloc_user:	ex	af,af'			; by process 0FFh.
-;
-		ld	c,b
-		ld	a,c			;If requested slot number is
-		and	10001111b		; zero then use the primary
-		jr	nz,not_primary_all	; mapper slot number.  Leave
-		ld	a,(RAMAD3##)		; the zero in B for now in
-		or	c			; case of a type 000 return.
-		ld	c,a			;C := slot number & type
-not_primary_all:
-;
-;    *****  ONLY TRY SPECIFIED SLOT IF TYPE 000  *****
-;
-		ld	a,c			;If "type" is 000 then
-		and	01110000b		; just try to allocate from
-		jr	nz,not_type_000		; the requested slot and
-		jr	ALL_SEG_SLOT_C		; then jump immediately with
-						; the result.
-not_type_000:
-;
-;
-;    *****  TRY SPECIFIED SLOT FIRST FOR TYPE 010  *****
-;
-		ld	b,c			;B := real slot & type
-		cp	00100000b		;For type 010 allocate in
-		jr	nz,not_type_010		; specified slot if possible.
-		call	ALL_SEG_SLOT_C
-		jr	nc,all_seg_ret
-not_type_010:
-;
-;
-;    *****  TRY EVERY SLOT EXCEPT SPECIFIED ONE FOR ALL TYPES  *****
-;
-		xor	a
-		ld	hl,EXPTBL##
-all_pri_loop:	bit	7,(hl)			;Set expanded slot flag in A
-		jr	z,all_not_exp		; if this slot is expanded.
-		set	7,a
-all_not_exp:
-all_sec_loop:	ld	c,a			;Try to allocate a segment
-		xor	b			; from this slot unless it
-		and	10001111b		; is the specified slot
-		jr	z,skip_slot		; number.
-		push	hl
-		call	ALL_SEG_SLOT_C
-		pop	hl
-		jr	nc,all_seg_ret		;Exit if got segment
-skip_slot:	ld	a,c
-;
-		bit	7,a
-		jr	z,all_not_exp_2		;If it is an expanded slot
-		add	a,4			; then step on to next
-		bit	4,a			; secondary slot and loop
-		jr	z,all_sec_loop		; back if not last one.
-all_not_exp_2:	inc	hl
-		inc	a			;Step onto next primary slot
-		and	03h			; and loop back if not done
-		jr	nz,all_pri_loop		; the last one.
-;
-;
-;    *****  FINALLY TRY SPECIFIED SLOT FOR TYPE 011  *****
-;
-		ld	a,b			;Couldn't find segment so if
-		and	01110000b		; try the specified segment as
-		cp	00110000b		; a "last resort" if it is
-		scf				; allocation type 011.
-		jr	nz,all_seg_ret
-		ld	c,b
-		call	ALL_SEG_SLOT_C
-;
-all_seg_ret:	push	af			;For all returns other than
-		ld	a,c			; for type 000, return the
-		and	10001111b		; actual slot number in
-		ld	b,a			; register B, preserving
-		pop	af			; carry flag.
-		ret
-;
-;
-;	--------------------------------------------------
-;
-;
-ALL_SEG_SLOT_C:	push	bc
-;
-		ld	a,c
-		and	00001111b		;Use slot number as an index
-		add	a,a			; into the MAP_TBL
-		add	a,a
-		ld	e,a
-		ld	d,0
-		ld	hl,MAP_TBL##
-		add	hl,de
-;
-		ld	e,(hl)			;Extract the two pointers
-		inc	hl			; for this mapper.
-		ld	d,(hl)
-		inc	hl
-		ld	a,(hl)
-		inc	hl
-		ld	h,(hl)			;DE -> segment counts (page-3)
-		ld	l,a			;HL -> segment list (page-2)
-		or	h
-		jr	z,no_seg_ret		;Error if no mapper.
-;
-		ld	a,(de)
-		inc	de
-		ld	c,a			;C := total segments in mapper
-		ex	af,af'
-		ld	b,a
-		ex	af,af'			;Skip if we are allocating
-		inc	b			; a system segment.
-		jr	z,all_system
-;
-;
-		ld	b,0
-all_user_loop:	ld	a,(hl)			;For a user segment look
-		or	a			; through the segment list
-		jr	z,got_user_seg		; forwards until we find a
-		inc	b			; free segment.
-		inc	hl			;C = loop counter
-		dec	c			;B = segment number
-		jr	nz,all_user_loop
-		jr	no_seg_ret		;Error if no free segments
-;
-got_user_seg:	ex	de,hl
-		dec	(hl)			;One fewer free segments
-		inc	hl
-		inc	hl
-		inc	(hl)			;One more user segment
-		jr	got_seg_ret		;Jump with B=segment
-;
-;
-all_system:	add	hl,bc			;For a system segment look
-all_sys_loop:	dec	hl			; through the segment list
-		ld	a,(hl)			; from the end backwards to
-		or	a			; find the highest numbered
-		jr	z,got_sys_seg		; free segment
-		dec	c
-		jr	nz,all_sys_loop
-		jr	no_seg_ret		;Error if no free segments
-;
-got_sys_seg:	ld	b,c
-		dec	b			;B = segment number
-		ex	de,hl
-		dec	(hl)			;One fewer free segments
-		inc	hl
-		inc	(hl)			;One more system segments
-;
-;
-got_seg_ret:	ex	af,af'			;Record the owning process id
-		ld	(de),a			; in the segment list (FFh if
-		ex	af,af'			; it is a system segment).
-;
-		ld	a,b			;A := allocated segment number
-		pop	bc
-		or	a			;Return with carry clear
-		ret				; to indicate success.
-;
-;
-no_seg_ret:	pop	bc			;If no free segments then
-		scf				; return with carry set to
-		ret				; indicate error.
-;
-;
-;-----------------------------------------------------------------------------
-;
+		push	ix
+		ld	ix,ALLSEG##
+		jr	DO_CALL
+
 	PROC	FRE_SEG
-;
-;   This  routine  frees  a  specified  RAM segment if it is allocated.  It is
-; called by an inter-slot call from a page-3 entry routine which preserves the
-; alternate  and index registers.  An error is indicated by returning with the
-; carry flag set if the segment is not allocated.  There is no  check  on  the
-; process id of the segment to be freed.
-;
-;
-		ld	c,a			;C = segment number
-		ld	a,b
-		and	10001111b		;If slot number is zero then
-		jr	nz,fre_not_prim		; use the primary mapper slot
-		ld	a,(RAMAD3##)
-fre_not_prim:	and	00001111b
-		add	a,a
-		add	a,a			;Use the slot number as an
-		ld	e,a			; index into MAP_TBL.
-		ld	d,0
-		ld	hl,MAP_TBL##
-		add	hl,de
-;
-		ld	e,(hl)			;Extract the two pointers
-		inc	hl			; for this mapper.
-		ld	d,(hl)
-		inc	hl
-		ld	a,(hl)
-		inc	hl
-		ld	h,(hl)			;DE -> segment counts (page-3)
-		ld	l,a			;HL -> segment list (page-2)
-		or	h
-		jr	z,fre_bad_seg		;Error if no mapper.
-;
-if 1 ;H.F.
-		ld	a,(de)			;Check that segment number is
-else
-		ld	a,(hl)			;Check that segment number is
-endif
-		cp	c			; smaller than the total
-		jr	c,fre_bad_seg		; segments for this mapper and
-		jr	z,fre_bad_seg		; error if not.
-		ld	b,0
-		add	hl,bc			;HL -> this segment in list
-		ld	a,(hl)			;Error if this segment is
-		or	a			; already free.
-		jr	z,fre_bad_seg
-		ld	(hl),b			;Mark it as free now.
-;
-		ex	de,hl
-		inc	hl
-		inc	(hl)			;One more free segment
-		inc	hl
-		inc	a			;One fewer user or system
-		jr	z,fre_system		; segment, depending on
-		inc	hl			; whether process = FFh.
-fre_system:	dec	(hl)
-		or	a			;Clear carry => success
-		ret
-;
-fre_bad_seg:	scf				;Set carry to indicate error
-		ret
-;
-;
-;-----------------------------------------------------------------------------
-;
+		push	ix
+		ld	ix,FRESEG##
+		jr	DO_CALL
+
 	PROC	FRE_USER_SEG
-;
-;    This routine is called whenever a "JOIN" function call is made.  It is
-; passed the process id which is being joined to and it frees up any user
-; segments with a process id greater than that.  System segments are never
-; freed by this routine.
-;
-; Entry:     B = Proccess id to join to
-; Returns:   None
-; Corrupts:  AF,C,DE,HL
-;
-;
-		ld	c,16
-		ld	hl,MAP_TBL##
-fre_map_loop:	ld	e,(hl)
-		inc	hl
-		ld	d,(hl)
-		push	de
-		inc	hl
-		ld	e,(hl)
-		inc	hl
-		ld	d,(hl)
-		inc	hl
-		ex	(sp),hl			;HL -> segment counts
-		ld	a,h			;DE -> segment list
-		or	l
-		jr	z,no_mapper
-;
-		push	bc
-		ld	c,(hl)			;C = number of segments
-fre_segs_loop:	ld	a,(de)
-		inc	a
-		jr	z,dont_fre_seg		;Don't free system segments
-		dec	a
-		jr	z,dont_fre_seg		;Don't free if already free
-		dec	a
-		cp	b			;Don't free it if its process
-		jr	c,dont_fre_seg		; id is too small.
-;
-		push	hl
-		xor	a
-		ld	(de),a			;Free the segment.
-		inc	hl
-		inc	(hl)			;Count one more free segment
-		inc	hl
-		inc	hl
-		dec	(hl)			;Count one fewer user segment
-		pop	hl
-;
-dont_fre_seg:	inc	de
-		dec	c			;Loop 'til done all segments.
-		jr	nz,fre_segs_loop
-		pop	bc
-;
-;
-no_mapper:	pop	hl
-		dec	c			;Loop 'til done all 16
-		jr	nz,fre_map_loop		; possible mappers.
-		ret
-;
-;
+		push	ix
+		ld	ix,FREUSEG##
+
+DO_CALL:
+	push	iy
+	exx
+	push	hl
+	push	de
+	push	bc
+	exx
+	ex	af,af'
+	push	af
+	ex	af,af'
+
+	ld	(A_SAVE##),a
+	ld	(BK4_ADD##),ix
+	ld	ix,?C4PBK##
+	ld	iy,(MASTER_SLOT##-1)
+	call	CALSLT##
+
+	ex	af,af'
+	pop	af
+	ex	af,af'
+	exx
+	pop	bc
+	pop	de
+	pop	hl
+	exx
+
+	pop	iy
+	pop	ix
+	ret
+
 ;-----------------------------------------------------------------------------
 ;
 	finish	<SEG>
