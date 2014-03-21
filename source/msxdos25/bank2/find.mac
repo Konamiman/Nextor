@@ -420,6 +420,8 @@ if 1
 	call	LOC_FIB
 	ret	nz
 
+	push	hl
+	push	bc
 	push	iy
 	push	de
 	ld	b,8
@@ -436,8 +438,8 @@ MOCF_LOOP:
 	pop	iy		;IY = Unit descriptor
 	bit	UF_MNT,(iy+UD_FLAGS##)
 	jr	z,MOCF_NEXT
-	ld	a,(iy+UD_PHYS##)
-	dec	a
+	ld	a,(iy+UD_DRV##)
+	inc	a
 	cp	(ix+25)
 	jr	nz,MOCF_NEXT
 	ld	a,(iy+UD_SCLU##)
@@ -450,6 +452,8 @@ MOCF_LOOP:
 	pop	iy
 	pop	de
 	pop	iy
+	pop	bc
+	pop	hl
 	ld	a,.FMNT##
 	or	a
 	ret
@@ -463,6 +467,8 @@ MOCF_NEXT2:
 
 	pop	de
 	pop	iy
+	pop	bc
+	pop	hl
 	xor	a
 	ret
 endif

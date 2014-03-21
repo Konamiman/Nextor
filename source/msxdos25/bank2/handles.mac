@@ -597,7 +597,7 @@ screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
 ; Returns:    A = Error code.
 ;
 ;
-		pcall	LOC_FIB			;Find the directory entry
+		pcall	MOC_FIB			;Find the directory entry
 		ret	nz
 ;
 		ld	a,0FFh			;Delete the file, setting the
@@ -655,7 +655,7 @@ screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
 ;
 ;
 		push	hl
-		pcall	LOC_FIB			;Find the directory entry on
+		pcall	MOC_FIB			;Find the directory entry on
 		pop	bc			; disk and moan if any
 		ret	nz			; error.
 ;
@@ -718,7 +718,7 @@ screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
 ;
 ;
 		push	hl
-		pcall	LOC_FIB			;Find the directory entry on
+		pcall	MOC_FIB			;Find the directory entry on
 		pop	bc			; disk and moan if any
 		ret	nz			; error.
 ;
@@ -787,7 +787,13 @@ screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
 ;
 		ex	af,af'			;Save get/set flag
 		push	hl
+		or	a
+		jr	z,FATTR2
+		pcall	MOC_FIB
+		jr	FATTR3
+FATTR2:
 		pcall	LOC_FIB			;Find the directory entry on
+FATTR3:
 		pop	bc			; disk and moan if any
 		ret	nz			; error.
 		ex	af,af'
@@ -879,7 +885,14 @@ get_hattrs:	ld	l,(ix+FAB_ATTR##)	;Get the attributes byte
 		ex	af,af'			;Save get/set flag
 		push	ix
 		push	hl			;Locate the directory entry
-		pcall	LOC_FIB			; on disk and moan if any
+		or	a
+		jr	z,FTIME2
+		pcall	MOC_FIB			; on disk and moan if any
+		jr	FTIME3
+FTIME2:
+		pcall	LOC_FIB
+FTIME3:
+
 		pop	bc			; error.
 		pop	de			;BC:=new date, DE:=new time
 		ret	nz
