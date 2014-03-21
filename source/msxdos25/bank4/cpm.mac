@@ -45,7 +45,7 @@ CP_MOD	EQU	7
 		LD	(IY+@SE_FLAGS##),SEM_SR	;OPEN searches, doesn't CREATE.
 		LD	A,ATM_HID		;Find hidden files as well.
 		LD	C,1			;Do append if necessary.
-OPEN_ENTRY:	CALL	S_F_F			;Locate the file and moan
+OPEN_ENTRY:	CALL	M_F_F			;Locate the file and moan
 		JR	NZ,RET_ERR		; if couldn't find it.
 ;
 ;       On returning, IX -> FIB.
@@ -736,6 +736,17 @@ LDIR_FROM_BUFF:
 ;
 ;------------------------------------------------------------------------------
 ;
+
+; This routine does the same as S_F_F but returns an error
+; if the file is mounted to a drive.
+
+M_F_F:
+	call	S_F_F
+	ret	nz
+
+	pcall	CHKMNT
+	ret
+
 S_F_F:
 ;
 ;        These   routines  provide  search  for  first  and  search  for  next

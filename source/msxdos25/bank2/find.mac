@@ -416,9 +416,11 @@ not_05h_fiddle:	pcall	SQ_NAME			; it into the fileinfo block.
 ; if the file is mounted to a drive.
 
 	PROC	MOC_FIB
-if 1
+
 	call	LOC_FIB
 	ret	nz
+
+	PROC	CHKMNT
 
 	push	hl
 	push	bc
@@ -471,7 +473,7 @@ MOCF_NEXT2:
 	pop	hl
 	xor	a
 	ret
-endif
+
 ;-----------------------------------------------------------------------------
 ;
 	PROC	LOC_FIB
