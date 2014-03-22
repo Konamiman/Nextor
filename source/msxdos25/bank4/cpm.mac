@@ -386,14 +386,14 @@ NEW_CREATE:	LD	(IY+@SE_FLAGS##),0	;Extent is zero or file does
 		LD	(IY+@SE_FLAGS##),SEM_SR	;Search rather than create.
 		XOR	A			;Don't delete hidden files.
 		LD	C,A			;Don't follow append path.
-		CALL	S_F_F			;Get FIB at FIB_1, find first,
+		CALL	M_F_F			;Get FIB at FIB_1, find first,
 		JR	START_DELETE		; and process it.
 ;
 DELETE_LOOP_OK:	POP	BC			;Flag that a file has been
 		LD	C,0			; deleted sucessfully.
 		PUSH	BC
 ;
-DELETE_LOOP:	CALL	S_F_N			;Find next file and stop
+DELETE_LOOP:	CALL	M_F_N			;Find next file and stop
 START_DELETE:	JR	NZ,DELETE_ERR		; if not found
 		BIT	AT_RO,(IX+FIB_ATR##)	;Don't delete read only files.
 		JR	NZ,DELETE_LOOP
@@ -435,14 +435,14 @@ START_DELETE:	JR	NZ,DELETE_ERR		; if not found
 		POP	DE			;-> FCB.
 		XOR	A			;Don't find hidden files.
 		LD	C,A			;Don't follow append path.
-		CALL	S_F_F			;Try to find first file
+		CALL	M_F_F			;Try to find first file
 ;
 		JR	START_RENAME		;Jump to do first rename
 ;
 RENAME_LOOP_OK:	POP	BC			;Flag that a file has been
 		LD	C,0			; renamed sucessfully.
 		PUSH	BC
-RENAME_LOOP:	CALL	S_F_N			;Find next file and stop
+RENAME_LOOP:	CALL	M_F_N			;Find next file and stop
 START_RENAME:	JR	NZ,RENAME_ERR		; if not found
 ;
 		LD	BC,TEMP_FCB##		;-> ASCIIZ new filename.
@@ -922,6 +922,27 @@ RESTORE_ERROR:	LD	A,(CPM_BUFF##+300)	;Restore the original error
 APPEND_STRING:	DB	'APPEND',0
 ;
 ;
+
+
+; Special versipn of S_F_N that acts as if FND_NEXT had returned an error
+; when the file is mounted. 
+
+M_F_N:
+		LD	IX,FIB_1##
+		LD	(IY+@SE_FLAGS),SEM_SR	;Flag not doing create.
+		PCALL	O_FIB			;Download directory variables
+		RET	NZ			; ready to continue search.
+		LD	DE,FIB_1##+FIB_PAT##	;Expanded version of filename.
+		PCALL	FND_NEXT
+		jr	nz,M_F_N2
+
+		pcall	CHKMNT
+
+M_F_N2:
+		LD	C,0			;Make sure don't do funny
+		PUSH	BC			; things with append.
+		JP	FOUND_FILE
+
 S_F_N:
 ;
 ;       This is the internal search for next subroutine.  It is passed a FIB
@@ -937,6 +958,7 @@ S_F_N:
 		LD	C,0			;Make sure don't do funny
 		PUSH	BC			; things with append.
 		JP	FOUND_FILE
+
 ;
 ;
 ;------------------------------------------------------------------------------
