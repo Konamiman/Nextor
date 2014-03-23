@@ -51,7 +51,44 @@ MAIN_LOOP:
 	jp	NEXT_DRIVE
 NORDISK:
 
+	;* If mounted file, print appropriate info
 
+	ld	a,(BUF_LETTER)
+	cp	3
+	jr	nz,NOMOUNT
+
+	ld	de,FILE_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	de,BUF_LETTER+4
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,(BUF_LETTER+1)
+	add	a,"A"
+	ld	(DRV_S),a
+	ld	de,ONDRV_S
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,(BUF_LETTER+2)
+	and	1
+	jr	z,NO_RDONLY
+	ld	de,RO_S
+	ld	c,_ZSTROUT##
+	call	5
+NO_RDONLY:
+
+	ld	de,TWOCRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+	ld	a,0FFh
+	ld	(BUF_LETTER),a
+	jp	NEXT_DRIVE
+
+NOMOUNT:
 	;* Get information about the associated driver
 
 	ld	ix,BUF_LETTER
@@ -203,6 +240,16 @@ DRIVE_MSG:
 	db	"A: is assigned to:",13,10,0
 ONSLOT_S:
 	db	" on slot ",0
+FILE_S:
+	db	"File ",0
+ONDRV_S:
+	db	" on drive "
+DRV_S:
+	db	"X:",0
+RO_S:
+	db	" (read only)",0
+TWOCRLF:
+	db	13,10
 CRLF:
 	db	13,10,0
 		

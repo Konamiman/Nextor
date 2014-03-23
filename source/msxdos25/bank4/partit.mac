@@ -1924,7 +1924,10 @@ GDRVR_NAME_LOOP:
 ;                +5 (1): LUN index (0 if not a device-based driver)
 ;                +6 (4): First sector number
 ;                        (0 if not a device-based driver, or if direct access device)
-;                +10 (13): Filename, zero-terminated
+;             When assigned to a file (+0 = 3):
+;                +1 (1): Drive where the file is located (0 = A:, etc)
+;                +2 (2): Flags. Bit 0: mounted in read-only mode.
+;                +4 (13): Filename, zero-terminated
 ;                          (empty string, if not assigned to a file)
 ;
 
@@ -1948,7 +1951,7 @@ F_GDLI_GO:
 
 	ld	a,(DOS_VER##)
 	or	a
-	jr	z,GDLI_DOS1
+	jp	z,GDLI_DOS1
 
 	ld	hl,UNIT_TAB##+2
 	sla	c
@@ -1978,6 +1981,44 @@ F_GDLI_GO:
 	ret
 NORDISK:
 
+	bit	UF_MNT,(ix+UD_FLAGS##)
+	jr	z,NOMNT
+
+	;Assigned to a mounted file
+
+	ld	(iy+0),3
+	ld	a,(ix+UD_DRV##)
+	ld	(iy+1),a
+	ld	a,(ix+UD_MFLAGS##)
+	ld	(iy+2),a
+	ld	(iy+3),0
+
+	ld	c,(ix+UD_FH##)
+	ld	b,0
+	ld	hl,MHANDLES##
+	add	hl,bc
+	add	hl,bc
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	inc	hl	;HL = Pointer to filename
+
+	push	iy
+	pop	de
+	inc	de
+	inc	de
+	inc	de
+	inc	de
+	ld	bc,13
+	ldir
+
+	xor	a
+	ret
+
+	;No mounted file
+
+NOMNT:
 	ld	(iy+0),1	;Block device mode is the only mode currently supported
 	ld	a,(ix+UD_SLOT##)
 	ld	(iy+1),a
