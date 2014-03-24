@@ -1,0 +1,103 @@
+Nextor 2.1 Alpha 1
+------------------
+
+By Konamiman, 3/2014
+http://www.konamiman.com
+
+
+1. WHAT'S NEW IN ALPHA 1
+
+Nextor 2.1 Alpha 1 has everything that Nextor 2.0 has plus one new feature: the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools.
+
+
+2. HOW TO MOUNT A FILE
+
+Files are mounted either by using the updated MAPDRV.COM tool from the COMMAND2.COM prompt, or the CALL MAPDRV command from the BASIC prompt.
+
+The syntax for MAPDRV.COM is:
+
+  MAPDRV <drive>: <file> [/ro]
+
+For example, to mount file TOOLS.DSK on drive G: do
+
+  MAPDRV G: TOOLS.DSK
+
+Adding "/ro" will cause the file to be mounted in read-only mode, that is, trying to write to the mounted drive will cause a "Write protected disk" error.
+
+The syntax for CALL MAPDRV is:
+
+  CALL MAPDRV(<drive>, <file> [,0|1])
+
+For example, again to mount file TOOLS.DSK on drive G: do
+
+  CALL MAPDRV("G:", "TOOLS.DSK")
+
+Adding ",1" after the file name will cause the file to be mounted in read-only mode.
+
+NOTE: If the disk image file has the read-only attribute set, it will ALWAYS be mounted in read-only mode, even if no "/ro" / ",1" modifier is specified.
+
+
+3. RULES AND RESTRICTIONS
+
+The disk image file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. Also, the following restrictions apply:
+
+- Any file can be mounted if it has a size between 512 bytes and 32 MBytes. 
+
+- The file cannot contain partitions, the contained filesystem is expected to start right at the beginning of the file.
+
+- It is not possible to mount a file on the drive where the file itself is located:
+MAPDRV A: A:TOOLS.DSK --> Error
+
+- It is not possible to mount the same file in two drives at the same time:
+MAPDRV B: TOOLS.DSK
+MAPDRV C: TOOLS.DSK --> Error
+
+- It is not possible to do a recursive file mount (mounting a file that is itself inside a mounted drive):
+MAPDRV B: TOOLS.DSK
+MAPDRV C: B:FILE.DSK --> Error
+
+- It is not possible to alter the mapping state of a drive if it contains one or more files that are currently mounted:
+MAPDRV B: A:TOOLS.DSK
+MAPDRV A: U --> Error
+
+- It is not possible to open or to alter (rename, move, delete, overwrite, change attributes) a mounted file:
+MAPDRV B: TOOLS.DSK
+TYPE TOOLS.DSK --> Error
+ECHO HELLO > TOOLS.DSK --> Error
+REN TOOLS.DSK X.DSK --> Error
+MOVE TOOLS.DSK SOMEDIR\ --> Error
+DEL TOOLS.DSK --> Error
+ATTRIB +R TOOLS.DSK --> Error
+
+
+4. CHANGES IN FUNCTION CALLS
+
+The _MAPDRV function call (7Ch) has been expanded to allow mounting files. The input parameters to mount a file are:
+
+B  = 3
+HL = Path to filename or FIB
+D  = 0 for default mount (write allowed unless the file has the read-only attribute set)
+     1 to force read-only mount
+
+The _GDLI function call (79h) now returns the following information in the data buffer for drives where a file is mounted:
+
++0: 3
++1: Drive where the mounted file is located (0 = A:, etc)
++2: Flags: 1 if the file is mounted in read-only mode, 0 otherwise
++3: 0 (reserved for more flags)
++4: Filename in printable format (up to 12 characters, plus a terminating zero)
+
+
+5. NEW ERROR CODES
+
+Two new error codes have been introduced:
+
+- "File is mounted" (.FMNT, DOS/Nextor error code B2h, BASIC error code 80)
+
+This error appears when trying to open or alter a mounted file, or when trying to perform any other non allowed operation involving a mounted file (see "Rules and restrictions")
+
+- "Bad file size" (.BFSZ, DOS/Nextor error code B1h, BASIC error code 81)
+
+This error appears when trying to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
+
+

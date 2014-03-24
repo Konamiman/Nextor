@@ -4098,19 +4098,8 @@ MAPDRV_OKPARS:
 	ld	b,3
 	ld	c,_MAPDRV##
 	call	BASIC_DOS
-	pop	hl
-	ret
-
-	if 0
-	ld	de,($SECBUF##)
-xxxx:
-	ld	a,(de)
-	or	a
-	ret	z
-	call	00A2h
-	inc	de
-	jr	xxxx
-	endif
+	
+	jp	MAPDRV_DOLOCK
 
 MAPDRV_NOMNT2:
 
@@ -4282,6 +4271,7 @@ MAPDRV_GOTPAR:
 
 	;* Lock the drive if necessary
 
+MAPDRV_DOLOCK:
 	ld	a,(MAPDRV_LCK)
 	or	a
 	jr	z,MAPDRV_END
