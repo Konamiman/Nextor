@@ -3002,9 +3002,12 @@ MF_CHK_ALRMNT:
 	pop	ix	;IX = Unit descriptor
 	ex	(sp),iy	;Now IY = FIB of file to mount
 
+	bit	UF_MNT,(ix+UD_FLAGS##)
+	jr	z,MF_ALRMNT_NEXT
+
 	ld	a,(iy+25)
-	inc a
-	cp	(ix+UD_PHYS##)
+	dec	a
+	cp	(ix+UD_DRV##)
 	jr	nz,MF_ALRMNT_NEXT
 
 	ld	a,(iy+19)
