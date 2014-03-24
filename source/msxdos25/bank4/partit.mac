@@ -4306,6 +4306,9 @@ MAPDRV_HELP:
 	db  "               [,<partition>",1
 	db  "               [,<devlun>",1
 	db  "               [,<driver slot>]]])",13,10
+	db	"CALL MAPDRV[L](<drive>",1
+	db	"               ,<filename>",1
+	db	"               [,<flags>])",13,10
 	db  13,10
 	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
 	db  "         or 0 for default drive",13,10
@@ -4317,6 +4320,10 @@ MAPDRV_HELP:
 	db  "          (1-7 each, LUN 0 = LUN 1)",13,10
 	db  "<driver slot>: main + 4*subslot, or",1
 	db  "               0 for primary controller",13,10
+	db	13,10
+	db	"<filename>: full path of file to mount",13,10
+	db	"<flags>: 1 to mount file in read-only",1
+	db  "    mode, 0 for default (read-write)",13,10
 	db  13,10
 	db  "MAPDRVL locks the drive after mapping",1
 	db	"      (not available in MSX-DOS 1 mode)",13,10
@@ -5008,6 +5015,40 @@ DRVI_LOOP:
 	jp	NEXT_DRIVE
 DRVI_NORD:
 
+	;* If mounted file, print appropriate info
+
+	ld	a,(BUF_LETTER)
+	cp	3
+	jr	nz,DRVI_NOMOUNT
+
+	ld	hl,FILE_S
+	call	PRINT
+
+	ld	hl,BUF_LETTER+4
+	call	PRINT
+
+	ld	hl,ONDRV_S
+	call	PRINT
+
+	ld	a,(BUF_LETTER+1)
+	add	a,"A"
+	call	CHPUT
+	ld	a,':'
+	call	CHPUT
+
+	ld	a,(BUF_LETTER+2)
+	and	1
+	ld	hl,RO_S
+	call	nz,PRINT
+
+	ld	hl,TWOCRLF
+	call	PRINT
+
+	ld	a,0FFh
+	ld	(BUF_LETTER),a
+	jp	NEXT_DRIVE
+
+DRVI_NOMOUNT:
 
 	;* Get information about the associated driver
 
@@ -5118,6 +5159,12 @@ DRIVE2_MSG:
 	db	": is assigned to:",13,10,0
 ONSLOT_S:
 	db	" on slot ",0
+FILE_S:
+	db	"File ",0
+ONDRV_S:
+	db	" on drive ",0
+RO_S:
+	db	" (read only)",0
 COLON_AND_CRLF:
 	db	":"
 CRLF:
