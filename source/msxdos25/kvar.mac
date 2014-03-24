@@ -347,7 +347,8 @@ size	macro	name
 				;FOR DEVICE ONLY (b7 set)
 				;     b5 - set => binary mode (no ctrl-Z)
 				;         clear=> ASCII mode (ctrl-Z checks)
-				; b4..b1 - reserved
+				;     b4 - set => the FAB corresponds to a mounted file
+				; b3..b1 - reserved
 				;     b0 - set => CONSOLE device
 	field	1,FAB_SA	;Search attributes
 ;

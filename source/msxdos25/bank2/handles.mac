@@ -785,13 +785,15 @@ screen_sz_dev:	ld	bc,3*4			;For a device, ask the device
 ;	       L = Current attributes
 ;
 ;
-		ex	af,af'			;Save get/set flag
+		;ex	af,af'			;Save get/set flag
 		push	hl
 		or	a
 		jr	z,FATTR2
+		ex	af,af'
 		pcall	MOC_FIB
 		jr	FATTR3
 FATTR2:
+		ex	af,af'
 		pcall	LOC_FIB			;Find the directory entry on
 FATTR3:
 		pop	bc			; disk and moan if any
@@ -882,14 +884,16 @@ get_hattrs:	ld	l,(ix+FAB_ATTR##)	;Get the attributes byte
 ;	      HL = Current date
 ;
 ;
-		ex	af,af'			;Save get/set flag
+		;ex	af,af'			;Save get/set flag
 		push	ix
 		push	hl			;Locate the directory entry
 		or	a
 		jr	z,FTIME2
+		ex	af,af'
 		pcall	MOC_FIB			; on disk and moan if any
 		jr	FTIME3
 FTIME2:
+		ex	af,af'
 		pcall	LOC_FIB
 FTIME3:
 
@@ -1815,6 +1819,8 @@ fab_scan_loop:	ld	l,(ix+FAB_NEXT##)	;Get next entry in FAB
 		sbc	hl,bc			;Ignore this FAB if it is
 		jr	z,fab_scan_loop		; the one we are using.
 ;
+		bit	4,(ix+FAB_MODE##)	;Skip if it's the FAB of a mounted file
+		jr	nz,fab_scan_loop
 		ex	de,hl			;See if this FAB matches the
 		call	CMP_FAB			; directory entry and loop
 		ex	de,hl			; back if it does not.

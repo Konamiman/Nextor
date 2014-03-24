@@ -3243,6 +3243,7 @@ MFOP_FOUND:
 		pop	hl
 		ex	af,af'			;Get access mode byte back
 		pcall	OPEN_FAB		;Open the file access block
+		set	4,(ix+FAB_MODE##)
 open_directory:	xor	a
 		ret
 ;
