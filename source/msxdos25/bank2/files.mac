@@ -59,37 +59,11 @@
 ;
 	PROC	RDWR_FAB
 ;
-if 0
-		push	af
+		ex	af,af'
 		ld	a,(RW_LEVEL##)
-		cp	3
-		jr	c,OKLEVEL
-		pop	af
-		ld	a,.NORAM##
-		or	a
-		ret
-OKLEVEL:
-		inc	a
-		ld	(RW_LEVEL##),a
+		cp	1
+		jr	nz,OKLEVEL
 
-		push	de
-		push	bc
-		ld	b,a
-		ld	hl,RW_SAVE##-20
-		ld	de,20
-		inc	b
-xxx5:	add	hl,de
-		djnz	xxx5
-
-		ex	de,hl
-		ld	hl,RW_OVER##
-		ld	bc,20
-		ldir
-
-		pop	bc
-		pop	de
-		pop	af
-else
 		ld	hl,(RW_OVER##)
 		push	hl
 		ld	hl,(RW_OVER##+2)
@@ -112,7 +86,11 @@ else
 		push	hl
 		;ld	hl,(PHYS_UNIT##)
 		;push	hl
-endif
+
+OKLEVEL:
+		inc	a
+		ld	(RW_LEVEL##),a
+		ex	af,af'
 
 		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
 		jp	nz,rdwr_device		; and writes separately.
@@ -161,27 +139,11 @@ rdwr_error:	or	a
 rdwr_ret_ok:	xor	a			; of file error.
 		
 RDWR_END:
-if 0
-		push	af
-		push	de
-		push	bc
+		ex	af,af'
 		ld	a,(RW_LEVEL##)
-		ld	b,a
-		dec	a
-		ld	(RW_LEVEL##),a
-		ld	hl,RW_SAVE##-20
-		ld	de,20
-xxx6:	add	hl,de
-		djnz	xxx6
+		cp	2
+		jr	nz,OKLEVEL2
 
-		ld	de,RW_OVER##
-		ld	bc,20
-		ldir
-
-		pop	bc
-		pop	de
-		pop	af
-else
 		;ex	af,af'
 		;pop	hl
 		;ld	a,l
@@ -207,7 +169,11 @@ else
 		pop	hl
 		ld	(RW_OVER##),hl
 		;ex	af,af'
-endif
+
+OKLEVEL2:
+		dec	a
+		ld	(RW_LEVEL##),a
+		ex	af,af'
 
 RDWR_END2:
 		ret

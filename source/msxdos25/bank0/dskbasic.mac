@@ -3547,7 +3547,7 @@ DBABORT_ROUTINE:
 ;
 ;	Analyze errors returned from BDOS call
 ;
-.FRSTER	equ	0B3h	;0BAh		; lowest MSXDOS2 error code supported
+.FRSTER	equ	0B1h	;0BAh		; lowest MSXDOS2 error code supported
 ;
 DERNUM	macro	ERRNAM
     ifidn   <ERRNAM>,<*>
@@ -3561,6 +3561,9 @@ QQQQ	defl	QQQQ+1
 QQQQ	defl	.FRSTER
 ;
 DERR_TAB:
+
+	DERNUM	ERRBFS	; File is mounted
+	DERNUM	ERRFIM	; Bad file size
 
 	DERNUM	ERRPUS	; Partition already in use
 	DERNUM	ERRIPA	; Invalid partition
@@ -3714,6 +3717,9 @@ QQQQ	defl	DERFST
 	DERMAK	ERRIDL	; Invalid device or LUN
 	DERMAK	ERRIPA	; Invalid partition
 	DERMAK	ERRPUS	; Partition already in use
+
+	DERMAK	ERRFIM	; File is mounted
+	DERMAK	ERRBFS	; Bad file size
 ;
 DERLST	equ	QQQQ-1		;
 ;
@@ -4109,6 +4115,9 @@ DERMSG:	defb	0
 	defb	'Invalid device or LUN',   0
 	defb	'Invalid partition number',0
 	defb	'Partition already in use',0
+
+	defb	'File is mounted',         0
+	defb	'Bad file size',           0
 
 ;		'----+----1----+----2----'
 ;

@@ -2419,7 +2419,6 @@ MAP_NORDISK:
 
 	;Check if any file hosted in this drive is mounted
 
-if 1
 	push	hl
 	push	bc
 	push	ix
@@ -2456,7 +2455,6 @@ ISMNT_NEXT:
 	pop	ix
 	pop	bc
 	pop	hl
-endif
 	;
 
 	ld	e,c
@@ -3914,6 +3912,10 @@ DOSV1_2:
 ; Map drive to partition "part" on device "dev" on driver in "slot", "segment"
 ; (ROM driver if segment = FFh)
 ;
+; _MAPDRV("x:", filename [,flags])
+; Mount the specified file in the drive (not available in DOS 1 mode)
+; Flags = 1 for read-only mount, 0 otherwise.
+;
 ; If "part" is 0, maps to absolute sector 0 of device
 ;
 ; If "part" is 2, 3 or 4, it is interpreted as logical partition
@@ -3933,6 +3935,7 @@ MAPDRV_DEV	equ	MAPDRV_TMP+5
 MAPDRV_LUN	equ	MAPDRV_TMP+6
 MAPDRV_SEC	equ	MAPDRV_TMP+7
 MAPDRV_LCK	equ	MAPDRV_SEC+4	;1 to lock the drive after the mapping
+MAPDRV_MNT	equ	MAPDRV_SEC+5	;0=no file mount, 1=mount normal, 2=mount read-only
 
 	ld	(MAPDRV_LCK),a
 
@@ -3945,6 +3948,7 @@ MAPDRV_LCK	equ	MAPDRV_SEC+4	;1 to lock the drive after the mapping
 	inc	a
 	ld	(MAPDRV_DEV),a
 	ld	(MAPDRV_SLT),a
+	ld	(MAPDRV_MNT),a
 	inc	a
 	ld	(MAPDRV_LUN),a
 
@@ -3959,8 +3963,56 @@ MAPDRV_LCK	equ	MAPDRV_SEC+4	;1 to lock the drive after the mapping
 	call	NEXT_CALL_PAR
 	jp	c,MAPDRV_OKPARS
 
-	;* Extract partition number
+	;* Extract partition number or file name
+	
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,MAPDRV_NOMNT
 
+	push	hl
+	ld	ix,FRMEVL
+	call	BASIC_ROUT
+	ld	a,(VALTYP)
+	cp	3
+	jr	nz,MAPDRV_NOSTR
+
+	pop	de
+	push	hl
+
+	ld	hl,(DAC+2)
+	ld	a,(hl)
+	ld	c,a
+	ld	b,0
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ld	de,($SECBUF##)
+	ldir
+	xor	a
+	ld	(de),a
+
+	pop	hl
+
+	ld	a,1
+	ld	(MAPDRV_MNT),a
+	call	NEXT_CALL_PAR
+	jp	c,MAPDRV_OKPARS
+
+	ld	ix,GETBYT
+	call	BASIC_ROUT
+	and	1
+	inc	a
+	ld	(MAPDRV_MNT),a
+	
+	ld	a,')'
+	call	SYNCHR
+	jp	MAPDRV_OKPARS
+
+MAPDRV_NOSTR:
+	pop	hl
+MAPDRV_NOMNT:
 	ld	ix,FRMQNT
 	call	BASIC_ROUT
 	ld	(MAPDRV_PAR),de
@@ -4027,6 +4079,36 @@ MAPDRV_NOPRIM:
 MAPDRV_OKPARS:
 
 	;>>> All parameters are in place, now try to perform the mapping
+
+	;* If mounting a file, mount it
+
+	ld	a,(MAPDRV_MNT)
+	or	a
+	jr	z,MAPDRV_NOMNT2
+
+	push	hl
+	dec	a
+	ld	d,a
+	ld	hl,($SECBUF##)
+	ld	a,(MAPDRV_DRV)
+	ld	b,3
+	ld	c,_MAPDRV##
+	call	BASIC_DOS
+	pop	hl
+	ret
+
+	if 0
+	ld	de,($SECBUF##)
+xxxx:
+	ld	a,(de)
+	or	a
+	ret	z
+	call	00A2h
+	inc	de
+	jr	xxxx
+	endif
+
+MAPDRV_NOMNT2:
 
 	;* If partition number is -1, perform unmapping
 
