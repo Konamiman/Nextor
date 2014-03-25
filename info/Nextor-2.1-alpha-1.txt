@@ -68,7 +68,7 @@ MAPDRV A: U --> Error
 - It is not possible to open or to alter (rename, move, delete, overwrite, change attributes) a mounted file:
 MAPDRV B: TOOLS.DSK
 TYPE TOOLS.DSK --> Error
-ECHO HELLO > TOOLS.DSK --> Error
+ECHO HELLO > TOOLS.DSK --> Error (see "known bugs" below)
 REN TOOLS.DSK X.DSK --> Error
 MOVE TOOLS.DSK SOMEDIR\ --> Error
 DEL TOOLS.DSK --> Error
@@ -108,7 +108,12 @@ This error appears when trying to open or alter a mounted file, or when trying t
 This error appears when trying to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
 
-6. OTHER USEFUL INFORMATION
+6. KNOWN BUGS
+
+Trying to overwrite a mounted file via the "Create file handle" function call (_CREATE, 44h), for example by executing a "ECHO HELLO > TOOLS.DSK" command, will actually succeeed and the file will be overwritten; a "File is mounted" error should be returned instead.
+
+
+7. OTHER USEFUL INFORMATION
 
 WARNING: This is alpha software. It has not been thoroughly tested and could be buggy. Please backup your data before using it.
 
