@@ -2,7 +2,7 @@ Nextor 2.1 Alpha 1
 ------------------
 
 By Konamiman, 3/2014
-http://www.konamiman.com
+http://www.konamiman.com#nextor
 
 
 1. WHAT'S NEW IN ALPHA 1
@@ -16,7 +16,7 @@ Files are mounted either by using the updated MAPDRV.COM tool from the COMMAND2.
 
 The syntax for MAPDRV.COM is:
 
-  MAPDRV <drive>: <file> [/ro]
+  MAPDRV <drive> <file> [/ro]
 
 For example, to mount file TOOLS.DSK on drive G: do
 
@@ -36,12 +36,17 @@ Adding ",1" after the file name will cause the file to be mounted in read-only m
 
 NOTE: If the disk image file has the read-only attribute set, it will ALWAYS be mounted in read-only mode, even if no "/ro" / ",1" modifier is specified.
 
+To unmount the file, simply set a different mapping on the drive where the file is mounted (in the previous examples it would be G:). You can set a normal partition mapping, or just leave the drive unmapped:
+
+  MAPDRV <drive> U
+  CALL MAPDRV(<drive>, -1)
+
 
 3. RULES AND RESTRICTIONS
 
-The disk image file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. Also, the following restrictions apply:
+To be mountable a disk image file must have a size of at least 512 bytes and at most 32 MBytes. The file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. 
 
-- Any file can be mounted if it has a size between 512 bytes and 32 MBytes. 
+Also, the following restrictions apply:
 
 - The file cannot contain partitions, the contained filesystem is expected to start right at the beginning of the file.
 
@@ -52,7 +57,7 @@ MAPDRV A: A:TOOLS.DSK --> Error
 MAPDRV B: TOOLS.DSK
 MAPDRV C: TOOLS.DSK --> Error
 
-- It is not possible to do a recursive file mount (mounting a file that is itself inside a mounted drive):
+- It is not possible to do a recursive file mount (mounting a file that is itself inside a mounted disk image file):
 MAPDRV B: TOOLS.DSK
 MAPDRV C: B:FILE.DSK --> Error
 
@@ -87,17 +92,31 @@ The _GDLI function call (79h) now returns the following information in the data 
 +3: 0 (reserved for more flags)
 +4: Filename in printable format (up to 12 characters, plus a terminating zero)
 
+Please refer to the Nextor Progrmmers Reference for more details on these function calls.
+
 
 5. NEW ERROR CODES
 
 Two new error codes have been introduced:
 
-- "File is mounted" (.FMNT, DOS/Nextor error code B2h, BASIC error code 80)
+- "File is mounted" (.FMNT, DOS error code B2h, BASIC error code 80)
 
 This error appears when trying to open or alter a mounted file, or when trying to perform any other non allowed operation involving a mounted file (see "Rules and restrictions")
 
-- "Bad file size" (.BFSZ, DOS/Nextor error code B1h, BASIC error code 81)
+- "Bad file size" (.BFSZ, DOS error code B1h, BASIC error code 81)
 
 This error appears when trying to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
 
+6. OTHER USEFUL INFORMATION
+
+WARNING: This is alpha software. It has not been thoroughly tested and could be buggy. Please backup your data before using it.
+
+WARNING: After mounting a file do not extract or swap the medium where the file is contained. The behavior of Nextor if this is done is undefined and you could lose data.
+
+The updated DRVINFO.COM tool and the CALL DRVINFO command will display the file name and the containing drive for drives where a file is mounted:
+
+  Drive G: is assigned to:
+  File TOOLS.DSK on drive A: (read-only)
+
+The easiest way to create empty disk image files is to use the NestorDiskImageCreator tool available at Konamiman's MSX site (http://konamiman.com/msx/megascsi/ndicreat.lzh).
