@@ -2295,7 +2295,7 @@ READ_UNIT:	;B  = Number of sectors
 		ld	a,RD_CMD
 
 ;===== end add DOS2.50
-CALL_UNIT:	;@3A06
+CALL_UNIT:
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
 ; driver is specified by a unit handler pointed to by HL, and the function  by

@@ -231,6 +231,7 @@ zero_p2_loop:	ld	(hl),0			; data segment up to the
 		ld	(MHANDLES##+6),hl
 		ld	a,h
 		ld	(RW_LEVEL##),a
+		ld	(BF_LEVEL##),a
 ;
 ;
 ;    *****  SETUP MAP_TBL AND SEGMENT LISTS IN PAGE-2  *****

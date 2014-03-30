@@ -116,6 +116,27 @@ endif
 				; SECTOR NOT ALREADY BUFFERED
 ;
 		pop	hl			;HL -> first buffer on chain
+
+		;MODIFICATION TO SUPPORT FILE MOUNTING:
+		;If a file is mounted, the call to RW_UNIT por pre-read
+		;will cause this routine to re-enter. In that case,
+		;the first buffer in the chain will end up having a wrong
+		;combination of unit+sector number and actual sector data.
+		;To prevent this, we check if we are re-entering,
+		;and in this case we use the second buffer in the chain
+		;instead of the frist one.
+
+		ld	a,(BF_LEVEL##)
+		or	a
+		jr	z,okbuflevel
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+okbuflevel:
+
+		;End of modification for file mounting
+
 		inc	hl
 		inc	hl
 		bit	7,(hl)			;Look at unit number and
@@ -216,7 +237,21 @@ bf_multi_read:	push	de			;Save registers which are
 ;;		ld	c,a
 ;===== end mod DOS2.50
 		ld	a,RD_CMD##		;Get READ command code
+
+		push	af
+		ld	a,(BF_LEVEL##)
+		inc	a
+		ld	(BF_LEVEL##),a	;To support re-enter check
+		pop	af
+
 		pcall	RW_UNIT			;Try to read the sector
+
+		push	af
+		ld	a,(BF_LEVEL##)
+		dec	a
+		ld	(BF_LEVEL##),a
+		pop	af
+
 		pop	bc			;Get copy count & separation
 		pop	de			;Get sector number back
 		jr	z,pre_read_ok		;Jump if read sector OK
@@ -250,7 +285,10 @@ no_pre_read:	ex	(sp),hl			;HL -> buffer descriptor
 already_in_buf:	pop	bc			 ;Clean up stack
 		set	FF_DBUF,(iy+@FAT_FLAGS##);Directory buffer not cached
 		ld	(B_CACHE##),hl		 ;Record buffer as cache
-		call	BF_END			 ;Put buffer on end of chain
+
+		ld	a,(BF_LEVEL##)
+		or	a
+		call	z,BF_END	;Put buffer on end of chain		 
 ;
 		xor	a
 		ret				;Return Z-set (for DIRTY_DISK)
