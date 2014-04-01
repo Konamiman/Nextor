@@ -1,8 +1,8 @@
 /* MKNEXROM - Make a Nextor kernel ROM
-   By Konamiman, 5/2011
+   By Konamiman, 4/2014
 
    Usage:
-   mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>]
+   mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>] [/8:<8K bank select address>]
 
    This program creates a Nextor kernel ROM from a base file and a driver file,
    as per the recipe specified in the driver development guide. It also allows modifying
@@ -52,6 +52,10 @@
 
    The maximum size for the extra file is 1K.
 
+
+   <8K bank select address> must be specified if the ROM maps two 8K banks instead of one single 16K bank
+   in Z80 page 1. The value must be the hexadecimal address where the bank number must be written
+   in order to make it visible in the first half of the page (4000h-6000h). 
 */
 
 /* v1.01 (4/2011):
@@ -68,6 +72,9 @@
    The address for the mapper code embedded in the initialization code is no longer
    calculated from the startup address. Instead, it is now at a fixed position
    (MAPPER_INIT_CODE_ADDRESS).
+
+   v1.05 (4/2014):
+   Added the <8K bank select address> parameter.
    
 */
 
@@ -89,6 +96,7 @@
 #define DOS1_EXTRA_BANK 3				//Bank for the extra code in DOS 2 mode
 #define DATABUFFER_SIZE sizeof(dataBuffer)
 #define MAPPER_INIT_CODE_ADDRESS 0x07DC
+#define _8K_INIT_PATCH_ADDRESS 0x00F7	//File position where the patch for 8K bank mapper must be written
 
 #define safeClose(file) {if(file!=NULL) {fclose(file); file=NULL;}}
 
@@ -114,12 +122,14 @@ int main(int argc, char* argv[])
 	int signatureLength;
 	int i;
 	unsigned short position;
+	int First8KMappingAddress=0;
 
 	char* baseFilename=NULL;
 	char* newFilename=NULL;
 	char* driverFilename=NULL;
 	char* mapperFilename=NULL;
 	char* extraFilename=NULL;
+	char* _First8KMappingAddress=NULL;
 
 	char* mapperCode[MAPPER_CODE_SIZE];
 	char* extraCode[EXTRA_CODE_SIZE];
@@ -146,12 +156,21 @@ int main(int argc, char* argv[])
 			mapperFilename=argv[i]+3;
 		} else if(IsParam(argv[i], 'e')) {
 			extraFilename=argv[i]+3;
+		} else if (IsParam(argv[i], '8')) {
+			_First8KMappingAddress=argv[i]+3;
 		} else {
 			DisplayInfo();
 			DoExit(0);
 		}
 	}
 
+	if (_First8KMappingAddress != NULL) {
+		sscanf(_First8KMappingAddress, "%4x", &First8KMappingAddress);
+		if (First8KMappingAddress < 0x4000 || First8KMappingAddress >= 0x8000) {
+			printf("*** Invalid value for the /8 parameter, must be a hexadecimal address in the range 4000-7FFF");
+			DoExit(1);
+		}
+	}
 
 	//* Open the base file and check its size
 
@@ -354,6 +373,12 @@ int main(int argc, char* argv[])
 	}
 
 
+	//* Write the patch for 8K bank based ROM mapper, if necessary
+
+	if (First8KMappingAddress != 0) {
+		//WIP...
+	}
+
 	//* Set the mapper code on the intitialization block
 
 	if(mapperFilename!=NULL) {
@@ -398,11 +423,12 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.04 - Make a Nextor kernel ROM\r\n"
-		   "By Konamiman, 8/2011\r\n"
+	printf("MKNEXROM v1.05 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 4/2014\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
-		   "mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>]\r\n"
+		   "mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>]\r\n"
+		   "         [/e:<extrafile>] [/8:<8K bank select address>]\r\n"
 		   );
 }
 
