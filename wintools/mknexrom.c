@@ -97,6 +97,7 @@
 #define DATABUFFER_SIZE sizeof(dataBuffer)
 #define MAPPER_INIT_CODE_ADDRESS 0x07DC
 #define _8K_INIT_PATCH_ADDRESS 0x00F7	//File position where the patch for 8K bank mapper must be written
+#define LD_XXXX_A_OPCODE 0x32
 
 #define safeClose(file) {if(file!=NULL) {fclose(file); file=NULL;}}
 
@@ -376,7 +377,24 @@ int main(int argc, char* argv[])
 	//* Write the patch for 8K bank based ROM mapper, if necessary
 
 	if (First8KMappingAddress != 0) {
-		//WIP...
+		char PatchFor8KMapper[3];
+		PatchFor8KMapper[0] = LD_XXXX_A_OPCODE;
+		PatchFor8KMapper[1] = (char)(First8KMappingAddress & 0xFF);
+		PatchFor8KMapper[2] = (char)((First8KMappingAddress >> 8) & 0xFF);
+
+		fseek(newFile, _8K_INIT_PATCH_ADDRESS, SEEK_SET);
+
+		do {
+			fseek(newFile, 0, SEEK_CUR);
+			writeCount = fwrite(PatchFor8KMapper, 1, sizeof(PatchFor8KMapper), newFile);
+			if (writeCount != sizeof(PatchFor8KMapper)) {
+				printf("*** Can't write patch for 8K mapper initialization to the ROM file: %s\r\n", newFilename);
+				DoExit(1);
+			}
+
+			fseek(newFile, BANK_SIZE - sizeof(PatchFor8KMapper) - 1, SEEK_CUR);
+			fgetc(newFile);
+		} while (!feof(newFile));
 	}
 
 	//* Set the mapper code on the intitialization block
