@@ -163,7 +163,12 @@ endif
 _$DOSVER::
 DOSV0::
 	defb	"Nextor kernel version "
-	defb	NXTVER##+"0", ".", NXTV_HI##+"0" ;, NXTV_LO##+"0"
+	defb	NXTVER##+"0", ".", NXTV_HI##+"0" 
+	
+	if 1
+	defb ".", NXTV_LO##+"0"
+	endif
+
 	INCLUDE betainfo.mac
 	defb	0
 ;

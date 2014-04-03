@@ -31,9 +31,6 @@ BNKID	equ	40FFh		;Where Bank ID is stored
 
 CHGBNK::
 
-	db	0FFh	;Header for MKNEXROM
-	dw	6000h
-
 	rlca
 	ld	(6000h),a
 	inc	a

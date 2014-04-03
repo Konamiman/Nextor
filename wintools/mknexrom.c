@@ -1,8 +1,8 @@
 /* MKNEXROM - Make a Nextor kernel ROM
-   By Konamiman, 5/2011
+   By Konamiman, 4/2014
 
    Usage:
-   mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>]
+   mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>] [/8:<8K bank select address>]
 
    This program creates a Nextor kernel ROM from a base file and a driver file,
    as per the recipe specified in the driver development guide. It also allows modifying
@@ -52,6 +52,25 @@
 
    The maximum size for the extra file is 1K.
 
+
+   <8K bank select address> must be specified if the ROM maps two 8K banks instead of one single 16K bank
+   in Z80 page 1. The value must be the hexadecimal address where the bank number must be written
+   in order to make it visible in the first half of the page (4000h-6000h). This will cause a small
+   portion of the boot code to be overwritten with a direct write of a 0 byte to that address, where the
+   original code is a call to 7FD0h (that will not contain any meaningful code at boot time in the case
+   of mappers that use 8K banks).
+
+   As an alternative to using the /8 parameter, the same can be achieved (a patched ROM file) if a
+   mapper file is specified that has a special header, consisting of a FFh byte plus the bank select address
+   in little endian. So for example the code for a ASCII8 mapper file with that header would be:
+
+   db	0FFh
+   dw	6000h
+   rlca
+   ld	(6000h),a
+   inc	a
+   ld	(6800h),a
+   ret
 */
 
 /* v1.01 (4/2011):
@@ -68,6 +87,9 @@
    The address for the mapper code embedded in the initialization code is no longer
    calculated from the startup address. Instead, it is now at a fixed position
    (MAPPER_INIT_CODE_ADDRESS).
+
+   v1.05 (4/2014):
+   Added the <8K bank select address> parameter.
    
 */
 
@@ -89,6 +111,9 @@
 #define DOS1_EXTRA_BANK 3				//Bank for the extra code in DOS 2 mode
 #define DATABUFFER_SIZE sizeof(dataBuffer)
 #define MAPPER_INIT_CODE_ADDRESS 0x07DC
+#define _8K_INIT_PATCH_ADDRESS 0x00F7	//File position where the patch for 8K bank mapper must be written
+#define LD_XXXX_A_OPCODE 0x32
+#define MAPPER_CODE_HEADER_SIZE 3
 
 #define safeClose(file) {if(file!=NULL) {fclose(file); file=NULL;}}
 
@@ -114,20 +139,23 @@ int main(int argc, char* argv[])
 	int signatureLength;
 	int i;
 	unsigned short position;
+	int First8KMappingAddress=0;
 
 	char* baseFilename=NULL;
 	char* newFilename=NULL;
 	char* driverFilename=NULL;
 	char* mapperFilename=NULL;
 	char* extraFilename=NULL;
+	char* _First8KMappingAddress=NULL;
 
-	char* mapperCode[MAPPER_CODE_SIZE];
+	char* mapperCode;
+	char mapperCodeBuffer[MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE];
 	char* extraCode[EXTRA_CODE_SIZE];
 	char* dataBuffer[1024];
 
 	char* driverSignature="NEXTOR_DRIVER";
 	signatureLength=strlen(driverSignature);
-
+	mapperCode = mapperCodeBuffer;
 	
 	//* Get command line parameters
 
@@ -146,12 +174,21 @@ int main(int argc, char* argv[])
 			mapperFilename=argv[i]+3;
 		} else if(IsParam(argv[i], 'e')) {
 			extraFilename=argv[i]+3;
+		} else if (IsParam(argv[i], '8')) {
+			_First8KMappingAddress=argv[i]+3;
 		} else {
 			DisplayInfo();
 			DoExit(0);
 		}
 	}
 
+	if (_First8KMappingAddress != NULL) {
+		sscanf(_First8KMappingAddress, "%4x", &First8KMappingAddress);
+		if (First8KMappingAddress < 0x4000 || First8KMappingAddress >= 0x8000) {
+			printf("*** Invalid value for the /8 parameter, must be a hexadecimal address in the range 4000-7FFF");
+			DoExit(1);
+		}
+	}
 
 	//* Open the base file and check its size
 
@@ -207,15 +244,24 @@ int main(int argc, char* argv[])
 			printf("*** Can't open mapper code file: %s\r\n", mapperFilename);
 			DoExit(1);
 		}
-		if(GetFileSize(mapperFile)>MAPPER_CODE_SIZE) {
-			printf("*** The mapper code file has not the expected size (%i bytes)\r\n", MAPPER_CODE_SIZE);
+		int fileSize = GetFileSize(mapperFile);
+		if (fileSize > (MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE)) {
+			printf("*** The mapper code file has not the expected size (%i bytes, or %i bytes if it has a header)\r\n", MAPPER_CODE_SIZE, MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE);
 			DoExit(1);
 		}
-		readCount=fread(mapperCode, 1, MAPPER_CODE_SIZE, mapperFile);
+		readCount = fread(mapperCode, 1, MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE, mapperFile);
 		if(readCount==0) {
 			printf("*** Can't read the mapper code file: %s\r\n", mapperFilename);
 			DoExit(1);
 		}
+
+		if(mapperCode[0] == (char)0xFF) {
+			if(First8KMappingAddress == 0) {
+				First8KMappingAddress = (int)mapperCode[1] + (((int)mapperCode[2]) << 8);
+			}
+			mapperCode = &(mapperCodeBuffer[MAPPER_CODE_HEADER_SIZE]);
+		}
+
 		safeClose(mapperFile);
 	}
 
@@ -354,6 +400,29 @@ int main(int argc, char* argv[])
 	}
 
 
+	//* Write the patch for 8K bank based ROM mapper, if necessary
+
+	if (First8KMappingAddress != 0) {
+		char PatchFor8KMapper[3];
+		PatchFor8KMapper[0] = LD_XXXX_A_OPCODE;
+		PatchFor8KMapper[1] = (char)(First8KMappingAddress & 0xFF);
+		PatchFor8KMapper[2] = (char)((First8KMappingAddress >> 8) & 0xFF);
+
+		fseek(newFile, _8K_INIT_PATCH_ADDRESS, SEEK_SET);
+
+		do {
+			fseek(newFile, 0, SEEK_CUR);
+			writeCount = fwrite(PatchFor8KMapper, 1, sizeof(PatchFor8KMapper), newFile);
+			if (writeCount != sizeof(PatchFor8KMapper)) {
+				printf("*** Can't write patch for 8K mapper initialization to the ROM file: %s\r\n", newFilename);
+				DoExit(1);
+			}
+
+			fseek(newFile, BANK_SIZE - sizeof(PatchFor8KMapper) - 1, SEEK_CUR);
+			fgetc(newFile);
+		} while (!feof(newFile));
+	}
+
 	//* Set the mapper code on the intitialization block
 
 	if(mapperFilename!=NULL) {
@@ -398,11 +467,12 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.04 - Make a Nextor kernel ROM\r\n"
-		   "By Konamiman, 8/2011\r\n"
+	printf("MKNEXROM v1.05 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 4/2014\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
-		   "mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>]\r\n"
+		   "mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>]\r\n"
+		   "         [/e:<extrafile>] [/8:<8K bank select address>]\r\n"
 		   );
 }
 

@@ -17,7 +17,7 @@ PPI.AR		equ	0A8h		;PPI Port A data read
 
 
 ROMST::		defb	"AB"		;Indicates valid ROM
-if 0
+if 1
 		defw	DOINIT		;Banked ROM initialization entry point
 else
 		defw	INIT##		;Initialization entry point
