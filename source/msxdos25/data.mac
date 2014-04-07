@@ -204,7 +204,7 @@ ram_ad	defl	DATABASE
 ;
 	var1	DSK_CHK		;Disk check control flag
 ;
-	var2	DVB_TABLE	;Pointer to table of device-based drives for DOS1	;spare	2
+	spare	2
 	var1	MFLAGS		;Miscellaneous flags
 	const	FASTOUT,0	;bit 0: set for fast STROUT
 	const	FIRSTLD,1	;bit 1: set while booting NEXTOR.SYS for the first time
@@ -254,6 +254,7 @@ ram_ad	defl	DATABASE
 ;
 	var1	DOS_VER		;DOS version number 2.x
 ;
+	var0	DVB_TABLE	;Pointer to table of device-based drives for DOS1
 	var1	P0_64K		;\   These are the basic 64k RAM segment
 	var1	P1_64K		; \  numbers which should never be changed
 	var1	P2_64K		; /  by anyone (including the system).
