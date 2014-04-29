@@ -722,6 +722,8 @@ div_10_loop:	inc	c			; an error number to the
 ;             B = Slot address of choice string (if A=0 on entry)
 ;            HL = Pointer to choice string (if A=0 on entry)
 ;
+
+if 0	;TODO: Move this code to ROM
 		ex	af,af'			;Save choice number in A'
 		push	hl
 		pop	ix			;IX -> buffer pointer
@@ -787,6 +789,7 @@ got_buf_bc:	set	7,d
 		ld	bc,UD_TIME##		;Zero the UD_TIME field to
 		add	hl,bc			; ensure that we will get
 		ld	(hl),0			; a new UPB next time.
+endif
 		ret
 ;
 ;
@@ -1335,6 +1338,14 @@ dspace_okfn:
 
 	;--- Calculate free space
 
+	bit	UF_F16,(ix+UD_FLAGS##)
+	jr	z,DSP_FAT12
+
+	call	ALLOC_FAT16
+	ex	de,hl
+	jr	DSP_NEXT
+
+DSP_FAT12:
 	inc	de			;DE = Maximum cluster number
 	push	de
 	ld	de,2			;Start at cluster 2
@@ -1362,6 +1373,7 @@ dspace_nofree:
 
 	push	bc
 	pop	de
+DSP_NEXT:
 
 	;--- Now we have a number of clusters in DE.
 	;    Transform it to KBytes + extra space.
