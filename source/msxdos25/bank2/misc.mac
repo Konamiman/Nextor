@@ -181,89 +181,29 @@ not_login:	djnz	login_loop		;Loop 'til done all drives
 		push	de
 ;
 		bit	UF_F16,(ix+UD_FLAGS##)
-		jp	z,ALLOC_FAT12
+		jr	z,ALLOC_FAT12
 
 		;--- FAT16 specific code
 
-		;In:
-		;DE=Total clusters
-		;IX=Unit descriptor
-		;Out: free clusters to the stack
-
-		ex	de,hl	;HL = Total cluster count
-		inc	hl
-
-		ld	e,(ix+UD_RES##)
-		ld	d,(ix+UD_RES##+1)	;DE = First FAT sector
-
-		push	hl
-		ld	hl,0	;Free cluster count
-
-ALLOC_LOOP:
-		;In: HL = Free cluster count
-		;    DE = Current FAT sector
-		;    pushed = remaining total cluster count
-
-		push	hl
-
-		xor	a
-		pcall	BF_FAT_SECTOR
-		ld	bc,BD_DATA
-		add	hl,bc	;HL = Pointer to sector data
-
-		inc	de
-		push	de
-		pop	bc
-
-		pop	de	;Previous free cluster count
-
-		push	bc	;Next FAT sector
-
-		ld	b,0
-		call	FCIS	;DE=Updated free cluster count
-
-		ex	de,hl
-		pop	de	;Next FAT sector
-
-		pop	bc	;Remaining total cluster count
-		ld	a,b
-		dec	a
-		ld	b,a
-		push	bc
-		jr	nz,ALLOC_LOOP	
-		pop	bc
-
-		;Scan last FAT sector
-
-		ld	a,c
-		or	a
-		jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
-
-		push	bc	;C=Remaining FAT entries
-		push	hl	;HL=Free cluster count
-		xor	a
-		pcall	BF_FAT_SECTOR
-		ld	bc,BD_DATA
-		add	hl,bc	;HL = Pointer to sector data
-		pop	de
-		pop	bc
-		ld	b,c
-		call	FCIS
-		ex	de,hl
-ALLOC_NOLAST:
+		call	ALLOC_FAT16
 
 		bit	UF_RALL,(ix+UD_FLAGS##)
 		jr	z,ALLOC_NOR
-		ld	a,(ix+UD_RDCLUS##+1)
+
+		ld	c,(ix+UD_RDCLUS##)
+		ld	b,(ix+UD_RDCLUS##+1)
+		bit	7,h
+		jr	nz,ALLOC_R
+
+		ld	a,b
 		cp	h
-		jr	nc,ALLOC_NOR
-		ld	b,a
-		ld	a,(ix+UD_RDCLUS##)
+		jr	c,ALLOC_R
+		ld	a,c
 		cp	l
 		jr	nc,ALLOC_NOR
-
+ALLOC_R:
 		ld	h,b
-		ld	l,a
+		ld	l,c
 ALLOC_NOR:
 
 		push	hl
@@ -339,6 +279,80 @@ no_reduced_total:
 		xor	a
 		ret				;Return with no error
 ;
+
+;----------------------------------------------------
+;
+; Routine to calculate free space on a FAT16 drive,
+; it is used by _ALLOC and _DSPACE.
+
+; In:  DE = Total clusters
+;      IX = Unit descriptor
+; Out: HL = Free clusters
+
+ALLOC_FAT16:
+		ex	de,hl	;HL = Total cluster count
+		inc	hl
+
+		ld	e,(ix+UD_RES##)
+		ld	d,(ix+UD_RES##+1)	;DE = First FAT sector
+
+		push	hl
+		ld	hl,0	;Free cluster count
+
+ALLOC_LOOP:
+		;In: HL = Free cluster count
+		;    DE = Current FAT sector
+		;    pushed = remaining total cluster count
+
+		push	hl
+
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+
+		inc	de
+		push	de
+		pop	bc
+
+		pop	de	;Previous free cluster count
+
+		push	bc	;Next FAT sector
+
+		ld	b,0
+		call	FCIS	;DE=Updated free cluster count
+
+		ex	de,hl
+		pop	de	;Next FAT sector
+
+		pop	bc	;Remaining total cluster count
+		ld	a,b
+		dec	a
+		ld	b,a
+		push	bc
+		jr	nz,ALLOC_LOOP	
+		pop	bc
+
+		;Scan last FAT sector
+
+		ld	a,c
+		or	a
+		jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
+
+		push	bc	;C=Remaining FAT entries
+		push	hl	;HL=Free cluster count
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+		pop	de
+		pop	bc
+		ld	b,c
+		call	FCIS
+		ex	de,hl
+ALLOC_NOLAST:
+
+		ret
 
 
 	;Calculate free entries in one FAT sector (for FAT16 only)
