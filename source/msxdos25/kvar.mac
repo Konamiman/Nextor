@@ -25,7 +25,7 @@
 	const	DOSV_LO,1	;Minor version number, low nybble
 	const	NXTVER,2
 	const	NXTV_HI,0
-	const	NXTV_LO,2
+	const	NXTV_LO,3
 ;===== end mod DOS2.50
 ;
 ;
