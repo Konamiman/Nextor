@@ -65,5 +65,7 @@ jentry	macro	name
 	jentry	CDRVINFO
 	jentry	CDRIVERS
 
+	jentry	F_LOCK
+
 	finish <JUMP>
 	end

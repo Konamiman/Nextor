@@ -723,7 +723,6 @@ div_10_loop:	inc	c			; an error number to the
 ;            HL = Pointer to choice string (if A=0 on entry)
 ;
 
-if 0	;TODO: Move this code to ROM
 		ex	af,af'			;Save choice number in A'
 		push	hl
 		pop	ix			;IX -> buffer pointer
@@ -789,7 +788,7 @@ got_buf_bc:	set	7,d
 		ld	bc,UD_TIME##		;Zero the UD_TIME field to
 		add	hl,bc			; ensure that we will get
 		ld	(hl),0			; a new UPB next time.
-endif
+
 		ret
 ;
 ;
@@ -1411,100 +1410,6 @@ dspace_c2k_loop:
 
 dspace_end:
 	xor	a
-	ret
-;
-;------------------------------------------------------------------------------
-;
-	PROC	F_LOCK
-;
-; Locks/unlocks a drive, or gets current lock state
-;
-; Entry:    E = Physical drive number (0=A:)
-;           A = 0 => get current value
-;               1 => set new value
-;           B = action (only if A=1)
-;               0 = unlock
-;               FFh = lock
-; Returns:  A = error code
-;           B = current lock status
-
-	ld	c,a
-
-	cp	MAX_UNITS##
-	ld	a,.IDRV##
-	ret	nc
-
-	ld	hl,UNIT_TAB##+2
-	ld	d,0
-	add	hl,de
-	add	hl,de
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a
-	or	h
-	ld	a,.IDRV##	;Return error if drive does not exist
-	ret	z
-
-	push	hl
-	pop	ix
-
-	ld	a,c
-	or	a
-	jr	z,mnt_get
-
-	ld	a,b
-	or	a
-	jr	z,do_ulock
-
-	;--- Lock the drive
-
-do_lock:
-	ld	a,(ix+UD_TIME##)
-	or	a
-	jr	nz,do_mnt_upbok
-
-	push	ix
-	pcall	BUILD_UPB
-	pcall	NEW_UPB
-	pop	ix
-	ld	(ix+UD_TIME##),2
-
-do_mnt_upbok:
-	pcall	FL_UD
-	pcall	INV_UD
-	set	UF_LCK,(ix+UD_FLAGS##)
-
-	xor	a
-	ld	b,0FFh
-	ret
-
-	;--- Unlock the drive
-
-do_ulock:
-	ld	a,(ix+UD_TIME##)
-	or	a
-	jr	z,do_umnt_upbok
-
-	pcall	FL_UD
-	pcall	INV_UD
-	ld	(ix+UD_TIME##),0
-
-do_umnt_upbok:
-	res	UF_LCK,(ix+UD_FLAGS##)
-
-	xor	a
-	ld	b,a
-	ret
-
-	;--- Get lock status
-
-mnt_get:
-	xor	a
-	ld	b,a
-	bit	UF_LCK,(ix+UD_FLAGS##)
-	ret	z
-	ld	b,0FFh
 	ret
 ;
 ;------------------------------------------------------------------------------
