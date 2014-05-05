@@ -17,6 +17,8 @@ PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
 PT_EXT		equ	5	;Partition type code for extended partition
 PT_FAT16	equ	6	;Partition type code for FAT16
 MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
+MAXCLUS_FAT12	equ	4084
+MAXCLUS_12BITS	equ	4095
 
 ;
 ;-----------------------------------------------------------------------------
@@ -2007,6 +2009,42 @@ endif
 		ld	(hl),d
 		inc	hl
 
+		;--- Decide if the drive is FAT12 or FAT16
+
+		dec	de	;Now DE = Cluster count
+
+		push	hl
+		push	de
+		ex	de,hl
+		ld	de,MAXCLUS_FAT12+1
+		call	COMP16
+		pop	de
+		pop	hl
+		jr	c,ok_fattype
+
+		push	hl
+		push	de
+		ex	de,hl
+		ld	de,MAXCLUS_12BITS+1
+		call	COMP16
+		pop	de
+		pop	hl
+		jr	nc,is_fat16
+
+		push	hl
+		push	de
+		push	ix
+		pop	hl
+		ld	de,UPB_FILESYS##
+		add	hl,de
+		ld	de,FAT16_S
+		ld	b,5
+		call	CP_FLSTR
+		pop	de
+		pop	hl
+		jr	nz,ok_fattype
+
+		if 0
 		ld	a,d		;Check if maximum cluster number
 		cp	10h	;0fh		;is greater than 4079 (0FEFh).
 		jr	c,ok_fattype	;If so, set the FAT16 flag.
@@ -2014,6 +2052,7 @@ endif
 		;ld	a,e
 		;cp	0F0h
 		;jr	c,ok_fattype
+		endif
 
 is_fat16:	ex	(sp),hl
 		push	hl
@@ -3036,6 +3075,15 @@ CP_FLSTR:
 	djnz	CP_FLSTR
 	ret
 
+COMP16:
+	ld	a,h
+	sub	d
+	ret	nz
+	ld	a,l
+	sub	e
+	ret
+
+FAT16_S:	db	"FAT16"
 
 	finish	<VAL>
 	end
