@@ -296,14 +296,18 @@ ALLOC_FAT16:
 		ld	e,(ix+UD_RES##)
 		ld	d,(ix+UD_RES##+1)	;DE = First FAT sector
 
-		push	hl
+		ld	b,h
+		ld	c,l
+		
 		ld	hl,0	;Free cluster count
 
 ALLOC_LOOP:
 		;In: HL = Free cluster count
 		;    DE = Current FAT sector
-		;    pushed = remaining total cluster count
-
+		;    BC = remaining total cluster count
+		
+		push	bc	;****
+		
 		push	hl
 
 		xor	a
@@ -312,8 +316,8 @@ ALLOC_LOOP:
 		add	hl,bc	;HL = Pointer to sector data
 
 		inc	de
-		push	de
-		pop	bc
+		ld	b,d
+		ld	c,e
 
 		pop	de	;Previous free cluster count
 
@@ -326,18 +330,13 @@ ALLOC_LOOP:
 		pop	de	;Next FAT sector
 
 		pop	bc	;Remaining total cluster count
-		ld	a,b
-		dec	a
-		ld	b,a
-		push	bc
-		jr	nz,ALLOC_LOOP	
-		pop	bc
-
+		djnz	ALLOC_LOOP
+		
 		;Scan last FAT sector
 
 		ld	a,c
 		or	a
-		jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
+		ret	z	;jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
 
 		push	bc	;C=Remaining FAT entries
 		push	hl	;HL=Free cluster count
