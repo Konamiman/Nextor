@@ -37,3 +37,4 @@ source/tools/data.mac
 *.sln
 *.suo
 
+source\tools\C\psft.com
