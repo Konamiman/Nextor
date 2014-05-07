@@ -38,3 +38,5 @@ source/tools/data.mac
 *.suo
 
 source\tools\C\psft.com
+source\tools\C\vsft.asm
+source\tools\C\vsft.com
