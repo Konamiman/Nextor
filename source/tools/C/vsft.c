@@ -5,8 +5,8 @@
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
         --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          asm.lib psft.c
-   hex2bin -e com psft.ihx
+          asm.lib vsft.c
+   hex2bin -e com vsft.ihx
    
    ASM.LIB, MSXCHAR.LIB and crt0msx_msxdos_advanced.rel
    are available at www.konamiman.com
@@ -80,6 +80,7 @@ typedef struct {
 #define null ((void*)0)
 	
 #define _TERM0 0x00
+#define _SETDTA 0x1A
 #define _ALLOC 0x1B
 #define _RDABS 0x2F
 #define _WRABS 0x30
@@ -102,14 +103,14 @@ const char* strTitle=
     "\r\n";
     
 const char* strUsage=
-    "Usage: psft <drive>: [fix] \r\n"
+    "Usage: vsft <drive>: [fix] \r\n"
     "\r\n"
 	"This tool checks the cluster count calculated by DOS for a given volume\r\n"
 	"and offers the possibility of fixing it if it is over the standard limits\r\n"
 	"(4084 clusters for FAT12, 65524 clusters for FAT16)\r\n"
-	"by slightly reducing the volume size in the boot sector.\r\n"
+	"by appropriately reducing the volume size in the boot sector.\r\n"
 	"\r\n"
-	"Run the tool as psft <drive>: first, and if it says that a fix is needed,\r\n"
+	"Run the tool as 'vsft <drive>:' first, and if it says that a fix is needed,\r\n"
 	"run again adding the \"fix\" parameter to actually perform the fix.\r\n"
 	"\r\n"
 	"Fixing FAT16 volumes is supported when running the tool in Nextor.\r\n"
@@ -123,7 +124,7 @@ const char* strCRLF = "\r\n";
 
 Z80_registers regs;
 bool isNextor;
-void* Buffer = (void*)0x8000;
+fatBootSector* Buffer = (fatBootSector*)0x8000;
 bool isFat16;
 byte driveNumber;		//0=A:, etc
 bool doFix;
@@ -153,6 +154,9 @@ void PrintSizeInK(unsigned long size);
 void CalculateSectorsToDecreaseForFix();
 void DoFix();
 void PrintFixInfo();
+void ReadBootSector();
+void FixVolumeSize();
+void WritebootSector();
 
 
 	/* MAIN */
@@ -332,7 +336,7 @@ void PrintDriveInfo()
 	} else if(totalClusters > MAX_12BIT_CLUSTER_COUNT) {
 		Terminate("Cluster count does not fit in 12 bits - this is not supposed to be supported by MSX-DOS!");
 	} else {
-		print("Filesystem:    FAT12 (just guessing! MSX-DOS does not support anything else)\r\n");
+		print("Filesystem:    FAT12 assumed (MSX-DOS does not support anything else)\r\n");
 	}
 }
 
@@ -378,7 +382,10 @@ void CalculateSectorsToDecreaseForFix()
 
 void DoFix()
 {
-	print("\r\nTODO: Fixing!");
+	ReadBootSector();
+	FixVolumeSize();
+	WritebootSector();
+	print("Fix applied!\r\n");
 }
 
 
@@ -389,4 +396,76 @@ void PrintFixInfo()
 	printf("This can be fixed by reducing the volume size by %i KBytes.\r\n",
 		sectorsToDecreaseForFix/2);
 	print("Run the tool again adding the 'fix' parameter to apply the fix.\r\n");
+}
+
+
+void ReadBootSector()
+{
+	print("\r\nReading boot sector...\r\n");
+
+	regs.Words.DE = (int)Buffer;
+	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
+
+	if(isNextor) {
+		regs.Bytes.A = driveNumber;
+		regs.Bytes.B = 1;
+		regs.Words.HL = 0;
+		regs.Words.DE = 0;
+		DosCall(_RDDRV, &regs, REGS_MAIN, REGS_MAIN);
+	} else {
+		regs.Bytes.L = driveNumber;
+		regs.Bytes.H = 1;
+		regs.Words.DE = 0;
+		DosCall(_RDABS, &regs, REGS_MAIN, REGS_MAIN);
+	}
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+}
+
+
+void FixVolumeSize()
+{
+	ulong totalSectors;
+
+	totalSectors = Buffer->smallSectorCount;
+	if(totalSectors == 0) {
+		totalSectors = Buffer->params.standard.bigSectorCount;
+	}
+
+	totalSectors -= sectorsToDecreaseForFix;
+
+	if(totalSectors <= 0xFFFF) {
+		Buffer->smallSectorCount = (uint)totalSectors;
+	} else {
+		Buffer->smallSectorCount = 0;
+		Buffer->params.standard.bigSectorCount = totalSectors;
+	}
+}
+
+
+void WritebootSector()
+{
+	print("Writing updated boot sector...\r\n");
+
+	regs.Words.DE = (int)Buffer;
+	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
+
+	if(isNextor) {
+		regs.Bytes.A = driveNumber;
+		regs.Bytes.B = 1;
+		regs.Words.HL = 0;
+		regs.Words.DE = 0;
+		DosCall(_WRDRV, &regs, REGS_MAIN, REGS_MAIN);
+	} else {
+		regs.Bytes.L = driveNumber;
+		regs.Bytes.H = 1;
+		regs.Words.DE = 0;
+		DosCall(_WRABS, &regs, REGS_MAIN, REGS_MAIN);
+	}
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
 }
