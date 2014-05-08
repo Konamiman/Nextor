@@ -950,7 +950,7 @@ NO_DUMMY:
 ;
 	call	GSLOT1##	;Set slot address of the master
 	ld	(MASTER_SLOT##),a
-xxx::
+
 	ld	a,(ID_BYTE)
 	and	1111b
 	ld	hl,CHAR_16	;Get KANJI range, only if japanese char generator available
