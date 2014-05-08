@@ -208,6 +208,7 @@ ram_ad	defl	DATABASE
 	var1	MFLAGS		;Miscellaneous flags
 	const	FASTOUT,0	;bit 0: set for fast STROUT
 	const	FIRSTLD,1	;bit 1: set while booting NEXTOR.SYS for the first time
+	const	ZALLOC,2	;bit 2: reduced alloc info mode becomes zero info mode
 	spare	1		;Available for DOS 2
 ;
 	var2	BLDCHK
