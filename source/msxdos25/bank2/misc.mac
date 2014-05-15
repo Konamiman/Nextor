@@ -180,6 +180,39 @@ not_login:	djnz	login_loop		;Loop 'til done all drives
 		ld	d,(ix+UD_NCLU##+1)	; for loop testing.
 		push	de
 ;
+		bit	UF_F16,(ix+UD_FLAGS##)
+		jr	z,ALLOC_FAT12
+
+		;--- FAT16 specific code
+
+		call	ALLOC_FAT16
+
+		bit	UF_RALL,(ix+UD_FLAGS##)
+		jr	z,ALLOC_NOR
+
+		ld	c,(ix+UD_RDCLUS##)
+		ld	b,(ix+UD_RDCLUS##+1)
+		bit	7,h
+		jr	nz,ALLOC_R
+
+		ld	a,b
+		cp	h
+		jr	c,ALLOC_R
+		ld	a,c
+		cp	l
+		jr	nc,ALLOC_NOR
+ALLOC_R:
+		ld	h,b
+		ld	l,c
+ALLOC_NOR:
+
+		push	hl
+		jr	ALLOC_COMMON
+
+		;--- FAT12 specific code
+
+ALLOC_FAT12:
+
 		ld	de,2			;Start at cluster 2
 		ld	b,d			;Free cluster count = 0
 		ld	c,d
@@ -190,36 +223,26 @@ free_space_lp:	push	de
 		pop	de			; the free cluster count.
 		jr	nz,not_free		
 		inc	bc
-
-		bit	UF_RALL,(ix+UD_FLAGS##)
-		jr	z,not_free_max
-
-		ld	a,b
-		cp	(ix+UD_RDCLUS##+1)
-		jr	nz,not_free_max
-		ld	a,c
-		cp	(ix+UD_RDCLUS##)
-		jr	z,free_max
-not_free_max:
 not_free:
 
-if 0
-		inc	de			;DE := next cluster number
-endif
+;if 0
+;		inc	de			;DE := next cluster number
+;endif
 		or	a
 		ex	(sp),hl
 		sbc	hl,de			;Compare with total number of
 		add	hl,de			; clusters from UPB.
 		ex	(sp),hl
-if 1
+;if 1
 		inc	de			;DE := next cluster number
-endif
+;endif
 		jr	nz,free_space_lp	;Loop if not reached end of FAT
 ;
-free_max:
 		push	bc			;Save number of free clusters
 ;
-;
+		;--- Common code for FAT12 and FAT16
+
+ALLOC_COMMON:
 		ld	e,(ix+UD_RES##)
 		ld	d,(ix+UD_RES##+1)	;Get the first FAT sector
 		xor	a
@@ -256,6 +279,97 @@ no_reduced_total:
 		xor	a
 		ret				;Return with no error
 ;
+
+;----------------------------------------------------
+;
+; Routine to calculate free space on a FAT16 drive,
+; it is used by _ALLOC and _DSPACE.
+
+; In:  DE = Total clusters
+;      IX = Unit descriptor
+; Out: HL = Free clusters
+
+ALLOC_FAT16:
+		ex	de,hl	;HL = Total cluster count
+		inc	hl
+
+		ld	e,(ix+UD_RES##)
+		ld	d,(ix+UD_RES##+1)	;DE = First FAT sector
+
+		ld	b,h
+		ld	c,l
+		
+		ld	hl,0	;Free cluster count
+
+ALLOC_LOOP:
+		;In: HL = Free cluster count
+		;    DE = Current FAT sector
+		;    BC = remaining total cluster count
+		
+		push	bc	;****
+		
+		push	hl
+
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+
+		inc	de
+		ld	b,d
+		ld	c,e
+
+		pop	de	;Previous free cluster count
+
+		push	bc	;Next FAT sector
+
+		ld	b,0
+		call	FCIS	;DE=Updated free cluster count
+
+		ex	de,hl
+		pop	de	;Next FAT sector
+
+		pop	bc	;Remaining total cluster count
+		djnz	ALLOC_LOOP
+		
+		;Scan last FAT sector
+
+		ld	a,c
+		or	a
+		ret	z	;jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
+
+		push	bc	;C=Remaining FAT entries
+		push	hl	;HL=Free cluster count
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+		pop	de
+		pop	bc
+		ld	b,c
+		call	FCIS
+		ex	de,hl
+ALLOC_NOLAST:
+
+		ret
+
+
+	;Calculate free entries in one FAT sector (for FAT16 only)
+	;In: DE = Previous count
+	;    B  = Entries in sector (0=256)
+	;    HL = Pointer to sector data
+	;Out: DE = DE + free clusters in sector
+
+FCIS:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	jr	nz,FCISN
+	inc	de
+FCISN:
+	djnz	FCIS
+	ret
 
 ;------------------------------------------------------------------------------
 ;
@@ -607,6 +721,7 @@ div_10_loop:	inc	c			; an error number to the
 ;             B = Slot address of choice string (if A=0 on entry)
 ;            HL = Pointer to choice string (if A=0 on entry)
 ;
+
 		ex	af,af'			;Save choice number in A'
 		push	hl
 		pop	ix			;IX -> buffer pointer
@@ -672,6 +787,7 @@ got_buf_bc:	set	7,d
 		ld	bc,UD_TIME##		;Zero the UD_TIME field to
 		add	hl,bc			; ensure that we will get
 		ld	(hl),0			; a new UPB next time.
+
 		ret
 ;
 ;
@@ -1220,6 +1336,14 @@ dspace_okfn:
 
 	;--- Calculate free space
 
+	bit	UF_F16,(ix+UD_FLAGS##)
+	jr	z,DSP_FAT12
+
+	call	ALLOC_FAT16
+	ex	de,hl
+	jr	DSP_NEXT
+
+DSP_FAT12:
 	inc	de			;DE = Maximum cluster number
 	push	de
 	ld	de,2			;Start at cluster 2
@@ -1247,6 +1371,7 @@ dspace_nofree:
 
 	push	bc
 	pop	de
+DSP_NEXT:
 
 	;--- Now we have a number of clusters in DE.
 	;    Transform it to KBytes + extra space.
@@ -1284,100 +1409,6 @@ dspace_c2k_loop:
 
 dspace_end:
 	xor	a
-	ret
-;
-;------------------------------------------------------------------------------
-;
-	PROC	F_LOCK
-;
-; Locks/unlocks a drive, or gets current lock state
-;
-; Entry:    E = Physical drive number (0=A:)
-;           A = 0 => get current value
-;               1 => set new value
-;           B = action (only if A=1)
-;               0 = unlock
-;               FFh = lock
-; Returns:  A = error code
-;           B = current lock status
-
-	ld	c,a
-
-	cp	MAX_UNITS##
-	ld	a,.IDRV##
-	ret	nc
-
-	ld	hl,UNIT_TAB##+2
-	ld	d,0
-	add	hl,de
-	add	hl,de
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a
-	or	h
-	ld	a,.IDRV##	;Return error if drive does not exist
-	ret	z
-
-	push	hl
-	pop	ix
-
-	ld	a,c
-	or	a
-	jr	z,mnt_get
-
-	ld	a,b
-	or	a
-	jr	z,do_ulock
-
-	;--- Lock the drive
-
-do_lock:
-	ld	a,(ix+UD_TIME##)
-	or	a
-	jr	nz,do_mnt_upbok
-
-	push	ix
-	pcall	BUILD_UPB
-	pcall	NEW_UPB
-	pop	ix
-	ld	(ix+UD_TIME##),2
-
-do_mnt_upbok:
-	pcall	FL_UD
-	pcall	INV_UD
-	set	UF_LCK,(ix+UD_FLAGS##)
-
-	xor	a
-	ld	b,0FFh
-	ret
-
-	;--- Unlock the drive
-
-do_ulock:
-	ld	a,(ix+UD_TIME##)
-	or	a
-	jr	z,do_umnt_upbok
-
-	pcall	FL_UD
-	pcall	INV_UD
-	ld	(ix+UD_TIME##),0
-
-do_umnt_upbok:
-	res	UF_LCK,(ix+UD_FLAGS##)
-
-	xor	a
-	ld	b,a
-	ret
-
-	;--- Get lock status
-
-mnt_get:
-	xor	a
-	ld	b,a
-	bit	UF_LCK,(ix+UD_FLAGS##)
-	ret	z
-	ld	b,0FFh
 	ret
 ;
 ;------------------------------------------------------------------------------

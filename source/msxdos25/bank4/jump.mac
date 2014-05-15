@@ -77,6 +77,7 @@ jentry	macro	name
 	jentry	FRESEG
 	jentry	FREUSEG
 
+	jentry	F_LOCK
 
 	finish <JUMP>
 	end

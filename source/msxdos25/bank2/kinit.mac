@@ -799,7 +799,7 @@ kbdos_table:
 	dw	?F_RALLOC## -OFFSET	;Get/set reduced allocation information mode vector
 	dw	?F_DSPACE## -OFFSET	;Get disk space information
 
-	dw	?F_LOCK## -OFFSET	;Lock/unlock drive
+	dw	F_LOCK##			;Lock/unlock drive
 
 	dw	F_GDRVR##		;Get information about device driver
 	dw	F_GDLI##		;Get information about drive letter

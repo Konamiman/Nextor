@@ -524,6 +524,8 @@ ram_ad	defl	4100h
 	var3	FRESEG
 	var3	FREUSEG
 
+	var3	F_LOCK
+
 ;-----------------------------------------------------------------------------
 ;
 ;	Routines on ROM page 0 and on disk drivers

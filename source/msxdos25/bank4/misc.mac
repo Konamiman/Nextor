@@ -1,0 +1,110 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Miscellaneous KBDOS functions (bank 4 part)
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	;RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_LOCK
+;
+; Locks/unlocks a drive, or gets current lock state
+;
+; Entry:    E = Physical drive number (0=A:)
+;           A = 0 => get current value
+;               1 => set new value
+;           B = action (only if A=1)
+;               0 = unlock
+;               FFh = lock
+; Returns:  A = error code
+;           B = current lock status
+
+	;ld	c,a		;A for the routine is passed in C
+	ld	iy,RAM_BASE##
+
+	ld	a,e
+	cp	MAX_UNITS##
+	ld	a,.IDRV##
+	ret	nc
+
+	ld	hl,UNIT_TAB##+2
+	ld	d,0
+	add	hl,de
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	or	h
+	ld	a,.IDRV##	;Return error if drive does not exist
+	ret	z
+
+	push	hl
+	pop	ix
+
+	ld	a,c
+	or	a
+	jr	z,mnt_get
+
+	ld	a,b
+	or	a
+	jr	z,do_ulock
+
+	;--- Lock the drive
+
+do_lock:
+	ld	a,(ix+UD_TIME##)
+	or	a
+	jr	nz,do_mnt_upbok
+
+	push	ix
+	pcall	BUILD_UPB
+	pcall	NEW_UPB
+	pop	ix
+	ld	(ix+UD_TIME##),2
+
+do_mnt_upbok:
+	pcall	FL_UD
+	pcall	INV_UD
+	set	UF_LCK,(ix+UD_FLAGS##)
+
+	xor	a
+	ld	b,0FFh
+	ret
+
+	;--- Unlock the drive
+
+do_ulock:
+	ld	a,(ix+UD_TIME##)
+	or	a
+	jr	z,do_umnt_upbok
+
+	pcall	FL_UD
+	pcall	INV_UD
+	ld	(ix+UD_TIME##),0
+
+do_umnt_upbok:
+	res	UF_LCK,(ix+UD_FLAGS##)
+
+	xor	a
+	ld	b,a
+	ret
+
+	;--- Get lock status
+
+mnt_get:
+	xor	a
+	ld	b,a
+	bit	UF_LCK,(ix+UD_FLAGS##)
+	ret	z
+	ld	b,0FFh
+	ret
+
+;------------------------------------------------------------------------------
+;
+	finish	<MISC>
+	end
+;
