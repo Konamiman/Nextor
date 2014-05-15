@@ -34,6 +34,8 @@ source/tools/*.com
 source/tools/*.COM
 source/tools/codes.mac
 source/tools/data.mac
+source\tools\C\*.asm
+source\tools\C\*.com
 *conflicto*.*
 *.sln
 *.suo
