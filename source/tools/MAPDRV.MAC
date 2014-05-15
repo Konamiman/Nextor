@@ -12,12 +12,12 @@ FIB	equ	3000h
       ; -------------------------------------------------------------------------------
 	db	13
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition,",13,10
-	db  "         or mount a file on a drive"
+	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
-	db  "MAPDRV <drive>: <filename> [/ro]",13,10
+	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device and LUN",13,10
 	db	"of the driver in the specified slot (must be a device-based driver).",13,10
@@ -28,7 +28,7 @@ FIB	equ	3000h
 	db	"to the device (needed for partitionless devices such as floppy disks).",13,10
 	db	"Partition numbers 2 to 4 refer to extended partitions 2-1 to 2-4 if partition",13,10
 	db	"2 of the device is extended, otherwise they refer to primary partitions.",13,10
-    db	13,10
+        db	13,10
 	db	"<device> and <LUN> must be a number from 1 to 7 each one. If <device> is",13,10
 	db	"specifided but <LUN> is omitted, value 1 is assumed for <LUN>.",13,10
 	db	13,10
@@ -38,7 +38,7 @@ FIB	equ	3000h
 	db	"If device information is provided but slot is omitted, the drive is mapped to",13,10
 	db	"the specified partition of the specified device in the driver already",13,10
 	db	"controlling the drive (this works only if the drive is currently mapped",13,10
-	db  "to a device-based driver).",13,10
+	db      "to a device-based driver).",13,10
 	db	13,10
 	db	"If both device and slot information are omitted, the drive is mapped to the",13,10
 	db	"specified partition of the device it is already mapped to (this works only if",13,10
@@ -48,8 +48,9 @@ FIB	equ	3000h
 	db	"'u' will leave the drive unmapped. Other parameters are ignored in both cases.",13,10
 	db	13,10
 	db	"If a valid filename is supplied after <drive>, the specified file will be",13,10
-	db  "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
-	db  "that contains a file that has been mapped."
+	db      "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
+	db      "that contains a file that has been mapped. Prepend the filename with '/'",13,10
+	db	"if the first character of his name is a digit.",13,10
 	db	1Ah
 
 USAGE_S:
@@ -57,7 +58,7 @@ USAGE_S:
 	db  "         or mount a file on a drive",13,10
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
-	db  "MAPDRV <drive>: <filename> [/ro]",13,10
+	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
@@ -122,6 +123,11 @@ NO_LOCK:
 	ld	b,.NOPAR##
 	ld	c,_TERM##
 	jp	c,5
+
+	ld	a,(de)
+	cp	"/"
+	inc	de
+	jp	z,IS_FILE_DE
 
 	ld	hl,BUF	;Try to get first parameter as a number
 	call	EXT8##
@@ -364,9 +370,10 @@ DO_LOCK_OK:
 	;    FIB is appropriately filled already.
 
 IS_FILE:
+	ld	de,BUF
+IS_FILE_DE:
 	ld	b,10110b	;Include directories, hidden and system files
 	ld	c,_FFIRST##
-	ld	de,BUF
 	ld	ix,FIB
 	call	5
 	jp	nz,DO_TERM
