@@ -17,6 +17,9 @@ bin/**
 *.LK
 *.orig
 *.rej
+*.base.dat
+dos250ba.dat
+kernel.dat
 info/*.pdf
 source/msxdos25/bank*/**.inc
 source/msxdos25/drivers/**.inc
