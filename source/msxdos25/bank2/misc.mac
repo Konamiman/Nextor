@@ -180,6 +180,17 @@ not_login:	djnz	login_loop		;Loop 'til done all drives
 		ld	d,(ix+UD_NCLU##+1)	; for loop testing.
 		push	de
 ;
+		ld	a,(MFLAGS##)
+		and	4	;ZALLOC
+		jr	z,NO_ZALLOC
+		bit	UF_RALL,(ix+UD_FLAGS##)
+		jr	z,NO_ZALLOC
+
+		ld	bc,0
+		push	bc
+		jr	ALLOC_COMMON
+NO_ZALLOC:
+
 		bit	UF_F16,(ix+UD_FLAGS##)
 		jr	z,ALLOC_FAT12
 
@@ -1339,6 +1350,16 @@ dspace_okfn:
 	jr	nz,dspace_tokbytes
 
 	;--- Calculate free space
+
+	ld	a,(MFLAGS##)
+	and	4	;ZALLOC
+	jr	z,DSP_NO_ZALLOC
+	bit	UF_RALL,(ix+UD_FLAGS##)
+	jr	z,DSP_NO_ZALLOC
+
+	ld	de,0
+	jr	DSP_NEXT
+DSP_NO_ZALLOC:
 
 	bit	UF_F16,(ix+UD_FLAGS##)
 	jr	z,DSP_FAT12
