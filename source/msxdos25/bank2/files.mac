@@ -180,7 +180,12 @@ RDWR_END2:
 ;
 ;	----------------------------------------
 ;
-rdwr_device:	ld	h,a			;Store the paging mode
+rdwr_device:
+		call	rdwrdev2
+		jp	RDWR_END
+
+rdwrdev2:
+		ld	h,a			;Store the paging mode
 		and	RFM_PG			; flag in the FAB ready for
 		ld	(ix+FAB_PG##),a		; passing to GET_SEGMENT
 ;
