@@ -78,6 +78,8 @@ jentry	macro	name
 	jentry	FREUSEG
 
 	jentry	F_LOCK
+	jentry  F_RALLOC
+	jentry	F_DSPACE
 
 	finish <JUMP>
 	end

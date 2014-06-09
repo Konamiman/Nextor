@@ -105,6 +105,224 @@ mnt_get:
 
 ;------------------------------------------------------------------------------
 ;
+	PROC	F_RALLOC
+;
+; Gets or sets the reduced allocation information mode vector
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           HL = value to set (only if A=1)
+;               L:0 = state for A:
+;               L:1 = state for B:, etc
+; Returns:  A = 0 (error code)
+;           HL = current value
+;                (bits for undefined drives are undefined)
+
+	ld	a,c		;A for the routine is passed in C
+	or	a
+	jr	z,redv_get
+
+	ld	(iy+@RALL_VECT##),l
+if MAX_UNITS## GT 8
+	ld	(iy+@RALL_VECT##+1),h
+endif
+
+	;--- Now set the UF_RALL bit for each drive that exists
+
+	xor	a
+readv_loop:
+	push	af
+	push	hl
+	ld	e,a
+	ld	d,0
+	ld	hl,UNIT_TAB##+2
+	add	hl,de
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ld	a,d
+	or	e
+	jr	z,readv_skipdrive	;Skip if undefined drive
+
+	push	de
+	pop	ix
+	ld	a,(ix+UD_TIME)
+	or	a
+	jr	z,readv_skipdrive	;Skip if no UPB
+	bit	UF_F12,(ix+UD_FLAGS##)
+	jr	nz,readv_skipdrive	;Skip if FAT12 drive
+
+	;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+	;          and compiles always the else clause.
+	;          Solve this if MAX_UNITS needs to grow over 8.
+
+	pop	hl	;HL = Vector
+if MAX_UNITS## GT 8
+	srl	h
+endif
+	rr	l	;Cy = Value for current drive
+	jr	c,readv_set1
+
+readv_set0:
+	res	UF_RALL,(ix+UD_FLAGS##)
+	jr	readv_nextdrive
+
+readv_set1:
+	set	UF_RALL,(ix+UD_FLAGS##)
+	jr	readv_nextdrive
+
+readv_skipdrive:
+	pop	hl
+	srl	l
+readv_nextdrive:
+	pop	af
+	inc	a
+	cp	MAX_UNITS##
+	jr	c,readv_loop
+
+	;--- Get current vector value
+
+redv_get:
+	ld	h,0
+	ld	l,(iy+@RALL_VECT##)
+if MAX_UNITS## GT 8
+	ld	h,(iy+@RALL_VECT##+1)
+endif
+
+	xor	a
+	ret
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DSPACE
+;
+; Gets the total or free disk space for a drive
+;
+; Entry:    E = drive number (0=default)
+;	    A = type of information to obtain
+;		0 => free space
+;               1 => total space
+; Returns:  A = error code
+;           HL:DE = space in KBytes
+;           BC = extra space in bytes
+;
+	ld	a,c		;A for the routine is passed in C
+	cp	2
+	jr	c,dspace_okfn
+	ld	a,.ISBFN##
+	ret
+dspace_okfn:
+  
+	ld	d,a
+	push	de
+
+	ld	c,e			;Validate the specified
+	ld	b,0			; drive and return if
+	ld	ix,FIB_1##		; any error detected.
+	pcall	VAL_FIB
+	or	a
+	pop	de
+	ret	nz
+
+	ld	a,d
+
+	push	hl
+	pop	ix
+	ld	e,(ix+UD_NCLU##)
+	ld	d,(ix+UD_NCLU##+1)
+	dec	de			;DE = Total cluster count	
+
+	or	a
+	jr	nz,dspace_tokbytes
+
+	;--- Calculate free space
+
+	ld	a,(MFLAGS##)
+	and	4	;ZALLOC
+	jr	z,DSP_NO_ZALLOC
+	bit	UF_RALL,(ix+UD_FLAGS##)
+	jr	z,DSP_NO_ZALLOC
+
+	ld	de,0
+	jr	DSP_NEXT
+DSP_NO_ZALLOC:
+
+	bit	UF_F16,(ix+UD_FLAGS##)
+	jr	z,DSP_FAT12
+
+	pcall	ALLF16
+	ex	de,hl
+	jr	DSP_NEXT
+
+DSP_FAT12:
+	inc	de			;DE = Maximum cluster number
+	push	de
+	ld	de,2			;Start at cluster 2
+	ld	b,d			;Free cluster count = 0
+	ld	c,d
+dspace_free_lp:
+	push	de
+	pcall	FAT_LOOKUP		;Get next FAT entry.
+	ld	a,d
+	or	e			;If entry is zero then bump
+	pop	de			; the free cluster count.
+	jr	nz,dspace_nofree		
+	inc	bc
+dspace_nofree:
+
+	or	a
+	ex	(sp),hl
+	sbc	hl,de			;Compare with total number of
+	add	hl,de			; clusters from UPB.
+	ex	(sp),hl
+
+	inc	de			;DE := next cluster number
+	jr	nz,dspace_free_lp	;Loop if not reached end of FAT
+	pop	de
+
+	push	bc
+	pop	de
+DSP_NEXT:
+
+	;--- Now we have a number of clusters in DE.
+	;    Transform it to KBytes + extra space.
+
+dspace_tokbytes:
+	ld	a,(ix+UD_CMSK##)	;Cluster mask = sectors/cluster-1
+	ld	bc,0
+	ld	hl,0
+	or	a
+	jr	nz,dspace_no1sec
+
+	;One sector per cluster:
+	;divide cluster count by two,
+	;set remainder as extra space.
+
+	srl	d
+	rr	e
+	rl	b
+	sla	b
+	jr	dspace_end
+
+	;More than one sector per cluster:
+	;Calculate size in KBytes.
+
+dspace_no1sec:
+	rra	;To get size in K, not in sectors
+dspace_c2k_loop:
+	rra
+	jr	nc,dspace_end
+	sla	e
+	rl	d
+	rl	l
+	rl	h
+	jr	dspace_c2k_loop
+
+dspace_end:
+	xor	a
+	ret
+;
 	finish	<MISC>
 	end
 ;

@@ -796,8 +796,8 @@ kbdos_table:
 	dw	?F_RDDRV## -OFFSET	;Absolute drive sector read
 	dw	?F_WRDRV## -OFFSET	;Absolute drive sector write
 
-	dw	?F_RALLOC## -OFFSET	;Get/set reduced allocation information mode vector
-	dw	?F_DSPACE## -OFFSET	;Get disk space information
+	dw	F_RALLOC##		;Get/set reduced allocation information mode vector
+	dw	F_DSPACE##		;Get disk space information
 
 	dw	F_LOCK##			;Lock/unlock drive
 
