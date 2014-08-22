@@ -197,6 +197,7 @@ NO_ZALLOC:
 		;--- FAT16 specific code
 
 		call	ALLOC_FAT16
+		dec	hl
 
 		bit	UF_RALL,(ix+UD_FLAGS##)
 		jr	z,ALLOC_NOR
@@ -302,6 +303,7 @@ no_reduced_total:
 
 ALLOC_FAT16:
 		ex	de,hl	;HL = Total cluster count
+		inc	hl
 		inc	hl
 
 		ld	e,(ix+UD_RES##)
