@@ -1837,6 +1837,8 @@ CMP_FAB:
 		ld	d,(ix+FAB_DSEC##+1)	; sector number.
 		;assume Cy=0 (check "ret nz")
 		sbc	hl,de
+		pop hl
+		ret nz
 		sbc	a,(ix+FAB_EX_DSEC##)
 ;;		ld	de,(DE_SECTOR##)
 ;;		ld	l,(ix+FAB_DSEC##)
@@ -1844,7 +1846,6 @@ CMP_FAB:
 ;;		or	a
 ;;		sbc	hl,de
 ;===== end mod FAT16
-		pop	hl
 		ret	nz
 ;
 		ld	e,(ix+FAB_UD##)		;Return with no match if it is
