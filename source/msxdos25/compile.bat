@@ -37,7 +37,7 @@ for %%A in (DOSHEAD,40FF,B0,INIT,ALLOC,DSKBASIC,DOSBOOT,BDOS,RAMDRV) do cpm32 M8
 cpm32 l80 /p:4000,CODES,KVAR,DATA,REL,DOSHEAD,40FF,B0,INIT,ALLOC,DSKBASIC,DOSBOOT,BDOS,RAMDRV,/p:781F,drv,/p:7fd0,chgbnk,b0/n/x/y/e
 hex2bin b0.hex
 ..\SymToEqus b0.sym b0labels.inc "\?[^ \t]+|DOSV0|GETERR|BDOSE"
-..\SymToEqus b0.sym b0lab_b3.inc "INIT|TIMINT|MAPBIO|GWRK|GSLT1|R_[^ \t]+"
+..\SymToEqus b0.sym b0lab_b3.inc "INIT|TIMINT|MAPBIO|GWRK|R_[^ \t]+"
 
 echo .
 echo ****************
