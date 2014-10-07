@@ -20,6 +20,7 @@ bin/**
 *.base.dat
 dos250ba.dat
 kernel.dat
+nextor2.rom
 info/*.pdf
 source/msxdos25/bank*/**.inc
 source/msxdos25/drivers/**.inc
