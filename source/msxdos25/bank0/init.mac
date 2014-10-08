@@ -1145,6 +1145,12 @@ endif
 	call	MYHOOK
 ;===== end add DOS2.50
 	pop	hl		;Now set up an inter-slot call
+
+	;This "patch for MegaSCSI" was causing the kanji mode to not work
+	;(CALL KANJI hanging the computer)
+	;since the Kanji ROM timer interrupt routine assumes that the
+	;previous hook is either a RET or a RST 30h (not a CALL!)
+if 0
 ;===== start mod DOS2.50 (support MegaSCSI)
 	ld	de,_TIME_IRQ##	; to our timer interrupt
 	ld	(hl),0;NOP	; routine in this ROM page.
@@ -1156,6 +1162,11 @@ endif
 	ld	(hl),d
 	inc	hl
 	ld	(hl),0C9h;RET
+else
+	ld	de,@TIME_IRQ##
+	call	MYHOOK
+endif
+
 ;;	ld	de,@TIME_IRQ##
 ;;	call	MYHOOK
 ;===== end mod DOS2.50
