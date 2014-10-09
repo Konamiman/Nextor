@@ -41,7 +41,15 @@ typedef unsigned long ulong;
 #define true (!(false))
 #define null ((void*)0)
 
+#define Buffer 0x9000
+
 #define _TERM0 0
+#define _FFIRST 0x40
+#define _OPEN 0x43
+#define _CREATE 0x44
+#define _CLOSE 0x45
+#define _WRITE 0x49
+#define _SEEK 0x4A
 #define _TERM 0x62
 #define _DOSVER 0x6F
 
@@ -58,8 +66,9 @@ const char* strUsage=
 	"This tool creates a file with the specified size,\r\n"
 	"or modifies the size of an existing file.\r\n"
 	"\r\n"
-	"You can specify an absolute <size>,\r\n"
-	"or increase the current file size with +<size>\r\n"
+	"You can specify a new absolute <size>,\r\n"
+	"or increase the current file size with +<size>.\r\n"
+        "The new file space is filled randomly.\r\n"
 	"\r\n"
 	"Specify the size in Kilobytes by appending K,\r\n"
     "or in Megabytes by appending M.\r\n";
@@ -73,7 +82,6 @@ Z80_registers regs;
 char* fileName;
 bool isAbsoluteSize;
 ulong newSize;
-ulong multiplier;
 
 /* Some handy code defines */
 
@@ -114,8 +122,6 @@ int main(char** argv, int argc)
 	CheckDosVersion();
 	ExtractParameters(argv, argc);
 	
-	newSize *= multiplier;
-
 	if(FileExists(fileName))
 		fileHandle = OpenFile(fileName);
 	else
@@ -151,7 +157,7 @@ void Terminate(const char* errorMessage)
     
     regs.Bytes.B = (errorMessage == NULL ? 0 : 1);
     DosCall(_TERM, &regs, REGS_MAIN, REGS_NONE);
-	DosCall(_TERM0, &regs, REGS_MAIN, REGS_NONE);
+    DosCall(_TERM0, &regs, REGS_MAIN, REGS_NONE);
 }
 
 
@@ -203,6 +209,7 @@ void ExtractParameters(char** argv, int argc)
 	char* sizePnt;
 	char lastSizeChar;
 	char firstSizeChar;
+	ulong multiplier;
 
 	if(argc != 2) {
         Terminate(strInvParam);
@@ -232,7 +239,7 @@ void ExtractParameters(char** argv, int argc)
 		Terminate(strInvParam);
 	}
 	
-	newSize = atol(sizePnt);
+	newSize = atol(sizePnt) * multiplier;
 }
 
 
@@ -241,11 +248,89 @@ bool IsDigit(char theChar)
 	return theChar >= '0' && theChar <= '9';
 }
 
-//WIP...
-bool FileExists(char* fileName) {return false;}
-byte OpenFile(char* fileName) {return 0;}
-byte CreateFile(char* fileName) {return 0;}
-ulong GetFileSize(byte fileHandle) {return 0;}
-void CloseFile(byte fileHandle) {}
-void SetFilePointer(byte fileHandle, ulong pointer) {}
-void WriteOneByte(byte fileHandle, byte value) {}
+
+bool FileExists(char* fileName) 
+{
+	regs.Bytes.B = 0;
+	regs.Words.DE = (int)fileName;
+	regs.Words.IX = Buffer;
+	DosCall(_FFIRST, &regs, REGS_ALL, REGS_AF);
+	return regs.Bytes.A == 0;
+}
+
+
+byte OpenFile(char* fileName) 
+{
+	regs.Bytes.A = 0;
+	regs.Words.DE = (int)fileName;
+	DosCall(_OPEN, &regs, REGS_MAIN, REGS_MAIN);
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+	return regs.Bytes.B;
+}
+
+
+byte CreateFile(char* fileName)
+{
+	regs.Bytes.A = 0;
+	regs.Bytes.B = 0x80;	//return error if file exists
+	regs.Words.DE = (int)fileName;
+	DosCall(_CREATE, &regs, REGS_MAIN, REGS_MAIN);
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+	return regs.Bytes.B;
+}
+
+
+ulong GetFileSize(byte fileHandle)
+{
+	regs.Bytes.B = fileHandle;
+	regs.Bytes.A = 2;	//Relative to end of file
+	regs.Words.HL = 0;
+	regs.Words.DE = 0;
+	DosCall(_SEEK, &regs, REGS_MAIN, REGS_MAIN);
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+
+	return (ulong)regs.Words.HL | (ulong)regs.Words.DE << 16;
+}
+
+
+void CloseFile(byte fileHandle)
+{
+	regs.Bytes.B = fileHandle;
+	DosCall(_CLOSE, &regs, REGS_MAIN, REGS_NONE);
+}
+
+
+void SetFilePointer(byte fileHandle, ulong pointer)
+{
+	regs.Bytes.B = fileHandle;
+	regs.Bytes.A = 0;	//Relative to beginning of file
+	regs.Words.HL = (int)(pointer & 0xFFFF);
+	regs.Words.DE = (int)(pointer >> 16);
+	DosCall(_SEEK, &regs, REGS_MAIN, REGS_AF);
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+}
+
+
+void WriteOneByte(byte fileHandle, byte value)
+{
+	regs.Bytes.B = fileHandle;
+	regs.Words.DE = (int)&value;
+	regs.Words.HL = 1;
+	DosCall(_WRITE, &regs, REGS_MAIN, REGS_AF);
+
+	if(regs.Bytes.A != 0) {
+		TerminateWithDosError(regs.Bytes.A);
+	}
+}
