@@ -87,12 +87,21 @@ void print(char* s);
 void CheckDosVersion();
 void ExtractParameters(char** argv, int argc);
 bool IsDigit(char theChar);
-
+bool FileExists(char* fileName);
+byte OpenFile(char* fileName);
+byte CreateFile(char* fileName);
+ulong GetFileSize(byte fileHandle);
+void CloseFile(byte fileHandle);
+void SetFilePointer(byte fileHandle, ulong pointer);
+void WriteOneByte(byte fileHandle, byte value);
 
 	/* MAIN */
 	
 int main(char** argv, int argc)
 {
+	byte fileHandle;
+	ulong oldSize;
+
 	fileName = (char*)0x8000;
 
 	print(strTitle);
@@ -104,10 +113,30 @@ int main(char** argv, int argc)
 	
 	CheckDosVersion();
 	ExtractParameters(argv, argc);
+	
+	newSize *= multiplier;
 
+	if(FileExists(fileName))
+		fileHandle = OpenFile(fileName);
+	else
+		fileHandle = CreateFile(fileName);
 	
+	oldSize = GetFileSize(fileHandle);
 	
+	if(!isAbsoluteSize)
+		newSize += oldSize;
 	
+	if(newSize < oldSize) {
+		CloseFile(fileHandle);
+		Terminate("Can't reduce file size");
+	}
+	
+	if(newSize > oldSize) {
+		SetFilePointer(fileHandle, newSize-1);
+		WriteOneByte(fileHandle, 0);
+	}
+	
+	CloseFile(fileHandle);
 	Terminate(null);
 	return 0;
 }
@@ -211,3 +240,12 @@ bool IsDigit(char theChar)
 {
 	return theChar >= '0' && theChar <= '9';
 }
+
+//WIP...
+bool FileExists(char* fileName) {return false;}
+byte OpenFile(char* fileName) {return 0;}
+byte CreateFile(char* fileName) {return 0;}
+ulong GetFileSize(byte fileHandle) {return 0;}
+void CloseFile(byte fileHandle) {}
+void SetFilePointer(byte fileHandle, ulong pointer) {}
+void WriteOneByte(byte fileHandle, byte value) {}
