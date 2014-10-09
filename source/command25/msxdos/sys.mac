@@ -3,6 +3,7 @@
 ;
 	.Z80
 	include	MACROS.INC
+	include USEKMSG.MAC
 ;
 ;
 FALSE	EQU	0
@@ -258,6 +259,7 @@ COPYCMD:LD	C,(HL)		; Get length of command.
 ; it terminates with .BADCMD or .OKCMD then it is still in memory.
 ;
 ;
+
 REBOOT:	XOR	A		; Zero command in command buffer so that when
 	LD	(80H),A		;   it is re-loaded it does not get a command.
 ;
@@ -1769,8 +1771,8 @@ DSTR:	LD	A,(DE)		; Get character from message.
 ;
 ;
 MESSAGE:LD	B,A		; B=message number.
-if 0
-	LD	DE,MESSAGES	; Point DE to messages table.
+if NOKMSG
+	LD	DE,MESSAGES+2	; Point DE to messages table.
 else
 	xor	a
 	ld	de,1100h	; See if Kanji driver is active.
