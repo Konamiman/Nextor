@@ -953,10 +953,7 @@ NO_DUMMY:
 
 	ld	a,(ID_BYTE)
 	and	1111b
-	ld	hl,CHAR_16	;Get KANJI range, only if japanese char generator available
-	jr	z,DOKANJTABLE
-	ld	hl,FOURZEROS
-DOKANJTABLE:
+	ld	hl,CHAR_16	;Get KANJI range
 	ld	de,KANJTABLE##
 	ld	bc,4
 	ldir
@@ -3178,8 +3175,6 @@ GET_DISKID_HL:
 	ret	nz
 	ld	hl,PROCNM+8
 	ret
-
-FOURZEROS:	db	0,0,0,0
 
 	end
 
