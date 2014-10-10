@@ -1839,7 +1839,7 @@ CMP_FAB:
 		sbc	hl,de
 		pop hl
 		ret nz
-		sbc	a,(ix+FAB_EX_DSEC##)
+		sub	(ix+FAB_EX_DSEC##)
 ;;		ld	de,(DE_SECTOR##)
 ;;		ld	l,(ix+FAB_DSEC##)
 ;;		ld	h,(ix+FAB_DSEC##+1)
