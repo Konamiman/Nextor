@@ -30,8 +30,9 @@ source/command25/msxdos/**.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac
 source/tools/**.inc
-source/tools/*.com
-source/tools/*.COM
+source/tools/**.asm
+source/tools/**.com
+source/tools/**.COM
 source/tools/codes.mac
 source/tools/data.mac
 source\tools\C\*.asm
@@ -39,4 +40,7 @@ source\tools\C\*.com
 *conflicto*.*
 *.sln
 *.suo
+NEXTOR.SYS
+NEXTORK.SYS
+
 

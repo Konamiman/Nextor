@@ -197,6 +197,7 @@ NO_ZALLOC:
 		;--- FAT16 specific code
 
 		call	ALLOC_FAT16
+		dec	hl
 
 		bit	UF_RALL,(ix+UD_FLAGS##)
 		jr	z,ALLOC_NOR
@@ -303,6 +304,7 @@ no_reduced_total:
 ALLOC_FAT16:
 	PROC	ALLF16
 		ex	de,hl	;HL = Total cluster count
+		inc	hl
 		inc	hl
 
 		ld	e,(ix+UD_RES##)
@@ -1220,6 +1222,25 @@ fout_get:
 ;
 ;------------------------------------------------------------------------------
 ;
+	ld	a,(MFLAGS##)
+	and	4	;ZALLOC
+	jr	z,DSP_NO_ZALLOC
+	bit	UF_RALL,(ix+UD_FLAGS##)
+	jr	z,DSP_NO_ZALLOC
+
+	ld	de,0
+	jr	DSP_NEXT
+DSP_NO_ZALLOC:
+
+	bit	UF_F16,(ix+UD_FLAGS##)
+	jr	z,DSP_FAT12
+
+	call	ALLOC_FAT16
+	ex	de,hl
+	jr	DSP_NEXT
+
+DSP_FAT12:
+DSP_NEXT:
 	finish	<MISC>
 	end
 ;

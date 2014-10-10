@@ -53,6 +53,10 @@ if KNJMSG
 		or	a			;In Kanji mode?
 		jr	z,message_loop		;No
 ;
+		ld	a,(MFLAGS##)	;Force English errors flag set?
+		and	8
+		jr	nz,message_loop
+
 		dec	hl			;Chain on to the next
 		ld	a,(hl)			; message table (Kanji)
 		dec	hl

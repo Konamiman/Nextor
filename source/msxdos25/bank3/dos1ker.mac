@@ -420,7 +420,7 @@ RETRTN	equ	WRPRIM+6	; address with a RET instruction, allways available
 
 ;* Addresses that were declared in the page 0 deleted code
 
-A402D	equ	GSLOT1
+A402D	equ	402Dh
 T4010	equ	4010h
 T4013	equ	4013h
 T4016	equ	4016h
@@ -5590,7 +5590,7 @@ A5FAE:	rrca
 ;	Inputs		-
 ;	Outputs		A = slotid
 
-GSLOT1::
+GSLT1::
 A5FB3:	call	A5FE7
 	or	(hl)
 	ret	p			; non expanded slot, quit

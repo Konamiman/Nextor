@@ -1869,14 +1869,15 @@ no_fab_match:	push	bc
 		ld	d,(ix+FAB_DSEC##+1)	; sector number.
 		;assume Cy=0 (check "ret nz")
 		sbc	hl,de
-		sbc	a,(ix+FAB_EX_DSEC##)
+		pop hl
+		ret nz
+		sub	(ix+FAB_EX_DSEC##)
 ;;		ld	de,(DE_SECTOR##)
 ;;		ld	l,(ix+FAB_DSEC##)
 ;;		ld	h,(ix+FAB_DSEC##+1)
 ;;		or	a
 ;;		sbc	hl,de
 ;===== end mod FAT16
-		pop	hl
 		ret	nz
 ;
 		ld	e,(ix+FAB_UD##)		;Return with no match if it is
