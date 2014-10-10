@@ -1,13 +1,15 @@
-Nextor 2.1 Alpha 1
-------------------
+Nextor 2.1 Alpha 1b
+-------------------
 
-By Konamiman, 3/2014
+By Konamiman, 10/2014
 http://www.konamiman.com#nextor
 
 
 1. WHAT'S NEW IN ALPHA 1
 
-Nextor 2.1 Alpha 1 has everything that Nextor 2.0 has plus one new feature: the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools.
+Nextor 2.1 Alpha 1b has everything that Nextor 2.0 has plus one new feature: the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools.
+
+Alpha 1b is the same as Alpha 1 with the bug fixes and new features that were added in versions 2.0.3 and 2.0.4.
 
 
 2. HOW TO MOUNT A FILE
