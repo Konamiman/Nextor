@@ -87,10 +87,15 @@ const char* strCRLF = "\r\n";
 
 Z80_registers regs;
 void* mallocPointer;
+char* outputFileName;
+int bootFileIndex;
+bool autoReset;
+int workAreaAddress;
 
 /* Some handy code defines */
 
 #define PrintNewLine() print(strCRLF)
+#define InvalidParameter() Terminate(strInvParam)
 
 /* Function prototypes */
 
@@ -109,6 +114,7 @@ void TerminateWithDosError(byte errorCode);
 void print(char* s);
 void CheckDosVersion();
 void* malloc(int size);
+int ParseHex(char* hexString);
 
 	/* MAIN */
 	
@@ -119,9 +125,12 @@ int main(char** argv, int argc)
 	Initialize();
 	ProcessArguments(argv, argc);
 	GenerateFile();
+
+	printf("%s\r\n", outputFileName);
+    printf("%i\r\n", bootFileIndex);
+    printf("%i\r\n", autoReset);
+    printf("%i\r\n", workAreaAddress);
 	
-	printf("%i\r\n", malloc(0));
-	printf("%i\r\n", malloc(100));
 	Terminate(null);
 	return 0;
 }
@@ -131,6 +140,13 @@ int main(char** argv, int argc)
 void Initialize()
 {
 	mallocPointer = (void*)MallocBase;
+	
+	outputFileName = malloc(128);
+	strcpy(outputFileName, "\\NEXT_DSK.DAT");
+	
+	bootFileIndex = 1;
+    autoReset = false;
+    workAreaAddress = 0;
 }
 
 void ProcessArguments(char** argv, int argc) 
@@ -177,28 +193,52 @@ int ProcessOption(char optionLetter, char* optionValue)
 		return 0;
 	}
 
-	Terminate(strInvParam);
+	InvalidParameter();
 	return 0;
 }
 
 void ProcessOutputFileOption(char* optionValue)
 {
-	printf("o: %s\r\n", optionValue);
+	char* lastCharPointer;
+	
+	strcpy(outputFileName, optionValue);
+	lastCharPointer = outputFileName + strlen(outputFileName) - 1;
+	if(*lastCharPointer == '\\') {
+	    strcpy(lastCharPointer + 1, "NEXT_DSK.DAT");
+	}
 }
 
 void ProcessBootIndexOption(char* optionValue)
 {
-	printf("b: %s\r\n", optionValue);
+    char index;
+    
+	if(optionValue[1] != 0) {
+	    InvalidParameter();
+	}
+	
+	index = *optionValue | 32;
+	
+	if(index >= '1' && index <= '9') {
+        bootFileIndex = index - '0';
+	} else if(index >= 'a' && index <= 'w') {
+        bootFileIndex = index - 'a' + 10;
+    } else {
+        InvalidParameter();
+    }
 }
 
 void ProcessWorkAreaAddressOption(char* optionValue)
 {
-	printf("a: %s\r\n", optionValue);
+	workAreaAddress = ParseHex(optionValue);
+    
+    if(workAreaAddress == 0 || ((uint)workAreaAddress) < 0xC000) {
+        InvalidParameter();
+    }
 }
 
 void ProcessResetOption()
 {
-	printf("r\r\n");
+	autoReset = true;
 }
 
 void ProcessFilename(char* fileName) 
@@ -265,7 +305,30 @@ void CheckDosVersion()
 void* malloc(int size)
 {
 	void* value = mallocPointer;
-	mallocPointer += size;
+	mallocPointer = (void*)(((int)mallocPointer) + size);
 	return value;
 }
 
+int ParseHex(char* hexString)
+{
+    int result;
+    char digit;
+    
+    result = 0;
+    while((digit = *hexString) != 0) {
+        digit |= 32;
+        result *= 16;
+        if(digit >= '0' && digit <= '9') {
+            result += digit - '0';
+        }
+        else if(digit >= 'a' && digit <='f') {
+            result += digit - 'a' + 10;
+        }
+        else {
+            return 0;
+        }
+        hexString++;
+    }
+    
+    return result;
+}
