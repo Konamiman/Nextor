@@ -34,16 +34,34 @@
 typedef unsigned char bool;
 typedef unsigned long ulong;
 
+typedef struct {
+    byte alwaysFF;
+    char filename[13];
+    byte attributes;
+    byte timeOfModification[2];
+    byte dateOfModification[2];
+    unsigned int startCluster;
+    unsigned long fileSize;
+    byte logicalDrive;
+    byte internal[38];
+} FileInfoBlock;
+
 	/* Defines */
 
 #define false (0)
 #define true (!(false))
 #define null ((void*)0)
 
+#define IS_NEXTOR (1 << 7)
+#define IS_DEVICE_BASED (1)
+
 #define MallocBase 0xA000
+
+#define MaxFilesToProcess 32
 
 #define _TERM0 0
 #define _FFIRST 0x40
+#define _FNEXT 0x41
 #define _OPEN 0x43
 #define _CREATE 0x44
 #define _CLOSE 0x45
@@ -51,6 +69,10 @@ typedef unsigned long ulong;
 #define _SEEK 0x4A
 #define _TERM 0x62
 #define _DOSVER 0x6F
+#define _GDRVR 0x78
+#define _GDLI 0x79
+
+#define _NOFIL 0xD7
 
 /* Strings */
 
@@ -75,7 +97,7 @@ const char* strUsage=
     "              Must be 1-9 or A-Z. Default is 1.\r\n"
     "\r\n"
     "- a <address>: Page 3 address for a 16 byte work area.\r\n"
-    "               Must be a hexadecimal number.\r\n"
+    "               Must be a hexadecimal number between C000 and FFEF.\r\n"
     "               If missing or 0, the area is allocated at boot time.\r\n"
     "\r\n"
     "- r : Reset the computer after generating the file.\r\n";
@@ -90,19 +112,29 @@ void* mallocPointer;
 char* outputFileName;
 int bootFileIndex;
 bool autoReset;
-int workAreaAddress;
+uint workAreaAddress;
+FileInfoBlock* fib;
+int totalFilesProcessed;
+byte* buffer;
 
 /* Some handy code defines */
 
 #define PrintNewLine() print(strCRLF)
 #define InvalidParameter() Terminate(strInvParam)
+#define PrimaryControllerSlot() (*(byte*)0xF348)
 
 /* Function prototypes */
 
+void CheckPreconditions();
+void CheckPrimaryControllerIsNextor();
 void Initialize();
 void ProcessArguments(char** argv, int argc);
 int ProcessOption(char optionLetter, char* optionValue);
 void ProcessFilename(char* fileName);
+void TooManyFiles();
+void StartSearchingFiles(char* fileName);
+void ProcessFileFound();
+void CheckControllerForFileInFib();
 void GenerateFile();
 void ProcessOutputFileOption(char* optionValue);
 void ProcessBootIndexOption(char* optionValue);
@@ -114,7 +146,8 @@ void TerminateWithDosError(byte errorCode);
 void print(char* s);
 void CheckDosVersion();
 void* malloc(int size);
-int ParseHex(char* hexString);
+uint ParseHex(char* hexString);
+void DoDosCall(byte functionCode);
 
 	/* MAIN */
 	
@@ -122,14 +155,15 @@ int main(char** argv, int argc)
 {
 	print(strTitle);
 	
+    CheckPreconditions();
 	Initialize();
 	ProcessArguments(argv, argc);
 	GenerateFile();
 
-	printf("%s\r\n", outputFileName);
+	/*printf("%s\r\n", outputFileName);
     printf("%i\r\n", bootFileIndex);
     printf("%i\r\n", autoReset);
-    printf("%i\r\n", workAreaAddress);
+    printf("%i\r\n", workAreaAddress);*/
 	
 	Terminate(null);
 	return 0;
@@ -137,16 +171,43 @@ int main(char** argv, int argc)
 
 /* Functions */
 
+void CheckPreconditions()
+{
+    CheckDosVersion();
+    CheckPrimaryControllerIsNextor();
+}
+
+void CheckPrimaryControllerIsNextor()
+{
+    byte flags;
+    
+    regs.Bytes.A = 0;
+    regs.Bytes.D = PrimaryControllerSlot();
+    regs.Bytes.E = 0xFF;
+    regs.Words.HL = (int)MallocBase;
+    
+    DoDosCall(_GDRVR);
+    
+    flags = ((byte*)MallocBase)[4];
+    if((flags & (IS_NEXTOR | IS_DEVICE_BASED)) != (IS_NEXTOR | IS_DEVICE_BASED)) {
+        Terminate("The primary controller is not a Nextor kernel with a device-based driver.");
+    }
+}
+
 void Initialize()
 {
 	mallocPointer = (void*)MallocBase;
 	
 	outputFileName = malloc(128);
 	strcpy(outputFileName, "\\NEXT_DSK.DAT");
+    
+    fib = malloc(sizeof(FileInfoBlock));
+    buffer = malloc(64);
 	
 	bootFileIndex = 1;
     autoReset = false;
     workAreaAddress = 0;
+    totalFilesProcessed = 0;
 }
 
 void ProcessArguments(char** argv, int argc) 
@@ -163,9 +224,11 @@ void ProcessArguments(char** argv, int argc)
 	    currentArg = argv[i];
 		if(currentArg[0] == '-') {
 		    i += ProcessOption(currentArg[1], argv[i+1]);
-		} else {
+		} else if(totalFilesProcessed < MaxFilesToProcess) {
 		    ProcessFilename(currentArg);
-		}
+		} else {
+            TooManyFiles();
+        }
 	}
 }
 
@@ -231,7 +294,7 @@ void ProcessWorkAreaAddressOption(char* optionValue)
 {
 	workAreaAddress = ParseHex(optionValue);
     
-    if(workAreaAddress == 0 || ((uint)workAreaAddress) < 0xC000) {
+    if(workAreaAddress < 0xC000 || workAreaAddress > 0xFFEF) {
         InvalidParameter();
     }
 }
@@ -243,7 +306,62 @@ void ProcessResetOption()
 
 void ProcessFilename(char* fileName) 
 { 
-	printf("f: %s\r\n", fileName);
+	//printf("f: %s\r\n", fileName);
+    
+    StartSearchingFiles(fileName);
+    
+    while(regs.Bytes.A == 0 && totalFilesProcessed < MaxFilesToProcess) {
+        ProcessFileFound();
+        DoDosCall(_FNEXT);
+    } 
+    
+    if(regs.Bytes.A == 0 && totalFilesProcessed == MaxFilesToProcess) {
+        TooManyFiles();
+    }
+ }
+
+void TooManyFiles()
+{
+    printf("*** Too many files specified, maximum is %i\r\n", MaxFilesToProcess);
+    Terminate(null);
+}
+
+void StartSearchingFiles(char* fileName)
+{
+    regs.Words.DE = (int)fileName;
+    regs.Bytes.B = 0;
+    regs.Words.IX = (int)fib;
+    
+    DoDosCall(_FFIRST);
+}
+
+void ProcessFileFound()
+{
+    char key;
+    
+    CheckControllerForFileInFib();
+            
+    totalFilesProcessed++;
+    
+    //WIP...
+    
+    key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
+    printf("%c -> %s\r\n", key, fib->filename);
+}
+
+void CheckControllerForFileInFib()
+{
+    byte drive;
+    
+    drive = fib->logicalDrive - 1;
+    regs.Bytes.A = drive;
+    regs.Words.HL = (int)buffer;
+    DoDosCall(_GDLI);
+    
+    if(buffer[0] != 1 || buffer[1] != PrimaryControllerSlot()) {
+        printf("*** Drive %c: is not controlled by the primary Nextor kernel\r\n", drive + 'A');
+        Terminate(null);
+    }
 }
 
 void GenerateFile() { }
@@ -309,9 +427,9 @@ void* malloc(int size)
 	return value;
 }
 
-int ParseHex(char* hexString)
+uint ParseHex(char* hexString)
 {
-    int result;
+    uint result;
     char digit;
     
     result = 0;
@@ -331,4 +449,12 @@ int ParseHex(char* hexString)
     }
     
     return result;
+}
+
+void DoDosCall(byte functionCode)
+{
+    DosCall(functionCode, &regs, REGS_ALL, REGS_ALL);
+    if(regs.Bytes.A != 0 && !(functionCode == _FNEXT && regs.Bytes.A == _NOFIL)) {
+        TerminateWithDosError(regs.Bytes.A);
+    }
 }
