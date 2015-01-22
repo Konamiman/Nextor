@@ -46,6 +46,21 @@ typedef struct {
     byte internal[38];
 } FileInfoBlock;
 
+typedef struct {
+    char signature[16];
+    byte numberOfEntriesInImagesTable;
+    byte indexOfImageToMountAtBoot;
+    uint workAreaAddress;
+    byte reserved[4];
+} GeneratedFileHeader;
+
+typedef struct {
+    byte deviceIndex;
+    byte logicalUnitNumber;
+    ulong firstFileSector;
+    uint fileSizeInSector;
+} GeneratedFileTableEntry;
+    
 	/* Defines */
 
 #define false (0)
@@ -60,13 +75,13 @@ typedef struct {
 #define MaxFilesToProcess 32
 
 #define _TERM0 0
+#define _DPARM 0x31
 #define _FFIRST 0x40
 #define _FNEXT 0x41
 #define _OPEN 0x43
 #define _CREATE 0x44
 #define _CLOSE 0x45
 #define _WRITE 0x49
-#define _SEEK 0x4A
 #define _TERM 0x62
 #define _DOSVER 0x6F
 #define _GDRVR 0x78
@@ -115,7 +130,9 @@ bool autoReset;
 uint workAreaAddress;
 FileInfoBlock* fib;
 int totalFilesProcessed;
-byte* buffer;
+byte* driveInfo;
+byte* driveParameters;
+byte* fileContentsBase;
 
 /* Some handy code defines */
 
@@ -134,7 +151,12 @@ void ProcessFilename(char* fileName);
 void TooManyFiles();
 void StartSearchingFiles(char* fileName);
 void ProcessFileFound();
+void GetDriveInfoForFileInFib();
 void CheckControllerForFileInFib();
+ulong GetFirstDriveSectorForFileInFib();
+ulong GetFirstFileSectorForFileInFib();
+void AddFileInFibToFilesTable(ulong sector);
+void AddFileInFibToFilenamesInfo();
 void GenerateFile();
 void ProcessOutputFileOption(char* optionValue);
 void ProcessBootIndexOption(char* optionValue);
@@ -158,7 +180,8 @@ int main(char** argv, int argc)
     CheckPreconditions();
 	Initialize();
 	ProcessArguments(argv, argc);
-	GenerateFile();
+    if(totalFilesProcessed > 0)
+        GenerateFile();
 
 	/*printf("%s\r\n", outputFileName);
     printf("%i\r\n", bootFileIndex);
@@ -202,8 +225,12 @@ void Initialize()
 	strcpy(outputFileName, "\\NEXT_DSK.DAT");
     
     fib = malloc(sizeof(FileInfoBlock));
-    buffer = malloc(64);
-	
+    driveInfo = malloc(64);
+    driveParameters = malloc(32);
+	fileContentsBase = malloc(
+        sizeof(GeneratedFileHeader) +
+        (sizeof(GeneratedFileTableEntry) * MaxFilesToProcess));
+    
 	bootFileIndex = 1;
     autoReset = false;
     workAreaAddress = 0;
@@ -294,7 +321,7 @@ void ProcessWorkAreaAddressOption(char* optionValue)
 {
 	workAreaAddress = ParseHex(optionValue);
     
-    if(workAreaAddress < 0xC000 || workAreaAddress > 0xFFEF) {
+    if(workAreaAddress != 0 && (workAreaAddress < 0xC000 || workAreaAddress > 0xFFEF)) {
         InvalidParameter();
     }
 }
@@ -338,33 +365,104 @@ void StartSearchingFiles(char* fileName)
 void ProcessFileFound()
 {
     char key;
+	ulong sector;
     
+	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
-            
-    totalFilesProcessed++;
     
-    //WIP...
+	sector = GetFirstDriveSectorForFileInFib();
+	sector += GetFirstFileSectorForFileInFib();
+	AddFileInFibToFilesTable(sector);
+	AddFileInFibToFilenamesInfo();
+	
+    totalFilesProcessed++;
     
     key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
     printf("%c -> %s\r\n", key, fib->filename);
 }
 
+void GetDriveInfoForFileInFib()
+{
+	regs.Bytes.A = fib->logicalDrive - 1;
+    regs.Words.HL = (int)driveInfo;
+    DoDosCall(_GDLI);
+}
+
 void CheckControllerForFileInFib()
 {
-    byte drive;
-    
-    drive = fib->logicalDrive - 1;
-    regs.Bytes.A = drive;
-    regs.Words.HL = (int)buffer;
-    DoDosCall(_GDLI);
-    
-    if(buffer[0] != 1 || buffer[1] != PrimaryControllerSlot()) {
-        printf("*** Drive %c: is not controlled by the primary Nextor kernel\r\n", drive + 'A');
+    if(driveInfo[0] != 1 || driveInfo[1] != PrimaryControllerSlot()) {
+        printf("*** Drive %c: is not controlled by the primary Nextor kernel\r\n", fib->logicalDrive - 1 + 'A');
         Terminate(null);
     }
 }
 
-void GenerateFile() { }
+ulong GetFirstDriveSectorForFileInFib()
+{
+	return *((ulong*)(driveInfo + 5));
+}
+
+ulong GetFirstFileSectorForFileInFib()
+{
+    ulong firstDataSector;
+    byte sectorsPerCluster;
+
+    regs.Words.DE = (int)driveParameters;
+    regs.Bytes.L = fib->logicalDrive;
+    DoDosCall(_DPARM);
+    firstDataSector = *(ulong*)(driveParameters+24);
+    sectorsPerCluster = *(byte*)(driveParameters+3);
+    
+    return
+        firstDataSector +
+        (fib->startCluster - 2) * sectorsPerCluster;
+}
+
+void AddFileInFibToFilesTable(ulong sector)
+{
+    GeneratedFileTableEntry* tableEntry;
+    
+    tableEntry =
+        (GeneratedFileTableEntry*)
+            (fileContentsBase + 
+            sizeof(GeneratedFileHeader) + 
+            (sizeof(GeneratedFileTableEntry) * totalFilesProcessed));
+            
+    tableEntry->deviceIndex = *(driveInfo + 4);
+    tableEntry->logicalUnitNumber = *(driveInfo + 5);
+    tableEntry->firstFileSector = sector;
+    tableEntry->fileSizeInSector = (uint)(fib->fileSize >> 9);
+}
+
+void AddFileInFibToFilenamesInfo()
+{
+
+}
+
+void GenerateFile() 
+{
+    GeneratedFileHeader* header;
+    
+    header = (GeneratedFileHeader*)fileContentsBase;
+    strcpy(header->signature, "Nextor DSK file");
+    header->numberOfEntriesInImagesTable = totalFilesProcessed;
+    header->indexOfImageToMountAtBoot = bootFileIndex;
+    header->workAreaAddress = workAreaAddress;
+    memset(header->reserved, 0, 4);
+    
+    regs.Words.DE = (int)outputFileName;
+    regs.Bytes.A = 0;
+    regs.Bytes.B = 0;
+    DoDosCall(_CREATE);
+    
+    regs.Words.DE = (int)fileContentsBase;
+    regs.Words.HL = 
+            (uint)
+            (sizeof(GeneratedFileHeader) + 
+            (sizeof(GeneratedFileTableEntry) * totalFilesProcessed));
+    DoDosCall(_WRITE);
+    
+    DoDosCall(_CLOSE);
+}
 
 void Terminate(const char* errorMessage)
 {
@@ -443,7 +541,7 @@ uint ParseHex(char* hexString)
             result += digit - 'a' + 10;
         }
         else {
-            return 0;
+            InvalidParameter();
         }
         hexString++;
     }
