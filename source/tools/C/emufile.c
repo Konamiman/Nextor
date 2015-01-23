@@ -418,6 +418,7 @@ void CheckControllerForFileInFib()
 
 ulong GetFirstDriveSectorForFileInFib()
 {
+    printf("!!! %x %x %x %x\r\n", driveInfo[5], driveInfo[6], driveInfo[7], driveInfo[8]);
 	return *((ulong*)(driveInfo + 5));
 }
 
@@ -429,12 +430,12 @@ ulong GetFirstFileSectorForFileInFib()
     regs.Words.DE = (int)driveParameters;
     regs.Bytes.L = fib->logicalDrive;
     DoDosCall(_DPARM);
-    firstDataSector = *(ulong*)(driveParameters+24);
+    firstDataSector = *(uint*)(driveParameters+15);
     sectorsPerCluster = *(byte*)(driveParameters+3);
     
     return
         firstDataSector +
-        (fib->startCluster - 2) * sectorsPerCluster;
+        ((fib->startCluster - 2) * sectorsPerCluster);
 }
 
 void AddFileInFibToFilesTable(ulong sector)
