@@ -70,9 +70,12 @@ typedef struct {
 #define IS_NEXTOR (1 << 7)
 #define IS_DEVICE_BASED (1)
 
-#define MallocBase 0xA000
+#define MallocBase 0x8000
 
 #define MaxFilesToProcess 32
+
+#define CALSLT 0x001C
+#define EXPTBL 0xFCC1
 
 #define _TERM0 0
 #define _DPARM 0x31
@@ -170,6 +173,7 @@ void CheckDosVersion();
 void* malloc(int size);
 uint ParseHex(char* hexString);
 void DoDosCall(byte functionCode);
+void ResetComputer();
 
 	/* MAIN */
 	
@@ -180,14 +184,20 @@ int main(char** argv, int argc)
     CheckPreconditions();
 	Initialize();
 	ProcessArguments(argv, argc);
-    if(totalFilesProcessed > 0)
+    if(totalFilesProcessed > 0) {
         GenerateFile();
+        printf("\r\n%s successfully generated!\r\n", outputFileName);
+        if(autoReset) {
+            print("Resetting computer...");
+            ResetComputer();
+        }
+    }
 
 	/*printf("%s\r\n", outputFileName);
     printf("%i\r\n", bootFileIndex);
     printf("%i\r\n", autoReset);
     printf("%i\r\n", workAreaAddress);*/
-	
+    
 	Terminate(null);
 	return 0;
 }
@@ -369,6 +379,16 @@ void ProcessFileFound()
     
 	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
+    
+    if(fib->fileSize < 512) {
+        printf("*** %s is too small (< 512 bytes) or empty - skipped\r\n", fib->filename);
+        return;
+    }
+    
+    if(fib->fileSize >= (32768 * 1024)) {
+        printf("*** %s is too big (> 32 MBytes)y - skipped\r\n", fib->filename);
+        return;
+    }
     
 	sector = GetFirstDriveSectorForFileInFib();
 	sector += GetFirstFileSectorForFileInFib();
@@ -555,4 +575,11 @@ void DoDosCall(byte functionCode)
     if(regs.Bytes.A != 0 && !(functionCode == _FNEXT && regs.Bytes.A == _NOFIL)) {
         TerminateWithDosError(regs.Bytes.A);
     }
+}
+
+void ResetComputer()
+{
+    regs.Bytes.IYh = *(byte*)EXPTBL;
+    regs.Words.IX = 0;
+    AsmCall(CALSLT, &regs, REGS_ALL, REGS_NONE);
 }
