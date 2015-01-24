@@ -1,4 +1,4 @@
-/* DSK emulation configuration file creation tool v1.0
+/* DSK emulation configuration file creation tool for Nextor v1.0
    By Konamiman 2/2015
 
    Compilation command line:
@@ -95,7 +95,7 @@ typedef struct {
 /* Strings */
 
 const char* strTitle=
-    "DSK Emulation Configuration File Creation Tool v1.0\r\n"
+    "DSK Emulation Configuration File Creation Tool for Nextor v1.0\r\n"
     "By Konamiman, 2/2015\r\n"
     "\r\n";
     
@@ -106,19 +106,17 @@ const char* strUsage=
     "\r\n"
     "<options>:\r\n"
     "\r\n"
-    "- o <file>: Path and name of the generated file.\r\n"
+    "- o <file>: Path and name of the generated configuration file.\r\n"
     "            Default is \"\\NEXT_DSK.DAT\"\r\n"
     "            (generated in the root directory of current drive).\r\n"
-    "            If <file> ends with \"\\\", \"NEXT_DSK.DAT\" is appended.\r\n"
-    "\r\n"
-    "- b <number>: The index of the image to mount at boot time.\r\n"
-    "              Must be 1-9 or A-Z. Default is 1.\r\n"
-    "\r\n"
-    "- a <address>: Page 3 address for a 16 byte work area.\r\n"
+    "            If <file> ends with \"\\\" or \":\", \"NEXT_DSK.DAT\" is appended.\r\n"
+    "- b <number>: The index of the image file to mount at boot time.\r\n"
+    "              Must be 1-9 or A-W. Default is 1.\r\n"
+    "- a <address>: Page 3 address for the 16 byte work area.\r\n"
     "               Must be a hexadecimal number between C000 and FFEF.\r\n"
-    "               If missing or 0, the area is allocated at boot time.\r\n"
-    "\r\n"
-    "- r : Reset the computer after generating the file.\r\n";
+    "               If missing or 0, the work area is allocated at boot time.\r\n"
+    "- r : Reset the computer after generating the file.\r\n"
+    "- p : Print filenames and associated keys.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
@@ -130,12 +128,15 @@ void* mallocPointer;
 char* outputFileName;
 int bootFileIndex;
 bool autoReset;
+bool printFilenames;
 uint workAreaAddress;
 FileInfoBlock* fib;
 int totalFilesProcessed;
 byte* driveInfo;
 byte* driveParameters;
 byte* fileContentsBase;
+byte* fileNamesBase;
+byte* fileNamesAppendAddress;
 
 /* Some handy code defines */
 
@@ -165,6 +166,7 @@ void ProcessOutputFileOption(char* optionValue);
 void ProcessBootIndexOption(char* optionValue);
 void ProcessWorkAreaAddressOption(char* optionValue);
 void ProcessResetOption();
+void ProcessPrintFilenamesOption();
 
 void Terminate(const char* errorMessage);
 void TerminateWithDosError(byte errorCode);
@@ -186,17 +188,16 @@ int main(char** argv, int argc)
 	ProcessArguments(argv, argc);
     if(totalFilesProcessed > 0) {
         GenerateFile();
-        printf("\r\n%s successfully generated!\r\n", outputFileName);
+        printf(
+            "%s%s successfully generated!\r\n%i disk image file(s) registered\r\n",
+            printFilenames ? "\r\n" : "", outputFileName, totalFilesProcessed);
         if(autoReset) {
             print("Resetting computer...");
             ResetComputer();
         }
+    } else {
+        print(strUsage);
     }
-
-	/*printf("%s\r\n", outputFileName);
-    printf("%i\r\n", bootFileIndex);
-    printf("%i\r\n", autoReset);
-    printf("%i\r\n", workAreaAddress);*/
     
 	Terminate(null);
 	return 0;
@@ -240,9 +241,12 @@ void Initialize()
 	fileContentsBase = malloc(
         sizeof(GeneratedFileHeader) +
         (sizeof(GeneratedFileTableEntry) * MaxFilesToProcess));
+    fileNamesBase = malloc(19 * MaxFilesToProcess);
+    fileNamesAppendAddress = fileNamesBase;
     
 	bootFileIndex = 1;
     autoReset = false;
+    printFilenames = false;
     workAreaAddress = 0;
     totalFilesProcessed = 0;
 }
@@ -292,6 +296,11 @@ int ProcessOption(char optionLetter, char* optionValue)
 	    ProcessResetOption();
 		return 0;
 	}
+    
+    if(optionLetter == 'p') {
+	    ProcessPrintFilenamesOption();
+		return 0;
+	}
 
 	InvalidParameter();
 	return 0;
@@ -303,7 +312,7 @@ void ProcessOutputFileOption(char* optionValue)
 	
 	strcpy(outputFileName, optionValue);
 	lastCharPointer = outputFileName + strlen(outputFileName) - 1;
-	if(*lastCharPointer == '\\') {
+	if(*lastCharPointer == '\\' || *lastCharPointer == ':') {
 	    strcpy(lastCharPointer + 1, "NEXT_DSK.DAT");
 	}
 }
@@ -341,10 +350,13 @@ void ProcessResetOption()
 	autoReset = true;
 }
 
+void ProcessPrintFilenamesOption()
+{
+    printFilenames = true;
+}
+
 void ProcessFilename(char* fileName) 
 { 
-	//printf("f: %s\r\n", fileName);
-    
     StartSearchingFiles(fileName);
     
     while(regs.Bytes.A == 0 && totalFilesProcessed < MaxFilesToProcess) {
@@ -376,7 +388,7 @@ void ProcessFileFound()
 {
     char key;
 	ulong sector;
-    
+
 	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
     
@@ -386,7 +398,7 @@ void ProcessFileFound()
     }
     
     if(fib->fileSize >= (32768 * 1024)) {
-        printf("*** %s is too big (> 32 MBytes)y - skipped\r\n", fib->filename);
+        printf("*** %s is too big (> 32 MBytes) - skipped\r\n", fib->filename);
         return;
     }
     
@@ -396,9 +408,11 @@ void ProcessFileFound()
 	AddFileInFibToFilenamesInfo();
 	
     totalFilesProcessed++;
-    
-    key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
-    printf("%c -> %s\r\n", key, fib->filename);
+
+    if(printFilenames) {
+        key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
+        printf("%c -> %s\r\n", key, fib->filename);
+    }
 }
 
 void GetDriveInfoForFileInFib()
@@ -418,8 +432,7 @@ void CheckControllerForFileInFib()
 
 ulong GetFirstDriveSectorForFileInFib()
 {
-    printf("!!! %x %x %x %x\r\n", driveInfo[5], driveInfo[6], driveInfo[7], driveInfo[8]);
-	return *((ulong*)(driveInfo + 5));
+	return *((ulong*)(driveInfo + 6));
 }
 
 ulong GetFirstFileSectorForFileInFib()
@@ -456,12 +469,27 @@ void AddFileInFibToFilesTable(ulong sector)
 
 void AddFileInFibToFilenamesInfo()
 {
-
+    int fileIndex = totalFilesProcessed + 1;
+    
+    sprintf(fileNamesAppendAddress, "%c -> ", fileIndex <= 9 ? fileIndex + '0' : fileIndex - 10 + 'A');
+    fileNamesAppendAddress += 5;
+    strcpy(fileNamesAppendAddress, fib->filename);
+    fileNamesAppendAddress += strlen(fib->filename);
+    *fileNamesAppendAddress++ = '\r';
+    *fileNamesAppendAddress++ = '\n';
 }
 
 void GenerateFile() 
 {
     GeneratedFileHeader* header;
+    byte fileHandle;
+    char* fileNamesHeader;
+          
+    if(bootFileIndex > totalFilesProcessed) {
+        bootFileIndex = totalFilesProcessed;
+        printf("\r\n*** Warning: boot file index is greater than number of files processed.\r\n    Set to %c instead in the generated file.\r\n",
+            bootFileIndex <= 9 ? bootFileIndex + '0' : bootFileIndex - 10 + 'A');
+    }
     
     header = (GeneratedFileHeader*)fileContentsBase;
     strcpy(header->signature, "Nextor DSK file");
@@ -474,6 +502,7 @@ void GenerateFile()
     regs.Bytes.A = 0;
     regs.Bytes.B = 0;
     DoDosCall(_CREATE);
+    fileHandle = regs.Bytes.B;
     
     regs.Words.DE = (int)fileContentsBase;
     regs.Words.HL = 
@@ -482,7 +511,20 @@ void GenerateFile()
             (sizeof(GeneratedFileTableEntry) * totalFilesProcessed));
     DoDosCall(_WRITE);
     
+    fileNamesHeader = "\fDisk image files registered:\r\n\r\n";
+    regs.Bytes.B = fileHandle;
+    regs.Words.DE = (int)fileNamesHeader;
+    regs.Words.HL = strlen(fileNamesHeader);
+    DoDosCall(_WRITE);
+    
+    regs.Bytes.B = fileHandle;
+    regs.Words.DE = (int)fileNamesBase;
+    regs.Words.HL = (int)(fileNamesAppendAddress - fileNamesBase);
+    DoDosCall(_WRITE);
+     
+    regs.Bytes.B = fileHandle;
     DoDosCall(_CLOSE);
+
 }
 
 void Terminate(const char* errorMessage)
@@ -532,10 +574,14 @@ end:
 
 void CheckDosVersion()
 {
+    regs.Bytes.B = 0x5A;
+    regs.Words.HL = 0x1234;
+    regs.Words.DE = 0xABCD;
+    regs.Words.IX = 0;
     DosCall(_DOSVER, &regs, REGS_ALL, REGS_ALL);
 	
-    if(regs.Bytes.B < 2) {
-        Terminate("This program is for MSX-DOS 2 only.");
+    if(regs.Bytes.B < 2 || regs.Bytes.IXh != 1) {
+        Terminate("This program is for Nextor only.");
     }
 }
 
