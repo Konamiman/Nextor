@@ -108,7 +108,6 @@ const char* strUsage=
     "\r\n"
     "- o <file>: Path and name of the generated configuration file.\r\n"
     "            Default is \"\\NEXT_DSK.DAT\"\r\n"
-    "            (generated in the root directory of current drive).\r\n"
     "            If <file> ends with \"\\\" or \":\", \"NEXT_DSK.DAT\" is appended.\r\n"
     "- b <number>: The index of the image file to mount at boot time.\r\n"
     "              Must be 1-9 or A-W. Default is 1.\r\n"
@@ -116,7 +115,9 @@ const char* strUsage=
     "               Must be a hexadecimal number between C000 and FFEF.\r\n"
     "               If missing or 0, the work area is allocated at boot time.\r\n"
     "- r : Reset the computer after generating the file.\r\n"
-    "- p : Print filenames and associated keys.\r\n";
+    "- p : Print filenames and associated keys.\r\n"
+    "\r\n"
+    "TYPE /B the generated file to see the names of the registered files.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
