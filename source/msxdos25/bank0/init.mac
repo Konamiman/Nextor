@@ -622,6 +622,10 @@ VER_CHK:
 ;
 ;	I am not the first.  check to see if I can be the new master.
 ;
+	ld	a,(PROCNM+9)	;If in disk emulation mode, disable myself
+	or	a
+	ret	nz
+
 	ld	a,(NXT_VER##)	;If previous master is MSX-DOS (not Nextor) then I become master.
 	or	a
 	jr	z,MAST_OK
@@ -700,6 +704,7 @@ SLAVE:
 	;PROCNM+6: Number of drives actually assigned
 	;PROCNM+7: 1 to boot in DOS 1 mode
 	;PROCNM+8: 1 if device-based driver
+	;PROCNM+9: 1 if in disk emulation mode (set by AUTODRV in partit.mac)
 
 	;Calculate how many work area space can be allocated, it will be:
 	;(SP) - MAX(C200h, BOTTOM+512)
@@ -2294,6 +2299,11 @@ CHECK_1KEY:
 	cp	00000110b		;
 ;===== start mod DOS2.50 (build type)
 	jr	nz,OLDDOS	;OLDDOS will do the rest of work.
+
+	ld	a,(PROCNM+9)	;If in disk emulation mode (set by AUTODRV from DOSINIT),
+	or	a               ;switch to DOS 1 mode
+	jr	z,OLDDOS
+
 if STURBO
 	ld	a,(VERSION)
 	cp	3		;MSXturboR?
@@ -2380,6 +2390,14 @@ endif
 	xor	a
 	ld	(DOS_VER##),a	;Needed for AUTODRV
 
+	;If we are in disk emulation mode (set by AUTODRV from DOSINIT),
+	;the work area is already created in BUF_1,
+	;so just jump to area relocation procedure.
+
+	ld	a,(PROCNM+9)
+	or	a
+	jr	nz,MK_EMU_TBL
+
 	;Build the table of drives attached to device-based drivers.
 	;We call AUTODRV on segment 4 to build the table in a
 	;fixed location (BUF_1), then we allocate space for the
@@ -2391,6 +2409,43 @@ endif
 	ld	hl,AUTODRV##
 	ld	(BK4_ADD##),hl
 	call	?C4PBK##
+
+	ld	a,(PROCNM+9)
+	or	a
+	jr	z,MK_DVB_TBL
+
+
+MK_EMU_TBL:
+	;We are in disk emulation mode.
+	;If a explicit location was specified for the work area,
+	;then just copy from BUF_1 to it.
+	;Otherwise allocate space in page 3.
+
+	ld	ix,0F980h	;BUF_1##
+	ld	l,(ix+17)
+	ld	h,(ix+18)
+	ld	a,h
+	or	l
+	jr	nz,OK_EMU_WK
+
+	ld	hl,17
+	call	ALLOC##	;Assume it always succeeds for now
+
+OK_EMU_WK:
+	ld	(hl),1	;Single entry
+	inc	hl
+	push	hl
+	ex	de,hl
+	ld	hl,0F980h	;BUF_1##
+	ld	bc,16
+	ldir
+
+	pop	hl
+	set	6,(hl)	;Disk emulation mode flag
+
+	jr	END_DVB_TBL
+
+MK_DVB_TBL:
 	ld	hl,0F980h	;(BUF_1##)
 	ld	a,(hl)
 	or	a
@@ -2421,6 +2476,7 @@ AUTODRV_OK2:
 
 	;End of creation of DVB_TABLE
 
+END_DVB_TBL:
 	ld	hl,(KER250##)		;Preserve KER250 and DVB_TABLE since
 	push	hl                      ;the next ldir will erase it
 	ld	hl,(KER250##+2)
