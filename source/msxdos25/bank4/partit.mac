@@ -468,11 +468,19 @@ GDRV_OK_ROM:
 ;
 	PROC	AUTODRV
 
-;    This routine automatically assigns devices and partitions to drives for
+; This routine automatically assigns devices and partitions to drives for
 ; device-based DOS 2.50 drivers. There are two versions, one for DOS 1 and
 ; another one for DOS 2, since the processing done in both cases is
 ; quite different.
+;
+; In both DOS 1 and DOS 2 modes AUTOASSIGN is called with A=1.
+; This causes the root directory of primary partitions to be scanned
+; for a file named NEXT_DSK.DAT (only if the current controller is the
+; primary controller); if found and its contents are valid, the whole
+; assignment procedure is aborted and we enter disk emulation mode.
 
+	ld	hl,sp
+	ld	(NXT7##),hl
 	ld	a,(DOS_VER##)
 	or	a
 	jp	nz,AUTODRV_DOS2
@@ -485,7 +493,7 @@ GDRV_OK_ROM:
 ; the "1" key is pressed.
 ;
 ; It does the auto-assignment of all the appropriate drives and at the
-; same time builds a table in the address supplied in HL, which contains
+; same time builds a table in the address stored in (DVB_TABLE), which contains
 ; information about the assigned device for each drive. Later, this
 ; table will be copied to an area allocated at page 3. This is necessary
 ; since DOS 1 does not allocate a data segment like DOS 2 does.
@@ -581,7 +589,16 @@ AUTODRV_DRVLOOP:
 	pop	hl
 	push	hl
 
+	ld	a,1
 	call	AUTO_ASSIGN
+
+	cp	2			;Did we enter disk emulation mode?
+	jr	nz,NOEMU1	;Yes: discard everything else and return
+	ld	hl,(NXT7##)
+	ld	sp,hl
+	ret
+
+NOEMU1:
 	ld	hl,(DVB_TABLE##)
 	inc	(hl)		;Increment size of table
 	pop	ix
@@ -592,7 +609,7 @@ AUTODRV_DRVLOOP:
 	jr	z,AUTODRV_DRVOK
 	;dec	hl
 	;dec	hl
-	;ld	(hl),0	;Do NOT set slot number to 0, unassigned driers have just device index 0
+	;ld	(hl),0	;Do NOT set slot number to 0, unassigned drivers have just device index 0
 	;inc	hl
 	;inc	hl
 	jr	AUTODRV_DRVNEXT
@@ -742,7 +759,16 @@ AUTOD_UDFND2:
 
 	push	ix
 	pop	hl
+	ld	a,1
 	call	AUTO_ASSIGN
+
+	cp	2			;Did we enter disk emulation mode?
+	jr	nz,NOEMU2	;Yes: discard everything else and return
+	ld	hl,(NXT7##)	;(note that we'll enter DOS 1 mode after returning)
+	ld	sp,hl
+	ret
+NOEMU2:
+
 	pop	hl	;Pointer in UNIT_TAB
 	or	a
 	jr	z,AUTOD_OK
@@ -825,9 +851,12 @@ SETNUMD_NOUD:
 ;
 ; Input:  HL = Address of unit descriptor, it must have UD_SLOT and UD_PHYS set
 ;              (assumes that it is a DOS 2.50 kernel slot with device based driver)
+;         A  = 0: Do NOT try to enter disk emulation mode
+;              1: Enter disk emulation mode if possible 
 ; Output: A  = Error code
 ;              0: Ok
 ;              1: No suitable device/partition found
+;              2: Disk emulation mode entered
 
 ;Temporary area BUF9 (9 bytes) is used as follows:
 ;+0: Candidate device (a device which has a suitable partition,
@@ -837,11 +866,19 @@ SETNUMD_NOUD:
 ;+5: Sector number of partition being examined
 ;
 ;Also, NXTEMP is used to store a pre-candidate device
-;(a device that exists but has not been checked yet for partitions)
+;(a device that exists but has not been checked yet for partitions),
+;NXT7+2 is used to store the value of A at input, and
+;NXT7+3 is used to store the stack pointer at input so that we can easily
+;discard the stack contents when entering disk emulation mode.
 
 AUTO_ASSIGN:
+	ld	(NXT7##+2),a
+
 	push	hl
 	pop	ix
+
+	ld	hl,sp
+	ld	(NXT7##+3),a
 
 	ld	(ix+UD_DI##),0
 	xor	a
@@ -1183,6 +1220,7 @@ DO_RSEC2:
 AA_OK_CANDIDATE2:
 	
 	;* Check that there is a file named NEXTOR.DAT in the root directory
+	;  (if A=1 at input and we are the primary controller, check NEXT_DSK.DAT first)
 
 	;jp	AA_NEXTPAR ;!!!
 
@@ -1238,6 +1276,8 @@ AA_MSXDOS2_ELOOP:
 	dec	a
 	jr	z,AA_NEXTPAR	;AA_LLOOP_NEXT
 	push	af
+
+	;WIP: search emu file
 
 	push	bc
 	ld	de,MSXDOS2DAT
@@ -1415,7 +1455,8 @@ AA_DO_ASSIGN:
 
 MSXDOS2DAT:
 	db	"NEXTOR  DAT"
-
+EMUDAT:
+	db	"NEXT_DSKDAT"
 
 ;This subroutine reads a sector from the device to SECBUF.
 ;Input: A  = Device index
@@ -2632,6 +2673,7 @@ MAP_DEF_DEVB:
 	push	hl
 	push	ix
 	pop	hl
+	xor	a
 	call	AUTO_ASSIGN
 	pop	hl
 	or	a
@@ -3418,6 +3460,7 @@ MAPDOS1_NOUNMAP:
 	push	de
 	push	ix
 	push	hl
+	xor	a
 	call	AUTO_ASSIGN
 	pop	hl
 	ld	(hl),0FFh	;Mark FAT buffer as invalid again
