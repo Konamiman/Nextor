@@ -479,7 +479,8 @@ GDRV_OK_ROM:
 ; primary controller); if found and its contents are valid, the whole
 ; assignment procedure is aborted and we enter disk emulation mode.
 
-	ld	hl,sp
+	ld	hl,0
+	add	hl,sp
 	ld	(NXT7##),hl
 	ld	a,(DOS_VER##)
 	or	a
@@ -791,9 +792,9 @@ AUTOD_OK:
 	inc	hl
 	inc	hl
 	pop	bc
-	djnz	AUTOD_LOOP
+	dec	b
+	jp	nz,AUTOD_LOOP
 	jp	SETNUMDRV
-
 
 ;-----------------------------------------------------------------------------
 ;
@@ -877,8 +878,9 @@ AUTO_ASSIGN:
 	push	hl
 	pop	ix
 
-	ld	hl,sp
-	ld	(NXT7##+3),a
+	ld	hl,0
+	add	hl,sp
+	ld	(NXT7##+3),hl
 
 	ld	(ix+UD_DI##),0
 	xor	a
@@ -1264,7 +1266,7 @@ AA_MSXDOS2_SLOOP:
 	push	bc
 	ld	b,d
 	call	AA_RSEC
-	jr	nz,AA_MSXDOS2_ERR
+	jp	nz,AA_MSXDOS2_ERR
 
 	ld	b,16	;Directory entries per sector
 	ld	hl,($SECBUF##)
@@ -1277,8 +1279,44 @@ AA_MSXDOS2_ELOOP:
 	jr	z,AA_NEXTPAR	;AA_LLOOP_NEXT
 	push	af
 
-	;WIP: search emu file
+	ld	a,(NXT7##+2)
+	or	a
+	jr	z,SRCHNXDAT2	;Don't search NEXT_DSK.DAT if A=0 at input
 
+	;TODO: jp SRCHNXDAT if I'm not the primary controller
+
+	push	bc
+	push	hl
+	ld	de,EMUDAT
+	ld	b,11
+	dec	hl
+AA_EMU_CHKE:
+	inc	hl
+	ld	a,(de)
+	cp	(hl)
+	inc	de
+	jr	nz,SRCHNXDAT
+	djnz	AA_MSXDOS2_CHKE
+
+	pop	hl
+	push	hl
+	call	GO_EMU
+	or	a
+	jr	z,SRCHNXDAT
+
+	;There's a NEXT_DSK.DAT file and it had valid contents:
+	;Stop the presses! We cancel everything since we've entered emulation mode.
+
+	ld	hl,(NXT7##+3)
+	ld	sp,hl
+	ld	a,2
+	ret
+
+SRCHNXDAT:
+	pop	hl
+	pop	bc
+
+SRCHNXDAT2:
 	push	bc
 	ld	de,MSXDOS2DAT
 	ld	b,11
@@ -1319,7 +1357,8 @@ AA_MSXDOS2_NXTE:
 	ld	(TMP_SEC##+2),hl
 	
 	pop	bc
-	djnz	AA_MSXDOS2_SLOOP
+	dec	b
+	jp	nz,AA_MSXDOS2_SLOOP
 	;jr	AA_LLOOP_NEXT
 
 AA_NEXTPAR::
@@ -1618,6 +1657,43 @@ upb_not_found:					;If anything was wrong with
 		or	h			; the UPB then return with
 		ret				; Z-flag clear.
 
+
+; This routine accepts in HL a pointer to the directory entry of the
+; NEXT_DSK.DAT file and does all the job of entering in disk emulation mode.
+;
+; It first reads the contents of the file (only the first sector)
+; and check that it has the expected structure. If this is not true,
+; or if there is an error when reading the file, it does nothing
+; and returns with A=0.
+;
+; Otherwise, it builds the work area in the same temporary buffer where
+; the device-drivers table is generated when booting normally in DOS 1 mode,
+; then returns with A=0. The format of the table is as follows, note that
+; it is mostly compatible with a DOS 1 device-drivers table with just one entry:
+;
+; +0: Device index of current disk image file
+;     Bit 7 is kept set to 1 to indicate that we are in disk emulation mode
+; +1: Controller slot (always the primary controller)
+; +2: Device + 16 * logical unit number for NEXT_DSK.DAT
+;     Bit 7 is set after the current image file is changed
+;     and reset again when disk change is checked
+; +3: Device index of disk image file
+; +4: Logical unit number of disk image file
+; +5-8: First sector of disk image file
+; +9-10: Disk image file size in sectors
+; +11: Number of entries in the disk images table in NEXT_DSK.DAT
+; +12-15: Device sector number of NEXT_DSK.DAT contents
+;
+; The definitve address of the work area as read from NEXT_DSK.DAT is temporarily
+; appended at the end of this table, so that either it will be moved to this place
+; or, if it is zero, the work area will be properly allocated.
+
+GO_EMU:
+
+	;WIP: do everything
+
+	xor	a
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
