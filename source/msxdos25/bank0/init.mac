@@ -2302,7 +2302,7 @@ CHECK_1KEY:
 
 	ld	a,(PROCNM+9)	;If in disk emulation mode (set by AUTODRV from DOSINIT),
 	or	a               ;switch to DOS 1 mode
-	jr	z,OLDDOS
+	jr	nz,OLDDOS
 
 if STURBO
 	ld	a,(VERSION)

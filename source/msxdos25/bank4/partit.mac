@@ -875,6 +875,9 @@ SETNUMD_NOUD:
 AUTO_ASSIGN:
 	ld	(NXT7##+2),a
 
+	xor	a
+	ld	(NXT7##+5),a
+
 	push	hl
 	pop	ix
 
@@ -1276,7 +1279,7 @@ AA_MSXDOS2_SLOOP:
 AA_MSXDOS2_ELOOP:
 	pop	af	;Total number of root dir entries
 	dec	a
-	jr	z,AA_NEXTPAR	;AA_LLOOP_NEXT
+	jp	z,AA_NEXTPAR	;AA_LLOOP_NEXT
 	push	af
 
 	ld	a,(NXT7##+2)
@@ -1296,7 +1299,7 @@ AA_EMU_CHKE:
 	cp	(hl)
 	inc	de
 	jr	nz,SRCHNXDAT
-	djnz	AA_MSXDOS2_CHKE
+	djnz	AA_EMU_CHKE
 
 	pop	hl
 	push	hl
@@ -1329,7 +1332,16 @@ AA_MSXDOS2_CHKE:
 	jr	nz,AA_MSXDOS2_NXTE
 	djnz	AA_MSXDOS2_CHKE
 
+	ld	a,(NXT7##+2)
+	or	a
+	jr	z,AA_DO_FOUND
+	ld	a,1
+	ld	(NXT7##+5),a
+	jr	AA_MSXDOS2_NXTE
+
+AA_DO_FOUND:
 	pop	bc
+AA_DO_FOUND2:
 	pop	bc
 	ld	hl,(BUF9##+5)
 	ld	(BUF9##+1),hl
@@ -1346,6 +1358,10 @@ AA_MSXDOS2_NXTE:
 
 	pop	bc
 	djnz	AA_MSXDOS2_ELOOP
+
+	ld	a,(NXT7##+5)
+	or	a
+	jr	nz,AA_DO_FOUND2
 
 	ld	hl,1
 	ld	de,(TMP_SEC##)	;Increase root dir sector number
@@ -1689,6 +1705,8 @@ upb_not_found:					;If anything was wrong with
 ; or, if it is zero, the work area will be properly allocated.
 
 GO_EMU:
+	di
+	halt
 
 	;WIP: do everything
 
