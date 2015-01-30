@@ -8,6 +8,8 @@
 	INCLUDE b0labels.inc
 ;
 
+SNSMAT	equ	0141h		;sense key matrix
+
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
 POFF_TYPE	equ	4	;Offset of partition type in p. table entry
@@ -1279,14 +1281,24 @@ AA_MSXDOS2_SLOOP:
 AA_MSXDOS2_ELOOP:
 	pop	af	;Total number of root dir entries
 	dec	a
-	jp	z,AA_NEXTPAR	;AA_LLOOP_NEXT
+	jp	z,AA_NOMOREENT	;AA_NEXTPAR	;AA_LLOOP_NEXT
 	push	af
 
 	ld	a,(NXT7##+2)
 	or	a
-	jr	z,SRCHNXDAT2	;Don't search NEXT_DSK.DAT if A=0 at input
+	jr	z,SRCHNX2	;Don't search NEXT_DSK.DAT if A=0 at input
 
-	;TODO: jp SRCHNXDAT if I'm not the primary controller
+	;TODO: jp SRCHNX2 if I'm not the primary controller
+
+	di
+	in	a,(0AAh)
+	and	0F0h
+	;add	0
+	out	(0AAh),a
+	ei
+	in	a,(0A9h)
+	and	1
+	jp	z,SRCHNX2	;Don't search NEXT_DSK.DAT if key 0 is pressed
 
 	push	bc
 	push	hl
@@ -1319,7 +1331,7 @@ SRCHNXDAT:
 	pop	hl
 	pop	bc
 
-SRCHNXDAT2:
+SRCHNX2:
 	push	bc
 	ld	de,MSXDOS2DAT
 	ld	b,11
@@ -1337,12 +1349,13 @@ AA_MSXDOS2_CHKE:
 	jr	z,AA_DO_FOUND
 	ld	a,1
 	ld	(NXT7##+5),a
-	jr	AA_MSXDOS2_NXTE
+	inc	hl
+	jr	AA_NXTE2
 
 AA_DO_FOUND:
 	pop	bc
-AA_DO_FOUND2:
 	pop	bc
+AA_DO_FOUND2:
 	ld	hl,(BUF9##+5)
 	ld	(BUF9##+1),hl
 	ld	hl,(BUF9##+7)
@@ -1353,15 +1366,12 @@ AA_DO_FOUND2:
 AA_MSXDOS2_NXTE:
 	inc	hl
 	djnz	AA_MSXDOS2_NXTE
+AA_NXTE2:
 	ld	bc,32-11
 	add	hl,bc		;Make HL point to the next dir entry
 
 	pop	bc
 	djnz	AA_MSXDOS2_ELOOP
-
-	ld	a,(NXT7##+5)
-	or	a
-	jr	nz,AA_DO_FOUND2
 
 	ld	hl,1
 	ld	de,(TMP_SEC##)	;Increase root dir sector number
@@ -1376,6 +1386,11 @@ AA_MSXDOS2_NXTE:
 	dec	b
 	jp	nz,AA_MSXDOS2_SLOOP
 	;jr	AA_LLOOP_NEXT
+
+AA_NOMOREENT:
+	ld	a,(NXT7##+5)
+	or	a
+	jr	nz,AA_DO_FOUND2
 
 AA_NEXTPAR::
 	ld	a,(NXT4##+2)
