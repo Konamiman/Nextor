@@ -1785,7 +1785,8 @@ FAKEMU:
 
 	db	1	;Device
 	db	1	;Lun
-	db	76h, 97h, 0, 0	;First absolute sector of dsk
+	;db	76h, 97h, 0, 0	;First absolute sector of dsk
+	db	66h, 9Dh, 0, 0	;First absolute sector of dsk
 	db	0a0h, 05h	;Size of dsk in sectors
 
 ;-----------------------------------------------------------------------------

@@ -335,12 +335,12 @@ CHG_ENTRY::
 
 	ld	a,d
 	or	a
-	jp	z,DISKERR	;Drive number must be 0
+	jp	nz,DISKERR	;Drive number must be 0
 
 	xor	a
 	ld	iy,(DVB_TABLE##)
-	bit	7,(iy)
-	res	7,(iy)
+	bit	7,(iy+2)
+	res	7,(iy+2)
 	ld	b,1
 	ret	z
 	ld	b,0FFh
