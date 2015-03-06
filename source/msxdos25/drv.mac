@@ -85,10 +85,28 @@ DIO_ENTRY::
 	or	a
 	jp	z,DISKERR
 
+	call	IS_EMU
+	jr	nc,DIOEN_NOEMU
+
+	;>>> In disk emulation mode
+
+	pop	af
+	or	a
+	push	af
+	jp	nz,DISKERR	;Drive number must be 0
+
+	;TODO: Check sector number against dsk file size
+
+	jr	DIOEN2
+
+	;>>> NOT in disk emulation mode
+
+DIOEN_NOEMU:
 	call	HAS_PARTITION
 	call	nz,ASSIGN_PARTITION
 	jp	nz,POP_CONV_ERR
 
+DIOEN2:
 	ld	a,1
 	ld	(KSLOT##),a	;KSLOT=1 -> device-based
 
@@ -305,9 +323,32 @@ CHG_ENTRY::
 	ld	ix,DV_CHGDSK##
 	jp	nc,DO_CALBNK
 
+	ld	d,a
 	ld	a,(iy+2)
 	or	a
 	jp	z,DISKERR
+
+	call	IS_EMU
+	jp	nc,CHGEN_NOEMU
+
+	;>>> In disk emulation mode
+
+	ld	a,d
+	or	a
+	jp	z,DISKERR	;Drive number must be 0
+
+	xor	a
+	ld	iy,(DVB_TABLE##)
+	bit	7,(iy)
+	res	7,(iy)
+	ld	b,1
+	ret	z
+	ld	b,0FFh
+	ret
+
+	;>>> NOT in disk emulation mode
+
+CHGEN_NOEMU:
 
 	;Drive-based mapping:
 	;Return "changed" if partition has changed, "unchanged" otherwise
@@ -358,11 +399,24 @@ DPB_ENTRY::
 	ld	ix,DV_GETDPB##
 	jp	nc,DO_CALBNK
 
+	call	IS_EMU
+	jr	nc,DO_MKDPB
+
+	;>>> In disk emulation mode
+
+	;or	a
+	;jp	nz,DISKERR	;Drive number must be 0
+
+	jr	DPBEN2
+
+	;>>> NOT in disk emulation mode
+
 DO_MKDPB:
 	call	HAS_PARTITION
 	call	nz,ASSIGN_PARTITION
 	jp	nz,CONV_ERR
 
+DPBEN2:
 	push	hl
 	ld	a,(iy+4)
 	ld	(TMP_SEC##),a
@@ -417,7 +471,7 @@ CHO_ENTRY::
 	ld	ix,DV_CHOICE##
 	jp	nc,DO_CALBNK
 	
-	ld	hl,741fh	;Formatting is no supported yet for device-based drivers
+	ld	hl,781fh	;Formatting is no supported yet for device-based drivers
 	ret
 
 	;--- Format device
@@ -473,6 +527,20 @@ IS_DVB:
 	or_iyl
 	jr	z,IS_NOT_DVB
 
+	ld	a,(iy)
+	and	80h
+	jr	z,IS_DVB_NOEMU
+
+	inc	iy
+	pop	af	;In emulation mode: return Cy=1 only if drive is 0
+	or	a
+	scf
+	ret	z
+
+	ccf
+	ret
+
+IS_DVB_NOEMU:
 	pop	af
 	push	af
 	push	bc
@@ -514,6 +582,23 @@ IS_NOT_DVB:
 	ccf
 	ret
 
+
+;--------------
+;
+; Check if we are in disk emulation mode
+; Assumes IS_DVB has returned Cy=1 (that is, in DOS 1 mode and DVB_TABLE exists)
+; Returns Cy=1 if in emulation mode, Cy=0 if not
+; Corruputs: F
+
+IS_EMU:
+	push	iy
+	ld	iy,(DVB_TABLE##)
+	bit	7,(iy)
+	pop	iy
+	scf
+	ret	nz
+	ccf
+	ret
 
 ;-----------------------------------------------------------------------------
 ;

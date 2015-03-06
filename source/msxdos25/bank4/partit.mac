@@ -24,6 +24,8 @@ MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
 CALLB0	equ	403Fh
 CALBAS	equ	0159h
 
+PROCNM	equ	0FD89h
+
 DCOMPR	equ	0020h
 ;CHPUT	equ	00A2h
 GETBYT	equ	521Ch
@@ -1315,7 +1317,11 @@ AA_EMU_CHKE:
 
 	pop	hl
 	push	hl
+	push	ix
+	push	iy
 	call	GO_EMU
+	pop	iy
+	pop	ix
 	or	a
 	jr	z,SRCHNXDAT
 
@@ -1699,7 +1705,7 @@ upb_not_found:					;If anything was wrong with
 ;
 ; Otherwise, it builds the work area in the same temporary buffer where
 ; the device-drivers table is generated when booting normally in DOS 1 mode,
-; then returns with A=0. The format of the table is as follows, note that
+; then returns with A=1. The format of the table is as follows, note that
 ; it is mostly compatible with a DOS 1 device-drivers table with just one entry:
 ;
 ; +0: Device index of current disk image file
@@ -1720,13 +1726,67 @@ upb_not_found:					;If anything was wrong with
 ; or, if it is zero, the work area will be properly allocated.
 
 GO_EMU:
-	di
-	halt
 
-	;WIP: do everything
+	;--- Read file contents
 
-	xor	a
+	;TODO: read from .DAT file!
+
+	ld	hl,FAKEMU
+	ld	de,($SECBUF##)
+	push	de
+	pop	ix
+	ld	bc,32
+	ldir
+
+	;--- Process file contents
+
+	;TODO: Validate
+	;TODO: set proper data if boot index != 1
+
+	ld	iy,0F980h
+
+	ld	a,81h
+	ld	(iy),a
+	ld	a,(0F348h)
+	ld	(iy+1),a
+	ld	a,1+16*1	;TODO: Pass dev+lun of NEXT_DSK.DAT to the routine
+	ld	(iy+2),a
+	ld	a,(ix+18)	;Work area address, low
+	ld	(iy+16),a
+	ld	a,(ix+19)	;Work area address, high
+	ld	(iy+17),a
+	ld	a,(ix+16)
+	ld	(iy+11),a	;Number of entries in table
+
+	push	ix
+	pop	hl
+	ld	bc,24
+	add	hl,bc
+	ld	de,0F980h+3
+	ld	bc,8
+	ldir		;Device, LUN, first sector, size of DSK
+
+	ld	a,(ix+24)	;Dev index
+	ld	(iy+3),a
+	ld	a,(ix+25)	;LUN index
+	ld	(iy+4),a
+
+EMUX::	
+	ld	a,1
+	ld	(PROCNM+9),a
 	ret
+
+FAKEMU:
+	db	"Nextor DSK file",0
+	db	1	;Num of entries in dsk table
+	db	1	;Index of entry to mount at boot
+	dw	0	;Work area address
+	ds	4	;Reserver
+
+	db	1	;Device
+	db	1	;Lun
+	db	76h, 97h, 0, 0	;First absolute sector of dsk
+	db	0a0h, 05h	;Size of dsk in sectors
 
 ;-----------------------------------------------------------------------------
 ;

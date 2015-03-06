@@ -2410,9 +2410,7 @@ endif
 	ld	(BK4_ADD##),hl
 	call	?C4PBK##
 
-	ld	a,(PROCNM+9)
-	or	a
-	jr	z,MK_DVB_TBL
+	jr	MK_DVB_TBL
 
 
 MK_EMU_TBL:
@@ -2422,18 +2420,16 @@ MK_EMU_TBL:
 	;Otherwise allocate space in page 3.
 
 	ld	ix,0F980h	;BUF_1##
-	ld	l,(ix+17)
-	ld	h,(ix+18)
+	ld	l,(ix+16)
+	ld	h,(ix+17)
 	ld	a,h
 	or	l
 	jr	nz,OK_EMU_WK
 
-	ld	hl,17
-	call	ALLOC##	;Assume it always succeeds for now
+	ld	hl,16
+	call	ALLOC##	;TODO: Check for failure to allocate
 
 OK_EMU_WK:
-	ld	(hl),1	;Single entry
-	inc	hl
 	push	hl
 	ex	de,hl
 	ld	hl,0F980h	;BUF_1##
@@ -2441,8 +2437,9 @@ OK_EMU_WK:
 	ldir
 
 	pop	hl
-	set	6,(hl)	;Disk emulation mode flag
+	set	7,(hl)	;Disk emulation mode flag
 
+	ld	(DVB_TABLE##),hl
 	jr	END_DVB_TBL
 
 MK_DVB_TBL:
