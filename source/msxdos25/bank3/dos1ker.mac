@@ -5793,9 +5793,9 @@ A6093:	add	a,(hl)			; driveid driver
 	ld	h,(hl)			; slotid driver
 	jp	SET_SLOT
 	nop
-	;push	hl
-	;pop	iy
-	;ret
+	push	hl	;?????
+	pop	iy
+	ret
 
 ;	Subroutine	mark FAT buffer as invalid
 ;	Inputs		A=driveid

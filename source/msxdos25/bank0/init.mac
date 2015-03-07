@@ -2412,7 +2412,6 @@ endif
 
 	jr	MK_DVB_TBL
 
-
 MK_EMU_TBL:
 	;We are in disk emulation mode.
 	;If a explicit location was specified for the work area,
@@ -2440,6 +2439,13 @@ OK_EMU_WK:
 	set	7,(hl)	;Disk emulation mode flag
 
 	ld	(DVB_TABLE##),hl
+		
+	ld	hl,NXT7##
+	ld	de,NXT7##+1
+	ld	bc,6
+	ld	(hl),0
+	ldir
+
 	jr	END_DVB_TBL
 
 MK_DVB_TBL:

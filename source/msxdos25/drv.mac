@@ -338,13 +338,13 @@ CHG_ENTRY::
 	jp	nz,DISKERR	;Drive number must be 0
 
 	xor	a
-	ld	iy,(DVB_TABLE##)
-	bit	7,(iy+2)
-	res	7,(iy+2)
+	ld	ix,(DVB_TABLE##)
+	bit	7,(ix+2)
+	res	7,(ix+2)
 	ld	b,1
 	ret	z
-	ld	b,0FFh
-	ret
+	ld	a,d
+	jp	DPBEN2
 
 	;>>> NOT in disk emulation mode
 
