@@ -2445,6 +2445,11 @@ OK_EMU_WK:
 	ld	bc,6
 	ld	(hl),0
 	ldir
+	ld	hl,TMP_FROOT##
+	ld	de,TMP_FROOT##+1
+	ld	bc,11
+	ld	(hl),0
+	ldir
 
 	jr	END_DVB_TBL
 

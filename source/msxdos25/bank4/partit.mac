@@ -1224,7 +1224,6 @@ AA_SPC_OK:
 	ld	hl,(TMP_SEC##+2)
 	ld	(BUF9##+3),hl
 DO_RSEC2:
-	;!!!!!
 
 AA_OK_CANDIDATE2:
 	
@@ -1242,7 +1241,14 @@ AA_SUM_FATS:
 	djnz	AA_SUM_FATS	;Make HL=Total FAT sectors count
 	ld	c,(iy+UPB_RES##)
 	ld	b,(iy+UPB_RES##+1)
-	add	hl,bc	;Now HL=First root directory sector
+	add	hl,bc	;Now HL=First root directory sector	;WIP
+
+	ld	(TMP_FROOT##),hl	;Same some data that we'll need 
+	ld	e,(iy+UPB_NDIR##)	;if we enter in disk emulation mode
+	ld	d,(iy+UPB_NDIR##+1)
+	ld	(TMP_NDIR##),de
+	ld	a,(iy+UPB_CS##)
+	ld	(TMP_CS##),a
 
 	ld	de,(TMP_SEC##)	;Set the absolute sector number
 	add	hl,de		;for the start of root directory
@@ -1725,18 +1731,84 @@ upb_not_found:					;If anything was wrong with
 ; appended at the end of this table, so that either it will be moved to this place
 ; or, if it is zero, the work area will be properly allocated.
 
-GO_EMU:
+GO_EMU::
+
+	;--- Calculate data sector of NEXT_DSK.DAT
+
+	push	ix
+	push	hl
+	pop	ix
+	ld	e,(ix+DR_CLU##)
+	ld	d,(ix+DR_CLU##+1)	;DE = First cluster number of file
+	pop	ix
+	dec	de
+	dec	de	;DE = Zero-based cluster index
+
+	ld	hl,0
+	ld	a,(TMP_CS##)	;Sectors per cluster
+GOEMU2:
+	rra
+	jp	c,GOEMU3
+	sla	e
+	rl	d
+	rl	l
+	rl	h
+	jr	GOEMU2
+GOEMU3:
+	push	hl		;HLDE = File sector, relative to first data sector
+	push	de
+	
+	ld	hl,(TMP_NDIR##)	;HL = Number of root directory entries
+	XOR A		;Divide by 32 -> HL = Number of root directory sectors
+    ADD HL, HL
+    RLA
+    ADD HL, HL
+    RLA
+    ADD HL, HL
+    RLA
+    LD L, H
+    LD H, A
+
+	ld	de,(TMP_FROOT##)
+	add	hl,de	
+	push	hl
+	pop	bc	;BC = First data sector
+	
+	pop	hl
+	add	hl,bc
+	ex	de,hl
+	pop	hl
+	ld	bc,0
+	adc	hl,bc	;HLDE = File sector relative to first partition sector
+
+	push	hl	;Calculate file sector number into TMP_SEC
+	ld	hl,(BUF9##+1)
+	add	hl,de
+	ld	(TMP_SEC##),hl
+	pop	de
+	ld	hl,(BUF9##+3)
+	adc	hl,de
+	ld	(TMP_SEC##+2),hl
 
 	;--- Read file contents
 
 	;TODO: read from .DAT file!
 
+if 0
 	ld	hl,FAKEMU
 	ld	de,($SECBUF##)
 	push	de
 	pop	ix
 	ld	bc,32
 	ldir
+endif
+
+	ld	a,(TMPLUN##)
+	ld	b,a
+	ld	a,(TMPDEV##)
+	call	AA_RSEC
+	ld	a,0
+	ret	nz
 
 	;--- Process file contents
 

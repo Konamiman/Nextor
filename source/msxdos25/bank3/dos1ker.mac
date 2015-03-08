@@ -5793,7 +5793,7 @@ A6093:	add	a,(hl)			; driveid driver
 	ld	h,(hl)			; slotid driver
 	jp	SET_SLOT
 	nop
-	push	hl	;?????
+	push	hl	;This line and the next two were commented out ?????
 	pop	iy
 	ret
 
