@@ -96,7 +96,27 @@ DIO_ENTRY::
 
 	jp	nz,DISKERR	;Drive number must be 0
 
-	;TODO: Check sector number against dsk file size
+	; Moan if sector number + sector count > dsk file size
+
+	push	hl
+	push	de
+	ld	ix,(DVB_TABLE##)
+	ld	e,(ix+9)
+	ld	d,(ix+10)	;DE = dsk size in sectors
+
+	pop	hl
+	push	hl
+	push	bc
+	ld	c,b
+	ld	b,0
+	add	hl,bc	;HL = Sector num + count
+	pop	bc
+
+	dec	hl
+	call	COMP16
+	pop	de
+	pop	hl
+	jp	nc,DIO_RNF
 
 	jr	DIOEN2
 
@@ -509,6 +529,12 @@ DISKERR:
 	scf
 	ret
 
+DIO_RNF:
+	pop	af
+	ld	a,8
+	ld	b,0
+	scf
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
@@ -774,6 +800,13 @@ CONV_ERR_END:
 	scf
 	ret
 
+COMP16:
+	ld	a,h
+	sub	d
+	ret	nz
+	ld	a,l
+	sub	e
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
