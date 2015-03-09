@@ -1243,23 +1243,24 @@ AA_SUM_FATS:
 	ld	b,(iy+UPB_RES##+1)
 	add	hl,bc	;Now HL=First root directory sector	;WIP
 
-	ld	(TMP_FROOT##),hl	;Same some data that we'll need 
-	ld	e,(iy+UPB_NDIR##)	;if we enter in disk emulation mode
-	ld	d,(iy+UPB_NDIR##+1)
-	ld	(TMP_NDIR##),de
-	ld	a,(iy+UPB_CS##)
-	ld	(TMP_CS##),a
-
 	ld	de,(TMP_SEC##)	;Set the absolute sector number
 	add	hl,de		;for the start of root directory
 	ld	(TMP_SEC##),hl
+	ld	(TMP_FROOT##),hl
 	ld	hl,0
 	ld	de,(TMP_SEC##+2)
 	adc	hl,de
 	ld	(TMP_SEC##+2),hl
+	ld	(TMP_FROOT##+2),hl
 
-	ld	b,(iy+UPB_NDIR##)	;Number of root directory entries
-	ld	a,(iy+UPB_NDIR##+1)	;Number of root directory entries
+	ld	e,(iy+UPB_NDIR##)	;Same some extra data that we'll need 
+	ld	d,(iy+UPB_NDIR##+1) ;if we enter in disk emulation mode
+	ld	(TMP_NDIR##),de
+	ld	a,(iy+UPB_CS##)
+	ld	(TMP_CS##),a
+
+	ld	b,e	;(iy+UPB_NDIR##)	;Number of root directory entries
+	ld	a,d	;(iy+UPB_NDIR##+1)	;Number of root directory entries
 	or	a
 	jr	z,AA_OK_ROOTNUM
 	ld	b,254
@@ -1756,43 +1757,40 @@ GOEMU2:
 	jr	GOEMU2
 GOEMU3:
 	push	hl		;HLDE = File sector, relative to first data sector
-	push	de
 	
 	ld	hl,(TMP_NDIR##)	;HL = Number of root directory entries
-	XOR A		;Divide by 32 -> HL = Number of root directory sectors
-    ADD HL, HL
-    RLA
-    ADD HL, HL
-    RLA
-    ADD HL, HL
-    RLA
-    LD L, H
-    LD H, A
+    SRL H	;Divide by 16 -> HL = Number of root directory sectors
+	RR L
+	SRL H
+	RR L
+	SRL H
+	RR L
+	SRL H
+	RR L
 
-	ld	de,(TMP_FROOT##)
-	add	hl,de	
 	push	hl
-	pop	bc	;BC = First data sector
-	
-	pop	hl
-	add	hl,bc
-	ex	de,hl
-	pop	hl
-	ld	bc,0
-	adc	hl,bc	;HLDE = File sector relative to first partition sector
+	pop	bc		;BC = Number of root directory sectors
 
-	push	hl	;Calculate file sector number into TMP_SEC
-	ld	hl,(BUF9##+1)
+	ex	de,hl	;HL = Relative file sector, low
+	ld	de,(TMP_FROOT##)	;DE = Absolute first root dir sector, low
 	add	hl,de
 	ld	(TMP_SEC##),hl
-	pop	de
-	ld	hl,(BUF9##+3)
+	pop	de	;DE = Relative file sector, high
+	ld	hl,(TMP_FROOT##+2)
 	adc	hl,de
 	ld	(TMP_SEC##+2),hl
 
-	;--- Read file contents
+	ld	hl,(TMP_SEC##)
+	add	hl,bc
+	ld	(TMP_SEC##),hl
+	ld	(0F980h+12),hl
+	ld	hl,(TMP_SEC##+2)
+	ld	de,0
+	adc	hl,de
+	ld	(TMP_SEC##+2),hl
+	ld	(0F980h+14),hl
 
-	;TODO: read from .DAT file!
+	;--- Read file contents
 
 if 0
 	ld	hl,FAKEMU
@@ -1802,7 +1800,7 @@ if 0
 	ld	bc,32
 	ldir
 endif
-
+emux::
 	ld	a,(TMPLUN##)
 	ld	b,a
 	ld	a,(TMPDEV##)
@@ -1816,19 +1814,30 @@ endif
 	;TODO: set proper data if boot index != 1
 
 	ld	iy,0F980h
+	ld	ix,($SECBUF##)
 
 	ld	a,81h
 	ld	(iy),a
 	ld	a,(0F348h)
 	ld	(iy+1),a
-	ld	a,1+16*1	;TODO: Pass dev+lun of NEXT_DSK.DAT to the routine
-	ld	(iy+2),a
 	ld	a,(ix+18)	;Work area address, low
 	ld	(iy+16),a
 	ld	a,(ix+19)	;Work area address, high
 	ld	(iy+17),a
 	ld	a,(ix+16)
 	ld	(iy+11),a	;Number of entries in table
+
+	ld	a,(TMPLUN##)
+	rlca
+	rlca
+	rlca
+	rlca
+	and	0F0h
+	ld	b,a
+	ld	a,(TMPDEV##)
+	and	0Fh
+	or	b
+	ld	(iy+2),a	;dev+lun of NEXT_DSK.DAT 
 
 	push	ix
 	pop	hl
@@ -1843,7 +1852,6 @@ endif
 	ld	a,(ix+25)	;LUN index
 	ld	(iy+4),a
 
-EMUX::	
 	ld	a,1
 	ld	(PROCNM+9),a
 	ret

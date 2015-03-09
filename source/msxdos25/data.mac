@@ -100,10 +100,10 @@ ram_ad	defl	DATABASE
 	;var3	FR_BK
 	;spare	6
 ;
-	var2	TMP_FROOT	;Temporary area used when activating disk emulation mode
+	var	TMP_FROOT,4	;Temporary area used when activating disk emulation mode
 	var1	TMP_CS
 	var2	TMP_NDIR
-	spare	7		;For future expansion
+	spare	5		;For future expansion
 ;
 	var1	CUR_DRV		;Current logical drive (1=A:)
 	var2	DTA_ADR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
