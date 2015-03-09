@@ -742,9 +742,9 @@ BOTTOM_OK:
 	;ld	b,2
 	;jr	nz,AUTODRIVES
 	
-	ld	a,6
+	xor	a
 	call	SNSMAT
-	and	00000010b	;Scan CTRL key
+	and	00100000b	;Scan "5" key
 	ld	b,1
 	jr	z,OKDEVBASED
 	;inc	b
