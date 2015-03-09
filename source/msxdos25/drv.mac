@@ -91,8 +91,9 @@ DIO_ENTRY::
 	;>>> In disk emulation mode
 
 	pop	af
-	or	a
 	push	af
+	or	a
+
 	jp	nz,DISKERR	;Drive number must be 0
 
 	;TODO: Check sector number against dsk file size
