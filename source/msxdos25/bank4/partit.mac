@@ -1792,15 +1792,6 @@ GOEMU3:
 
 	;--- Read file contents
 
-if 0
-	ld	hl,FAKEMU
-	ld	de,($SECBUF##)
-	push	de
-	pop	ix
-	ld	bc,32
-	ldir
-endif
-emux::
 	ld	a,(TMPLUN##)
 	ld	b,a
 	ld	a,(TMPDEV##)
@@ -1808,17 +1799,68 @@ emux::
 	ld	a,0
 	ret	nz
 
-	;--- Process file contents
+	;--- Validate file contents
 
-	;TODO: Validate
-	;TODO: set proper data if boot index != 1
-
-	ld	iy,0F980h
 	ld	ix,($SECBUF##)
 
-	ld	a,81h
-	ld	(iy),a
-	ld	a,(0F348h)
+	;> Signature must be as expected
+
+	push	ix
+	pop	hl
+	ld	de,NDATSIG
+GOEMU_SIG1:
+	ld	a,(de)
+	cp	(hl)
+	ld	a,0
+	ret	nz
+	or	a
+	jr	z,GOEMU_SIG2
+	inc	hl
+	inc	de
+	jr	GOEMU_SIG1
+GOEMU_SIG2:
+
+	;> Number of entries must be between 1 and 32
+
+	ld	a,(ix+16)
+	or	a
+	ret	z
+	cp	33
+	inc	a	;We need the incremented value in next step
+	ld	b,a
+	ld	a,0
+	ret	nc
+	
+	;> Index of image to mount at boot must be between 1 and num of entries
+
+	ld	a,(ix+17)
+	or	a
+	ret	z
+	cp	b
+	ld	a,0
+	ret	nc
+
+	;> Work are address must be 0 or a page 3 address
+
+	ld	a,(ix+19)
+	ld	b,a
+	or	(ix+18)
+	jr	z,GOEMU_WAOK
+
+	ld	a,b
+	and	0C0h
+	cp	0C0h
+	ld	a,0
+	ret	nz
+GOEMU_WAOK:
+
+	;--- Process file contents
+
+	ld	iy,0F980h
+
+	;> Basic data
+
+	ld	a,(0F348h)	;Controller slot
 	ld	(iy+1),a
 	ld	a,(ix+18)	;Work area address, low
 	ld	(iy+16),a
@@ -1839,35 +1881,33 @@ emux::
 	or	b
 	ld	(iy+2),a	;dev+lun of NEXT_DSK.DAT 
 
-	push	ix
-	pop	hl
+	;> Current file data
+
+	ld	a,(ix+17)	;Boot file index
+	ld	(iy),a
+	set	7,(iy)
+	dec	a
+	add	a,a		;Each entry is 8 bytes
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	h,0
 	ld	bc,24
 	add	hl,bc
+	push	ix
+	pop	bc
+	add	hl,bc	;HL = Pointer to boot file data
 	ld	de,0F980h+3
 	ld	bc,8
-	ldir		;Device, LUN, first sector, size of DSK
+	ldir
 
-	ld	a,(ix+24)	;Dev index
-	ld	(iy+3),a
-	ld	a,(ix+25)	;LUN index
-	ld	(iy+4),a
+	;--- All done
 
 	ld	a,1
 	ld	(PROCNM+9),a
 	ret
 
-FAKEMU:
-	db	"Nextor DSK file",0
-	db	1	;Num of entries in dsk table
-	db	1	;Index of entry to mount at boot
-	dw	0	;Work area address
-	ds	4	;Reserver
-
-	db	1	;Device
-	db	1	;Lun
-	;db	76h, 97h, 0, 0	;First absolute sector of dsk
-	db	66h, 9Dh, 0, 0	;First absolute sector of dsk
-	db	0a0h, 05h	;Size of dsk in sectors
+NDATSIG:	db	"Nextor DSK file",0
 
 ;-----------------------------------------------------------------------------
 ;
