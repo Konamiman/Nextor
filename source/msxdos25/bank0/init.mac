@@ -2433,7 +2433,7 @@ OK_EMU_WK:
 	ex	de,hl
 	ld	hl,0F980h	;BUF_1##
 	ld	bc,16
-	ldir
+	call	MEMCPY
 
 	pop	hl
 	set	7,(hl)	;Disk emulation mode flag
@@ -3235,6 +3235,35 @@ GET_DISKID_HL:
 	inc	a
 	ret	nz
 	ld	hl,PROCNM+8
+	ret
+
+;This routine copies BC bytes from HL to DE.
+;If DE=HL does nothing, if DE<HL uses LDIR, if DE>HL uses LDDR.
+;Corrupts AF.
+
+MEMCPY:
+	ld	a,d
+	cp	h
+	jr	c,DO_LDIR
+	jr	nz,DO_LDDR
+
+	ld	a,e
+	cp	l
+	jr	c,DO_LDIR
+	ret	z
+
+DO_LDDR:
+	push	bc
+	add	hl,bc
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	pop	bc
+	lddr
+	ret
+
+DO_LDIR:
+	ldir
 	ret
 
 FOURZEROS:	db	0,0,0,0
