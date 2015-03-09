@@ -567,7 +567,6 @@ NOTKILL:
 	ld	a,1
 	ld	(PROCNM+7),a
 MEM_CHK_OK1:
-
 ;
 	ld	hl,DATASIZE##	;Try to allocate fixed system work area
 	call	ALLOC##		; just below RAMLOW.
@@ -612,6 +611,7 @@ INIHOOK:
 	call	SNSMAT
 	di
 	and	00000010b	;extract CTRL key status; Z := pressed
+	xor	00000010b
 	ld	(TARGET##),a
 ;
 	ld	a,BELL		;tell user scanning is over
