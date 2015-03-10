@@ -1,0 +1,178 @@
+Nextor 2.1 Alpha 2
+------------------
+
+By Konamiman, 3/2015
+http://www.konamiman.com#nextor
+
+
+1. WHAT'S NEW IN ALPHA 2
+
+Nextor 2.1 Alpha 1 hasincluded everything that Nextor 2.0 has plus one new feature: the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools. This feature is explained in section 2.
+
+Furthermore, Nextor 2.1 Alpha 2 adds yet a new feature: the ability to boot the computer in disk emulation mode, using disk image files as if they were real floppy disks. You can now play your favourite MSX-DOS 2 incompatible games with Nextor! This feature is explained in section 3.
+
+
+2. MOUNTING FILES
+
+2.1. HOW TO MOUNT A FILE
+
+Files are mounted either by using the updated MAPDRV.COM tool from the COMMAND2.COM prompt, or the CALL MAPDRV command from the BASIC prompt.
+
+The syntax for MAPDRV.COM is:
+
+  MAPDRV <drive> <file> [/ro]
+
+For example, to mount file TOOLS.DSK on drive G: do
+
+  MAPDRV G: TOOLS.DSK
+
+Adding "/ro" will cause the file to be mounted in read-only mode, that is, trying to write to the mounted drive will cause a "Write protected disk" error.
+
+The syntax for CALL MAPDRV is:
+
+  CALL MAPDRV(<drive>, <file> [,0|1])
+
+For example, again to mount file TOOLS.DSK on drive G: do
+
+  CALL MAPDRV("G:", "TOOLS.DSK")
+
+Adding ",1" after the file name will cause the file to be mounted in read-only mode.
+
+NOTE: If the disk image file has the read-only attribute set, it will ALWAYS be mounted in read-only mode, even if no "/ro" / ",1" modifier is specified.
+
+To unmount the file, simply set a different mapping on the drive where the file is mounted (in the previous examples it would be G:). You can set a normal partition mapping, or just leave the drive unmapped:
+
+  MAPDRV <drive> U
+  CALL MAPDRV(<drive>, -1)
+
+
+2.2. RULES AND RESTRICTIONS
+
+To be mountable a disk image file must have a size of at least 512 bytes and at most 32 MBytes. The file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. 
+
+Also, the following restrictions apply:
+
+- The file cannot contain partitions, the contained filesystem is expected to start right at the beginning of the file.
+
+- It is not possible to mount a file on the drive where the file itself is located:
+MAPDRV A: A:TOOLS.DSK --> Error
+
+- It is not possible to mount the same file in two drives at the same time:
+MAPDRV B: TOOLS.DSK
+MAPDRV C: TOOLS.DSK --> Error
+
+- It is not possible to do a recursive file mount (mounting a file that is itself inside a mounted disk image file):
+MAPDRV B: TOOLS.DSK
+MAPDRV C: B:FILE.DSK --> Error
+
+- It is not possible to alter the mapping state of a drive if it contains one or more files that are currently mounted:
+MAPDRV B: A:TOOLS.DSK
+MAPDRV A: U --> Error
+
+- It is not possible to open or to alter (rename, move, delete, overwrite, change attributes) a mounted file:
+MAPDRV B: TOOLS.DSK
+TYPE TOOLS.DSK --> Error
+ECHO HELLO > TOOLS.DSK --> Error (see "known bugs" below)
+REN TOOLS.DSK X.DSK --> Error
+MOVE TOOLS.DSK SOMEDIR\ --> Error
+DEL TOOLS.DSK --> Error
+ATTRIB +R TOOLS.DSK --> Error
+
+
+2.3. CHANGES IN FUNCTION CALLS
+
+The _MAPDRV function call (7Ch) has been expanded to allow mounting files. The input parameters to mount a file are:
+
+B  = 3
+HL = Path to filename or FIB
+D  = 0 for default mount (write allowed unless the file has the read-only attribute set)
+     1 to force read-only mount
+
+The _GDLI function call (79h) now returns the following information in the data buffer for drives where a file is mounted:
+
++0: 3
++1: Drive where the mounted file is located (0 = A:, etc)
++2: Flags: 1 if the file is mounted in read-only mode, 0 otherwise
++3: 0 (reserved for more flags)
++4: Filename in printable format (up to 12 characters, plus a terminating zero)
+
+Please refer to the Nextor Progrmmers Reference for more details on these function calls.
+
+
+2.4. NEW ERROR CODES
+
+Two new error codes have been introduced:
+
+- "File is mounted" (.FMNT, DOS error code B2h, BASIC error code 80)
+
+This error appears when trying to open or alter a mounted file, or when trying to perform any other non allowed operation involving a mounted file (see "Rules and restrictions")
+
+- "Bad file size" (.BFSZ, DOS error code B1h, BASIC error code 81)
+
+This error appears when trying to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
+
+
+2.5. KNOWN BUGS
+
+Trying to overwrite a mounted file via the "Create file handle" function call (_CREATE, 44h), for example by executing a "ECHO HELLO > TOOLS.DSK" command, will actually succeeed and the file will be overwritten; a "File is mounted" error should be returned instead.
+
+
+3. DISK EMULATION MODE
+
+3.1. HOW TO ENTER AND EXIT DISK EMULATION MODE
+
+Nextor will boot in disk emulation mode if it finds a file named NEXT_DSK.DAT in the root directory of a primary partition in a device controlled by the primary Nextor controller. This file contains information about the disk image files to be used for the emulation.
+
+The NEXT_DSK.DAT file is created by using the supplied EMUFILE.COM tool. Most times it's as easy as doing just "EMUFILE file1.dsk file2.dsk file3.dsk". There are additional options, run the program without parameters to get more information.
+
+To disable the disk emulation mode (that is, to boot normally even if a NEXT_DSK.DAT file exists), keep the 0 (zero) key pressed while the computer boots. You will have to manually delete or rename the NEXT_DSK.DAT file to prevent the disk emulation mode to be entered again in the next system boot.
+
+
+3.2. SWITCHING THE EMULATED FILE
+
+Up to 32 disk image files can be specified for an emulation session, but only one of them is active at a given time. In order to switch to a different file, you must press the appropriate key while the computer is trying to read the file; this will emulate a disk change. The keys are 1-9 for the first nine image files, then A-W for the rest, in alphabetical order.
+
+For example, assume you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
+
+Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you press the appropriate key (then the caps led will go off). This is useful when having to directly press an alphanumeric key is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
+
+Tip: 
+
+
+3.3. RULES AND LIMITATIONS
+
+The following rules and restrictions apply to the disk emulation mode:
+
+- The primary controller must be a Nextor kernel with a device-based driver.
+
+- The NEXT_DSK.DAT file and all the disk image files must be placed in devices controlled by the primary controller (but they can be in different partitions and even in different devices).
+
+- Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep pressed GRAPH and 2 while the computer boots, and when the caps led lits, release both keys and press 1.
+
+- All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting.
+
+- If you are using a NEXTOR.DAT file, Nextor needs the NEXT_DSK.DAT to be found before NEXTOR.DAT in order to start emulation mode. This means that NEXT_DSK.DAT must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
+
+
+3.4. KNOWN BUGS
+
+If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one card and one ROM disk) AND you have a MSX-DOS kernel (tipically an internal floppy disk drive), Nextor's DOS 1 kernel will unnecessarily allocate lots of memory for FAT buffers, causing most games to not work. Do one of the following as a workaround:
+
+ - Keep pressed SHIFT while booting to disable the MSX-DOS kernels.
+ - Keep pressed the GRAPH and 5 keys while booting until the CAPS led lits, then release them and press 1; this will force Nextor to allocate only one drive for itself.
+
+Do NOT press CTRL to disable the virtual second floppy disk drive, as Nextor does it automatically!
+
+
+4. OTHER USEFUL INFORMATION
+
+WARNING: This is alpha software. It has not been thoroughly tested and could be buggy. Please backup your data before using it.
+
+WARNING: After mounting a file do not extract or swap the medium where the file is contained. The behavior of Nextor if this is done is undefined and you could lose data.
+
+The updated DRVINFO.COM tool and the CALL DRVINFO command will display the file name and the containing drive for drives where a file is mounted:
+
+  Drive G: is assigned to:
+  File TOOLS.DSK on drive A: (read-only)
+
+The easiest way to create empty disk image files is to use the NestorDiskImageCreator tool available at Konamiman's MSX site (http://konamiman.com/msx/megascsi/ndicreat.lzh).
