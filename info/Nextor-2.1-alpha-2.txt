@@ -132,11 +132,9 @@ To disable the disk emulation mode (that is, to boot normally even if a NEXT_DSK
 
 Up to 32 disk image files can be specified for an emulation session, but only one of them is active at a given time. In order to switch to a different file, you must press the appropriate key while the computer is trying to read the file; this will emulate a disk change. The keys are 1-9 for the first nine image files, then A-W for the rest, in alphabetical order.
 
-For example, assume you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
+For example, assume that you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
 
-Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you press the appropriate key (then the caps led will go off). This is useful when having to directly press an alphanumeric key is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
-
-Tip: 
+Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you press the appropriate key (then the caps led will go off). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
 3.3. RULES AND LIMITATIONS
@@ -147,6 +145,10 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The NEXT_DSK.DAT file and all the disk image files must be placed in devices controlled by the primary controller (but they can be in different partitions and even in different devices).
 
+- The NEXT_DSK.DAT file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to generate the file immediately before using it.
+
+- The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
+
 - Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep pressed GRAPH and 2 while the computer boots, and when the caps led lits, release both keys and press 1.
 
 - All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting.
@@ -156,12 +158,14 @@ The following rules and restrictions apply to the disk emulation mode:
 
 3.4. KNOWN BUGS
 
+The current version of the EMUFILE.COM tool does not verify that the disk image files are not fragmented.
+
 If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one card and one ROM disk) AND you have a MSX-DOS kernel (tipically an internal floppy disk drive), Nextor's DOS 1 kernel will unnecessarily allocate lots of memory for FAT buffers, causing most games to not work. Do one of the following as a workaround:
 
  - Keep pressed SHIFT while booting to disable the MSX-DOS kernels.
- - Keep pressed the GRAPH and 5 keys while booting until the CAPS led lits, then release them and press 1; this will force Nextor to allocate only one drive for itself.
+ - Keep pressed the 5 key while booting to force Nextor to allocate only one drive for itself. If you are emulating five or more image files, do the following instead: keep pressed the GRAPH and 5 keys while booting until the CAPS led lits, then release them and press 1.
 
-Do NOT press CTRL to disable the virtual second floppy disk drive, as Nextor does it automatically!
+Do NOT press CTRL to disable the virtual second floppy disk drive, as Nextor does it automatically. Pressing CTRL will enable the virtual drive instead!
 
 
 4. OTHER USEFUL INFORMATION
