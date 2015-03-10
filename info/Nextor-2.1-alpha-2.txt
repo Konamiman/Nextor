@@ -137,7 +137,7 @@ For example, assume that you are playing a two disks game. You boot with disk 1 
 Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you press the appropriate key (then the caps led will go off). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
-3.3. RULES AND LIMITATIONS
+3.3. RULES AND RESTRICTIONS
 
 The following rules and restrictions apply to the disk emulation mode:
 
