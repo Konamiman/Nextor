@@ -364,22 +364,29 @@ CHGFILE:
 
 CHGF2:
 	ld	ix,(DVB_TABLE##)
-	call	GETCURKEY
-	or	a
-	jr	nz,CHGF3
 
-	ld	a,6		;Check CODE/KANA key
+	ld	a,6		;Check GRAPH key
 	call	SNSKEY
-	cpl
-	and	10000b
-	ret	z
-heyx::
-	call	CAPSON
+	and	100b
+	jr	nz,NOGRAPH
 
 CHGWAIT:
+	call	CAPSON
+	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
+	or	a
+	jr	nz,CHGWAIT
+
+CHGWA2:
+	call	GETCURKEY	;...then to be pressed again.
+	or	a
+	jr	z,CHGWA2
+
+	jr	CHGF3
+
+NOGRAPH:	
 	call	GETCURKEY
 	or	a
-	jr	z,CHGWAIT
+	ret	z
 
 CHGF3:
 	ld	c,a
