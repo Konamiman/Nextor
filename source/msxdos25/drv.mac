@@ -29,6 +29,7 @@ $$DRIVE::
 
 	;*** This should be compiled at 781Fh
 
+SNSMAT	equ	0141h
 
 ;-----------------------------------------------------------------------------
 ;
@@ -79,7 +80,7 @@ DO_DIRCALL:
 DIO_ENTRY::
 	push	af
 	call	IS_DVB
-	jr	nc,DIO_ENTRY_DO
+	jp	nc,DIO_ENTRY_DO
 
 	ld	a,(iy+2)
 	or	a
@@ -95,6 +96,13 @@ DIO_ENTRY::
 	or	a
 
 	jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	jr	z,DIOCHGFOK
+	pop	bc
+	ld	b,0
+	ret
+DIOCHGFOK:
 
 	; Moan if sector number + sector count > dsk file size
 
@@ -332,6 +340,222 @@ DIO_INC_DE_DVB_END:
 	pop	hl
 	ret
 
+;-----------------------------------------------------------------------------
+
+;This routine is invoked in disk emulation mode prior to any disk access.
+;If checks if a valid file change key is being pressed, and if so,
+;reloads the NEXT_DSK.DAT file and updates the information in DVB_TABLE.
+;If no suitable key is being pressed, or if change is performed ok, returns Z.
+;If there is an error reading NEXT_DSK.DAT, returns NZ and A=Error code.
+
+CHGFILE:
+	push	hl
+	push	de
+	push	bc
+	push	ix
+	push	iy
+	call	CHGF2
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+CHGF2:
+	ld	ix,(DVB_TABLE##)
+	call	GETCURKEY
+	or	a
+	jr	nz,CHGF3
+
+	ld	a,6		;Check CODE/KANA key
+	call	SNSKEY
+	cpl
+	and	10000b
+	ret	z
+heyx::
+	call	CAPSON
+
+CHGWAIT:
+	call	GETCURKEY
+	or	a
+	jr	z,CHGWAIT
+
+CHGF3:
+	ld	c,a
+	call	CAPSON
+
+	;--- The key with index C is pressed
+
+	;> Do nothing if chosen file is the same currently in use
+
+	ld	a,(ix)
+	and	7Fh
+	cp	c
+	call	z,CAPSOFF
+	ret	z
+
+	;> Read .DAT file
+
+	push	bc
+
+	ld	a,(ix+2)	;.DAT file dev index + 16 * LUN index
+	ld	d,a
+	rrca
+	rrca
+	rrca
+	rrca
+	and	111b
+	ld	b,a	;LUN
+	ld	a,d
+	and	111b	;Device
+
+	ld	l,(ix+12)
+	ld	h,(ix+13)
+	ld	(TMP_SEC##),hl
+	ld	l,(ix+14)
+	ld	h,(ix+15)
+	ld	(TMP_SEC##+2),hl
+
+	ld	iy,(0F348h-1)	;Master controller slot
+	ld	hl,DEV_RW##
+	ld	(BK4_ADD##),hl
+	ld	c,b
+	ld	b,1
+	ld	hl,($SECBUF##)
+	ld	de,TMP_SEC##
+	or	a
+
+	push	ix
+	ld	ix,CALDRV##
+	call	CALSLT##	;Call DEV_RW
+	pop	ix
+	pop	bc
+	call	CAPSOFF
+	or	a
+	ret	nz
+
+	;> Set the new file data in work area
+
+	ld	a,c
+	ld	(ix),a
+	set	7,(ix)
+	set	7,(ix+2)	;File changed flag
+	
+	dec	a
+	add	a,a		;Each entry is 8 bytes
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	h,0
+	ld	bc,24
+	add	hl,bc
+	ld	de,($SECBUF##)
+	add	hl,de	;HL = Pointer to boot file data
+	push	ix
+	pop	de
+	inc	de
+	inc	de
+	inc	de
+	ld	bc,8
+	ldir
+
+	xor	a
+	ret
+
+
+	;Return in A the index of currently pressed key, 0 if none
+	;Input: IX = Pointer to entry in DVB_TABLE
+
+GETCURKEY:
+	ld	b,(ix+11)
+	ld	hl,CHGTBL
+	ld	d,-1
+	ld	c,1
+
+	;B=Number of keys left to test
+	;HL=Pointer to current key in table
+	;D=Last keyboard row checked
+	;E=Last keyboard row value obtained
+	;C=Current key number
+CHGLOOP:
+	ld	a,(hl)
+	inc	hl
+	cp	d
+	jr	z,IHAVEROW
+	ld	d,a
+	call	SNSKEY
+	ld	e,a
+IHAVEROW:
+	ld	a,(hl)
+	inc	hl
+	and	e
+	ld	a,c
+	ret	z
+	inc	c
+	djnz	CHGLOOP
+
+	xor	a	;No suitable key pressed
+	ret
+
+SNSKEY:
+	push	bc
+	push	ix
+	ld	ix,SNSMAT
+	ld	iy,(0FCC1h-1)
+	call	CALSLT##
+	pop	ix
+	pop	bc
+	ret
+
+CHGTBL:
+	db	0,2	;1
+	db	0,4	;2
+	db	0,8	;3
+	db	0,16	;4
+	db	0,32	;5
+	db	0,64	;6
+	db	0,128	;7
+	db	1,1		;8
+	db	1,2		;9
+	db	2,64	;A
+	db	2,128	;B
+	db	3,1	;C
+	db	3,2	;D
+	db	3,4	;E
+	db	3,8	;F
+	db	3,16	;G
+	db	3,32	;H
+	db	3,64	;I
+	db	3,128	;J
+	db	4,1	;K
+	db	4,2	;L
+	db	4,4	;M
+	db	4,8	;N
+	db	4,16	;O
+	db	4,32	;P
+	db	4,64	;Q
+	db	4,128	;R
+	db	5,1	;S
+	db	5,2	;T
+	db	5,4	;U
+	db	5,8	;V
+	db	5,16	;W
+
+CAPSON:
+	in	a,(0AAh)
+	and	10111111b
+	out	(0AAh),a
+	ret
+
+CAPSOFF:
+	push	af
+	in	a,(0AAh)
+	or	01000000b
+	out	(0AAh),a
+	pop	af
+	ret
+
 
 ;-----------------------------------------------------------------------------
 ;
@@ -357,6 +581,9 @@ CHG_ENTRY::
 	ld	a,d
 	or	a
 	jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	ret	nz
 
 	xor	a
 	ld	ix,(DVB_TABLE##)
@@ -427,6 +654,9 @@ DPB_ENTRY::
 
 	;or	a
 	;jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	ret	nz
 
 	jr	DPBEN2
 
