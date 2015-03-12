@@ -134,7 +134,7 @@ Up to 32 disk image files can be specified for an emulation session, but only on
 
 For example, assume that you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
 
-Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you press the appropriate key (then the caps led will go off). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
+Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you release GRAPH and press the appropriate file key (then the caps led will go off). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
 3.3. RULES AND RESTRICTIONS
@@ -147,13 +147,15 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The NEXT_DSK.DAT file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to generate the file immediately before using it.
 
+- The disk image files must have a size of at least 512 bytes and at most 32 MBytes.
+
 - The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
 
 - Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep pressed GRAPH and 2 while the computer boots, and when the caps led lits, release both keys and press 1.
 
 - All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting.
 
-- If you are using a NEXTOR.DAT file, Nextor needs the NEXT_DSK.DAT to be found before NEXTOR.DAT in order to start emulation mode. This means that NEXT_DSK.DAT must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
+- If you are using a NEXTOR.DAT file to alter the device mappings priority, Nextor needs the NEXT_DSK.DAT to be found before NEXTOR.DAT in order to start emulation mode. This means that NEXT_DSK.DAT must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
 
 
 3.4. KNOWN BUGS
