@@ -153,7 +153,7 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep pressed GRAPH and 2 while the computer boots, and when the caps led lits, release both keys and press 1.
 
-- All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting.
+- All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting; this is useful to free some memory.
 
 - If you are using a NEXTOR.DAT file to alter the device mappings priority, Nextor needs the NEXT_DSK.DAT to be found before NEXTOR.DAT in order to start emulation mode. This means that NEXT_DSK.DAT must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
 
@@ -162,12 +162,7 @@ The following rules and restrictions apply to the disk emulation mode:
 
 The current version of the EMUFILE.COM tool does not verify that the disk image files are not fragmented.
 
-If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one card and one ROM disk) AND you have a MSX-DOS kernel (tipically an internal floppy disk drive), Nextor's DOS 1 kernel will unnecessarily allocate lots of memory for FAT buffers, causing most games to not work. Do one of the following as a workaround:
-
- - Keep pressed SHIFT while booting to disable the MSX-DOS kernels.
- - Keep pressed the 5 key while booting to force Nextor to allocate only one drive for itself. If you are emulating five or more image files, do the following instead: keep pressed the GRAPH and 5 keys while booting until the CAPS led lits, then release them and press 1.
-
-Do NOT press CTRL to disable the virtual second floppy disk drive, as Nextor does it automatically. Pressing CTRL will enable the virtual drive instead!
+If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers, therefore they are mostly harmless.
 
 
 4. OTHER USEFUL INFORMATION
@@ -175,6 +170,12 @@ Do NOT press CTRL to disable the virtual second floppy disk drive, as Nextor doe
 WARNING: This is alpha software. It has not been thoroughly tested and could be buggy. Please backup your data before using it.
 
 WARNING: After mounting a file do not extract or swap the medium where the file is contained. The behavior of Nextor if this is done is undefined and you could lose data.
+
+Starting at version 2.1 alpha 2, the following changes apply to the boot keys:
+
+- CTRL: Enable the virtual second floppy disk drive. Not pressing the key will disable it. That is, the meaning of the CTRL key for floppy disk drives is reversed relative to how MSX-DOS works.
+
+- 5: Force Nextor kernels to allocate only one drive for themselves, regardless of the number of devices attached (this behavior was attached to the CTRL key in previous versions). This prevents the dummy drives problem mentioned in the previous section.
 
 The updated DRVINFO.COM tool and the CALL DRVINFO command will display the file name and the containing drive for drives where a file is mounted:
 
