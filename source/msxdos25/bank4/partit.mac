@@ -8,6 +8,7 @@
 	INCLUDE b0labels.inc
 ;
 
+DISKID	equ	0FD99h
 SNSMAT	equ	0141h		;sense key matrix
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
@@ -1297,7 +1298,9 @@ AA_MSXDOS2_ELOOP:
 	or	a
 	jr	z,SRCHNX2	;Don't search NEXT_DSK.DAT if A=0 at input
 
-	;TODO: jp SRCHNX2 if I'm not the primary controller
+	ld	a,(DISKID)
+	or	a
+	jr	nz,SRCHNX2	;I'm not the primary controller
 
 	di
 	in	a,(0AAh)
@@ -1384,7 +1387,8 @@ AA_NXTE2:
 	add	hl,bc		;Make HL point to the next dir entry
 
 	pop	bc
-	djnz	AA_MSXDOS2_ELOOP
+	dec	b
+	jp	nz,AA_MSXDOS2_ELOOP
 
 	ld	hl,1
 	ld	de,(TMP_SEC##)	;Increase root dir sector number
@@ -1900,7 +1904,7 @@ GOEMU_WAOK:
 	ld	de,0F980h+3
 	ld	bc,8
 	ldir
-
+ekix::
 	;--- All done
 
 	ld	a,1
