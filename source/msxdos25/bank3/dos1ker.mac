@@ -4704,7 +4704,7 @@ A592C:	ld	e,(hl)
 	inc	bc			; and a FAT buffer flag
 	ld	l,c
 	ld	h,b			; size of the FAT buffer
-	call	A5EC8			; allocate memory (adjust BASIC areapointers, halt when error)
+	call	ALLFBUF	;A5EC8			; allocate memory (adjust BASIC areapointers, halt when error)
 	ld	(YF349),hl		; base system bottom sofar
 	ld	(hl),0FFH		; flag invalid FAT buffer
 	inc	hl
@@ -9075,7 +9075,7 @@ HERRP_NEW:
 	ret	c
 	cp	76
 	jp	c,HERRP_OLD
-	cp	76+4
+	cp	76+5
 	jp	nc,HERRP_OLD
 
 	sub	76-1
@@ -9089,7 +9089,35 @@ NEW_ERRS:
 	defb	'Invalid device or LUN', 0
 	defb	'Invalid partition number', 0
 	defb	'Partition already in use', 0
+	defb	'Illegal in emulation', 0
 
+	;Allocate page 3 memory for the FAT buffer of a drive.
+	;Input:  IX = pointer to DPB
+	;        HL = Amount of memory to allocate
+	;Output: HL = Pointer to allocated memory
+	;        Cy = 1 if not enough memory
+
+	;This routine is necessary to prevent Nextor from allocating
+	;memory for FAT buffers for drives other than the first one
+	;(each buffer is 1.5K, it's a lot and not doing this causes
+	;many games to not work)
+
+ALLFBUF:
+	ld	a,(PROCNM+9)
+	or	a
+	jp	z,A5EC8		;Jump to actual allocation if not in emulation mode...
+
+	ld	a,(ix)
+	or	a
+	jp	z,A5EC8		;...or if it's the first drive...
+
+	ld	bc,(0FB21h)
+	cp	c
+	jp	nc,A5EC8	;...or if it's a MSX-DOS drive.
+
+	ld	hl,(YF349)	;Otherwise it's a drive that will never be accessed:
+	or	a			;don't allocate memory.
+	ret	
 
 ; DRV.MAC is to be placed here.
 

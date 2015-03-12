@@ -2729,6 +2729,18 @@ UNMAP_NEXT2:
 	ret
 
 F_MAPDRV_GO:
+	ld	a,(0F313h)
+	or	a
+	jr	nz,FMPDRV2
+
+	push	hl
+	ld	hl,(DVB_TABLE##)
+	bit	7,(hl)
+	pop	hl
+	ld	a,.FMNT##
+	ret	nz		;Drive mapping change not allowed in disk emulation mode
+
+FMPDRV2:
 	ld	a,c
 	cp	MAX_UNITS##
 	ld	a,.IDRV##

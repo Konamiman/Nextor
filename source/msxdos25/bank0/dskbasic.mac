@@ -3562,8 +3562,8 @@ QQQQ	defl	.FRSTER
 ;
 DERR_TAB:
 
-	DERNUM	ERRBFS	; File is mounted
-	DERNUM	ERRFIM	; Bad file size
+	DERNUM	ERRBFS	; Bad file size
+	DERNUM	ERRFIM	; File is mounted
 
 	DERNUM	ERRPUS	; Partition already in use
 	DERNUM	ERRIPA	; Invalid partition
