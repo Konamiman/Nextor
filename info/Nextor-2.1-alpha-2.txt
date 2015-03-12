@@ -147,7 +147,7 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The NEXT_DSK.DAT file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to generate the file immediately before using it.
 
-- The disk image files must have a size of at least 512 bytes and at most 32 MBytes.
+- The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem (the FORMAT command will not work in disk emulation mode).
 
 - The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
 
@@ -176,6 +176,8 @@ Starting at version 2.1 alpha 2, the following changes apply to the boot keys:
 - CTRL: Enable the virtual second floppy disk drive. Not pressing the key will disable it. That is, the meaning of the CTRL key for floppy disk drives is reversed relative to how MSX-DOS works.
 
 - 5: Force Nextor kernels to allocate only one drive for themselves, regardless of the number of devices attached (this behavior was attached to the CTRL key in previous versions). This prevents the dummy drives problem mentioned in the previous section.
+
+The CALL MAPDRV command does not work in disk emulation mode, this is by design.
 
 The updated DRVINFO.COM tool and the CALL DRVINFO command will display the file name and the containing drive for drives where a file is mounted:
 
