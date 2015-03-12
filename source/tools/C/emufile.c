@@ -449,7 +449,7 @@ ulong GetFirstFileSectorForFileInFib()
     
     return
         firstDataSector +
-        ((fib->startCluster - 2) * sectorsPerCluster);
+        ((ulong)(fib->startCluster - 2) * (ulong)sectorsPerCluster);
 }
 
 void AddFileInFibToFilesTable(ulong sector)
