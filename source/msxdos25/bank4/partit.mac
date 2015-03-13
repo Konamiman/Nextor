@@ -1298,7 +1298,10 @@ AA_MSXDOS2_ELOOP:
 	or	a
 	jr	z,SRCHNX2	;Don't search NEXT_DSK.DAT if A=0 at input
 
-	ld	a,(DISKID)
+	push	hl
+	call	GET_DISKID_HL
+	ld	a,(hl)
+	pop	hl
 	or	a
 	jr	nz,SRCHNX2	;I'm not the primary controller
 
@@ -5885,6 +5888,14 @@ GET_DVB_NEXT:
 	djnz	GET_DVB_LOOP
 
 	scf
+	ret
+
+GET_DISKID_HL:
+	ld	hl,DISKID
+	ld	a,(hl)
+	inc	a
+	ret	nz
+	ld	hl,PROCNM+8
 	ret
 
 	finish <PARTIT>

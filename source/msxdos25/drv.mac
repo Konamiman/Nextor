@@ -144,7 +144,11 @@ WVDP:
 	ld	a,8fh
 	out	(99h),a
 
-	jr	DIOEN2
+	call	CAPSON
+	pop	af
+	call	DIOEN2
+	call	CAPSOFF
+	ret
 
 	;>>> NOT in disk emulation mode
 
@@ -152,8 +156,11 @@ DIOEN_NOEMU:
 	call	HAS_PARTITION
 	call	nz,ASSIGN_PARTITION
 	jp	nz,POP_CONV_ERR
+	jr	DIOEN3
 
 DIOEN2:
+	push	af
+DIOEN3:
 	ld	a,1
 	ld	(KSLOT##),a	;KSLOT=1 -> device-based
 
