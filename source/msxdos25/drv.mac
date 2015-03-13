@@ -126,6 +126,24 @@ DIOCHGFOK:
 	pop	hl
 	jp	nc,DIO_RNF
 
+	; Wait for VDP interrupt.
+	; This introduces a small delay that is required by some games.
+
+	di
+	ld	a,2
+	out	(99h),a
+	ld	a,8fh
+	out	(99h),a
+WVDP:
+	in	a,(99h)
+	and	81h
+	dec	a
+	jr	z,WVDP
+	xor	a
+	out	(99h),a
+	ld	a,8fh
+	out	(99h),a
+
 	jr	DIOEN2
 
 	;>>> NOT in disk emulation mode
