@@ -123,7 +123,7 @@ Trying to overwrite a mounted file via the "Create file handle" function call (_
 
 Nextor will boot in disk emulation mode if it finds a file named NEXT_DSK.DAT in the root directory of a primary partition in a device controlled by the primary Nextor controller. This file contains information about the disk image files to be used for the emulation.
 
-The NEXT_DSK.DAT file is created by using the supplied EMUFILE.COM tool. Most times it's as easy as doing just "EMUFILE file1.dsk file2.dsk file3.dsk". There are additional options, run the program without parameters to get more information.
+The NEXT_DSK.DAT file is created by using the supplied EMUFILE.COM tool. Most times it's as easy as doing just "EMUFILE file1.dsk file2.dsk file3.dsk" (or "EMUFILE game\*.dsk", or just "EMUFILE game\"). There are additional options, run the program without parameters to get more information.
 
 To disable the disk emulation mode (that is, to boot normally even if a NEXT_DSK.DAT file exists), keep the 0 (zero) key pressed while the computer boots. You will have to manually delete or rename the NEXT_DSK.DAT file to prevent the disk emulation mode to be entered again in the next system boot.
 
@@ -134,7 +134,7 @@ Up to 32 disk image files can be specified for an emulation session, but only on
 
 For example, assume that you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
 
-Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you release GRAPH and press the appropriate file key (then the caps led will go off). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
+Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you release GRAPH and press the appropriate file key. This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
 3.3. RULES AND RESTRICTIONS
@@ -158,11 +158,20 @@ The following rules and restrictions apply to the disk emulation mode:
 - If you are using a NEXTOR.DAT file to alter the device mappings priority, Nextor needs the NEXT_DSK.DAT to be found before NEXTOR.DAT in order to start emulation mode. This means that NEXT_DSK.DAT must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
 
 
-3.4. KNOWN BUGS
+3.4. HOW TO FREE SOME MEMORY
+
+Some games will not work "out of the box" because they assume that only the floppy disk drive is present in the system, but now there are drives allocated for both Nextor and the floppy drive, and thus the amount of free memory is smaller. You can do the following in order to increase the amount of memory available for games:
+
+- Press SHIFT while booting to disable the internal floppy disk drive (and any other MSX-DOS kernel, for that matter).
+
+- Press 5 while booting to force Nextor to allocate only one drive for itself (useful only if you have more than one device connected to your Nextor controller). If your emulation session has five or more disk images, do the following instead: press GRAPH+5 until the caps led lits, then release both keys and press 1.
+
+
+3.5. KNOWN BUGS
 
 The current version of the EMUFILE.COM tool does not verify that the disk image files are not fragmented.
 
-If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers, therefore they are mostly harmless.
+If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers.
 
 
 4. OTHER USEFUL INFORMATION
@@ -176,6 +185,8 @@ Starting at version 2.1 alpha 2, the following changes apply to the boot keys:
 - CTRL: Enable the virtual second floppy disk drive. Not pressing the key will disable it. That is, the meaning of the CTRL key for floppy disk drives is reversed relative to how MSX-DOS works.
 
 - 5: Force Nextor kernels to allocate only one drive for themselves, regardless of the number of devices attached (this behavior was attached to the CTRL key in previous versions). This prevents the dummy drives problem mentioned in the previous section.
+
+The caps lock led will lit when the disk image files are accessed in floppy disk emulation mode.
 
 The CALL MAPDRV command does not work in disk emulation mode, this is by design.
 
