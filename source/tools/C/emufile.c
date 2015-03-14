@@ -108,7 +108,7 @@ const char* strUsage=
     "\r\n"
     "- o <file>: Path and name of the generated configuration file.\r\n"
     "            Default is \"\\NEXT_DSK.DAT\"\r\n"
-    "            If <file> ends with \"\\\" or \":\", \"NEXT_DSK.DAT\" is appended.\r\n"
+    "            If it ends with \"\\\" or \":\", file name will be \"NEXT_DSK.DAT\".\r\n"
     "- b <number>: The index of the image file to mount at boot time.\r\n"
     "              Must be 1-9 or A-W. Default is 1.\r\n"
     "- a <address>: Page 3 address for the 16 byte work area.\r\n"
