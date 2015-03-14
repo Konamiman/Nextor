@@ -399,7 +399,7 @@ CHGWAIT:
 	call	CAPSON
 	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
 	or	a
-	jr	z,CHGWAIT
+	jr	nz,CHGWAIT
 
 CHGWA2:
 	call	GETCURKEY	;...then to be pressed again.
