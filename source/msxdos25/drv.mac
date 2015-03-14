@@ -399,7 +399,7 @@ CHGWAIT:
 	call	CAPSON
 	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
 	or	a
-	jr	nz,CHGWAIT
+	jr	z,CHGWAIT
 
 CHGWA2:
 	call	GETCURKEY	;...then to be pressed again.
@@ -530,13 +530,16 @@ IHAVEROW:
 	xor	a	;No suitable key pressed
 	ret
 
-SNSKEY:
+SNSKEY::
 	push	bc
-	push	ix
-	ld	ix,SNSMAT
-	ld	iy,(0FCC1h-1)
-	call	CALSLT##
-	pop	ix
+	ld	c,a
+	di
+	in	a,(0AAh)
+	and 0F0h
+	add	a,c
+	out	(0AAh),a
+	ei
+	in	a,(0A9h)
 	pop	bc
 	ret
 
@@ -1034,6 +1037,10 @@ POP_CONV_ERR:
 CONV_ERR:
 	or	a
 	ret	z
+	;jr	c,CONVE2
+	;xor	a
+	;ret
+CONVE2:
 
 	push	bc
 	ld	b,0

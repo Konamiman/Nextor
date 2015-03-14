@@ -4759,7 +4759,7 @@ A59C1:	ld	c,040H
 	jr	c,A59CB
 	ld	(RAMAD1),a		; found, set ram slotid page 1
 A59CB:	ld	sp,0C200H		; switch to a temporary stack, just above temp startbuffer
-	ld	a,(H.STKE+0)
+	call	TRRAMAD	;ld	a,(H.STKE+0)
 	cp	0C9H			; STKE hook set ?
 	jr	z,A59DB			; nop, cont
 	ld	ix,M7D17
@@ -9118,6 +9118,22 @@ ALLFBUF:
 	ld	hl,(YF349)	;Otherwise it's a drive that will never be accessed:
 	or	a			;don't allocate memory.
 	ret	
+
+TRRAMAD:
+	ld	a,(002Dh)
+	cp	3		;Turbo-R?
+	jr	nz,TRRAMEND
+	push	hl
+	ld	hl,(DVB_TABLE##)
+	bit	7,(hl)		;In disk emulation mode?
+	pop	hl
+	jr	z,TRRAMEND
+	ld	a,(0F344h)
+	ld	(0F341h),a
+	ld	(0F342h),a
+TRRAMEND:
+	ld	a,(H.STKE+0)
+	ret
 
 ; DRV.MAC is to be placed here.
 
