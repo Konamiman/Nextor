@@ -1,9 +1,7 @@
-	; Device-based driver for the sunrise IDE interface for MSX-DOS 2.50
+	; Device-based driver for the sunrise IDE interface for Nextor
 	;
-        ; Version 0.1
-        ; By Konamiman
-
-	;org	4100h
+	; By Piter Punk
+	; Based on version 0.1 by Konamiman
 
 DRV_START:
 
@@ -32,11 +30,7 @@ DEBUG	equ	0	;Set to 1 for debugging, 0 to normal operation
 
 VER_MAIN	equ	0
 VER_SEC		equ	1
-VER_REV		equ	0
-
-	if DEBUG eq 1
-	include	B0LABELS.INC
-	endif
+VER_REV		equ	5
 
 ;This is a very barebones driver. It has important limitations:
 ;- CHS mode not supported, disks must support LBA mode.
@@ -49,9 +43,8 @@ VER_REV		equ	0
 ;
 ; IDE registers and bit definitions
 
-IDE_BANK	equ	4104h
-    ;bit 0: enable (1) or disable (0) IDE registers
-    ;bits 5-7: select 16K ROM bank
+IDE_BANK	equ	4104h	;bit 0: enable (1) or disable (0) IDE registers
+				;bits 5-7: select 16K ROM bank
 IDE_DATA	equ	7C00h	;Data registers, this is a 512 byte area
 IDE_ERROR	equ	7E01h	;Error register
 IDE_FEAT	equ	7E01h	;Feature register
@@ -62,10 +55,9 @@ IDE_CYLOW	equ	7E04h	;Cylinder low (CHS mode)
 IDE_LBAMID	equ	7E04h	;Logical sector mid (LBA mode)
 IDE_CYHIGH	equ	7E05h	;Cylinder high (CHS mode)
 IDE_LBAHIGH	equ	7E05h	;Logical sector high (LBA mode)
-IDE_HEAD	equ	7E06h
-    ;bits 0-3: Head (CHS mode), logical sector higher (LBA mode)
+IDE_HEAD	equ	7E06h	;bits 0-3: Head (CHS mode), logical sector higher (LBA mode)
 IDE_STATUS	equ	7E07h	;Status register
-IDE_CMD	equ	7E07h	;Command register
+IDE_CMD		equ	7E07h	;Command register
 IDE_DEVCTRL	equ	7E0Eh	;Device control register
 
 ; Bits in the error register
@@ -155,8 +147,6 @@ CHGET	equ	009Fh
 ; Error codes for DEV_RW and DEV_FORMAT
 ;
 
-if DRV_TYPE eq 1
-
 .NCOMP	equ	0FFh
 .WRERR	equ	0FEh
 .DISK	equ	0FDh
@@ -169,8 +159,6 @@ if DRV_TYPE eq 1
 .IFORM	equ	0F0h
 .IDEVL	equ	0B5h
 .IPARM	equ	08Bh
-
-endif
 
 ;-----------------------------------------------------------------------------
 ;
@@ -265,13 +253,7 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 ;    bit 0: 0 for drive-based, 1 for device-based
 ;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
 
-if DRV_TYPE eq 0
-	db	0
-endif
-
-if DRV_TYPE eq 1
 	db 1+(2*DRV_HOTPLUG)
-endif
 
 ;Reserved byte
 	db	0
@@ -298,23 +280,12 @@ DRV_NAME:
 
 	ds	15
 
-if DRV_TYPE eq 0
-        jp      DRV_DSKIO
-        jp      DRV_DSKCHG
-        jp      DRV_GETDPB
-        jp      DRV_CHOICE
-        jp      DRV_DSKFMT
-        jp      DRV_MTOFF
-endif
-
-if DRV_TYPE eq 1
 	jp	DEV_RW
 	jp	DEV_INFO
 	jp	DEV_STATUS
 	jp	LUN_INFO
 	jp	DEV_FORMAT
 	jp	DEV_CMD
-endif
 
 
 ;-----------------------------------------------------------------------------
@@ -344,7 +315,7 @@ DRV_TIMI:
 ;    Input:
 ;      A = 1
 ;      B = number of allocated drives for this controller
-;          (255 if device-based driver, unless 4 i pressed at boot)
+;          (255 if device-based driver, unless 4 is pressed at boot)
 ;
 ;    The work area address can be obtained by using GWORK.
 ;
@@ -367,7 +338,7 @@ DRV_INIT:
 	or	a
 	ld	hl,0
 	ld	a,2
-	ret	z	;Note that Cy is 0 (no interrupt hooking needed)
+	ret	z			;Note that Cy is 0 (no interrupt hooking needed)
 
 	;xor a
 	;ld (TESTADD),a
@@ -375,225 +346,281 @@ DRV_INIT:
 	ld	de,INFO_S
 	call	PRINT
 
-if DEBUG eq 1
-	call	DO
-
-	ld	hl,8101h
-	ld	(DRVTBL##),hl
-	ld	hl,8301h
-	ld	(DRVTBL##+2),hl
-	ld	hl,8501h
-	ld	(DRVTBL##+4),hl
-	ld	hl,0
-	ld	(DRVTBL##+6),hl
-
-	ld	a,87h
-	ld	(KER250##),a
-	ld	a,85h
-	ld	(KER250##+1),a
-	ld	a,89h
-	ld	(KER250##+2),a
-	xor	a
-	ld	(KER250##+3),a
-
-	ld	a,1
-	ld	ix,GDRIVER##
-	ex	af,af'
-	ld	a,4
-	call	CALBNK
-	jp	DRV_INIT_END
-
-
-;Input:    Cy=0 to read, 1 to write
-;          A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7
-;          C = Number of sectors to read or write
-;          HL = Source or destination memory address for the transfer
-;          DE = Address where the 4 byte sector number is stored.
-
-	ld	hl,0C000h
-	ld	($SECBUF##),hl
-
-	;ld	hl,GPART##
-	;ld	(BK4_ADD##),hl
-
-	ld	b,1
-	ld	c,0FFh
-	ld	d,1
-	ld	e,1
-	ld	h,4
-	ld	l,0
-
-	ld	ix,GPART##
-	ex	af,af'
-	ld	a,4
-	call	CALBNK
-	jp	DRV_INIT_END
-
-	or	a
-	ld	a,1
-	ld	b,1
-	ld	c,3
-	ld	hl,0
-	ld	(0C000h),hl
-	ld	(0C002h),hl
-	ld	hl,0C000h
-	ld	de,0C000h
-	call	DEV_RW
-
-	ld	a,1
-	ld	(0C000h),a
-	ld	a,2
-	ld	(0C200h),a
-	ld	a,34h
-	ld	(0C000h+512*3-1),a
-
-	scf
-	ld	a,1
-	ld	b,1
-	ld	c,3
-	ld	hl,0
-	ld	(0C000h),hl
-	ld	(0C002h),hl
-	ld	hl,0C000h
-	ld	de,0C000h
-	call	DEV_RW
-
-	jp	DRV_INIT_END
-
-luninfo:
-
-	ld	a,1
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,2
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,3
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,2
-	ld	b,2
-	ld	hl,0C000h
-	call	LUN_INFO
-
-	jp	DRV_INIT_END
-
-	ld	a,1
-	ld	b,0
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,1
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,2
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,3
-	ld	hl,0C000h
-	call	DEV_INFO
-	jp	DRV_INIT_END
-DO:
-endif
+	ld	de,SEARCH_S
+	call	PRINT
 
 	ld	a,1
 	call	MY_GWORK
 	call	IDE_ON
-	ld	(ix),0
-	ld	(ix+4),0	;Assume no devices initially
+	ld	(ix),0			;Assume both devices empty
+	ld	(ix+4),0	
 
-	;--- Perform a software reset on both devices
-
-	ld	a,M_SRST
-	ld	(IDE_DEVCTRL),a
-	nop	;Wait 5 us
-	xor	a
-	ld	(IDE_DEVCTRL),a
+        ld      a,M_SRST		;Do a software reset
+        ld      (IDE_DEVCTRL),a
+        nop     ;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
 
 WAIT_RESET:
-	ld	a,(IDE_STATUS)
-	and	M_BSY+M_DRDY
-	cp	M_DRDY
-	jr	nz,WAIT_RESET	;Wait for BSY to clear and DRDY to set		
+        ld      de,7640			;Timeout after 30 s
+WAIT_RESET1:
+        ld      a,0
+        cp      e
+        jr      nz,WAIT_DOT		;Print dots while waiting
+        ld      a,46
+        call    CHPUT
+WAIT_DOT:
+	call	CHECK_ESC
+	jp	c,INIT_NO_DEV
+        ld      b,255
+WAIT_RESET2:
+        ld      a,(IDE_STATUS)
+        and     M_BSY+M_DRDY
+        cp      M_DRDY
+        jr      z,WAIT_RESET_END        ;Wait for BSY to clear and DRDY to set          
+        djnz    WAIT_RESET2
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,WAIT_RESET1
+        jp      INIT_NO_DEV
+WAIT_RESET_END:
 
-	;--- Determine whether there is any device connected
-	;    by looking at the diagnostic code in the error register
+	;--- Do a quick pre-check on MASTER device
 
-	ld	a,(IDE_ERROR)
-	ld	b,a
-	and	1
-	cp	1
-	jr	nz,INIT_NO_DEV	;Master failed: give up
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+	nop
 
-	ld	(ix+4),b	;We'll check later if there is a slave
+	call	INIT_PRECHECK_DEV	
+	ld	a,(IDE_SECCNT)
+	cp	85
+	jr	nz,MASTER_CHECK1_END
+	ld	a,(IDE_SECNUM)
+	cp	170
+	jr	nz,MASTER_CHECK1_END
 
-	;--- Get info and show the name for the master
+	ld	a,1			;Flag the device
+	ld	(ix),a
+MASTER_CHECK1_END:
+        ld      a,46			;Print dot
+        call    CHPUT
+	
+	;--- Same pre-check on SLAVE device
 
-	xor	a
-	ld	(IDE_HEAD),a	;Select device 1
-	ld	a,0ECh
-	call	DO_IDE
-	jr	c,OK_MASTER
+	call	WAIT_CMD_RDY	
+	jr	c,SLAVE_CHECK1_END
+	ld	a,M_DEV
+	ld	(IDE_HEAD),a		;Select device 1
 
-	call	INIT_CHECK_DEV
-	jr	c,OK_MASTER
+	call	INIT_PRECHECK_DEV	
+	ld	a,(IDE_SECCNT)
+	cp	85
+	jr	nz,SLAVE_CHECK1_END
+	ld	a,(IDE_SECNUM)
+	cp	170
+	jr	nz,SLAVE_CHECK1_END
+
+	ld	a,1			;Flag the device
+	ld	(ix+4),a
+SLAVE_CHECK1_END:
+        ld      a,46			;Print dot
+        call    CHPUT
+       
+        ld      a,M_SRST		; Do ANOTHER software reset
+        ld      (IDE_DEVCTRL),a
+        nop     			;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
+	nop				;Wait 5 us
+        ld      a,46			;Print dot
+        call    CHPUT
+
+	ld      de,CRLF_S
+        call    PRINT
+
+	;--- Get info and show the name for the MASTER
 
 	ld	de,MASTER_S
 	call	PRINT
+
+WSKIPMAS:			; If ESC is pressed, ignore this device
+        ld      de,624			; Wait 1s to read the keyboard
+WSKIPMAS1:
+        call    CHECK_ESC
+        jr      c,NODEV_MASTER
+        ld      b,64
+WSKIPMAS2:
+	ex	(sp),hl
+	ex	(sp),hl
+        djnz    WSKIPMAS2
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,WSKIPMAS1
+
+	ld	a,(ix)			;If the device isn't flagged it doesn't exists
+	cp	1
+	jr	nz,NODEV_MASTER
+        ld      a,46			;Print FIRST dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY
+	jr	c,NODEV_MASTER
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+        ld      a,46			;Print SECOND dot
+        call    CHPUT
+
+	ld	a,0ECh			;Send IDENTIFY commad
+	call	DO_IDE			
+	jr	c,NODEV_MASTER
+        ld      a,46			;Print THIRD dot
+        call    CHPUT
+
+	call	INIT_CHECK_DEV		;Check if the device is ATA or ATAPI
+	jr	c,NODEV_MASTER
+        ld      a,46			;Print FOURTH dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY		;Try to select the device
+	jr	c,NODEV_MASTER		;this is our last chance to *NOT* detect it
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+        ld      a,46			;Print FIFTH dot
+        call    CHPUT
+
 	call	INIT_PRINT_NAME
 
 	ld	(ix),2	;ATA device with LBA
+	jr	OK_MASTER
+
+NODEV_MASTER:
+	call	CHECK_ESC
+	jr	c,NODEV_MASTER
+
+	ld	(ix),0	
+	ld	de,NODEVS_S
+	call	PRINT
+	
 OK_MASTER:
 
-	;--- If the presence of slave musy be checked,
-	;    issue a test command and check for error
-
-	ld	a,(ix+4)	;1 if slave OK or not present, 81h if failed
-	ld	(ix+4),0
-	cp	1
-	jr	nz,OK_SLAVE
-
-	ld	a,M_DEV
-	ld	(IDE_HEAD),a	;Select device 1
-	ld	a,0ECh
-	call	DO_IDE
-	jr	c,OK_SLAVE	;If error, no device, or ATAPI device
-
-	;--- Get info and show the name for the slave
-
-	call	INIT_CHECK_DEV
-	jr	c,OK_SLAVE
-
+	;--- Get info and show the name for the SLAVE
+	
 	ld	de,SLAVE_S
 	call	PRINT
+
+WAIT_SKIP_SLAVE:			; If ESC is pressed, ignore this device
+        ld      de,624			; Wait 1s to read the keyboard
+WAIT_SKIP_SLAVE1:
+        call    CHECK_ESC
+        jr      c,NODEV_SLAVE
+        ld      b,64
+WAIT_SKIP_SLAVE2:
+	ex	(sp),hl
+	ex	(sp),hl
+        djnz    WAIT_SKIP_SLAVE2
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,WAIT_SKIP_SLAVE1
+
+	ld	a,(ix+4)		;If the device isn't flagged it doesn't exists
+	cp	1
+	jr	nz,NODEV_SLAVE
+        ld      a,46			;Print FIRST dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY	
+	jr	c,NODEV_SLAVE
+	ld	a,M_DEV
+	ld	(IDE_HEAD),a		;Select device 1
+        ld      a,46			;Print SECOND dot
+        call    CHPUT
+	
+	ld	a,0ECh
+	call	DO_IDE
+	jr	c,NODEV_SLAVE		;If error, no device, or ATAPI device
+        ld      a,46			;Print THIRD dot
+        call    CHPUT
+
+	call	INIT_CHECK_DEV
+	jr	c,NODEV_SLAVE
+        ld      a,46			;Print FOURTH dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY	
+	jr	c,NODEV_SLAVE
+	ld	a,M_DEV
+	ld	(IDE_HEAD),a		;Select device 1
+        ld      a,46			;Print FIFTH dot
+        call    CHPUT
+	
 	call	INIT_PRINT_NAME
 
-	ld	(ix+4),2	;ATA device with LBA
+	ld	(ix+4),2		;ATA device with LBA
+	jr	OK_SLAVE
+
+NODEV_SLAVE:
+	call	CHECK_ESC
+	jr	c,NODEV_SLAVE
+
+	ld	(ix+4),0
+	ld	de,NODEVS_S
+	call	PRINT
 OK_SLAVE:
-	
-	;--- End of the initialization procedure
+
+        ld      a,M_SRST		;Last software reset before we go
+        ld      (IDE_DEVCTRL),a		;some times a faulty slave leaves
+					;BSY set forever (30s)
+        nop     ;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
 
 	jr	DRV_INIT_END
 
 INIT_NO_DEV:
+	call	CHECK_ESC
+	jr	c,INIT_NO_DEV
+
+	ld      de,CRLF_S
+        call    PRINT
+	ld	de,MASTER_S
+	call	PRINT
 	ld	de,NODEVS_S
 	call	PRINT
+	ld	de,SLAVE_S
+	call	PRINT
+	ld	de,NODEVS_S
+	call	PRINT
+	
+	;--- End of the initialization procedure
 
 DRV_INIT_END:
 	call	IDE_OFF
-if DEBUG eq 1
-	;call	CHGET	;For debugging
-endif
-
 	ret
 
-;--- Subruotines for the INIT procedure
+;--- Subroutines for the INIT procedure
+
+;Check if there is any device listening in the bus
+;Input: device already selected
+;Output: If something is there, IDE_SECCNT=85, IDE_SECNUM=170
+;	 Both variables have random values if nothing is there
+
+INIT_PRECHECK_DEV:
+	ld	a,85
+	ld	(IDE_SECCNT),a
+	ld	a,170
+	ld	(IDE_SECNUM),a
+	ld	a,170
+	ld	(IDE_SECCNT),a
+	ld	a,85
+	ld	(IDE_SECNUM),a
+	ld	a,85
+	ld	(IDE_SECCNT),a
+	ld	a,170
+	ld	(IDE_SECNUM),a
+	ret
 
 ;Check that a device is present and usable.
 ;Input:  IDENTIFY DEVICE issued successfully.
@@ -603,20 +630,72 @@ endif
 INIT_CHECK_DEV:
 	ld	hl,IDE_DATA
 	ld	de,TEMP_WORK
-	ld	bc,50*2		;Get the first 50 data words
+	ld	bc,50*2	;Get the first 50 data words
 	ldir
 
-	;ld	a,(TEMP_WORK+1)
-	;and	80h		;ATAPI device?
-	;scf
-	;ret	nz
+	ld	a,(IDE_STATUS)		;Check status
+	cp	01111111b		;Usually this means "no device"
+	jr	z,INIT_CHECK_NODEV
 
-	ld	a,(TEMP_WORK+49*2+1)
-	and	2		;LBA supported?
+	; "At power-up or after reset, the Command Block Registers are initialized 
+	;  to the following values:
+	;
+	; 	REGISTER          VALUE
+	; 	1F1 Error         : 01
+	; 	1F2 Sector Count  : 01
+	; 	1F3 Sector Number : 01
+	; 	1F4 Cylinder Low  : 00
+	; 	1F5 Cylinder High : 00
+	; 	1F6 Drive / Head  : 00"
+	;
+	; Not all devices respect this. One of my CompactFlash cards never have
+	; Sector Count = 01 and Sector Number = 01 after reset.
+	;
+	;	ld	a,(IDE_SECNUM)		;Test if the device is REALLY here
+	;	cp	1
+	;	jr	nz,INIT_CHECK_NODEV
+	;	ld	a,(IDE_SECCNT)
+	;	cp	1
+	;	jr	nz,INIT_CHECK_NODEV
+
+	ld	a,(IDE_CYLOW)		;Test for PATAPI devices
+	cp	20 
+	jr	nz,TEST2_FOR_ATAPI
+	ld	a,(IDE_CYHIGH)
+	cp	235
+	jr	z,INIT_CHECK_NODEV
+TEST2_FOR_ATAPI:
+	ld	a,(IDE_CYLOW)		;Test for SATAPI devices
+	cp	105
+	jr	nz,TEST_FOR_ATA
+	ld	a,(IDE_CYHIGH)
+	cp	150
+	jr	z,INIT_CHECK_NODEV
+
+TEST_FOR_ATA:
+	ld	a,(IDE_CYLOW)		;Test for PATA devices
+	cp	0
+	jr	nz,TEST2_FOR_ATA
+	ld	a,(IDE_CYHIGH)
+	cp	0
+	jr	z,TEST_FOR_LBA
+TEST2_FOR_ATA:
+	ld	a,(IDE_CYLOW)		;Test for SATA devices
+	cp	60
+	jr	nz,INIT_CHECK_NODEV
+	ld	a,(IDE_CYHIGH)
+	cp	195
+	jr	nz,INIT_CHECK_NODEV
+	
+TEST_FOR_LBA:
+	ld      a,(TEMP_WORK+49*2+1)
+	and	2			;LBA supported?
+	jr	z,INIT_CHECK_NODEV
+	xor	a
+	ret
+
+INIT_CHECK_NODEV:
 	scf
-	ret	z
-
-	or	a
 	ret
 
 
@@ -707,133 +786,8 @@ DRV_DIRECT4:
 
 
 ;=====
-;=====  BEGIN of DRIVE-BASED specific routines
-;=====
-
-if DRV_TYPE eq 0
-
-;-----------------------------------------------------------------------------
-;
-; Read/write disk sectors
-;
-;Input:    A  = Drive number, starting at 0
-;          Cy = 0 for reading sectors, 1 for writing sectors
-;          B  = Number of sectors to read/write
-;          DE = First sector number to read/write
-;          HL = source/destination address for the transfer
-;Output:   Cy = 0 on success, 1 on error
-;          A  = Error code (on error only):
-;               0   Write protected
-;               2   Not ready
-;               4   Data (CRC) error
-;               6   Seek error
-;               8   Record not found
-;               10  Write fault
-;               12  Other errors
-
-DRV_DSKIO:
-	ld	a,12
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Get disk change status
-;
-;Input:    A  = Drive number, starting at 0
-;          B  = C = Media descriptor
-;          HL = Base address for DPB -1
-;Output:   Cy = 0 on success, 1 on error
-;          A  = Error code (on error only)
-;               Same codes as DRV_DSKIO
-;          B  = Disk status (on success only)
-;               1  Disk not changed
-;               0  Unknown
-;              -1  Disk changed
-
-DRV_DSKCHG:
-	ld	a,12
-	scf
-      	ret
-      
-      
-;-----------------------------------------------------------------------------
-;
-; Get DPB for disk
-;
-;Input:    A  = Drive number, starting at 0
-;          B  = C = Media descriptor
-;          HL = Base address for DPB -1
-;Output:   -
-
-DRV_GETDPB:
-	ld	a,12
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Return format choice string
-;
-;Input:   -
-;Output:  HL = Address of the choice string in the kernel slot
-
-DRV_CHOICE:
-	ld      hl,NULL_MSG
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Format a disk
-;
-;Input:   A  = Formatting choice, from 1 to 9 (see DRV_CHOICE).
-;         D  = Drive number, starting at 0
-;         HL = Address of work area in memory
-;         DE = Size of work area
-;Output:  Cy = 0 on success, 1 on error
-;         A  = Error code (on error only):
-;              0   Write protected
-;              2   Not ready
-;              4   Data (CRC) error
-;              6   Seek error
-;              8   Record not found
-;              10  Write fault
-;              12  Bad parameter
-;              14  Insufficient memory
-;              16  Other errors
-
-DRV_DSKFMT:
-	ld	a,16
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Turn off the floppy disk drive motor
-;
-;Input:   -
-;Output:  -
-
-DRV_MTOFF:
-	ret
-
-endif
-
-
-;=====
-;=====  END of DRIVE-BASED specific routines
-;=====
-
-
-;=====
 ;=====  BEGIN of DEVICE-BASED specific routines
 ;=====
-
-if DRV_TYPE eq 1
 
 ;-----------------------------------------------------------------------------
 ;
@@ -915,6 +869,8 @@ DEV_RW_NO0SEC:
 	;---  READ
 	;---
 
+	call	WAIT_CMD_RDY
+	jr	c,DEV_RW_ERR
 	ld	a,20h
 	push	bc	;Save sector count
 	call	DO_IDE
@@ -943,6 +899,8 @@ DEV_R_GDATA:
 	;---
 
 DEV_DO_WR:
+	call	WAIT_CMD_RDY
+	jr	c,DEV_RW_ERR
 	ld	a,30h
 	push	bc	;Save sector count
 	call	DO_IDE
@@ -1139,6 +1097,8 @@ DEV_STRING_LOOP:
 	ld	a,d
 	cp	33
 	jr	nc,DEVSTRLOOP_1
+	cp	126
+	jr	c,DEVSTRLOOP_1
 	ld	a," "
 DEVSTRLOOP_1:
 	ld	(hl),a
@@ -1146,6 +1106,8 @@ DEVSTRLOOP_1:
 	ld	a,e
 	cp	33
 	jr	nc,DEVSTRLOOP_2
+	cp	126
+	jr	c,DEVSTRLOOP_2
 	ld	a," "
 DEVSTRLOOP_2:
 	ld	(hl),a
@@ -1193,6 +1155,7 @@ DEV_INFO_ERR2:
 ;Corrupts AF, DE
 
 DEV_STING_PREPARE:
+	call	WAIT_CMD_RDY
 	ld	a,c		;Issue IDENTIFY DEVICE command
 	ld	(IDE_HEAD),a
 	ld	a,0ECh
@@ -1262,15 +1225,6 @@ DEV_STATUS:
 	ld	a,1
 	ret	nz
 
-	;ld	a,(TESTADD)
-	;or	a
-	;ld	a,2
-	;ld	(TESTADD),a
-	;ret	z
-
-	;ld	a,1	;Device is non-removable
-	;ret
-
 	ld	a,e
 	dec	a	;FOR TESTING:
 	ld	a,2	;Return "Unchanged" for device 1, "Unknown" for device 2
@@ -1325,6 +1279,11 @@ LUN_INFO:
 	jr	z,LUN_INFO2
 	ld	a,M_DEV
 LUN_INFO2:
+	ld	e,a
+	call	WAIT_CMD_RDY	
+	jr	c,LUN_INFO_ERROR
+	ld	a,e
+
 	ld	(IDE_HEAD),a
 
 	ld	a,0ECh
@@ -1339,7 +1298,7 @@ LUN_INFO2:
 	ld	(ix+9),h
 	ld	hl,(IDE_DATA)	;Skip word 2
 	ld	hl,(IDE_DATA)
-	ld	(ix+10),l	;Word 3: Heades
+	ld	(ix+10),l	;Word 3: Heads
 	ld	hl,(IDE_DATA)
 	ld	hl,(IDE_DATA)	;Skip words 4,5
 	ld	hl,(IDE_DATA)
@@ -1466,9 +1425,6 @@ DEV_CMD:
 	ld	a,2
 	ret
 
-endif
-
-
 ;=====
 ;=====  END of DEVICE-BASED specific routines
 ;=====
@@ -1494,7 +1450,38 @@ IDE_OFF:
 	ld	(IDE_BANK),a
 	ret
 
+;-----------------------------------------------------------------------------
+;
+; Wait the BSY flag to clear and RDY flag to be set
+; if we wait for more than 30s, send a soft reset to IDE BUS
+; if the soft reset didn't work after 30s return with error
+;
+; Input:  Nothing
+; Output: Cy=1 if timeout after soft reset 
+; Preserves: DE and BC
 
+WAIT_CMD_RDY:
+	push	de
+	push	bc
+	ld	de,8142		;Limit the wait to 30s
+WAIT_RDY1:
+	ld	b,255
+WAIT_RDY2:
+	ld	a,(IDE_STATUS)
+	and	M_BSY+M_DRDY
+	cp	M_DRDY
+	jr	z,WAIT_RDY_END	;Wait for BSY to clear and DRDY to set		
+	djnz	WAIT_RDY2	;End of WAIT_RDY2 loop
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,WAIT_RDY1	;End of WAIT_RDY1 loop
+	scf
+WAIT_RDY_END:
+	pop	bc
+	pop	de
+	ret	
+	
 ;-----------------------------------------------------------------------------
 ;
 ; Execute a command
@@ -1507,6 +1494,7 @@ DO_IDE:
 	ld	(IDE_CMD),a
 
 WAIT_IDE:
+	nop	; Wait 50us
 	ld	a,(IDE_STATUS)
 	bit	DRQ,a
 	jr	nz,IDE_END
@@ -1517,6 +1505,23 @@ IDE_END:
 	rrca
 	ret
 
+;-----------------------------------------------------------------------------
+;
+; Read the keyboard matrix to see if ESC is pressed
+; Output: Cy = 1 if pressed, 0 otherwise
+
+CHECK_ESC:
+	ld	b,7
+	in	a,(0AAh)
+	and	11110000b
+	or	b
+	out	(0AAh),a
+	in	a,(0A9h)	
+	bit	2,a
+	jr	nz,CHECK_ESC_END
+	scf
+CHECK_ESC_END:
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
@@ -1599,11 +1604,16 @@ CHECK_DEV_LUN:
 ;=======================
 
 INFO_S:
-	db	"Sunrise IDE device-based driver",13,10
-	db	"(c) Konamiman 2009",13,10,13,10,0
+	db	"Sunrise IDE driver v"
+	db	VER_MAIN+"0",".",VER_SEC+"0",".",VER_REV+"0",13,10
+	db	"(c) Konamiman  2009",13,10
+	db	"(c) Piter Punk 2014",13,10,13,10,0
+
+SEARCH_S:
+	db	"Searching: ",0
 
 NODEVS_S:
-	db	"No IDE devices found.",13,10,0
+	db	"Not found",13,10,0
 MASTER_S:
 	db	"Master device: ",0
 SLAVE_S:
@@ -1618,6 +1628,6 @@ CRLF_S:
 
 DRV_END:
 
-	;ds	3FD0h-(DRV_END-DRV_START)
+	ds	3ED0h-(DRV_END-DRV_START)
 
 	end
