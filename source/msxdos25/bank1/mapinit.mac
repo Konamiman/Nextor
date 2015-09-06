@@ -704,10 +704,21 @@ MAPBIO::
 		call	DH_CABNK##
 		exx
 		bit	0,d
-		jr	nz,MAPBIO2
 		exx
+		jr	nz,MAPBIO2
 		ret
-MAPBIO2:	exx
+MAPBIO2:
+
+		call	EXB_NEX
+		exx
+		ex	af,af'
+		bit	0,d
+		exx
+		jr	nz,MAPBIO22
+		ex	af,af'
+		ret
+MAPBIO22:
+		ex	af,af'
 
 		push	af	;Dont call system handler if running DOS 1
 		ld	a,(DOS_VER##)
@@ -731,6 +742,42 @@ MAPBIO3:
 		exx
 		ret
 ;
+
+EXB_NEX:	;WIP...
+;
+;       Call the EXTBIO routine of Nextor kernels other than the master one
+;
+	exx
+	ex af,af'
+	ld	hl,KER250
+	ld	b,4
+EXB_LOOP:
+	ld	a,(hl)
+	or a	;Zero if empty entry
+	jr	z,EXB_DJNZ
+	ld	c,a
+	ld	a,(MASTER_SLOT##)
+	cp	c
+	jr	z,EXB_DJNZ	;Skip master kernel as we have processed it already
+
+	ld	a,c
+	db	0FDh,67h	;LD IYh,A
+	ld	ix,CALDRV##
+	ld	hl,DV_EXTBIO##
+	ld (BK4_ADD##),hl
+
+	ld	d,1
+	exx
+	ex	af,af'
+	call	CALSLT	;But CALST will destroy D'... :-(
+
+
+EXB_DJNZ:
+	inc	hl
+	djnz	EXB_LOOP
+	ret
+
+
 CHK_DEV:	ld	a,d
 		or	e
 		jr	nz,CHK_MAPDEV
