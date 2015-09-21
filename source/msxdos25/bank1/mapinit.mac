@@ -748,11 +748,24 @@ EXB_NEX:	;WIP...
 ;       Call the EXTBIO routine of Nextor kernels other than the master one
 ;
 	exx
-	ex af,af'
-	ld	hl,KER250
-	ld	b,4
+	ex	af,af'
+	ld	hl,EXB_RAM
+	ld	de,($SECBUF##)
+	ld	bc,EXB_RAM_END-EXB_RAM
+	ldir
+	ex	af,af'
+	exx
+	ld	ix,($SECBUF##)
+	jp	(ix)
+
+	;--- From here is copied to RAM
+EXB_RAM:
+	ld	ix,KER250##
+	ld	iy,0400h
 EXB_LOOP:
-	ld	a,(hl)
+	exx
+	ex	af,af'
+	ld	a,(ix)
 	or a	;Zero if empty entry
 	jr	z,EXB_DJNZ
 	ld	c,a
@@ -761,21 +774,63 @@ EXB_LOOP:
 	jr	z,EXB_DJNZ	;Skip master kernel as we have processed it already
 
 	ld	a,c
-	db	0FDh,67h	;LD IYh,A
-	ld	ix,CALDRV##
+	ld	h,40h
+	push	ix
+	push	iy
+	ex	af,af'
+	exx
+	push	af
+	push	bc
+	push	de
+	push	hl
+	call	ENASLT
 	ld	hl,DV_EXTBIO##
 	ld (BK4_ADD##),hl
+	exx
+	ld	de,0100h
+	exx
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	call	CALDRV##
 
-	ld	d,1
+	pop	iy
+	pop	ix
 	exx
 	ex	af,af'
-	call	CALSLT	;But CALST will destroy D'... :-(
-
+	bit	0,d
+	jr	z,EXB_RAM_FIN
 
 EXB_DJNZ:
-	inc	hl
-	djnz	EXB_LOOP
+	push	iy
+	pop	af
+	dec	a
+	jr	z,EXB_RAM_FIN
+	push	af
+	pop	iy
+	inc	ix
+	ex	af,af'
+	exx
+	jr	EXB_LOOP
+
+EXB_RAM_FIN:
+	ex	af,af'
+	exx
+	push	af
+	push	bc
+	push	de
+	push	hl
+	ld	a,(MASTER_SLOT##)
+	ld	h,40h
+	call	ENASLT
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
 	ret
+EXB_RAM_END:
+	;--- Up to here is copied to RAM
 
 
 CHK_DEV:	ld	a,d
