@@ -2,6 +2,12 @@
 
 Nextor is a disk operating system for MSX computers. It is built on top of the source code of MSX-DOS 2.31.
 
+### Important note ###
+
+MSX-DOS 2.31 code is **not** open source. Therefore, neither is Nextor's, sadly.
+
+You have access to the Nextor source code because you have been explicitly granted access to it. Please do **NOT** share/redistribute any part of it.
+
 ### How to build Nextor ###
 
 You need:
