@@ -29,6 +29,10 @@ source/msxdos25/bank5/**.asm
 source/command25/msxdos/**.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac
+source/command25/command/**.inc
+source/command25/command/codes.mac
+source/command25/command/data.mac
+source/command25/command/command2.com
 source/tools/**.inc
 source/tools/**.asm
 source/tools/**.com
