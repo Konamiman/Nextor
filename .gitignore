@@ -29,7 +29,10 @@ source/msxdos25/bank5/**.asm
 source/command25/msxdos/**.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac
-source/command25/command/**.inc
+source/command25/command/bank.inc
+source/command25/command/condasm.inc
+source/command25/command/const.inc
+source/command25/command/macros.inc
 source/command25/command/codes.mac
 source/command25/command/data.mac
 source/command25/command/command2.com
