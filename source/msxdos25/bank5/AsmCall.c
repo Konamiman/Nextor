@@ -30,7 +30,7 @@ void DriverCall(byte slot, uint routineAddress)
 void DosCall(byte function, register_usage outRegistersDetail)
 {
     regs.Bytes.C = function;
-    SwitchSystemBankThenCall(0xF37D, outRegistersDetail);
+    SwitchSystemBankThenCall((int)0xF37D, outRegistersDetail);
 }
 
 

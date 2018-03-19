@@ -1587,3 +1587,4 @@ int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer)
 
 
 #include "asmcall.c"
+#include "printf.c"
