@@ -132,12 +132,10 @@ new_boot_sec:	push	af
 
 		ld	ix,UPB_BUF##
 
-		xor	a			;Try to read the boot sector
-		ld	d,a			; from the disk and if there
-		ld	e,a			; was any error then give up
-		ld	(DIO_EX_SECTOR##),a	; immediately.
-		ld	bc,(DATA_SEG##)
-		ld	b,1
+		ld	d,a			; Try to read the boot sector
+		ld	e,a			; from the disk and if there
+		ld	bc,(DATA_SEG##) ; was any error then give up
+		ld	b,1         ; immediately.
 		call	READ_UNIT
 
 		pop	bc
@@ -978,7 +976,6 @@ MCHECK2:
 		xor	a
 		ld	e,a
 		ld	d,a
-		ld	(DIO_EX_SECTOR##),a
 		ld	bc,(DATA_SEG##)
 		ld	b,1
 		ld	ix,UPB_BUF##
@@ -1319,8 +1316,6 @@ build_upb_srchpar:
 ;
 try_build_upb:	ld	de,0			;Try to read the boot sector
 ;===== start mod DOS2.50
-		xor	a
-		ld	(DIO_EX_SECTOR##),a
 		ld	bc,(DATA_SEG##)		; from the disk and if there
 		ld	b,1			; was any error then jump to
 						; moan to the user about it.
@@ -1392,9 +1387,7 @@ build_upb_pfound:
 		set	UF_FOK,(ix+UD_DFLAGS##)
 		ex	(sp),ix
 
-		xor	a	;Read boot sector of the partition
-		ld	(DIO_EX_SECTOR##),a
-		ld	bc,(DATA_SEG##)
+		ld	bc,(DATA_SEG##) ;Read boot sector of the partition
 		ld	b,1
 		ld	de,0
 		pop	hl	;Restore unit desciptor
@@ -2311,15 +2304,34 @@ COMPHLDE:
 ;------------------------------------------------------------------------------
 ;
 ;===== start add DOS2.50
+
+; Input for READ_UNIT and WRITE_UNIT:
+; B  = Number of sectors
+; DE = First sector (3rd byte is always 0)
+; HL = Unit descriptor
+; IX = Transfer address
+;
+; READ_UNIT corrupts BC
+
 WRITE_UNIT:
+		xor a
+		ld (DIO_EX_SECTOR##),a
 		ld	a,WR_CMD
 		jr	CALL_UNIT
 
-READ_UNIT:	;B  = Number of sectors
-		;DE = First sector (plus DIO_EX_SECTOR)
-		;HL = Unit descriptor
-		;IX = Transfer address
+READ_UNIT:
+		ld a,(DIO_EX_SECTOR##)
+		push af
+		xor a
+		ld (DIO_EX_SECTOR##),a
 		ld	a,RD_CMD
+		call CALL_UNIT
+		pop bc
+		ld c,a
+		ld a,b
+		ld (DIO_EX_SECTOR##),a
+		ld a,c
+		ret
 
 ;===== end add DOS2.50
 CALL_UNIT:
@@ -2345,8 +2357,6 @@ CALL_UNIT:
 ;  (DIO_EX_SECTOR) = sector number bit16-22 (if required) :FAT16
 ; Returns:       A = Error code (eg .RNF##), flags set appropriately.
 ;	      B,DE = Assorted results from unit handler
-; Corrupts:   AF,BC,DE
-;
 ;
 		cp	number_of_cmds		;Reject if command code is
 		jr	nc,bad_unit_cmd		; not a sensible value.
