@@ -2128,61 +2128,71 @@ F_CDRVR_GO:
 	ld	l,(ix+6)
 	ld	h,(ix+7)
 
-	ld	a,(EXPTBL)
-	ld	b,a
-	call	GSLOT0
-	cp	b
+	;--- We need to ensure that the user environment is mapped in
+	;    so that the driver can see any possible user supplied data.
+
+	ld	a,(DOS_VER##)
+	or	a
+	jr nz,CDRV_NODOS1
+
+	;--- We are in DOS 1 mode:
+	;    We can just call the driver right away.
+
 	ld	b,(ix+3)
 	ld	ix,CALDRV##
-	jr	nz,CDRV_FROM_DOS
-
-	;If BASIC slot is set in page 0, restore page 2 user segment only...
-CDRV_FROM_BASIC:
-	ld	a,(DOS_VER##)
-	or	a
-	ld	a,(P2_TPA##)
-	call	nz,PUT_P2##
 	pop	af
-
 	call	CALSLT##
 	push	af
 	pop	ix
 
-	jr	CDRV_END
-
-	;...otherwise, restore both page 0 and 2
-CDRV_FROM_DOS:
-	ld	a,(DOS_VER##)
-	or	a
-	ld	a,(P2_TPA##)
-	call	nz,PUT_P2##
-	
-	ld	a,(DOS_VER##)
-	or	a
-	ld	a,(P0_TPA##)
-	call	nz,PUT_P0##
-	pop	af
-
-	push	bc
-	call	CALSLT##
-	pop	bc
-	push	af
-	pop	ix
-
-	ld	a,(DOS_VER##)
-	or	a
-	ld	a,(CODE_SEG##)
-	call	nz,PUT_P0##
-
-CDRV_END:
-	ld	a,(DOS_VER##)
-	or	a
-	ld	a,(DATA_SEG##)		;Put kernel data segment
-	call	nz,PUT_P2##		; back into page-2
-	
-	xor	a
+    xor a
 	ret
+CDRV_NODOS1:
 
+	;--- We are in DOS 2 mode:
+	;    We need to restore TPA segments so that the driver
+	;    can see any possible user supplied data.
+	;    We always restore TPA segment in page 2.
+	;    We restore TPA segment in page 0 only if it was already
+	;    in place when the function was called; otherwise
+	;    that TPA segment could be uninitialized.
+
+	ld a,(PS_BDO##)
+	and 11b
+	ld b,a ;Main slot number
+	ld a,(SS_BDO##)
+	rla
+	rla
+	and 1100b
+	or b   
+	ld b,a ;Main slot + subslot
+
+	ld a,(RAMAD0##)
+	and 1111b
+	cp b
+	jr nz,CDRV_NORAM0
+
+	ld	a,(P0_TPA##)
+	call	PUT_P0##
+
+CDRV_NORAM0:
+	ld	a,(P2_TPA##)
+	call	PUT_P2##
+
+	ld	b,(ix+3)
+	pop	af
+	ld	ix,CALDRV##
+	call	$CALSLT##
+	push	af
+	pop	ix
+
+	ld	a,(CODE_SEG##)
+	call	PUT_P0##
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+
+    xor a
+	ret
 
 ;-----------------------------------------------------------------------
 ;
