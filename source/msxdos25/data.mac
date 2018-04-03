@@ -103,7 +103,7 @@ ram_ad	defl	DATABASE
 	spare	12		;For future expansion
 ;
 	var1	CUR_DRV		;Current logical drive (1=A:)
-	var2	DTA_ADR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
+	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
 ;
 	var0	NXT7
 	spare	7

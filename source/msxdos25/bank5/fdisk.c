@@ -944,7 +944,7 @@ void PrintOnePartitionInfo(partitionInfo* info)
 	print(": ");
 	if(info->partitionType == PARTYPE_FAT12) {
 		print("FAT12");
-	} else if(info->partitionType == PARTYPE_FAT16) {
+	} else if(info->partitionType == PARTYPE_FAT16 || info->partitionType == PARTYPE_FAT16_SMALL || info->partitionType == PARTYPE_FAT16_LBA) {
 		print("FAT16");
 	} else if(info->partitionType == 0xB || info->partitionType == 0xC) {
 		print("FAT32");

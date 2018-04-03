@@ -177,6 +177,7 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 		memcpy(&(sector->params.DOS220.z80BootCode), SectorBootCode, (uint)0xC090 - (uint)0xC03E);
 	}
 	
+	sector->mbrSignature = 0xAA55;
 }
 
 

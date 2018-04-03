@@ -17,7 +17,7 @@ PT_FAT12	equ	1	;Partition type code for FAT12
 PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
 PT_EXT		equ	5	;Partition type code for extended partition
 PT_FAT16	equ	6	;Partition type code for FAT16
-MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
+PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
 
 CALLB0	equ	403Fh
 CALBAS	equ	0159h
@@ -132,9 +132,6 @@ CHPUT:
 	call	DEV_READ
 	ret	nz
 
-	call	CHECK_MBR_SIG
-	jp	nz,UNEX_PART
-
 	;--- Get pointer to main partition table entry
 
 	push	bc
@@ -205,9 +202,6 @@ EXTP_LOOP:
 	call	UPDATE_SEC
 	call	DEV_READ
 	jr	nz,TWO_POPS_IY
-
-	call	CHECK_MBR_SIG
-	jr	nz,TPIY_UNEX_PART
 
 	dec	l
 	ld	a,l
@@ -288,25 +282,6 @@ UNEX_PART:
 
 UNEX_DEVL:
 	ld	a,.IDEVL##
-	ret
-
-
-;Check the MBR signature
-;Input: MBR in SECBUF
-;Output: Z for valid signature, NZ otherwise
-;Corrupts: AF, IX
-
-CHECK_MBR_SIG:
-	ld	ix,($SECBUF##)
-	push	bc
-	ld	bc,MBR_SIG
-	add	ix,bc
-	pop	bc
-	ld	a,(ix)
-	cp	55h
-	ret	nz
-	ld	a,(ix+1)
-	cp	0AAh
 	ret
 
 
@@ -1046,11 +1021,6 @@ AA_OK_CANDIDATE:
 	xor	a
 	ld	(NXT4##+2),a
 
-	push	ix
-	call	CHECK_MBR_SIG
-	pop	ix
-	jp	nz,AA_CHECK_BOOT_MBR	;No MBR signature
-
 	ld	hl,($SECBUF##)
 	ld	bc,MBR_PSTART+POFF_TYPE
 	add	hl,bc
@@ -1068,6 +1038,8 @@ AA_PLOOP::
 	cp	PT_FAT16
 	jr	z,AA_PLOOP_OKTYPE
 	cp	PT_FAT16_S
+	jr	z,AA_PLOOP_OKTYPE
+	cp	PT_FAT16_L
 	jr	z,AA_PLOOP_OKTYPE
 
 AA_PLOOP_NEXT:
