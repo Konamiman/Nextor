@@ -164,6 +164,7 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 	sector->sectorsPerFat = parameters->sectorsPerFat;
 	strcpy(sector->params.standard.volumeLabelString, "NEXTOR 2.0 "); //it is same for DOS 2.20 format
 	sector->params.standard.serialNumber = GetNewSerialNumber(); //it is same for DOS 2.20 format
+	sector->mbrSignature = 0xAA55;
 
 	if(parameters->isFat16) {
 		sector->params.standard.bigSectorCount = parameters->totalSectors;
@@ -176,8 +177,6 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 		strcpy(sector->params.DOS220.fatTypeString, "FAT12   ");
 		memcpy(&(sector->params.DOS220.z80BootCode), SectorBootCode, (uint)0xC090 - (uint)0xC03E);
 	}
-	
-	sector->mbrSignature = 0xAA55;
 }
 
 

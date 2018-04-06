@@ -36,6 +36,7 @@ init:   ;call    gsinit
 
 	;* Place data after program code, and data init code after data
 
+	.area	_HOME
 	.area	_CODE
 	.area	_DATA
 _heap_top::
