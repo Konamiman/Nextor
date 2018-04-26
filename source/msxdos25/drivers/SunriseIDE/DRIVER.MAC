@@ -252,8 +252,10 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 ; Driver flags:
 ;    bit 0: 0 for drive-based, 1 for device-based
 ;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
+;    bit 2: 1 if the driver provides configuration
+;             (implements the DRV_CONFIG routine)
 
-	db 1+(2*DRV_HOTPLUG)
+	db 1+(2*DRV_HOTPLUG)+4
 
 ;Reserved byte
 	db	0
@@ -277,8 +279,9 @@ DRV_NAME:
         jp      DRV_DIRECT2
         jp      DRV_DIRECT3
         jp      DRV_DIRECT4
+    jp  DRV_CONFIG
 
-	ds	15
+	ds	12
 
 	jp	DEV_RW
 	jp	DEV_INFO
@@ -783,6 +786,46 @@ DRV_DIRECT2:
 DRV_DIRECT3:
 DRV_DIRECT4:
 	ret
+
+;-----------------------------------------------------------------------------
+;
+; Get driver configuration
+;
+; Input:
+;   A = Configuration index
+;   BC, DE, HL = Depends on the configuration
+;
+; Output:
+;   A = 0: Ok
+;       1: Configuration not available for the supplied index
+;   BC, DE, HL = Depends on the configuration
+;
+; * Get number of drives at boot time (for device-based drivers only):
+;   Input:
+;     A = 1
+;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+;   Output:
+;     B = number of drives
+
+DRV_CONFIG:
+	ld a,1
+	ret
+
+	;Example: 3 drives at boot time in DOS 2 mode, 2 drives in DOS 1 mode
+
+if 0
+	dec a
+	ld a,1
+	ret nz
+
+	ld a,b
+	or a
+	ld a,0
+	ld b,3
+	ret z
+	ld b,2
+	ret
+endif
 
 
 ;=====

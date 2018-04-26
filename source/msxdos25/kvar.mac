@@ -162,7 +162,7 @@ size	macro	name
 				;               (if zero, all other bits are meaningless)
                 ;        bit 1: the device supports hot-plug (ignored)
                 ;        bit 2: the drive is removable
-				;        bit 3: the drive is controlled by direct filesystem access (ignored)
+				;        bit 3: partition assignment is pending for this drive
 				;        bit 4: value at UD_FSEC is valid
 				;               (so that BUILD_UPB will not auto-assign partition)
 				;        bit 5: value at UD_CHKSUM is valid

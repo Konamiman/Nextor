@@ -429,7 +429,8 @@ COMMAND:
 	defw	DRVINFO
 	defb	'DRIVERS',0
 	defw	DRIVERS
-
+	defb    'MATO34',0
+	defw    MATO34
 ;
 	defb	0		;end of table
 
@@ -873,6 +874,16 @@ DRVINFO:
 DRIVERS:
 	ld	a,4
 	ld	ix,CDRIVERS##
+	jp	CALBNK##
+
+
+	subttl	CALL MATO34 command
+;
+;	MATO34
+;
+MATO34:
+	ld	a,4
+	ld	ix,CMATO34##
 	jp	CALBNK##
 
 

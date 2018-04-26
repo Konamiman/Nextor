@@ -239,7 +239,7 @@ UFM_Z8	equ	(1 SHL UF_Z80)
 UF_DBD	equ	0	;Set => drive assigned to a device-based driver
 UF_HPL	equ	1	;Set => device supports hot-plug
 UF_RMV	equ	2	;Set => drive assigned to a removable device
-UF_DFS	equ	3	;Set => drive is controlled by direct filesystem access
+UF_PAP	equ	3	;Set => drive is pending partition assignment
 UF_FOK	equ	4	;Set => value at UD_FSEC is valid
 ;
 ;
@@ -248,10 +248,15 @@ UF_FOK	equ	4	;Set => value at UD_FSEC is valid
 UFM_DB	equ	(1 SHL UF_DBD)
 UFM_HP	EQU	(1 SHL UF_HPL)
 UFM_RM	equ	(1 SHL UF_RMV)
-UFM_DF	equ	(1 SHL UF_DFS)
+UFM_PP	equ	(1 SHL UF_PAP)
 UFM_FO	equ	(1 SHL UF_FOK)
 
 NUMKEYS	equ	0FCBBh
+
+;                 DRIVER CONFIGURATION KEYS
+;               =============================
+
+CFG_DRVS   equ 1
 
 ;-----------------------------------------------------------------------------
 ;

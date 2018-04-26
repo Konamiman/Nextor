@@ -265,7 +265,8 @@ ram_ad	defl	DATABASE
 	var1	NXT_VER		;Nextor version numbr
 	var1	MAIN_BANK
 	var	KER250,4	;MSX-DOS 2.50 kernel slots,
-                                ;bit 6 is set if timer interrupt routine is to be called
+                    ;bit 6 is set if timer interrupt routine is to be called
+					;bit 5 is set if the driver provides configuration
 	var	_TIME_IRQ,5,F31E
 ;;	spare	11
 ;===== end mod DOS2.50
@@ -514,6 +515,11 @@ ram_ad	defl	4100h
 	var3	CDRIVERS
 
 	var3	F_LOCK
+	var3	F_FOUT
+	var3	F_RALLOC
+
+	var3    DRVS2
+	var3    CMATO34
 
 ;-----------------------------------------------------------------------------
 ;
@@ -547,7 +553,8 @@ ram_ad	defl	4100h
 	var3	DV_D2
 	var3	DV_D3
 	var3	DV_D4
-	spare	15
+	var3    DV_CONFIG
+	spare	12
 	
 	;Routines for drive-based and device-based drivers
 

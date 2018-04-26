@@ -945,6 +945,21 @@ MEDIA_CHECK:
 ; Corrupts:   AF
 ;
 ;
+
+		;First check if partition assignment is pending, if so return "changed"
+
+		push ix
+		push hl
+		pop ix
+		bit UF_PAP,(ix+UD_DFLAGS##)
+		pop ix
+		jr z,MCHECK1
+		ld a,1
+		or a
+		ld a,0
+		ret
+
+MCHECK1:
 		call	_MCHECK
 		ret	z
 		ret	nc	;If not "not sure interpret as changed", return
@@ -1346,18 +1361,6 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 build_upb_do_findpart:
 		push	ix
 		pop	hl
-		ld	bc,MBR_SIG
-		add	hl,bc
-		ld	a,(hl)
-		cp	55h
-		jr	nz,build_upb_dof2
-		inc	hl
-		ld	a,(hl)
-		cp	0AAh			;If no MBR signature found,
-		jr	nz,build_upb_dof2	;try searching UPB in the MBR itself
-
-		push	ix
-		pop	hl
 		ld	bc,MBR_PSTART+POFF_TYPE
 		add	hl,bc
 		ld	b,4
@@ -1439,11 +1442,16 @@ build_upb_err:	ld	b,a
 		pcall	C_DISK_ERR		; to try it again.
 		push	hl
 		jp	try_build_upb
-;
+;.ndos
 found_upb:	pop	de	;Throw away input AF
 found_upb2:	pop	de
 		pop	bc
-		or	a
+		push ix
+		push hl
+		pop ix
+		res UF_PAP,(ix+UD_DFLAGS##)
+		pop ix
+		or a
 		ret
 
 ;;		ld	de,1			;If no UPB in boot sector

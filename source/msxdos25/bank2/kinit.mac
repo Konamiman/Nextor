@@ -783,13 +783,13 @@ kbdos_table:
 	dw	?F_DOSVER##-OFFSET	;Get MSX-DOS version number
 	dw	?F_REDIR## -OFFSET	;Get/set redirection state
 
-	dw	?F_FOUT## -OFFSET	;Get/set fast STROUT flag
+	dw	F_FOUT##	;Get/set fast STROUT flag
 	dw	?F_ZSTROUT##-OFFSET	;Zero-terminated string output
 
 	dw	?F_RDDRV## -OFFSET	;Absolute drive sector read
 	dw	?F_WRDRV## -OFFSET	;Absolute drive sector write
 
-	dw	?F_RALLOC## -OFFSET	;Get/set reduced allocation information mode vector
+	dw	F_RALLOC##	;Get/set reduced allocation information mode vector
 	dw	?F_DSPACE## -OFFSET	;Get disk space information
 
 	dw	F_LOCK##			;Lock/unlock drive

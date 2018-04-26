@@ -6,6 +6,8 @@
 	INCLUDE	MACROS.INC
 	INCLUDE	CONST.INC
 	;RAMMOD
+
+CHPUT	equ	00A2h	
 ;
 ;------------------------------------------------------------------------------
 ;
@@ -105,6 +107,189 @@ mnt_get:
 
 ;------------------------------------------------------------------------------
 ;
+	PROC	F_FOUT
+;
+;    This function gets or sets the value of fast STROUT flag.
+; When this flag is set, STROUT will copy the string to $SECBUF before printing it.
+; This speeds up printing process, but limits string length to 512 bytes.
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           B = value to set (only if A=1)
+;               0 = disable
+;               FFh = enable
+; Returns:  A = 0 (error code)
+;           B = current value, 0 or 1.
+;
+        ld a,c
+		or	a			;Skip if just getting value
+		jr	z,fout_get
+
+		ld	a,b
+		and	1
+		ld	b,a
+		ld	a,(MFLAGS##)
+		and	0FEh
+		or	b
+		ld	(MFLAGS##),a
+;
+fout_get:
+		ld	bc,(MFLAGS##-1)	;Get current value into B.
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_RALLOC
+;
+; Gets or sets the reduced allocation information mode vector
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           HL = value to set (only if A=1)
+;               L:0 = state for A:
+;               L:1 = state for B:, etc
+; Returns:  A = 0 (error code)
+;           HL = current value
+;                (bits for undefined drives are undefined)
+
+	ld	iy,RAM_BASE##
+
+    ld a,c
+	or	a
+	jr	z,redv_get
+
+	ld	(iy+@RALL_VECT##),l
+if 0 ;MAX_UNITS## GT 8
+	ld	(iy+@RALL_VECT##+1),h
+endif
+
+	;--- Now set the UF_RALL bit for each drive that exists
+
+	xor	a
+readv_loop:
+	push	af
+	push	hl
+	ld	e,a
+	ld	d,0
+	ld	hl,UNIT_TAB##+2
+	add	hl,de
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ld	a,d
+	or	e
+	jr	z,readv_skipdrive	;Skip if undefined drive
+
+	push	de
+	pop	ix
+	ld	a,(ix+UD_TIME)
+	or	a
+	jr	z,readv_skipdrive	;Skip if no UPB
+	bit	UF_F12,(ix+UD_FLAGS##)
+	jr	nz,readv_skipdrive	;Skip if FAT12 drive
+
+	;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+	;          and compiles always the else clause.
+	;          Solve this if MAX_UNITS needs to grow over 8.
+
+	pop	hl	;HL = Vector
+if 0 ;MAX_UNITS GT 8
+	srl	h
+endif
+	rr	l	;Cy = Value for current drive
+	jr	c,readv_set1
+
+readv_set0:
+	res	UF_RALL,(ix+UD_FLAGS##)
+	jr	readv_nextdrive
+
+readv_set1:
+	set	UF_RALL,(ix+UD_FLAGS##)
+	jr	readv_nextdrive
+
+readv_skipdrive:
+	pop	hl
+	srl	l
+readv_nextdrive:
+	pop	af
+	inc	a
+	cp	MAX_UNITS##
+	jr	c,readv_loop
+
+	;--- Get current vector value
+
+redv_get:
+	ld	h,0
+	ld	l,(iy+@RALL_VECT##)
+if 0 ;MAX_UNITS## GT 8
+	ld	h,(iy+@RALL_VECT##+1)
+endif
+
+	xor	a
+	ret
+;
+;------------------------------------------------------------------------------
+;
+	PROC	CMATO34
+
+	push hl
+
+	ld a,r
+	and 7
+	add a,a
+	ld hl,MATOS
+	ld c,a
+	ld b,0
+	add hl,bc
+
+	ld a,(hl)
+	inc hl
+	ld h,(hl)
+	ld l,a
+
+	ld a,10
+	call CHPUT
+	ld a,34
+	call CHPUT
+
+	call PUTS
+
+	ld hl,MATOMEM
+	call PUTS
+
+	pop hl
+	ret
+
+PUTS:
+	ld a,(hl)
+	or a
+	ret z
+	call CHPUT
+	inc hl
+	jr PUTS
+
+MATOS: dw MATO1, MATO2, MATO3, MATO4, MATO5, MATO6, MATO7, MATO8
+
+MATO1: db "Desintegrome en mi propia parafernalia divisuatoria",0
+MATO2: db "Yo solo queria jugar al Tetris...",0
+MATO3: db "AUTOVERMIETUNG!!",0
+MATO4: db "Ni que yo fuera el gran capullo del decimal! Como se nota que no tengo ascensor en mi casa.",0
+MATO5: db "Pareces un hombre de 40 anyos de hace 40 anyos.",0
+MATO6: db "Hasta incluso! Muera todo!",0
+MATO7: db "Decidi cultivarme como persona, al tiempo que relajaba mis esfinteres.",0
+MATO8: db "Interconexion fractalizada en tiempo real con los gestores de memoria subyugada",0
+
+MATOMEM: db 34,13,10,10
+	db "IN MEMORIAM",13,10,10
+	db "Marcos Rosales ",34,"Mato#34",34,13,10,10
+	db "1974 - 2018",13,10,10,0
+
+;------------------------------------------------------------------------------
+;
+
 	finish	<MISC>
 	end
 ;

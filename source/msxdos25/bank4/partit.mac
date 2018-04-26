@@ -484,6 +484,8 @@ GDRV_OK_ROM:
 ; the drive will be considered to belong to a device-based driver).
 
 AUTODRV_DOS1:
+	call DRVS1
+
 	ld	hl,(DVB_TABLE##)
 	ld	(hl),0		;start with zero entries in table
 	inc	hl
@@ -1699,6 +1701,8 @@ CALC_NUMCLUS1:
 ;                                    0 => Drive-based driver
 ;                             bit 1: 1 => Driver supports hot-plug devices
 ;                                    0 => Hot-plug devices not supported
+;                             bit 1: 2 => Driver provides configuration
+;                                    0 => Driver does not provide configuration
 ;                             bit 7: 1 => MSX-DOS 2.50 driver
 ;                                    0 => Legacy driver (MSX-DOS 1/2.20/2.3x kernel)
 ;                     +5 (1): Driver main version number
@@ -1830,7 +1834,7 @@ GDRV_IS_KER250:
 	ld	hl,DV_TYPE##
 	ld	ix,CALDRV##
 	call	CALSLT##
-	and	11b
+	and	111b
 	or	10000000b
 	pop	iy
 	pop	ix
@@ -1896,6 +1900,7 @@ GDRVR_NAME_LOOP:
 ;                +5 (1): LUN index (0 if not a device-based driver)
 ;                +6 (4): First sector number
 ;                        (0 if not a device-based driver, or if direct access device)
+;                        (-1 if partition assignment is pending)
 ;                +10 (13): Filename, zero-terminated
 ;                          (empty string, if not assigned to a file)
 ;
@@ -1920,7 +1925,7 @@ F_GDLI_GO:
 
 	ld	a,(DOS_VER##)
 	or	a
-	jr	z,GDLI_DOS1
+	jp	z,GDLI_DOS1
 
 	ld	hl,UNIT_TAB##+2
 	sla	c
@@ -1966,6 +1971,19 @@ NORDISK:
 	ld	(iy+4),a
 	ld	a,(ix+UD_LI##)
 	ld	(iy+5),a
+
+    bit UF_PAP,(ix+UD_DFLAGS##)
+	jr z,NOPAP
+
+	ld a,0FFh
+    ld	a,(ix+UD_FSEC##)
+	ld	a,(ix+UD_FSEC##+1)
+	ld	a,(ix+UD_FSEC##+2)
+	ld	a,(ix+UD_FSEC##+3)
+	cpl
+	ret
+
+NOPAP:
 	ld	a,(ix+UD_FSEC##)
 	ld	(iy+6),a
 	ld	a,(ix+UD_FSEC##+1)
@@ -4876,14 +4894,19 @@ SLOFDR_FOUND:
 ; Check if a slot number is a Nextor kernel
 ; Input:    E = Slot number
 ; Output:   Cy = 0 if Nextor kernel, 1 if NOT a Nextor kernel
+;           HL = Pointer to entry in KER250
 ; Modifies: AF, HL, B
 
 IS_NEXTOR_KER:
+	ld a,e
+	or a
+	scf
+	ret z
 	ld	hl,KER250
 	ld	b,4
 IS_NEX_LOOP:
 	ld	a,(hl)
-	and	10111111b
+	and	10001111b
 	cp	e
 	scf
 	ccf
@@ -4931,6 +4954,118 @@ GET_DVB_NEXT:
 	djnz	GET_DVB_LOOP
 
 	scf
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	DRVS2
+
+;    Get the number of drives assigned to this driver at boot time in DOS 2 mode.
+;    Input: B<>0 if the driver provides configuration.
+;    Output: A = number of drives.
+
+	ld a,b
+	or a
+	jr z,COUNTDEVS
+
+	;If the driver provices configuration, we first try asking the driver
+
+	ld	ix,DV_CONFIG##
+	ld	a,CFG_DRVS
+	ld b,0
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	or a
+	ld a,b
+	ret z
+
+    ;The driver does not provide configuration, or asking for the number of drives
+	;results in an error returned:
+	;Invoke LUN_INFO on all possible devices of the driver,
+	;and return in A the number of devices found.
+
+COUNTDEVS:
+	ld	c,0
+	ld	a,1
+COUNTDEVS1:
+	ld	b,7
+COUNTDEVS2:
+	push	af
+	push	bc
+	ld	hl,COUNTDEVS	;Throw away the returned data
+	ld	ix,LUN_INFO##
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	pop	bc
+	or	a
+	jr	nz,COUNTDEVS3
+	inc	c
+COUNTDEVS3:
+	pop	af
+	djnz	COUNTDEVS2
+	inc	a
+	cp	8
+	jr	c,COUNTDEVS1
+	ld	a,c ;!!!
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+;    This routine is invoked right before the drive assignment process in DOS 1 mode.
+;    It scans all the available kernels and for those who are Nextor device-based
+;    and provide configuration, asks how many drives should be assigned at boot.
+;    Then it updates the drives count for that kernel in DRVTBL accordingly.
+
+DRVS1:
+	ld	hl,DRVTBL##+1
+	ld	b,4	;B=Entries in DRVTBL
+
+DRVS1LOOP:
+	ld e,(hl)
+	push bc
+	push hl
+
+	push de
+	call IS_NEXTOR_KER
+	pop de
+	jr c,DRVS1NEXT	;Skip if not a Nextor kernel
+
+	ld_iyh_e
+	ld	hl,RDBANK##
+	ld	(BK4_ADD##),hl
+	ld	hl,DV_TYPE##
+	ld	ix,CALDRV##
+	call	CALSLT
+	and 101b
+	cp  101b	;Device-based & provides config?
+	jr nz,DRVS1NEXT ;No: skip
+
+	ld hl,DV_CONFIG##
+	ld	(BK4_ADD##),hl
+	ld a,CFG_DRVS
+	ld b,1
+	ld	ix,CALDRV##
+	call	CALSLT
+	or a
+	jr nz,DRVS1NEXT  ;Skip if that config is not available
+
+	pop hl
+	dec hl
+	ld (hl),b
+	inc hl
+	jr DRVS1NX2
+
+DRVS1NEXT:
+	pop hl
+DRVS1NX2:	
+	pop bc
+	inc hl
+	inc hl
+	djnz DRVS1LOOP
 	ret
 
 	finish <PARTIT>
