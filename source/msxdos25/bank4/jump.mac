@@ -71,6 +71,7 @@ jentry	macro	name
 
 	jentry  DRVS2
 	jentry  CMATO34
+	jentry  AUTO_ASPART
 
 	finish <JUMP>
 	end

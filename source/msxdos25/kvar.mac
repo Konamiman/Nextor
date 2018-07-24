@@ -167,7 +167,6 @@ size	macro	name
 				;               (so that BUILD_UPB will not auto-assign partition)
 				;        bit 5: value at UD_CHKSUM is valid
 ;
-	field	0,UD_REL	;Relative unit number for unit handler (for drive-based drivers)
 	field	1,UD_LI		;LUN index (for device-based drivers)
 	field	1,UD_SEG	;Segment number for RAM based drivers, FFh for ROM based drivers
 ;
@@ -202,9 +201,30 @@ size	macro	name
 	field	4,UD_FSEC	;First device sector (only for block devices on device-based drivers)
 
 	field	2,UD_CHKSUM
+
+	field	1,UD_REL	;Relative unit number for unit handler
+                        ;(for device-based drivers this is only used if the driver
+						; provides configuration, in order to get the default mapping
+						; for the drive)
 ;
 	size	UD_SZ		;Total size of unit descriptor
 ;
+
+;*****************************************************************************
+
+; Entry in the device-based drives table in MSX-DOS 1 mode
+; WARNING: UD1_SLOT needs to be at the same position as UD_SLOT
+
+	ifield	0		;Start at offset zero
+;
+	field	1,UD1_SLOT	;Slot address of appropriate disk driver
+	field	1,UD1_REL	;Relative unit number
+	                    ;bit 7 is set if partition has changed
+	field   1,UD1_DI	;Device index
+	field   1,UD1_LI    ;LUN index
+	field   4,UD1_FSEC	;First absolute sector number
+
+    size	UD1_SZ		;Total size of unit descriptor
 ;
 ;-----------------------------------------------------------------------------
 ;

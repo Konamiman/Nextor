@@ -50,7 +50,6 @@ ram_ad	defl	DATABASE
 ;	------------------------
 ;
 	var	PRTBUF,6,F1C9	;MSX-DOS1 compatible string output routine
-	var0	NXT4
 	spare	4
 ;
 ;	------------------------
@@ -240,12 +239,7 @@ ram_ad	defl	DATABASE
 ;
 ;	------------------------
 ;
-	var1	NXTEMP		;For temporary usage by kernel
-	var0	NXT2
-	var1	TMPLUN
-	var1	TMPDEV
-	spare	1
-	;spare	4
+	spare	4
 ;
 	var1	RAWFLG, F30D	;Read-after write flag - must not move
 	var1	COUNTRY,F30E	;Accessed by COMMAND.COM - can't move
@@ -276,7 +270,13 @@ ram_ad	defl	DATABASE
 	var2	DISKVECT,F323	;BDOS_GO disk error vector
 	var2	BREAKVECT,F325	;BDOS_GO ctrl-stop vector
 ;
-	var	AUXBODY,10,F327
+	var	AUXBODY,3,F327	;Actually 10
+	var1	NXTEMP		;For temporary usage by AUTO_ASSIGN
+	var0	NXT2        ;(values are saved in the stack and later restored)
+	var1	TMPLUN
+	var1	TMPDEV
+	var1    NXT3
+	var3    NXT4
 
 	;These variables are declared inside ARG, a 16 byte area used by math-pack.
 	;There should be no conflict since DOS kernel and math-pack
@@ -520,6 +520,7 @@ ram_ad	defl	4100h
 
 	var3    DRVS2
 	var3    CMATO34
+	var3    AUTO_ASPART
 
 ;-----------------------------------------------------------------------------
 ;

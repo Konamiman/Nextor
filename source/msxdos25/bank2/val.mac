@@ -16,6 +16,7 @@ PT_FAT12	equ	1	;Partition type code for FAT12
 PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
 PT_EXT		equ	5	;Partition type code for extended partition
 PT_FAT16	equ	6	;Partition type code for FAT16
+PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
 MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
 MAXCLUS_FAT12	equ	4084
 MAXCLUS_12BITS	equ	4095
@@ -1212,6 +1213,9 @@ cp_volid_loop:	ld	a,(de)
 ; to the same controller, device and LUN (this is done by UNMAPALL routine
 ; in the kernel ROM page 4). Then reset the UF_FOK flag and jump to
 ; BUILD_UPB in order to search for the first partition of the new media.
+;
+; A partition assignment pending (UF_PAP) is a special case: we skip the
+; entire unmapping procedure since there was no real media change.
 
 DO_MEDIA_CHANGE:
 	push	ix
@@ -1220,6 +1224,8 @@ DO_MEDIA_CHANGE:
 	pop	ix
 	bit	UF_DBD,(ix+UD_DFLAGS##)
 	jr	z,POPIX_BUILD_UPB
+	bit UF_PAP,(ix+UD_DFLAGS##)
+	jr	nz,POPIX_BUILD_UPB
 
 	push	af
 	push	bc
@@ -1305,27 +1311,6 @@ build_upb_okfsec:
 		push	af
 		push	ix
 
-		;ld	a,(MFLAGS##)
-		;and	2
-		;jr	z,build_upb_srchpar
-
-		;bit	UF_FOK,(ix+UD_DFLAGS##)
-		;jr	z,build_upb_srchpar
-
-		;ld	a,(ix+UD_FSEC##+2)
-		;ld	(DIO_EX_SECTOR##),a
-		;ld	e,(ix+UD_FSEC##)
-		;ld	d,(ix+UD_FSEC##+1)
-		;ld	bc,(DATA_SEG##)
-		;ld	b,1
-		;pop	hl
-		;push	hl
-		;ld	ix,UPB_BUF##
-		;call	READ_UNIT
-		;pop	hl
-		;jp	nz,build_upb_err
-		;jp	build_upb_dofind
-
 build_upb_srchpar:		
 		ld	ix,UPB_BUF##
 ;
@@ -1356,9 +1341,38 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 		ex	(sp),ix
 		and	UFM_DB+UFM_FO
 		cp	UFM_DB
-		jr	nz,build_upb_dof2
+		jp	nz,build_upb_dof2
 
 build_upb_do_findpart:
+	ex	(sp),ix
+    ld b,(ix+UD_DI##)
+	ld c,(ix+UD_LI##)
+	ex	(sp),ix
+	
+	pop hl
+	push hl
+
+	push ix
+	push iy
+
+	ld	ix,AUTO_ASPART##
+	ld	(BK4_ADD##),ix
+	ld	ix,?CALL4##
+	ld	iy,(MASTER_SLOT##-1)
+	call	CALSLT##		
+	
+	pop iy
+	pop ix
+
+	or a
+	jp nz,build_upb_notfind
+
+	ex	(sp),ix
+	set	UF_FOK,(ix+UD_DFLAGS##)
+	ex	(sp),ix
+	pop	hl	;Restore unit desciptor
+	jp found_upb
+
 		push	ix
 		pop	hl
 		ld	bc,MBR_PSTART+POFF_TYPE
@@ -1371,6 +1385,8 @@ build_upb_srchp:
 		cp	PT_FAT16
 		jr	z,build_upb_pfound
 		cp	PT_FAT16_S
+		jr	z,build_upb_pfound
+		cp  PT_FAT16_L
 		jr	nz,build_upb_nopfound
 build_upb_pfound:
 		ld	bc,POFF_PSTART-POFF_TYPE	
@@ -1423,7 +1439,8 @@ build_upb_dofind:
 ;
 		;If no valid UPB found, and are invoking from F_RDDRV or F_WRDRV,
 		;ignore error and continue.
-		
+
+build_upb_notfind:		
 		bit	RF_DOS2,(iy+@RW_FLAGS##)
 		ld	a,1
 		jr	nz,found_upb

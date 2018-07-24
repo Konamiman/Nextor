@@ -257,6 +257,11 @@ ST10:	PUSH	DE
 
 	endm
 
+djpnz macro address
+    dec b
+	jp nz,address
+  endm
+
 ;------------------------------------------------------------------------------
 ;
 	.list

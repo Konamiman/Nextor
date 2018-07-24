@@ -273,12 +273,12 @@ DRV_NAME:
 	jp	DRV_INIT
 	jp	DRV_BASSTAT
 	jp	DRV_BASDEV
-        jp      DRV_EXTBIO
-        jp      DRV_DIRECT0
-        jp      DRV_DIRECT1
-        jp      DRV_DIRECT2
-        jp      DRV_DIRECT3
-        jp      DRV_DIRECT4
+    jp  DRV_EXTBIO
+    jp  DRV_DIRECT0
+    jp  DRV_DIRECT1
+    jp  DRV_DIRECT2
+    jp  DRV_DIRECT3
+    jp  DRV_DIRECT4
     jp  DRV_CONFIG
 
 	ds	12
@@ -806,27 +806,20 @@ DRV_DIRECT4:
 ;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
 ;   Output:
 ;     B = number of drives
+;
+; * Get default configuration for drive
+;   Input:
+;     A = 2
+;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+;     C = Relative drive number at boot time
+;   Output:
+;     B = Device index
+;     C = LUN index
 
 DRV_CONFIG:
 	ld a,1
 	ret
-
-	;Example: 3 drives at boot time in DOS 2 mode, 2 drives in DOS 1 mode
-
-if 0
-	dec a
-	ld a,1
-	ret nz
-
-	ld a,b
-	or a
-	ld a,0
-	ld b,3
-	ret z
-	ld b,2
-	ret
-endif
-
+	
 
 ;=====
 ;=====  BEGIN of DEVICE-BASED specific routines

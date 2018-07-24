@@ -275,7 +275,7 @@ MATOS: dw MATO1, MATO2, MATO3, MATO4, MATO5, MATO6, MATO7, MATO8
 
 MATO1: db "Desintegrome en mi propia parafernalia divisuatoria",0
 MATO2: db "Yo solo queria jugar al Tetris...",0
-MATO3: db "AUTOVERMIETUNG!!",0
+MATO3: db "No lo piense mas y pida ya el NestorMetodo!",0
 MATO4: db "Ni que yo fuera el gran capullo del decimal! Como se nota que no tengo ascensor en mi casa.",0
 MATO5: db "Pareces un hombre de 40 anyos de hace 40 anyos.",0
 MATO6: db "Hasta incluso! Muera todo!",0

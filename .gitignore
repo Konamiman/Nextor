@@ -23,11 +23,11 @@ dos250ba.dat
 kernel.dat
 nextor2.rom
 info/*.pdf
-source/msxdos25/bank*/**.inc
-source/msxdos25/drivers/**.inc
-source/msxdos25/bank5/**.dat
-source/msxdos25/bank5/**.asm
-source/command25/msxdos/**.inc
+source/msxdos25/bank*/*.inc
+source/msxdos25/drivers/*.inc
+source/msxdos25/bank5/*.dat
+source/msxdos25/bank5/*.asm
+source/command25/msxdos/*.inc
 source/command25/msxdos/codes.mac
 source/command25/msxdos/data.mac
 source/tools/**.inc
