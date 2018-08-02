@@ -1066,7 +1066,7 @@ void AddPartition()
 				break;
 			} else if(ch == '\0' || ch == 13 || ch == 'm') {
 				validNumberEntered = true;
-				enteredSizeInK << 10;
+				enteredSizeInK <<= 10;
 				sizeInKSpecified = false;
 				break;
 			} else if(ch < '0' || ch > '9') {
@@ -1146,7 +1146,8 @@ void TestDeviceAccess()
 	InitializeScreenForTestDeviceAccess(message);
 
 	while(GetKey() == 0) {
-		_ultoa(sectorNumber, buffer, 10);
+		sprintf(buffer, "%u", sectorNumber);
+		//_ultoa(sectorNumber, buffer, 10);
 		Locate(messageLen, MESSAGE_ROW);
 		print(buffer);
 		print(" ...\x1BK");
@@ -1161,7 +1162,7 @@ void TestDeviceAccess()
 
 		if((error = regs.Bytes.A) != 0) {
 			strcpy(buffer, errorMessageHeader);
-			_ultoa(sectorNumber, buffer + strlen(errorMessageHeader), 10);
+			sprintf(buffer + strlen(errorMessageHeader), "%u", sectorNumber);
 			strcpy(buffer + strlen(buffer), ":");
 			PrintDosErrorMessage(error, buffer);
 			PrintStateMessage("Continue reading sectors? (y/n) ");

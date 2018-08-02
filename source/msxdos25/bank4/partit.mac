@@ -686,6 +686,7 @@ AUTOD_UDFND2:
 	or a
 	jr z,AUTOD_OK
 	set UF_PAP,(ix+UD_DFLAGS##) ;Partition will be assigned on first access
+	set UF_NCH,(ix+UD_DFLAGS##)
 	jr	AUTOD_OK
 
 AUTOD_UDFND3:
@@ -5025,7 +5026,7 @@ COUNTDEVS1:
 COUNTDEVS2:
 	push	af
 	push	bc
-	ld	hl,COUNTDEVS	;Throw away the returned data
+	ld	hl,($SECBUF##)	;We don't actually need this data
 	ld	ix,LUN_INFO##
 	ex	af,af'
 	ld	a,DV_BANK##
@@ -5099,7 +5100,7 @@ DRVS1NX2:
 ;
 ;    Check if a given candidate partition assignment information is already
 ;    in use in any unit.
-;    Input: IX = Address of pointer to target unit descriptor in UNIT_TAB
+;    Input: IX = Address of target unit descriptor
 ;                (will be skipped in the check), DOS 2 mode only
 ;           H  = Driver slot number
 ;           L  = Driver segment number
@@ -5111,10 +5112,9 @@ DRVS1NX2:
 ;    Modifies: AF, B, DE, HL, IX, IY
 
 CHECK_MAP_IN_USE:
-lulz::
 	ld	a,(DOS_VER##)
 	or a
-	jr z,CMIU_DOS1
+	jp z,CMIU_DOS1
 
 CMIU_DOS2:
 	push    de
@@ -5129,8 +5129,8 @@ CMIU_CHECK:
 	pop	de	;Target unit descriptor pointer
 	push	de
 
-	push	iy
-	pop hl
+	ld l,(iy)
+	ld h,(iy+1)
 
 	or	a
 	sbc	hl,de

@@ -496,6 +496,7 @@ int CreatePartition(int index)
 	ulong extendedPartitionFirstAbsoluteSector;
 	partitionTableEntry* tableEntry;
 	bool onlyPrimaryPartitions = (partitionsCount <= 4);
+	ulong x;
 
 	if(onlyPrimaryPartitions) {
 		mbrSector = 0;
@@ -546,6 +547,9 @@ int CreatePartition(int index)
     }
 
 	mbr->mbrSignature = 0xAA55;
+
+	x = tableEntry->firstAbsoluteSector;	//Without this, firstAbsoluteSector is written to disk as 0. WTF???
+	tableEntry->firstAbsoluteSector = x;
 
 	memcpy(sectorBufferBackup, sectorBuffer, 512);
 

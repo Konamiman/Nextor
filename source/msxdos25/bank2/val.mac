@@ -41,11 +41,6 @@ MAXCLUS_12BITS	equ	4095
 		call	CALL_UNIT		; give up if any error
 		ret	nz			; (shouldn't be!)
 ;
-if 0
-		ld	a,d
-		and	e			;If returned pointer is
-		inc	a			; 0FFFFh then return an
-else
 		ld	a,e			;Null pointer is OK.
 		or	d
 		ret	z
@@ -59,11 +54,12 @@ else
 		ex	(sp),ix
 		pop	hl			;If returned string is
 		or	a			; null then return an
-endif
+
 		ld	a,.IFORM##		; error.
 		ret	z
 		xor	a
 		ret
+
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -954,13 +950,32 @@ MEDIA_CHECK:
 		pop ix
 		bit UF_PAP,(ix+UD_DFLAGS##)
 		pop ix
-		jr z,MCHECK1
+		jr z,MCHK0
 		ld a,1
-		or a
-		ld a,0
+		or a	;NC, NZ
 		ret
 
-MCHECK1:
+MCHK0:
+		call MCHK2
+
+		push ix
+		push af
+
+		push hl
+		pop ix
+		bit UF_NCH,(ix+UD_DFLAGS##)
+		jr z,MCHK1
+
+		res UF_NCH,(ix+UD_DFLAGS##)
+		ex	(sp),hl	;retrieve pushed AF
+		set 6,l		;set Z to force "not changed"
+		ex  (sp),hl
+MCHK1:
+		pop af
+		pop ix
+		ret
+
+MCHK2:
 		call	_MCHECK
 		ret	z
 		ret	nc	;If not "not sure interpret as changed", return
@@ -1225,7 +1240,7 @@ DO_MEDIA_CHANGE:
 	bit	UF_DBD,(ix+UD_DFLAGS##)
 	jr	z,POPIX_BUILD_UPB
 	bit UF_PAP,(ix+UD_DFLAGS##)
-	jr	nz,POPIX_BUILD_UPB
+	jr	nz,RESFOK_BUILD_UPB
 
 	push	af
 	push	bc
@@ -1257,6 +1272,7 @@ DO_MEDIA_CHANGE:
 
 	push	hl
 	pop	ix
+RESFOK_BUILD_UPB:	
 	res	UF_FOK,(ix+UD_DFLAGS##)
 	pop	ix
 
@@ -1295,6 +1311,20 @@ POPIX_BUILD_UPB:
 ;
 ;
 build_upb_common:
+		call bupc
+		ret nz
+		push af
+		push ix
+		push hl
+		pop ix
+		res UF_PAP,(ix+UD_DFLAGS##)
+		pop ix
+		pop af
+		ret
+
+bupc:
+		push	 af
+		
 		push	hl
 		pop	ix
 
@@ -1306,6 +1336,7 @@ build_upb_common:
 		ld	(ix+UD_FSEC##+3),0
 build_upb_okfsec:
 
+		pop		af
 		push	bc
 		push	de
 		push	af
@@ -1371,59 +1402,24 @@ build_upb_do_findpart:
 	set	UF_FOK,(ix+UD_DFLAGS##)
 	ex	(sp),ix
 	pop	hl	;Restore unit desciptor
+
+	;Read boot sector in UPB_BUF, it will be needed later
+
+	push hl
+	pop ix
+	ld de,0
+	ld	ix,UPB_BUF##
+	ld	bc,(DATA_SEG##)
+	ld	b,1
+	push hl
+	push ix
+	call READ_UNIT
+	pop ix
+	pop hl
+
+	jr nz,build_upb_err
 	jp found_upb
 
-		push	ix
-		pop	hl
-		ld	bc,MBR_PSTART+POFF_TYPE
-		add	hl,bc
-		ld	b,4
-build_upb_srchp:
-		ld	a,(hl)
-		cp	PT_FAT12
-		jr	z,build_upb_pfound
-		cp	PT_FAT16
-		jr	z,build_upb_pfound
-		cp	PT_FAT16_S
-		jr	z,build_upb_pfound
-		cp  PT_FAT16_L
-		jr	nz,build_upb_nopfound
-build_upb_pfound:
-		ld	bc,POFF_PSTART-POFF_TYPE	
-		add	hl,bc
-		ex	(sp),ix
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+1),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+2),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+3),a
-		set	UF_FOK,(ix+UD_DFLAGS##)
-		ex	(sp),ix
-
-		ld	bc,(DATA_SEG##) ;Read boot sector of the partition
-		ld	b,1
-		ld	de,0
-		pop	hl	;Restore unit desciptor
-		ld	ix,UPB_BUF##
-		call	READ_UNIT
-		jr	nz,build_upb_err
-
-		jr	build_upb_dofind
-
-build_upb_nopfound:
-		ld	de,MBR_PSIZE
-		add	hl,de
-		djnz	build_upb_srchp
-
-		;If no valid partition found,
-		;try searching UPB in the MBR itself
-	
 build_upb_dof2:
 		ex	(sp),ix
 		set	UF_FOK,(ix+UD_DFLAGS##)
@@ -1463,11 +1459,6 @@ build_upb_err:	ld	b,a
 found_upb:	pop	de	;Throw away input AF
 found_upb2:	pop	de
 		pop	bc
-		push ix
-		push hl
-		pop ix
-		res UF_PAP,(ix+UD_DFLAGS##)
-		pop ix
 		or a
 		ret
 
@@ -2196,19 +2187,19 @@ reduce_set:
 		;          and compiles always the else clause.
 		;          Solve this if MAX_UNITS needs to grow over 8.
 
-if MAX_UNITS## GT 8
-		ld	hl,(RALL_VECT##)
-else
+;if MAX_UNITS## GT 8
+;		ld	hl,(RALL_VECT##)
+;else
 		ld	a,(RALL_VECT##)
-endif
+;endif
 
 reduce_bit_loop:
-if MAX_UNITS## GT 8
-		srl	h
-		rr	l
-else
+;if MAX_UNITS## GT 8
+;		srl	h
+;		rr	l
+;else
 		rrca
-endif
+;endif
 		djnz	reduce_bit_loop
 		jr	nc,reduce_end	;Here Cy is the red. all. flag for this drive
 		set	UF_RALL,(ix+UD_FLAGS##)

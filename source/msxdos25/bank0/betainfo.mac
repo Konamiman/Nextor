@@ -3,7 +3,7 @@ if ALPHA gt 0
 endif
 
 if BETA gt 0
-	defb	" beta ",BETA+"0"," 2018.07.24"
+	defb	" beta ",BETA+"0"," 2018.08.01"
 endif
 
 if RC gt 0
