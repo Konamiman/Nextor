@@ -204,7 +204,7 @@ copy ..\..\codes.rel
 copy ..\..\kvar.rel
 copy ..\..\data.rel
 copy ..\..\chgbnk.rel
-copy ..\b6.mac
+copy ..\..\bank6\b6.mac
 copy ..\..\bank0\b0labels.inc
 for %%A in (B6,DRIVER,CHGBNK) do cpm32 M80 =%%A
 cpm32 L80 /P:4100,DRIVER,DRIVER/N/X/Y/E
@@ -212,22 +212,21 @@ cpm32 L80 /P:7fd0,CHGBNK,CHGBNK/N/X/Y/E
 hex2bin -s 4000 driver.hex
 hex2bin -s 7FD0 CHGBNK.hex
 
-..\..\mknexrom  ..\..\Nextor-2.0.4.base.dat Nextor-2.0.4.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
+..\..\..\..\wintools\mknexrom  ..\..\Nextor-2.0.4.base.dat Nextor-2.0.4.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
 copy Nextor-2.0.4.%%~nc.ROM ..\..\..\..\bin\kernels
 del b6.mac
-del *.rom
 cd ..
 )
 )
 
 echo .
 echo ***
-echo ***  Driver: SD SCC+
+echo ***  Driver: MegaFlashROM SD SCC+
 echo ***
 echo .
 
-cd sdscc
-..\..\mknexrom ..\..\Nextor-2.0.4.base.dat nextor2.rom /d:driver.bin /m:Mapper.ASCII8.bin
+cd MegaFlashRomSD
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.0.4.base.dat nextor2.rom /d:driver.bin /m:Mapper.ASCII8.bin
 copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.0.4.MegaFlashSDSCC.ROM
 sjasm makerecoverykernel.asm kernel.dat
 copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.0.4.MegaFlashSDSCC.Recovery.ROM
