@@ -110,23 +110,25 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.0.4](#51-v204)
+[5.1. v2.0.5 beta 1](#51-v205-beta-1)
 
-[5.2. v2.0.3](#52-v203)
+[5.2. v2.0.4](#52-v204)
 
-[5.3. v2.0.2](#53-v202)
+[5.3. v2.0.3](#53-v203)
 
-[5.4. v2.0.1](#54-v201)
+[5.4. v2.0.2](#54-v202)
 
-[5.5. v2.0 final](#55-v20-final)
+[5.5. v2.0.1](#55-v201)
 
-[5.6. v2.0 Beta 2](#56-v20-beta-2)
+[5.6. v2.0 final](#56-v20-final)
 
-[5.7. v2.0 Beta 1](#57-v20-beta-1)
+[5.7. v2.0 Beta 2](#57-v20-beta-2)
 
-[5.8. v2.0 Alpha 2b](#58-v20-alpha-2b)
+[5.8. v2.0 Beta 1](#58-v20-beta-1)
 
-[5.9. v2.0 Alpha 2](#59-v20-alpha-2)
+[5.9. v2.0 Alpha 2b](#59-v20-alpha-2b)
+
+[5.10. v2.0 Alpha 2](#510-v20-alpha-2)
 
 ## 1. Introduction
 
@@ -354,6 +356,8 @@ After all drives have been assigned to drivers, a device and partition to drive 
 9.  Go to the next device-based driver (if any), and repeat from step 2.
 
 In short: available devices having a FAT12 or FAT16 partition are assigned to the available drives in device and logical unit number order, but the first partition having a NEXTOR.DAT file in the root directory has preference. Note that the contents of the NEXTOR.DAT file is irrelevant, it may even be an empty file (in future versions of Nextor this file is likely to contain some system configuration information). Also, note that only primary partitions are examined in the automatic mapping procedure.
+
+Starting with Nextor 2.0.5, device-based drivers can tell Nextor how many drives they want at boot time and which devices should be mapped to these drivers, bypassing part of this automatic procedure (partitions are still selected automatically). This feature is optional, and must be implemented by the driver developer.
 
 After the automatic mapping is finished, the boot procedure will continue with the following steps:
 
@@ -846,7 +850,21 @@ Note that error messages will be displayed in English regardless of the variant 
 
 This section contains the change history for the different versions of Nextor. Changes that affect application or driver development are not listed here; instead, you should look at the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ and _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ documents for a list of changes of that type.
 
-### 5.1. v2.0.4
+### 5.1. v2.0.5 beta 1
+
+* Fix: if an error occurred while performing sector access and the user selected "retry", the higher byte of sector number was being reset to 0. Thus, when accessing past the first 32MB of the device this caused weird errors, and data corruption when writing.
+
+* Fix: FDISK crashing when the system booted directly in BASIC.
+
+* Fix: the Nextor kernel code was writing to the driver space in ROM, causing crashes due to inadvertent ROM bank changes.
+
+* Partitions of type 14 (FAT16 with LBA mapping) are now recognized as a valid FAT16 partition at boot time, and displayed as "FAT16" in partition lists in fdisk.
+
+* MBR signature (0x55AA at the end of the sector) is now added to the MBR of the generated partitions by FDISK (previosly it was being added to the sector with the partition table only).
+
+* Drivers can now specify the desired number of drives and device to drive assignment at boot time (see the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ for details). This will imply changes in the user experience only if the driver chooses to use this feature.
+
+### 5.2. v2.0.4
 
 * Fixed a bug introduced in v2.0.3 that caused the free disk space to be reported incorrectly by one cluster.
 
@@ -864,7 +882,7 @@ This section contains the change history for the different versions of Nextor. C
 
 * Two variants of NEXTOR.SYS are offered now: with and without Japanese error messages (see 4.3. Reduced NEXTOR.SYS without Japanese error messages).
 
-### 5.2. v2.0.3
+### 5.3. v2.0.3
 
 * The code that calculates the free space on a FAT16 volume (used by the ALLOC and DSPACE function calls) has been rewritten from scratch for performance. Now calculating the free space on a FAT16 volume takes about 1/10 of the time it took in previous versions.
 
@@ -876,21 +894,21 @@ This section contains the change history for the different versions of Nextor. C
 
 * The system variable KANJTABLE (at &HF30F) now is filled from the contents of the BIOS only if the computer has a Japanese character set. This solves the corrupted error messages in some computers upgraded to MSX2+.
 
-### 5.3. v2.0.2
+### 5.4. v2.0.2
 
 * One of the changes in the v2.0 final ("Fixed a bug in the kernel code that caused a data area to be overwritten with a pointer") has been rolled back. It was not actually a bug, and the "fix" was preventing Nextor from properly booting in DOS 1 mode.
 
-### 5.4. v2.0.1
+### 5.5. v2.0.1
 
 * Corrected a bug in the kernel boot code that rendered Nextor unusable in openMSX and could potentially cause problems in real computers as well. The MKNEXROM tool and the [Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md) document have been updated as well. 
 
-### 5.5. v2.0 final
+### 5.6. v2.0 final
 
 * Fixed a bug in NEXTOR.SYS that caused the "Abort, Retry, Ignore" message not to be displayed properly.
 
 * Fixed a bug in the kernel code that caused a data area to be overwritten with a pointer.
 
-### 5.6. v2.0 Beta 2
+### 5.7. v2.0 Beta 2
 
 * Fixed a bug that caused the RAM disk to not work properly.
 
@@ -904,7 +922,7 @@ This section contains the change history for the different versions of Nextor. C
 
 * Added the NSYSVER tool (see 3.4.10. NSYSVER: the NEXTOR.SYS version changer)
 
-### 5.7. v2.0 Beta 1
+### 5.8. v2.0 Beta 1
 
 * Fixed a bug that caused device sectors to be read more times than necessary, thus seriously hurting device access speed.
 
@@ -966,7 +984,7 @@ This section contains the change history for the different versions of Nextor. C
 
 * Devices are now reported as being fixed in the experimental Sunrise IDE driver; hot card swapping is not supported when CF cards.
 
-### 5.8. v2.0 Alpha 2b
+### 5.9. v2.0 Alpha 2b
 
 * Previous versions assumed that ROM bank 0 was switched at boot time, and the system crashed if any other bank was switched instead. Now Nextor boots properly regardless of which bank is switched at boot time.
 
@@ -978,7 +996,7 @@ This section contains the change history for the different versions of Nextor. C
 
 * Added the note for Sunrise IDE/CF users (section 3.1.1) in this manual.
 
-### 5.9. v2.0 Alpha 2
+### 5.10. v2.0 Alpha 2
 
 * Corrected some serious bugs related to partition management. Especially one that prevented the system from booting when a completely blank device (not containing any partition) was attached to a device-based driver.
 

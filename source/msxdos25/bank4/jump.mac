@@ -66,6 +66,12 @@ jentry	macro	name
 	jentry	CDRIVERS
 
 	jentry	F_LOCK
+	jentry	F_FOUT
+	jentry	F_RALLOC
+
+	jentry  DRVS2
+	jentry  CMATO34
+	jentry  AUTO_ASPART
 
 	finish <JUMP>
 	end

@@ -1,10 +1,9 @@
 //-----------------------------------------------------------------------------	
 // 
-// Crea el fichero de recuperacion de la kernel
-// Se trata de una cabecera que sirve de identificador e indica el tamaño de
-// la kernel.
-// Hay que grabar este fichero en la tarjeta SD tras formatearla.
-// Luego se carga desde el menu recovery
+// Create the kernel recovery file.
+// It's aheader that acts as an identifier and tells the size of the kernel.
+// This file has to be saved in the SD card after formatting it,
+// then it's loaded from the recovery menu.
 //
 // Manuel Pazos 13/01/2013
 //

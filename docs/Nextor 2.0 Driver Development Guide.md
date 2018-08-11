@@ -68,7 +68,9 @@
 
 [4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-413eh)
 
-[4.4.8. RESERVED (4152h to 415Fh)](#448-reserved-4152h-to-415fh)
+[4.4.8. DRV_CONFIG (4152h)](#448-drv_config-4152h)
+
+[4.4.9. RESERVED (4155h to 415Fh)](#449-reserved-4155h-to-415fh)
 
 [4.5. Routines for drive-based drivers](#45-routines-for-drive-based-drivers)
 
@@ -100,17 +102,19 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.0.1](#51-v201)
+[5.1. v2.0.5 beta 1](#51-v205-beta-1)
 
-[5.2. v2.0 final](#52-v20-final)
+[5.2. v2.0.1](#52-v201)
 
-[5.3. v2.0 Beta 2](#53-v20-beta-2)
+[5.3. v2.0 final](#53-v20-final)
 
-[5.4. v2.0 Beta 1](#54-v20-beta-1)
+[5.4. v2.0 Beta 2](#54-v20-beta-2)
 
-[5.5. v2.0 Alpha 2b](#55-v20-alpha-2b)
+[5.5. v2.0 Beta 1](#55-v20-beta-1)
 
-[5.6. v2.0 Alpha 2](#56-v20-alpha-2)
+[5.6. v2.0 Alpha 2b](#56-v20-alpha-2b)
+
+[5.7. v2.0 Alpha 2](#57-v20-alpha-2)
 
 ## 1. Introduction
 
@@ -392,7 +396,7 @@ _Device-based drivers_ use a completely different approach. They do not expose d
 
 In general it is recommended to develop device-based drivers, as the routines to implement are easier and the driver code needs to just read and write absolute device sectors without having to worry about partitions; also, the Nextor built-in device partitioning tool can be used to create partitions on devices controlled by device-based drivers only. Developing a drive-based driver may however be a good option to easily convert an existing MSX-DOS driver to Nextor.
 
-Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility. More details are provided in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_.
+Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4152h)). More details are provided in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_.
 
 ### 4.2. Page 0 routines and data
 
@@ -512,10 +516,14 @@ This is a flags byte that contains information about the driver:
 ```
 bit 0:  0 = the driver is a drive-base driver
         1 = the driver is a device-based driver
-bits 1-7: Reserved, must be zero
+bit 1:  Reserved, must be zero
+bit 2:  1 if the driver implements the DRV_CONFIG routine
+bits 3-7: Reserved, must be zero
 ````
 
-### 4.3.3. RESERVED (410Fh)
+Note that [DRV_CONFIG](#448-drv_config-4152h) is used by Nextor starting at version 2.0.5.
+
+#### 4.3.3. RESERVED (410Fh)
 
 Reserved byte, must be zero.
 
@@ -632,7 +640,49 @@ These are the entries for direct calls to the driver. Calls to any of the five e
 
 If the driver does not implement any direct call code, it can simply fill these entry points with RETs.
 
-#### 4.4.8. RESERVED (4152h to 415Fh)
+#### 4.4.8. DRV_CONFIG (4152h)
+
+This routine, introduced in Nextor 2.0.5, allows the driver to provide information about its preferred configuration at boot time. If this routine is implemented, the appropriate bit of [the driver flags](#432-drv_flags-410eh) must be set.
+
+Nextor will specify the required configuration type by passing a configuration index when invoking this routine. For compatibility with future versions of Nextor, which could define new configuration indexes, this routine should always return an error when an unknown configuration index is supplied (also when the configuration index is known but the driver is unable to supply meaningful configuration).
+
+All the configurations are optional: the driver may choose to implement all of them or only some. Nextor will always resort to default or automatically calculated values for the configuration indexes for which the driver returns an error.
+
+**Note:** Currently, all the defined configurations apply to device-based drivers only.
+
+```
+Input:
+  A = Configuration index
+  BC, DE, HL = Depends on the configuration
+
+Output:
+  A = 0: Ok
+      1: Configuration not available for the supplied index,
+         or unknown configuration index
+  BC, DE, HL = Depends on the configuration
+
+* Get number of drives at boot time
+  Input:
+    A = 1
+    B = 0 for DOS 2 mode, 1 for DOS 1 mode
+  Output:
+    B = number of drives
+
+* Get default configuration for drive
+  Input:
+    A = 2
+    B = 0 for DOS 2 mode, 1 for DOS 1 mode
+    C = Relative drive number at boot time
+  Output:
+    B = Device index
+    C = LUN index
+```
+
+For "Get default configuration for drive", Nextor will assign the specified device and LUN to the appropriate drive at boot time, and the partition will be selected automatically. If the device is not ready at boot time, the drive will still be assigned, and Nextor will try to search for a partition every time the drive is accessed until the device is available. This is useful for having drives assigned to removable devices even if they don't have a volume inserted at boot time.
+
+Also, "Get default configuration for drive" will be invoked for relative units 0 to N-1, where N is either the value returned by "Get number of drives at boot time", or (if the routine returns an error for that configuration) the value calculated automatically by Nextor from the number of available devices.
+
+#### 4.4.9. RESERVED (4155h to 415Fh)
 
 This area is reserved for future expansion, it must be filled with zeros.
 
@@ -964,19 +1014,23 @@ patch both banks if a data file for this area is supplied.
 
 This section contains the legacy change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ document.
 
-### 5.1. v2.0.1
+### 5.1. v2.0.5 beta 1
+
+Added [the DRV_CONFIG routine](#448-drv_config-4152h).
+
+### 5.2. v2.0.1
 
 Added an explanation about how to proceed when generating a kernel file when using a ROM mapper that works with 8K banks.
 
-### 5.2. v2.0 final
+### 5.3. v2.0 final
 
 There are no changes relative to driver development in this version.
 
-### 5.3. v2.0 Beta 2
+### 5.4 v2.0 Beta 2
 
 There are no changes relative to driver development in this version.
 
-### 5.4. v2.0 Beta 1
+### 5.5. v2.0 Beta 1
 
 There are no changes relative to driver development in this version. However, this document has been updated as follows:
 
@@ -990,10 +1044,10 @@ There are no changes relative to driver development in this version. However, th
 
 * In the description of the DRV_DIRECT routine, the entry points in banks 0 and 3 were incorrectly stated to be 7850h to 785Ch. The text has been corrected to specify the real values, 7850h to 785Ch (and the same in the DRIVER.ASM file).
 
-### 5.5. v2.0 Alpha 2b
+### 5.6. v2.0 Alpha 2b
 
 * The last step of the manual ROM file creation (Section 3.1) has been changed, now the file position for the extra bank switching code is not calculated but is a fixed number.
 
-### 5.6. v2.0 Alpha 2
+### 5.7. v2.0 Alpha 2
 
 * The built-in format choice string addresses have been increased by 1K. So now they are 781Fh for the null string and 7820h for the "Single/double sided" string.

@@ -395,7 +395,7 @@ DELETE_LOOP_OK:	POP	BC			;Flag that a file has been
 ;
 DELETE_LOOP:	CALL	S_F_N			;Find next file and stop
 START_DELETE:	JR	NZ,DELETE_ERR		; if not found
-		BIT	AT_RO,(IX+FIB_ATR##)	;Don't delete read only files.
+		BIT	AT_RO,(IX+FIB_ATTR##)	;Don't delete read only files.
 		JR	NZ,DELETE_LOOP
 		LD	A,1			;Make disc dirty.
 		PCALL	DEL_FIB			;Actually do the delete.  The

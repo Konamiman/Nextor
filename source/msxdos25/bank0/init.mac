@@ -700,6 +700,7 @@ SLAVE:
 	;PROCNM+6: Number of drives actually assigned
 	;PROCNM+7: 1 to boot in DOS 1 mode
 	;PROCNM+8: 1 if device-based driver
+	;PROCNM+9: <>0 if the driver provides configuration
 
 	;Calculate how many work area space can be allocated, it will be:
 	;(SP) - MAX(C200h, BOTTOM+512)
@@ -726,8 +727,14 @@ BOTTOM_OK:
 	ld	(BK4_ADD##),hl
 	ld	hl,DV_TYPE##
 	call	CALDRV##
-	and	1	;Device-based driver?
+	ld h,a
+	and	1
 	ld	(PROCNM+8),a
+	ld a,h
+	push af
+	and 100b
+	ld	(PROCNM+9),a
+	pop af
 	pop	hl
 	jr	z,NO_DEVBASED
 	
@@ -784,7 +791,7 @@ BIGENOUGH:
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
-	call	COUNTDEVS
+	call	COUNTDRV
 	ld	(PROCNM+5),a
 
 NO255DRIVES:
@@ -848,6 +855,11 @@ FINDKER250:
 	jr	z,NOSETINT
 	set	6,b
 NOSETINT:
+	ld a,(PROCNM+9)
+	or a
+	jr	z,NOSETCONF
+	set 5,b
+NOSETCONF:
 	ld	(hl),b
 
 	ld	a,(PROCNM+6)
@@ -1095,7 +1107,7 @@ NO_DPB:
 ;
 	call	GSLOT2		;Get current page-2 slot
 	ld	b,a
-nomem::
+
 	ld	a,(PROCNM+7)
 	cp	1
 	jr	z,NODOSINIT
@@ -2181,34 +2193,14 @@ SNEXT:	CALLDOS	12h	;;Search for next (FCB)
 	ALIGN	501Eh
 FSIZE:	CALLDOS	23h	;;Get file size (FCB)
 ;
-	;Invoke LUN_INFO on all possible devices of the driver,
-	;and return in A the number of devices found.
+    ;--- Get in A the number of drives assigned to this driver at boot time.
 
-cdvs::
-COUNTDEVS:
-	ld	c,0
-	ld	a,1
-COUNTDEVS1:
-	ld	b,7
-COUNTDEVS2:
-	push	af
-	push	bc
-	ld	hl,COUNTDEVS	;Throw away the returned data
-	ld	ix,LUN_INFO##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
-	pop	bc
-	or	a
-	jr	nz,COUNTDEVS3
-	inc	c
-COUNTDEVS3:
-	pop	af
-	djnz	COUNTDEVS2
-	inc	a
-	cp	8
-	jr	c,COUNTDEVS1
-	ld	a,c ;!!!
+COUNTDRV:
+	ld a,(PROCNM+9)
+	ld b,a
+	ld	hl,DRVS2##
+	ld	(BK4_ADD##),hl
+	call	?C4PBK##
 	ret
 
 	ALIGN	504Eh

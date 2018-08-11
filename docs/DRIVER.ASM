@@ -1,14 +1,14 @@
-	; Dummy disk driver for Nextor 2.0
-	; By Konamiman, 2/2014
-	;
-	; This code can be used as the basis for developing
-	; a real disk driver: just set DRV_TYPE appropriately,
-        ; change the driver name and version at DRV_NAME and VER_*, and
-        ; implement the required routines depending on the driver type.
-	;
-	; See the Nextor driver development guide for more details.
+    ; Dummy disk driver for Nextor 2.0
+    ; By Konamiman, 8/2018
+    ;
+    ; This code can be used as the basis for developing
+    ; a real disk driver: just set DRV_TYPE appropriately,
+    ; change the driver name and version at DRV_NAME and VER_*, and
+    ; implement the required routines depending on the driver type.
+    ;
+    ; See the Nextor driver development guide for more details.
 
-	;org	4100h
+    ;org 4100h
 
 
 DRV_START:
@@ -166,13 +166,15 @@ SING_DBL  equ     7820h ;"1-Single side / 2-Double side"
 ;
 ; Driver flags:
 ;    bit 0: 0 for drive-based, 1 for device-based
+;    bit 2: 1 if the driver implements the DRV_CONFIG routine
+;             (used by Nextor from v2.0.5)
 
 if DRV_TYPE eq 0
-	db	0
+	db	0+4
 endif
 
 if DRV_TYPE eq 1
-	db	1
+	db	1+4
 endif
 
 
@@ -207,25 +209,26 @@ DRV_NAME:
 	jp	DRV_INIT
 	jp	DRV_BASSTAT
 	jp	DRV_BASDEV
-        jp      DRV_EXTBIO
-        jp      DRV_DIRECT0
-        jp      DRV_DIRECT1
-        jp      DRV_DIRECT2
-        jp      DRV_DIRECT3
-        jp      DRV_DIRECT4
+    jp  DRV_EXTBIO
+    jp  DRV_DIRECT0
+    jp  DRV_DIRECT1
+    jp  DRV_DIRECT2
+    jp  DRV_DIRECT3
+    jp  DRV_DIRECT4
+	jp	DRV_CONFIG
 
-	ds	15
+	ds	12
 
 if DRV_TYPE eq 0
 
-	; These routines are mandatory for drive-based drivers
+; These routines are mandatory for drive-based drivers
 
-        jp      DRV_DSKIO
-        jp      DRV_DSKCHG
-        jp      DRV_GETDPB
-        jp      DRV_CHOICE
-        jp      DRV_DSKFMT
-        jp      DRV_MTOFF
+    jp  DRV_DSKIO
+    jp  DRV_DSKCHG
+    jp  DRV_GETDPB
+    jp  DRV_CHOICE
+    jp  DRV_DSKFMT
+    jp  DRV_MTOFF
 endif
 
 if DRV_TYPE eq 1
@@ -354,6 +357,41 @@ DRV_DIRECT3:
 DRV_DIRECT4:
 	ret
 
+
+;-----------------------------------------------------------------------------
+;
+; Get driver configuration 
+; (bit 2 of driver flags must be set if this routine is implemented)
+;
+; Input:
+;   A = Configuration index
+;   BC, DE, HL = Depends on the configuration
+;
+; Output:
+;   A = 0: Ok
+;       1: Configuration not available for the supplied index
+;   BC, DE, HL = Depends on the configuration
+;
+; * Get number of drives at boot time (for device-based drivers only):
+;   Input:
+;     A = 1
+;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+;   Output:
+;     B = number of drives
+;
+; * Get default configuration for drive
+;   Input:
+;     A = 2
+;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+;     C = Relative drive number at boot time
+;   Output:
+;     B = Device index
+;     C = LUN index
+
+DRV_CONFIG:
+	ld a,1
+	ret
+	
 
 ;=====
 ;=====  BEGIN of DRIVE-BASED specific routines

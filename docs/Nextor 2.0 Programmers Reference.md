@@ -68,19 +68,21 @@
 
 [7. Change history](#7-change-history)
 
-[7.1. v2.0.4](#71-v204)
+[7.1. v2.0.5 beta 1](#71-v205-beta-1)
 
-[7.2. v2.0.3](#72-v203)
+[7.2. v2.0.4](#72-v204)
 
-[7.3. v2.0 final](#73-v20-final)
+[7.3. v2.0.3](#73-v203)
 
-[7.4. v2.0 Beta 2](#74-v20-beta-2)
+[7.4. v2.0 final](#74-v20-final)
 
-[7.5. v2.0 Beta 1](#75-v20-beta-1)
+[7.5. v2.0 Beta 2](#75-v20-beta-2)
 
-[7.6. v2.0 Alpha 2b](#76-v20-alpha-2b)
+[7.6. v2.0 Beta 1](#76-v20-beta-1)
 
-[7.7. v2.0 Alpha 2](#77-v20-alpha-2)
+[7.7. v2.0 Alpha 2b](#77-v20-alpha-2b)
+
+[7.8. v2.0 Alpha 2](#78-v20-alpha-2)
 
 ## 1. Introduction
 
@@ -377,7 +379,9 @@ The information returned in the data buffer is as follows:
     bit 7: 1 => the driver is a Nextor driver
            0 => the driver is a MSX-DOS driver
                 (embedded within a MSX-DOS kernel ROM)
-    bits 6-1: Unused, always zero
+    bits 6-3: Unused, always zero
+    bit 2: 1 if the driver implements the DRV_CONFIG routine
+    bit 1: Unused, always zero
     bit 0: 1 => the driver is a device-based driver
            0 => the driver is a drive-based driver
 +5: Driver main version number
@@ -388,6 +392,8 @@ The information returned in the data buffer is as follows:
 ```
 
 In the case of MSX-DOS drivers, the driver flags byte is always zero, and no information about driver version number or driver name is returned.
+
+Nextor uses the DRV_CONFIG routine starting at version 2.0.5. See  the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ document for details.
 
 ### 3.9. Get information about a drive letter (_GDLI, 79h)
 
@@ -693,33 +699,37 @@ All of this applies only if the loaded version of NEXTOR.SYS is 2.0 beta 2 or ne
 
 This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the application developer point of view are listed. For information on changes in general, please look at the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ document. For information on changes related to driver development, please look at the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ document.
 
-### 7.1. v2.0.4
+### 7.1. v2.0.5 beta 1
+
+* [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h) now returns an extra flag that tells if the driver implements the DRV_CONFIG routine.
+
+### 7.2. v2.0.4
 
 * If an environment variable named ERRLANG exists with value EN, the _EXPLAIN function call will return error messages in English even if the kanji mode is active. See 2.6. _EXPLAIN (66h).
 
-### 7.2. v2.0.3
+### 7.3. v2.0.3
 
 * Corrected a bug in the _DPARM function call: it was always returning a value of 1 in +28 (meaning “FAT16 filesystem”) when then cluster count was between 4080 and 4095, without actually checking the filesystem contained in the drive. See 2.4. _DPARM (31h)
 
 * Added an explanation about the zero allocation information mode in section 2.2. _ALLOC (1Bh)
 
-### 7.3. v2.0 final
+### 7.4. v2.0 final
 
 (There are no changes relevant to application development in this version)
 
-### 7.4. v2.0 Beta 2
+### 7.5. v2.0 Beta 2
 
 The NEXTOR.SYS version number reported by the DOSVER function call can now be changed (see 6.2. Changing the NEXTOR.SYS version number).
 
-### 7.5. v2.0 Beta 1
+### 7.6. v2.0 Beta 1
 
 (There are no changes relevant to application development in this version)
 
-### 7.6. v2.0 Alpha 2b
+### 7.7. v2.0 Alpha 2b
 
 (There are no changes relevant to application development in this version)
 
-### 7.7. v2.0 Alpha 2
+### 7.8. v2.0 Alpha 2
 
 * The DOSVER function call has been extended to allow detection of Nextor in MSX-DOS 1 mode.
 
