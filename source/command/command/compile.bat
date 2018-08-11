@@ -1,8 +1,8 @@
 @echo off
 cls
-copy ..\..\msxdos25\*.inc
-copy ..\..\msxdos25\codes.mac
-copy ..\..\msxdos25\data.mac
+copy ..\..\kernel\*.inc
+copy ..\..\kernel\codes.mac
+copy ..\..\kernel\data.mac
 for %%A in (CODES,DATA,START,CLI,CMD,COPY,DIRS,FILES,IO,JTEXT,MESSAGES,MISC,VAR,VER) do cpm32 M80 =%%A
 cpm32 l80 /P:100,CODES,DATA,START,CLI,CMD,COPY,DIRS,FILES,IO,JTEXT,MESSAGES,MISC,VAR,VER,COMMAND2/n/x/y/e
 hex2bin -s 100 command2.hex

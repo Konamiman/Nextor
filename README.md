@@ -10,9 +10,9 @@ Note that there is no `master` branch, but branches for each major version of Ne
 
 * [**source**](/source): The source code of Nextor itself.
 
-    * [**msxdos25**](source/msxdos25): The kernel ROM, includes the FDISK tool.
+    * [**kernel**](source/kernel): The kernel ROM, includes the FDISK tool.
 
-    * [**command25**](source/command25): `NEXTOR.SYS`, `COMMAND2.COM` and the command line tools that were originally supplied with MSX-DOS.
+    * [**command**](source/command): `NEXTOR.SYS`, `COMMAND2.COM` and the command line tools that were originally supplied with MSX-DOS.
 
     * [**tools**](source/tools): The new command line tools created for Nextor.
 
@@ -31,13 +31,13 @@ You need:
 
 ### To build the Nextor kernel
 
-Run the `compile.bat` script located in the `source\msxdos25` folder. If the FDISK tool has not been compiled already (the `fdisk.dat` and `fdisk2.dat` files do not exist in the `bank5` folder), they will be compiled on the fly.
+Run the `compile.bat` script located in the `source\kernel` folder. If the FDISK tool has not been compiled already (the `fdisk.dat` and `fdisk2.dat` files do not exist in the `bank5` folder), they will be compiled on the fly.
 
-The generated kernel base file and the complete ROM files will be generated in the `bin\kernels` folder. One ROM file will be generated for each folder existing in the `source\msxdos25\drivers` folder.
+The generated kernel base file and the complete ROM files will be generated in the `bin\kernels` folder. One ROM file will be generated for each folder existing in the `source\kernel\drivers` folder.
 
 ### To build the FDISK tool only
 
-If you make a change in the FDISK tool, you can compile it without having to compile the full kernel again. Just run the `compile.bat` script in the `source\msxdos25\bank5` folder (do NOT run `compfdsk.bat`). The ROM files in `bin\kernels` will be appropriately updated.
+If you make a change in the FDISK tool, you can compile it without having to compile the full kernel again. Just run the `compile.bat` script in the `source\kernel\bank5` folder (do NOT run `compfdsk.bat`). The ROM files in `bin\kernels` will be appropriately updated.
 
 ### To build the command line tools
 
@@ -45,10 +45,10 @@ Run the `compile.bat` script in the `source\tools` folder. The tools will be gen
 
 ### To build `NEXTOR.SYS`
 
-Run the `compile.bat` script in the `source\command25\msxdos` folder. The file will be generated in the `bin\tools` folder.
+Run the `compile.bat` script in the `source\command\msxdos` folder. The file will be generated in the `bin\tools` folder.
 
 ### To build `COMMAND2.COM`
 
-Run the `compile.bat` script in the `source\command25\command` folder. The file will be generated in the `bin\tools` folder.
+Run the `compile.bat` script in the `source\command\command` folder. The file will be generated in the `bin\tools` folder.
 
 At this time there's no specific script (other than the original makefile) for building the original MSX-DOS command line tools.
