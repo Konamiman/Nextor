@@ -1,4 +1,5 @@
 MSX-DOS is (c) 2018 The MSX Licensing Corporation
+
 Nextor is (c) 2018 Nestor Soriano Vilchez
 
 Nextor is a fork of MSX-DOS and as such it makes extensive use of the MSX-DOS source code. The MSX Licensing Corporation authorizes this usage under the following terms:
