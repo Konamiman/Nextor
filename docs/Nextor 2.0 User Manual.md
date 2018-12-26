@@ -222,7 +222,7 @@ The zero allocation information mode is available since Nextor 2.0.3.
 
 ### 2.6. Z80 access mode
 
-In MSX Turbo-R computers MSX-DOS 2 always switches to the Z80 CPU when accessing a disk driver. Nextor will never change the CPU when accessing drivers attached to a Nextor kernel, but when accessing drivers attached to a MSX-DOS kernel it is possible to have the Z80 access mode active or not. When active, Nextor will switch to Z80 before accessing the driver, as MSX-DOS does. See _[3.4.7. Z80MODE: the Z80 access mode tool](#347-z80mode-the-z80-access-mode-tool)_.
+In MSX Turbo-R computers, MSX-DOS 2 always switches to the Z80 CPU when accessing a disk driver. Nextor will never change the CPU when accessing drivers attached to a Nextor kernel, but when accessing drivers attached to a MSX-DOS kernel it may be required to have the Z80 access mode active. When active, Nextor will switch to Z80 before accessing the driver, as MSX-DOS does. See _[3.4.7. Z80MODE: the Z80 access mode tool](#347-z80mode-the-z80-access-mode-tool)_.
 
 The Z80 access mode is active by default for all MSX-DOS drivers. It is possible to switch it on or off on a per driver basis (it is not possible to change it for specific drive letters).
 
@@ -234,7 +234,7 @@ Nextor introduces the _fast STROUT_ mode. When this mode is active, the string w
 
 ### 2.8. Extended mapper support routines
 
-MSX-DOS 2 provides a set mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides two new ones that allow allocating a contiguous block of memory (from 1 byte to 16K) inside a given segment. See the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ for details.
+MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides two new ones that allow allocating a contiguous block of memory (from 1 byte to 16K) inside a given segment. See the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ for details.
 
 ### 2.9. Boot keys
 
