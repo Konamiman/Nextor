@@ -1,6 +1,0 @@
-83:1F, 1800
-8E:FE, 1800
-
-3EA3: call_unit
-
-EA94: CALL ENASLT
