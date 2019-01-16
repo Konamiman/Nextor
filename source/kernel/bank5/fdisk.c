@@ -87,9 +87,9 @@ ulong fakeDeviceSizeInK;
 
 #define HideCursor() print("\x1Bx5")
 #define DisplayCursor() print("\x1By5")
-#define CursorDown() putchar('\x1F')
-#define CursorUp() putchar('\x1E')
-#define ClearScreen() putchar('\x0C')
+#define CursorDown() chput('\x1F')
+#define CursorUp() chput('\x1E')
+#define ClearScreen() chput('\x0C')
 #define HomeCursor() print("\x0D\x1BK")
 #define DeleteToEndOfLine() print("\x1BK")
 #define DeleteToEndOfLineAndCursorDown() print("\x1BK\x1F");
@@ -147,7 +147,7 @@ void Locate(byte x, byte y);
 void LocateX(byte x);
 void PrintCentered(char* string);
 void PrintStateMessage(char* string);
-void putchar(char ch);
+void chput(char ch);
 void print(char* string);
 int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer);
 
@@ -934,9 +934,9 @@ void ShowPartitions()
 void PrintOnePartitionInfo(partitionInfo* info)
 {
 	if(!partitionsExistInDisk && partitionsCount <= 4) {
-		putchar(info->primaryIndex == 1 ? '1' : info->extendedIndex + 1 + '0');
+		chput(info->primaryIndex == 1 ? '1' : info->extendedIndex + 1 + '0');
 	} else {
-		putchar(info->primaryIndex + '0');
+		chput(info->primaryIndex + '0');
 		if(info->extendedIndex != 0) {
 			printf("-%i", info->extendedIndex);
 		}
@@ -1505,7 +1505,7 @@ void PrintRuler()
 
 	HomeCursor();
 	for(i = 0; i < currentScreenConfig.screenWidth; i++) {
-		putchar('-');
+		chput('-');
 	}
 }
 
@@ -1543,7 +1543,7 @@ void PrintStateMessage(char* string)
 }
 
 
-void putchar(char ch) __naked
+void chput(char ch) __naked
 {
     __asm
     push    ix

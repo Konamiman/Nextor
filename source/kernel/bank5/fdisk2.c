@@ -54,7 +54,7 @@ byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong
 int remote_PreparePartitionningProcess(byte* callerParameters);
 int remote_CreatePartition(byte* callerParameters);
 int CreatePartition(int index);
-void putchar(char ch);
+void chput(char ch);
 void Locate(byte x, byte y);
 
 //BC = function number (defined in fdisk.h), HL = address of parameters block
@@ -561,7 +561,7 @@ int CreatePartition(int index)
 }
 
 
-void putchar(char ch) __naked
+void chput(char ch) __naked
 {
     __asm
     push    ix
