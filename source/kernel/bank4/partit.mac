@@ -550,6 +550,7 @@ AUTODRV_DRVLOOP:
 	ld_a_iyl
 	ld	(ix+UD1_SLOT##),a		;Set slot number in table entry
 	ld	a,c
+    ld  (ix+UD1_REL##),a    
 	push	af
 	xor a
 	push	bc
@@ -2427,7 +2428,6 @@ GDLI_DOS1:
 	or	a
 	jr	nz,GDLI_ISDVB_OK
 	
-	ld	(iy),0	;If device index is zero, drive is unassigned
 	xor		a
 	ret
 
@@ -5478,6 +5478,14 @@ OK_NAME:
 	and	1
 	jr	z,SHOW_REL
 	
+    ld a,(ix+4)
+    or a
+    jr nz,SHOW_DEVLUN
+    ld hl,NO_DEV_MSG
+    call PRINT
+    jr OK_DEVLUN
+
+SHOW_DEVLUN:
 	ld	hl,DEV_MSG
 	call	PRINT
 	ld	a,(ix+4)
@@ -5538,6 +5546,8 @@ ONDRV_S:
 	db	" on drive ",0
 RO_S:
 	db	" (read only)",0
+NO_DEV_MSG:
+    db  "No device assigned",0    
 COLON_AND_CRLF:
 	db	":"
 CRLF:
