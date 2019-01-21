@@ -18,6 +18,11 @@ ld_iyh_a	macro
 	ld	h,a
 	endm
 
+ld_iyh_e	macro
+	db	0FDh
+	ld	h,e
+	endm
+
 ld_iyl_a	macro
 	db	0FDh
 	ld	l,a
@@ -251,6 +256,12 @@ ST10:	PUSH	DE
 	RET
 
 	endm
+
+
+djpnz macro address
+    dec b
+	jp nz,address
+  endm
 
 ;------------------------------------------------------------------------------
 ;

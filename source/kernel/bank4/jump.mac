@@ -78,8 +78,12 @@ jentry	macro	name
 	jentry	FREUSEG
 
 	jentry	F_LOCK
+    jentry	F_FOUT
 	jentry  F_RALLOC
 	jentry	F_DSPACE
+
+    jentry  DRVS2
+	jentry  AUTO_ASPART
 
 	finish <JUMP>
 	end

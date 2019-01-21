@@ -768,6 +768,7 @@ EXB_LOOP:
 	ld	a,(ix)
 	or a	;Zero if empty entry
 	jr	z,EXB_DJNZ
+    and 10001111b    
 	ld	c,a
 	ld	a,(MASTER_SLOT##)
 	cp	c

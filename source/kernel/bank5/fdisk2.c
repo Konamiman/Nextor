@@ -164,6 +164,7 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 	sector->sectorsPerFat = parameters->sectorsPerFat;
 	strcpy(sector->params.standard.volumeLabelString, "NEXTOR 2.0 "); //it is same for DOS 2.20 format
 	sector->params.standard.serialNumber = GetNewSerialNumber(); //it is same for DOS 2.20 format
+	sector->mbrSignature = 0xAA55;
 
 	if(parameters->isFat16) {
 		sector->params.standard.bigSectorCount = parameters->totalSectors;
@@ -176,7 +177,6 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 		strcpy(sector->params.DOS220.fatTypeString, "FAT12   ");
 		memcpy(&(sector->params.DOS220.z80BootCode), SectorBootCode, (uint)0xC090 - (uint)0xC03E);
 	}
-	
 }
 
 
@@ -496,6 +496,7 @@ int CreatePartition(int index)
 	ulong extendedPartitionFirstAbsoluteSector;
 	partitionTableEntry* tableEntry;
 	bool onlyPrimaryPartitions = (partitionsCount <= 4);
+	ulong x;
 
 	if(onlyPrimaryPartitions) {
 		mbrSector = 0;
@@ -546,6 +547,9 @@ int CreatePartition(int index)
     }
 
 	mbr->mbrSignature = 0xAA55;
+
+	x = tableEntry->firstAbsoluteSector;	//Without this, firstAbsoluteSector is written to disk as 0. WTF???
+	tableEntry->firstAbsoluteSector = x;
 
 	memcpy(sectorBufferBackup, sectorBuffer, 512);
 

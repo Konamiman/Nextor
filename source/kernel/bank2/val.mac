@@ -16,6 +16,7 @@ PT_FAT12	equ	1	;Partition type code for FAT12
 PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
 PT_EXT		equ	5	;Partition type code for extended partition
 PT_FAT16	equ	6	;Partition type code for FAT16
+PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
 MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
 MAXCLUS_FAT12	equ	4084
 MAXCLUS_12BITS	equ	4095
@@ -40,11 +41,6 @@ MAXCLUS_12BITS	equ	4095
 		call	CALL_UNIT		; give up if any error
 		ret	nz			; (shouldn't be!)
 ;
-if 0
-		ld	a,d
-		and	e			;If returned pointer is
-		inc	a			; 0FFFFh then return an
-else
 		ld	a,e			;Null pointer is OK.
 		or	d
 		ret	z
@@ -58,11 +54,12 @@ else
 		ex	(sp),ix
 		pop	hl			;If returned string is
 		or	a			; null then return an
-endif
+
 		ld	a,.IFORM##		; error.
 		ret	z
 		xor	a
 		ret
+
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -132,12 +129,10 @@ new_boot_sec:	push	af
 
 		ld	ix,UPB_BUF##
 
-		xor	a			;Try to read the boot sector
-		ld	d,a			; from the disk and if there
-		ld	e,a			; was any error then give up
-		ld	(DIO_EX_SECTOR##),a	; immediately.
-		ld	bc,(DATA_SEG##)
-		ld	b,1
+		ld	d,a			; Try to read the boot sector
+		ld	e,a			; from the disk and if there
+		ld	bc,(DATA_SEG##) ; was any error then give up
+		ld	b,1         ; immediately.
 		call	READ_UNIT
 
 		pop	bc
@@ -956,6 +951,40 @@ MEDIA_CHECK:
 ; Corrupts:   AF
 ;
 ;
+		;First check if partition assignment is pending, if so return "changed"
+
+		push ix
+		push hl
+		pop ix
+		bit UF_PAP,(ix+UD_DFLAGS##)
+		pop ix
+		jr z,MCHK0
+		ld a,1
+		or a	;NC, NZ
+		ret
+
+MCHK0:
+		call MCHK2
+
+		push ix
+		push af
+
+		push hl
+		pop ix
+		bit UF_NCH,(ix+UD_DFLAGS##)
+		jr z,MCHK1
+
+		res UF_NCH,(ix+UD_DFLAGS##)
+		ex	(sp),hl	;retrieve pushed AF
+		set 6,l		;set Z to force "not changed"
+		ex  (sp),hl
+MCHK1:
+		pop af
+		pop ix
+		ret
+
+MCHK2:
+
 		call	_MCHECK
 		ret	z
 		ret	nc	;If not "not sure interpret as changed", return
@@ -987,7 +1016,6 @@ MCHECK2:
 		xor	a
 		ld	e,a
 		ld	d,a
-		ld	(DIO_EX_SECTOR##),a
 		ld	bc,(DATA_SEG##)
 		ld	b,1
 		ld	ix,UPB_BUF##
@@ -1209,6 +1237,9 @@ cp_volid_loop:	ld	a,(de)
 ; to the same controller, device and LUN (this is done by UNMAPALL routine
 ; in the kernel ROM page 4). Then reset the UF_FOK flag and jump to
 ; BUILD_UPB in order to search for the first partition of the new media.
+;
+; A partition assignment pending (UF_PAP) is a special case: we skip the
+; entire unmapping procedure since there was no real media change.
 
 DO_MEDIA_CHANGE:
 	push	ix
@@ -1217,6 +1248,8 @@ DO_MEDIA_CHANGE:
 	pop	ix
 	bit	UF_DBD,(ix+UD_DFLAGS##)
 	jr	z,POPIX_BUILD_UPB
+    bit UF_PAP,(ix+UD_DFLAGS##)
+	jr	nz,RESFOK_BUILD_UPB
 
 	push	af
 	push	bc
@@ -1248,6 +1281,7 @@ DO_MEDIA_CHANGE:
 
 	push	hl
 	pop	ix
+RESFOK_BUILD_UPB:    
 	res	UF_FOK,(ix+UD_DFLAGS##)
 	pop	ix
 
@@ -1286,6 +1320,20 @@ POPIX_BUILD_UPB:
 ;
 ;
 build_upb_common:
+		call bupc
+		ret nz
+		push af
+		push ix
+		push hl
+		pop ix
+		res UF_PAP,(ix+UD_DFLAGS##)
+		pop ix
+		pop af
+		ret
+
+bupc:
+		push	 af
+
 		push	hl
 		pop	ix
 
@@ -1297,39 +1345,17 @@ build_upb_common:
 		ld	(ix+UD_FSEC##+3),0
 build_upb_okfsec:
 
+		pop		af
 		push	bc
 		push	de
 		push	af
 		push	ix
-
-		;ld	a,(MFLAGS##)
-		;and	2
-		;jr	z,build_upb_srchpar
-
-		;bit	UF_FOK,(ix+UD_DFLAGS##)
-		;jr	z,build_upb_srchpar
-
-		;ld	a,(ix+UD_FSEC##+2)
-		;ld	(DIO_EX_SECTOR##),a
-		;ld	e,(ix+UD_FSEC##)
-		;ld	d,(ix+UD_FSEC##+1)
-		;ld	bc,(DATA_SEG##)
-		;ld	b,1
-		;pop	hl
-		;push	hl
-		;ld	ix,UPB_BUF##
-		;call	READ_UNIT
-		;pop	hl
-		;jp	nz,build_upb_err
-		;jp	build_upb_dofind
 
 build_upb_srchpar:		
 		ld	ix,UPB_BUF##
 ;
 try_build_upb:	ld	de,0			;Try to read the boot sector
 ;===== start mod DOS2.50
-		xor	a
-		ld	(DIO_EX_SECTOR##),a
 		ld	bc,(DATA_SEG##)		; from the disk and if there
 		ld	b,1			; was any error then jump to
 						; moan to the user about it.
@@ -1355,71 +1381,53 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 		ex	(sp),ix
 		and	UFM_DB+UFM_FO
 		cp	UFM_DB
-		jr	nz,build_upb_dof2
+		jp	nz,build_upb_dof2
 
 build_upb_do_findpart:
-		push	ix
-		pop	hl
-		ld	bc,MBR_SIG
-		add	hl,bc
-		ld	a,(hl)
-		cp	55h
-		jr	nz,build_upb_dof2
-		inc	hl
-		ld	a,(hl)
-		cp	0AAh			;If no MBR signature found,
-		jr	nz,build_upb_dof2	;try searching UPB in the MBR itself
+        ex	(sp),ix
+        ld b,(ix+UD_DI##)
+        ld c,(ix+UD_LI##)
+        ex	(sp),ix
 
-		push	ix
-		pop	hl
-		ld	bc,MBR_PSTART+POFF_TYPE
-		add	hl,bc
-		ld	b,4
-build_upb_srchp:
-		ld	a,(hl)
-		cp	PT_FAT12
-		jr	z,build_upb_pfound
-		cp	PT_FAT16
-		jr	z,build_upb_pfound
-		cp	PT_FAT16_S
-		jr	nz,build_upb_nopfound
-build_upb_pfound:
-		ld	bc,POFF_PSTART-POFF_TYPE	
-		add	hl,bc
-		ex	(sp),ix
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+1),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+2),a
-		inc	hl
-		ld	a,(hl)
-		ld	(ix+UD_FSEC##+3),a
-		set	UF_FOK,(ix+UD_DFLAGS##)
-		ex	(sp),ix
+        pop hl
+        push hl
 
-		xor	a	;Read boot sector of the partition
-		ld	(DIO_EX_SECTOR##),a
-		ld	bc,(DATA_SEG##)
-		ld	b,1
-		ld	de,0
-		pop	hl	;Restore unit desciptor
-		ld	ix,UPB_BUF##
-		call	READ_UNIT
-		jr	nz,build_upb_err
+		push ix
+	    push iy
 
-		jr	build_upb_dofind
+		ld	ix,AUTO_ASPART##
+        ld	(BK4_ADD##),ix
+        ld	ix,?CALL4##
+        ld	iy,(MASTER_SLOT##-1)
+        call	CALSLT##		
 
-build_upb_nopfound:
-		ld	de,MBR_PSIZE
-		add	hl,de
-		djnz	build_upb_srchp
+        pop iy
+        pop ix
 
-		;If no valid partition found,
-		;try searching UPB in the MBR itself
+        or a
+        jp nz,build_upb_notfind
+
+        ex	(sp),ix
+        set	UF_FOK,(ix+UD_DFLAGS##)
+        ex	(sp),ix
+        pop	hl	;Restore unit desciptor
+
+        ;Read boot sector in UPB_BUF, it will be needed later
+
+        push hl
+        pop ix
+        ld de,0
+        ld	ix,UPB_BUF##
+        ld	bc,(DATA_SEG##)
+        ld	b,1
+        push hl
+        push ix
+        call READ_UNIT
+        pop ix
+        pop hl
+
+        jr nz,build_upb_err
+        jp found_upb
 	
 build_upb_dof2:
 		ex	(sp),ix
@@ -1436,7 +1444,8 @@ build_upb_dofind:
 ;
 		;If no valid UPB found, and are invoking from F_RDDRV or F_WRDRV,
 		;ignore error and continue.
-		
+
+build_upb_notfind:		
 		bit	RF_DOS2,(iy+@RW_FLAGS##)
 		ld	a,1
 		jr	nz,found_upb
@@ -1455,11 +1464,11 @@ build_upb_err:	ld	b,a
 		pcall	C_DISK_ERR		; to try it again.
 		push	hl
 		jp	try_build_upb
-;
+;.ndos
 found_upb:	pop	de	;Throw away input AF
 found_upb2:	pop	de
 		pop	bc
-		or	a
+		or a
 		ret
 
 ;;		ld	de,1			;If no UPB in boot sector
@@ -2190,19 +2199,19 @@ reduce_set:
 		;          and compiles always the else clause.
 		;          Solve this if MAX_UNITS needs to grow over 8.
 
-if MAX_UNITS## GT 8
-		ld	hl,(RALL_VECT##)
-else
+;if MAX_UNITS## GT 8
+;		ld	hl,(RALL_VECT##)
+;else
 		ld	a,(RALL_VECT##)
-endif
+;endif
 
 reduce_bit_loop:
-if MAX_UNITS## GT 8
-		srl	h
-		rr	l
-else
+;if MAX_UNITS## GT 8
+;		srl	h
+;		rr	l
+;else
 		rrca
-endif
+;endif
 		djnz	reduce_bit_loop
 		jr	nc,reduce_end	;Here Cy is the red. all. flag for this drive
 		set	UF_RALL,(ix+UD_FLAGS##)
@@ -2323,15 +2332,34 @@ COMPHLDE:
 ;------------------------------------------------------------------------------
 ;
 ;===== start add DOS2.50
+
+; Input for READ_UNIT and WRITE_UNIT:
+; B  = Number of sectors
+; DE = First sector (3rd byte is always 0)
+; HL = Unit descriptor
+; IX = Transfer address
+;
+; READ_UNIT corrupts BC
+
 WRITE_UNIT:
+		xor a
+		ld (DIO_EX_SECTOR##),a
 		ld	a,WR_CMD
 		jr	CALL_UNIT
 
-READ_UNIT:	;B  = Number of sectors
-		;DE = First sector (plus DIO_EX_SECTOR)
-		;HL = Unit descriptor
-		;IX = Transfer address
+READ_UNIT:
+		ld a,(DIO_EX_SECTOR##)
+		push af
+		xor a
+		ld (DIO_EX_SECTOR##),a
 		ld	a,RD_CMD
+		call CALL_UNIT
+		pop bc
+		ld c,a
+		ld a,b
+		ld (DIO_EX_SECTOR##),a
+		ld a,c
+		ret
 
 ;===== end add DOS2.50
 CALL_UNIT:
@@ -2357,7 +2385,6 @@ CALL_UNIT:
 ;  (DIO_EX_SECTOR) = sector number bit16-22 (if required) :FAT16
 ; Returns:       A = Error code (eg .RNF##), flags set appropriately.
 ;	      B,DE = Assorted results from unit handler
-; Corrupts:   AF,BC,DE
 ;
 ;
 		cp	number_of_cmds		;Reject if command code is

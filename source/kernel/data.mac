@@ -50,7 +50,6 @@ ram_ad	defl	DATABASE
 ;	------------------------
 ;
 	var	PRTBUF,6,F1C9	;MSX-DOS1 compatible string output routine
-	var0	NXT4
 	spare	4
 ;
 ;	------------------------
@@ -106,7 +105,7 @@ ram_ad	defl	DATABASE
 	spare	5		;For future expansion
 ;
 	var1	CUR_DRV		;Current logical drive (1=A:)
-	var2	DTA_ADR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
+	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
 ;
 	var0	NXT7
 	spare	7
@@ -243,12 +242,7 @@ ram_ad	defl	DATABASE
 ;
 ;	------------------------
 ;
-	var1	NXTEMP		;For temporary usage by kernel
-	var0	NXT2
-	var1	TMPLUN
-	var1	TMPDEV
-	spare	1
-	;spare	4
+	spare	4
 ;
 	var1	RAWFLG, F30D	;Read-after write flag - must not move
 	var1	COUNTRY,F30E	;Accessed by COMMAND.COM - can't move
@@ -268,7 +262,8 @@ ram_ad	defl	DATABASE
 	var1	NXT_VER		;Nextor version numbr
 	var1	MAIN_BANK
 	var	KER250,4	;MSX-DOS 2.50 kernel slots,
-                                ;bit 6 is set if timer interrupt routine is to be called
+                    ;bit 6 is set if timer interrupt routine is to be called
+					;bit 5 is set if the driver provides configuration
 	var	_TIME_IRQ,5,F31E
 ;;	spare	11
 ;===== end mod DOS2.50
@@ -278,7 +273,13 @@ ram_ad	defl	DATABASE
 	var2	DISKVECT,F323	;BDOS_GO disk error vector
 	var2	BREAKVECT,F325	;BDOS_GO ctrl-stop vector
 ;
-	var	AUXBODY,10,F327
+	var	AUXBODY,3,F327	;Actually 10
+	var1	NXTEMP		;For temporary usage by AUTO_ASSIGN
+	var0	NXT2        ;(values are saved in the stack and later restored)
+	var1	TMPLUN
+	var1	TMPDEV
+	var1    NXT3
+	var3    NXT4
 
 	;These variables are declared inside ARG, a 16 byte area used by math-pack.
 	;There should be no conflict since DOS kernel and math-pack
@@ -529,8 +530,12 @@ ram_ad	defl	4100h
 	var3	FREUSEG
 
 	var3	F_LOCK
+   	var3	F_FOUT
 	var3	F_RALLOC
 	var3	F_DSPACE
+
+	var3    DRVS2
+	var3    AUTO_ASPART
 
 ;-----------------------------------------------------------------------------
 ;
@@ -564,7 +569,8 @@ ram_ad	defl	4100h
 	var3	DV_D2
 	var3	DV_D3
 	var3	DV_D4
-	spare	15
+	var3    DV_CONFIG
+	spare	12
 	
 	;Routines for drive-based and device-based drivers
 

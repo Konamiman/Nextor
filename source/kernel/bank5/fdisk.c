@@ -944,7 +944,7 @@ void PrintOnePartitionInfo(partitionInfo* info)
 	print(": ");
 	if(info->partitionType == PARTYPE_FAT12) {
 		print("FAT12");
-	} else if(info->partitionType == PARTYPE_FAT16) {
+	} else if(info->partitionType == PARTYPE_FAT16 || info->partitionType == PARTYPE_FAT16_SMALL || info->partitionType == PARTYPE_FAT16_LBA) {
 		print("FAT16");
 	} else if(info->partitionType == 0xB || info->partitionType == 0xC) {
 		print("FAT32");
@@ -1009,6 +1009,7 @@ void AddPartition()
 	char ch;
 	bool validNumberEntered = false;
 	ulong enteredSizeInK;
+	ulong temp;
 	bool lessThan1MAvailable;
 	bool sizeInKSpecified;
 	ulong unpartitionnedSpaceExceptAlignmentInK = (unpartitionnedSpaceInSectors - EXTRA_PARTITION_SECTORS) / 2;
@@ -1065,14 +1066,17 @@ void AddPartition()
 				break;
 			} else if(ch == '\0' || ch == 13 || ch == 'm') {
 				validNumberEntered = true;
-				enteredSizeInK *= 1024;
+				enteredSizeInK <<= 10;
 				sizeInKSpecified = false;
 				break;
 			} else if(ch < '0' || ch > '9') {
 				break;
 			}
-			enteredSizeInK = (enteredSizeInK * 10) + (ch - '0');
-			
+			//This should be: enteredSizeInK = (enteredSizeInK * 10) + (ch - '0'),
+			//but thew computer crashes. Looks like the compiler is doing something wrong
+			//when linking the longs handling library.
+			temp = enteredSizeInK;
+			enteredSizeInK = (enteredSizeInK << 3) + temp + temp  + (ch - '0');
 			lineLength--;
 			if(lineLength == 0) {
 				validNumberEntered = true;
@@ -1084,7 +1088,7 @@ void AddPartition()
 
 		if(validNumberEntered &&
 			(sizeInKSpecified && (enteredSizeInK > maxPartitionSizeInK) || (enteredSizeInK < MIN_PARTITION_SIZE_IN_K)) ||
-			(!sizeInKSpecified && (enteredSizeInK > ((ulong)maxPartitionSizeInM * (ulong)1024)))
+			(!sizeInKSpecified && (enteredSizeInK > ((ulong)maxPartitionSizeInM  * 1024)))
 			) {
 				validNumberEntered = false;
 		}
@@ -1142,7 +1146,8 @@ void TestDeviceAccess()
 	InitializeScreenForTestDeviceAccess(message);
 
 	while(GetKey() == 0) {
-		_ultoa(sectorNumber, buffer, 10);
+		sprintf(buffer, "%u", sectorNumber);
+		//_ultoa(sectorNumber, buffer, 10);
 		Locate(messageLen, MESSAGE_ROW);
 		print(buffer);
 		print(" ...\x1BK");
@@ -1157,7 +1162,7 @@ void TestDeviceAccess()
 
 		if((error = regs.Bytes.A) != 0) {
 			strcpy(buffer, errorMessageHeader);
-			_ultoa(sectorNumber, buffer + strlen(errorMessageHeader), 10);
+			sprintf(buffer + strlen(errorMessageHeader), "%u", sectorNumber);
 			strcpy(buffer + strlen(buffer), ":");
 			PrintDosErrorMessage(error, buffer);
 			PrintStateMessage("Continue reading sectors? (y/n) ");
@@ -1587,3 +1592,4 @@ int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer)
 
 
 #include "asmcall.c"
+#include "printf.c"

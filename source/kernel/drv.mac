@@ -647,34 +647,6 @@ CHGEN_NOEMU:
 	ld	b,1	;"Unchanged" if partition has not changed
 	ret
 
-	if 0
-
-	ld	b,(iy+3)
-	ld	ix,DEV_STATUS##
-	push	hl
-	push	iy
-	call	DO_CALBNK
-	pop	iy
-	pop	hl
-	or	a
-	jr	nz,CHG_ENTRY_2
-	ld	a,12
-	scf
-	ret
-
-CHG_ENTRY_2:
-	ld	b,1	;Not changed
-	dec	a
-	ret	z
-	ld	b,-1	;Changed
-	dec	a
-	jr	z,DO_MKDPB
-	ld	b,0	;Unknown
-	xor	a
-	ret
-
-	endif
-	
 	;--- Obtain DPB, input: IY=Entry in DVB_TABLE, HL=Address for DPB
 
 DPB_ENTRY::
@@ -841,18 +813,18 @@ IS_DVB_NOEMU:
 	inc	iy
 
 IS_DVB_LOOP:
+    push bc
 	ld	a,(KSLOT##)
-	cp	(iy)
+	ld b,(iy)
+	res 6,b
+	cp b
+	pop bc	
 	jr	nz,DIO_NEXT
 
 	ld	a,(iy+1)
 	and	01111111b	;Ignore partition changed flag
 	cp	c
 	jr	nz,DIO_NEXT
-
-	;ld	a,c
-	;cp	(iy+1)
-	;jr	nz,DIO_NEXT
 
 DIO_OK:
 	pop	bc	;Found, return Cy=1
@@ -898,7 +870,7 @@ IS_EMU:
 ; Return A=0, Z if partition assigned; A<>0, NZ if NO partition assigned.
 
 HAS_PARTITION:
-	ld	a,(iy+4)	;No partition assgined
+	ld	a,(iy+4)	;No partition assigned
 	and	(iy+5)		;if sector number is -1
 	and	(iy+6)
 	and	(iy+7)
@@ -915,10 +887,8 @@ RET_NZ:
 ;
 ; Assign the first available FAT12 primary partition to
 ; the device whose entry of DVB_TABLE pointed by IY.
-; If no disk error happens but no partitions are found,
-; absolute sector 0 is assigned.
 ; Returns disk error code in A, with Z appropriately set.
-; Corrupts, AF, IX.
+; Corrupts: AF, IX.
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
@@ -928,80 +898,28 @@ POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
 PT_FAT12	equ	1	;Partition type code for FAT12
 
 ASSIGN_PARTITION:
-	push	bc
-	push	de
-	push	hl
-	push	iy
-	call	READ_BOOT
-	pop	iy
-	or	a
-	jr	nz,ASSIGN_P_END
+	push bc
+	push de
+	push hl
+	push iy
 
-	ld	hl,($SECBUF##)
-	ld	bc,510
-	add	hl,bc
-	ld	a,(hl)
-	cp	055h
-	jr	nz,ASSIG_P_MBR
-	inc	hl
-	ld	a,(hl)
-	cp	0AAh
-	jr	z,ASSIGN_P_DO
+	pop hl
+	push hl
 
-ASSIG_P_MBR:
-	xor	a		;No partition table found:
-	ld	(iy+4),a	;assign to MBR
-	ld	(iy+5),a
-	ld	(iy+6),a
-	ld	(iy+7),a
-	jr	ASSIGN_P_END
+	ld b,(iy+UD1_DI##)
+	ld c,(iy+UD1_LI##)
+	ld	a,4
+	ld	ix,AUTO_ASPART##
+	call	CALBNK##
 
-ASSIGN_P_DO:
-	ld	ix,($SECBUF##)
-	ld	bc,MBR_PSTART
-	add	ix,bc
-	ld	b,4
-ASSIGN_P_LOOP:
-	ld	a,(ix+POFF_TYPE)
-	cp	PT_FAT12
-	jr	nz,ASSIGN_P_NEXT
+    pop iy
+	pop hl
+	pop de
+	pop bc
 
-	ld	a,(ix+POFF_PSIZE+3)	;Skip partition if size is >16M
-	or	a
-	jr	nz,ASSIGN_P_NEXT
-	ld	a,(ix+POFF_PSIZE+2)
-	or	a
-	jr	nz,ASSIGN_P_NEXT
-	ld	d,(ix+POFF_PSIZE+1)
-	ld	e,(ix+POFF_PSIZE)
-	dec	de
-	ld	a,d
-	cp	80h
-	jr	nc,ASSIGN_P_NEXT
-
-	ld	a,(ix+POFF_PSTART)	;Partition found: assign it
-	ld	(iy+4),a
-	ld	a,(ix+POFF_PSTART+1)
-	ld	(iy+5),a
-	ld	a,(ix+POFF_PSTART+2)
-	ld	(iy+6),a
-	ld	a,(ix+POFF_PSTART+3)
-	ld	(iy+7),a
-	xor	a
-	jr	ASSIGN_P_END
-
-ASSIGN_P_NEXT:
-	ld	de,MBR_PSIZE
-	add	ix,de
-	djnz	ASSIGN_P_LOOP
-
-	ld	a,0FFh	;No suitable partition found: error
-	or	a
-	
-ASSIGN_P_END:
-	pop	hl
-	pop	de
-	pop	bc
+	or a
+	ret z
+	ld a,12
 	ret
 
 

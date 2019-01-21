@@ -21,6 +21,7 @@
 #define PARTYPE_FAT16_SMALL 4
 #define PARTYPE_EXTENDED 5
 #define PARTYPE_FAT16 6
+#define PARTYPE_FAT16_LBA 0x0E
 
 #define PSTATE_EXISTS 0
 #define PSTATE_ADDED 1
@@ -88,6 +89,8 @@ typedef struct {
 			byte z80BootCode;
 		} DOS220;
 	} params;
+   	byte emptySpace[447];
+	uint mbrSignature;
 } fatBootSector;
 
 typedef struct {

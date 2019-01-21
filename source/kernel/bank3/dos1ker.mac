@@ -100,7 +100,7 @@ XF1E2	equ	0F1E2H			; WBOOT, warm boot DOS system
 XF1E8	equ	0F1E8H			; start handler in DOS memory
 XF1F4	equ	0F1F4H			; validate FCB filename
 YF1F7	equ	0F1F7H			; reserved devicenames
-YF20B	equ	0F20BH			; ´direntry´ for devices
+YF20B	equ	0F20BH			; 'direntry' for devices
 YF22B	equ	0F22BH			; days in month table
 YF237	equ	0F237H			; BDOS console output columnpos
 YF238	equ	0F238H			; console columnpos at start of lineinput
@@ -1001,7 +1001,7 @@ A43C3:	ld	(de),a
 	inc	iy
 	djnz	A43BB
 	ld	a,080H
-	ld	(de),a			; ´orginal DR byte´ b7 set (ignore fileattribute)
+	ld	(de),a			; 'orginal DR byte' b7 set (ignore fileattribute)
 	call	A425A			; check if devicename
 	jr	nc,A4408		; yep, end rename with error
 	ld	a,(YF2B8)
@@ -4651,7 +4651,7 @@ A58A8:	call	A622D			; hook H.LOPD when H.CLEA is hooked (for register system bot
 	ld	a,00DH
 	ld	(YCONBF+130),a		; ?? end marker con buffer
 	ld	a,7
-	ld	(YF345),a		; max number of FCB´s is 7
+	ld	(YF345),a		; max number of FCB's is 7
 	ld	hl,1461
 	ld	(YF33B),hl		; default date when no clockchip is 1-1-1984
 	ld	b,8
@@ -5053,7 +5053,7 @@ A5BA0:	ld	sp,0C200H		; switch to a temporary stack
 	ld	hl,M4173
 	push	hl			; execute RUN command
 	ld	hl,BUF+10-1
-	push	hl			; ´basicpointer´
+	push	hl			; 'basicpointer'
 	ld	hl,BUF+64
 	push	hl
 	ld	(hl),0E1H
@@ -5075,7 +5075,7 @@ A5C16:	ld	hl,T72AE
 	ld	(HIMEM),hl
 	ld	a,(YF345)
 	ld	c,a
-	ld	b,0			; number of FCB´s
+	ld	b,0			; number of FCB's
 	ld	de,37
 	call	A4916			; * 37
 	call	A5EB8			; allocate memory (adjust HIMEM, halt when error)
@@ -5769,7 +5769,7 @@ A607B:	pop	hl
 	jp	A636E
 
 ; Unused code
-; looks like the previous jump is a patch, may be the ´ei´ instruction at the end of the patch was forgotten ??
+; looks like the previous jump is a patch, may be the 'ei' instruction at the end of the patch was forgotten ??
 ; patch code does not fit here, 1 byte too less
 
 	nop
@@ -7280,7 +7280,7 @@ A6939:	ld	ix,M739A		; quit loading & start (headloop/executing)
 	ld	bc,5
 	push	de
 	ldir
-	pop	hl			; ´basicpointer´
+	pop	hl			; 'basicpointer'
 	ld	ix,M4601
 	jp	A731E			; continue in the execution loop
 
@@ -8200,7 +8200,7 @@ A6FBD:	cpir
 	pop	de
 	ret
 
-T6FCC:	defb	'."/\[]:+=;,*?'
+T6FCC:	defb	'.',34,'/\[]:+=;,*?'
 
 A6FD9:	ld	a," "
 	cp	(hl)

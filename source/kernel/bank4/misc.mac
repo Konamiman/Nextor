@@ -6,6 +6,8 @@
 	INCLUDE	MACROS.INC
 	INCLUDE	CONST.INC
 	;RAMMOD
+
+CHPUT	equ	00A2h	
 ;
 ;------------------------------------------------------------------------------
 ;
@@ -102,6 +104,42 @@ mnt_get:
 	ret	z
 	ld	b,0FFh
 	ret
+
+
+;------------------------------------------------------------------------------
+;
+	PROC	F_FOUT
+;
+;    This function gets or sets the value of fast STROUT flag.
+; When this flag is set, STROUT will copy the string to $SECBUF before printing it.
+; This speeds up printing process, but limits string length to 512 bytes.
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           B = value to set (only if A=1)
+;               0 = disable
+;               FFh = enable
+; Returns:  A = 0 (error code)
+;           B = current value, 0 or 1.
+;
+        ld a,c
+		or	a			;Skip if just getting value
+		jr	z,fout_get
+
+		ld	a,b
+		and	1
+		ld	b,a
+		ld	a,(MFLAGS##)
+		and	0FEh
+		or	b
+		ld	(MFLAGS##),a
+;
+fout_get:
+		ld	bc,(MFLAGS##-1)	;Get current value into B.
+		xor	a
+		ret
+;
+;
 
 ;------------------------------------------------------------------------------
 ;
