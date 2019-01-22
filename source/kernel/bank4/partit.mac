@@ -853,7 +853,9 @@ SETNUMD_NOUD:
 AUTO_ASSIGN:
     or a
 
-AUTO_COMMON:	
+AUTO_COMMON:
+  	ld	(NXT7##+2),a
+
 	ld	de,(NXTEMP##)	;Save lots of page 3 variables.
 	push	de			;This is necessary because AUTO_ASSIGN uses them
 	ld	de,(TMPDEV##)	;as temporary work area, which is OK in DOS 2 mode
@@ -896,8 +898,6 @@ AUTO_COMMON3:
 	xor a
 	ld (BUF9##),a
 	ld (NXT3##),a
-
-	ld	(NXT7##+2),a
 
 	xor	a
 	ld	(NXT7##+5),a
