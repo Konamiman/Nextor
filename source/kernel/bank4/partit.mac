@@ -5952,12 +5952,19 @@ GET_DISKID_HL:
 ;    Input: B<>0 if the driver provides configuration.
 ;    Output: A = number of drives.
 
+    push bc
+    call SCAN_5_KEY
+    pop bc
+    ld c,a
+
 	ld a,b
 	or a
 	jr z,COUNTDEVS
 
 	;If the driver provices configuration, we first try asking the driver
+    ;(we pass C=00100000b if "5" key is pressed)
 
+    push bc
 	ld	ix,DV_CONFIG##
 	ld	a,CFG_DRVS
 	ld b,0
@@ -5966,14 +5973,28 @@ GET_DISKID_HL:
 	call	CALBNK##
 	or a
 	ld a,b
+    pop bc
 	ret z
 
     ;The driver does not provide configuration, or asking for the number of drives
 	;results in an error returned:
 	;Invoke LUN_INFO on all possible devices of the driver,
 	;and return in A the number of devices found.
+    ;Input: C=00100000b if "5" key is pressed, C=0 otherwise
 
 COUNTDEVS:
+    push bc
+    call COUNTDEVS0
+    pop bc
+    or a
+    ret z   ;No devices found
+
+    bit 5,c
+    ret z
+    ld a,1  ;Only 1 device if "5" key is pressed
+    ret
+
+COUNTDEVS0:
 	ld	c,0
 	ld	a,1
 COUNTDEVS1:
@@ -6023,10 +6044,14 @@ DRVS1LOOP:
 
 	ld_iyh_e
 	call GET_DV_TYPE
-	and 101b
-	cp  101b	;Device-based & provides config?
-	jr nz,DRVS1NEXT ;No: skip
+    bit 0,a ;Device-based?
+    jr z,DRVS1NEXT ;No: skip
+	and 100b
+	cp  100b	;Provides config?
+	jr nz,DRVS1NX3 ;No: skip but check "5" key
 
+    call SCAN_5_KEY
+    ld c,a
 	ld hl,DV_CONFIG##
 	ld	(BK4_ADD##),hl
 	ld a,CFG_DRVS
@@ -6034,8 +6059,9 @@ DRVS1LOOP:
 	ld	ix,CALDRV##
 	call	CALSLT
 	or a
-	jr nz,DRVS1NEXT  ;Skip if that config is not available
+	jr nz,DRVS1NX3  ;Skip but check "5" key if that config is not available
 
+DRVS1CHG:
 	pop hl
 	dec hl
 	ld (hl),b
@@ -6050,6 +6076,14 @@ DRVS1NX2:
 	inc hl
 	djnz DRVS1LOOP
 	ret
+
+DRVS1NX3:
+    call SCAN_5_KEY
+    and 00100000b
+    ld b,1
+    jr nz,DRVS1CHG
+    jr DRVS1NEXT
+
 
 ;-----------------------------------------------------------------------------
 ;
@@ -6300,6 +6334,13 @@ GET_DV_TYPE:
 	ld	ix,CALDRV##
 	call	CALSLT##
 	ret
+
+SCAN_5_KEY:
+	xor	a
+	call	SNSMAT
+	and	00100000b
+    xor 00100000b   ;A=00100000b if "5" key pressed, 0 if not
+    ret
 
 	finish <PARTIT>
 	end

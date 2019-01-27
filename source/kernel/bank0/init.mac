@@ -723,7 +723,10 @@ BOTTOM_OK:
 	sbc	hl,de	;HL = -DE
 	add	hl,sp
 
-	call	CALLINIT
+    xor a
+	call	CALL_DV_INIT
+    push af
+    pop bc
 	ld	e,c
 	res	1,e
 
@@ -732,7 +735,7 @@ BOTTOM_OK:
 	ld	(BK4_ADD##),hl
 	ld	hl,DV_TYPE##
 	call	CALDRV##
-nene::    
+
     ld h,a
 	and	1	;Device-based driver?
 	ld	(PROCNM+8),a
@@ -740,25 +743,11 @@ nene::
 	push af
 	and 100b
 	ld	(PROCNM+10),a
+    ld b,a
 	pop af
 	pop	hl
 	jr	z,NO_DEVBASED
 	
-	;xor	a
-	;call	SNSMAT	;Scan "5" key 
-	;and	00100000b
-	;ld	b,2
-	;jr	nz,AUTODRIVES
-	
-	xor	a
-	call	SNSMAT
-	and	00100000b	;Scan "5" key
-	ld	b,1
-	jr	z,OKDEVBASED
-	;inc	b
-	;jr	OKDEVBASED
-
-AUTODRIVES:
 	ld	b,255
 
 OKDEVBASED:
@@ -792,12 +781,9 @@ BIGENOUGH:
 	ld	hl,PROCNM+4
 	ld	b,255
 	set	1,(hl)
-	ld	ix,DV_INIT##	;Initialize environment and hardware
-	ld	a,1
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
-	call	COUNTDRV
+    ld a,1
+    call CALL_DV_INIT   ;Initialize environment and hardware
+	call COUNTDRV
 	ld	(PROCNM+5),a
 
 NO255DRIVES:
@@ -831,13 +817,10 @@ DO_INIT_ENV:
 	ld	a,(PROCNM+4)
 	and	2
 	jr	nz,INITENV_DONE
-	ld	ix,DV_INIT##	;Initialize environment and hardware
-	ld	a,(PROCNM+6)	;only if we haven't done that yet
+    ld	a,(PROCNM+6)	;only if we haven't done that yet
 	ld	b,a
-	ld	a,1
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
+    ld a,1
+    call CALL_DV_INIT   ;Initialize environment and hardware
 INITENV_DONE:
 
 	ld	a,(PROCNM+8)
@@ -2766,15 +2749,12 @@ GTIME:	CALLDOS	2Ch	;Get time
 STIME:	CALLDOS	2Dh	;Set time
 ;
 
-CALLINIT:
-	ld	ix,DV_INIT##	;Call init routine for my driver
+SCAN_5_KEY:
 	xor	a
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##	;We pass B=available drives, HL=allocatable work area
-	push	af		;Save number of drives and interrupt flag
-	pop	bc
-	ret
+	call	SNSMAT
+	and	00100000b
+    xor 00100000b   ;A=00100000b if "5" key pressed, 0 if not
+    ret
 
 	ALIGN	55FFh
 VERIFY:	CALLDOS	2Eh	;Set/reset verify flag
@@ -3259,6 +3239,22 @@ DO_LDDR:
 DO_LDIR:
 	ldir
 	ret
+
+    ;Call DRV_INIT in my slot.
+    ;Input: A, B = Input for the routine.
+
+CALL_DV_INIT:
+    push af
+    push bc
+    call SCAN_5_KEY
+    pop bc
+    ld c,a
+    pop af
+    ld	ix,DV_INIT##	;Initialize environment and hardware
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+    ret
 
 FOURZEROS:	db	0,0,0,0
 

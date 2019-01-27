@@ -4153,7 +4153,7 @@ A5667:	ld	(de),a			; copy char
 	ld	(YF30C),a		; save the FCB EX byte
 	ret
 
-T5677:	defb	'."/[]:+=;,'
+T5677:	defb	'.",34,"/[]:+=;,'
 
 ;	Subroutine	check if double byte header char
 ;	Inputs		________________________

@@ -265,6 +265,8 @@ DRV_TIMI:
 ;      A = 0
 ;      B = number of available drives
 ;      HL = maximum size of allocatable work area in page 3
+;      C: bit 5 set if user is requesting reduced drive count
+;         (by pressing the 5 key)
 ;    Output:
 ;      A = number of required drives (for drive-based driver only)
 ;      HL = size of required work area in page 3
@@ -274,6 +276,8 @@ DRV_TIMI:
 ;    Input:
 ;      A = 1
 ;      B = number of allocated drives for this controller
+;      C: bit 5 set if user is requesting reduced drive count
+;         (by pressing the 5 key)
 ;
 ;    The work area address can be obtained by using GWORK.
 ;
@@ -376,6 +380,8 @@ DRV_DIRECT4:
 ;   Input:
 ;     A = 1
 ;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+;     C: bit 5 set if user is requesting reduced drive count
+;        (by pressing the 5 key)
 ;   Output:
 ;     B = number of drives
 ;
