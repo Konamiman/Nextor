@@ -618,7 +618,7 @@ endif
 		ld	b,ACM_MOD
 NOT_MOD2:	ld	(ix+FAB_ACC##),b
 		ld	(ix+FAB_ATTR##),a
-		and	AT_DEV			;restore FAB_MODE
+		and	ATM_DEV			;restore FAB_MODE
 		jr	z,NOT_DEV2
 		ld	a,MDM_DEV+MDM_CPM+MDM_ASC
 NOT_DEV2:	ld	(ix+FAB_MODE##),a

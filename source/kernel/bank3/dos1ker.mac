@@ -4201,7 +4201,6 @@ A56D0:
 ;	Inputs		
 ;	Outputs		________________________
 
-bd::
 A56D3:
 	call	DO_BDOS
 	;ei
