@@ -66,9 +66,9 @@
 
 [4.4.6. DRV_EXTBIO (413Fh)](#446-drv_extbio-413fh)
 
-[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-413eh)
+[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-414eh)
 
-[4.4.8. DRV_CONFIG (4152h)](#448-drv_config-4152h)
+[4.4.8. DRV_CONFIG (4151h)](#448-drv_config-4151h)
 
 [4.4.9. RESERVED (4155h to 415Fh)](#449-reserved-4155h-to-415fh)
 
@@ -229,7 +229,7 @@ The Nextor kernel has an architecture that is based on the one of the MSX-DOS 2 
 
 * There is a 1K unused space at banks 0 and 3 (visible at addresses 7BD0h to 7FCFh). This space does not contain any kernel code and can be used to put any code or data that is required by the driver to be here. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
-* There are five entry points at kernel banks 0 and 3 (starting at addresses 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-413eh)_ for more details.
+* There are five entry points at kernel banks 0 and 3 (starting at addresses 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-414eh)_ for more details.
 
 Figure 3 shows a diagram with the structure of a Nextor kernel.
 
@@ -396,7 +396,7 @@ _Device-based drivers_ use a completely different approach. They do not expose d
 
 In general it is recommended to develop device-based drivers, as the routines to implement are easier and the driver code needs to just read and write absolute device sectors without having to worry about partitions; also, the Nextor built-in device partitioning tool can be used to create partitions on devices controlled by device-based drivers only. Developing a drive-based driver may however be a good option to easily convert an existing MSX-DOS driver to Nextor.
 
-Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4152h)). More details are provided in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_.
+Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4151h)). More details are provided in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_.
 
 ### 4.2. Page 0 routines and data
 
@@ -521,7 +521,7 @@ bit 2:  1 if the driver implements the DRV_CONFIG routine
 bits 3-7: Reserved, must be zero
 ````
 
-Note that [DRV_CONFIG](#448-drv_config-4152h) is used by Nextor starting at version 2.0.5.
+Note that [DRV_CONFIG](#448-drv_config-4151h) is used by Nextor starting at version 2.0.5.
 
 #### 4.3.3. RESERVED (410Fh)
 
@@ -634,13 +634,13 @@ D'=1: Execute the kernel and/or the system extended BIOS handler.
 
 The driver extended BIOS handler is always entered with D'=1. Therefore, if the driver does not handle extended BIOS at all, it can simply fill this entry point with RETs.
 
-#### 4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)
+#### 4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)
 
 These are the entries for direct calls to the driver. Calls to any of the five entry points available at addresses 7850h to 785Ch in the kernel ROM (bank 0 or bank 3) will be mapped to a call to the corresponding DRV_DIRECT entry point. This is useful when the driver wants to provide extra functionality for configuration, returning information, or other purposes. When these routines are entered, paging state will be the same as when the bank 0/3 entry was invoked, except of course that the driver bank will be switched on page 1 instead of the kernel bank. All registers except IX and AF' are passed unmodified from the caller.
 
 If the driver does not implement any direct call code, it can simply fill these entry points with RETs.
 
-#### 4.4.8. DRV_CONFIG (4152h)
+#### 4.4.8. DRV_CONFIG (4151h)
 
 This routine, introduced in Nextor 2.0.5, allows the driver to provide information about its preferred configuration at boot time. If this routine is implemented, the appropriate bit of [the driver flags](#432-drv_flags-410eh) must be set.
 
@@ -1016,7 +1016,7 @@ This section contains the legacy change history for the different versions of Ne
 
 ### 5.1. v2.0.5 beta 1
 
-Added [the DRV_CONFIG routine](#448-drv_config-4152h).
+Added [the DRV_CONFIG routine](#448-drv_config-4151h).
 
 ### 5.2. v2.0.1
 
