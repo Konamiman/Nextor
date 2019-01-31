@@ -24,15 +24,6 @@
 
 [10. Change history](#10-change-history)
 
-[10.1. v2.0.3](#101-v203)
-
-[10.2. v2.0.2](#102-v202)
-
-[10.3. v2.0 final](#103-v20-final)
-
-[10.4. v2.0 Beta 2](#104-v20-beta-2)
-
-[10.5. v2.0 Beta 1](#105-v20-beta-1)
 
 ## 1. Introduction
 
@@ -40,9 +31,9 @@ Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX co
 
 This document provides a walkthrough of the features that Nextor adds to MSX-DOS in the form of a step-by-step guide. In order to make it easier for everyone, this guide assumes that the blueMSX emulator with will be used for the walkthrough together with an emulated Sunrise IDE controller. Users of other emulators will need to adapt the steps of _[2. Setting up blueMSX](#2-setting-up-bluemsx)_ appropriately; on the other hand, users of real MSX hardware should take a look at _[2.1. Setting up a real MSX](#21-setting-up-a-real-msx)_.
 
-The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level. Also, It is a good idea to get acquainted with Nextor by reading _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ prior to (or in parallel with) this document.
+The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level. Also, It is a good idea to get acquainted with Nextor by reading _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to (or in parallel with) this document.
 
-Note: in this guide the following Nextor tools will be used: MAPDRV.COM, LOCK.COM and RALLOC.COM. The other tools are simple enough for not needing a step-by-step usage explanation; remember however that all the Nextor tools are explained in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ and that you can get help for any of the tools by invoking them without parameters or by issuing a TYPE command directly on the command file (for example `TYPE FASTOUT.COM`).
+Note: in this guide the following Nextor tools will be used: MAPDRV.COM, LOCK.COM and RALLOC.COM. The other tools are simple enough for not needing a step-by-step usage explanation; remember however that all the Nextor tools are explained in the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ and that you can get help for any of the tools by invoking them without parameters or by issuing a TYPE command directly on the command file (for example `TYPE FASTOUT.COM`).
 
 ## 2. Setting up blueMSX
 
@@ -228,7 +219,7 @@ d. Reset the computer. Once in the COMMAND2 prompt, issue a _DIR_ command and ch
 
 ![](img/gsg/DirAAndDirB.png)
 
-***What has happened?*** This time, Nextor has assigned two drives (A: and B:) to the Sunrise IDE driver, since two devices have been detected; the floppy disk controller has now drives C: and D: assigned. At boot time, Nextor assigns as many drives as devices are available to each controller (for device-based controllers only; see the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ for details about the controller types).
+***What has happened?*** This time, Nextor has assigned two drives (A: and B:) to the Sunrise IDE driver, since two devices have been detected; the floppy disk controller has now drives C: and D: assigned. At boot time, Nextor assigns as many drives as devices are available to each controller (for device-based controllers only; see the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ for details about the controller types).
 
 Drive A: has been mapped to the first available partition on the first available device, as usual. However, once this has been done, Nextor has searched for more suitable partitions on additional devices to be mapped to drive B:. So drive A: is mapped to the first partition in the master device (50M big) and drive B: is mapped to the first partition in the slave device (85M big).
 
@@ -315,7 +306,7 @@ Note: the zero allocation information mode is available since Nextor 2.0.3.
  
 ## 9. Using the boot keys
 
-We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots; see the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ for a full list of the available keys.
+We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots; see the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ for a full list of the available keys.
 
 a.	Reset your computer while keeping the "3" key pressed. You will see that the computer boots in the BASIC prompt.
 
@@ -333,13 +324,13 @@ e.	Reset your computer while keeping the "CTRL" key pressed. Once in the COMMAND
 
 ![](img/gsg/DriversOneDrive.png)
 
-***What has happened?*** When the "CTRL" key is kept pressed at boot time, Nextor will assign one single drive to Nextor drivers, regardless of the number of attached devices (for device-based controllers only; see the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ for details about the controller types). The same behavior is exhibited by the floppy disk controller as usual.
+***What has happened?*** When the "CTRL" key is kept pressed at boot time, Nextor will assign one single drive to Nextor drivers, regardless of the number of attached devices (for device-based controllers only; see the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ for details about the controller types). The same behavior is exhibited by the floppy disk controller as usual.
  
 f.	Reset your computer while keeping the "SHIFT" key pressed. Once in the COMMAND2.COM prompt, execute the DRIVERS tool again. You will see that no drives have been assigned to the floppy disk drive:
 
 ![](img/gsg/DriversOneController.png)
 
-***What has happened?*** When the "SHIFT" key is kept pressed at boot time, all the storage controllers with a MSX-DOS kernel (including the floppy disk drive controller) will disable themselves, but Nextor will not. This is useful to maximize the amount of available memory, especially in MSX-DOS 1 mode, as shown in the next step. (There are boot keys to selectively disable the Nextor kernels as well; see the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ for details)
+***What has happened?*** When the "SHIFT" key is kept pressed at boot time, all the storage controllers with a MSX-DOS kernel (including the floppy disk drive controller) will disable themselves, but Nextor will not. This is useful to maximize the amount of available memory, especially in MSX-DOS 1 mode, as shown in the next step. (There are boot keys to selectively disable the Nextor kernels as well; see the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ for details)
 
 g.	Reset your computer while keeping the "1" and "3" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command. You will see that there are about 20K free for BASIC code.
 
@@ -351,34 +342,4 @@ h.	Reset your computer while keeping the "1", "3", "SHIFT" and "CTRL" keys press
  
 ## 10. Change history
 
-This section lists the changes in this document from previous releases. Note that this document won't be updated anymore, please look at the file history in the Git repository for newer changes.
-
-### 10.1. v2.0.3
-
-Added steps to test the new zero allocation information mode in section 8. The reduced/zero allocation information mode.
-
-### 10.2. v2.0.2
-
-There are no changes in functionality in this version, but some errata in this document has been corrected:
-
-* References to drive C: in steps a. and m. of section 3 have been corrected to mention drive B: instead.
-
-* Reference to drive B: in step a. of section 4 has been corrected to a reference to drive D:.
-
-### 10.3. v2.0 final
-
-There are no changes in functionality in this version, therefore this guide has not changed.
-
-### 10.4. v2.0 Beta 2
-
-* Starting at version 2.0 beta 2, Nextor no longer assigns a fixed number of two drives to device-based controllers at boot time; instead, it assigns one drive per available device. This guide has been modified accordingly.
-
-* Section 9. Using the boot keys has been added.
-
-### 10.5. v2.0 Beta 1
-
-* References to Alpha changed to references to Beta.
-
-* The drive lock test has been shortened to the floppy example only, since now a "Not sure" change status no longer implies an automatic drive mapping change (depends on the boot sector checksum).
-
-* Changed the examples of MAPDRV.COM usage to reflect the new parameters syntax used by the tool.
+Please look at the file history in the Git repository if you are interested in the change history for this document. For the legacy changes list for the 2.0 branch, please look at the _[Nextor 2.0 Getting Started Guide](../../../blob/v2.0/docs/Nextor%202.0%20Getting%20Started%20Guide.md#10-change-history)_ document.

@@ -1,4 +1,4 @@
-# Nextor 2.0 Driver Development Guide
+# Nextor 2.1 Driver Development Guide
 
 ## Index
 
@@ -66,9 +66,9 @@
 
 [4.4.6. DRV_EXTBIO (413Fh)](#446-drv_extbio-413fh)
 
-[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-413eh)
+[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-414eh)
 
-[4.4.8. DRV_CONFIG (4152h)](#448-drv_config-4152h)
+[4.4.8. DRV_CONFIG (4151h)](#448-drv_config-4151h)
 
 [4.4.9. RESERVED (4155h to 415Fh)](#449-reserved-4155h-to-415fh)
 
@@ -102,25 +102,14 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.0.5 beta 1](#51-v205-beta-1)
+[5.1. v2.1.0 beta 1](#51-v210-beta-1)
 
-[5.2. v2.0.1](#52-v201)
-
-[5.3. v2.0 final](#53-v20-final)
-
-[5.4. v2.0 Beta 2](#54-v20-beta-2)
-
-[5.5. v2.0 Beta 1](#55-v20-beta-1)
-
-[5.6. v2.0 Alpha 2b](#56-v20-alpha-2b)
-
-[5.7. v2.0 Alpha 2](#57-v20-alpha-2)
 
 ## 1. Introduction
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
+This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
 
 ## 2. The Nextor kernel architecture
 
@@ -229,7 +218,7 @@ The Nextor kernel has an architecture that is based on the one of the MSX-DOS 2 
 
 * There is a 1K unused space at banks 0 and 3 (visible at addresses 7BD0h to 7FCFh). This space does not contain any kernel code and can be used to put any code or data that is required by the driver to be here. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
-* There are five entry points at kernel banks 0 and 3 (starting at addresses 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-413eh)_ for more details.
+* There are five entry points at kernel banks 0 and 3 (starting at addresses 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)](#447-drv_direct01234-4142h-4145h-4148h-414bh-414eh)_ for more details.
 
 Figure 3 shows a diagram with the structure of a Nextor kernel.
 
@@ -396,7 +385,7 @@ _Device-based drivers_ use a completely different approach. They do not expose d
 
 In general it is recommended to develop device-based drivers, as the routines to implement are easier and the driver code needs to just read and write absolute device sectors without having to worry about partitions; also, the Nextor built-in device partitioning tool can be used to create partitions on devices controlled by device-based drivers only. Developing a drive-based driver may however be a good option to easily convert an existing MSX-DOS driver to Nextor.
 
-Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4152h)). More details are provided in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_.
+Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4151h)). More details are provided in the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_.
 
 ### 4.2. Page 0 routines and data
 
@@ -521,7 +510,7 @@ bit 2:  1 if the driver implements the DRV_CONFIG routine
 bits 3-7: Reserved, must be zero
 ````
 
-Note that [DRV_CONFIG](#448-drv_config-4152h) is used by Nextor starting at version 2.0.5.
+Note that [DRV_CONFIG](#448-drv_config-4151h) is used by Nextor starting at version 2.0.5.
 
 #### 4.3.3. RESERVED (410Fh)
 
@@ -564,8 +553,12 @@ This is the driver initialization routine. It will be called by the kernel twice
 Input:   A  = 0
          B  = Number of available drive letters
          HL = Maximum size of allocatable work area in page 3
+         C  = Initialization flags
+              bit 5: User is requesting reduced drive count
 Output:  A  = Number of controlled drive units (for drive-based drivers only)
          HL = Size of required work area in page 3
+         C  = Initialization flags
+              bit 5: User is requesting reduced drive count
          Cy = 1 if DRV_TIMI must be hooked to the timer interrupt, 0 otherwise
 ```
 
@@ -575,6 +568,11 @@ Output:  A  = Number of controlled drive units (for drive-based drivers only)
 Input:   A = 1
          B = Number of drive letters actually allocated for this controller
 ```
+
+Drive-based drivers must return the number of required drive units in the output of the the first execution of this routine.   Device-base drivers can optionally request an initial number of drives to be allocated at boot time by implementing [the DRV_CONFIG routine](#448-drv_config-4151h), thus overriding [the automatic mapping procedure](Nextor%202.1%20User%20Manual.md#32-booting-nextor).
+
+The "User is requesting reduced drive count" flag will be set if the user wants one single drive to be allocated per driver.
+In the current version of Nextor this happens when the user keeps the 5 key pressed at boot time, but this could change in future versions (a different key could be used or an alternative mechanism for the same function could be provided); therefore the driver should **not** scan the keyboard directly, instead it should just look at the supplied flag and act accordingly (if appropriate). Note also that the same flag is passed to [the DRV_CONFIG routine](#448-drv_config-4151h) as well.
 
 Starting at the second execution of this routine, the GWORK routine can be used at any time to obtain the address of the space reserved for the current slot at SLTWRK. The driver should act as follows regarding the page 3 work area:
 
@@ -634,13 +632,13 @@ D'=1: Execute the kernel and/or the system extended BIOS handler.
 
 The driver extended BIOS handler is always entered with D'=1. Therefore, if the driver does not handle extended BIOS at all, it can simply fill this entry point with RETs.
 
-#### 4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 413Eh)
+#### 4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)
 
 These are the entries for direct calls to the driver. Calls to any of the five entry points available at addresses 7850h to 785Ch in the kernel ROM (bank 0 or bank 3) will be mapped to a call to the corresponding DRV_DIRECT entry point. This is useful when the driver wants to provide extra functionality for configuration, returning information, or other purposes. When these routines are entered, paging state will be the same as when the bank 0/3 entry was invoked, except of course that the driver bank will be switched on page 1 instead of the kernel bank. All registers except IX and AF' are passed unmodified from the caller.
 
 If the driver does not implement any direct call code, it can simply fill these entry points with RETs.
 
-#### 4.4.8. DRV_CONFIG (4152h)
+#### 4.4.8. DRV_CONFIG (4151h)
 
 This routine, introduced in Nextor 2.0.5, allows the driver to provide information about its preferred configuration at boot time. If this routine is implemented, the appropriate bit of [the driver flags](#432-drv_flags-410eh) must be set.
 
@@ -665,6 +663,8 @@ Output:
   Input:
     A = 1
     B = 0 for DOS 2 mode, 1 for DOS 1 mode
+    C = Initialization flags
+        bit 5: User is requesting reduced drive count
   Output:
     B = number of drives
 
@@ -677,6 +677,8 @@ Output:
     B = Device index
     C = LUN index
 ```
+
+See [DRV_INIT](#443-drv_init-4136h) for an explanation about the "User is requesting reduced drive count" flag.
 
 For "Get default configuration for drive", Nextor will assign the specified device and LUN to the appropriate drive at boot time, and the partition will be selected automatically. If the device is not ready at boot time, the drive will still be assigned, and Nextor will try to search for a partition every time the drive is accessed until the device is available. This is useful for having drives assigned to removable devices even if they don't have a volume inserted at boot time.
 
@@ -866,7 +868,7 @@ The available sector numbers must range from zero to the number of available sec
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
-The error codes returned are the same used by MSX-DOS 2, as listed under the category "Disk errors" in the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ document. The .IDEVL error is new in Nextor and has a code of B5h; the complete list of new error codes defined by Nextor is in the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ document.
+The error codes returned are the same used by MSX-DOS 2, as listed under the category "Disk errors" in the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ document. The .IDEVL error is new in Nextor and has a code of B5h; the complete list of new error codes defined by Nextor is in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 #### 4.6.2. DEV_INFO (4163h)
 
@@ -937,7 +939,7 @@ This routine tells the media change status for a device. Nextor will normally ca
 
 In the current version of Nextor this routine will never be called with B=0 (check the status of the device itself). Support for hot-plug device systems such as the USB bus is planned for a future version.
 
-Nextor uses a boot sector checksum mechanism to manage device changes when drivers return A=3 in response to a call to DEV_STATUS (see _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_, section "Managing media changes", for details). In order to avoid boot sector reads and checksum calculations, drivers should return proper device change information (that is, DEV_STATUS should return A=1 or 2 instead of 3) whenever possible.
+Nextor uses a boot sector checksum mechanism to manage device changes when drivers return A=3 in response to a call to DEV_STATUS (see _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_, section "Managing media changes", for details). In order to avoid boot sector reads and checksum calculations, drivers should return proper device change information (that is, DEV_STATUS should return A=1 or 2 instead of 3) whenever possible.
 
 **Important note:** the status returned by this routine is always relative to the previous invocation of the same routine. Calls to DEV_RW must NOT cause the next call to DEV_STATUS to return A=1 if the device has changed. In other words, in the sequence of: media change – call to DEV_RW – call to DEV_STATUS, the last call must return A=2. This behavior is necessary for a proper operation of the Nextor drive mapping engine.
 
@@ -1012,42 +1014,10 @@ patch both banks if a data file for this area is supplied.
 
 ## 5. Change history
 
-This section contains the legacy change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 2.0 Programmers Reference](Nextor%202.0%20Programmers%20Reference.md)_ document.
+This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
-### 5.1. v2.0.5 beta 1
+This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Driver Development Guide](../../../blob/v2.0/docs/Nextor%202.0%20Driver%20Development%20Guide.md#5-change-history)_ document.
 
-Added [the DRV_CONFIG routine](#448-drv_config-4152h).
+### 5.1. v2.1 beta 1
 
-### 5.2. v2.0.1
-
-Added an explanation about how to proceed when generating a kernel file when using a ROM mapper that works with 8K banks.
-
-### 5.3. v2.0 final
-
-There are no changes relative to driver development in this version.
-
-### 5.4 v2.0 Beta 2
-
-There are no changes relative to driver development in this version.
-
-### 5.5. v2.0 Beta 1
-
-There are no changes relative to driver development in this version. However, this document has been updated as follows:
-
-* The new boot sector checksum feature is mentioned in the description of the DEV_STATUS routine. 
-
-* In the description of the DEV_STATUS routine, a note about the value returned by the routine when DEV_RW is invoked after a media change has been added.
-
-* The meaning of register C as an extension to the sector number in the DRV_DSKIO routine is now explained. This feature was already present in previous versions but was not documented.
-
-* In the description of the CALLB0 routine, the address of CODE_ADD was incorrectly specified as F2EDh; it has been corrected to the real address, F84Ch.
-
-* In the description of the DRV_DIRECT routine, the entry points in banks 0 and 3 were incorrectly stated to be 7850h to 785Ch. The text has been corrected to specify the real values, 7850h to 785Ch (and the same in the DRIVER.ASM file).
-
-### 5.6. v2.0 Alpha 2b
-
-* The last step of the manual ROM file creation (Section 3.1) has been changed, now the file position for the extra bank switching code is not calculated but is a fixed number.
-
-### 5.7. v2.0 Alpha 2
-
-* The built-in format choice string addresses have been increased by 1K. So now they are 781Fh for the null string and 7820h for the "Single/double sided" string.
+Added the "User is requesting reduced drive count" flag to the input of [the DRV_INIT routine](#443-drv_init-4136h) and [the DRV_CONFIG routine](#448-drv_config-4151h). 

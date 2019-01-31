@@ -68,29 +68,16 @@
 
 [7. Change history](#7-change-history)
 
-[7.1. v2.0.5 beta 1](#71-v205-beta-1)
+[7.1. v2.1.0 beta 1](#71-v210-beta-1)
 
-[7.2. v2.0.4](#72-v204)
-
-[7.3. v2.0.3](#73-v203)
-
-[7.4. v2.0 final](#74-v20-final)
-
-[7.5. v2.0 Beta 2](#75-v20-beta-2)
-
-[7.6. v2.0 Beta 1](#76-v20-beta-1)
-
-[7.7. v2.0 Alpha 2b](#77-v20-alpha-2b)
-
-[7.8. v2.0 Alpha 2](#78-v20-alpha-2)
 
 ## 1. Introduction
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view (basically the new function calls provided, but also some other useful information). The development of device drivers for Nextor is not covered in this document; this topic has a separate document devoted to itself, _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_.
+This document provides a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view (basically the new function calls provided, but also some other useful information). The development of device drivers for Nextor is not covered in this document; this topic has a separate document devoted to itself, _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_.
 
-The reader of this document is assumed to have experience developing applications for MSX in general and for MSX-DOS 2 in particular (specifically, the information covered by chapter 3 of _MSX2 Technical Handbook_ and the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ and _[MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)_ documents is assumed to be known). Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ prior to this document.
+The reader of this document is assumed to have experience developing applications for MSX in general and for MSX-DOS 2 in particular (specifically, the information covered by chapter 3 of _MSX2 Technical Handbook_ and the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ and _[MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)_ documents is assumed to be known). Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document.
 
 ## 2. Changes in existing function calls
 
@@ -393,7 +380,7 @@ The information returned in the data buffer is as follows:
 
 In the case of MSX-DOS drivers, the driver flags byte is always zero, and no information about driver version number or driver name is returned.
 
-Nextor uses the DRV_CONFIG routine starting at version 2.0.5. See  the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ document for details.
+Nextor uses the DRV_CONFIG routine starting at version 2.0.5. See  the _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document for details.
 
 ### 3.9. Get information about a drive letter (_GDLI, 79h)
 
@@ -415,7 +402,7 @@ The information returned in the data buffer is as follows:
     0: Unassigned
     1: Assigned to a storage device attached to a Nextor or MSX-DOS driver
     2: Unused
-    3: Unused
+    3: A file is mounted in the drive
     4: Assigned to the RAM disk (all other fields will be zero)
 +1: Driver slot number
 +2: Driver segment number, FFh if the driver is embedded within a Nextor 
@@ -431,6 +418,15 @@ The information returned in the data buffer is as follows:
 +9..+63: Reserved (currently always zero)
 ```
 
+If a file is mounted in the drive, the information returned in the data buffer is insetad as follows:
+
+```
++1: Drive where the mounted file is located (0 = A:, etc)
++2: Flags:
+    bit 0: mount mode, 0 = read and write, 1 = read-only
++3: Always 0
++4: Filename in printable format (up to 12 characters, plus a terminating zero)
+```
 
 If a drive larger than the maximum drive number supported by the system is specified, an .IDRV error will be returned. Note that if a drive number is specified which is legal in Nextor, but is currently not assigned to any driver, then no error will be returned, but an empty information block will be returned (the drive status byte should be checked).
 
@@ -510,7 +506,7 @@ Results:     A = Error code
 
 Allows direct invocation of a routine in a device driver. This function works in MSX-DOS 1 mode.
 
-Routines for any driver type (MSX-DOS, device-based and drive-based) can be invoked with this function, however it is intended primarily for device-based drivers, in order to enumerate devices (DEV_INFO and LUN_INFO) and directly access the device absolute sectors (DEV_RW routine), for example to develop device partitioning tools. The available routines for device drivers are enumerated and described in detail in the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ document.
+Routines for any driver type (MSX-DOS, device-based and drive-based) can be invoked with this function, however it is intended primarily for device-based drivers, in order to enumerate devices (DEV_INFO and LUN_INFO) and directly access the device absolute sectors (DEV_RW routine), for example to develop device partitioning tools. The available routines for device drivers are enumerated and described in detail in the _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
 
 The input value of registers AF, BC, DE and HL for the routine must be provided in an 8 byte buffer pointed by HL. The order of the register values in the buffer is as follows: F, A, C, B, E, D, L, H. The output values of these registers, on the other hand, are returned directly in the registers themselves; except the output value of AF which is returned in IX.
 
@@ -522,12 +518,17 @@ An .IDRVR error will be returned by this function call if a non-existing driver 
 
 ```
 Parameters:  C = 7CH (_MAPDRV)
-             A = physical drive (0=A:, 1=B:, etc)
+             A = Physical drive (0=A:, 1=B:, etc)
              B = Action to perform
                  0: Unmap the drive
                  1: Map the drive to its default state
                  2: Map the drive by using specific mapping data
+                 3: Mount a file in the drive
              HL = Address of a 8 byte buffer with mapping data (if B=2)
+                  Address of the file name or FIB (if B=3)
+             D = File mount type (if B=3)
+                 0: Automatic (read-only if the file has that attribute set, read and write otherwise)
+                 1: Read-only
 Results:     A = Error code
 ```
 
@@ -535,7 +536,7 @@ Allows mapping a drive number to a specific combination of device number, logica
 
 If B=0 at input, the drive will be unmapped. This means that the drive will be unavailable from that moment, and any attempt to access it will result in an "Invalid drive" error. If the drive is already unmapped, nothing will happen and no error will be returned.
 
-If B=1 at input, the drive will be reverted to its default state. If at boot time the drive was unmapped (not assigned to any driver), or was mapped to a drive on a MSX-DOS driver or on a drive-based driver, then the drive will be reverted to the same state. If at boot time the drive was assigned to a device-based driver, then an auto-assign procedure will be performed for this drive, using the same rules as the automatic mapping procedure performed at boot time (the automatic mapping procedure is described in the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ document) except that the NEXTOR.DAT file will not be searched. This may result or not on the drive having the same mapping as it had at boot time, depending on the presence of removable devices in the associated driver and the state of the other drives.
+If B=1 at input, the drive will be reverted to its default state. If at boot time the drive was unmapped (not assigned to any driver), or was mapped to a drive on a MSX-DOS driver or on a drive-based driver, then the drive will be reverted to the same state. If at boot time the drive was assigned to a device-based driver, then an auto-assign procedure will be performed for this drive, using the same rules as the automatic mapping procedure performed at boot time (the automatic mapping procedure is described in the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ document) except that the NEXTOR.DAT file will not be searched. This may result or not on the drive having the same mapping as it had at boot time, depending on the presence of removable devices in the associated driver and the state of the other drives.
 
 If the automatic mapping procedure resulting from invoking this function with B=1 fails (because there are no suitable devices or partitions), the drive will be unmapped, regardless of its previous mapping state. An .IDEVL error will be returned in this case.
 
@@ -571,6 +572,9 @@ When invoked in MSX-DOS 1 mode, the following restrictions apply to this functio
 
 * The new mapping information may specify a different partition and/or device, but the driver slot must be the same that was assigned to the drive at boot time. This is not an issue if there is only one Nextor kernel in the system.
 These restrictions are imposed by the Nextor architecture.
+
+If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0. A .BFSZ error will be returned if the file is too small or too big.
+
 
 ### 3.13. Enable or disable the Z80 access mode for a driver (_Z80MODE, 7Dh)
 
@@ -618,6 +622,15 @@ Information about a disk partition on a device has been requested, but the speci
 * Partition is already in use (.PUSED, 0B3h)
 
 An attempt has made to map a drive to a driver, device and starting sector number; but there is already another drive which is mapped to the same combination of driver, device, logical unit, and starting sector number.
+
+* File is mounted (.FMNT, 0B2h)
+
+An attempt to open or alter a mounted file, or to perform any other disallowed operation involving a mounted file, has been made.
+
+* Bad file size (.BFSZ, 0B1h)
+
+Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
+
 
 ## 5. Extended mapper support routines
 
@@ -673,9 +686,9 @@ This bug is corrected in Nextor, so the ESC-Y escape sequence can be safely used
 
 ### 6.2. Changing the NEXTOR.SYS version number
 
-Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (NEXTOR.SYS in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This is a problem since the current NEXTOR.SYS version number is 2.0.
+Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (NEXTOR.SYS in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This is a problem since the current NEXTOR.SYS version number is 2.1.
 
-As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily. There is a command line tool, NSYSVER.COM, that allows to easily do this change (see the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ for more details) but if you want to do the change programmatically, here is the procedure:
+As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily. There is a command line tool, NSYSVER.COM, that allows to easily do this change (see the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ for more details) but if you want to do the change programmatically, here is the procedure:
 
 1.  When in MSX-DOS mode (page 0 mapped to TPA RAM), read the 16 bit value stored at address 0001h.
 2.  Add 32h to the obtained value.
@@ -697,40 +710,16 @@ All of this applies only if the loaded version of NEXTOR.SYS is 2.0 beta 2 or ne
 
 ## 7. Change history
 
-This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the application developer point of view are listed. For information on changes in general, please look at the _[Nextor 2.0 User Manual](Nextor%202.0%20User%20Manual.md)_ document. For information on changes related to driver development, please look at the _[Nextor 2.0 Driver Development Guide](Nextor%202.0%20Driver%20Development%20Guide.md)_ document.
+This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the application developer point of view are listed. For information on changes in general, please look at the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to driver development, please look at the _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
 
-### 7.1. v2.0.5 beta 1
+This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Programmers Reference](../../../blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#7-change-history)_ document.
+
+### 7.1. v2.1.0 beta 1
 
 * [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h) now returns an extra flag that tells if the driver implements the DRV_CONFIG routine.
 
-### 7.2. v2.0.4
+* [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) now allows to mount files.
 
-* If an environment variable named ERRLANG exists with value EN, the _EXPLAIN function call will return error messages in English even if the kanji mode is active. See 2.6. _EXPLAIN (66h).
+* [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h) returns a new set of information for drives where a file is mounted.
 
-### 7.3. v2.0.3
-
-* Corrected a bug in the _DPARM function call: it was always returning a value of 1 in +28 (meaning “FAT16 filesystem”) when then cluster count was between 4080 and 4095, without actually checking the filesystem contained in the drive. See 2.4. _DPARM (31h)
-
-* Added an explanation about the zero allocation information mode in section 2.2. _ALLOC (1Bh)
-
-### 7.4. v2.0 final
-
-(There are no changes relevant to application development in this version)
-
-### 7.5. v2.0 Beta 2
-
-The NEXTOR.SYS version number reported by the DOSVER function call can now be changed (see 6.2. Changing the NEXTOR.SYS version number).
-
-### 7.6. v2.0 Beta 1
-
-(There are no changes relevant to application development in this version)
-
-### 7.7. v2.0 Alpha 2b
-
-(There are no changes relevant to application development in this version)
-
-### 7.8. v2.0 Alpha 2
-
-* The DOSVER function call has been extended to allow detection of Nextor in MSX-DOS 1 mode.
-
-* The GDRVR, GPART, CDRVR and GDLI function calls now work in MSX-DOS 1 mode.
+* [Error codes](#4-new-error-codes) "File is mounted" (.FMNT) and "Bad file size" (.BFSZ) introduced.
