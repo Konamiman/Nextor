@@ -1,0 +1,1022 @@
+	.z80
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	Substitute for the dummy disk driver module
+
+; In MSX-DOS 2.3x, this was a dummy disk driver module that simply returned errors when called.
+; Now this contains code that redirects calls to the driver bank.
+
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+;
+;-----------------------------------------------------------------------------
+;
+$$DRIVE::
+;
+;       External Routines.
+;
+;	extrn	PROMPT,SETINT,PRVINT,GETSLOT,GETWRK,DIV16,ENASLT,XFER
+;
+;       External Variables.
+;
+;	extrn	$SECBUF,RAMAD0,RAMAD1,RAMAD2,RAMAD3,RAWFLG
+;
+;       Public Values.
+;
+	public	DEFDPB
+;
+
+	;*** This should be compiled at 781Fh
+
+SNSMAT	equ	0141h
+
+;-----------------------------------------------------------------------------
+;
+; Null message. The address of this message can be returned by
+; the CHOICE routine in the disk driver when the device can't be formatted.
+
+null_message:
+	db	0
+
+; "Single side/double side" message, can be used when driving
+; a legacy MSX disk drive
+
+	db	"1 - Single side",13,10
+	db	"2 - Double side",13,10
+	db	0
+
+;-----------------------------------------------------------------------------
+;
+; Entries for direct calls.
+; Calls to these addresses will be translated to calls to the DV_DIRECTx
+; entry points in the driver bank.
+
+	ds	7850h-7843h	;Can't do "ds 7850h-$", the compiler complaints
+
+DIRCALL::
+	call	DO_DIRCALL
+	call	DO_DIRCALL
+	call	DO_DIRCALL
+	call	DO_DIRCALL
+	call	DO_DIRCALL
+
+DO_DIRCALL:
+	pop	ix
+	push	bc
+	ld	bc,DV_D0##-DIRCALL-3
+	add	ix,bc
+	pop	bc
+	jp	DO_CALBNK
+
+
+;-----------------------------------------------------------------------------
+;
+; Entry for disk routine DSKIO. It is somewhat complex:
+; if transfer involves page 1, then 1-sector transfers are done
+; by using XFER and SECBUF.
+;
+
+DIO_ENTRY::
+	push	af
+	call	IS_DVB
+	jp	nc,DIO_ENTRY_DO
+
+	ld	a,(iy+2)
+	or	a
+	jp	z,DISKERR
+
+	call	IS_EMU
+	jr	nc,DIOEN_NOEMU
+
+	;>>> In disk emulation mode
+
+	pop	af
+	push	af
+	or	a
+
+	jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	jr	z,DIOCHGFOK
+	pop	bc
+	ld	b,0
+	ret
+DIOCHGFOK:
+
+	; Moan if sector number + sector count > dsk file size
+
+	push	hl
+	push	de
+	ld	ix,(DVB_TABLE##)
+	ld	e,(ix+9)
+	ld	d,(ix+10)	;DE = dsk size in sectors
+
+	pop	hl
+	push	hl
+	push	bc
+	ld	c,b
+	ld	b,0
+	add	hl,bc	;HL = Sector num + count
+	pop	bc
+
+	dec	hl
+	call	COMP16
+	pop	de
+	pop	hl
+	jp	nc,DIO_RNF
+
+	; Wait for VDP interrupt.
+	; This introduces a small delay that is required by some games.
+
+	di
+	ld	a,2
+	out	(99h),a
+	ld	a,8fh
+	out	(99h),a
+WVDP:
+	in	a,(99h)
+	and	81h
+	dec	a
+	jr	z,WVDP
+	xor	a
+	out	(99h),a
+	ld	a,8fh
+	out	(99h),a
+
+	call	CAPSON
+	pop	af
+	call	DIOEN2
+	call	CAPSOFF
+	ret
+
+	;>>> NOT in disk emulation mode
+
+DIOEN_NOEMU:
+	call	HAS_PARTITION
+	call	nz,ASSIGN_PARTITION
+	jp	nz,POP_CONV_ERR
+	jr	DIOEN3
+
+DIOEN2:
+	push	af
+DIOEN3:
+	ld	a,1
+	ld	(KSLOT##),a	;KSLOT=1 -> device-based
+
+	push	hl
+	ld	l,(iy+4)
+	ld	h,(iy+5)
+	add	hl,de
+	ld	ix,TMP_SEC##
+	ld	(ix),l	;Calculate absolute sector number
+	ld	(ix+1),h
+	ld	l,(iy+6)
+	ld	h,(iy+7)
+	ld	de,0
+	adc	hl,de
+	ld	(ix+2),l
+	ld	(ix+3),h
+	pop	hl		;Restore transfer address
+	ld	de,TMP_SEC##
+	
+	ld	c,(iy+3)	;Set LUN index
+	pop	af		;From here Cy must be kept untouched
+	ld	a,(iy+2)	;Set device index
+	jr	DIO_ENTRY_DO_2
+
+		
+;From here, the processing is almost the same for device-based drivers
+;and for drive-based drivers, since the relevant parameters are almost the same
+;(B for the sector count, HL for the transfer address, A and C are not touched).
+;The only thing to take in account, is that for drive-based, DE contains
+;the sector number; and for device-based, DE is a pointer to a 32 bit sector number.
+;We use KSLOT to handle this difference.
+
+DIO_ENTRY_DO:
+	xor	a
+	ld	(KSLOT##),a	;KSLOT=0 -> drive-based
+	pop	af
+DIO_ENTRY_DO_2:
+
+	; If the transfer starts and ends in page 0,
+	; ir of it starts in page 2 or 3,
+	; do all the transfer with a simple call to the driver
+
+	push	af
+	bit	7,h
+	jp	nz,DIO_NOP1	;Transfer starts in page 2 or 3?
+	push	hl
+	push	bc
+	sla	b
+	ld	c,0	;Now BC = number of bytes to read
+	add	hl,bc
+	dec	hl	;Now HL = last read or written address
+	ld	a,h
+	and	11000000b	;Last accessed address in page 0?
+	pop	bc
+	pop	hl
+	jp	z,DIO_NOP1
+	pop	af
+
+	jp	c,DIO_WR_LOOP
+
+	; Loop for reading to page 1
+
+DIO_RD_LOOP:
+	push	af
+	bit	7,h
+	jp	nz,DIO_NOP1	;If not in page 0/1 anymore,
+	push	bc		;do the remaining transfer
+	push	de		;with a simple call to the driver
+	push	hl
+	
+	ld	hl,($SECBUF##)
+	ld	b,1
+	or	a
+	
+	ld	ix,DV_DSKIO##	;Or DEV_RW (they are at the same address)
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	jr	nc,DIO_RD_OK
+
+	pop	hl	;On disk error, just return
+	pop	de
+	pop	bc
+	pop	bc	;Not POP AF, to preserve error info
+	jp	CONV_ERR
+DIO_RD_OK:
+	
+	ld	hl,($SECBUF##)
+	pop	de	;Was PUSH HL
+	push	de
+	ld	bc,512
+	call	XFER##
+
+	pop	hl
+	pop	de
+	pop	bc
+	inc	h
+	inc	h	;Increase destination address by 512
+	call	DIO_INC_DE
+	pop	af
+	djnz	DIO_RD_LOOP
+
+	xor	a
+	ret
+
+	; Loop for writing from page 1
+
+DIO_WR_LOOP:
+	push	af
+	bit	7,h
+	jr	nz,DIO_NOP1	;If not in page 0/1 anymore,
+	push	hl		;do the remaining transfer
+	push	bc		;with a simple call to the driver
+	push	de
+
+	ld	de,($SECBUF##)
+	ld	bc,512
+	call	XFER##	;Preserves AF
+
+	pop	de
+	pop	bc
+	push	bc
+	push	de
+
+	ld	hl,($SECBUF##)
+	ld	b,1
+	scf
+	
+	ld	ix,DV_DSKIO##
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	jr	nc,DIO_WR_OK
+
+	pop	de	;On disk error, just return
+	pop	bc
+	pop	hl
+	pop	hl	;Not POP AF, to preserve error info
+	ret
+
+DIO_WR_OK:
+	pop	de
+	pop	bc
+	pop	hl
+	inc	h
+	inc	h	;Increase destination address by 512
+	call	DIO_INC_DE
+	pop	af
+	djnz	DIO_WR_LOOP
+
+	xor	a
+	ret	
+
+
+; Jump here when the transfer can be done in a single step
+; (no page 1 involved)
+
+DIO_NOP1:
+	pop	af
+	ld	ix,DV_DSKIO##
+	call	DO_CALBNK
+	jp	CONV_ERR
+
+
+;This subroutine increases the sector number by one.
+;Corrupts AF, IX.
+
+DIO_INC_DE:
+	ld	a,(KSLOT##)
+	or	a
+	jr	nz,DIO_INC_DE_DVB
+
+	;Drive-based: simply increment DE.
+	;Note that C can't hold sector number,
+	;since this will be called in DOS 1 mode only,
+	;and DOS 1 does not support FAT16,
+	;so sector numbers are always 16 bit.
+
+	inc	de
+	ret
+
+	;Device-based: increment the 32 bit number pointed by DE
+
+DIO_INC_DE_DVB:
+	push	hl
+	push	de
+	pop	ix
+	ld	l,(ix)
+	ld	h,(ix+1)
+	inc	hl
+	ld	(ix),l
+	ld	(ix+1),h
+	ld	a,h
+	or	l	
+	jr	nz,DIO_INC_DE_DVB_END
+	ld	l,(ix+2)
+	ld	h,(ix+3)
+	inc	hl
+	ld	(ix+2),l
+	ld	(ix+3),h
+DIO_INC_DE_DVB_END:
+	pop	hl
+	ret
+
+;-----------------------------------------------------------------------------
+
+;This routine is invoked in disk emulation mode prior to any disk access.
+;If checks if a valid file change key is being pressed, and if so,
+;reloads the NEXT_DSK.DAT file and updates the information in DVB_TABLE.
+;If no suitable key is being pressed, or if change is performed ok, returns Z.
+;If there is an error reading NEXT_DSK.DAT, returns NZ and A=Error code.
+
+CHGFILE:
+	push	hl
+	push	de
+	push	bc
+	push	ix
+	push	iy
+	call	CHGF2
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+CHGF2:
+	ld	ix,(DVB_TABLE##)
+
+	ld	a,6		;Check GRAPH key
+	call	SNSKEY
+	and	100b
+	jr	nz,NOGRAPH
+
+CHGWAIT:
+	call	CAPSON
+	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
+	or	a
+	jr	nz,CHGWAIT
+
+CHGWA2:
+	call	GETCURKEY	;...then to be pressed again.
+	or	a
+	jr	z,CHGWA2
+
+	jr	CHGF3
+
+NOGRAPH:	
+	call	GETCURKEY
+	or	a
+	ret	z
+
+CHGF3:
+	ld	c,a
+	call	CAPSON
+
+	;--- The key with index C is pressed
+
+	;> Do nothing if chosen file is the same currently in use
+
+	ld	a,(ix)
+	and	7Fh
+	cp	c
+	call	z,CAPSOFF
+	ret	z
+
+	;> Read .DAT file
+
+	push	bc
+
+	ld	a,(ix+2)	;.DAT file dev index + 16 * LUN index
+	ld	d,a
+	rrca
+	rrca
+	rrca
+	rrca
+	and	111b
+	ld	b,a	;LUN
+	ld	a,d
+	and	111b	;Device
+
+	ld	l,(ix+12)
+	ld	h,(ix+13)
+	ld	(TMP_SEC##),hl
+	ld	l,(ix+14)
+	ld	h,(ix+15)
+	ld	(TMP_SEC##+2),hl
+
+	ld	iy,(0F348h-1)	;Master controller slot
+	ld	hl,DEV_RW##
+	ld	(BK4_ADD##),hl
+	ld	c,b
+	ld	b,1
+	ld	hl,($SECBUF##)
+	ld	de,TMP_SEC##
+	or	a
+
+	push	ix
+	ld	ix,CALDRV##
+	call	CALSLT##	;Call DEV_RW
+	pop	ix
+	pop	bc
+	call	CAPSOFF
+	or	a
+	ret	nz
+
+	;> Set the new file data in work area
+
+	ld	a,c
+	ld	(ix),a
+	set	7,(ix)
+	set	7,(ix+2)	;File changed flag
+	
+	dec	a
+	add	a,a		;Each entry is 8 bytes
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	h,0
+	ld	bc,24
+	add	hl,bc
+	ld	de,($SECBUF##)
+	add	hl,de	;HL = Pointer to boot file data
+	push	ix
+	pop	de
+	inc	de
+	inc	de
+	inc	de
+	ld	bc,8
+	ldir
+
+	xor	a
+	ret
+
+
+	;Return in A the index of currently pressed key, 0 if none
+	;Input: IX = Pointer to entry in DVB_TABLE
+
+GETCURKEY:
+	ld	b,(ix+11)
+	ld	hl,CHGTBL
+	ld	d,-1
+	ld	c,1
+
+	;B=Number of keys left to test
+	;HL=Pointer to current key in table
+	;D=Last keyboard row checked
+	;E=Last keyboard row value obtained
+	;C=Current key number
+CHGLOOP:
+	ld	a,(hl)
+	inc	hl
+	cp	d
+	jr	z,IHAVEROW
+	ld	d,a
+	call	SNSKEY
+	ld	e,a
+IHAVEROW:
+	ld	a,(hl)
+	inc	hl
+	and	e
+	ld	a,c
+	ret	z
+	inc	c
+	djnz	CHGLOOP
+
+	xor	a	;No suitable key pressed
+	ret
+
+SNSKEY::
+	push	bc
+	ld	c,a
+	di
+	in	a,(0AAh)
+	and 0F0h
+	add	a,c
+	out	(0AAh),a
+	ei
+	in	a,(0A9h)
+	pop	bc
+	ret
+
+CHGTBL:
+	db	0,2	;1
+	db	0,4	;2
+	db	0,8	;3
+	db	0,16	;4
+	db	0,32	;5
+	db	0,64	;6
+	db	0,128	;7
+	db	1,1		;8
+	db	1,2		;9
+	db	2,64	;A
+	db	2,128	;B
+	db	3,1	;C
+	db	3,2	;D
+	db	3,4	;E
+	db	3,8	;F
+	db	3,16	;G
+	db	3,32	;H
+	db	3,64	;I
+	db	3,128	;J
+	db	4,1	;K
+	db	4,2	;L
+	db	4,4	;M
+	db	4,8	;N
+	db	4,16	;O
+	db	4,32	;P
+	db	4,64	;Q
+	db	4,128	;R
+	db	5,1	;S
+	db	5,2	;T
+	db	5,4	;U
+	db	5,8	;V
+	db	5,16	;W
+
+CAPSON:
+	in	a,(0AAh)
+	and	10111111b
+	out	(0AAh),a
+	ret
+
+CAPSOFF:
+	push	af
+	in	a,(0AAh)
+	or	01000000b
+	out	(0AAh),a
+	pop	af
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+	; General disk routines entry
+
+	;--- Check disk change status
+
+CHG_ENTRY::
+	call	IS_DVB
+	ld	ix,DV_CHGDSK##
+	jp	nc,DO_CALBNK
+
+	ld	d,a
+	ld	a,(iy+2)
+	or	a
+	jp	z,DISKERR
+
+	call	IS_EMU
+	jp	nc,CHGEN_NOEMU
+
+	;>>> In disk emulation mode
+
+	ld	a,d
+	or	a
+	jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	ret	nz
+
+	xor	a
+	ld	ix,(DVB_TABLE##)
+	bit	7,(ix+2)
+	res	7,(ix+2)
+	ld	b,1
+	ret	z
+	ld	a,d
+	jp	DPBEN2
+
+	;>>> NOT in disk emulation mode
+
+CHGEN_NOEMU:
+
+	;Drive-based mapping:
+	;Return "changed" if partition has changed, "unchanged" otherwise
+
+	ld	a,(iy+1)
+	ld	c,a
+	res	7,(iy+1)
+	and	10000000b	;Check partition changed flag
+	ld	b,-1
+	ld	a,c
+	jr	nz,DO_MKDPB	;"Changed" if partition has changed
+	xor	a
+	ld	b,1	;"Unchanged" if partition has not changed
+	ret
+
+	;--- Obtain DPB, input: IY=Entry in DVB_TABLE, HL=Address for DPB
+
+DPB_ENTRY::
+	call	IS_DVB
+	ld	ix,DV_GETDPB##
+	jp	nc,DO_CALBNK
+
+	call	IS_EMU
+	jr	nc,DO_MKDPB
+
+	;>>> In disk emulation mode
+
+	;or	a
+	;jp	nz,DISKERR	;Drive number must be 0
+
+	call	CHGFILE
+	ret	nz
+
+	jr	DPBEN2
+
+	;>>> NOT in disk emulation mode
+
+DO_MKDPB:
+	call	HAS_PARTITION
+	call	nz,ASSIGN_PARTITION
+	jp	nz,CONV_ERR
+
+DPBEN2:
+	push	hl
+	ld	a,(iy+4)
+	ld	(TMP_SEC##),a
+	ld	a,(iy+5)
+	ld	(TMP_SEC##+1),a
+	ld	a,(iy+6)
+	ld	(TMP_SEC##+2),a
+	ld	a,(iy+7)
+	ld	(TMP_SEC##+3),a
+	ld	a,(iy+2)
+	ld	b,1
+	ld	c,(iy+3)
+	ld	de,TMP_SEC##
+	ld	hl,($SECBUF##)
+	or	a
+	ld	ix,DEV_RW##
+	call	DO_CALBNK
+	pop	de
+	inc	de
+	or	a
+	jp	nz,CONV_ERR
+
+	ld	hl,($SECBUF##)
+	ld	bc,MKDPB##
+	ld	(BK4_ADD##),bc
+	call	?C4PBK##
+
+	if 0
+
+spfat::
+	ld	a,(DOS_VER##)
+	or	a
+	jr	nz,MKDPB_OK_SECPERFAT
+	ld	ix,($SECBUF##)
+	ld	a,(ix+17h)
+	or	a
+	jp	nz,DISKERR
+	ld	a,(ix+16h)
+	cp	4
+	jp	nc,DISKERR
+MKDPB_OK_SECPERFAT:
+
+	endif
+
+	xor	a
+	ret
+	
+	;--- Format choice
+
+CHO_ENTRY::
+	call	IS_DVB
+	ld	ix,DV_CHOICE##
+	jp	nc,DO_CALBNK
+	
+	ld	hl,781fh	;Formatting is no supported yet for device-based drivers
+	ret
+
+	;--- Format device
+
+FMT_ENTRY::
+	call	IS_DVB
+	ld	ix,DV_CHOICE##
+	jp	nc,DO_CALBNK
+	
+	ld	a,16		;Formatting is no supported yet for device-based drivers
+	scf
+	ret
+
+	;--- Motor off
+
+MOF_ENTRY::
+	call	IS_DVB
+	ld	ix,DV_MTOFF##
+	jp	nc,DO_CALBNK
+
+	ret
+
+DO_CALBNK:
+	ex	af,af'
+	ld	a,DV_BANK##
+	jp	CALBNK##
+
+
+	;--- Jump here when an operation is requested
+	;    on an existing, but empty, entry in DVB_TABLE
+
+DISKERR:
+	ld	a,12
+	scf
+	ret
+
+DIO_RNF:
+	pop	af
+	ld	a,8
+	ld	b,0
+	scf
+	ret
+
+;-----------------------------------------------------------------------------
+;
+; Check if the relative drive pointer by A refers to a device-based driver
+; and we are in DOS 1 mode. If so, returns Cy=1 and IY=pointer to the
+; table entry in DVB_TABLE. Otherwise returns Cy=0.
+; Corrupts IY, F.
+
+IS_DVB:
+	push	af
+	ld	a,(DOS_VER##)
+	or	a
+	jr	nz,IS_NOT_DVB
+
+	ld	iy,(DVB_TABLE##)
+	ld_a_iyh
+	or_iyl
+	jr	z,IS_NOT_DVB
+
+	ld	a,(iy)
+	and	80h
+	jr	z,IS_DVB_NOEMU
+
+	inc	iy
+	pop	af	;In emulation mode: return Cy=1 only if drive is 0
+	or	a
+	scf
+	ret	z
+
+	ccf
+	ret
+
+IS_DVB_NOEMU:
+	pop	af
+	push	af
+	push	bc
+	ld	c,a	;C = Drive number
+	ld	b,(iy)	;B = num of entries in DVB_TABLE
+	inc	iy
+
+IS_DVB_LOOP:
+    push bc
+	ld	a,(KSLOT##)
+	ld b,(iy)
+	res 6,b
+	cp b
+	pop bc	
+	jr	nz,DIO_NEXT
+
+	ld	a,(iy+1)
+	and	01111111b	;Ignore partition changed flag
+	cp	c
+	jr	nz,DIO_NEXT
+
+DIO_OK:
+	pop	bc	;Found, return Cy=1
+	pop	af
+	scf
+	ret
+
+DIO_NEXT:
+	push	bc
+	ld	bc,8
+	add	iy,bc
+	pop	bc
+	djnz	IS_DVB_LOOP
+	pop	bc
+
+IS_NOT_DVB:
+	pop	af
+	scf
+	ccf
+	ret
+
+
+;--------------
+;
+; Check if we are in disk emulation mode
+; Assumes IS_DVB has returned Cy=1 (that is, in DOS 1 mode and DVB_TABLE exists)
+; Returns Cy=1 if in emulation mode, Cy=0 if not
+; Corruputs: F
+
+IS_EMU:
+	push	iy
+	ld	iy,(DVB_TABLE##)
+	bit	7,(iy)
+	pop	iy
+	scf
+	ret	nz
+	ccf
+	ret
+
+;-----------------------------------------------------------------------------
+;
+; Check if the entry of DVB_TABLE pointed by IY has a partition assigned.
+; Return A=0, Z if partition assigned; A<>0, NZ if NO partition assigned.
+
+HAS_PARTITION:
+	ld	a,(iy+4)	;No partition assigned
+	and	(iy+5)		;if sector number is -1
+	and	(iy+6)
+	and	(iy+7)
+	inc	a
+	jr	z,RET_NZ
+	xor	a
+	ret
+RET_NZ:
+	inc	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Assign the first available FAT12 primary partition to
+; the device whose entry of DVB_TABLE pointed by IY.
+; Returns disk error code in A, with Z appropriately set.
+; Corrupts: AF, IX.
+
+MBR_PSTART	equ	01BEh	;Start of partition table in MBR
+MBR_PSIZE	equ	16	;Size of partition table entry
+POFF_TYPE	equ	4	;Offset of partition type in p. table entry
+POFF_PSTART	equ	8	;Offset of partition start in p. table entry
+POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
+PT_FAT12	equ	1	;Partition type code for FAT12
+
+ASSIGN_PARTITION:
+	push bc
+	push de
+	push hl
+	push iy
+
+	pop hl
+	push hl
+
+	ld b,(iy+UD1_DI##)
+	ld c,(iy+UD1_LI##)
+	ld	a,4
+	ld	ix,AUTO_ASPART##
+	call	CALBNK##
+
+    pop iy
+	pop hl
+	pop de
+	pop bc
+
+	or a
+	ret z
+	ld a,12
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Read the MBR of the device whose entry in DVB_TABLE
+; is pointed by IY. Returns the disk error in A.
+; Corrupts AF, BC, DE, HL, IX, IY.
+
+READ_BOOT:
+	ld	de,0
+	ld	(TMP_SEC##),de
+	ld	(TMP_SEC##+2),de
+	ld	a,(iy+2)
+	ld	b,1
+	ld	c,(iy+3)
+	ld	de,TMP_SEC##
+	ld	hl,($SECBUF##)
+	or	a
+	ld	ix,DEV_RW##
+	jp	DO_CALBNK
+
+
+;-----------------------------------------------------------------------------
+;
+; Convert the disk error returned by a device-based routine,
+; into its drive-based equivalent
+
+POP_CONV_ERR:
+	inc	sp
+	inc	sp
+
+CONV_ERR:
+	or	a
+	ret	z
+	;jr	c,CONVE2
+	;xor	a
+	;ret
+CONVE2:
+
+	push	bc
+	ld	b,0
+	cp	.WPROT##
+	jr	z,CONV_ERR_END
+	ld	b,2
+	cp	.NRDY##
+	jr	z,CONV_ERR_END
+	ld	b,4
+	cp	.DATA##
+	jr	z,CONV_ERR_END
+	ld	b,6
+	cp	.SEEK##
+	jr	z,CONV_ERR_END
+	ld	b,8
+	cp	.RNF##
+	jr	z,CONV_ERR_END
+	ld	b,10
+	cp	.WRERR##
+	jr	z,CONV_ERR_END
+	ld	b,12
+
+CONV_ERR_END:
+	ld	a,b
+	pop	bc
+	scf
+	ret
+
+COMP16:
+	ld	a,h
+	sub	d
+	ret	nz
+	ld	a,l
+	sub	e
+	ret
+
+;-----------------------------------------------------------------------------
+;
+; Default DPB, it contains data for a 720K disk drive
+
+DEFDPB:
+	DB	0FFh
+
+	DB	0F9h
+	DW	512		
+	DB	15		
+	DB	4		
+	DB	1		
+	DB	2		
+	DW	1		
+	DB	2		
+	DB	112		
+	DW	14		
+	DW	714		
+	DB	3		
+	DW	7
+;
+	finish	<DRV>
+;
+	end
+;

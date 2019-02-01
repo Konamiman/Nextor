@@ -1,0 +1,1214 @@
+	.z80
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Miscellaneous KBDOS functions
+;******************************************************************************
+;
+	INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+	RAMMOD
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_CPMVER
+;
+;   This is the "get CP/M version number" KBDOS call.  It  simply  returns the
+; version  number of CP/M which is being emulated.  This is always CP/M 2.2 in
+; the current system.
+;
+		ld	hl,22h
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DSKRST
+;
+;    This  is  the  CP/M  "disk  reset"  function.  It simply flushes all disk
+; buffers (by calling the "flush" function below) and then resets the  current
+; drive and DTA address to its default of A: and 80h.
+;
+		ld	b,0FFh
+		ld	d,0
+		call	F_FLUSH
+		ld	a,1			;H.F
+		ld	(CUR_DRV##),a		;H.F
+;===== start mod DOS2.50
+		ld	de,80h
+;
+;	----------------------------------------
+;
+	PROC	F_DTA
+;
+;    This function simply sets the current disk transfer address from DE.
+;
+		ld	(DTA_ADDR##),de
+;;		ld	hl,80h
+;;		ld	(DTA_ADDR##),hl
+;===== end mod DOS2.50
+		xor	a
+		ld	h,a
+		ld	l,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_SELDSK
+;
+;    This function selects the specified disk as the current  drive  and  also
+; returns  the  number of drives.  If an invalid drive number is given then no
+; error is returned.  This is necessary for MSX-DOS 1 compatability.
+;
+; Entry:     E = Logical drive number (FFh=default, 0=A:, etc)
+; Returns:   A = Error code (0 or .IDRV)
+;            L = Number of physical drives in the system
+;
+		inc	e			;Adjust so 1=A:
+		ld	a,e			;Get logical drive number and
+		ld	c,.IDRV##		; check it is valid (assume
+		pcall	nz,LG_TO_PHYS		; invalid if E=0FFh on entry).
+		jr	z,dont_seldsk
+		ld	a,(hl)			;Also don't select the disk
+		inc	hl			; if drive does not exist.
+		or	(hl)
+		jr	z,dont_seldsk
+		ld	a,e			;If it is valid then store
+		ld	(CUR_DRV##),a		; it as current drive.
+		ld	c,0			;Zero error code
+dont_seldsk:
+		ld	hl,($NUMDRV##)		;Get number of drives and
+		ld	h,0			; return it to user.
+		ld	a,c
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_LOGIN
+;
+;    This routine returns the "login vector" which is simply a word with a bit
+; set  for  each  logical  drive  which is available.  The word is built up by
+; trying each logical drive in turn, converting it to  a  physical  drive  and
+; seeing if the unit descriptor for this drive exists.  The RAM disk will only
+; be included if it is enabled.
+;
+		ld	b,MAX_UNITS##
+		ld	hl,0			;Initialise login vector
+login_loop:	add	hl,hl
+		push	hl
+		ld	a,b			;Look up next logical drive
+		pcall	LG_TO_PHYS		; to see if it has a unit
+		ld	a,(hl)			; descriptor.
+		inc	hl
+		or	(hl)
+		pop	hl			;If it does then set its bit
+		jr	z,not_login		; in login vector else don't.
+		inc	hl
+not_login:	djnz	login_loop		;Loop 'til done all drives
+;
+		xor	a			;Return with no error.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_CURDRV
+;
+;    This function simply returns the current drive.
+;
+;===== start mod DOS2.50
+		ld	hl,(CUR_DRV##)		;Get current drive and
+		dec	l			; adjust it so 0=A:.
+;;		ld	a,(CUR_DRV##)
+;;		dec	a
+;;		ld	l,a
+;===== end mod DOS2.50
+		xor	a
+		ld	h,a
+		ret
+;===== start del DOS2.50 (move to F_DSKRST)
+;;;
+;;;
+;;;------------------------------------------------------------------------------
+;;;
+;;	PROC	F_DTA
+;;;
+;;;    This function simply sets the current disk transfer address from DE.
+;;;
+;;		ld	(DTA_ADDR##),de
+;;		xor	a
+;;		ld	h,a
+;;		ld	l,a
+;;		ret
+;===== end del DOS2.50
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_ALLOC
+;
+;    This is the MSX-DOS 1.0 compatible "get allocation information"  function
+; routine.  The results returned are not exactly as expected from the function
+; definition, the sector size is not returned.  It is  the  job  of  the  code
+; which calls the KBDOS to sort out the results (the sector size is always 512
+; bytes).
+;
+; If the reduced allocation information mode is set for the drive, then
+; cluster counting loop finishes as soon as the reduced cluster count is reached
+; or when all the FAT is examined, whatever happens first.
+;
+; Entry:      E = drive number (0=>default)
+; Returns:    A = Error code
+;             C = Sectors/cluster (0FFh if any error)
+;            DE = Total number of clusters
+;            HL = Number of free clusters
+;            IX = Pointer to MSX-DOS 1.0 compatible DPB
+;            IY = Pointer to first FAT sector in a page-3 buffer
+;
+		ld	c,e			;Validate the specified
+		ld	b,0			; drive and return if
+		ld	ix,FIB_1##		; any error detected.
+		pcall	VAL_FIB
+		or	a
+		ld	c,0FFh			;Set C=FFh if error return
+		ret	nz
+;
+		push	hl			;Get total number of
+		pop	ix			; clusters from UPB and
+		ld	e,(ix+UD_NCLU##)	; save it on the stack
+		ld	d,(ix+UD_NCLU##+1)	; for loop testing.
+		push	de
+;
+		ld	a,(MFLAGS##)
+		and	4	;ZALLOC
+		jr	z,NO_ZALLOC
+		bit	UF_RALL,(ix+UD_FLAGS##)
+		jr	z,NO_ZALLOC
+
+		ld	bc,0
+		push	bc
+		jr	ALLOC_COMMON
+NO_ZALLOC:
+
+		bit	UF_F16,(ix+UD_FLAGS##)
+		jr	z,ALLOC_FAT12
+
+		;--- FAT16 specific code
+
+		call	ALLOC_FAT16
+		dec	hl
+
+		bit	UF_RALL,(ix+UD_FLAGS##)
+		jr	z,ALLOC_NOR
+
+		ld	c,(ix+UD_RDCLUS##)
+		ld	b,(ix+UD_RDCLUS##+1)
+		bit	7,h
+		jr	nz,ALLOC_R
+
+		ld	a,b
+		cp	h
+		jr	c,ALLOC_R
+		ld	a,c
+		cp	l
+		jr	nc,ALLOC_NOR
+ALLOC_R:
+		ld	h,b
+		ld	l,c
+ALLOC_NOR:
+
+		push	hl
+		jr	ALLOC_COMMON
+
+		;--- FAT12 specific code
+
+ALLOC_FAT12:
+
+		ld	de,2			;Start at cluster 2
+		ld	b,d			;Free cluster count = 0
+		ld	c,d
+free_space_lp:	push	de
+		pcall	FAT_LOOKUP		;Get next FAT entry.
+		ld	a,d
+		or	e			;If entry is zero then bump
+		pop	de			; the free cluster count.
+		jr	nz,not_free		
+		inc	bc
+not_free:
+
+;if 0
+;		inc	de			;DE := next cluster number
+;endif
+		or	a
+		ex	(sp),hl
+		sbc	hl,de			;Compare with total number of
+		add	hl,de			; clusters from UPB.
+		ex	(sp),hl
+;if 1
+		inc	de			;DE := next cluster number
+;endif
+		jr	nz,free_space_lp	;Loop if not reached end of FAT
+;
+		push	bc			;Save number of free clusters
+;
+		;--- Common code for FAT12 and FAT16
+
+ALLOC_COMMON:
+		ld	e,(ix+UD_RES##)
+		ld	d,(ix+UD_RES##+1)	;Get the first FAT sector
+		xor	a
+		pcall	BF_FAT_SECTOR		; into a buffer.
+		ld	de,BD_DATA##
+		add	hl,de			;Copy the whole of this
+		ld	de,($SECBUF##)		; sector into a buffer in
+		push	de			; page-3 so that the user
+		ld	bc,200h			; can access it.
+		ldir
+;
+		pop	iy			;IY -> FAT sector in buffer
+		pop	hl			;HL := number of free clusters
+		pop	de
+		dec	de			;DE := total number of
+ifdef VER880722
+		dec	de			;      clusters on disk.
+else
+		nop
+endif
+
+		bit	UF_RALL,(ix+UD_FLAGS##)
+		jr	z,no_reduced_total
+		ld	e,(ix+UD_RDCLUS##)
+		ld	d,(ix+UD_RDCLUS##+1)	;Return reduced total size if necessary
+
+no_reduced_total:
+		ld	c,(ix+UD_DPB##)
+		ld	b,(ix+UD_DPB##+1)	;Get DPB address and save it
+		push	bc			; on stack.
+		ld	c,(ix+UD_CMSK##)
+		inc	c			; C := sectors/cluster
+		pop	ix			;IX := DPB address
+		xor	a
+		ret				;Return with no error
+;
+
+;----------------------------------------------------
+;
+; Routine to calculate free space on a FAT16 drive,
+; it is used by _ALLOC and _DSPACE.
+
+; In:  DE = Total clusters
+;      IX = Unit descriptor
+; Out: HL = Free clusters
+
+ALLOC_FAT16:
+	PROC	ALLF16
+		ex	de,hl	;HL = Total cluster count
+		inc	hl
+		inc	hl
+
+		ld	e,(ix+UD_RES##)
+		ld	d,(ix+UD_RES##+1)	;DE = First FAT sector
+
+		ld	b,h
+		ld	c,l
+		
+		ld	hl,0	;Free cluster count
+
+ALLOC_LOOP:
+		;In: HL = Free cluster count
+		;    DE = Current FAT sector
+		;    BC = remaining total cluster count
+		
+		push	bc	;****
+		
+		push	hl
+
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+
+		inc	de
+		ld	b,d
+		ld	c,e
+
+		pop	de	;Previous free cluster count
+
+		push	bc	;Next FAT sector
+
+		ld	b,0
+		call	FCIS	;DE=Updated free cluster count
+
+		ex	de,hl
+		pop	de	;Next FAT sector
+
+		pop	bc	;Remaining total cluster count
+		djnz	ALLOC_LOOP
+		
+		;Scan last FAT sector
+
+		ld	a,c
+		or	a
+		ret	z	;jr	z,ALLOC_NOLAST	;Skip if (clusters mod 256) = 0
+
+		push	bc	;C=Remaining FAT entries
+		push	hl	;HL=Free cluster count
+		xor	a
+		pcall	BF_FAT_SECTOR
+		ld	bc,BD_DATA
+		add	hl,bc	;HL = Pointer to sector data
+		pop	de
+		pop	bc
+		ld	b,c
+		call	FCIS
+		ex	de,hl
+ALLOC_NOLAST:
+
+		ret
+
+
+	;Calculate free entries in one FAT sector (for FAT16 only)
+	;In: DE = Previous count
+	;    B  = Entries in sector (0=256)
+	;    HL = Pointer to sector data
+	;Out: DE = DE + free clusters in sector
+
+FCIS:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	jr	nz,FCISN
+	inc	de
+FCISN:
+	djnz	FCIS
+	ret
+
+;------------------------------------------------------------------------------
+;
+	PROC	F_VERIFY
+;
+;    This function sets the verify after write  flag  according  to  the  flag
+; passed  in  register  E.   Zero  indicates  disabled  and non-zero indicates
+; enabled.
+;
+		ld	a,e
+		ld	(RAWFLG##),a
+		xor	a
+		ld	h,a
+		ld	l,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DPARM
+;
+;    This  KBDOS  function  fills  in  a user parameter block with a series of
+; parameters concerning the disk format in a specified drive.  The  parameters
+; are  all decoded from the unit descriptor and are the same as the parameters
+; in a boot sector but with some additional ones.  An error can result if  the
+; drive given is illegal.
+;
+; Entry:        L = Drive number (0=default, 1=A:, etc)
+;              DE = Pointer to 32 byte buffer
+; Returns:      A = Error code
+;              DE = Filled in with the relevant data.
+;
+		ld	ix,FIB_1##
+		ld	b,0
+		ld	c,l
+		push	de			;Validate the specified
+		pcall	VAL_FIB			; drive, using a build
+		pop	de			; in FIB, and give up if
+		or	a			; there was an error.
+		ret	nz
+;
+		push	hl			;IX -> unit descriptor
+		pop	ix			; for later and save user's
+		push	de			; pointer for return.
+;
+		ld	bc,UD_PHYS##		;Copy physical unit number
+		add	hl,bc			; from unit descriptor
+		ldi				; into the data block.
+;
+		ld	bc,512
+		ld	a,c			;Set sector size to 512.
+		ld	(de),a
+		inc	de
+		ld	a,b
+		ld	(de),a
+		inc	de
+;
+		inc	hl
+		ld	a,(hl)			;Set sectors/cluster to
+		inc	hl			; cluster mask + 1.
+		inc	a
+		ld	(de),a
+		inc	de
+;
+		inc	hl
+		ldi				;Copy number of reserved
+		ldi				; sectors directly.
+;
+		ldi				;Copy number of FATs
+;
+		ld	a,(hl)
+		inc	hl
+		push	hl			;Calculate the number of
+		ld	l,(hl)			; root directory entries
+		ld	h,0			; by:
+		add	hl,hl			;    sectors*16 + odd
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		add	a,l
+		ld	(de),a
+		inc	de			;Store number of entries
+		ld	a,h			; in the data block.
+		ld	(de),a
+		inc	de
+		pop	hl
+		inc	hl
+;
+		inc	de
+		inc	de
+		push	de			;Save pointer for media byte
+		inc	de			;Copy sectors/FAT, root dir
+		ld	bc,1+2+2+2+1+4		; sector, data sector, max
+		ldir				; clusters, dirty flag and
+						; volume-id.
+if 1
+		push	de			;Adjust max clusters
+		ex	de,hl			; which is actually a number of
+		ld	bc,-(2+1+4)		; FAT entries.
+		add	hl,bc
+		inc	(hl)
+		jr	nz,dp_clu_noinc
+		inc	hl
+		inc	(hl)
+dp_clu_noinc:	ex	de,hl
+		pop	de
+endif
+		ld	b,32-24
+		xor	a
+dp_clear_loop:	ld	(de),a			;Clear the rest of the
+		inc	de			; user's parameter block.
+		djnz	dp_clear_loop
+;
+		pop	de
+		ldi				;Copy media byte in.
+;
+		ld	l,(ix+UD_NCLU##)	;Get maximum cluster number
+		ld	h,(ix+UD_NCLU##+1)	; and subtract 2 to get the
+		dec	hl			; actual number of data
+if 0
+		dec	hl			; clusters.
+endif
+		ld	b,(ix+UD_CSHFT##)
+if 0
+		inc	b
+endif
+;===== start mod FAT16 (0CBAh patch)
+		;assume A=0 and Cy=0 (set "xor a")
+		code	MVI C			;Skip "ADD HL,HL" first time
+dp_shift_lp:	add	hl,hl			;Shift this according to the
+		adc	a,a			; cluster shift to get
+;;		jr	dp_shift_st
+;;dp_shift_lp:	add	hl,hl
+;===== end mod FAT16
+dp_shift_st:	djnz	dp_shift_lp		; number of data sectors.
+		ld	c,(ix+UD_SDAT##)
+		ld	b,(ix+UD_SDAT##+1)	;Add on the first data sector
+		add	hl,bc			; number to get the total
+;===== start add FAT16 (0CBAh patch)
+		adc	a,0
+;===== end add FAT16
+		ex	de,hl			; number of sectors and put
+		dec	hl			; it in the user's data
+		dec	hl			; block at the correct place.
+;===== start add FAT16 (ALLSEC patch)
+		or	a			;ADE < 10000h ?
+		jr	z,f_dparm_fat12		;yes
+
+f_dparm_fat16:
+		ld	(hl),0			;+10
+		dec	hl
+		ld	(hl),0			;+ 9
+		jr	f_dparm_bigsec
+f_dparm_fat12:
+		ld	(hl),d			;+10
+		dec	hl
+		ld	(hl),e			;+ 9
+
+f_dparm_bigsec:
+		ld	bc,18			;+ 9+18 = +27
+		add	hl,bc
+		ld	(hl),0			;+27 : highest
+		dec	hl
+		ld	(hl),a			;+26 : high
+		dec	hl
+;===== end add FAT16
+		ld	(hl),d			;+25 : middle
+		dec	hl
+		ld	(hl),e			;+24 : low
+;
+		bit	UF_F16,(ix+UD_FLAGS##)
+		pop	ix
+		ld	a,0
+		jr	z,f_dparm_fsystem
+		inc	a
+		;ld	l,(ix+17)		;Filesystem: FAT16 if max cluster >=0FF0
+		;ld	h,(ix+18)
+		;ld	de,0FF0h
+		;xor	a
+		;sbc	hl,de			;Cy set if HL<DE
+		;jr	c,f_dparm_fsystem
+		;inc	a
+f_dparm_fsystem:
+		ld	(ix+28),a		;+28: 0 for FAT12, 1 for FAT16
+
+		push	ix
+		pop	de			;Restore pointer and return
+		xor	a			; with no error.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GDTA
+;
+;    This function simply returns the current disk transfer address in DE.
+;
+		ld	de,(DTA_ADDR##)
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GVFY
+;
+;   This function simply returns 00h or 0FFh in register B to indicate whether
+; verify after write is enabled or not.
+;
+		ld	a,(RAWFLG##)
+		or	a
+		jr	z,verify_off
+		ld	a,0FFh
+verify_off:	ld	b,a
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_FLUSH
+;
+;   This function call flushes disk buffers for a specified drive or  for  all
+; drives. It also optionally invalidates all buffers and unit descriptors.
+;
+; Entry:        B = drive number (0=default, 1=A:, FFh=all)
+;               D = 00h => flush only
+;                   FFh => flush and invalidate
+; Returns:      A = Error code
+;
+		ld	a,b			;If unit number is FFh then
+		cp	0FFh			; must invalidate them all.
+		jr	z,flush_got_phys
+;
+		pcall	LG_TO_PHYS		;Convert the logical drive to
+		ld	b,a			; a physical drive and give up
+		ld	a,c			; with error code if it is
+		ret	z			; illegal.
+;
+flush_got_phys:	ld	a,b			;Flush all buffers for this
+		pcall	FL_PHYS			; unit (or all units)
+		ld	a,d
+		or	a			;Return with A=0 unless
+		ret	z			; invalidating was requested.
+;
+		ld	a,b
+		pcall	INV_PHYS		;Invalidate all buffers and
+		pcall	ZAP_ALL			; zap the unit descriptors.
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_TE0
+;
+;   This is the "terminate  program"  KBDOS  call.  It  simply  jumps  to  the
+; "terminate with error code" routine, having loaded up a zero error code.
+;
+		ld	b,0
+;
+;	----------------------------------------
+;
+	PROC	F_TERM
+;
+;   This is the "terminate with error code" function call.  It simply jumps to
+; the abort vector with the specified error code in register A, and with  zero
+; in register B (secondary error code).
+;
+		ld	a,b
+		ld	b,0
+		pcall	GO_ABORT
+		jr	$
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_ERROR
+;
+;   This is about the simplest BDOS function of all.  It  simply  returns  the
+; error  code  from the last function.  Its own error code is always zero.
+;
+		ld	b,(iy+@LAST_ERR##)
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_EXPLAIN
+;
+;    This  function  produces  explanation  strings  for  error  codes.    The
+; messages are in a separate file in the ROM resident half of the code and are
+; accessed  by  an  inter-slot  call to the routine ERR_MSG (pointed to by the
+; $ERR_MSG variable in page-3).  If an error has no message then a message  of
+; the form "System error 77" or "User error 23" is returned.
+; System errors are defined as any code in the range 40h...FFh and user errors
+; are 00h...3Fh.
+;
+; Entry:       B = Error code to be explained
+;             DE = Pointer to 64 byte buffer for message
+; Returns:     A = 0
+;              B = 0 if message available, unchanged if "Error nnn" message
+;             DE = Preserved, contains ASCIIZ message string
+;
+		ld	a,b
+		push	de			;Save buffer pointer
+		push	iy
+		ld	iy,(MASTER_SLOT##-1)	;Inter-slot call to page-1
+		ld	ix,($ERR_MSG##)		; to get string for this
+		call	CALSLT##		; error code.
+		ei
+		pop	iy
+		ld	b,a			;If default error message then
+		or	a			; append number to the message
+		dec	hl			; and return with B=error,
+		call	nz,add_err_number	; else return with B=0.
+		xor	a
+		ld	(hl),a			;Terminate the string
+		pop	de			; and always return with A=0.
+		ret
+;
+;
+add_err_number:	ld	c,-1			;Recursive routine to append
+div_10_loop:	inc	c			; an error number to the
+		sub	10			; default error string.
+		jr	nc,div_10_loop
+		add	a,10+"0"		;Convert remainder to digit
+		push	af
+		ld	a,c
+		or	a			;If quotient from division
+		call	nz,add_err_number	; is non-zero then insert
+		pop	af			; it recursively.
+		ld	(hl),a			;Put the digit into the
+		inc	hl			; string and adjust pointer.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_FMT
+;
+;    This is the "format disk" KBDOS function.  It is passed the logical drive
+; number  to  be  formatted  and  a pointer to a buffer in the TPA space. This
+; buffer must not cross a segment boundary.
+;
+; Entry:      A = Choice number (00h => get choice string
+;                                -ve => new boot sector)
+;             B = Logical drive number
+;            HL = Pointer to start of buffer area (unused if A=0)
+;            DE = Size of buffer area (unused if A=0)
+; Returns:    A = Error code
+;             B = Slot address of choice string (if A=0 on entry)
+;            HL = Pointer to choice string (if A=0 on entry)
+;
+
+		ex	af,af'			;Save choice number in A'
+		push	hl
+		pop	ix			;IX -> buffer pointer
+		ld	a,b
+		pcall	LG_TO_PHYS		;Find the physical drive
+		ld	a,(hl)			; and error get a pointer
+		inc	hl			; to the unit descriptor
+		ld	h,(hl)			; into HL.
+		ld	l,a
+		or	h			;Return an error if the
+		ld	a,c			; drive does not exist.
+		ret	z
+;
+		ex	af,af'			;If choice <> 00h then
+		or	a			; jump to actually do the
+		jr	nz,do_format		; format operation.
+;
+		pcall	DSK_CHOICE		;Get prompt string from
+		push	hl			; driver.
+		pop	ix
+		ld	b,(ix+UD_SLOT##)	; B := slot address of driver
+		ex	de,hl			;HL := address of string
+		or	a
+		ret
+;
+;
+do_format:	ex	af,af'
+		pcall	FL_UD			;Flush and invalidate any
+		pcall	INV_UD			; buffers for the drive.
+;
+		push	hl			;Save unit descriptor
+check_buf_loop:	push	de			;Save buffer size
+		push	ix
+		pop	de			;DE -> start of buffer
+		xor	a
+		pcall	GET_SEGMENT		;Find out the segment.
+		ld	hl,4000h
+		or	a
+		sbc	hl,de			;HL := size of room in page-0
+		ex	(sp),hl			;HL := buffer size
+		pop	bc			;BC := size of room in page-0
+		sbc	hl,bc			;If whole of buffer is in
+		jr	c,got_buf_hl_bc		; page-0 then skip.
+		sbc	hl,bc			;Skip if bottom half of buffer
+		jr	c,got_buf_bc		; is bigger than top.
+		add	hl,bc
+		ex	de,hl			;DE := reduced buffer size
+		add	ix,bc			;IX := adjusted buffer pointer
+		jr	check_buf_loop
+;
+got_buf_hl_bc:	add	hl,bc
+		ld	b,h			;BC := size of buffer to use
+		ld	c,l
+got_buf_bc:	set	7,d
+		push	de			;IX -> start of buffer to
+		pop	ix			;      use in page-2.
+		ld	d,a			;D := segment number
+		ex	af,af'			;A := choice number (1...9)
+		pop	hl			;HL -> unit descriptor
+;
+		pcall	DSK_FORMAT		;Do the format operation
+;
+		ld	bc,UD_TIME##		;Zero the UD_TIME field to
+		add	hl,bc			; ensure that we will get
+		ld	(hl),0			; a new UPB next time.
+
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_RAMD
+;
+;    This is the "create/destroy RAM disk" KBDOS function.  It is  passed  the
+; number  of  segments to use for the RAM disk in register B.  If this is 0FFh
+; then it will simply return the current RAM disk size.  If B=00h then the RAM
+; disk  will  be destroyed, otherwise a new one will be created with a maximum
+; size as specified in register B.
+;
+;    This routine has the job of allocating  and  freeing  the  segments,  and
+; setting  up  the RAM disk unit descriptor.  The setting up of the UPB in the
+; boot sector is done by the RAM disk itself when "VAL_FIB" is called, and the
+; initialising of the FATs and root directory is done by  the  "FAT_INIT"  and
+; "ZERO_CLUSTER" routines which are called by this routine.
+;
+; Entry:      B =     00h => destroy RAMdisk
+;                 1...FEh => create RAMdisk with this maximum size
+;                     FFh => return current RAMdisk size
+; Returns:    A = Error code
+;             B = Current RAMdisk size, 0 => no RAMdisk
+;
+RAMD_NUM	equ	"H"-"A"+1
+;
+		push	bc
+		ld	b,RAMD_NUM		;Un-assign the RAM disk's
+		ld	d,b			; logical drive.
+		call	F_ASSIGN
+		pop	bc
+;
+		inc	b			;Skip if just asking how
+		jp	z,ramdisk_ret_ok	; big the RAM disk is.
+		dec	b			;Skip if killing an existing
+		jp	z,kill_ramdisk		; RAM disk.
+;
+;       ----------------------------------------
+;
+		ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;If unit descriptor for
+		ld	a,h			   ; "H:" already exists
+		or	l			   ; then give an error as
+		ld	c,.RAMDX##		   ; we can't have two
+		jp	nz,ramdisk_ret_c	   ; RAM disks.
+;
+		call	ZAP_RAMD		;Zero the boot sector to give
+						; a nice clean starting point
+;
+		ld	de,RD_LIST##		;Loop to allocate system
+		ld	hl,RD_COUNT##		; segments until we run out
+all_seg_loop:	exx				; or we have got the required
+		ld	a,1			; number of segments. (B=30h
+		ld	b,00110000b		; => only use primary mapper
+		pcall	ALL_SEG			;    as "last resort".
+		jr	c,no_free_seg		;Exit if no free segments
+		push	bc
+		exx
+		inc	(hl)			;Bump segment count
+		ld	(de),a			;Record segment number
+		inc	de
+		pop	af
+		ld	(de),a			;Record slot number.
+		inc	de
+		djnz	all_seg_loop
+no_free_seg:
+;
+		ld	a,(RD_COUNT##)		;If we could not allocate
+		or	a			; any segments at all then
+		ld	a,c			; exit with an error.
+		ld	c,.NORAM##
+		jp	z,ramdisk_ret_c
+;
+		ld	hl,(RM_UD##)		   ;Record the RAM disk's unit
+		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; descriptor address.
+;
+		ld	a,RAMD_NUM
+		push	hl			;Setup a few important fields
+		pop	ix			; of the unit descriptor.
+		ld	(ix+UD_PHYS##),a	;Physical unit number
+		ld	(ix+UD_TIME##),0	;No current UPB
+		ld	(ix+UD_CDIR##+1),0FFh	;Current directory is root
+;===== start add FAT16 (DOS2.50 original patch)
+		ld	(ix+UD_CDIR##),0FFh
+;===== end add FAT16
+;
+		ld	c,a			;Validate the RAM disk, this
+		ld	ix,FIB_1		; will set up the UPB but
+		ld	b,0			; won't initialise the root
+		pcall	VAL_FIB			; directory or FAT's
+;
+		ld	a,0FFh			;Setup FAT's with a fixed
+		pcall	FAT_INIT		; media byte value.
+		ld	de,0
+		pcall	ZERO_CLUSTER		;Setup root directory
+		pcall	FL_UD			;Flush buffers to disk.
+if 0
+		ld	hl,$NUMDRV##
+		inc	(hl)			;Count one more drive
+endif
+		jr	ramdisk_ret_ok		;Jump to return no error
+;
+;       ----------------------------------------
+;
+kill_ramdisk:	ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;Don't do anything if
+		ld	a,h			   ; there is no RAM disk
+		or	l			   ; to destroy.
+		jr	z,ramdisk_ret_ok
+;
+		ld	a,RAMD_NUM		;Invalidate any buffers for
+		pcall	INV_PHYS		; the RAM disk.
+;
+		ld	hl,0			   ;Remove the RAM disk from
+		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; the unit descr. table.
+;
+if 0
+		ld	hl,$NUMDRV##		;Count one less physical
+		dec	(hl)			; drive present.
+;
+endif
+		xor	a			;Set RAM disk segment count
+		ld	(RD_COUNT##),a		; to zero.
+;
+		ld	hl,RD_LIST##
+kill_ramd_loop:	ld	c,(hl)			;Now loop through the
+		inc	hl			; segment list, freeing
+		ld	b,(hl)			; each segment in turn until
+		inc	hl			; we reach slot number
+		ld	a,b			; zero which indicates end of
+		or	a			; the list.
+		jr	z,ramdisk_ret_ok
+		push	hl
+		ld	a,c
+		pcall	FRE_SEG
+		pop	hl
+		jr	kill_ramd_loop
+;
+;       ----------------------------------------
+;
+ramdisk_ret_ok:	ld	c,0
+ramdisk_ret_c:	ld	a,(RD_COUNT##)		;Always return with RAM disk
+		ld	b,a			; size in B and error code
+		ld	a,c			; in A.
+		ret
+;
+;
+;       ----------------------------------------
+;
+	PROC	ZAP_RAMD
+;
+		ld	hl,RD_BOOT##		;Simple routine to zero
+		ld	de,RD_END##-RD_BOOT##	; the RAM disk boot sector.
+zap_boot_loop:	ld	(hl),0
+		inc	hl
+		dec	de
+		ld	a,d
+		or	e
+		jr	nz,zap_boot_loop
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_BUFFER
+;
+;    This is the "allocate sector buffers" KBDOS function.  It  will  allocate
+; or  free  sector  buffers  as  required to get the total number specified in
+; register B on entry.  If register B  is  smaller  than  the  minimum  number
+; allowed  then  it will not alter the current number but will just return how
+; many there are.  If it runs out of memory in allocating buffers then it will
+; not return an error.
+;
+; Entry:       B = Number of buffers required (0 => just return current)
+; Returns:     A = 0
+;              B = Current number of buffers
+;
+		ld	a,b			;Don't do anything if too
+		cp	MIN_BUFS##		; few buffers requested.
+		jr	c,buffers_done
+;
+alter_buf_loop:	ld	a,b			;See how many buffer we have
+		cp	(iy+@B_COUNT##)		; at the moment.
+		jr	z,buffers_done		;Finished if correct number.
+		jr	nc,alloc_buffer		;Jump if not got enough.
+;
+		ld	hl,(B_CHAIN##)		;Too many so free one.
+		pcall	BF_FLUSH		;Flush the first buffer on
+		ld	e,(hl)			; the chain.
+		inc	hl
+		ld	d,(hl)			;Get address of next buffer
+		dec	hl			; and store it as the new
+		ld	(B_CHAIN##),de		; chain head.
+		pcall	FR_P2
+		ld	hl,0			;Clear the buffer cache just
+		ld	(B_CACHE##),hl		; in case.
+		ld	hl,B_COUNT##
+		dec	(hl)			;Count one less buffer and
+		jr	alter_buf_loop		; loop to check again.
+;
+alloc_buffer:	ld	hl,BD_SZ##		;Too few so allocate one more.
+		pcall	ALL_P2			;Allocate RAM for the buffer
+		jr	nz,buffers_done		; and stop if out of memory.
+		ld	de,(B_CHAIN##)
+		ld	(B_CHAIN##),hl		;Link the new buffer onto
+		ld	(hl),e			; the start of the chain.
+		inc	hl
+		ld	(hl),d
+		ld	hl,B_COUNT##		;Count one more buffer now.
+		inc	(hl)
+		jr	alter_buf_loop
+;
+buffers_done:	ld	b,(iy+@B_COUNT##)	;Get current number of buffers
+		xor	a			; and return it to caller.
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_ASSIGN
+;
+;    This function ASSIGNs a specified physical unit to  a  specified  logical
+; unit.   If  the physical unit is zero then the logical unit is assigned back
+; to itself and if the logical unit is zero then all units are  assigned  back
+; to themselves.  If the physical unit is 0FFh then no assignments are changed
+; but the current assignment for the physical drive is returned.
+;
+; Entry:    B = Logical drive  number (0 => all)
+;           D = Physical drive number (0 => reset, 0FFh => dont change)
+; Returns:  A = Error code
+;           D = Physical drive number (unless B=0 on entry)
+;
+		ld	hl,ASG_TAB##		;Point HL at start of ASG_TAB.
+;
+		ld	a,b
+		or	a			;Jump if un-assigning all
+		jr	z,unassign_all		; units.
+;
+		cp	MAX_UNITS##+1		;Error if logical unit number
+		ld	a,.IDRV##		; is invalid.
+		ret	nc
+;
+		ld	c,b
+		ld	b,0			;Point HL at ASG_TAB entry for
+		add	hl,bc			; the specified logical unit.
+		ld	a,d
+		inc	a			;If physical unit = 0FFh then
+		jr	z,dont_assign		; just return current setting.
+		dec	a			;If physical unit = 000h then
+		jr	z,unassign_one		; reset this setting.
+		cp	MAX_UNITS##+1		;Check physical unit number
+		ld	a,.IDRV##		; and give error if invalid.
+		ret	nc
+;
+		ld	c,d			;Set ASG_TAB entry to the
+unassign_one:	ld	(hl),c			; appropriate value.
+dont_assign:	ld	d,(hl)			;Get current setting
+		xor	a
+		ret				;Return with no error
+;
+;
+unassign_all:	ld	(hl),a			;Walk through UNIT_TAB setting
+		inc	hl			; each entry to its own value.
+		inc	a
+		cp	MAX_UNITS##+1
+		jr	nz,unassign_all
+		xor	a
+		ld	d,a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DCHK
+;
+;    This function gets or sets the value  of  "DSK_CHK"  which  controls  the
+; amount of disk change checking which the system does.
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           B = value to set (only if A=1)
+; Returns:  A = 0 (error code)
+;           B = current value, 00h or FFh.
+;
+		or	a			;Skip if just getting value
+		jr	z,dont_set_dchk
+;
+		ld	a,b
+		or	a			;If setting to non-zero value
+		jr	z,set_dchk_on		; then make sure it is 0FFh
+		ld	a,0FFh			; to keep things tidy.
+set_dchk_on:	ld	(DSK_CHK##),a		;Set new value.
+;
+dont_set_dchk:
+;===== start mod DOS2.50
+		ld	bc,(DSK_CHK##-1)	;Get current value into B.
+;;		ld	a,(DSK_CHK##)
+;;		ld	b,a
+;===== end mod DOS2.50
+		xor	a
+		ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_DOSVER
+;
+;    This  function just returns the version number of the MSX-DOS  ROM.  The
+; version number itself is defined in the VAR module.
+;
+; Entry:    Optionally, magic numbers:
+;           HL = 01234h
+;           DE = 0ABCDh
+;            B = 5Ah
+; Returns:   A = 0 (error code)
+;            B = Major version number
+;            C = Minor version number (release number)
+;           DE = 0
+;           HL = Address of version string in kernel ROM
+;
+;           If magic numbers are present (otherwise, IX and IY preserved):
+;           IXh = 1 (Nextor identifier)
+;           IXl = Nextor major version number
+;           IYh = Nextor secondary version number
+;           IYl = Nextor revision number
+;
+		ld	a,b
+		cp	5Ah
+		jr	nz,DOSVER2
+		ld	a,h
+		cp	12h
+		jr	nz,DOSVER2
+		ld	a,l
+		cp	34h
+		jr	nz,DOSVER2
+		ld	a,d
+		cp	0ABh
+		jr	nz,DOSVER2
+		ld	a,e
+		cp	0CDh
+		jr	nz,DOSVER2
+
+		ld	ix,256 + NXTVER##
+		ld	iy,256*NXTV_HI## + NXTV_LO##
+		ld	hl,DOSV0##
+DOSVER2:
+
+		ld	b,DOSVER##
+		ld	c,DOSV_LO##+16*DOSV_HI##
+		xor	a
+		ld	d,a
+		ld	e,a
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	F_REDIR
+;
+;    This function gets or sets the value of the  redirection  flags.   These
+; flags  determine  whether  the CP/M character I/O functions will go through
+; file handles or not.  The effect of  changing  these  is  purely  temporary
+; since  many  file  handle  operations  will  reset  them.  This function is
+; provided for any programs which want to do character I/O that  must  go  to
+; the screen, without having to do BIOS calls.
+;
+; Entry:    A = 0 => get current value
+;               1 => set new value
+;           B = flags to set (only if A=1).  b0 set => input redirected
+;                                            b1 set => output redirected
+; Returns:  A = 0 (error code)
+;           B = current value (before setting new value if A=1)
+;                  b0 set => input redirected
+;                  b1 set => output redirected
+;
+		ld	c,(iy+@IO_RDR##)	;Get current redirection flags
+		or	a
+		jr	z,dont_set_redir	;If setting new value then
+		ld	(iy+@IO_RDR##),b	; store it.
+dont_set_redir:	ld	b,c			;Return old value in B
+		xor	a
+		ret
+;
+;------------------------------------------------------------------------------
+;
+	ld	a,(MFLAGS##)
+	and	4	;ZALLOC
+	jr	z,DSP_NO_ZALLOC
+	bit	UF_RALL,(ix+UD_FLAGS##)
+	jr	z,DSP_NO_ZALLOC
+
+	ld	de,0
+	jr	DSP_NEXT
+DSP_NO_ZALLOC:
+
+	bit	UF_F16,(ix+UD_FLAGS##)
+	jr	z,DSP_FAT12
+
+	call	ALLOC_FAT16
+	ex	de,hl
+	jr	DSP_NEXT
+
+DSP_FAT12:
+DSP_NEXT:
+	finish	<MISC>
+	end
+;
