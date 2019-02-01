@@ -26,7 +26,7 @@ Note that there is no `master` branch, but branches for each major version of Ne
 
 You need:
 
-1. A Windows machine (if you succeed in building Nextor from a Linux machine, please let me know!)
+1. A Windows machine (if you don't have one see ["No Windows?"](#no-windows) below)
 2. SDCC ([http://sdcc.sourceforge.net](http://sdcc.sourceforge.net)), targetting the Z80 processor, to build FDISK.
 3. .NET Framework 2.0 or higher (for the `SymToEqus` tool in the `wintools` folder)
 4. The `wintools` folder must be added to the `PATH` environment variable
@@ -54,3 +54,7 @@ Run the `compile.bat` script in the `source\command\msxdos` folder. The file wil
 Run the `compile.bat` script in the `source\command\command` folder. The file will be generated in the `bin\tools` folder.
 
 At this time there's no specific script (other than the original makefile) for building the original MSX-DOS command line tools.
+
+### No Windows?
+
+If your machine doesn't run Windows you can still build Nextor by using Xesco's [Nextor builder](https://github.com/xesco/NextorBuilder).
