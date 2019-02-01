@@ -1,7 +1,60 @@
 # Nextor
 
-This branch is a bit outdated, it needs some cleanup and syncrhonization work. In the mean time please see:
+Nextor is a disk operating system for MSX computers. It is built on top of the source code of MSX-DOS 2.31, released in 1991.
 
-* The README.md file for the `v.2.0` branch
+The source code of Nextor is published with permission from the MSX Licensing Corporation under certain terms. **Please take a moment to read [the license terms](LICENSE.md) for details**.
 
-* The `Nextor-2.1-alpha-1.txt` and `Nextor-2.1-alpha-2.txt` files in the `info` folder of this branch
+Please visit [the Nextor section in Konamiman's MSX page](https://www.konamiman.com/msx/msx-e.html#nextor) for binaries.
+
+## Repository structure
+
+Note that there is no `master` branch, but branches for each major version of Nextor (v2.0 and v2.1 currently).
+
+* [**source**](/source): The source code of Nextor itself.
+
+    * [**kernel**](source/kernel): The kernel ROM, includes the FDISK tool.
+
+    * [**command**](source/command): `NEXTOR.SYS`, `COMMAND2.COM` and the command line tools that were originally supplied with MSX-DOS.
+
+    * [**tools**](source/tools): The new command line tools created for Nextor.
+
+* [**wintools**](/wintools): Windows tools needed for building Nextor. Includes the source for two custom made tools: [`mknexrom`](/wintools/mknexrom.c) (C) and [`SymToEqus`](/wintools/SymToEqus.cs) (C#).
+
+* [**docs**](/docs): Documentation for both users and developers.
+
+## How to build Nextor
+
+You need:
+
+1. A Windows machine (if you don't have one see ["No Windows?"](#no-windows) below)
+2. SDCC ([http://sdcc.sourceforge.net](http://sdcc.sourceforge.net)), targetting the Z80 processor, to build FDISK.
+3. .NET Framework 2.0 or higher (for the `SymToEqus` tool in the `wintools` folder)
+4. The `wintools` folder must be added to the `PATH` environment variable
+
+### To build the Nextor kernel
+
+Run the `compile.bat` script located in the `source\kernel` folder. If the FDISK tool has not been compiled already (the `fdisk.dat` and `fdisk2.dat` files do not exist in the `bank5` folder), they will be compiled on the fly.
+
+The generated kernel base file and the complete ROM files will be generated in the `bin\kernels` folder. One ROM file will be generated for each folder existing in the `source\kernel\drivers` folder.
+
+### To build the FDISK tool only
+
+If you make a change in the FDISK tool, you can compile it without having to compile the full kernel again. Just run the `compile.bat` script in the `source\kernel\bank5` folder (do NOT run `compfdsk.bat`). The ROM files in `bin\kernels` will be appropriately updated.
+
+### To build the command line tools
+
+Run the `compile.bat` script in the `source\tools` folder. The tools will be generated in the `bin\tools` folder.
+
+### To build `NEXTOR.SYS`
+
+Run the `compile.bat` script in the `source\command\msxdos` folder. The file will be generated in the `bin\tools` folder.
+
+### To build `COMMAND2.COM`
+
+Run the `compile.bat` script in the `source\command\command` folder. The file will be generated in the `bin\tools` folder.
+
+At this time there's no specific script (other than the original makefile) for building the original MSX-DOS command line tools.
+
+### No Windows?
+
+If your machine doesn't run Windows you can still build Nextor by using Xesco's [Nextor builder](https://github.com/xesco/NextorBuilder).
