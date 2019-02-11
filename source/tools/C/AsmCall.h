@@ -1,18 +1,7 @@
-#ifndef __ASM_H
-#define __ASM_H
+#ifndef __ASMCALL_H
+#define __ASMCALL_H
 
 #include "types.h"
-
-#ifndef NULL
-#define NULL 0
-#endif
-
-
-/* ---  Register detail levels  --- */
-
-// This value tells which registers to pass in/out
-// to the routine invoked by AsmCall, DosCall, BiosCall
-// and UnapiCall.
 
 typedef enum {
 	REGS_NONE = 0,	//No registers at all
@@ -20,14 +9,6 @@ typedef enum {
 	REGS_MAIN = 2,	//AF, BC, DE, HL
 	REGS_ALL = 3	//AF, BC, DE, HL, IX, IY
 } register_usage;
-
-
-/* ---  Structure representing the Z80 registers  ---
-        Registers can be accesses as:
-        Signed or unsigned words (ex: regs.Words.HL, regs.UWords.HL)
-        Bytes (ex: regs.Bytes.A)
-        Flags (ex: regs.Flags.Z)
- */
 
 typedef union {
 	struct {
@@ -72,4 +53,10 @@ typedef union {
 	} Flags;
 } Z80_registers;
 
-#endif
+
+#define AsmCall(dir, regs, in, out) AsmCallAlt(dir, regs, in, out, 0)
+
+void DosCall(byte function, Z80_registers* regs, register_usage inRegistersDetail, register_usage outRegistersDetail);
+void AsmCallAlt(uint address, Z80_registers* regs, register_usage inRegistersDetail, register_usage outRegistersDetail, int alternateAf);
+
+#endif //__ASMCALL_H

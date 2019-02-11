@@ -13,7 +13,6 @@ P2_REG		equ	0FEh
 P3_REG		equ	0FFh
 
 MSXVER	equ	002Dh
-SNSMAT	equ	0141h
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -147,8 +146,8 @@ if (BUILTIN AND STURBO)
 		ld	a,b
 		jr	nz,NOTR2
 		ld	b,a
-		ld	a,(NUMKEYS)
-		and	00010000b
+		ld	a,(BOOTKEYS##)
+		and	00010000b   ;4 key pressed?
 		ld	a,b
 		jr	nz,NOTR2
 		sub	4
@@ -183,7 +182,7 @@ if (BUILTIN AND STURBO)
 ;;if 1 ;;HYBRID
 ;===== end mod DOS2.50
 
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
 		ld	a,6
 		jr	nz,SYSSEGSCOUNT
@@ -251,13 +250,13 @@ if (BUILTIN AND STURBO)
 		jr	nz,NOTURBOR
 
 		;ld	d,a
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
-		;ld	a,d					;On Turbo-R, the "6" key causes
-		jr	nz,NOTURBOR	;the bigger mapper to be used as primary
+		;ld	a,d	                ;On Turbo-R, the "4" key causes
+		jr	nz,NOTURBOR         ;the bigger mapper to be used as primary
 
 		dec	hl			;Always mark last 4
-		dec	(hl)			; segments as allocated
+		dec	(hl)		; segments as allocated
 		dec	hl			; to system.
 		dec	(hl)
 		dec	hl
@@ -312,13 +311,6 @@ MAP_SCAN::
 ;
 ;    *****  LOOP TO FIND MAPPERS AND BUILD UP TEMPORARY MAPPER RECORDS  *****
 ;
-		ld	d,a
-		xor	a
-		call	SNSMAT
-		cpl
-		ld	(NUMKEYS),a
-		ld	a,d
-
 		di				;Remember current page-2 slot
 		push	af			; for fail safe.
 ;
@@ -353,9 +345,9 @@ sec_slot_loop:	push	hl
 		jr	nz,NO_PRIM_INTERNAL
 
 		ld	d,a
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
-		ld	a,d					;On Turbo-R, the "5" key causes
+		ld	a,d					;On Turbo-R, the "4" key causes
 		jr	nz,NO_PRIM_INTERNAL	;the bigger mapper to be used as primary
 
 ;===== start mod DOS2.50 (build type)
@@ -745,7 +737,8 @@ MAPBIO3:
 
 EXB_NEX:	;WIP...
 ;
-;       Call the EXTBIO routine of Nextor kernels other than the master one
+;   Call the EXTBIO routine of Nextor kernels other than the master one
+;   Out: D'=1 if system hook must be called, 0 otherwise
 ;
 	exx
 	ex	af,af'
@@ -774,8 +767,6 @@ EXB_LOOP:
 	cp	c
 	jr	z,EXB_DJNZ	;Skip master kernel as we have processed it already
 
-	ld	a,c
-	ld	h,40h
 	push	ix
 	push	iy
 	ex	af,af'
@@ -784,11 +775,14 @@ EXB_LOOP:
 	push	bc
 	push	de
 	push	hl
+    ld a,(ix)
+    and 10001111b
+   	ld	h,40h
 	call	ENASLT
 	ld	hl,DV_EXTBIO##
 	ld (BK4_ADD##),hl
 	exx
-	ld	de,0100h
+	ld	de,0100h    ;Pass D'=1 by default
 	exx
 	pop	hl
 	pop	de
@@ -816,6 +810,7 @@ EXB_DJNZ:
 	jr	EXB_LOOP
 
 EXB_RAM_FIN:
+    set 0,d     ;System hook must be called
 	ex	af,af'
 	exx
 	push	af

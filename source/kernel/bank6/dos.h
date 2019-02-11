@@ -47,7 +47,7 @@ typedef struct {
 	uint cylinders;
 	byte heads;
 	byte sectorsPertrack;
-	bool suitableForPartitionning;
+	bool suitableForPartitioning;
 } lunInfo;
 
 
@@ -75,7 +75,7 @@ typedef struct {
 #define LUN_INFO 0x4169
 
 
-#define BK4_ADD 0xF84C
+#define BK4_ADD 0xF1CF
 
 
 #endif   //__DOS_H

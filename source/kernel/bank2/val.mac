@@ -619,20 +619,26 @@ NEW_BOOT_SZ	equ	$-NEW_BOOT
 ;		---------------------------------
 ;
 		pop	hl
-		call	CHECK_LOCK		;Skip all if disk is locked
+        push hl
+        push hl
+        ld	bc,UD_TIME##		; unit descriptor and skip if
+		add	hl,bc			; it is zero since this means
+		ld	a,(hl)			; that there is no current
+        pop hl
+		or	a			; UPB for this unit.
+        jr z,valfib2
+		call	IS_FIXED_OR_LOCKED		;Skip all if disk is fixed or locked
 		ld	a,0
-		ret	nz
-		push	hl
+        pop hl
+		ret	c
+        push hl
+valfib2:
 
 		dec	b			;Skip if B<>1
 		jr	nz,not_opened
 ;
 		pop	hl
-	
-		;ld	a,(MFLAGS##)
-		;and	2
-		;ld	a,0
-		;ret	nz		;Skip if "no check media change" flag is set
+
 		push	hl
 
 wfile_loop:	push	ix
@@ -755,9 +761,9 @@ if 1
 		dec	a			;If timeout >2 then assume
 		jr	nz,got_old_volid	; same UPB.  Otherwise 2.
 endif
-		call	CHECK_LOCK		;Assume disk unchanged
-		jr	nz,got_old_volid	;if drive is locked
-		call	CHECK_MNT		;or mounted
+		call	IS_FIXED_OR_LOCKED		;Assume disk unchanged
+		jr	c,got_old_volid     ;if drive is locked
+		call	CHECK_MNT		;or has a file mounted
 		jr	nz,got_old_volid
 
 		call	MEDIA_CHECK		;Do a media check call.
@@ -805,21 +811,36 @@ no_dos_disk:	pop	ix			;Restore FIB pointer
 		ret
 
 
-; This subroutine will check if a disk is locked.
-; If so, and if there is no UPB for the drive, it will generate a new UPB.
-; Otherwise (drive not locked, or UPB already exists), it will do nothing.
+; This subroutine will check if a device is either fixed, or removable but locked.
 ;
 ; Entry:    HL = Unit descriptor
-; Returns:  NZ set it drive is locked, Z otherwise
+; Returns:  C it drive is fixed or locked, NC otherwise
 ; Corrupts: none
 
-CHECK_LOCK:
+IS_FIXED_OR_LOCKED:
 		push	hl
 		ex	(sp),ix
-		bit	UF_LCK,(ix+UD_FLAGS##)
+        push bc
+        ld b,a
+
+        ld a,(ix+UD_DFLAGS##)
+        and UFM_DB+UFM_RM
+        cp UFM_DB     ;Device-based + not removable?
+        scf
+        jr z,CHKLCK2
+
+        bit UF_LCK,(ix+UD_FLAGS##)
+        scf
+        jr nz,CHKLCK2
+        or a
+
+CHKLCK2:
+        ld a,b
+        pop bc
 		ex	(sp),ix
 		pop	hl
 		ret
+
 
 CHECK_MNT:
 		push	hl
@@ -890,26 +911,34 @@ VAL_SAME:
 ;
 		push	af
 
-		call	CHECK_LOCK
-		jr	nz,pop_af_ret
-if 1
-		call	UD_TICK			;Make UD_TIME up to date.
-endif
 		push	de
 		push	hl
 		ld	de,UD_TIME##		;HL -> UD_TIME byte of unit
 		add	hl,de			;      descriptor.
-		ld	a,2
-		cp	(hl)			;If UD_TIME>2 then the timeout
-		pop	hl			; has not expired so return
-		jr	c,pop_deaf_ret		; without further checking.
-;
-		push	bc			;If UD_TIME=2 then do a media
+        ld a,(hl)
+        cp 2
+        pop hl
+        push bc
+        jr c,chk_same_do        ;If UD_TIME=0 or 1 there's no UPB so build one
+
+        call    IS_FIXED_OR_LOCKED      ;If fixed or locked media do nothing more
+		jr	c,not_changed
+
+        call    UD_TICK			;Make UD_TIME up to date.
+        cp 3                    ;If UD_TIME>2 then the timeout
+        jr nc,not_changed       ; has not expired so return without further checking.
+
+        cp 2                ;If UD_TIME=2 then do a media
 		call	z,MEDIA_CHECK		; check call, otherwise assume
 		jr	z,not_changed		; that disk has changed.
 ;
+chk_same_do:
 		push	ix			;Get a new UPB for this unit
 chk_same_loop:	call	DO_MEDIA_CHANGE		; from the unit handler.
+
+        ld ix,UPB_BUF##
+        call NEW_UPB
+
 		call	TEST_SAME_DISK		;Test whether volume-id's are
 		jr	z,same_disk		; the same and jump if so.
 ;
@@ -996,7 +1025,7 @@ MCHK2:
 		pop	hl
 		bit	UF_DBD,a
 		jr	nz,MCHECK2
-		ld	a,1	;Return C & NZ
+		ld	a,1	;Return C & NZ (not sure, assume changed) if not a device-based driver
 		or	a
 		scf
 		ret
@@ -1030,7 +1059,12 @@ MCHECK2:
 		xor	a
 		jr	MCHECKEND		;are reported as "changed"
 MCHECK_NOERR:
+        ld a,(ix+26h)
+        and 28h
+        cp 28h
+        jr z,MCHK_NODIRTYFLAG
 		ld	(ix+26h),0	;Clear dirty disk flag for the checksum
+MCHK_NODIRTYFLAG:
 		ld	b,0
 		ld	hl,0
 		ld	ix,UPB_BUF##
@@ -1256,23 +1290,14 @@ DO_MEDIA_CHANGE:
 	push	de
 	push	hl
 	push	iy
-	ex	af,af'
-	push	af
-	ex	af,af'
 
 	ld	b,(ix+UD_SLOT##)
 	ld	c,(ix+UD_SEG##)
 	ld	d,(ix+UD_DI##)
 	ld	e,(ix+UD_LI##)
 	ld	ix,UNMAPALL##
-	ld	(BK4_ADD##),ix
-	ld	ix,?CALL4##
-	ld	iy,(MASTER_SLOT##-1)
-	call	CALSLT##
+	call CALL4_PRESERVE_ALT
 
-	ex	af,af'
-	pop	af
-	ex	af,af'
 	pop	iy
 	pop	hl
 	pop	de
@@ -1395,22 +1420,22 @@ build_upb_do_findpart:
 		push ix
 	    push iy
 
+        ld d,0
 		ld	ix,AUTO_ASPART##
-        ld	(BK4_ADD##),ix
-        ld	ix,?CALL4##
-        ld	iy,(MASTER_SLOT##-1)
-        call	CALSLT##		
+        call CALL4_PRESERVE_ALT
 
         pop iy
         pop ix
 
+        pop	hl	;Restore unit desciptor
         or a
         jp nz,build_upb_notfind
 
+        push hl
         ex	(sp),ix
         set	UF_FOK,(ix+UD_DFLAGS##)
         ex	(sp),ix
-        pop	hl	;Restore unit desciptor
+        pop hl
 
         ;Read boot sector in UPB_BUF, it will be needed later
 
@@ -1427,8 +1452,8 @@ build_upb_do_findpart:
         pop hl
 
         jr nz,build_upb_err
-        jp found_upb
-	
+        push hl
+
 build_upb_dof2:
 		ex	(sp),ix
 		set	UF_FOK,(ix+UD_DFLAGS##)
@@ -1605,8 +1630,6 @@ MKDPB_DEVBASED:
 		push	iy
 		ex	af,af'
 		push	af
-		ld	de,MKDPB##
-		ld	(BK4_ADD##),de
 		push	ix
 		ex	(sp),hl
 		pop	ix
@@ -1614,9 +1637,8 @@ MKDPB_DEVBASED:
 		ld	d,(ix+UD_DPB##+1)
 		inc	de
 
-		ld	iy,(MASTER_SLOT##-1)
-		ld	ix,?C4PBK##
-		call	CALSLT##	;Since we don't know state of page 1 when KBDOS is called.
+        ld ix,MKDPB##
+        call CALL4_PRESERVE_ALT ;Since we don't know state of page 1 when KBDOS is called.
 		
 		pop	af
 		ex	af,af'
@@ -1867,6 +1889,10 @@ endif
 		push	hl
 
 		ld	hl,0
+        ld a,(ix+26h)
+        and 28h
+        cp 28h
+        jr z,NUPBL
 		ld	(ix+26h),0	;Clear dirty disk flag for the checksum
 NUPBL:	ld	e,(ix)
 		ld	d,(ix+1)
@@ -3364,6 +3390,35 @@ COMP16:
 	ld	a,l
 	sub	e
 	ret
+
+    ;Call a routine in bank 4 of master slot, preserving alternate registers.
+    ;Input: IX=Routine to call
+CALL4_PRESERVE_ALT:
+    exx
+    ex af,af'
+    push af
+    push bc
+    push de
+    push hl
+    ex af,af'
+    exx
+
+	ld	(BK4_ADD##),ix
+	ld	ix,?C4PBK##
+	ld	iy,(MASTER_SLOT##-1)
+	call	CALSLT##
+
+    exx
+    ex af,af'
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ex af,af'
+    exx
+
+    ret
+
 
 FAT16_S:	db	"FAT16"
 

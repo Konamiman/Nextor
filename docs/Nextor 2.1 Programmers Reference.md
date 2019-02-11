@@ -1,4 +1,4 @@
-# Nextor 2.0 Programmers Reference
+# Nextor 2.1 Programmers Reference
 
 ## Index
 
@@ -66,9 +66,21 @@
 
 [6.2. Changing the NEXTOR.SYS version number](#62-changing-the-nextorsys-version-number)
 
-[7. Change history](#7-change-history)
+[7. Nextor internals](#7-nextor-internals)
 
-[7.1. v2.1.0 beta 1](#71-v210-beta-1)
+[7.1. One-time boot keys](#71-one-time-boot-keys)
+
+[7.2. Disk emulation mode](#72-disk-emulation-mode)
+
+[7.2.1. Disk emulation data file format](#721-disk-emulation-data-file-format)
+
+[7.2.2. Entering disk emulation mode](#722-entering-disk-emulation-mode)
+
+[8. Change history](#8-change-history)
+
+[8.1. v2.1.0 beta 2](#81-v210-beta-2)
+
+[8.2. v2.1.0 beta 1](#82-v210-beta-1)
 
 
 ## 1. Introduction
@@ -299,7 +311,7 @@ Results:     A = error code
              BC = extra space in bytes
 ```
 
-This function returns the total or free space for a drive. The space information is always returned in Kilobytes, regardless of the type and the cluster size of the filesystem mapped to the drive.
+This function returns the total or free space for a drive. The space information in HL:DE is always returned in Kilobytes, regardless of the type and the cluster size of the filesystem mapped to the drive.
 
 The "extra free space in bytes" result will be different from zero only when the minimum allocation unit of the drive is not a whole number of kilobytes. In case of FAT drives, it will be non-zero (specifically, it will be 512) only when the drive uses one sector per cluster and the cluster count is odd. For example, for a drive having one sector per cluster and 15 free clusters, this function will return HL=0, DE=7 and BC=512 when called with A=0 for that drive.
 
@@ -413,9 +425,9 @@ The information returned in the data buffer is as follows:
     0 for drive-based drivers and MSX-DOS drivers)
 +5: Logical unit index (for device-based drivers only; 
     0 for drive-based drivers and MSX-DOS drivers)
-+5..+8: First device sector number (for devices in device-based drivers only;
++6..+9: First device sector number (for devices in device-based drivers only;
         always zero for drive-based drivers and MSX-DOS drivers)
-+9..+63: Reserved (currently always zero)
++10..+63: Reserved (currently always zero)
 ```
 
 If a file is mounted in the drive, the information returned in the data buffer is insetad as follows:
@@ -442,13 +454,20 @@ Parameters:  C = 7AH (_GPART)
              D = Device index
              E = Logical unit index
              H = Primary partition number (1 to 4)
+             H:7 = 0: Get information about the partition
+                   1: Get the device sector number that holds
+                      the partition table entry
              L = Extended partition number
                  (0 for an entry in the primary partition table)
 
 Results:     A = Error code
-             B = Partition type code,
-                 0 if the specified partition does not exist
-             HL:DE = Starting device absolute sector number of the partition
+             If partition information is requested:
+                 B = Partition type code
+                 C = Status byte of the partition
+                 HL:DE = Starting device absolute sector number of the partition
+                 IX:IY = Partition size in sectors
+             If the sector number of the partition table entry is requested:
+                 HL:DE = Device sector number that holds the partition table entry
 ```
 
 Returns information about a device partition. This function works in MSX-DOS 1 mode.
@@ -464,7 +483,7 @@ The partition type code returns information about the filesystem that the partit
 1: FAT12
 4: FAT16, smaller than 32MB (obsolete)
 5: Extended (see below)
-6: FAT16
+6: FAT16 (CHS)
 14: FAT16 (LBA)
 ```
 
@@ -474,11 +493,11 @@ A device can have up to four primary partitions, numbered 1 to 4. In order to ac
 
 In order to enumerate all the partitions existing in a device , the following procedure should be followed, to take in account the possible presence of extended partitions:
 
- 1.  Search partition 1-0 (primary number 1, extended number 0).
+1.  Search partition 1-0 (primary number 1, extended number 0).
 
 2.  Search partition 2-0. If it exists and is of type "Extended", search partitions 2-1, 2-2, 2-3, etc, until a partition code 0 is returned.
 
-3.  If partition 2-0 does not exist or is not of type "Extended", search partitions 3-0 and 3-4.
+3.  If partition 2-0 does not exist or is not of type "Extended", search partitions 3-0 and 4-0.
 
 Note that it is possible that a device has no partitions at all. In this case, it is still possible that the device contains a valid filesystem, mapped to the absolute device sector zero; this is indeed the case of floppy disks and devices with very small capacity.
 
@@ -486,7 +505,16 @@ When a partition is mapped to a drive letter, the partition first sector will al
 
 Nextor needs to read the device in order to search for partitions. If there is any error when accessing the device (for example, not ready), an error code will be returned. The standard system error handling routine (or the user error handling routine, if one is defined with _DEFER) will NOT be invoked.
 
-When the specified partition does not exist in the device (for example, when a primary partition number larger than 4 is specified, or when an extended partition number is specified for a non-extended primary partition), then B=0 and A=.IPART will be returned.
+When the specified partition does not exist in the device (for example, when a primary partition number larger than 4 is specified, or when an extended partition number is specified for a non-extended primary partition), then A=.IPART will be returned.
+
+Starting with Nextor 2.1.0 beta 2, it is possible to request the device sector number that holds the partition table, instead of requesting information about the partition; this is useful for applications intended for modifying the partition table entries. The way to locate the partition table entry in the returned sector is as follows:
+
+* If a primary partition was requested (extended number was 0), then the sector number returned is always 0, and the offset for the partition table entry in the sector is 1BEh, 1CEh, 1DEh and 1EEh for primary partition numbers 1, 2, 3 and 4 respectively.
+
+* If an extended partition is requested (primary partition number is 2, extended partition number is not 0) then the partition table entry is the first one in the returned sector (at offset 1BEh).
+
+For more information on the partition table structure see [Master Boot Record on Wikipedia](https://en.wikipedia.org/wiki/Master_boot_record).
+
 
 ### 3.11. Call a routine in a device driver (_CDRVR, 7Bh)
 
@@ -583,8 +611,8 @@ Parameters:  C = 7DH (_Z80MODE)
              A = Driver slot number
              B =  00H => get current Z80 access mode
                   01H => set Z80 access mode
-             D =  00H => disable Z80 access mode (only if A=01H)
-                  FFH => enable Z80 access mode (only if A=01H)
+             D =  00H => disable Z80 access mode (only if B=01H)
+                  FFH => enable Z80 access mode (only if B=01H)
 
 Results:     A = Error code
              D = Current Z80 access mode for the specified driver,
@@ -708,13 +736,101 @@ Of course this change is temporary and it will cease to have effect (that is, th
 
 All of this applies only if the loaded version of NEXTOR.SYS is 2.0 beta 2 or newer.
 
-## 7. Change history
+## 7. Nextor internals
+
+This section details how some of the Nextor features work internally. This may be useful to develop applications that make use of these features as an alternative to the supplied Nextor tools.
+
+## 7.1. One-time boot keys
+
+The [one-time boot keys mechanism](Nextor%202.1%20User%20Manual.md#292-one-time-boot-keys) kicks in at boot time when the zero-terminated signature string NEXTOR_BOOT_KEYS is found at address A100h. In that case, the status of the alphanumeric keys are taken from the bytes that follow the signature, instead of being read from the keyboard, as the following table shows; a bit set to 1 means that the key is considered to be pressed.
+
+| Address | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+|:-------:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| A111h   | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+| A112h   | F | E | D | C | B | A | 9 | 8 |
+| A113h   | N | M | L | K | J | I | H | G |
+| A114h   | V | U | T | S | R | Q | P | O |
+| A115h   |   |   |CTRL|SHFT| Z | Y | X | W |
+
+Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 6 to 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
+
+## 7.2. Disk emulation mode
+
+This section explains some details about the [disk emulation mode](Nextor%202.1%20User%20Manual.md#39-disk-emulation-mode).
+
+### 7.2.1. Disk emulation data file format
+
+The disk emulation data file, used by Nextor to know which disk image files must be used during an emulation session, consists of a header followed by a table with information about each of the disk image files. The header has the following contents:
+
+| Offset | Meaning |
+|:------:|---------|
+|   +0   | Signature string `NEXTOR_EMU_DATA`, zero terminated |
+|   +16  | Number of entries in the disk image files table     |
+|   +17  | 1-based index of the file to mount at boot time     |
+|   +18  | Address to use as work area during the emulation session, or 0 if this area must be allocated (2 bytes, little endian) |
+|   +20  | Reserved, must be zero (4 bytes)                    |
+
+Each entry in the disk image files table is as follows:
+
+| Offset | Meaning |
+|:------:|---------|
+|   +0   | Number of the device that contains the file (0 = same as emulation data file) |
+|   +1   | Number of the logical unit that contains the file (if device number is not 0)  |
+|   +2   | Absolute device sector number where the file starts (4 bytes, little endian) |
+|   +6   | Size of the file in sectors (2 bytes, little endian) |
+
+If the device number in a disk image files table entry is zero, then Nextor will assume that the disk image file is located at the same device and logical unit as the emulation data file (the logical unit number in the table entry is ignored in this case). The `EMUFILE.COM` tool sets the device number to 0 for all entries if all the disk image files are located in the same device and logical unit as the emulation data file that is being created.
+
+Any contents in the emulation data file past the last entry in the disk images file table is ignored by the Nextor kernel. The `EMUFILE.COM` tool places here a printable list of the disk image filenames, it can be displayed by executing `TYPE /B datafile` in the command prompt.
+
+### 7.2.2. Entering disk emulation mode
+
+At boot time Nextor will enter disk emulation mode if it finds a pointer to the disk emulation data file. This pointer consists simply of a device+logical unit number and an absolute device sector number.
+
+Note that although this documentation and [the user manual](Nextor%202.1%20User%20Manual.md) use the term "emulation data file", an actual file isn't required - the Nextor kernel is only concerned about the sector number where the emulation data is located, regardless of whether this sector is part of a file or not. Using a file is usually the most convenient way to store this information, but a tool could be developed to use e.g. a reserved sector right before the FAT for this purpose.
+
+Nextor will enter the one-time disk emulation mode if it finds the following information in RAM at boot time:
+
+| Address | Contents |
+|:-------:|---------|
+| A000h   | Signature string `NEXTOR_EMU_DATA`, zero terminated        |
+| A010h   | Number of the device that contains the emulation data      |
+| A011h   | Number of the logical unit that contains the emulation data |
+| A012h   | Absolute device sector number that contains the emulation data (4 bytes, little endian) |
+
+If the above information is not found, Nextor will enter the persistent disk emulation mode if it finds the following information in the first partition table entry of any of the available devices in the primary Nextor controller:
+
+| Sector offset | Partition table entry offset | Partition table meaning | Nextor meaning |
+|:-------------:|:----------------------------:|-------------------------|----------------|
+| 1BEh          | +0                           | Status byte             | Bit 0 set = enter disk emulation mode                 |         
+| 1BFh          | +1                           | Start CHS               | Number of the device that contains the emulation data |
+| 1C0h          | +2                           | Start CHS               | Number of the logical unit that contains the emulation data |
+| 1C1h          | +3                           | Start CHS               | MSB of the absolute device sector number that contains the emulation data |
+| 1C2h          | +4                           | Partition type          | Must be non zero |
+| 1C3h          | +5                           | End CHS                 | 3rd byte of the absolute device sector number that contains the emulation data |
+| 1C4h          | +6                           | End CHS                 | 2nd byte of the absolute device sector number that contains the emulation data |
+| 1C5h          | +7                           | End CHS                 | LSB of the absolute device sector number that contains the emulation data |
+
+For example, if the emulation data is located at device 1, logical unit 2, sector 33445566h, and the partition is FAT16 (partition type 0Eh) and has the "active" flag set in the status byte, then the start of the partition table entry set for persistent emulation would look like this (in hexadecimal):
+
+    81 01 02 33 0E 44 55 66
+
+Note that the condition for Nextor entering emulation mode is that bit 0 of the status byte must be set **and** the partition type code must be non-zero (but can be any other value, not necessarily FAT). Also note that the device and logical unit information here refers to the emulation data file only - the disk image files themselves can be located at a different device.
+
+Also worth noting: Nextor will check that the emulation data actually starts with the `NEXTOR_EMU_DATA` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
+
+
+## 8. Change history
 
 This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the application developer point of view are listed. For information on changes in general, please look at the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to driver development, please look at the _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Programmers Reference](../../../blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#7-change-history)_ document.
 
-### 7.1. v2.1.0 beta 1
+### 8.1. v2.1.0 beta 2
+
+* [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah) now returns the status byte of the partition, and allows to retrieve the device sector number that holds the partition table entry instead of information about the partition.
+
+### 8.2. v2.1.0 beta 1
 
 * [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h) now returns an extra flag that tells if the driver implements the DRV_CONFIG routine.
 

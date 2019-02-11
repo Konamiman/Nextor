@@ -1,21 +1,12 @@
-/* DSK emulation configuration file creation tool for Nextor v1.0
-   By Konamiman 2/2015
+/* DSK emulation configuration file creation tool for Nextor v1.1
+   By Konamiman 3/2019
 
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
           --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          asm.lib emufile.c
+          emufile.c
    hex2bin -e com emufile.ihx
-   
-   ASM.LIB, MSXCHAR.LIB and crt0msx_msxdos_advanced.rel
-   are available at www.konamiman.com
-   
-   (You don't need MSXCHAR.LIB if you manage to put proper PUTCHAR.REL,
-   GETCHAR.REL and PRINTF.REL in the standard Z80.LIB... I couldn't manage to
-   do it, I get a "Library not created with SDCCLIB" error)
-   
-   Comments are welcome: konamiman@konamiman.com
 */
 
 /* Includes */
@@ -24,27 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdlib.h>
-
-//These are available at www.konamiman.com
-#include "asm.h"
+#include "types.h"
+#include "system.h"
+#include "dos.h"
+#include "partit.h"
+#include "asmcall.h"
+#include "strcmpi.h"
 
 	/* Typedefs */
-
-typedef unsigned char bool;
-typedef unsigned long ulong;
-
-typedef struct {
-    byte alwaysFF;
-    char filename[13];
-    byte attributes;
-    byte timeOfModification[2];
-    byte dateOfModification[2];
-    unsigned int startCluster;
-    unsigned long fileSize;
-    byte logicalDrive;
-    byte internal[38];
-} FileInfoBlock;
 
 typedef struct {
     char signature[16];
@@ -70,74 +48,90 @@ typedef struct {
 #define IS_NEXTOR (1 << 7)
 #define IS_DEVICE_BASED (1)
 
+#define PARSE_FLAG_HAS_FILENAME (1 << 3)
+#define PARSE_FLAG_HAS_EXTENSION (1 << 4)
+#define PARSE_FLAG_IS_AMBIGUOUS (1 << 5)
+
 #define MallocBase 0x8000
 
 #define MaxFilesToProcess 32
 
-#define CALSLT 0x001C
-#define EXPTBL 0xFCC1
+#define SetupRAMAddress ((byte*)0xA000)
 
-#define _TERM0 0
-#define _DPARM 0x31
-#define _FFIRST 0x40
-#define _FNEXT 0x41
-#define _OPEN 0x43
-#define _CREATE 0x44
-#define _CLOSE 0x45
-#define _WRITE 0x49
-#define _TERM 0x62
-#define _DOSVER 0x6F
-#define _GDRVR 0x78
-#define _GDLI 0x79
-
-#define _NOFIL 0xD7
 
 /* Strings */
 
 const char* strTitle=
-    "DSK Emulation Configuration File Creation Tool for Nextor v1.0\r\n"
-    "By Konamiman, 2/2015\r\n"
+    "Disk image emulation tool for Nextor v1.1\r\n"
+    "By Konamiman, 3/2019\r\n"
     "\r\n";
     
 const char* strUsage=
-    "Usage: emufile [<options>] <files> [<files> ...]\r\n"
+    "Usage: emufile [<options>] <output file> <files> [<files> ...]\r\n"
+    "       emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
+    "       emufile ?\r\n";
+
+const char* strHelp=
+    "* To create an emulation data file:\r\n"
     "\r\n"
-    "<files>: Disk image files to emulate. Can contain wildcards.\r\n"
+    "emufile [<options>] <output file> <files> [<files> ...]\r\n"
+    "\r\n"
+    "<output file>: Path and name of emulation data file to create.\r\n"
+    "               Default extension is .EMU\r\n"
     "\r\n"
     "<options>:\r\n"
     "\r\n"
-    "- o <file>: Path and name of the generated configuration file.\r\n"
-    "            Default is \"\\NEXT_DSK.DAT\"\r\n"
-    "            If it ends with \"\\\" or \":\", file name will be \"NEXT_DSK.DAT\".\r\n"
-    "- b <number>: The index of the image file to mount at boot time.\r\n"
-    "              Must be 1-9 or A-W. Default is 1.\r\n"
-    "- a <address>: Page 3 address for the 16 byte work area.\r\n"
-    "               Must be a hexadecimal number between C000 and FFEF.\r\n"
-    "               If missing or 0, the work area is allocated at boot time.\r\n"
-    "- r : Reset the computer after generating the file.\r\n"
-    "- p : Print filenames and associated keys.\r\n"
+    "-b <number>: The index of the image file to mount at boot time.\r\n"
+    "             Must be 1-9 or A-W. Default is 1.\r\n"
+    "-a <address>: Page 3 address for the 16 byte work area.\r\n"
+    "              Must be a hexadecimal number between C000 and FFEF.\r\n"
+    "              If missing or 0, the work area is allocated at boot time.\r\n"
+    "-p : Print filenames and associated keys after creating the data file.\r\n"
     "\r\n"
-    "TYPE /B the generated file to see the names of the registered files.\r\n";
+    "TYPE /B the generated file to see the names of the registered files.\r\n"
+    "\r\n"
+    "\r\n"
+    "* To setup an existing emulation data file for booting:\r\n"
+    "\r\n"
+    "emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
+    "\r\n"
+    "o: one-time emulation (store emulation data file pointer in RAM).\r\n"
+    "This is the default if only <data file> is specified.\r\n"
+    "\r\n"
+    "p: persistent emulation (store emulation data file pointer in partition table).\r\n"
+    "Use <device index> and <LUN index> to specify the device whose\r\n"
+    "partition table will be written. Default device (if only 'p' is specified)\r\n"
+    "is the device where the emulation data file is located.\r\n"
+    "Default <LUN index> (if only 'p<device index>' is specified) is 1.\r\n"
+    "\r\n"
+    "The computer will reset after successfully finishing the setup.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
 
+const char* emuDataSignature = "NEXTOR_EMU_DATA";
+
 /* Global variables */
 
 Z80_registers regs;
+byte ASMRUT[4];
+byte OUT_FLAGS;
 void* mallocPointer;
 char* outputFileName;
 int bootFileIndex;
-bool autoReset;
 bool printFilenames;
 uint workAreaAddress;
-FileInfoBlock* fib;
+fileInfoBlock* fib;
 int totalFilesProcessed;
-byte* driveInfo;
+driveLetterInfo* driveInfo;
 byte* driveParameters;
 byte* fileContentsBase;
 byte* fileNamesBase;
 byte* fileNamesAppendAddress;
+byte fileHandle;
+int setupPartitionDeviceIndex;
+int setupPartitionLunIndex;
+bool setupAsPersistent;
 
 /* Some handy code defines */
 
@@ -150,7 +144,9 @@ byte* fileNamesAppendAddress;
 void CheckPreconditions();
 void CheckPrimaryControllerIsNextor();
 void Initialize();
-void ProcessArguments(char** argv, int argc);
+bool ProcessArguments(char** argv, int argc);
+void ProcessCreateFileArguments(char** argv, int argc);
+void ProcessSetupFileArguments(char** argv, int argc);
 int ProcessOption(char optionLetter, char* optionValue);
 void ProcessFilename(char* fileName);
 void TooManyFiles();
@@ -158,17 +154,15 @@ void StartSearchingFiles(char* fileName);
 void ProcessFileFound();
 void GetDriveInfoForFileInFib();
 void CheckControllerForFileInFib();
-ulong GetFirstDriveSectorForFileInFib();
 ulong GetFirstFileSectorForFileInFib();
 void AddFileInFibToFilesTable(ulong sector);
+void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
 void AddFileInFibToFilenamesInfo();
 void GenerateFile();
-void ProcessOutputFileOption(char* optionValue);
+void AddFileExtension(char* fileName);
 void ProcessBootIndexOption(char* optionValue);
 void ProcessWorkAreaAddressOption(char* optionValue);
-void ProcessResetOption();
 void ProcessPrintFilenamesOption();
-
 void Terminate(const char* errorMessage);
 void TerminateWithDosError(byte errorCode);
 void print(char* s);
@@ -176,26 +170,39 @@ void CheckDosVersion();
 void* malloc(int size);
 uint ParseHex(char* hexString);
 void DoDosCall(byte functionCode);
+void SetupFile();
+void DriverCall(byte slot, uint routineAddress);
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sectorNumber, byte* buffer, bool write);
+void VerifyDataFileSignature(byte* sectorBuffer);
 void ResetComputer();
+
+#define ReadDeviceSector(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer, false)
+#define WriteDeviceSector(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer, true)
 
 	/* MAIN */
 	
 int main(char** argv, int argc)
 {
+    bool isSetupFile;
+
+    ASMRUT[0] = 0xC3;
 	print(strTitle);
-	
+
     CheckPreconditions();
 	Initialize();
-	ProcessArguments(argv, argc);
+	isSetupFile = ProcessArguments(argv, argc);
+
+    if(isSetupFile) {
+        SetupFile();
+        printf("Done. Resetting computer...");
+        ResetComputer();
+    }
     if(totalFilesProcessed > 0) {
+        SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
         GenerateFile();
         printf(
             "%s%s successfully generated!\r\n%i disk image file(s) registered\r\n",
             printFilenames ? "\r\n" : "", outputFileName, totalFilesProcessed);
-        if(autoReset) {
-            print("Resetting computer...");
-            ResetComputer();
-        }
     } else {
         print(strUsage);
     }
@@ -234,10 +241,10 @@ void Initialize()
 	mallocPointer = (void*)MallocBase;
 	
 	outputFileName = malloc(128);
-	strcpy(outputFileName, "\\NEXT_DSK.DAT");
+    *outputFileName = (char)0;
     
-    fib = malloc(sizeof(FileInfoBlock));
-    driveInfo = malloc(64);
+    fib = malloc(sizeof(fileInfoBlock));
+    driveInfo = malloc(sizeof(driveLetterInfo));
     driveParameters = malloc(32);
 	fileContentsBase = malloc(
         sizeof(GeneratedFileHeader) +
@@ -245,43 +252,121 @@ void Initialize()
     fileNamesBase = malloc(19 * MaxFilesToProcess);
     fileNamesAppendAddress = fileNamesBase;
     
+    fileHandle = 0;
 	bootFileIndex = 1;
-    autoReset = false;
     printFilenames = false;
     workAreaAddress = 0;
     totalFilesProcessed = 0;
 }
 
-void ProcessArguments(char** argv, int argc) 
+bool ProcessArguments(char** argv, int argc) 
 {
-	int i;
-	char* currentArg;
+    if(argc > 0 && argv[0][0] == '?') {
+        print(strHelp);
+        Terminate(null);
+    }
 
-	if(argc == 0) {
+	if(argc < 2) {
         print(strUsage);
         Terminate(null);
     }
-	
+
+    if(strcmpi(argv[0], "set") == 0) {
+        ProcessSetupFileArguments(argv, argc);
+        return true;
+    }
+
+    ProcessCreateFileArguments(argv, argc);
+    return false;
+}
+
+void ProcessCreateFileArguments(char** argv, int argc)
+{
+    int i;
+	char* currentArg;
+    bool processingOptions;
+
+    processingOptions = true;
+
     for(i=0; i<argc; i++) {
 	    currentArg = argv[i];
 		if(currentArg[0] == '-') {
-		    i += ProcessOption(currentArg[1], argv[i+1]);
+            if(processingOptions) {
+		        i += ProcessOption(currentArg[1], argv[i+1]);
+            } else {
+                Terminate("Can't process more options after filenames");
+            }
+        } else if(*outputFileName == null) {
+            processingOptions = false;
+            AddFileExtension(currentArg);
 		} else if(totalFilesProcessed < MaxFilesToProcess) {
 		    ProcessFilename(currentArg);
 		} else {
             TooManyFiles();
         }
 	}
+
+    if(*outputFileName == null) {
+        Terminate("No output file name specified");
+    }
+
+    if(totalFilesProcessed == 0) {
+        Terminate("No disk image files to emulate specified");
+    }
+}
+
+void ProcessSetupFileArguments(char** argv, int argc)
+{
+    byte paramFirstChar;
+
+    setupAsPersistent = false;
+    setupPartitionDeviceIndex = 0;
+    setupPartitionLunIndex = 0;
+
+    strcpy(outputFileName, argv[1]);
+
+    if(argc == 2) {
+        return;
+    }
+
+    paramFirstChar = argv[2][0] | 32;
+
+    if(paramFirstChar == 'o') {
+        return;
+    }
+    else if(paramFirstChar != 'p') {
+        InvalidParameter();
+    }
+
+    setupAsPersistent = true;
+
+    if(argv[2][1] == '\0') {
+        return;
+    }
+
+    setupPartitionDeviceIndex = argv[2][1] - '0';
+    if(setupPartitionDeviceIndex < 1 || setupPartitionDeviceIndex > 9) {
+        Terminate("Invalid device index");
+    }
+
+    if(argv[2][2] == '\0') {
+        setupPartitionLunIndex = 1;
+        return;
+    }
+
+    setupPartitionLunIndex = argv[2][2] - '0';
+    if(setupPartitionLunIndex < 1 || setupPartitionLunIndex > 9) {
+        Terminate("Invalid LUN index");
+    }
+
+    if(argv[2][3] != '\0') {
+        InvalidParameter();
+    }
 }
 
 int ProcessOption(char optionLetter, char* optionValue)
 {
     optionLetter |= 32;
-	
-	if(optionLetter == 'o') {
-		ProcessOutputFileOption(optionValue);
-		return 1;
-	} 
 	
 	if(optionLetter == 'b') {
 	    ProcessBootIndexOption(optionValue);
@@ -293,11 +378,6 @@ int ProcessOption(char optionLetter, char* optionValue)
 		return 1;
 	}
 	
-	if(optionLetter == 'r') {
-	    ProcessResetOption();
-		return 0;
-	}
-    
     if(optionLetter == 'p') {
 	    ProcessPrintFilenamesOption();
 		return 0;
@@ -307,15 +387,17 @@ int ProcessOption(char optionLetter, char* optionValue)
 	return 0;
 }
 
-void ProcessOutputFileOption(char* optionValue)
+void AddFileExtension(char* fileName)
 {
-	char* lastCharPointer;
-	
-	strcpy(outputFileName, optionValue);
-	lastCharPointer = outputFileName + strlen(outputFileName) - 1;
-	if(*lastCharPointer == '\\' || *lastCharPointer == ':') {
-	    strcpy(lastCharPointer + 1, "NEXT_DSK.DAT");
-	}
+    strcpy(outputFileName, fileName);
+
+    regs.Bytes.B = 0;
+    regs.Words.DE = (int)outputFileName;
+    DoDosCall(_PARSE);
+
+    if(!(regs.Bytes.B & PARSE_FLAG_HAS_EXTENSION)) {
+        strcpy((char*)regs.Words.DE, ".EMU");
+    }
 }
 
 void ProcessBootIndexOption(char* optionValue)
@@ -344,11 +426,6 @@ void ProcessWorkAreaAddressOption(char* optionValue)
     if(workAreaAddress != 0 && (workAreaAddress < 0xC000 || workAreaAddress > 0xFFEF)) {
         InvalidParameter();
     }
-}
-
-void ProcessResetOption()
-{
-	autoReset = true;
 }
 
 void ProcessPrintFilenamesOption()
@@ -403,8 +480,7 @@ void ProcessFileFound()
         return;
     }
     
-	sector = GetFirstDriveSectorForFileInFib();
-	sector += GetFirstFileSectorForFileInFib();
+	sector = driveInfo->firstSectorNumber + GetFirstFileSectorForFileInFib();
 	AddFileInFibToFilesTable(sector);
 	AddFileInFibToFilenamesInfo();
 	
@@ -425,15 +501,10 @@ void GetDriveInfoForFileInFib()
 
 void CheckControllerForFileInFib()
 {
-    if(driveInfo[0] != 1 || driveInfo[1] != PrimaryControllerSlot()) {
+    if(driveInfo->driveStatus != DRIVE_STATUS_ASSIGNED_TO_DEVICE || driveInfo->driverSlotNumber != PrimaryControllerSlot()) {
         printf("*** Drive %c: is not controlled by the primary Nextor kernel\r\n", fib->logicalDrive - 1 + 'A');
         Terminate(null);
     }
-}
-
-ulong GetFirstDriveSectorForFileInFib()
-{
-	return *((ulong*)(driveInfo + 6));
 }
 
 ulong GetFirstFileSectorForFileInFib()
@@ -462,8 +533,8 @@ void AddFileInFibToFilesTable(ulong sector)
             sizeof(GeneratedFileHeader) + 
             (sizeof(GeneratedFileTableEntry) * totalFilesProcessed));
             
-    tableEntry->deviceIndex = *(driveInfo + 4);
-    tableEntry->logicalUnitNumber = *(driveInfo + 5);
+    tableEntry->deviceIndex = driveInfo->deviceIndex;
+    tableEntry->logicalUnitNumber = driveInfo->logicalUnitNumber;
     tableEntry->firstFileSector = sector;
     tableEntry->fileSizeInSector = (uint)(fib->fileSize >> 9);
 }
@@ -480,11 +551,44 @@ void AddFileInFibToFilenamesInfo()
     *fileNamesAppendAddress++ = '\n';
 }
 
+void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile()
+{
+    GeneratedFileTableEntry* tableEntry;
+    int i;
+
+    regs.Bytes.B = 0;
+    regs.Words.DE = (int)outputFileName;
+    DoDosCall(_PARSE);
+    regs.Bytes.A = regs.Bytes.C - 1;    //drive number of the data file
+    regs.Words.HL = (int)driveInfo;
+    DoDosCall(_GDLI);
+
+    tableEntry = (GeneratedFileTableEntry*)(fileContentsBase + sizeof(GeneratedFileHeader));
+
+    for(i=0; i<totalFilesProcessed; i++)
+    {
+        if(tableEntry->deviceIndex != driveInfo->deviceIndex || tableEntry->logicalUnitNumber != driveInfo->logicalUnitNumber) {
+            return;
+        }
+        tableEntry++;
+    }
+
+    tableEntry = (GeneratedFileTableEntry*)(fileContentsBase + sizeof(GeneratedFileHeader));
+
+    for(i=0; i<totalFilesProcessed; i++)
+    {
+        tableEntry->deviceIndex = 0;
+        tableEntry->logicalUnitNumber = 0;
+        tableEntry++;
+    }
+}
+
 void GenerateFile() 
 {
     GeneratedFileHeader* header;
     byte fileHandle;
     char* fileNamesHeader;
+    char* bootFileIndexString;
           
     if(bootFileIndex > totalFilesProcessed) {
         bootFileIndex = totalFilesProcessed;
@@ -493,7 +597,7 @@ void GenerateFile()
     }
     
     header = (GeneratedFileHeader*)fileContentsBase;
-    strcpy(header->signature, "Nextor DSK file");
+    strcpy(header->signature, emuDataSignature);
     header->numberOfEntriesInImagesTable = totalFilesProcessed;
     header->indexOfImageToMountAtBoot = bootFileIndex;
     header->workAreaAddress = workAreaAddress;
@@ -511,7 +615,7 @@ void GenerateFile()
             (sizeof(GeneratedFileHeader) + 
             (sizeof(GeneratedFileTableEntry) * totalFilesProcessed));
     DoDosCall(_WRITE);
-    
+        
     fileNamesHeader = "\fDisk image files registered:\r\n\r\n";
     regs.Bytes.B = fileHandle;
     regs.Words.DE = (int)fileNamesHeader;
@@ -522,28 +626,155 @@ void GenerateFile()
     regs.Words.DE = (int)fileNamesBase;
     regs.Words.HL = (int)(fileNamesAppendAddress - fileNamesBase);
     DoDosCall(_WRITE);
+
+    bootFileIndexString = malloc(32);
+    sprintf(bootFileIndexString, "\r\nBoot file index: %i\r\n", bootFileIndex);
+    regs.Bytes.B = fileHandle;
+    regs.Words.DE = (int)bootFileIndexString;
+    regs.Words.HL = strlen(bootFileIndexString);
+    DoDosCall(_WRITE);
      
     regs.Bytes.B = fileHandle;
     DoDosCall(_CLOSE);
+}
 
+void SetupFile()
+{
+	ulong sector;
+    masterBootRecord* sectorBuffer;
+    partitionTableEntry* partition;
+    byte error;
+
+    AddFileExtension(outputFileName);
+    StartSearchingFiles(outputFileName);
+	GetDriveInfoForFileInFib();
+    CheckControllerForFileInFib();
+    
+    if(fib->fileSize == 0) {
+        Terminate("*** The emulation data file is empty");
+    }
+
+    sectorBuffer = malloc(sizeof(masterBootRecord));
+
+    VerifyDataFileSignature((byte*)sectorBuffer);
+
+	sector = driveInfo->firstSectorNumber + GetFirstFileSectorForFileInFib();
+	
+    if(setupPartitionDeviceIndex == 0) {
+        setupPartitionDeviceIndex = driveInfo->deviceIndex;
+        setupPartitionLunIndex = driveInfo->logicalUnitNumber;
+    }
+
+    sectorBuffer = malloc(sizeof(masterBootRecord));
+    error = ReadDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
+    if(error != 0) {
+        print("*** Error when reading MBR of device:");
+        TerminateWithDosError(error);
+    }
+
+    if(setupAsPersistent) {
+        partition = &(sectorBuffer->primaryPartitions[0]);
+        partition->status |= 1;
+        partition->chsOfFirstSector[0] = driveInfo->deviceIndex;
+        partition->chsOfFirstSector[1] = driveInfo->logicalUnitNumber;
+        partition->chsOfFirstSector[2] = ((byte*)&sector)[3];   //MSB
+        partition->chsOfLastSector[0] = ((byte*)&sector)[2];
+        partition->chsOfLastSector[1] = ((byte*)&sector)[1];
+        partition->chsOfLastSector[2] = ((byte*)&sector)[0];    //LSB
+
+        error = WriteDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
+        if(error != 0) {
+            print("*** Error when writing MBR of device:");
+            TerminateWithDosError(error);
+        }
+    } else {
+        strcpy(SetupRAMAddress, emuDataSignature);
+        SetupRAMAddress[0x10] = driveInfo->deviceIndex;
+        SetupRAMAddress[0x11] = driveInfo->logicalUnitNumber;
+        SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
+        SetupRAMAddress[0x13] = ((byte*)&sector)[1];
+        SetupRAMAddress[0x14] = ((byte*)&sector)[2];
+        SetupRAMAddress[0x15] = ((byte*)&sector)[3];   //MSB
+    }
+}
+
+void VerifyDataFileSignature(byte* sectorBuffer)
+{
+    regs.Words.DE = (int)outputFileName;
+    regs.Bytes.A = 1;    //read-only
+    DoDosCall(_OPEN);
+    fileHandle = regs.Bytes.B;
+
+    regs.Words.DE = (int)sectorBuffer;
+    regs.Words.HL = 16;
+    DoDosCall(_READ);
+
+    if(regs.Words.HL < 16 || strcmpi((char*)sectorBuffer, emuDataSignature) != 0) {
+        Terminate("Invalid emulation data file");
+    }
+}
+
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sectorNumber, byte* buffer, bool write)
+{
+	regs.Flags.C = write;
+	regs.Bytes.A = deviceIndex;
+	regs.Bytes.B = 1;
+	regs.Bytes.C = lunIndex;
+	regs.Words.HL = (int)buffer;
+	regs.Words.DE = (int)&sectorNumber;
+
+	DriverCall(driverSlot, DEV_RW);
+	return regs.Bytes.A;
+}
+
+void DriverCall(byte slot, uint routineAddress)
+{
+	byte registerData[8];
+	int i;
+
+	memcpy(registerData, &regs, 8);
+
+	regs.Bytes.A = slot;
+	regs.Bytes.B = 0xFF;
+	regs.UWords.DE = routineAddress;
+	regs.Words.HL = (int)registerData;
+
+	DoDosCall(_CDRVR);
+
+    regs.Words.AF = regs.Words.IX;
+}
+
+void ResetComputer()
+{
+    regs.Bytes.IYh = *(byte*)EXPTBL;
+    regs.Words.IX = 0;
+    AsmCall(CALSLT, &regs, REGS_ALL, REGS_NONE);
+
+    //Just in case, but we should never reach here
+    Terminate(null);
 }
 
 void Terminate(const char* errorMessage)
 {
+    if(fileHandle != 0) {
+        regs.Bytes.B = fileHandle;
+        DoDosCall(_CLOSE);
+    }
+
     if(errorMessage != NULL) {
         printf("\r\x1BK*** %s\r\n", errorMessage);
     }
     
     regs.Bytes.B = (errorMessage == NULL ? 0 : 1);
-    DosCall(_TERM, &regs, REGS_MAIN, REGS_NONE);
-    DosCall(_TERM0, &regs, REGS_MAIN, REGS_NONE);
+    DoDosCall(_TERM);
+    DoDosCall(_TERM0);
 }
 
 
 void TerminateWithDosError(byte errorCode)
 {
     regs.Bytes.B = errorCode;
-    DosCall(_TERM, &regs, REGS_MAIN, REGS_NONE);
+    DoDosCall(_TERM);
 }
 
 
@@ -577,7 +808,7 @@ void CheckDosVersion()
 {
     regs.Bytes.B = 0x5A;
     regs.Words.HL = 0x1234;
-    regs.Words.DE = 0xABCD;
+    regs.Words.DE = (int)0xABCD;
     regs.Words.IX = 0;
     DosCall(_DOSVER, &regs, REGS_ALL, REGS_ALL);
 	
@@ -625,9 +856,7 @@ void DoDosCall(byte functionCode)
     }
 }
 
-void ResetComputer()
-{
-    regs.Bytes.IYh = *(byte*)EXPTBL;
-    regs.Words.IX = 0;
-    AsmCall(CALSLT, &regs, REGS_ALL, REGS_NONE);
-}
+#define COM_FILE
+#include "printf.c"
+#include "asmcall.c"
+#include "strcmpi.c"

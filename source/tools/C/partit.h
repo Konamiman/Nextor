@@ -1,7 +1,7 @@
 #ifndef __PARTIT_H
 #define __PARTIT_H
 
-#include "types.h"
+#include "../../tools/C/types.h"
 
 #define MAX_PARTITIONS_TO_HANDLE 256
 #define MIN_DEVICE_SIZE_IN_K 10
@@ -40,6 +40,7 @@ typedef struct {
 	byte primaryIndex;
 	byte extendedIndex;
 	byte partitionType;
+    byte status;
 	ulong sizeInK;
 	uint alignmentPaddingInSectors;
 } partitionInfo;

@@ -818,6 +818,9 @@ DRV_DIRECT4:
 ;     C = LUN index
 
 DRV_CONFIG:
+    ld a,1
+    ret
+
     dec a
     jr z,DRV_CONFIG_1
     dec a
@@ -835,7 +838,10 @@ DRV_CONFIG_1:
     ret
 
 DRV_CONFIG_2:
-    ld a,1
+    ld b,c
+    inc b
+    ld c,1
+    xor a
     ret
     
 
@@ -868,6 +874,11 @@ DRV_CONFIG_2:
 ;          B = Number of sectors actually read/written
 
 DEV_RW:
+    ;jr nc,kk
+    ;ld a,0F8h   ;.WPROT
+    ;ld b,0
+    ;ret
+kk:
 	push	af
 
 	ld	a,b	;Swap B and C

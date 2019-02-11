@@ -29,6 +29,8 @@
 #include <stdarg.h>
 #include "system.h"
 
+#define CONOUT 2
+
 #ifdef SUPPORT_LONG
 extern void _ultoa(long val, char* buffer, char base);
 extern void _ltoa(long val, char* buffer, char base);
@@ -67,10 +69,15 @@ static void do_char(const char* buf, char c) __naked
   ld h,a
   or l
 
+#ifdef COM_FILE
+  ld c,#CONOUT
+  jp z,5
+#else
   ld a,e
   jp z,CHPUT
+#endif
 
-  ld(hl),e
+  ld (hl),e
   ret
 
   __endasm;

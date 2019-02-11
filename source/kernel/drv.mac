@@ -12,7 +12,28 @@
 ;
 ;-----------------------------------------------------------------------------
 ;
-$$DRIVE::
+SCANKEYS equ 41EFh-3    ;As defined in init.mac
+
+PRINTL	macro	NAME,VALUE
+	if2
+	.PRINTX % Size of NAME = VALUE bytes %
+	endif
+	endm
+
+ALIGN	macro	ADDR
+    if $-START gt ADDR-ORIGIN
+	error	<Code overwraps at ADDR>
+	PRINTL	<wrap at ADDR>,%($-START)-(ADDR-ORIGIN)
+	org	ADDR-ORIGIN
+    else
+	PRINTL	<hole at ADDR>,%(ADDR-ORIGIN)-($-START)
+	defs	(ADDR-ORIGIN)-($-START),0
+    endif
+endm
+
+ORIGIN	equ	7700h
+
+    ALIGN 7700h
 ;
 ;       External Routines.
 ;
@@ -27,10 +48,219 @@ $$DRIVE::
 	public	DEFDPB
 ;
 
-	;*** This should be compiled at 781Fh
 
-SNSMAT	equ	0141h
+;-----------------------------------------------------------------------------
 
+;This routine is invoked in disk emulation mode prior to any disk access.
+;If checks if a valid file change key is being pressed, and if so,
+;reloads the emulation data file and updates the information in DVB_TABLE.
+;If no suitable key is being pressed, or if change is performed ok, returns Z.
+;If there is an error reading the emulation data file, returns NZ and A=Error code.
+
+CHGFILE:
+	push	hl
+	push	de
+	push	bc
+	push	ix
+	push	iy
+	call	CHGF2
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+CHGF2:
+	ld	ix,(DVB_TABLE##)
+
+    call GETCURKEY
+    or a
+    ret z
+    cp 0FFh
+    jr nz,CHGF3
+
+	call	CAPSON
+    call WAIT_KEY_RELEASE ;GRAPH pressed: wait for other keys to release...
+
+CHGWA2:
+	call	GETCURKEY	;...then to be pressed again.
+	or	a
+	jr	z,CHGWA2
+
+    cp 0FFh      ;User changed his mind and pressed GRAPH 
+    jr nz,CHGF3
+
+    call WAIT_KEY_RELEASE
+    ret
+
+CHGF3:
+	ld	c,a
+	call	CAPSON
+
+	;--- The key with index C is pressed
+
+	;> Do nothing if chosen file is the same currently in use
+
+	ld	a,(ix+DSK_IDX##)
+	and	3Fh
+	cp	c
+	call	z,CAPSOFF
+	ret	z
+
+	;> Read emulation data file
+
+	push	bc
+
+	ld	a,(ix+EMU_DEVLUN##) ;data file dev index + 16 * LUN index
+	ld	d,a
+	rrca
+	rrca
+	rrca
+	rrca
+	and	111b
+	ld	b,a	;LUN
+	ld	a,d
+	and	111b	;Device
+
+	ld	l,(ix+EMU_FSEC##)
+	ld	h,(ix+EMU_FSEC##+1)
+	ld	(TMP_SEC##),hl
+	ld	l,(ix+EMU_FSEC##+2)
+	ld	h,(ix+EMU_FSEC##+3)
+	ld	(TMP_SEC##+2),hl
+
+	ld	iy,(0F348h-1)	;Master controller slot
+	ld	hl,DEV_RW##
+	ld	(BK4_ADD##),hl
+	ld	c,b
+	ld	b,1
+	ld	hl,($SECBUF##)
+	ld	de,TMP_SEC##
+	or	a
+
+	push	ix
+	ld	ix,CALDRV##
+	call	CALSLT##	;Call DEV_RW
+	pop	ix
+	pop	bc
+	call	CAPSOFF
+	or	a
+	ret	nz
+
+	;> Set the new file data in work area
+
+    ld a,(ix+DSK_IDX##)
+    and 11000000b   ;In emulation mode flag + Russian keyboard flag
+    ld b,a
+	ld	a,c
+    or b
+	ld	(ix+DSK_IDX##),a
+	set	7,(ix+EMU_DEVLUN##) ;File changed flag
+	
+	dec	a
+	add	a,a		;Each entry is 8 bytes
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	h,0
+	ld	bc,24
+	add	hl,bc
+	ld	de,($SECBUF##)
+	add	hl,de	;HL = Pointer to boot file data
+	push	ix
+	pop	de
+	inc	de
+	inc	de  ;DE must point to DSK_DEV in work area
+	ld	bc,8
+	ldir
+
+    ld a,(ix+DSK_DEV##) ;set DSK_DEV and DSK_LUN as same of data file if 0
+    or a
+    jr nz,CHGF4
+    ld a,(ix+EMU_DEVLUN##)
+    ld b,a
+    and 00000111b
+    ld (ix+DSK_DEV##),a
+    ld a,b
+    rrca
+    rrca
+    rrca
+    rrca
+    and 00000111b
+    ld (ix+DSK_LUN##),a
+
+CHGF4:
+	xor	a
+	ret
+
+
+WAIT_KEY_RELEASE:
+    call	GETCURKEY
+	or	a
+	jr	nz,WAIT_KEY_RELEASE
+    ret
+
+
+	;Return in A the index of currently pressed key, 0 if none, FFh is GRAPH
+	;Input: IX = Pointer to emulation data area
+GETCURKEY:
+    ex af,af'
+    ld a,(ix+DSK_IDX##)
+    rlca
+    rlca
+    rlca
+    and 1   ;Russian keyboard?
+    ex af,af'
+    push ix
+	ld	ix,SCANKEYS
+	xor a
+	call	CALBNK##
+    pop ix
+    bit 6,h
+    ld a,0FFh
+    ret nz
+    ld c,b
+	ld b,(ix+DSK_COUNT##)
+    ld a,1
+
+    ;HLDEC = key statuses
+    ;B = Keys left to check
+    ;A = Current key index
+    ;We do an initial rotation because we want to start at key 1.
+CHGLOOP:
+    sra c
+    rr e
+    rr d
+    rr l
+    rr h
+    bit 0,c
+    ret nz
+
+    inc a
+    djnz CHGLOOP
+
+    xor a
+    ret
+
+CAPSON:
+	in	a,(0AAh)
+	and	10111111b
+	out	(0AAh),a
+	ret
+
+CAPSOFF:
+	push	af
+	in	a,(0AAh)
+	or	01000000b
+	out	(0AAh),a
+	pop	af
+	ret
+
+
+
+
+    ALIGN 781Fh
 ;-----------------------------------------------------------------------------
 ;
 ; Null message. The address of this message can be returned by
@@ -52,9 +282,9 @@ null_message:
 ; Calls to these addresses will be translated to calls to the DV_DIRECTx
 ; entry points in the driver bank.
 
-	ds	7850h-7843h	;Can't do "ds 7850h-$", the compiler complaints
+    ALIGN 7850h
 
-DIRCALL::
+DIRCALL:
 	call	DO_DIRCALL
 	call	DO_DIRCALL
 	call	DO_DIRCALL
@@ -82,22 +312,31 @@ DIO_ENTRY::
 	call	IS_DVB
 	jp	nc,DIO_ENTRY_DO
 
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	or	a
 	jp	z,DISKERR
 
 	call	IS_EMU
-	jr	nc,DIOEN_NOEMU
+	jp	c,DIOEN_ISEMU
+
+    ;>>> NOT in disk emulation mode
+
+DIOEN_NOEMU:
+	call	HAS_PARTITION
+	call	nz,ASSIGN_PARTITION
+	jp	nz,POP_CONV_ERR
+	jr	DIOEN3
 
 	;>>> In disk emulation mode
 
+DIOEN_ISEMU:
 	pop	af
 	push	af
 	or	a
 
 	jp	nz,DISKERR	;Drive number must be 0
 
-	call	CHGFILE
+	call CHGFILE
 	jr	z,DIOCHGFOK
 	pop	bc
 	ld	b,0
@@ -109,8 +348,8 @@ DIOCHGFOK:
 	push	hl
 	push	de
 	ld	ix,(DVB_TABLE##)
-	ld	e,(ix+9)
-	ld	d,(ix+10)	;DE = dsk size in sectors
+	ld	e,(ix+DSK_SIZE##)
+	ld	d,(ix+DSK_SIZE##+1) ;DE = dsk size in sectors
 
 	pop	hl
 	push	hl
@@ -150,29 +389,36 @@ WVDP:
 	call	CAPSOFF
 	ret
 
-	;>>> NOT in disk emulation mode
-
-DIOEN_NOEMU:
-	call	HAS_PARTITION
-	call	nz,ASSIGN_PARTITION
-	jp	nz,POP_CONV_ERR
-	jr	DIOEN3
-
 DIOEN2:
 	push	af
+    ld iy,(DVB_TABLE)
 DIOEN3:
+
+    ; In this point one of these is true:
+    ;
+    ; - We are in disk emulation mode, and IY points to the beginning
+    ;   of the work area for emulation mode.
+    ;
+    ; - We are in normal DOS 1 mode, and IY points to the entry
+    ;   for the drive in DVB_TABLE.
+    ;
+    ; The following code is common to both cases, that's why
+    ; device index, LUN index and first sector number must be stored
+    ; at the same offset in both the DVB_TABLE entries (UD1_*)
+    ; and the disk emulation work area (DSK_*).
+
 	ld	a,1
 	ld	(KSLOT##),a	;KSLOT=1 -> device-based
 
 	push	hl
-	ld	l,(iy+4)
-	ld	h,(iy+5)
+	ld	l,(iy+UD1_FSEC##)
+	ld	h,(iy+UD1_FSEC##+1)
 	add	hl,de
 	ld	ix,TMP_SEC##
 	ld	(ix),l	;Calculate absolute sector number
 	ld	(ix+1),h
-	ld	l,(iy+6)
-	ld	h,(iy+7)
+	ld	l,(iy+UD1_FSEC##+2)
+	ld	h,(iy+UD1_FSEC##+3)
 	ld	de,0
 	adc	hl,de
 	ld	(ix+2),l
@@ -180,9 +426,9 @@ DIOEN3:
 	pop	hl		;Restore transfer address
 	ld	de,TMP_SEC##
 	
-	ld	c,(iy+3)	;Set LUN index
-	pop	af		;From here Cy must be kept untouched
-	ld	a,(iy+2)	;Set device index
+	ld	c,(iy+UD1_LI##) ;Set LUN index
+	pop	af                   ;From here Cy must be kept untouched
+	ld	a,(iy+UD1_DI##) ;Set device index
 	jr	DIO_ENTRY_DO_2
 
 		
@@ -366,233 +612,6 @@ DIO_INC_DE_DVB_END:
 	ret
 
 ;-----------------------------------------------------------------------------
-
-;This routine is invoked in disk emulation mode prior to any disk access.
-;If checks if a valid file change key is being pressed, and if so,
-;reloads the NEXT_DSK.DAT file and updates the information in DVB_TABLE.
-;If no suitable key is being pressed, or if change is performed ok, returns Z.
-;If there is an error reading NEXT_DSK.DAT, returns NZ and A=Error code.
-
-CHGFILE:
-	push	hl
-	push	de
-	push	bc
-	push	ix
-	push	iy
-	call	CHGF2
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	de
-	pop	hl
-	ret
-
-CHGF2:
-	ld	ix,(DVB_TABLE##)
-
-	ld	a,6		;Check GRAPH key
-	call	SNSKEY
-	and	100b
-	jr	nz,NOGRAPH
-
-CHGWAIT:
-	call	CAPSON
-	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
-	or	a
-	jr	nz,CHGWAIT
-
-CHGWA2:
-	call	GETCURKEY	;...then to be pressed again.
-	or	a
-	jr	z,CHGWA2
-
-	jr	CHGF3
-
-NOGRAPH:	
-	call	GETCURKEY
-	or	a
-	ret	z
-
-CHGF3:
-	ld	c,a
-	call	CAPSON
-
-	;--- The key with index C is pressed
-
-	;> Do nothing if chosen file is the same currently in use
-
-	ld	a,(ix)
-	and	7Fh
-	cp	c
-	call	z,CAPSOFF
-	ret	z
-
-	;> Read .DAT file
-
-	push	bc
-
-	ld	a,(ix+2)	;.DAT file dev index + 16 * LUN index
-	ld	d,a
-	rrca
-	rrca
-	rrca
-	rrca
-	and	111b
-	ld	b,a	;LUN
-	ld	a,d
-	and	111b	;Device
-
-	ld	l,(ix+12)
-	ld	h,(ix+13)
-	ld	(TMP_SEC##),hl
-	ld	l,(ix+14)
-	ld	h,(ix+15)
-	ld	(TMP_SEC##+2),hl
-
-	ld	iy,(0F348h-1)	;Master controller slot
-	ld	hl,DEV_RW##
-	ld	(BK4_ADD##),hl
-	ld	c,b
-	ld	b,1
-	ld	hl,($SECBUF##)
-	ld	de,TMP_SEC##
-	or	a
-
-	push	ix
-	ld	ix,CALDRV##
-	call	CALSLT##	;Call DEV_RW
-	pop	ix
-	pop	bc
-	call	CAPSOFF
-	or	a
-	ret	nz
-
-	;> Set the new file data in work area
-
-	ld	a,c
-	ld	(ix),a
-	set	7,(ix)
-	set	7,(ix+2)	;File changed flag
-	
-	dec	a
-	add	a,a		;Each entry is 8 bytes
-	add	a,a
-	add	a,a
-	ld	l,a
-	ld	h,0
-	ld	bc,24
-	add	hl,bc
-	ld	de,($SECBUF##)
-	add	hl,de	;HL = Pointer to boot file data
-	push	ix
-	pop	de
-	inc	de
-	inc	de
-	inc	de
-	ld	bc,8
-	ldir
-
-	xor	a
-	ret
-
-
-	;Return in A the index of currently pressed key, 0 if none
-	;Input: IX = Pointer to entry in DVB_TABLE
-
-GETCURKEY:
-	ld	b,(ix+11)
-	ld	hl,CHGTBL
-	ld	d,-1
-	ld	c,1
-
-	;B=Number of keys left to test
-	;HL=Pointer to current key in table
-	;D=Last keyboard row checked
-	;E=Last keyboard row value obtained
-	;C=Current key number
-CHGLOOP:
-	ld	a,(hl)
-	inc	hl
-	cp	d
-	jr	z,IHAVEROW
-	ld	d,a
-	call	SNSKEY
-	ld	e,a
-IHAVEROW:
-	ld	a,(hl)
-	inc	hl
-	and	e
-	ld	a,c
-	ret	z
-	inc	c
-	djnz	CHGLOOP
-
-	xor	a	;No suitable key pressed
-	ret
-
-SNSKEY::
-	push	bc
-	ld	c,a
-	di
-	in	a,(0AAh)
-	and 0F0h
-	add	a,c
-	out	(0AAh),a
-	ei
-	in	a,(0A9h)
-	pop	bc
-	ret
-
-CHGTBL:
-	db	0,2	;1
-	db	0,4	;2
-	db	0,8	;3
-	db	0,16	;4
-	db	0,32	;5
-	db	0,64	;6
-	db	0,128	;7
-	db	1,1		;8
-	db	1,2		;9
-	db	2,64	;A
-	db	2,128	;B
-	db	3,1	;C
-	db	3,2	;D
-	db	3,4	;E
-	db	3,8	;F
-	db	3,16	;G
-	db	3,32	;H
-	db	3,64	;I
-	db	3,128	;J
-	db	4,1	;K
-	db	4,2	;L
-	db	4,4	;M
-	db	4,8	;N
-	db	4,16	;O
-	db	4,32	;P
-	db	4,64	;Q
-	db	4,128	;R
-	db	5,1	;S
-	db	5,2	;T
-	db	5,4	;U
-	db	5,8	;V
-	db	5,16	;W
-
-CAPSON:
-	in	a,(0AAh)
-	and	10111111b
-	out	(0AAh),a
-	ret
-
-CAPSOFF:
-	push	af
-	in	a,(0AAh)
-	or	01000000b
-	out	(0AAh),a
-	pop	af
-	ret
-
-
-;-----------------------------------------------------------------------------
 ;
 	; General disk routines entry
 
@@ -604,7 +623,7 @@ CHG_ENTRY::
 	jp	nc,DO_CALBNK
 
 	ld	d,a
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	or	a
 	jp	z,DISKERR
 
@@ -622,8 +641,8 @@ CHG_ENTRY::
 
 	xor	a
 	ld	ix,(DVB_TABLE##)
-	bit	7,(ix+2)
-	res	7,(ix+2)
+	bit	7,(ix+EMU_DEVLUN##)
+	res	7,(ix+EMU_DEVLUN##)
 	ld	b,1
 	ret	z
 	ld	a,d
@@ -636,9 +655,9 @@ CHGEN_NOEMU:
 	;Drive-based mapping:
 	;Return "changed" if partition has changed, "unchanged" otherwise
 
-	ld	a,(iy+1)
+	ld	a,(iy+UD1_REL##)
 	ld	c,a
-	res	7,(iy+1)
+	res	7,(iy+UD1_REL##)
 	and	10000000b	;Check partition changed flag
 	ld	b,-1
 	ld	a,c
@@ -676,17 +695,17 @@ DO_MKDPB:
 
 DPBEN2:
 	push	hl
-	ld	a,(iy+4)
+	ld	a,(iy+UD1_FSEC##)
 	ld	(TMP_SEC##),a
-	ld	a,(iy+5)
+	ld	a,(iy+UD1_FSEC##+1)
 	ld	(TMP_SEC##+1),a
-	ld	a,(iy+6)
+	ld	a,(iy+UD1_FSEC##+2)
 	ld	(TMP_SEC##+2),a
-	ld	a,(iy+7)
+	ld	a,(iy+UD1_FSEC##+3)
 	ld	(TMP_SEC##+3),a
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	ld	b,1
-	ld	c,(iy+3)
+	ld	c,(iy+UD1_LI##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
@@ -815,13 +834,13 @@ IS_DVB_NOEMU:
 IS_DVB_LOOP:
     push bc
 	ld	a,(KSLOT##)
-	ld b,(iy)
+	ld b,(iy+UD1_SLOT##)
 	res 6,b
 	cp b
 	pop bc	
 	jr	nz,DIO_NEXT
 
-	ld	a,(iy+1)
+	ld	a,(iy+UD1_REL##)
 	and	01111111b	;Ignore partition changed flag
 	cp	c
 	jr	nz,DIO_NEXT
@@ -870,10 +889,10 @@ IS_EMU:
 ; Return A=0, Z if partition assigned; A<>0, NZ if NO partition assigned.
 
 HAS_PARTITION:
-	ld	a,(iy+4)	;No partition assigned
-	and	(iy+5)		;if sector number is -1
-	and	(iy+6)
-	and	(iy+7)
+	ld	a,(iy+UD1_FSEC##)  ;No partition assigned
+	and	(iy+UD1_FSEC##+1)  ;if sector number is -1
+	and	(iy+UD1_FSEC##+2)
+	and	(iy+UD1_FSEC##+3)
 	inc	a
 	jr	z,RET_NZ
 	xor	a
@@ -908,7 +927,8 @@ ASSIGN_PARTITION:
 
 	ld b,(iy+UD1_DI##)
 	ld c,(iy+UD1_LI##)
-	ld	a,4
+	ld a,4
+    ld d,0
 	ld	ix,AUTO_ASPART##
 	call	CALBNK##
 
@@ -933,9 +953,9 @@ READ_BOOT:
 	ld	de,0
 	ld	(TMP_SEC##),de
 	ld	(TMP_SEC##+2),de
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	ld	b,1
-	ld	c,(iy+3)
+	ld	c,(iy+UD1_LI##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
@@ -1016,6 +1036,10 @@ DEFDPB:
 	DB	3		
 	DW	7
 ;
+
+    ALIGN 7BD0h
+    ;Here goes the 1K free area at the end of banks 0 and 3
+
 	finish	<DRV>
 ;
 	end

@@ -142,11 +142,8 @@ READ_BOOT_SEC::
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-		ld	hl,BOOT_DISKVECT	;Setup disk error and break
-		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOT_BREAKVECT	; errors while booting.
-		ld	(BREAKVECT##),hl
-;
+        call SET_BOOT_VECTORS
+
 		ld	de,($SECBUF##)		;Set the DTA address ready
 		ld	c,_SETDTA##		; for reading the boot
 		call	BOOT_BDOS		; sector in.
@@ -283,24 +280,8 @@ TRY_MSX_DOS::
 ;
 		ld	(CUR_DRV##),a		;Setup default drive.
 
-		;push	af
-		;ld	a,(NOTFIRST##)
-		;or	a
-		;jr	nz,NOBOOT
-		;ld	e,a
-		;ld	a,1
-		;ld	bc,0FF00h + _LOCK##
-		;call	BOOT_BDOS
-		;ld	hl,MFLAGS##
-		;set	1,(hl)
-
 NOBOOT:
-		;pop	af
-
-		ld	hl,BOOT_DISKVECT	;Setup disk error and break
-		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOT_BREAKVECT	; errors while booting.
-		ld	(BREAKVECT##),hl
+        call SET_BOOT_VECTORS
 ;
 		ld	b,0			;Unassign all drives (does
 		ld	d,b			; not waste very much time)
@@ -313,13 +294,19 @@ NOBOOT:
 		jr	z,msxdos_fail
 ;
 retry_dos:
-		ld	de,BOOT_NAME		;Try to open the "MSXDOS.SYS"
-		xor	a			; file on the default drive.
+		ld	de,BOOT_NAME    ;Try to open the "NEXTOR.SYS"
+		xor	a               ;file on the default drive.
+		ld	c,_OPEN##
+		call	BOOT_BDOS
+        jr z,msxdos_bootok
+
+        ld	de,OLD_BOOT_NAME    ;Fallback to try "MSXDOS.SYS"
+		xor	a
 		ld	c,_OPEN##
 		call	BOOT_BDOS
 		jr	nz,msxdos_fail		;Jump if file not found
 ;
-
+msxdos_bootok:
 		ld	de,100h
 		ld	hl,3F00h		;Try to read the file in at
 		ld	c,_READ##		; 100h up to the top of
@@ -352,10 +339,33 @@ msxdos_fail:
 ;
 ;
 BOOT_NAME:	db	"\NEXTOR.SYS",0
-;
+OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ;
 ;-----------------------------------------------------------------------------
 ;
+
+; Originally, the abort vector was set pointing to BOOT_BREAKVECT whenever
+; NEXTOR.SYS was about to be loaded. If the user pressed CTRL+STOP at this time,
+; the abort routine kicked in and it tried to read the address at BOOT_BREAK
+; and execute it - but since the user paging had been restored before that,
+; a random value was being read instead, and thus random code was executed
+; and the computer crashed.
+;
+; Solution: since this default abort routine is just one byte (a RET),
+; just store it at an unused place in page 3 and point to it instead.
+
+SBDAVEC::
+SET_BOOT_VECTORS:
+        ld hl,BOOT_DISKVECT
+        ld (DISKVECT##),hl
+        ld a,0C9h
+        ld (RAM_ABORT##),a
+        ld hl,RAM_ABORT##
+        ld (RAM_ABORT##+1),hl
+        ld hl,RAM_ABORT##+1
+        ld (BREAKVECT##),hl
+        ret
+
 BOOT_BDOS:	call	BDOS##			;Routine for calling BDOS.
 		cp	.ABORT##
 		jr	nz,not_abort_err	;If we have an aborted disk

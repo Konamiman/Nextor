@@ -86,18 +86,18 @@ read_error:
 ;===== end add DOS2.50
 		set	3,c
 sector_invalid:
-		push	hl
-		push	bc
-		ld	bc,UD_PHYS##		;Get physical unit number from
-		add	hl,bc			; the unit descriptor into
-		pop	bc			; register B.
-		ld	b,(hl)
-		inc	hl
-		ld	a,(hl)			;If UD_TIME is non-zero (UPB
-		or	a			; is defined) then set it to
-		jr	z,err_no_upb		; one to force a BUILD UPB
-		ld	(hl),1			; before next access.
-err_no_upb:	pop	hl
+        push ix
+        push hl
+        pop ix
+        ld b,(ix+UD_PHYS##)
+        bit UF_DBD,(ix+UD_DFLAGS##)
+        jr nz,err_no_upb
+        ld a,(ix+UD_TIME##) ;If UD_TIME is non-zero (UPB is defined) then set it to
+        or a                ; one to force a BUILD UPB before next access.
+        jr	z,err_no_upb
+        ld (ix+UD_TIME##),1
+err_no_upb:
+        pop ix
 ;
 		pop	af
 		cp	.STOP##			;If STOP key pressed then abort

@@ -1,0 +1,3 @@
+*.asm
+!crt0*.asm
+*.com

@@ -30,6 +30,10 @@
 
 [2.9. Boot keys](#29-boot-keys)
 
+[2.9.1. Boot key inverters](#291-boot-key-inverters)
+
+[2.9.2. One-time boot keys](#292-one-time-boot-keys)
+
 [2.10. Built-in partitioning tool](#210-built-in-partitioning-tool)
 
 [2.11. Embedded MSX-DOS 1](#211-embedded-msx-dos-1)
@@ -73,6 +77,10 @@
 [3.4.9. DELALL: the partition quick format tool](#349-delall-the-partition-quick-format-tool)
 
 [3.4.10. NSYSVER: the NEXTOR.SYS version changer](#3410-nsysver-the-nextorsys-version-changer)
+
+[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)
+
+[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)
 
 [3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)
 
@@ -126,7 +134,9 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.1.0 beta 1](#51-v210-beta-1)
+[5.1. v2.1.0 beta 2](#51-v210-beta-2)
+
+[5.2. v2.1.0 beta 1](#52-v210-beta-1)
 
 
 ## 1. Introduction
@@ -239,6 +249,8 @@ MSX-DOS 2 provides a set mapper support routines, which allow applications to al
 
 The boot time configuration of Nextor can be modified by keeping pressed some special keys while the system is booting. These keys and their behavior are:
 
+*  **0**: Disable permanent disk emulation mode by deleting the emulation data file pointer from the partition table. See _[3.9. Disk emulation mode](#39-disk-emulation-mode)_.
+
 *  **1**: Force boot in MSX-DOS 1 mode. If the computer is a MSX Turbo-R, switches CPU to Z80 mode.
 
 *  **2**: Force boot in MSX-DOS 1 mode. If the computer is a MSX Turbo-R, switches CPU to R800-ROM mode. Note that in MSX-DOS 1 mode, the active CPU is never changed when accessing disk drives; this may cause some storage devices to not work properly, especially those mapped to MSX-DOS drivers such as floppy disk drives.
@@ -249,7 +261,7 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **5**: Assign only one drive to each Nextor kernel with a device-based driver regardless of the number of devices controlled by the driver. This overrides the normal behavior, in which Nextor assigns one drive per device found (see _[3.2. Booting Nextor](#32-booting-nextor)_). This is just the default behavior, though - drivers can override it they implement [the DRV_CONFIG routine](Nextor%202.1%20Driver%20Development%20Guide.md#448-drv_config-4151h)).
 
-* **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable it second "ghost" drive, allowing to free some extra memory, especially in MSX-DOS 1 mode.
+* **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable it second "ghost" drive, allowing to free some extra memory, especially in MSX-DOS 1 mode. Note that this key is inverted by default so you'll get the opposite behavior unless you customize the Nextor ROM (see _[2.9.1. Boot key inverters](#291-boot-key-inverters)_).
 
 *  **SHIFT**: Prevent MSX-DOS kernels from booting, but allow Nextor kernels to boot normally. This is useful to disable the internal floppy disk drive in order to get some extra TPA memory, especially in MSX-DOS 1 mode.
 
@@ -263,6 +275,47 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
     * In the rare event that you have a Nextor kernel at slot 0, use the keys UIOP for 0-0 to 0-3, respectively.
     
 Example: if your Nextor kernel is in primary slot 1, press Q to prevent it from booting. If you have it in slot 2-3, press F.
+
+#### 2.9.1. Boot key inverters
+
+The Nextor kernel has two bytes, at offsets 512 and 513 in the ROM that act as _boot key inverters_. There's one bit assigned to each of the keys that affect the booting process (not including the slot keys), and when that bit it set, then the meaning of the key is inverted. For example, if the bit for the SHIFT key is pressed, then MSX-DOS drivers will be disabled unless SHIFT is pressed while booting.
+
+Being hardcoded values, the only way to customize them is to modify the Nextor ROM file before flashing it into your device. The MKNEXROM.EXE tool can be used for that, or you can do it manually using a hexadecimal editor.
+
+Here's how bits are assigned to each key:
+
+* First byte (offset 512):
+
+  * Bits 1 to 5: keys 1 to 5
+
+* Second byte (offset 513):
+
+  * Bit 5: CTRL key
+  * Bit 4: SHIFT key
+
+All other bits are currently unused and should always be 0 to ensure compatibility with possible future extensions.
+
+If you use MKNEXROM.EXE you need to supply a 16 bit hexadecimal value with the `/k` parameter. You should build that number by adding the values for each key as follows:
+
+  * 1: 0002
+  * 2: 0004
+  * 3: 0008
+  * 4: 0010
+  * 5: 0020
+  * CTRL: 2000
+  * SHIFT: 1000
+
+e.g. `/k:3002` to invert the 1, CTRL and SHIFT keys.
+
+By default (when using the "official" ROM files) only the CTRL key is inverted, so that by default internal floppy disk drives will boot with only one drive letter assigned.
+
+#### 2.9.2. One-time boot keys
+
+There's an alternative way to modify the Nextor booting procedure: the _one-time boot keys_. If at boot time Nextor finds a certain signature at a certain position in RAM, it will read a handful of bytes following that signature and use them as the values for the boot keys (including the slot keys), ignoring the keyboard. The RAM area used is at page 2, therefore this only works on computers with at least 32K RAM.
+
+Being a RAM based mechanism, it's "one-time" in the sense that it won't work again on the next computer reset unless the signature and the key data is put on memory again. The signature is explicitly erased by Nextor after being read to make this behavior consistent.
+
+The [NEXBOOT.COM tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool) can be used to easily set this data and reset the computer, but all the tool does is writing to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 ### 2.10. Built-in partitioning tool
 
@@ -301,6 +354,8 @@ Nextor consists of the following components:
 
 **Note:** two variants of the NEXTOR.SYS file exist. See _[4.3. Reduced NEXTOR.SYS without Japanese error messages](#43-reduced-nextorsys-without-japanese-error-messages)_.
 
+**Note:** starting with Nextor 2.1.0 beta 2, the kernel will try to load MSXDOS2.SYS if NEXTOR.SYS is not found. However in this case the Nextor command line tools won't work.
+
 In order to boot in the MSX-DOS 1 prompt, you need the usual MSXDOS.SYS and COMMAND.COM files. Also, if you have just the kernel and no NEXTOR.SYS or MSXDOS.SYS files, Nextor will boot in the BASIC prompt (running AUTOEXEC.BAS if present).
 
 Therefore, in order to "install" Nextor, you have two options:
@@ -325,7 +380,7 @@ Also, note that the Sunrise IDE driver supplied with Nextor 2.0 is an experiment
 
 The Nextor booting procedure is similar to the one performed by MSX-DOS 2. However, if Nextor device-based drivers are present, things are a little different since it is necessary to perform a drive to device and partition mapping for all the drives attached to Nextor drivers (if you are not using any Nextor kernel with a device-based driver attached, then the booting procedure is identical to MSX-DOS 2).
 
-At boot time, Nextor will perform a query to all the available device-based drivers to find out how many devices are being controlled by these drivers (actually, how many logical units, but devices will usually have one single logical unit), and will assign to each driver as many drives as devices are controlled by the driver. If CTRL is pressed at boot time, only one drive is assigned to each driver instead (see _[2.9. Boot keys](#29-boot-keys)_).
+At boot time, Nextor will perform a query to all the available device-based drivers to find out how many devices are being controlled by these drivers (actually, how many logical units, but devices will usually have one single logical unit), and will assign to each driver as many drives as devices are controlled by the driver. If 5 is pressed at boot time, only one drive is assigned to each driver instead (see _[2.9. Boot keys](#29-boot-keys)_).
 
 For example, assume that you have two Nextor kernels with a device-based driver attached. The kernel in slot 1 controls one device, while the kernel in slot 2 controls three devices. Then the initial drive assignment would be as follows:
 
@@ -335,37 +390,25 @@ B:, C:, D: for driver on slot 2
 E:, F: for the internal disk drive
 ```
 
-If you boot while pressing CTRL, the assignment will be:
+If you boot while pressing 5, the assignment will be:
 
 ```
 A: for driver on slot 1
 B: for driver on slot 2
-C: for the internal disk drive (which is affected by CTRL as well)
+C:, D: for the internal disk drive
 ```
 
 The internal disk drive would not have any drives attached if you pressed SHIFT while booting (see _[2.9. Boot keys](#29-boot-keys)_).
 
-After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. The procedure is repeated for each driver and is as follows:
+After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. Each drive is mapped to the first partition found that meets the following conditions:
 
-1.  Start with the first drive associated to the first Nextor device-based driver found.
+1. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
+2. Has the "active" flag set in the partition table (this can be set using [FDISK](#35-the-built-in-partitioning-tool))
+3. No drives have been already mapped to partitions in the same device
 
-2.  Start with the first logical unit on the first device available.
+If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "active" flag check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort before leaving the drive unmapped.
 
-3.  Scan all the existing primary partitions. If one of them has a FAT12 or FAT16 filesystem which has a file named NEXTOR.DAT in the root directory, map it to the drive. (If the drive has no valid partition table, search for one single filesystem at device sector zero)
-
-4.  If step 3 fails, repeat it with the next logical unit available in the device.
-
-5.  If step 3 fails for all the logical units on the device, repeat it with the next device.
-
-6.  If step 3 fails for all the devices, repeat from step 1 but this time do not search a NEXTOR.DAT file (that is, map the first FAT12 or FAT16 partition available).
-
-7.  If step 6 fails (there are no usable partitions available), leave the drive unmapped.
-
-8.  Repeat steps 2-7 for the other drives assigned to the driver (if any), but skipping the logical units already assigned to a drive.
-
-9.  Go to the next device-based driver (if any), and repeat from step 2.
-
-In short: available devices having a FAT12 or FAT16 partition are assigned to the available drives in device and logical unit number order, but the first partition having a NEXTOR.DAT file in the root directory has preference. Note that the contents of the NEXTOR.DAT file is irrelevant, it may even be an empty file (in future versions of Nextor this file is likely to contain some system configuration information). Also, note that only primary partitions are examined in the automatic mapping procedure.
+Note that in order to speed up the botting procedure, only the first 9 partitions of each device are scanned during this procedure; consequently, [FDISK](#35-the-built-in-partitioning-tool) allows to change the "active" flag on these first 9 partitions only.
 
 Starting with Nextor 2.0.5, device-based drivers can tell Nextor how many drives they want at boot time and which devices should be mapped to these drivers, bypassing part of this automatic procedure (partitions are still selected automatically). This feature is optional, and must be implemented by the driver developer.
 
@@ -373,13 +416,15 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if the NEXTOR.SYS and COMMAND2.COM files are present in the boot drive (the first drive that is not unmapped), the DOS prompt is shown after AUTOEXEC.BAT is executed (if present).
+2.  Otherwise, if the NEXTOR.SYS (or MSXDOS2.SYS) and COMMAND2.COM files are present in the boot drive (the first drive that is not unmapped), the DOS prompt is shown after AUTOEXEC.BAT is executed (if present).
 
 3.  Otherwise, if the boot drive has a MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause MSXDOS.SYS and COMMAND.COM to be loaded if present.
 
 4.  If the previous step returns, then the BASIC environment is activated, and AUTOEXEC.BAS is executed if present.
 
 Note that step 3 will not be done if the disk has a standard boot sector (not created by MSX-DOS 1 or MSX-DOS 2). The built-in disk partitioning tool will create MSX-DOS 2 boot sectors for all partitions of 32MB or less, and standard boot sectors for larger partitions.
+
+Starting with Nextor 2.1.0 beta 2, the Nextor kernel will load MSXDOS2.SYS if present when NEXTOR.SYS is not found, thus allowing booting from old MSX-DOS 2 disks. Note however that in this case the Nextor command line tools won't work.
 
 #### 3.2.1. Booting in DOS 1 mode
 
@@ -598,6 +643,45 @@ Note: the version number change performed by this tool is temporary and it will 
 
 Note: do not use this tool with NEXTOR.SYS versions older than 2.0 beta 2.
 
+#### 3.4.11. NEXBOOT: the one-time boot keys configuration tool
+
+The NEXBOOT.COM tool allows to easily configure the keys to be used as [one-time boot keys](#292-one-time-boot-keys) in the next reset. The syntax is:
+
+```
+NEXBOOT <boot keys>|. [<slot> [<slot>... ]]
+```
+
+where the boot keys are the numeric keys, C for CTRL and S for shift, and `<slot>` are the slot numbers of the Nextor kernels to be disabled. For example `NEXBOOT 1C` will invert CTRL and 1 keys, `NEXBOOT S 1 23` will invert the SHIFT keys and disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
+
+In all cases, the tool resets the computer immediately after apporpriately setting the keys information in RAM.
+
+#### 3.4.12. EMUFILE: the disk emulation mode tool
+
+The EMUFILE.COM tool allows to create disk emulation mode data files and to enter disk emulation mode. The syntax for creating an emulation data file is:
+
+```
+emufile [<options>] <output file> <files> [<files> ...]
+```
+
+`<output file>` is the name of the emulation data file that will be created (default extension is .EMU), and `<files>` are the disk image files that will be used for the emulation (these can contain wildcards). Numbers (for disk change) are assigned to the disk image files in the same order as they are specified; when using wildcards, in the order they are found in the storage device that contains them (the same order that you see when you do run the DIR command).
+
+The `-b <number>` option allows you to specify the number of the disk image file that will be used to boot when the emulation session starts, default is 1.
+
+The `-a <address>` option allows you to specify the page 3 address that Nextor will use as work area (about 16 bytes) during the emulation session, must be a hexadecimal number in page 3 (C000 or higher). If not specified, this area will be allocated by Nextor before starting the emulation session.
+
+The `-p` option will print all the filenames and associated keys after creating the data file. Note however that you can see this same information afterwards if you `TYPE /B` the emulation data file.
+
+The syntax for starting a disk emulation session is as follows:
+
+```
+emufile set <data file> [o|p[<device index>[<LUN index>]]]
+```
+
+`o` will start the emulation using the one-time variant (this is the default), and `p` will start the emulation using the persistent variant. For the later, by default the emulation file data pointer will be written to the device where `<data file>` is stored, but you can specify a different `<device index>` and also optionally a `<LUN index>`. The default LUN index is 1 (i.e. `p3` is the same as `p31`).
+
+Note that in both variants the computer will reset immediately after `EMUFILE.COM` writes the emulation data file pointer to the appropriate place.
+
+
 ### 3.5. The built-in partitioning tool
 
 The Nextor kernel has an embedded utility for partitioning storage devices attached to Nextor device-based drivers. To start it, just invoke CALL FDISK from the BASIC prompt. It works properly on both 40 columns and 80 columns mode. Please note that starting the FDISK tool will delete the current BASIC program from memory.
@@ -614,11 +698,11 @@ The tool has a user interface based on menus, so anyone should be able to use it
 
 * Partitions up to 32MB will have a MSX-DOS 2 boot sector, partitions of 33MB and more will have a standard boot sector.
 
-* If four partitions or less are defined, they will be created as primary partitions. If five partitions or more are defined, then the first one will be primary and the others will be extended partitions contained within the second primary partition. Remember that Nextor only scans primary partitions during the automatic drive to device and partition mapping process.
-
 * To get an optimum cluster size, it is recommended to define the partition sizes as powers of two (that is: 1M, 2M, 4M, 8M, 16M or 32M for FAT12 partitions; 64M, 128M, 256M, 512M, 1G, 2G or 4G for FAT16 partitions). If this is not possible, it is better to select the partition size as slightly smaller than the closest power of two than slightly higher (that is, for example 31M is better than 33M).
 
 Remember that Nextor can handle devices with FAT16 partitions and standard boot sectors; if you use a factory-partitioned device of 2GB or less you probably don't need to partition it, unless you want to create MSX-DOS 1 compatible partitions (4GB devices are usually shipped with a FAT32 partition, so you will need to partition it with FDISK anyway).
+
+When creating new partitions you can choose which one(s) will have the "active" flag set, thus being eligible for automatic mapping at boot time (see _[3.2. Booting Nextor](#32-booting-nextor)_); it is also possible change the flag on already existing partitions.
 
 The partitioning tool works in MSX-DOS 1 mode too. Note however that the tool will always allow you to create partitions larger than 16M, which are not compatible with MSX-DOS 1.
 
@@ -927,16 +1011,22 @@ ATTRIB +R TOOLS.DSK --> Error
 
 ### 3.9. Disk emulation mode
 
-Since version 2.1 Nextor allows to boot in disk emulation mode. In this mode the usies a disk image file (or a set of swappable files) as the boot device instead of a regular device. This is ideal for playing disks that were released in floppy disk and can't be run from a modern storage device, because they don't have a filesystem or because they need to run in MSX-DOS 1 mode.
+Since version 2.1 Nextor allows to boot in disk emulation mode. In this mode Nextor uses a disk image file (or a set of swappable files) as the boot device instead of a regular device. This is ideal for playing disks that were released in floppy disk and can't be run from a modern storage device, because they don't have a filesystem or because they need to run in MSX-DOS 1 mode.
+
+The technical details about how the disk emulation mode works are in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document in case you are interested in building your own tool instead of using `EMUFILE.COM`.
 
 
 #### 3.9.1. Entering and exiting the disk emulation mode
 
-Nextor will boot in disk emulation mode if it finds a file named `NEXT_DSK.DAT` in the root directory of a primary partition in a device controlled by the primary Nextor controller. This file contains information about the disk image files to be used for the emulation.
+First of all, the data needed during a disk emulation mode session (which disk image files will be used and where are they located) must exist in a file with a certain format, the _disk emulation data file_. You can create these files using [the `EMUFILE.COM` tool](#3412-emufile-the-disk-emulation-mode-tool). These files can have any name and will typically have the .EMU extension, but that's not mandatory.
 
-The `NEXT_DSK.DAT` file is created by using the supplied `EMUFILE.COM` tool. Most times it's as easy as doing just `EMUFILE file1.dsk file2.dsk file3.dsk` (or `EMUFILE game\*.dsk`, or just `EMUFILE game\`). There are additional options, run the program without parameters to get more information.
+Second, in order to tell Nextor to boot in disk emulation mode, a pointer to the appropriate disk emulation data file must exist at a special location while the computer boots. There are two variants of the emulation mode, each requiring a different location for the emulation data file pointer:
 
-To disable the disk emulation mode (that is, to boot normally even if a `NEXT_DSK.DAT` file exists), keep the 0 (zero) key pressed while the computer boots. You will have to manually delete or rename the `NEXT_DSK.DAT` file to prevent the disk emulation mode to be entered again in the next system boot.
+* **One-time:** Nextor will enter disk emulation mode only once, that is, after resetting the computer again Nextor will boot normally. In this mode the pointer to the emulation data file is set in RAM.
+
+* **Persistent:** Nextor will enter disk emulation mode on every computer reset, until that mode is manually disabled by pressing 0 while booting. In this mode the pointer to the emulation data file is set in the partition table of one of the devices controlled by Nextor (usually the same device that contains the emulation data file and the disk image files, but that's not mandatory).
+
+Both variants of disk emulation mode can be entered by using the `EMUFILE.COM` tool with the `set` parameter, being the one-time variant the default one.
 
 
 #### 3.9.2. Changing the image file
@@ -945,7 +1035,7 @@ Up to 32 disk image files can be specified for an emulation session, but only on
 
 For example, assume that you are playing a two disks game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press space key. Just press 2 (they key assigned to the second image file) and the space key at the same time and you're good to go.
 
-Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The caps led will lit and the computer will freeze until you release GRAPH and press the appropriate file key. This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
+Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The CAPS led will lit and the computer will freeze until you release GRAPH and press the appropriate file key (or you can press GRAPH again if you change your mind and want to keep using the same disk). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
 #### 3.9.3. Rules and restrictions
@@ -954,9 +1044,9 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The primary controller must be a Nextor kernel with a device-based driver.
 
-- The `NEXT_DSK.DAT` file and all the disk image files must be placed in devices controlled by the primary controller (but they can be in different partitions and even in different devices).
+- The emulation data file and all the disk image files must be placed in devices controlled by the primary controller (but they can be in different partitions and even in different devices).
 
-- The `NEXT_DSK.DAT` file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to generate the file immediately before using it.
+- The emulation data file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to either generate the file immediately before using it, or have a partition reserved only for disk image files and their corresponding emulation data files (that is, a partition where you usually don' create or move files around).
 
 - The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem (the FORMAT command will not work in disk emulation mode).
 
@@ -965,8 +1055,6 @@ The following rules and restrictions apply to the disk emulation mode:
 - Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep pressed GRAPH and 2 while the computer boots, and when the caps led lits, release both keys and press 1.
 
 - All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting; this is useful to free some memory.
-
-- If you are using a `NEXTOR.DAT` file to alter the device mappings priority, Nextor needs the `NEXT_DSK.DAT` to be found before NEXTOR.DAT in order to start emulation mode. This means that `NEXT_DSK.DAT` must be placed either 1. In the same partition of NEXTOR.DAT (relative position in the root directory is irrelevant); 2. In a primary partition with a smaller number in the same device; or 3. In a device with a smaller device number.
 
 
 #### 3.9.4 How to free some memory
@@ -980,7 +1068,7 @@ Some games will not work "out of the box" because they assume that only the flop
 
 #### 3.9.5. Known bugs
 
-* The current version of the EMUFILE.COM tool does not verify that the disk image files are not fragmented.
+* The current version of the `EMUFILE.COM` tool does not verify that the disk image files are not fragmented.
 
 * If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers.
 
@@ -1011,7 +1099,56 @@ This section contains the change history for the different versions of Nextor. C
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 User Manual](../../../blob/v2.0/docs/Nextor%202.0%20User%20Manual.md#5-change-history)_ document.
 
 
-### 5.1. v2.1.0 beta 1
+### 5.1. v2.1.0 beta 2
+
+- Nextor will now try to load `MSXDOS2.SYS` if `NEXTOR.SYS` is not found in the boot drive.
+
+- The method for selecting partitions for automatic mapping has changed from requiring a `NEXTOR.DAT` file in the root directory to having the "active" flag set in the partition table.
+
+- Now the first 9 partitions of a device will be scanned during the automatic mapping procedure, this includes extended partitions.
+
+- FDISK allows to change the "active" flag of new and existing partitions.
+
+- FDISK now always creates extended partitions, even if 4 or less partitions are defined.
+
+- FDISK now creates FAT16 partitions with a partition type code of 14 (FAT16 LBA) instead of 6 (FAT16 CHS).
+
+- The numeric keyboard can now be used both when booting and when changing disks in disk emulation mode.
+
+- Russian keyboard is now properly recognized (numeric keys only).
+
+- Introduced the [boot key inverters](#291-boot-key-inverters).
+
+- Introduced the [one-time boot keys](#292-one-time-boot-keys).
+
+- Introduced the [NEXBOOT.COM tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool) to set the RAM based one-time boot keys.
+
+- Introduced the RAM based one-time [disk emulation mode](#39-disk-emulation-mode).
+
+- The method to enter the old disk emulation mode (now named "persistent") has changed from requiring a `NEXT_DSK.DAT` file in the root directory to storing a pointer to the emulation data file in the partition table of the device.
+
+- Pressing the 0 key at boot time will delete the pointer to the emulation data file in the partition table, thus permanently disabling the emulation mode - no need to manually do anything else.
+
+- When Nextor is waiting for a disk key press after having pressed GRAPH in disk emulation mode, now you can press GRAPH again to cancel the disk change.
+
+- The first Nextor kernel to boot now clears the screen before invoking the driver initialization.
+
+- ARG is no longer used as temporary work area by the Nextor kernel, this should improve the compatibility of games in disk emulation mode.
+
+- Fix: drive was remapped in case of error (even if it was retried successfully).
+
+- Fix: boot sector checksum calculation had a bug that caused "Wrong disk" errors.
+
+- Fix: [#1 pressing CTRL+STOP while Nextor was trying to load NEXTOR.SYS hanged the computer](https://github.com/Konamiman/Nextor/issues/1).
+
+- Fix: [#23 computer hanged when booting with one single drive letter (e.g. when using single-device controller in a computer without internal disk drive)](https://github.com/Konamiman/Nextor/issues/23).
+
+- Fix: [#29 wrong stack management hangedd the computer when a file handle was read or written to a number of times](https://github.com/Konamiman/Nextor/issues/29).
+
+- Fix: computer crashing when more than one Nextor kernel was present as soon as the extended BIOS hook was called (for example, when loading COMMAND2.COM).
+
+
+### 5.2. v2.1.0 beta 1
 
 - All the changes and fixes of [Nextor 2.0.5](../../../blob/v2.0/docs/Nextor%202.0%20User%20Manual.md#51-v205-beta-1).
 

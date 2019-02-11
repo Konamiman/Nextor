@@ -1,43 +1,37 @@
-	; Device-based driver for the sunrise IDE interface for MSX-DOS 2.50
+	; Device-based driver for the FLASHJACKS IDE interface for Nextor
 	;
-        ; Version 0.1
-        ; By Konamiman
+	; By Aquijacks v1.4
+	; Based on version 0.1 by Konamiman and 0.15 by Piter Punk
 
-	;org	4100h
+	;output	"sunride_aquijacks.bin"
+	
+	org		$4000
+
+	ds		256, $FF		; 256 dummy bytes
+
 
 DRV_START:
 
 TESTADD	equ	0F3F5h
-TIMEVAR	equ	0FC9Eh
 
 ;-----------------------------------------------------------------------------
 ;
 ; Driver configuration constants
 ;
 
-;Driver type:
-;   0 for drive-based
-;   1 for device-based
-
-DRV_TYPE	equ	1
 
 ;Hot-plug devices support (device-based drivers only):
 ;   0 for no hot-plug support
 ;   1 for hot-plug support
 
-DRV_HOTPLUG	equ	0
+DRV_HOTPLUG	equ	1
 
-DEBUG	equ	0	;Set to 1 for debugging, 0 to normal operation
 
 ;Driver version
 
-VER_MAIN	equ	0
-VER_SEC		equ	2
-VER_REV		equ	0
-
-	if DEBUG eq 1
-	include	B0LABELS.INC
-	endif
+VER_MAIN	equ	1
+VER_SEC		equ	4
+VER_REV		equ	1
 
 ;This is a very barebones driver. It has important limitations:
 ;- CHS mode not supported, disks must support LBA mode.
@@ -50,9 +44,8 @@ VER_REV		equ	0
 ;
 ; IDE registers and bit definitions
 
-IDE_BANK	equ	4104h
-    ;bit 0: enable (1) or disable (0) IDE registers
-    ;bits 5-7: select 16K ROM bank
+IDE_BANK	equ	4104h	;bit 0: enable (1) or disable (0) IDE registers
+				;bits 5-7: select 16K ROM bank
 IDE_DATA	equ	7C00h	;Data registers, this is a 512 byte area
 IDE_ERROR	equ	7E01h	;Error register
 IDE_FEAT	equ	7E01h	;Feature register
@@ -63,10 +56,10 @@ IDE_CYLOW	equ	7E04h	;Cylinder low (CHS mode)
 IDE_LBAMID	equ	7E04h	;Logical sector mid (LBA mode)
 IDE_CYHIGH	equ	7E05h	;Cylinder high (CHS mode)
 IDE_LBAHIGH	equ	7E05h	;Logical sector high (LBA mode)
-IDE_HEAD	equ	7E06h
-    ;bits 0-3: Head (CHS mode), logical sector higher (LBA mode)
+IDE_HEAD	equ	7E06h	;bits 0-3: Head (CHS mode), logical sector higher (LBA mode)
 IDE_STATUS	equ	7E07h	;Status register
-IDE_CMD	equ	7E07h	;Command register
+IDE_CMD		equ	7E07h	;Command register
+IDE_FLASHJACKS	equ	7E09h	;Registro FlashJacks
 IDE_DEVCTRL	equ	7E0Eh	;Device control register
 
 ; Bits in the error register
@@ -116,6 +109,8 @@ M_SRST	equ	(1 SHL SRST)
 
 CHPUT	equ	00A2h	;Character output
 CHGET	equ	009Fh
+CLS	equ	00C3h
+MSXVER	equ	002Dh
 
 
 ;-----------------------------------------------------------------------------
@@ -156,22 +151,18 @@ CHGET	equ	009Fh
 ; Error codes for DEV_RW and DEV_FORMAT
 ;
 
-if DRV_TYPE eq 1
-
-.NCOMP	equ	0FFh
-.WRERR	equ	0FEh
-.DISK	equ	0FDh
-.NRDY	equ	0FCh
-.DATA	equ	0FAh
-.RNF	equ	0F9h
-.WPROT	equ	0F8h
-.UFORM	equ	0F7h
-.SEEK	equ	0F3h
-.IFORM	equ	0F0h
-.IDEVL	equ	0B5h
-.IPARM	equ	08Bh
-
-endif
+NCOMP	equ	0FFh
+WRERR	equ	0FEh
+DISK	equ	0FDh
+NRDY	equ	0FCh
+DATA	equ	0FAh
+RNF	equ	0F9h
+WPROT	equ	0F8h
+UFORM	equ	0F7h
+SEEK	equ	0F3h
+IFORM	equ	0F0h
+IDEVL	equ	0B5h
+IPARM	equ	08Bh
 
 ;-----------------------------------------------------------------------------
 ;
@@ -266,13 +257,7 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 ;    bit 0: 0 for drive-based, 1 for device-based
 ;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
 
-if DRV_TYPE eq 0
-	db	0
-endif
-
-if DRV_TYPE eq 1
 	db 1+(2*DRV_HOTPLUG)
-endif
 
 ;Reserved byte
 	db	0
@@ -297,25 +282,16 @@ DRV_NAME:
         jp      DRV_DIRECT3
         jp      DRV_DIRECT4
 
+
 	ds	15
 
-if DRV_TYPE eq 0
-        jp      DRV_DSKIO
-        jp      DRV_DSKCHG
-        jp      DRV_GETDPB
-        jp      DRV_CHOICE
-        jp      DRV_DSKFMT
-        jp      DRV_MTOFF
-endif
-
-if DRV_TYPE eq 1
 	jp	DEV_RW
 	jp	DEV_INFO
 	jp	DEV_STATUS
 	jp	LUN_INFO
 	jp	DEV_FORMAT
 	jp	DEV_CMD
-endif
+	
 
 
 ;-----------------------------------------------------------------------------
@@ -345,7 +321,7 @@ DRV_TIMI:
 ;    Input:
 ;      A = 1
 ;      B = number of allocated drives for this controller
-;          (255 if device-based driver, unless 4 i pressed at boot)
+;          (255 if device-based driver, unless 4 is pressed at boot)
 ;
 ;    The work area address can be obtained by using GWORK.
 ;
@@ -368,235 +344,369 @@ DRV_INIT:
 	or	a
 	ld	hl,0
 	ld	a,2
-	ret	z	;Note that Cy is 0 (no interrupt hooking needed)
+	ret	z			;Note that Cy is 0 (no interrupt hooking needed)
 
 	;xor a
 	;ld (TESTADD),a
 
+	;--- Borra la pantalla. En los MSX1 hay que decirselo ya que no lo tiene implementado de serie.
+	
+	push	af ; Guarda las variables de inicio.
+	push	bc
+	push	hl
+	;bit	0,a ; Pone a cero el flag Z
+	;xor	a ; Pone a cero a
+	;call	CLS
+	;--- Este m�todo de borrado es mejor. Aportado por Victor.
+	ld	a,40 ; 40 columnas
+	ld	(0F3AEh),a
+	xor	a
+	call	005Fh ; Screen 0
+
+	;--- Comprueba el bit de doble reset y lo ejecuta en caso de estar en on.
+	call	IDE_ON
+	ld      a,(IDE_FLASHJACKS) ; Trae el registro de Flashjacks. 
+	and	11110100b ; Anula los bits de freq y deja solo la marca de comprobaci�n y el bit de reset.
+	cp	0A4h ;	Comprueba marca de comprobaci�n y bit de reset
+	jr	nz,CONTPRG ; No ha detectado una marca correcta del registro flashjacks por lo que no ejecuta nada del reset.
+	call	IDE_OFF
+	pop	hl ; Retorno de las variables de inicio.
+	pop	bc 
+	pop	af
+	rst	0 ; Fuerza un reset. A partir de aqu� hace un soft reset y no continua con el programa.
+CONTPRG:
+	call	IDE_OFF
+	
+	;----------------------------------------------
+	;Compruba las teclas F4 y F5 (VDP FREQ y fuerza TURBOCPU)
+	push	af
+	push	hl
+	push	de
+	push	bc
+
+	; Compara tecla pulsada
+	ld	b,7 ;row 7 	RET 	SELECT 	BS 	STOP 	TAB 	ESC 	F5 	F4
+	in	a,(0AAh)
+	and	11110000b
+	or	b
+	out	(0AAh),a
+	in	a,(0A9h)	
+	bit	0,a ;F4 -- Si es tecla pulsada turbo va a la rutina de activaci�n del turbo.
+	jr	nz,Fin_ini ; Salta si no se pulsa tecla de turbo.
+	push	af
+	call	putTURBO_CPU ; Ejecuta el turbo CPU.
+	pop	af
+Fin_ini:pop	bc
+	pop	de
+	pop	hl
+	pop	af
+	
+	;--- Comienza la escritura en pantalla del driver.	
 	ld	de,INFO_S
 	call	PRINT
+	
+	;--- Saca por pantalla el modelo de ordenador.	
+	ld	de,MODELO ; Escribre Modelo:
+	call	PRINT
+	ld      a,(MSXVER) ; Trae el registro de version de MSX de la BIOS
+	cp	00h ; Si es un MSX1 realiza un salto a la escritura de MSX1.
+	jr	z,IMP_MSX1 
+	cp	01h ; Si es un MSX2 realiza un salto a la escritura de MSX2.
+	jr	z,IMP_MSX2 
+	cp	02h ; Si es un MSX2+ realiza un salto a la escritura de MSX2+.
+	jr	z,IMP_MSX2M 
+	cp	03h ; Si es un MSX TurboR realiza un salto a la escritura de MSX TurboR.
+	jr	z,IMP_MSXR 
+	cp	04h ; Si es un OCM realiza un salto a la escritura de OCM.
+	jr	z,IMP_OCM 
+	jp	NO_DETEC ; Si no es ninguna de las versiones mencionadas, imprime un no detectado.
+IMP_MSX1:
+	ld	de,M_MSX1
+	call	PRINT
+	jp	FIN_IMP;
+IMP_MSX2:
+	ld	de,M_MSX2
+	call	PRINT
+	jp	FIN_IMP;
+IMP_MSX2M:
+	ld	de,M_MSX2M
+	call	PRINT
+	jp	FIN_IMP;
+IMP_MSXR:
+	ld	de,M_MSXR
+	call	PRINT
+	jp	FIN_IMP;
+IMP_OCM:
+	ld	de,M_OCM
+	call	PRINT
+	jp	FIN_IMP;
+NO_DETEC:
+	ld	de,M_NDTC
+	call	PRINT
+FIN_IMP:
+	pop	hl ; Retorno de las variables de inicio.
+	pop	bc 
+	pop	af
 
-if DEBUG eq 1
-	call	DO
-
-	ld	hl,8101h
-	ld	(DRVTBL##),hl
-	ld	hl,8301h
-	ld	(DRVTBL##+2),hl
-	ld	hl,8501h
-	ld	(DRVTBL##+4),hl
-	ld	hl,0
-	ld	(DRVTBL##+6),hl
-
-	ld	a,87h
-	ld	(KER250##),a
-	ld	a,85h
-	ld	(KER250##+1),a
-	ld	a,89h
-	ld	(KER250##+2),a
-	xor	a
-	ld	(KER250##+3),a
-
-	ld	a,1
-	ld	ix,GDRIVER##
-	ex	af,af'
-	ld	a,4
-	call	CALBNK
-	jp	DRV_INIT_END
-
-
-;Input:    Cy=0 to read, 1 to write
-;          A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7
-;          C = Number of sectors to read or write
-;          HL = Source or destination memory address for the transfer
-;          DE = Address where the 4 byte sector number is stored.
-
-	ld	hl,0C000h
-	ld	($SECBUF##),hl
-
-	;ld	hl,GPART##
-	;ld	(BK4_ADD##),hl
-
-	ld	b,1
-	ld	c,0FFh
-	ld	d,1
-	ld	e,1
-	ld	h,4
-	ld	l,0
-
-	ld	ix,GPART##
-	ex	af,af'
-	ld	a,4
-	call	CALBNK
-	jp	DRV_INIT_END
-
-	or	a
-	ld	a,1
-	ld	b,1
-	ld	c,3
-	ld	hl,0
-	ld	(0C000h),hl
-	ld	(0C002h),hl
-	ld	hl,0C000h
-	ld	de,0C000h
-	call	DEV_RW
-
-	ld	a,1
-	ld	(0C000h),a
-	ld	a,2
-	ld	(0C200h),a
-	ld	a,34h
-	ld	(0C000h+512*3-1),a
-
-	scf
-	ld	a,1
-	ld	b,1
-	ld	c,3
-	ld	hl,0
-	ld	(0C000h),hl
-	ld	(0C002h),hl
-	ld	hl,0C000h
-	ld	de,0C000h
-	call	DEV_RW
-
-	jp	DRV_INIT_END
-
-luninfo:
-
-	ld	a,1
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,2
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,3
-	ld	b,1
-	ld	hl,0C000h
-	call	LUN_INFO
-	ld	a,2
-	ld	b,2
-	ld	hl,0C000h
-	call	LUN_INFO
-
-	jp	DRV_INIT_END
-
-	ld	a,1
-	ld	b,0
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,1
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,2
-	ld	hl,0C000h
-	call	DEV_INFO
-	ld	a,1
-	ld	b,3
-	ld	hl,0C000h
-	call	DEV_INFO
-	jp	DRV_INIT_END
-DO:
-endif
+	;-- B�squeda de la unidad por pantalla.
+	ld	de,SEARCH_S
+	call	PRINT
 
 	ld	a,1
 	call	MY_GWORK
 	call	IDE_ON
-	ld	(ix),0
-	ld	(ix+4),0	;Assume no devices initially
+	ld	(ix),0			;Assume both devices empty
+	ld	(ix+4),0	
 
-	;--- Perform a software reset on both devices
-
-	ld	a,M_SRST
-	ld	(IDE_DEVCTRL),a
-	nop	;Wait 5 us
-	xor	a
-	ld	(IDE_DEVCTRL),a
+        ld      a,M_SRST		;Do a software reset
+        ld      (IDE_DEVCTRL),a
+        nop     ;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
 
 WAIT_RESET:
-	ld	a,(IDE_STATUS)
-	and	M_BSY+M_DRDY
-	cp	M_DRDY
-	jr	nz,WAIT_RESET	;Wait for BSY to clear and DRDY to set		
+        ld      de,7640			;Timeout after 30 s
+WAIT_RESET1:
+        ld      a,0
+        cp      e
+        jr      nz,WAIT_DOT		;Print dots while waiting
+        ld      a,46
+        call    CHPUT
+WAIT_DOT:
+	call	CHECK_ESC
+	jp	c,INIT_NO_DEV
+        ld      b,255
+WAIT_RESET2:
+        ld      a,(IDE_STATUS)
+        and     M_BSY+M_DRDY
+        cp      M_DRDY
+        jr      z,WAIT_RESET_END        ;Wait for BSY to clear and DRDY to set          
+        djnz    WAIT_RESET2
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,WAIT_RESET1
+        jp      INIT_NO_DEV
+WAIT_RESET_END:
 
-	;--- Determine whether there is any device connected
-	;    by looking at the diagnostic code in the error register
+	;--- Do a quick pre-check on MASTER device
 
-	ld	a,(IDE_ERROR)
-	ld	b,a
-	and	1
-	cp	1
-	jr	nz,INIT_NO_DEV	;Master failed: give up
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+	nop
 
-	ld	(ix+4),b	;We'll check later if there is a slave
+	call	INIT_PRECHECK_DEV	
+	ld	a,(IDE_SECCNT)
+	cp	85
+	jr	nz,MASTER_CHECK1_END
+	ld	a,(IDE_SECNUM)
+	cp	170
+	jr	nz,MASTER_CHECK1_END
 
-	;--- Get info and show the name for the master
+	ld	a,1			;Flag the device
+	ld	(ix),a
+MASTER_CHECK1_END:
+        ld      a,46			;Print dot
+        call    CHPUT
+       
+        ld      a,M_SRST		; Do ANOTHER software reset
+        ld      (IDE_DEVCTRL),a
+        nop     			;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
+	nop				;Wait 5 us
+        ld      a,46			;Print dot
+        call    CHPUT
 
-	xor	a
-	call	WRHEAD	;Select device 1
-	ld	e,a
-	ld	a,0ECh
-	call	DO_IDE2
-	jr	c,OK_MASTER
+	ld      de,CRLF_S
+        call    PRINT
 
-	call	INIT_CHECK_DEV
-	jr	c,OK_MASTER
+	;--- Get info and show the name for the MASTER
 
 	ld	de,MASTER_S
 	call	PRINT
+
+WSKIPMAS:			; If ESC is pressed, ignore this device
+        ld      de,624			; Wait 1s to read the keyboard
+WSKIPMAS1:
+        call    CHECK_ESC
+        jr      c,NODEV_MASTER
+        ld      b,64
+WSKIPMAS2:
+	ex	(sp),hl
+	ex	(sp),hl
+        djnz    WSKIPMAS2
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,WSKIPMAS1
+
+	ld	a,(ix)			;If the device isn't flagged it doesn't exists
+	cp	1
+	jr	nz,NODEV_MASTER
+        ld      a,46			;Print FIRST dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY
+	jr	c,NODEV_MASTER
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+        ld      a,46			;Print SECOND dot
+        call    CHPUT
+
+	ld	a,0ECh			;Send IDENTIFY commad
+	call	DO_IDE			
+	jr	c,NODEV_MASTER
+        ld      a,46			;Print THIRD dot
+        call    CHPUT
+
+	call	INIT_CHECK_DEV		;Check if the device is ATA or ATAPI
+	jr	c,NODEV_MASTER
+        ld      a,46			;Print FOURTH dot
+        call    CHPUT
+
+	call	WAIT_CMD_RDY		;Try to select the device
+	jr	c,NODEV_MASTER		;this is our last chance to *NOT* detect it
+	ld	a,0
+	ld	(IDE_HEAD),a		;Select device 0
+        ld      a,46			;Print FIFTH dot
+        call    CHPUT
+
 	call	INIT_PRINT_NAME
 
 	ld	(ix),2	;ATA device with LBA
-OK_MASTER:
+	jr	OK_MASTER
 
-	;--- If the presence of slave musy be checked,
-	;    issue a test command and check for error
+NODEV_MASTER:
+	call	CHECK_ESC
+	jr	c,NODEV_MASTER
 
-	ld	a,(ix+4)	;1 if slave OK or not present, 81h if failed
-	ld	(ix+4),0
-	cp	1
-	jr	nz,OK_SLAVE
-
-	ld	a,M_DEV
-	call	WRHEAD	;Select device 1
-	ld	e,a
-	ld	a,0ECh
-	call	DO_IDE2
-	jr	c,OK_SLAVE	;If error, no device, or ATAPI device
-
-	;--- Get info and show the name for the slave
-
-	call	INIT_CHECK_DEV
-	jr	c,OK_SLAVE
-
-	ld	de,SLAVE_S
+	ld	(ix),0	
+	ld	de,NODEVS_S
 	call	PRINT
-	call	INIT_PRINT_NAME
-
-	ld	(ix+4),2	;ATA device with LBA
-OK_SLAVE:
 	
-	;--- End of the initialization procedure
+OK_MASTER:
+        ld      a,M_SRST		;Last software reset before we go
+        ld      (IDE_DEVCTRL),a		;some times a faulty slave leaves
+					;BSY set forever (30s)
+        nop     ;Wait 5 us
+        xor     a
+        ld      (IDE_DEVCTRL),a
 
 	jr	DRV_INIT_END
 
 INIT_NO_DEV:
+	call	CHECK_ESC
+	jr	c,INIT_NO_DEV
+
+	ld      de,CRLF_S
+        call    PRINT
+	ld	de,MASTER_S
+	call	PRINT
 	ld	de,NODEVS_S
 	call	PRINT
+		
+	;--- Fin del procedimiento de inicializaci�n.
 
 DRV_INIT_END:
+	ld	(ix+4),0 ; Marca que no hay unidad esclava.
 	call	IDE_OFF
-if DEBUG eq 1
-	;call	CHGET	;For debugging
-endif
 
+	;--- Retardo de espera de 2 Segundos para que se vea el texto de carga del driver en pantalla. 
+	;--- Si es un MSXTurboR no lo hace. Este ya tiene retardo de por si en el arranque.
+	push	de
+	push	bc
+	ld      a,(MSXVER) ; Trae el registro de version de MSX de la BIOS
+	cp	03h ; Si es un MSX TurboR realiza un salto ya que este equipo es lento de por si al arranque.
+	jr	z,ESPERA_FIN ; Omite la espera de 2s para el TurboR
+	ld	de,1861	;Contador cargado para 2s
+ESPERA_RDY1:
+	ld	b,255
+ESPERA_RDY2:
+	djnz	ESPERA_RDY2	;Bucle ESPERA_RDY2
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,ESPERA_RDY1	;Bucle ESPERA_RDY1 
+ESPERA_FIN:
+	pop	bc
+	pop	de
+
+	;--- Codigo asistencia a la unidad FLASHJACKS. Se ejecuta despues del inicio de NEXTOR.
+	call	IDE_ON
+	ld      a,(MSXVER) ; Trae el registro de version de MSX de la BIOS
+	cp	00h ; Si es un MSX1 salta la operaci�n de forzado del VDP por incompatibilidad del mismo.
+	jr	z,DEV_FLASH_FIN 
+	
+	; Compara tecla pulsada
+	ld	b,7 ;row 7 	RET 	SELECT 	BS 	STOP 	TAB 	ESC 	F5 	F4
+	in	a,(0AAh)
+	and	11110000b
+	or	b
+	out	(0AAh),a
+	in	a,(0A9h)	
+	bit	1,a ;F5 -- Si es tecla pulsada VDP va a la rutina de permutaci�n de frecuencia.
+	jp	z,DEV_VDP_FIN ; Salta la gesti�n del VDP para la permutaci�n del VDP por tecla pulsada.
+	ld      a,(IDE_FLASHJACKS) ; Trae el registro de Flashjacks. 
+	and	11111011b ; Anula el bit de doble reset para comparar el resto.
+	cp	0A3h ;	Forzado a 60Hz. 101000 + Bit de Forzado a 1 + Bit de 60 Hz a 1
+	jr	z,DEV_FLASH60 ; Salta al forzado a 60 Hz.
+	cp	0A2h ;	Forzado a 50Hz. 101000 + Bit de Forzado a 1 + Bit de 50 Hz a 0
+	jr	z,DEV_FLASH50 ; Salta al forzado a 50 Hz.
+	jp	DEV_FLASH_FIN ; Otras opciones son ignoradas y no hace cambio alguno.
+
+DEV_FLASH50:
+	ld	a,02h ; 02h a 50hz y 00h a 60hz
+	jp	DEV_FLASHVDP;
+
+DEV_FLASH60:
+	ld	a,00h ; 02h a 50hz y 00h a 60hz
+
+DEV_FLASHVDP:
+	out	(099h),a ;Salida directa del VPD
+	ld	(0ffe8h), a ;Salida por BIOS del VDP registro 9
+	ld	a,89h
+	out	(099h),a
+
+DEV_FLASH_FIN:
+	call	IDE_OFF
+	ret ; Devuelve el control.
+
+DEV_VDP_FIN:
+	; Ejecuta la permutaci�n del VDP existente
+	ld	hl,0ffe8h;VDP register value
+	ld	a,(hl)
+	xor	2
+	ld	(hl),a
+	di
+	out	(99h),a ;Set VDP Frequency
+	ld	a,9+128
+	ei
+	out	(099h),a
+	call	IDE_OFF
+	ret ; Devuelve el control.
+	
+;--- Subroutines for the INIT procedure
+
+;Check if there is any device listening in the bus
+;Input: device already selected
+;Output: If something is there, IDE_SECCNT=85, IDE_SECNUM=170
+;	 Both variables have random values if nothing is there
+
+INIT_PRECHECK_DEV:
+	ld	a,85
+	ld	(IDE_SECCNT),a
+	ld	a,170
+	ld	(IDE_SECNUM),a
+	ld	a,170
+	ld	(IDE_SECCNT),a
+	ld	a,85
+	ld	(IDE_SECNUM),a
+	ld	a,85
+	ld	(IDE_SECCNT),a
+	ld	a,170
+	ld	(IDE_SECNUM),a
 	ret
-
-;--- Subruotines for the INIT procedure
 
 ;Check that a device is present and usable.
 ;Input:  IDENTIFY DEVICE issued successfully.
@@ -606,20 +716,72 @@ endif
 INIT_CHECK_DEV:
 	ld	hl,IDE_DATA
 	ld	de,TEMP_WORK
-	ld	bc,50*2		;Get the first 50 data words
+	ld	bc,50*2	;Get the first 50 data words
 	ldir
 
-	;ld	a,(TEMP_WORK+1)
-	;and	80h		;ATAPI device?
-	;scf
-	;ret	nz
+	ld	a,(IDE_STATUS)		;Check status
+	cp	01111111b		;Usually this means "no device"
+	jr	z,INIT_CHECK_NODEV
 
-	ld	a,(TEMP_WORK+49*2+1)
-	and	2		;LBA supported?
+	; "At power-up or after reset, the Command Block Registers are initialized 
+	;  to the following values:
+	;
+	; 	REGISTER          VALUE
+	; 	1F1 Error         : 01
+	; 	1F2 Sector Count  : 01
+	; 	1F3 Sector Number : 01
+	; 	1F4 Cylinder Low  : 00
+	; 	1F5 Cylinder High : 00
+	; 	1F6 Drive / Head  : 00"
+	;
+	; Not all devices respect this. One of my CompactFlash cards never have
+	; Sector Count = 01 and Sector Number = 01 after reset.
+	;
+	;	ld	a,(IDE_SECNUM)		;Test if the device is REALLY here
+	;	cp	1
+	;	jr	nz,INIT_CHECK_NODEV
+	;	ld	a,(IDE_SECCNT)
+	;	cp	1
+	;	jr	nz,INIT_CHECK_NODEV
+
+	ld	a,(IDE_CYLOW)		;Test for PATAPI devices
+	cp	20 
+	jr	nz,TEST2_FOR_ATAPI
+	ld	a,(IDE_CYHIGH)
+	cp	235
+	jr	z,INIT_CHECK_NODEV
+TEST2_FOR_ATAPI:
+	ld	a,(IDE_CYLOW)		;Test for SATAPI devices
+	cp	105
+	jr	nz,TEST_FOR_ATA
+	ld	a,(IDE_CYHIGH)
+	cp	150
+	jr	z,INIT_CHECK_NODEV
+
+TEST_FOR_ATA:
+	ld	a,(IDE_CYLOW)		;Test for PATA devices
+	cp	0
+	jr	nz,TEST2_FOR_ATA
+	ld	a,(IDE_CYHIGH)
+	cp	0
+	jr	z,TEST_FOR_LBA
+TEST2_FOR_ATA:
+	ld	a,(IDE_CYLOW)		;Test for SATA devices
+	cp	60
+	jr	nz,INIT_CHECK_NODEV
+	ld	a,(IDE_CYHIGH)
+	cp	195
+	jr	nz,INIT_CHECK_NODEV
+	
+TEST_FOR_LBA:
+	ld      a,(TEMP_WORK+49*2+1)
+	and	2			;LBA supported?
+	jr	z,INIT_CHECK_NODEV
+	xor	a
+	ret
+
+INIT_CHECK_NODEV:
 	scf
-	ret	z
-
-	or	a
 	ret
 
 
@@ -710,133 +872,8 @@ DRV_DIRECT4:
 
 
 ;=====
-;=====  BEGIN of DRIVE-BASED specific routines
-;=====
-
-if DRV_TYPE eq 0
-
-;-----------------------------------------------------------------------------
-;
-; Read/write disk sectors
-;
-;Input:    A  = Drive number, starting at 0
-;          Cy = 0 for reading sectors, 1 for writing sectors
-;          B  = Number of sectors to read/write
-;          DE = First sector number to read/write
-;          HL = source/destination address for the transfer
-;Output:   Cy = 0 on success, 1 on error
-;          A  = Error code (on error only):
-;               0   Write protected
-;               2   Not ready
-;               4   Data (CRC) error
-;               6   Seek error
-;               8   Record not found
-;               10  Write fault
-;               12  Other errors
-
-DRV_DSKIO:
-	ld	a,12
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Get disk change status
-;
-;Input:    A  = Drive number, starting at 0
-;          B  = C = Media descriptor
-;          HL = Base address for DPB -1
-;Output:   Cy = 0 on success, 1 on error
-;          A  = Error code (on error only)
-;               Same codes as DRV_DSKIO
-;          B  = Disk status (on success only)
-;               1  Disk not changed
-;               0  Unknown
-;              -1  Disk changed
-
-DRV_DSKCHG:
-	ld	a,12
-	scf
-      	ret
-      
-      
-;-----------------------------------------------------------------------------
-;
-; Get DPB for disk
-;
-;Input:    A  = Drive number, starting at 0
-;          B  = C = Media descriptor
-;          HL = Base address for DPB -1
-;Output:   -
-
-DRV_GETDPB:
-	ld	a,12
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Return format choice string
-;
-;Input:   -
-;Output:  HL = Address of the choice string in the kernel slot
-
-DRV_CHOICE:
-	ld      hl,NULL_MSG
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Format a disk
-;
-;Input:   A  = Formatting choice, from 1 to 9 (see DRV_CHOICE).
-;         D  = Drive number, starting at 0
-;         HL = Address of work area in memory
-;         DE = Size of work area
-;Output:  Cy = 0 on success, 1 on error
-;         A  = Error code (on error only):
-;              0   Write protected
-;              2   Not ready
-;              4   Data (CRC) error
-;              6   Seek error
-;              8   Record not found
-;              10  Write fault
-;              12  Bad parameter
-;              14  Insufficient memory
-;              16  Other errors
-
-DRV_DSKFMT:
-	ld	a,16
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Turn off the floppy disk drive motor
-;
-;Input:   -
-;Output:  -
-
-DRV_MTOFF:
-	ret
-
-endif
-
-
-;=====
-;=====  END of DRIVE-BASED specific routines
-;=====
-
-
-;=====
 ;=====  BEGIN of DEVICE-BASED specific routines
 ;=====
-
-if DRV_TYPE eq 1
 
 ;-----------------------------------------------------------------------------
 ;
@@ -863,6 +900,7 @@ if DRV_TYPE eq 1
 ;          B = Number of sectors actually read/written
 
 DEV_RW:
+	
 	push	af
 
 	ld	a,b	;Swap B and C
@@ -901,14 +939,20 @@ DEV_RW_NO0SEC:
 	ld	a,(ix+3)
 	or	M_LBA
 	or	b
-	call	WRHEAD	;IDE_HEAD must be written first,
+	di ; Se desactivan peticiones de interrupciones para evitar intromisiones.
+	ld	(IDE_HEAD),a	;IDE_HEAD must be written first,
+	ld	(IDE_HEAD),a	; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
 	ld	a,(ix)		;or the other IDE_LBAxxx and IDE_SECCNT
 	ld	(IDE_LBALOW),a	;registers will not get a correct value
+	ld	(IDE_LBALOW),a	; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
 	ld	a,(ix+1)	;(blueMSX issue?)
+	ld	(IDE_LBAMID),a  ; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
 	ld	(IDE_LBAMID),a
 	ld	a,(ix+2)
+	ld	(IDE_LBAHIGH),a  ; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
 	ld	(IDE_LBAHIGH),a
 	ld	a,c
+	ld	(IDE_SECCNT),a  ; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
 	ld	(IDE_SECCNT),a
 	
 	pop	af
@@ -917,7 +961,9 @@ DEV_RW_NO0SEC:
 	;---
 	;---  READ
 	;---
-
+	
+	call	WAIT_CMD_RDY
+	jr	c,DEV_RW_ERR
 	ld	a,20h
 	push	bc	;Save sector count
 	call	DO_IDE
@@ -933,10 +979,53 @@ DEV_R_GDATA:
 	push	bc
 	ld	hl,IDE_DATA
 	ld	bc,512
-	ldir
-	pop	bc
-	djnz	DEV_R_GDATA
 
+BUCLE_R_GDATA:
+	di ; Se desactivan peticiones de interrupciones para evitar intromisiones.
+	ld	a,(IDE_STATUS)
+	bit	BSY,a
+	jr	nz,BUCLE_R_GDATA ; Hace una comprobaci�n al inicio y deja paso cuando la FLASHJACKS informa que puede continuar.
+	;ld	a,(hl) ; Esto est� anulado ya que se trata del mismo proceso que hace ldir pero en muchos mas ciclos de reloj. Proceso muy lento.
+	;ld	(de),a
+	;inc	hl
+	;inc	de
+	;dec	bc
+	;ld	a,b
+	;or	c
+	;jr	nz,BUCLE_R_GDATA ; Esto est� anulado ya que se trata del mismo proceso que hace ldir pero en muchos mas ciclos de reloj.
+
+	;ldir ; Volcado ultrar�pido. Usar el del LDI(mas abajo) si se reportan anomal�as (Psycho world en DSK es bueno para probarlo).
+	;CALL	VOLCADO ; Es un ldir un 21% m�s r�pido.
+
+
+BUCLE_R2_GDATA:
+	ldi  ; 8x LDI + 8x nop Hacemos una espera en cada byte de volcado para dejar a la Flashjacks que se refresque a tiempo.(En un manual de asm es un modo r�pido de copia)
+	nop  ; Esto solo es para sistemas ultra r�pidos como el TurboR. Esto hace lectura y ciclo refresco, bucle hasta fin.
+	ldi  ; Es el m�todo m�s estable. (pero no el m�s r�pido. Mas r�pido ldir y a�n m�s call VOLCADO) 
+	nop  ; Los otros funcionan pero cuando hay algo en el otro slot, provoca fallos. (Ejemplo Music module slot 1 y FlashJacks slot 2)
+	ldi
+	nop
+	ldi
+	nop
+	ldi
+	nop
+	ldi
+	nop
+	ldi
+	nop
+	ldi
+	nop
+	jp pe,BUCLE_R2_GDATA
+
+BUCLE_R_FIN:	
+	ld	a,(IDE_STATUS)
+	bit	BSY,a
+	jr	nz,BUCLE_R_FIN ; Hace una comprobaci�n al final y deja paso cuando la FLASHJACKS informa que puede continuar.
+	pop	bc
+	call	WAIT_IDE
+	
+	dec	b
+	jp	nz,DEV_R_GDATA
 	call	IDE_OFF
 	xor	a
 	ret
@@ -946,6 +1035,8 @@ DEV_R_GDATA:
 	;---
 
 DEV_DO_WR:
+	call	WAIT_CMD_RDY
+	jr	c,DEV_RW_ERR
 	ld	a,30h
 	push	bc	;Save sector count
 	call	DO_IDE
@@ -957,7 +1048,8 @@ DEV_W_LOOP:
 	push	bc
 	ld	de,IDE_DATA
 	ld	bc,512
-	ldir
+	ldir ; Se deja ldir por mayor estabilidad.
+	;CALL	VOLCADO ; Es un ldir un 21% m�s r�pido.(Por estabilidad se quita)
 	pop	bc
 
 	call	WAIT_IDE
@@ -965,8 +1057,9 @@ DEV_W_LOOP:
 
 	call	DEV_RW_FAULT
 	ret	nz
-
-	djnz	DEV_W_LOOP
+	
+	dec	b	
+	jp	nz,DEV_W_LOOP
 
 	call	IDE_OFF
 	xor	a
@@ -984,26 +1077,26 @@ DEV_RW_ERR:
 
 	bit	NM,a	;Not ready
 	jr	nz,DEV_R_ERR1
-	ld	a,.NRDY
+	ld	a,NRDY
 	ld	b,0
 	ret
 DEV_R_ERR1:
 
 	bit	IDNF,a	;Sector not found
 	jr	nz,DEV_R_ERR2
-	ld	a,.RNF
+	ld	a,RNF
 	ld	b,0
 	ret
 DEV_R_ERR2:
 
 	bit	WP,a	;Write protected
 	jr	nz,DEV_R_ERR3
-	ld	a,.WPROT
+	ld	a,WPROT
 	ld	b,0
 	ret
 DEV_R_ERR3:
 
-	ld	a,.DISK	;Other error
+	ld	a,DISK	;Other error
 	ld	b,0
 	ret
 
@@ -1016,7 +1109,7 @@ DEV_RW_FAULT:
 	ret	z
 
 	call	IDE_OFF
-	ld	a,.DISK
+	ld	a,DISK
 	ld	b,0
 	or	a
 	ret
@@ -1026,17 +1119,16 @@ DEV_RW_FAULT:
 DEV_RW_NOSEC:
 	call	IDE_OFF
 	pop	af
-	ld	a,.RNF
+	ld	a,RNF
 	ld	b,0
 	ret
 
 DEV_RW_NODEV:
 	call	IDE_OFF
 	pop	af
-	ld	a,.IDEVL
+	ld	a,IDEVL
 	ld	b,0
 	ret
-
 
 ;-----------------------------------------------------------------------------
 ;
@@ -1142,6 +1234,8 @@ DEV_STRING_LOOP:
 	ld	a,d
 	cp	33
 	jr	nc,DEVSTRLOOP_1
+	cp	126
+	jr	c,DEVSTRLOOP_1
 	ld	a," "
 DEVSTRLOOP_1:
 	ld	(hl),a
@@ -1149,6 +1243,8 @@ DEVSTRLOOP_1:
 	ld	a,e
 	cp	33
 	jr	nc,DEVSTRLOOP_2
+	cp	126
+	jr	c,DEVSTRLOOP_2
 	ld	a," "
 DEVSTRLOOP_2:
 	ld	(hl),a
@@ -1196,8 +1292,9 @@ DEV_INFO_ERR2:
 ;Corrupts AF, DE
 
 DEV_STING_PREPARE:
+	call	WAIT_CMD_RDY
 	ld	a,c		;Issue IDENTIFY DEVICE command
-	call	WRHEAD
+	ld	(IDE_HEAD),a
 	ld	a,0ECh
 	call	DO_IDE
 	ret	c
@@ -1265,15 +1362,6 @@ DEV_STATUS:
 	ld	a,1
 	ret	nz
 
-	;ld	a,(TESTADD)
-	;or	a
-	;ld	a,2
-	;ld	(TESTADD),a
-	;ret	z
-
-	;ld	a,1	;Device is non-removable
-	;ret
-
 	ld	a,e
 	dec	a	;FOR TESTING:
 	ld	a,2	;Return "Unchanged" for device 1, "Unknown" for device 2
@@ -1328,7 +1416,12 @@ LUN_INFO:
 	jr	z,LUN_INFO2
 	ld	a,M_DEV
 LUN_INFO2:
-	call	WRHEAD
+	ld	e,a
+	call	WAIT_CMD_RDY	
+	jr	c,LUN_INFO_ERROR
+	ld	a,e
+
+	ld	(IDE_HEAD),a
 
 	ld	a,0ECh
 	call	DO_IDE
@@ -1342,7 +1435,7 @@ LUN_INFO2:
 	ld	(ix+9),h
 	ld	hl,(IDE_DATA)	;Skip word 2
 	ld	hl,(IDE_DATA)
-	ld	(ix+10),l	;Word 3: Heades
+	ld	(ix+10),l	;Word 3: Heads
 	ld	hl,(IDE_DATA)
 	ld	hl,(IDE_DATA)	;Skip words 4,5
 	ld	hl,(IDE_DATA)
@@ -1438,7 +1531,7 @@ LUN_INFO_ERROR:
 ; FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
 
 DEV_FORMAT:
-	ld	a,.IFORM
+	ld	a,IFORM
 	ret
 
 
@@ -1469,9 +1562,6 @@ DEV_CMD:
 	ld	a,2
 	ret
 
-endif
-
-
 ;=====
 ;=====  END of DEVICE-BASED specific routines
 ;=====
@@ -1497,127 +1587,80 @@ IDE_OFF:
 	ld	(IDE_BANK),a
 	ret
 
+;-----------------------------------------------------------------------------
+;
+; Wait the BSY flag to clear and RDY flag to be set
+; if we wait for more than 30s, send a soft reset to IDE BUS
+; if the soft reset didn't work after 30s return with error
+;
+; Input:  Nothing
+; Output: Cy=1 if timeout after soft reset 
+; Preserves: DE and BC
 
+WAIT_CMD_RDY:
+	push	de
+	push	bc
+	ld	de,8142		;Limit the wait to 30s
+WAIT_RDY1:
+	ld	b,255
+WAIT_RDY2:
+	ld	a,(IDE_STATUS)
+	and	M_BSY+M_DRDY
+	cp	M_DRDY
+	jr	z,WAIT_RDY_END	;Wait for BSY to clear and DRDY to set		
+	djnz	WAIT_RDY2	;End of WAIT_RDY2 loop
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,WAIT_RDY1	;End of WAIT_RDY1 loop
+	scf
+WAIT_RDY_END:
+	pop	bc
+	pop	de
+	ret	
+	
 ;-----------------------------------------------------------------------------
 ;
 ; Execute a command
 ;
 ; Input:  A = Command code
 ;         Other command registers appropriately set
-; Output: Cy=1 if timeout on BSY clear or if ERR bit in status register set
+; Output: Cy=1 if ERR bit in status register set
 
-DO_IDE:
-	ld	(IDE_CMD),a
-	;ex	(sp),hl	;Not necessary - WAIT_BUSY introduces delay already
-	;ex	(sp),hl
+DO_IDE: di
+	ld	(IDE_CMD),a ; Se duplica env�o de comando para refrescar sin error la FLASHJACKS.
+	ld	(IDE_CMD),a 
 
 WAIT_IDE:
-	call	WAIT_BUSY
-	jr	c,DO_IDE_TOUT
+	nop	; Wait 50us
+	nop	; Wait 50us
+	ld	a,(IDE_STATUS)
 	bit	DRQ,a
-	jr	z,WAIT_IDE
+	jr	nz,IDE_END
+	bit	BSY,a
+	jr	nz,WAIT_IDE
 
+IDE_END:
 	rrca
 	ret
 
-DO_IDE_TOUT:
-	pop	af
+;-----------------------------------------------------------------------------
+;
+; Read the keyboard matrix to see if ESC is pressed
+; Output: Cy = 1 if pressed, 0 otherwise
+
+CHECK_ESC:
+	ld	b,7
+	in	a,(0AAh)
+	and	11110000b
+	or	b
+	out	(0AAh),a
+	in	a,(0A9h)	
+	bit	2,a
+	jr	nz,CHECK_ESC_END
 	scf
+CHECK_ESC_END:
 	ret
-
-
-;Wait for the BUSY flag to clear.
-;If we spend 30 seconds waiting, return Cy set.
-;Returns A=last value of IDE_STATUS read (except if timeout occurs).
-
-WAIT_BUSY:
-	push	bc
-	push	de
-	ld	bc,1500
-	ld	a,(TIMEVAR)
-	ld	d,a
-
-WBUSY_LOOP:
-	ld	a,(IDE_STATUS)
-	bit	BSY,a
-	jr	z,WBUSY_END
-
-	ld	a,(TIMEVAR)
-	cp	d
-	jr	z,WBUSY_LOOP
-	ld	d,a
-
-	dec	bc
-	ld	a,b
-	or	c
-	jr	nz,WBUSY_LOOP
-	scf
-
-WBUSY_END:
-	pop	de
-	pop	bc
-	ret
-
-	;--- This is the same as DO_IDE
-	;    but writes E to IDE_HEAD while waiting
-
-DO_IDE2:
-	ld	(IDE_CMD),a
-	;ex	(sp),hl	;Not necessary - WAIT_BUSY introduces delay already
-	;ex	(sp),hl
-
-WAIT_IDE2:
-	call	WAIT_BUSY2
-	jr	c,DO_IDE_TOUT2
-	bit	DRQ,a
-	jr	z,WAIT_IDE2
-
-	rrca
-	ret
-
-DO_IDE_TOUT2:
-	pop	af
-	scf
-	ret
-
-WAIT_BUSY2:
-	push	bc
-	push	de
-	ld	bc,1500
-	ld	a,(TIMEVAR)
-	ld	d,a
-
-WBUSY_LOOP2:
-	ld	a,e
-	ld	(IDE_HEAD),a
-	ld	a,(IDE_STATUS)
-	bit	BSY,a
-	jr	z,WBUSY_END2
-
-	ld	a,(TIMEVAR)
-	cp	d
-	jr	z,WBUSY_LOOP2
-	ld	d,a
-
-	dec	bc
-	ld	a,b
-	or	c
-	jr	nz,WBUSY_LOOP2
-	scf
-
-WBUSY_END2:
-	pop	de
-	pop	bc
-	ret
-
-
-;Write A to the HEAD register
-
-WRHEAD:
-	;call	WAIT_BUSY
-	ld	(IDE_HEAD),a
-	ret
-
 
 ;-----------------------------------------------------------------------------
 ;
@@ -1694,23 +1737,112 @@ CHECK_DEV_LUN:
 	or	a
 	ret
 
+;-----------------------------------------------------------------------------
+;
+; Hace un volcado de 512 bytes.
+VOLCADO:
+	REPT 512 ; esto es un 21% m�s r�pido que el ldi
+	ldi
+	ENDM
+	ret
+
+;----------------------------------------------------------------------------------
+;Turn On Turbo CPU: MSX CIEL, Panasonic 2+,Panasonic Turbo R, special TurboCPU kits
+;
+;Input:	Nothing
+;Output: Nothing 
+
+putTURBO_CPU:
+	
+CHGTURCIEL	equ	01387h	; CIEL Expert3 bizarre turbo routine
+
+_TURBO3:
+;	; Expert 3 CIEL	
+;	; Test if the CIEL change-turbo routine signature is in ROM
+	ld	hl,CHGTURCIEL
+	ld	de,CIELSIGN
+	ld	c,2
+
+_CIEL1:	ld	b,3
+_CIEL2: ld	a,(hl)
+	ld	ixh,a
+	ld	a,(de)
+	cp	ixh
+	jr	nz,NOTCIEL
+	inc	hl
+	inc	de
+	djnz	_CIEL2
+	ld	hl,CHGTURCIEL+0Ch
+	dec	c
+	ld	a,c
+	or	a
+	jr	nz,_CIEL2
+	call	CHGTURCIEL
+	db	1	; Padding to make the CIELSIGN inert
+CIELSIGN:	DEFB	0A7h,0FAh,093h,013h,0DBh,0B6h
+
+NOTCIEL:			
+	
+;------------------------------------------------------------------------------			
+				;Check for Panasonic 2+
+	LD	A,8
+	OUT 	(040H),A	;out the manufacturer code 8 (Panasonic) to I/O port 40h
+	IN	A,(040H)	;read the value you have just written
+	CPL			;complement all bits of the value
+	CP	8		;if it does not match the value you originally wrote,
+	JR	NZ,Not_WX	;it is not a WX/WSX/FX.
+	XOR	A		;write 0 to I/O port 41h
+	OUT	(041H),A	;and the mode changes to high-speed clock
+	
+		
+	jr	end_turbo
+
+Not_WX:  ld	a,(0180h)	;Turbo R or Turbo CPU kits with JUMP in 0180h
+	cp	0c3h
+		;no_turbo
+	jr	nz,end_turbo
+	ld	a,081h		;ROM Mode... for DRAM Mode-> 82h
+	call	0180h
+
+end_turbo:
+
+	ret
+;---------------------------------------------------------------
+
 
 ;=======================
 ; Strings
 ;=======================
 
 INFO_S:
-	db	"Sunrise IDE device-based driver",13,10
-	db	"(c) Konamiman 2009",13,10,13,10,0
+	db	"FLASHJACKS IDE driver v"
+	db	VER_MAIN+"0",".",VER_SEC+"0",".",VER_REV+"0",13,10
+	db	"(c) Konamiman  2009",13,10
+	db	"(c) Aquijacks  2018",13,10,13,10,0
+
+SEARCH_S:
+	db	"Buscando: ",0
 
 NODEVS_S:
-	db	"No IDE devices found.",13,10,0
+	db	"No encontrada",13,10,0
 MASTER_S:
-	db	"Master device: ",0
-SLAVE_S:
-	db	"Slave device:  ",0
+	db	"Unidad: ",0
 CRLF_S:
 	db	13,10,0
+MODELO:
+	db	"Modelo: ",0
+M_MSX1:
+	db	"MSX1",13,10,13,10,0
+M_MSX2:
+	db	"MSX2",13,10,13,10,0
+M_MSX2M:
+	db	"MSX2+",13,10,13,10,0
+M_MSXR:
+	db	"MSX TurboR",13,10,13,10,0
+M_OCM:
+	db	"OCM",13,10,13,10,0
+M_NDTC:
+	db	"No detectado",13,10,13,10,0
 
 
 ;-----------------------------------------------------------------------------
@@ -1719,6 +1851,8 @@ CRLF_S:
 
 DRV_END:
 
-	;ds	3FD0h-(DRV_END-DRV_START)
+	ds	3ED0h-(DRV_END - DRV_START)
 
 	end
+
+

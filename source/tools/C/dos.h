@@ -10,7 +10,20 @@
 #define MAX_INFO_LENGTH 64
 
 
-/* MSX-DOS data structures */
+/* MSX-DOS/Nextor data structures */
+
+typedef struct {
+    byte alwaysFF;
+    char filename[13];
+    byte attributes;
+    byte timeOfModification[2];
+    byte dateOfModification[2];
+    unsigned int startCluster;
+    unsigned long fileSize;
+    byte logicalDrive;
+    byte internal[38];
+} fileInfoBlock;
+
 
 #define DRIVER_IS_DOS250 (1 << 7)
 #define DRIVER_IS_DEVICE_BASED 1
@@ -34,6 +47,19 @@ typedef struct {
 	char deviceName[MAX_INFO_LENGTH];
 } deviceInfo;
 
+#define DRIVE_STATUS_ASSIGNED_TO_DEVICE 1
+
+
+typedef struct {
+    byte driveStatus;
+    byte driverSlotNumber;
+    byte driverSegmentNumber;
+    byte relativeDriveNumber;
+    byte deviceIndex;
+    byte logicalUnitNumber;
+    ulong firstSectorNumber;
+    byte reserved[64 - 10];
+} driveLetterInfo;
 
 #define BLOCK_DEVICE 0
 #define READ_ONLY_LUN (1 << 1)
@@ -47,23 +73,36 @@ typedef struct {
 	uint cylinders;
 	byte heads;
 	byte sectorsPerTrack;
-	bool suitableForPartitionning;
+	bool suitableForPartitioning;
 } lunInfo;
 
 
 /* MSX-DOS functions */
 
+#define _TERM0 0
 #define _DIRIO 0x06
 #define _BUFIN 0x0A
+#define _DPARM 0x31
+#define _FFIRST 0x40
+#define _FNEXT 0x41
+#define _OPEN 0x43
+#define _CREATE 0x44
+#define _CLOSE 0x45
+#define _READ 0x48
+#define _WRITE 0x49
+#define _PARSE 0x5B
+#define _TERM 0x62
 #define _EXPLAIN 0x66
+#define _DOSVER 0x6F
 #define _GDRVR 0x78
 #define _GPART 0x7A
 #define _CDRVR 0x7B
-
+#define _GDLI 0x79
 
 /* MSX-DOS error codes */
 
 #define _IPART 0xB4
+#define _NOFIL 0xD7
 
 
 /* Disk driver routines */
@@ -75,7 +114,7 @@ typedef struct {
 #define LUN_INFO 0x4169
 
 
-#define BK4_ADD 0xF84C
+#define BK4_ADD 0xF1D0
 
 
 #endif   //__DOS_H

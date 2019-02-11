@@ -9,3 +9,7 @@ endif
 if RC gt 0
 	defb	" RC ",RC+"0"," "
 endif
+
+if RR gt 0
+	defb	"r",RR+"0"," "
+endif

@@ -8,12 +8,16 @@
 	INCLUDE b0labels.inc
 ;
 
+EMU_RAM_ADDRESS equ 0A000h
+
 DISKID	equ	0FD99h
-SNSMAT	equ	0141h		;sense key matrix
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
+POFF_STATUS equ 0   ;Offset of status byte in p. table entry
+POFF_CHS_START equ 1
 POFF_TYPE	equ	4	;Offset of partition type in p. table entry
+POFF_CHS_END equ 5
 POFF_PSTART	equ	8	;Offset of partition start in p. table entry
 POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
 PT_FAT12	equ	1	;Partition type code for FAT12
@@ -72,11 +76,18 @@ CHPUT:
 ;             D = Device index, 1 to 7
 ;             E = LUN index, 1 to 7
 ;             H = Primary partition number (1 to 4)
+;                 bit 7: 0 = Get partition information
+;                        1 = Get partition table absolute sector
 ;             L = Extended partition number (0 for primary entry in MBR)
 ; Returns:    A = Error from DEV_RW or F_GDRVR, or .IPART; 0 if no error
-;             B = Partition type, 0 for non existing partition
-;             HLDE = Starting sector of partition
-;             IXIY = Partition size
+;             If "Get partition information":
+;               B = Partition type, 0 for non existing partition
+;               C = 80h if bootable partition
+;               HLDE = Starting sector of partition
+;               IXIY = Partition size
+;             If "Get partition table absolute sector":
+;               HLDE = Absolute sector that holds the partition table entry
+;                      (0 for primary partitions)
 ;
 ; In case of disk error when reading the device, an error code will
 ; be returned. We cannot invoke the standard disk error handling routine,
@@ -122,8 +133,9 @@ CHPUT:
 	jp	nc,UNEX_DEVL
 
 	ld	a,h
-	or	a
-	ret	z
+    and 01111111b
+	;or	a
+	jp	z,UNEX_PART
 	cp	5
 	jp	nc,UNEX_PART
 
@@ -146,6 +158,7 @@ CHPUT:
 	ld	bc,MBR_PSIZE
 
 	ld	a,h
+    and 01111111b
 PTENTRY_LOOP:
 	dec	a
 	jr	z,OK_PENTRY
@@ -160,22 +173,30 @@ OK_PENTRY:
 	or	a
 	jr	nz,DO_EXTPAR
 
+    ld	a,(ix+POFF_TYPE)
+    or	a
+	jp	z,UNEX_PART
+    ld  b,a
+
+    bit 7,h ;Partition table entry sector requested: it's always 0 for primary partitions
+    ld hl,0
+    ld de,0
+    ld a,0
+    ret nz
+
 	ld	e,(ix+POFF_PSIZE)
 	ld	d,(ix+POFF_PSIZE+1)
 	ld	l,(ix+POFF_PSIZE+2)
 	ld	h,(ix+POFF_PSIZE+3)
 	push	de
 	push	hl
-	ld	b,(ix+POFF_TYPE)
+    ld  c,(ix+POFF_STATUS)
 	ld	e,(ix+POFF_PSTART)
 	ld	d,(ix+POFF_PSTART+1)
 	ld	l,(ix+POFF_PSTART+2)
 	ld	h,(ix+POFF_PSTART+3)
 	pop	ix
 	pop	iy
-	ld	a,b
-	or	a
-	jp	z,UNEX_PART
 	xor	a
 	ret
 DO_EXTPAR:
@@ -217,6 +238,9 @@ EXTP_LOOP:
 	;    Get the base sector number for the primary entry
 	;    and return
 
+    bit 7,h ;Partition table entry sector requested: return its sector
+    jr nz,EXTP_ENTRYADD
+
 	ld	ix,($SECBUF##)
 	ld	bc,MBR_PSTART
 	add	ix,bc
@@ -224,10 +248,12 @@ EXTP_LOOP:
 	call	UPDATE_SEC
 
 	ld	b,(ix+POFF_TYPE)
+    ld  c,(ix+POFF_STATUS)
 	ld	e,(ix+POFF_PSIZE)
 	ld	d,(ix+POFF_PSIZE+1)
 	ld	l,(ix+POFF_PSIZE+2)
 	ld	h,(ix+POFF_PSIZE+3)
+EXTP_ENTRYADD:    
 	push	de
 	push	hl
 	ld	ix,TMP_SEC##
@@ -449,11 +475,11 @@ GDRV_OK_ROM:
 	PROC	AUTODRV
 
 ; This routine automatically assigns devices and partitions to drives for
-; device-based DOS 2.50 drivers. There are two versions, one for DOS 1 and
+; device-based Nextor drivers. There are two versions, one for DOS 1 and
 ; another one for DOS 2, since the processing done in both cases is
 ; quite different.
 ;
-; In both DOS 1 and DOS 2 modes AUTOASSIGN is called with A=1.
+; In both DOS 1 and DOS 2 modes AUTO_ASSIGN (or AUTO_ASPART) is called with A=1.
 ; This causes the root directory of primary partitions to be scanned
 ; for a file named NEXT_DSK.DAT (only if the current controller is the
 ; primary controller); if found and its contents are valid, the whole
@@ -461,7 +487,7 @@ GDRV_OK_ROM:
 
 	ld	hl,0
 	add	hl,sp
-	ld	(NXT7##),hl
+	ld	(SPSAVE##),hl
 	ld	a,(DOS_VER##)
 	or	a
 	jp	nz,AUTODRV_DOS2
@@ -563,6 +589,7 @@ AUTODRV_DRVLOOP:
 	push ix
 	push iy
 	ld b,1
+    ld a,b
 	call ASK_DRIVE_CONFIG
 	pop iy
 	pop ix
@@ -570,7 +597,10 @@ AUTODRV_DRVLOOP:
 	jr z,AUTODRV_DRVL3
 	dec a
 	jr z,AUTODRV_DRVL2	;Driver does not provide config for that drive
+    dec a
+    jp nz,AUTOD_EMU ;We entered disk emulation mode
 
+AUTODRV_DRVL1:
 	pop ix
 	push ix
 	ld a,-1
@@ -586,17 +616,13 @@ AUTODRV_DRVL2:
 	push ix
 	pop hl
 
-	ld	a,1 ;?????
+	ld	d,1
 	call	AUTO_ASSIGN
 AUTODRV_DRVL3:    
 
 	cp	2			;Did we enter disk emulation mode?
-	jr	nz,NOEMU1	;Yes: discard everything else and return
-	ld	hl,(NXT7##)
-	ld	sp,hl
-	ret
+	jp	z,AUTOD_EMU	;Yes: discard everything else and return
 
-NOEMU1:
 	ld	hl,(DVB_TABLE##)
 	inc	(hl)		;Increment size of table
 	pop	ix
@@ -705,8 +731,9 @@ AUTOD_UDFND2:
 
 	ld b,0
 	ld c,(ix+UD_REL##)
+    ld a,1
 	call ASK_DRIVE_CONFIG
-	dec a
+	cp 1
 	jr z,AUTOD_UDFND3 ;Driver did not provide config
 	pop hl
 	or a
@@ -721,15 +748,12 @@ AUTOD_UDFND3:
 
 	push	ix
 	pop	hl
-	ld	a,1
+	ld	d,1
 	call	AUTO_ASSIGN
 
 	cp	2			;Did we enter disk emulation mode?
-	jr	nz,NOEMU2	;Yes: discard everything else and return
-	ld	hl,(NXT7##)	;(note that we'll enter DOS 1 mode after returning)
-	ld	sp,hl
-	ret
-NOEMU2:
+	jp  z,AUTOD_EMU	;Yes: discard everything else and return
+    ;(note that we'll enter DOS 1 mode after returning)
 
 	pop	hl	;Pointer in UNIT_TAB
 	or	a
@@ -756,6 +780,13 @@ AUTOD_OK:
 	pop	bc
 	djpnz AUTOD_LOOP
 	jp	SETNUMDRV
+
+    ;--- We entered disk emulation mode, so return immediately
+
+AUTOD_EMU:
+    ld	hl,(SPSAVE##)	;(note that we'll enter DOS 1 mode after returning)
+	ld	sp,hl
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
@@ -824,108 +855,109 @@ SETNUMD_NOUD:
 ;                  Address of entry in device-based drives table, must have UD_SLOT set
 ;         B = Device index (AUTO_ASPART only)
 ;         C = LUN index (AUTO_ASPART only)
-;         A  = 0: Do NOT try to enter disk emulation mode
+;         D  = 0: Do NOT try to enter disk emulation mode
 ;              1: Enter disk emulation mode if possible 
 ;
 ; Output: A  = Error code
 ;              0: Ok
 ;              1: No suitable device/partition found
-;              2: Disk emulation mode entered
+;              2: Disk emulation mode was entered
 
-;Temporary area BUF9 (9 bytes) is used as follows:
-;+0: Candidate device (a device which has a suitable partition,
-;    but has no NEXTOR.SYS file), device + 8*LUN (0 if no candidates found),
-;    bit 7 is the removable device flag, bit 6 is the hot-plug device flag
-;+1: Sector number of first partition found on disk
-;+5: Sector number of partition being examined
-;
-;Also, NXTEMP is used to store a pre-candidate device
-;(a device that exists but has not been checked yet for partitions),
-;NXT7+2 is used to store the value of A at input, and
-;NXT7+3 is used to store the stack pointer at input so that we can easily
-;discard the stack contents when entering disk emulation mode.
+;CURR = current deivce/partition being examined
+;CAND = candidate device/partition, will be assigned if no one has the active flag set in status byte
+
+AAD_UNIT_DESCRIPTOR equ 0
+AAD_LOOP_DEV_INDEX equ 2
+AAD_LOOP_LUN_INDEX equ 3
+AAD_DRIVER_SLOT equ 4
+AAD_CURR_PART_DEVLUN equ 5
+AAD_CURR_PART_INDEX equ 6 ;Bit 7 set when examining extended partitions, FFh when examining the MBR
+AAD_CURR_PART_SECTOR equ 7
+AAD_CURR_PART_STATUS_BYTE equ 11
+AAD_CAND_PART_DEVLUN equ 12
+AAD_CAND_PART_SECTOR equ 13
+AAD_FLAGS equ 17
+
+AAD_SIZE equ 18
+
+AAFLAG_ENTER_EMU_MODE equ 0
+AAFLAG_IS_AUTOASPART equ 7
 
 	PROC	AUTO_ASPART
 
-	scf
-	jr AUTO_COMMON
+	set AAFLAG_IS_AUTOASPART,d
 
 AUTO_ASSIGN:
-    or a
+    ld ix,-AAD_SIZE
+    add ix,sp
+    ld sp,ix
 
-AUTO_COMMON:
-  	ld	(NXT7##+2),a
+  	ld	(ix+AAD_FLAGS),d
 
-	ld	de,(NXTEMP##)	;Save lots of page 3 variables.
-	push	de			;This is necessary because AUTO_ASSIGN uses them
-	ld	de,(TMPDEV##)	;as temporary work area, which is OK in DOS 2 mode
-	push	de			;but in in DOS 1 mode these are actually used for anything else.
-	ld	de,(NXT4##)
-	push	de
-	ld	de,(NXT4##+2)
-	push	de
+    ld (ix+AAD_UNIT_DESCRIPTOR),l
+    ld (ix+AAD_UNIT_DESCRIPTOR+1),h
+    push hl
+    pop iy
+    ld a,(iy+UD_SLOT##)
+    ld (ix+AAD_DRIVER_SLOT),a
+
 	call	AUTO_COMMON2
-	pop	de
-	ld	(NXT4##+2),de
-	pop	de
-	ld	(NXT4##),de
-	pop	de
-	ld	(TMPDEV##),de
-	pop	de
-	ld	(NXTEMP##),de
+
+    ld ix,AAD_SIZE
+    add ix,sp
+    ld sp,ix
+
 	ret
 
 AUTO_COMMON2:
-	jr nc,AUTO_COMMON3
+    bit 0,d
+    jr z,AUTO_NOEMU
+    push bc
+    push de
+    push hl
+    xor a
+    call TRY_RAM_EMU
+    pop hl
+    pop de
+    pop bc
+    or a
+    ld a,2
+    ret nz
+AUTO_NOEMU:
+
+    bit 7,d
+	jr z,AUTO_COMMON3
 
 ;AUTO_ASPART:	
-	push hl
-	pop ix
-	ld a,b	    ;(ix+UD_DI##)
-	ld (TMPDEV##),a
-	ld a,c  	;(ix+UD_LI##)
-	ld (TMPLUN##),a
+	ld (ix+AAD_LOOP_DEV_INDEX),b
+	ld (ix+AAD_LOOP_LUN_INDEX),c
 	xor a
-	ld (BUF9##),a
-	ld (NXTEMP##),a
-	inc a
-	ld (NXT3##),a
+	ld (ix+AAD_CAND_PART_DEVLUN),a
+	ld (ix+AAD_CURR_PART_DEVLUN),a
 
 	jp AA_CHKDUP_OK 
 
 ;AUTO_ASSIGN:
 AUTO_COMMON3:
 	xor a
-	ld (BUF9##),a
-	ld (NXT3##),a
+	ld (ix+AAD_CAND_PART_DEVLUN),a
+	ld (ix+AAD_CURR_PART_STATUS_BYTE),a
 
-	xor	a
-	ld	(NXT7##+5),a
-
-	push	hl
-	pop	ix
-
-	ld	hl,0
-	add	hl,sp
-	ld	(NXT7##+3),hl
-
-	ld	a,1	;Device index
+	inc a	;Device index = 1
 AA_DLOOP:
-	ld	(TMPDEV##),a	;push	af
+	ld	(ix+AAD_LOOP_DEV_INDEX),a
 	ld	a,1	;LUN index
 AA_LLOOP:
-	ld	(TMPLUN##),a	;push	af
+	ld	(ix+AAD_LOOP_LUN_INDEX),a
 
 	xor	a
-	ld	(NXTEMP##),a
+	ld	(ix+AAD_CURR_PART_DEVLUN),a
 
 	;--- Check if the same slot+device+LUN has been assigned
 	;    to other drive already
 
-	ld	a,(TMPDEV##)
-	ld	d,a
-	ld	a,(TMPLUN##)
-	ld	e,a
+	ld	d,(ix+AAD_LOOP_DEV_INDEX)
+	ld	e,(ix+AAD_LOOP_LUN_INDEX)
 
 	ld	a,(DOS_VER##)	;Skip in DOS 1
 	or	a
@@ -943,7 +975,7 @@ AA_CHKDUP_DOS1:
 
 AA_CHKDUP_LOOP1:
 	ld	a,(iy+UD_SLOT##)
-	cp	(ix+UD_SLOT##)
+	cp	(ix+AAD_DRIVER_SLOT)
 	jr	nz,AA_CHKDUP_NEXT1
 
 	ld	a,(iy+UD1_DI##)
@@ -987,7 +1019,7 @@ AA_CHKDUP_LOOP:
 	jr	z,AA_CHKDUP_NEXT	;Unit descriptor in use?
 
 	ld	a,(iy+UD_SLOT##)
-	cp	(ix+UD_SLOT##)
+	cp	(ix+AAD_DRIVER_SLOT)
 	jr	nz,AA_CHKDUP_NEXT
 
 	ld	a,(iy+UD_DI##)
@@ -1010,18 +1042,13 @@ AA_CHKDUP_OK:
 
 	;--- Obtain device information
 
-	ld	a,(ix+UD_SLOT##)
+	ld	a,(ix+AAD_DRIVER_SLOT)
 	ld_iyh_a
 	ld	hl,LUN_INFO##
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF##)
-	;pop	bc	;Retrieve LUN index
-	;pop	af	;Retrieve device index
-	;push	af
-	;push	bc
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	push	ix
 	ld	ix,CALDRV##
 	call	CALSLT	;Call LUN_INFO
@@ -1056,105 +1083,184 @@ AA_CHKDUP_OK:
 	;* Mark the device as candidate for autoassign,
 	;  unless this was done before
 
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	sla	b
 	sla	b
 	sla	b
 	or	b
 	or	d	;Include removable flag
-	ld (NXTEMP##),a	;Device + 8*LUN, bit 7 is removable flag
+	ld (ix+AAD_CURR_PART_DEVLUN),a	;Device + 8*LUN, bit 7 is removable flag
 AA_OK_CANDIDATE:
 
-	;--- Device parameters OK.
-	;    Now read MBR and look for a suitable partition.
+	;--- Device parameters OK. Now scan partitions.
 
-	;* Read device MBR
+    ld a,1
+AA_PXLOOP:
+    ld (ix+AAD_CURR_PART_INDEX),a
+    ld h,a
+    ld l,0
+    bit 7,a ;We are examining extended partitions?
+    jr z,AA_PX_1ST
+    ld h,2  ;Yes: primary = 2, extended = partition # - 1
+    and 7Fh
+    dec a
+    ld l,a
+AA_PX_1ST:
+    ld	e,(ix+AAD_LOOP_LUN_INDEX)
+	ld	d,(ix+AAD_LOOP_DEV_INDEX)
+    ld	c,(ix+AAD_DRIVER_SLOT)
+    ld  b,0FFh
 
-	ld	hl,0
-	ld	(TMP_SEC##),hl
-	ld	(TMP_SEC##+2),hl
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
-	call	AA_RSEC 
-	or a
-	jp	nz,AA_LLOOP_NEXT	;Not ready
+    push ix
+    call F_GPART
+    pop ix
+    cp  .IPART
+    jp z,AA_PLOOP_END
+    or a
+    jp	nz,AA_LLOOP_NEXT	;Not ready or partition not available
+AA_PX_POK:
 
-	;* Check partition table
+    ;--- If we are scanning the first partition and bit 0 of status byte is set, try to enter disk emulation mode
 
-	xor	a
-	ld	(NXT4##+2),a
+    ld  (ix+AAD_CURR_PART_STATUS_BYTE),c
 
-	ld	hl,($SECBUF##)
-	ld	bc,MBR_PSTART+POFF_TYPE
-	add	hl,bc
-	ld	b,4
-AA_PLOOP::
-	ld	a,(hl)	;A=Partition type
+    bit 0,c
+    jp z,AA_PX_NOEMU    ;Bit 0 of status byte must be set
+    bit AAFLAG_ENTER_EMU_MODE,(ix+AAD_FLAGS)
+    jp z,AA_PX_NOEMU    ;Enter emulation mode must have been requested    
+    ld a,(0F348h)    
+    cp (ix+AAD_DRIVER_SLOT) ;Must be the primary slot
+    jp nz,AA_PX_NOEMU    
+    ld a,(ix+AAD_CURR_PART_INDEX)   ;Must be the first partition
+    dec a
+    jp nz,AA_PX_NOEMU
+
+    push hl
+    push de
+    push bc
+    push ix
+
+    ld hl,($SECBUF##)   ;We still have sector 0 of the device here from F_GPART
+    ld bc,MBR_PSTART
+    add hl,bc
+    push hl
+    pop iy  ;IY = First entry of partition table
+
+    ld a,(BOOTKEYS##)
+    and 00000001b       ;"0" key pressed?
+    jr z,AA_PX_DOEMU
+
+    ;* Reset emulation mode flag from status byte in partition table, then boot normally
+
+AA_PX_KILLEMU:
+    ld  a,(ix+AAD_CURR_PART_STATUS_BYTE)
+    and 0FEh
+    ld (iy+POFF_STATUS),a
+    xor a
+    ld (iy+POFF_CHS_START),a
+    ld (iy+POFF_CHS_START+1),a
+    ld (iy+POFF_CHS_START+2),a
+    ld (iy+POFF_CHS_END),a
+    ld (iy+POFF_CHS_END+1),a
+    ld (iy+POFF_CHS_END+2),a
+
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
+    ld  c,(ix+AAD_DRIVER_SLOT)
+    ld de,0
+	ld	(TMP_SEC##),de
+	ld	(TMP_SEC##+2),de
+    call AA_WSEC
+
+    pop ix
+    pop bc
+    pop de
+    pop hl
+    jr AA_PX_NOEMU
+
+AA_PX_DOEMU:
+    ld hl,($SECBUF##)   ;We still have sector 0 of the device here from F_GPART
+    ld bc,MBR_PSTART
+    add hl,bc
+    push hl
+    pop iy
+    ld c,(ix+AAD_DRIVER_SLOT)
+    ld a,(iy+POFF_CHS_START)
+    ld b,(iy+POFF_CHS_START+1)
+    ld h,(iy+POFF_CHS_START+2)
+    ld l,(iy+POFF_CHS_END)
+    ld d,(iy+POFF_CHS_END+1)
+    ld e,(iy+POFF_CHS_END+2)
+    call GO_EMU
+    pop ix
+    pop bc
+    pop de
+    pop hl
+    inc a
+    cp 2
+    ret z    
+
+AA_PX_NOEMU:
+    ld	a,b	;Partition type
+    cp  PT_EXT
+    jr  nz,AA_PX_NOEX
+    ld a,(ix+AAD_CURR_PART_INDEX)
+    or 80h
+    jp AA_PXLOOP
+AA_PX_NOEX:    
 	cp	PT_FAT12
 	jr	z,AA_PLOOP_OKTYPE
-
-	ld	d,a
 	ld	a,(DOS_VER##)
 	or	a
 	jr	z,AA_PLOOP_NEXT	;In DOS1 only FAT12 is valid
-	ld	a,d
+	ld	a,b
 	cp	PT_FAT16
 	jr	z,AA_PLOOP_OKTYPE
 	cp	PT_FAT16_S
-	jr	z,AA_PLOOP_OKTYPE
+ 	jr	z,AA_PLOOP_OKTYPE
 	cp	PT_FAT16_L
 	jr	z,AA_PLOOP_OKTYPE
-
 AA_PLOOP_NEXT:
-	ld	de,MBR_PSIZE
-	add	hl,de
-	djnz	AA_PLOOP
-	ld	hl,0
-	ld	(BUF9##+5),hl
-	ld	(BUF9##+7),hl
-	jr	AA_CHECK_BOOT_MBR	;No suitable partitions found: try the MBR itself
+    ld a,(ix+AAD_CURR_PART_INDEX)
+    inc a     ;FFh if no more partitions left (we were examining the MBR itself)
+    jp z,AA_LLOOP_NEXT
+    cp 5    ;We examine the first 4 primary partitions only...
+    jp c,AA_PXLOOP
+    bit 7,a
+    jr z,AA_PLOOP_END
+    cp 80h+10    ;...or up to 9 extended partitions
+    jp c,AA_PXLOOP
+
+AA_PLOOP_END:
+    ld	hl,0            ;No suitable partitions found: try the MBR itself as last resort
+	ld	de,0
+    xor a
+    ld  (ix+AAD_CURR_PART_STATUS_BYTE),a    ;Clear any stale active partition flag
+    dec a
+    ld  (ix+AAD_CURR_PART_INDEX),a    ;Partition # = 0FFh -> no more partitions
+
+    ;* Read first sector of partition
+
 AA_PLOOP_OKTYPE:
-
-	ld	(NXT4##),hl
-	ld	a,b
-	ld	(NXT4##+2),a
-
-	;* Read first sector of partition
-
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
-	ld	de,POFF_PSTART-POFF_TYPE
-	add	hl,de
-	ld	e,(hl)
-	inc	hl
-	ld	d,(hl)
-	inc	hl
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	ld	(TMP_SEC##),de
-	ld	(BUF9##+5),de
-	ld	e,(hl)
-	inc	hl
-	ld	d,(hl)
-	ld	(TMP_SEC##+2),de
-	ld	(BUF9##+7),de
+    ld  (ix+AAD_CURR_PART_SECTOR),e
+    ld  (ix+AAD_CURR_PART_SECTOR+1),d
+	ld	(TMP_SEC##+2),hl
+    ld  (ix+AAD_CURR_PART_SECTOR+2),l
+    ld  (ix+AAD_CURR_PART_SECTOR+3),h
+    ld  c,(ix+AAD_DRIVER_SLOT)
 
-DO_RSEC:
 	call	AA_RSEC
 	jr	nz,AA_PLOOP_NEXT
 
-	;* Check FAT boot sector
+    ;* Check FAT boot sector
 
 AA_CHECK_BOOT:
 	call	CHECK_FAT_BOOT
-	jp	nz,AA_NEXTPAR	;AA_LLOOP_NEXT
-	jr	AA_CHECK_BOOT2
-
-AA_CHECK_BOOT_MBR:
-	call	CHECK_FAT_BOOT
-	jp	nz,AA_LLOOP_NEXT
+	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 
 AA_CHECK_BOOT2:
 
@@ -1166,263 +1272,86 @@ AA_CHECK_BOOT2:
 	jr	nz,AA_SPC_OK
 	ld	a,(iy+UPB_SFAT##+1)
 	or	a
-	jp	nz,AA_NEXTPAR	;AA_LLOOP_NEXT
+	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 	ld	a,(iy+UPB_SFAT##)
 	cp	4
-	jp	nc,AA_NEXTPAR	;AA_LLOOP_NEXT
+	jp	nc,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 AA_SPC_OK:
 
 	;* Check if the partition is already mapped to another drive
 
 	push ix
 	push iy
-	ld h,(ix+UD_SLOT##)
-	ld l,(ix+UD_SEG##)
-	ld a,(TMPDEV##)
-	ld d,a
-	ld a,(TMPLUN##)
-	ld e,a
+	ld h,(ix+AAD_DRIVER_SLOT)
+	ld l,0FFh   ;(ix+UD_SEG##)
+    ld e,(ix+AAD_UNIT_DESCRIPTOR)
+    ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
+    push de
+	ld d,(ix+AAD_LOOP_DEV_INDEX)
+	ld e,(ix+AAD_LOOP_LUN_INDEX)
 	exx
-	ld de,(BUF9##+5)
-	ld hl,(BUF9##+7)
+    ld  e,(ix+AAD_CURR_PART_SECTOR)
+    ld  d,(ix+AAD_CURR_PART_SECTOR+1)
+    ld  l,(ix+AAD_CURR_PART_SECTOR+2)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+3)
 	exx
+    pop ix
 
 	call CHECK_MAP_IN_USE
 	pop iy
 	pop ix
-	jp nz,AA_NEXTPAR
+	jp nz,AA_PLOOP_NEXT
 
-	;* All checks ok, partition is good
+	;* All checks ok, partition is good.
+    ;  If it has the active flag set, go ahead and assign it.
+    ;  Otherwise mark it as candidate.
 
-	ld	a,(BUF9##)
-	or	a
-	jr	nz,AA_OK_CANDIDATE2
+    ld a,(ix+AAD_CURR_PART_STATUS_BYTE)
+    and 80h
+    jr z,AA_NOT_ACTIVE
 
-	ld	a,(NXTEMP##)
-	ld	(BUF9##),a		;Valid partition: mark as candidate device
-
-	ld	hl,(TMP_SEC##)	;If this is the first partition being examined,
-	ld	(BUF9##+1),hl	;save its number
-	ld	hl,(TMP_SEC##+2)
-	ld	(BUF9##+3),hl
-DO_RSEC2:
-
-AA_OK_CANDIDATE2:
-	
-	;* Check that there is a file named NEXTOR.DAT in the root directory
-	;  (if A=1 at input and we are the primary controller, check NEXT_DSK.DAT first)
-
-	;jp	AA_NEXTPAR ;!!!
-
-	ld	e,(iy+UPB_SFAT##)
-	ld	d,(iy+UPB_SFAT##+1)	;DE=Sectors per fat
-	ld	b,(iy+UPB_NFAT##)	;B=Number of FATs
-	ld	hl,0
-AA_SUM_FATS:
-	add	hl,de
-	djnz	AA_SUM_FATS	;Make HL=Total FAT sectors count
-	ld	c,(iy+UPB_RES##)
-	ld	b,(iy+UPB_RES##+1)
-	add	hl,bc	;Now HL=First root directory sector	;WIP
-
-	ld	de,(TMP_SEC##)	;Set the absolute sector number
-	add	hl,de		;for the start of root directory
-	ld	(TMP_SEC##),hl
-	ld	(TMP_FROOT##),hl
-	ld	hl,0
-	ld	de,(TMP_SEC##+2)
-	adc	hl,de
-	ld	(TMP_SEC##+2),hl
-	ld	(TMP_FROOT##+2),hl
-
-	ld	e,(iy+UPB_NDIR##)	;Same some extra data that we'll need 
-	ld	d,(iy+UPB_NDIR##+1) ;if we enter in disk emulation mode
-	ld	(TMP_NDIR##),de
-	ld	a,(iy+UPB_CS##)
-	ld	(TMP_CS##),a
-
-	ld	b,e	;(iy+UPB_NDIR##)	;Number of root directory entries
-	ld	a,d	;(iy+UPB_NDIR##+1)	;Number of root directory entries
-	or	a
-	jr	z,AA_OK_ROOTNUM
-	ld	b,254
-AA_OK_ROOTNUM:
-
-	;Outer loop: check all root directory sectors
-
-AA_MSXDOS2_SLOOP:
-	ld	a,(TMPLUN##)
-	ld	d,a
-	ld	a,(TMPDEV##)
-
-	push	bc
-	ld	b,d
-	call	AA_RSEC
-	jp	nz,AA_MSXDOS2_ERR
-
-	ld	b,16	;Directory entries per sector
-	ld	hl,($SECBUF##)
-
-	;Inner loop: check all entries in one sector
-
-AA_MSXDOS2_ELOOP:
-	pop	af	;Total number of root dir entries
-	dec	a
-	jp	z,AA_NOMOREENT	;AA_NEXTPAR	;AA_LLOOP_NEXT
-	push	af
-
-	ld	a,(NXT7##+2)
-	or	a
-	jr	z,SRCHNX2	;Don't search NEXT_DSK.DAT if A=0 at input
-
-	push	hl
-	call	GET_DISKID_HL
-	ld	a,(hl)
-	pop	hl
-	or	a
-	jr	nz,SRCHNX2	;I'm not the primary controller
-
-	di
-	in	a,(0AAh)
-	and	0F0h
-	;add	0
-	out	(0AAh),a
-	ei
-	in	a,(0A9h)
-	and	1
-	jp	z,SRCHNX2	;Don't search NEXT_DSK.DAT if key 0 is pressed
-
-	push	bc
-	push	hl
-	ld	de,EMUDAT
-	ld	b,11
-	dec	hl
-AA_EMU_CHKE:
-	inc	hl
-	ld	a,(de)
-	cp	(hl)
-	inc	de
-	jr	nz,SRCHNXDAT
-	djnz	AA_EMU_CHKE
-
-	pop	hl
-	push	hl
-	push	ix
-	push	iy
-	call	GO_EMU
-	pop	iy
-	pop	ix
-	or	a
-	jr	z,SRCHNXDAT
-
-	;There's a NEXT_DSK.DAT file and it had valid contents:
-	;Stop the presses! We cancel everything since we've entered emulation mode.
-
-	ld	hl,(NXT7##+3)
-	ld	sp,hl
-	ld	a,2
-	ret
-
-SRCHNXDAT:
-	pop	hl
-	pop	bc
-
-SRCHNX2:
-	push	bc
-	ld	de,MSXDOS2DAT
-	ld	b,11
-	dec	hl
-AA_MSXDOS2_CHKE:
-	inc	hl
-	ld	a,(de)
-	cp	(hl)
-	inc	de
-	jr	nz,AA_MSXDOS2_NXTE
-	djnz	AA_MSXDOS2_CHKE
-
-	ld	a,(NXT7##+2)
-	or	a
-	jr	z,AA_DO_FOUND
-	ld	a,1
-	ld	(NXT7##+5),a
-	inc	hl
-	jr	AA_NXTE2
-
-AA_DO_FOUND:
-	pop	bc
-	pop	bc
-AA_DO_FOUND2:
-	ld	hl,(BUF9##+5)
-	ld	(BUF9##+1),hl
-	ld	hl,(BUF9##+7)
-	ld	(BUF9##+3),hl
+    ld  l,(ix+AAD_CURR_PART_SECTOR)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+1)
+    ld  (ix+AAD_CAND_PART_SECTOR),l
+    ld  (ix+AAD_CAND_PART_SECTOR+1),h
+    ld  l,(ix+AAD_CURR_PART_SECTOR+2)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+3)
+    ld  (ix+AAD_CAND_PART_SECTOR+2),l
+    ld  (ix+AAD_CAND_PART_SECTOR+3),h
+    ld	a,(ix+AAD_CURR_PART_DEVLUN)
+	ld	(ix+AAD_CAND_PART_DEVLUN),a
 	jp	AA_DO_ASSIGN
 
-AA_MSXDOS2_NXTE:
-	inc	hl
-	djnz	AA_MSXDOS2_NXTE
-AA_NXTE2:
-	ld	bc,32-11
-	add	hl,bc		;Make HL point to the next dir entry
-
-	pop	bc
-	dec	b
-	jp	nz,AA_MSXDOS2_ELOOP
-
-	ld	hl,1
-	ld	de,(TMP_SEC##)	;Increase root dir sector number
-	add	hl,de
-	ld	(TMP_SEC##),hl
-	ld	hl,0
-	ld	de,(TMP_SEC##+2)
-	adc	hl,de
-	ld	(TMP_SEC##+2),hl
-	
-	pop	bc
-	dec	b
-	jp	nz,AA_MSXDOS2_SLOOP
-
-AA_NOMOREENT:
-	ld	a,(NXT7##+5)
+AA_NOT_ACTIVE:
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)
 	or	a
-	jr	nz,AA_DO_FOUND2
+	jp	nz,AA_PLOOP_NEXT
 
-AA_NEXTPAR::
-	ld	a,(NXT4##+2)
-	or	a
-	jr	z,AA_LLOOP_NEXT
+	ld	a,(ix+AAD_CURR_PART_DEVLUN)
+	ld	(ix+AAD_CAND_PART_DEVLUN),a  ;Valid partition: mark as candidate device
 
-	ld	hl,0
-	ld	(TMP_SEC##),hl
-	ld	(TMP_SEC##+2),hl
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
-	call	AA_RSEC
-	jp	nz,AA_LLOOP_NEXT	;Not ready
+	ld	hl,(TMP_SEC##)	;If this is the first partition being examined, save its number
+    ld (ix+AAD_CAND_PART_SECTOR),l
+    ld (ix+AAD_CAND_PART_SECTOR+1),h
+	ld	hl,(TMP_SEC##+2)
+    ld (ix+AAD_CAND_PART_SECTOR+2),l
+    ld (ix+AAD_CAND_PART_SECTOR+3),h
 
-	ld	hl,(NXT4##)
-	ld	a,(NXT4##+2)
-	ld	b,a
-	jp	AA_PLOOP_NEXT
-
-AA_MSXDOS2_ERR:
-	pop	bc
+    jp  AA_PLOOP_NEXT
 
 	;--- No suitable partitions in the current LUN,
 	;    so jump to the next device or LUN
 
 AA_LLOOP_NEXT:
-	ld a,(NXT3##)
-	or a
+	bit AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
 	jr nz,AA_LLOOP_END
 
-	ld	a,(TMPLUN##)
+	ld	a,(ix+AAD_LOOP_LUN_INDEX)
 	inc	a
 	cp	8
 	jp	nz,AA_LLOOP
 
-	ld	a,(TMPDEV##)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	inc	a
 	cp	8
 	jp	nz,AA_DLOOP
@@ -1432,7 +1361,7 @@ AA_LLOOP_END:
 	;    If a candidate device was identified, use it,
 	;    otherwise return an error
 
-	ld	a,(BUF9##)
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)
 	or	a
 	jr	z,AA_END_NOFOUND
 
@@ -1444,30 +1373,34 @@ AA_LLOOP_END:
 	ld	b,a	;B=LUN
 	ld	a,c
 	and	111b	;A=Device
-	ld	(TMPDEV##),a
-	ld	a,b
-	ld	(TMPLUN##),a
+	ld	(ix+AAD_LOOP_DEV_INDEX),a
+	ld	(ix+AAD_LOOP_LUN_INDEX),b
 	jp	AA_DO_ASSIGN
 
 AA_END_NOFOUND:
 	ld	a,1
 	ret	;Error, no suitable device/partition found
 
-	;--- A suitable device has been found.
+	;--- A suitable device has been found (the candidate device).
 	;    Assign it to the drive.
 
 AA_DO_ASSIGN:
+    ld l,(ix+AAD_UNIT_DESCRIPTOR)
+    ld h,(ix+AAD_UNIT_DESCRIPTOR+1)
+    push hl
+    pop iy
+
 	ld a,(DOS_VER##)
 	or a
 	jr z,AA_DO_ASSDOS1
 
-	set	UF_FOK,(ix+UD_DFLAGS##)	;Tell that the partition information is valid
-	ld	b,(ix+UD_SLOT##)
-	ld	c,(ix+UD_PHYS##)
+	set	UF_FOK,(iy+UD_DFLAGS##)	;Tell that the partition information is valid
+	ld	b,(iy+UD_SLOT##)
+	ld	c,(iy+UD_PHYS##)
 	push	bc
 
-	ld	a,(ix+UD_DFLAGS##)
-	push	ix	;First clear the current unit descriptor
+	ld	a,(iy+UD_DFLAGS##)
+	push	iy	;First clear the current unit descriptor
 	pop	hl
 	push	hl
 	pop	de
@@ -1475,92 +1408,142 @@ AA_DO_ASSIGN:
 	ld	(hl),0
 	ld	bc,UD_SZ##-1
 	ldir
-	ld	(ix+UD_DFLAGS##),a
+	ld	(iy+UD_DFLAGS##),a
 
 	pop	bc
-	ld	(ix+UD_SLOT##),b
-	ld	(ix+UD_PHYS##),c
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
-	ld	(ix+UD_LI##),b
-	ld	(ix+UD_DI##),a
-	ld	(ix+UD_SEG##),0FFh
+	ld	(iy+UD_SLOT##),b
+	ld	(iy+UD_PHYS##),c
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
+	ld	(iy+UD_LI##),b
+	ld	(iy+UD_DI##),a
+	ld	(iy+UD_SEG##),0FFh
 
-	ld	hl,(BUF9##+1)
-	ld	(ix+UD_FSEC##),l
-	ld	(ix+UD_FSEC##+1),h
-	ld	hl,(BUF9##+3)
-	ld	(ix+UD_FSEC##+2),l
-	ld	(ix+UD_FSEC##+3),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+1)
+	ld	(iy+UD_FSEC##),l
+	ld	(iy+UD_FSEC##+1),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR+2)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+3)
+	ld	(iy+UD_FSEC##+2),l
+	ld	(iy+UD_FSEC##+3),h
 
-	ld	(ix+UD_CDIR##+1),0FFh	;set current dir -ve => root
-	ld	(ix+UD_CDIR##),0FFh
+	ld	(iy+UD_CDIR##+1),0FFh	;set current dir -ve => root
+	ld	(iy+UD_CDIR##),0FFh
 
-	ld	a,(BUF9##)	;Retrieve removable unit flag
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)	;Retrieve removable unit flag
 	rlca
 	rlca
 	rlca
 	and	4
 	or	UFM_DB		;Set "device based driver"
-	or	(ix+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
-	ld	(ix+UD_DFLAGS##),a
+	or	(iy+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
+	ld	(iy+UD_DFLAGS##),a
 
 	ld	hl,$DPBLIST##
-	ld	c,(ix+UD_PHYS##)
+	ld	c,(iy+UD_PHYS##)
 	dec	c
 	sla	c
 	ld	b,0
 	add	hl,bc
 	ld	a,(hl)
-	ld	(ix+UD_DPB##),a
+	ld	(iy+UD_DPB##),a
 	inc	hl
 	ld	a,(hl)
-	ld	(ix+UD_DPB##+1),a
+	ld	(iy+UD_DPB##+1),a
 
 	xor	a
 	ret
 
 AA_DO_ASSDOS1:
-	ld	a,(TMPDEV##)
-	ld	(ix+UD1_DI##),a
-	ld	a,(TMPLUN##)
-	ld	(ix+UD1_LI##),a
-	ld	hl,(BUF9##+1)
-	ld	(ix+UD1_FSEC##),l
-	ld	(ix+UD1_FSEC##+1),h
-	ld	hl,(BUF9##+3)
-	ld	(ix+UD1_FSEC##+2),l
-	ld	(ix+UD1_FSEC##+3),h
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
+	ld	(iy+UD1_DI##),a
+	ld	a,(ix+AAD_LOOP_LUN_INDEX)
+	ld	(iy+UD1_LI##),a
+    ld  l,(ix+AAD_CAND_PART_SECTOR)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+1)
+	ld	(iy+UD1_FSEC##),l
+	ld	(iy+UD1_FSEC##+1),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR+2)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+3)
+	ld	(iy+UD1_FSEC##+2),l
+	ld	(iy+UD1_FSEC##+3),h
 
 	xor	a
 	ret
 
-MSXDOS2DAT:
-	db	"NEXTOR  DAT"
-EMUDAT:
-	db	"NEXT_DSKDAT"
 
-;This subroutine reads a sector from the device to SECBUF.
+    ;Try to enter emulation mode from data in RAM
+    ;Returns A=1 on success, 0 on failure
+
+TRY_RAM_EMU:
+    call GET_P2##
+    ld b,a
+    ld a,(P2_TPA##)
+    call PUT_P2##
+
+    ld hl,EMU_RAM_ADDRESS
+    ld de,EMUDATASIG
+    call STRCOMP
+    jr nz,TRY_RAM_EMU_NO_SIG
+
+    xor a            ;Disable emulation for next boot
+    ld (EMU_RAM_ADDRESS),a    ;(in case the code of the emulated disk doesn't do it itself)
+
+    push bc          ;Save original page 2 segment
+
+    ld bc,(0F348h)
+    push ix
+    ld ix,EMU_RAM_ADDRESS+10h
+    ld a,(ix)
+    ld b,(ix+1)
+    ld e,(ix+2)
+    ld d,(ix+3)
+    ld l,(ix+4)
+    ld h,(ix+5)
+
+    pop ix
+
+    ex (sp),hl
+    push af
+    ld a,h          ;Restore original page 2 segment
+    call PUT_P2##
+    pop af
+    ex (sp),hl
+    inc sp          ;Discard saved segment number without affecting any register
+    inc sp
+
+    jp GO_EMU
+
+TRY_RAM_EMU_NO_SIG:
+    ld a,b  ;Previous segment
+    call PUT_P2##
+    xor a
+    ret
+
+
+;This subroutine reads (AA_RSEC) or writes (AA_WSEC) a sector from the device to SECBUF.
 ;Input: A  = Device index
 ;       B  = LUN
-;       IX = Address of unit descriptor
+;       C  = Driver slot
 ;       (TMP_SEC) = sector number
 ;Output: NZ on error
 ;Preserves IX
 
+AA_WSEC:
+    scf
+    jr AA_DOSEC
+
 AA_RSEC:
-	push	af
-	ld	a,(ix+UD_SLOT##)
-	ld_iyh_a
-	pop	af
+    or a
+AA_DOSEC:    
+	ld_iyh_c
 	ld	hl,DEV_RW##
 	ld	(BK4_ADD##),hl
 	ld	c,b
 	ld	b,1
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
-	or	a
 	push	ix
 	ld	ix,CALDRV##
 	call	CALSLT	;Call DEV_RW
@@ -1698,99 +1681,54 @@ upb_not_found:					;If anything was wrong with
 		ret				; Z-flag clear.
 
 
-; This routine accepts in HL a pointer to the directory entry of the
-; NEXT_DSK.DAT file and does all the job of entering in disk emulation mode.
+; This routine does all the job of entering in disk emulation mode
+; given the pointer to the emulation data file that is passed as follows:
+;
+; A = Device index
+; B = LUN index
+; C = Driver slot number
+; HLDE = Absolute device sector where the file starts
 ;
 ; It first reads the contents of the file (only the first sector)
 ; and check that it has the expected structure. If this is not true,
 ; or if there is an error when reading the file, it does nothing
 ; and returns with A=0.
 ;
-; Otherwise, it builds the work area in the same temporary buffer where
-; the device-drivers table is generated when booting normally in DOS 1 mode,
-; then returns with A=1. The format of the table is as follows, note that
-; it is mostly compatible with a DOS 1 device-drivers table with just one entry:
+; Otherwise, it builds the work area in EMU_TMP (the same temporary buffer where
+; the device-drivers table is generated when booting normally in DOS 1 mode),
+; then returns with A=1. The format of the table is defined in kvar.mac (DSK_*).
 ;
-; +0: Device index of current disk image file
-;     Bit 7 is kept set to 1 to indicate that we are in disk emulation mode
-; +1: Controller slot (always the primary controller)
-; +2: Device + 16 * logical unit number for NEXT_DSK.DAT
-;     Bit 7 is set after the current image file is changed
-;     and reset again when disk change is checked
-; +3: Device index of disk image file
-; +4: Logical unit number of disk image file
-; +5-8: First sector of disk image file
-; +9-10: Disk image file size in sectors
-; +11: Number of entries in the disk images table in NEXT_DSK.DAT
-; +12-15: Device sector number of NEXT_DSK.DAT contents
-;
-; The definitve address of the work area as read from NEXT_DSK.DAT is temporarily
-; appended at the end of this table, so that either it will be moved to this place
+; The definitve address of the work area as read from the emulation data file is temporarily
+; stored in EMU_WK_AREA, so that either the table it will be moved to this place
 ; or, if it is zero, the work area will be properly allocated.
 
-GO_EMU::
+GO_EMU:
 
-	;--- Calculate data sector of NEXT_DSK.DAT
+    ;--- Store device and LUN of the emulation data file
 
-	push	ix
-	push	hl
-	pop	ix
-	ld	e,(ix+DR_CLU##)
-	ld	d,(ix+DR_CLU##+1)	;DE = First cluster number of file
-	pop	ix
-	dec	de
-	dec	de	;DE = Zero-based cluster index
-
-	ld	hl,0
-	ld	a,(TMP_CS##)	;Sectors per cluster
-GOEMU2:
-	rra
-	jp	c,GOEMU3
-	sla	e
-	rl	d
-	rl	l
-	rl	h
-	jr	GOEMU2
-GOEMU3:
-	push	hl		;HLDE = File sector, relative to first data sector
-	
-	ld	hl,(TMP_NDIR##)	;HL = Number of root directory entries
-    SRL H	;Divide by 16 -> HL = Number of root directory sectors
-	RR L
-	SRL H
-	RR L
-	SRL H
-	RR L
-	SRL H
-	RR L
-
-	push	hl
-	pop	bc		;BC = Number of root directory sectors
-
-	ex	de,hl	;HL = Relative file sector, low
-	ld	de,(TMP_FROOT##)	;DE = Absolute first root dir sector, low
-	add	hl,de
-	ld	(TMP_SEC##),hl
-	pop	de	;DE = Relative file sector, high
-	ld	hl,(TMP_FROOT##+2)
-	adc	hl,de
-	ld	(TMP_SEC##+2),hl
-
-	ld	hl,(TMP_SEC##)
-	add	hl,bc
-	ld	(TMP_SEC##),hl
-	ld	(0F980h+12),hl
-	ld	hl,(TMP_SEC##+2)
-	ld	de,0
-	adc	hl,de
-	ld	(TMP_SEC##+2),hl
-	ld	(0F980h+14),hl
+    push af
+    push bc
+    ld  c,a ;Dev
+    ld	a,b ;LUN
+	rlca
+	rlca
+	rlca
+	rlca
+	and	0F0h
+	ld	b,a
+	ld	a,c ;Dev
+	and	0Fh
+	or	b
+	ld	(EMU_TMP##+EMU_DEVLUN##),a	;dev+lun of emulation data file
+    pop bc
+    pop af
 
 	;--- Read file contents
 
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+    ld (EMU_TMP##+EMU_FSEC##),de
+    ld (EMU_TMP##+EMU_FSEC##+2),hl
+    ld (TMP_SEC##),de
+    ld (TMP_SEC##+2),hl
 	call	AA_RSEC
 	ld	a,0
 	ret	nz
@@ -1803,18 +1741,10 @@ GOEMU3:
 
 	push	ix
 	pop	hl
-	ld	de,NDATSIG
-GOEMU_SIG1:
-	ld	a,(de)
-	cp	(hl)
-	ld	a,0
+	ld	de,EMUDATASIG
+    call STRCOMP
+    ld	a,0
 	ret	nz
-	or	a
-	jr	z,GOEMU_SIG2
-	inc	hl
-	inc	de
-	jr	GOEMU_SIG1
-GOEMU_SIG2:
 
 	;> Number of entries must be between 1 and 32
 
@@ -1852,36 +1782,31 @@ GOEMU_WAOK:
 
 	;--- Process file contents
 
-	ld	iy,0F980h
+	ld	iy,EMU_TMP##
 
 	;> Basic data
 
-	ld	a,(0F348h)	;Controller slot
-	ld	(iy+1),a
 	ld	a,(ix+18)	;Work area address, low
-	ld	(iy+16),a
+	ld	(EMU_WK_AREA##),a
 	ld	a,(ix+19)	;Work area address, high
-	ld	(iy+17),a
+	ld	(EMU_WK_AREA##+1),a
 	ld	a,(ix+16)
-	ld	(iy+11),a	;Number of entries in table
-
-	ld	a,(TMPLUN##)
-	rlca
-	rlca
-	rlca
-	rlca
-	and	0F0h
-	ld	b,a
-	ld	a,(TMPDEV##)
-	and	0Fh
-	or	b
-	ld	(iy+2),a	;dev+lun of NEXT_DSK.DAT 
+	ld	(iy+DSK_COUNT##),a	;Number of entries in table
 
 	;> Current file data
 
 	ld	a,(ix+17)	;Boot file index
-	ld	(iy),a
+	ld	(iy+DSK_IDX##),a
 	set	7,(iy)
+
+    ld c,a
+    ld a,(I_AM_RUSSIAN##)
+    or a
+    jr z,GOEMU_NORUS
+    set 6,(iy)
+GOEMU_NORUS:
+    ld a,c
+
 	dec	a
 	add	a,a		;Each entry is 8 bytes
 	add	a,a
@@ -1893,17 +1818,33 @@ GOEMU_WAOK:
 	push	ix
 	pop	bc
 	add	hl,bc	;HL = Pointer to boot file data
-	ld	de,0F980h+3
+	ld	de,EMU_TMP##+DSK_DEV##
 	ld	bc,8
 	ldir
-ekix::
+
+    ld a,(iy+DSK_DEV##) ;set DSK_DEV and DSK_LUN as same of data file if 0
+    or a
+    jr nz,GOEMU_END
+    ld a,(iy+EMU_DEVLUN##)
+    ld b,a
+    and 00000111b
+    ld (iy+DSK_DEV##),a
+    ld a,b
+    rrca
+    rrca
+    rrca
+    rrca
+    and 00000111b
+    ld (iy+DSK_LUN##),a
+
 	;--- All done
 
+GOEMU_END:
 	ld	a,1
-	ld	(PROCNM+9),a
+	ld	(IN_EMU##),a
 	ret
 
-NDATSIG:	db	"Nextor DSK file",0
+EMUDATASIG:  db  "NEXTOR_EMU_DATA",0
 
 ;-----------------------------------------------------------------------------
 ;
@@ -1923,43 +1864,43 @@ NDATSIG:	db	"Nextor DSK file",0
 	ld	(iy+0),a	;Media ID
 
 	ld	hl,512
-	ld	(iy+1),l	;Tamanyo sector
+	ld	(iy+1),l	;Sector size
 	ld	(iy+2),h
 	ld	a,15
-	ld	(iy+3),a	;(Tamanyo sector/32)-1
+	ld	(iy+3),a	;(Sector size/32)-1
 	ld	a,4
-	ld	(iy+4),a	;Num unos en el anterior
+	ld	(iy+4),a	;Bits set to 1 in previous value
 
 	ld	a,(ix+13)
 	dec	a
-	ld	(iy+5),a	;(Sectores por cluster)-1
+	ld	(iy+5),a	;(Sectors per cluster)-1
 	ld	b,0
 MKDPB_CNT1S:
 	inc	b
 	rrca
 	jr	c,MKDPB_CNT1S
-	ld	(iy+6),b	;Num unos en el anterior+1
+	ld	(iy+6),b	;Bits set to 1 in previous value+1
 
-	ld	a,(ix+14)	;Sector inicio FAT=Sectores reservados
+	ld	a,(ix+14)	;FAT first sector=reserved sectors
 	ld	(iy+7),a
 	ld	a,(ix+15)
 	ld	(iy+8),a
 
-	ld	a,(ix+16)	;Numero FATs
+	ld	a,(ix+16)	;Number of FATs
 	ld	(iy+9),a
 
 	ld	a,(ix+18)
 	or	a
 	ld	a,254
 	jr	nz,DIRENT
-	ld	a,(ix+17)	;Num entradas directorio
+	ld	a,(ix+17)	;Number of directory entries
 DIRENT:
 	ld	(iy+10),a
 
-	ld	e,(ix+22)	;Sectores por FAT
-	ld	(iy+15),e	;(2 bytes en sector 0, 1 byte en DPB)
+	ld	e,(ix+22)	;Sectors per FAT
+	ld	(iy+15),e	;(2 bytes in sector 0, 1 byte in DPB)
 
-	;1er sector directorio=(Sectores reservados+Num FATs*Sectores por FAT)
+	;1st sector directory=(Reserved sectors+Number of FATs*Sectors per FAT)
 
 	ld	d,0
 	ld	b,(ix+16)
@@ -1976,10 +1917,10 @@ CALC_1SECDIR:
 	ld	(iy+17),h
 	ex	de,hl
 
-	;1er sector datos=(Sectores reservados+Num FATs*Sectores por FAT)+
-	;                 (32*Entradas dir/512)
+	;1er data sector =(Reserved sectors+Num FATs*Sectors per FAT)+
+	;                 (32*Directory entries/512)
 
-	ld	l,(ix+17)	;Calcula Entradas dir/16
+	ld	l,(ix+17)	;Calculate directory entries/16
 	ld	h,(ix+18)
 	ld	b,4
 CALC_1SECDAT:
@@ -1991,7 +1932,7 @@ CALC_1SECDAT:
 	ld	(iy+11),l
 	ld	(iy+12),h
 
-	;Num clusters+1=((Sectores totales-1er sector datos)/Sectores por cluster)+1
+	;Num clusters+1=((Total sectors-1st data sector)/Sectors per cluster)+1
 
 	push	hl
 	pop	bc	;DE=1st data sector
@@ -2013,9 +1954,9 @@ OK_SMALLSEC:
 	sbc	hl,bc
 	ex	de,hl		;DEHL=total sectors - 1st data sector
 
-	ld	a,(ix+13)	;Divide teniendo en cuenta que
+	ld	a,(ix+13)	;Divide taking in account that
 CALC_NUMCLUS:
-	rrca		;sectores por cluster es potencia de 2
+	rrca		;sectors por cluster is a power of 2
 	jr	c,CALC_NUMCLUS1
 	sra	d
 	rr	e
@@ -2995,10 +2936,11 @@ MAP_DEF_DEVB:
 
 	ld b,0
 	ld c,(ix+UD_REL##)
+    xor a
 	push hl
 	call ASK_DRIVE_CONFIG
 	pop hl
-	dec a
+	cp 1
 	jr z,MAP_DEF_DEVB_NOCFG ;Driver did not provide config
 	or a
 	ld a,0
@@ -3010,7 +2952,7 @@ MAP_DEF_DEVB_NOCFG:
 	push	hl
 	push	ix
 	pop	hl
-	xor	a
+	ld d,0
 	call	AUTO_ASSIGN
 	pop	hl
 	or	a
@@ -3746,6 +3688,7 @@ MAPDOS1_DEF:
 	ld c,(ix+UD1_REL##)
 	res	7,c	;Ignore "media changed" flag
 	ld	b,1
+    xor a
 	call ASK_DRIVE_CONFIG
 	pop ix
 	pop hl
@@ -3767,6 +3710,7 @@ MAPDOS1_DEF_NOCFG:	;No config provided by driver, use AUTO_ASSIGN
 	push ix
 	pop hl
 	push hl
+    ld d,0
 	call AUTO_ASSIGN
 	pop ix
 	pop hl
@@ -3788,7 +3732,7 @@ if 0
 	pop	hl
 	push	ix
 	push	hl
-	xor	a
+	ld d,0
 	call	AUTO_ASSIGN
 	pop	hl
 	ld	(hl),0FFh	;Mark FAT buffer as invalid again
@@ -5953,7 +5897,8 @@ GET_DISKID_HL:
 ;    Output: A = number of drives.
 
     push bc
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
+    and 00100000b
     pop bc
     ld c,a
 
@@ -6050,7 +5995,8 @@ DRVS1LOOP:
 	cp  100b	;Provides config?
 	jr nz,DRVS1NX3 ;No: skip but check "5" key
 
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
+    and 00100000b
     ld c,a
 	ld hl,DV_CONFIG##
 	ld	(BK4_ADD##),hl
@@ -6078,7 +6024,7 @@ DRVS1NX2:
 	ret
 
 DRVS1NX3:
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
     and 00100000b
     ld b,1
     jr nz,DRVS1CHG
@@ -6200,7 +6146,7 @@ CMIU_END:
 	;--- DOS 1 version
 
 CMIU_DOS1:
-	ld	iy,(DVB_TABLE##)
+	ld	iy,(DVB_TABLE)
 	ld	b,(iy)
 	ld a,b
 	or a
@@ -6264,14 +6210,19 @@ CMIU1_NEXT:
 ;              Must have UD_SLOT set
 ;         C  = Relative unit for the drive
 ;         B  = 0 for DOS 2 mode, 1 for DOS 1 mode
+;         A  = 1 to enter disk emulation mode
 ; Output: A = 0 ok
 ;             1 driver did not provide info for that drive
 ;             2 driver provided info, but can't assign partition to drive
+;             3 if disk emulation mode has been entered
 ;         If A=0 or 2, sets UD_DI, UD_LI and UD_SEG in the unit descriptor
 ;         If A=0, sets UF_FOK in UD_DFLAGS in the unit descriptor
+;         If A=3, returns B, C, HLDE from AUTO_ASPART
 ; Modifies: AF, BC, DE, HL, IY
 
 ASK_DRIVE_CONFIG:
+    ld d,a
+    push de
 	push bc ;BC=DOS mode and relative unit
 	ld a,(ix+UD_SLOT##)
 	ld_iyh_a
@@ -6283,6 +6234,7 @@ ASK_DRIVE_CONFIG:
 	call	CALSLT
 	pop ix
 	pop hl	;H=DOS mode and relative unit
+    pop de  ;D=A at input
 	or a
 	ret nz
 
@@ -6306,8 +6258,11 @@ ASKDRVCFG_NEXT:
 	push ix
 	pop hl
 	push hl
+    ;ld a,d
 	call AUTO_ASPART
 	pop ix
+    cp 2
+    jr z,ASKDRVCFG_GOEMU
 	pop bc ;B=DOS mode
 
 	dec a
@@ -6319,6 +6274,12 @@ ASKDRVCFG_NEXT:
 	set	UF_FOK,(ix+UD_DFLAGS##)
 	xor a
 	ret
+
+ASKDRVCFG_GOEMU:
+    pop af    
+    ld a,3
+    ret
+
 
 ;----------------------------
 ;
@@ -6335,12 +6296,20 @@ GET_DV_TYPE:
 	call	CALSLT##
 	ret
 
-SCAN_5_KEY:
-	xor	a
-	call	SNSMAT
-	and	00100000b
-    xor 00100000b   ;A=00100000b if "5" key pressed, 0 if not
-    ret
+
+; Compare zero terminated strings pointed by HL and DE
+; Return Z if they are equal, NZ if not
+; Modifies AF, HL, DE
+
+STRCOMP:
+    ld	a,(de)
+	cp	(hl)
+	ret	nz
+	or	a
+	ret	z
+	inc	hl
+	inc	de
+	jr	STRCOMP
 
 	finish <PARTIT>
 	end

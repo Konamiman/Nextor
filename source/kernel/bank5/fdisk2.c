@@ -15,13 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "asm.h"
-#include "system.h"
-#include "dos.h"
-#include "types.h"
-#include "partit.h"
+#include "../../tools/C/types.h"
+#include "../../tools/C/system.h"
+#include "../../tools/C/dos.h"
+#include "../../tools/C/asmcall.h"
+#include "drivercall.h"
+#include "../../tools/C/partit.h"
 #include "fdisk.h"
-#include "asmcall.h"
 
 byte sectorBuffer[512];
 byte sectorBufferBackup[512];
@@ -39,6 +39,8 @@ ulong mainExtendedPartitionFirstSector;
 uint sectorsPerTrack;
 
 #define Clear(address, len) memset(address, 0, len)
+#define ReadSectorFromDevice(driverSlot, deviceIndex, lunIndex, firstDeviceSector) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, firstDeviceSector, 0)
+#define WriteSectorToDevice(driverSlot, deviceIndex, lunIndex, firstDeviceSector) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, firstDeviceSector, 1)
 
 int remote_CreateFatFileSystem(byte* callerParameters);
 byte CreateFatFileSystem(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, ulong fileSystemSizeInK);
@@ -50,11 +52,12 @@ int remote_CalculateFatFileSystemParameters(byte* callerParameters);
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
-byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector);
-int remote_PreparePartitionningProcess(byte* callerParameters);
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, byte write);
+int remote_PreparePartitioningProcess(byte* callerParameters);
 int remote_CreatePartition(byte* callerParameters);
 int CreatePartition(int index);
-void putchar(char ch);
+int remote_ToggleStatusBit(byte* callerParameters);
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector);
 void Locate(byte x, byte y);
 
 //BC = function number (defined in fdisk.h), HL = address of parameters block
@@ -68,11 +71,14 @@ int main(int bc, int hl)
 		case f_CreateFatFileSystem:
 			return remote_CreateFatFileSystem((byte*)hl);
 			break;
-		case f_PreparePartitionningProcess:
-			return remote_PreparePartitionningProcess((byte*)hl);
+		case f_PreparePartitioningProcess:
+			return remote_PreparePartitioningProcess((byte*)hl);
 			break;
 		case f_CreatePartition:
 			return remote_CreatePartition((byte*)hl);
+			break;
+		case f_ToggleStatusBit:
+			return remote_ToggleStatusBit((byte*)hl);
 			break;
 		default:
 			return 0;
@@ -439,9 +445,9 @@ int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystem
 }
 
 
-byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector)
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, byte write)
 {
-	regs.Flags.C = 1;
+	regs.Flags.C = write;
 	regs.Bytes.A = deviceIndex;
 	regs.Bytes.B = 1;
 	regs.Bytes.C = lunIndex;
@@ -453,7 +459,7 @@ byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong
 }
 
 
-int remote_PreparePartitionningProcess(byte* callerParameters)
+int remote_PreparePartitioningProcess(byte* callerParameters)
 {
 	int i;
 	int sectorsRemaining;
@@ -495,38 +501,22 @@ int CreatePartition(int index)
 	ulong firstFileSystemSector;
 	ulong extendedPartitionFirstAbsoluteSector;
 	partitionTableEntry* tableEntry;
-	bool onlyPrimaryPartitions = (partitionsCount <= 4);
 	ulong x;
 
-	if(onlyPrimaryPartitions) {
-		mbrSector = 0;
-		tableEntry = &(mbr->primaryPartitions[index]);
-		if(index == 0) {
-			ClearSectorBuffer();
-			nextDeviceSector = 1;
-		} else {
-			memcpy(sectorBuffer, sectorBufferBackup, 512);
-		}
-		tableEntry->firstAbsoluteSector = nextDeviceSector;
-	} else {
-		mbrSector = nextDeviceSector;
-		tableEntry = &(mbr->primaryPartitions[0]);
-		ClearSectorBuffer();
-		tableEntry->firstAbsoluteSector = 1;
-	}
+    mbrSector = nextDeviceSector;
+	tableEntry = &(mbr->primaryPartitions[0]);
+	ClearSectorBuffer();
+	tableEntry->firstAbsoluteSector = 1;
 
+    tableEntry->status = partition->status;
 	tableEntry->partitionType = partition->partitionType;
 	tableEntry->sectorCount = partition->sizeInK * 2;
 
 	firstFileSystemSector = mbrSector + tableEntry->firstAbsoluteSector;
 
-	if(onlyPrimaryPartitions){
-		nextDeviceSector = tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
-	} else {
-		nextDeviceSector += tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
-	}
+	nextDeviceSector += tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
 
-	if(!onlyPrimaryPartitions && index != (partitionsCount - 1)) {
+	if(index != (partitionsCount - 1)) {
 		tableEntry++;
 		tableEntry->partitionType = PARTYPE_EXTENDED;
 		tableEntry->firstAbsoluteSector = nextDeviceSector;
@@ -560,20 +550,29 @@ int CreatePartition(int index)
 	return CreateFatFileSystem(driverSlot, deviceIndex, selectedLunIndex, firstFileSystemSector, partition->sizeInK);
 }
 
-
-void putchar(char ch) __naked
+int remote_ToggleStatusBit(byte* callerParameters)
 {
-    __asm
-    push    ix
-    ld      ix,#4
-    add     ix,sp
-    ld  a,(ix)
-    call CHPUT
-    pop ix
-    ret
-    __endasm;
+	return (int)ToggleStatusBit(
+        callerParameters[0],
+		*((ulong*)&callerParameters[1]));
 }
 
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector)
+{
+    int error;
+    masterBootRecord* mbr = (masterBootRecord*)sectorBuffer;
+    partitionTableEntry* entry;
+
+    error = ReadSectorFromDevice(driverSlot, deviceIndex, selectedLunIndex, partitonTablesector);
+    if(error != 0)
+        return error;
+
+    entry =&mbr->primaryPartitions[partitionTableEntryIndex];
+
+    entry->status ^= 0x80;
+
+    return WriteSectorToDevice(driverSlot, deviceIndex, selectedLunIndex, partitonTablesector);
+}
 
 void Locate(byte x, byte y)
 {
@@ -583,4 +582,5 @@ void Locate(byte x, byte y)
 }
 
 
-#include "asmcall.c"
+#include "../../tools/C/asmcall.c"
+#include "drivercall.c"
