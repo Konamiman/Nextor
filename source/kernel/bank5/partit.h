@@ -40,6 +40,7 @@ typedef struct {
 	byte primaryIndex;
 	byte extendedIndex;
 	byte partitionType;
+    byte status;
 	ulong sizeInK;
 	uint alignmentPaddingInSectors;
 } partitionInfo;

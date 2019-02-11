@@ -13,6 +13,7 @@ SNSMAT	equ	0141h		;sense key matrix
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
+POFF_STATUS equ 0   ;Offset of status byte in p. table entry
 POFF_TYPE	equ	4	;Offset of partition type in p. table entry
 POFF_PSTART	equ	8	;Offset of partition start in p. table entry
 POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
@@ -72,11 +73,18 @@ CHPUT:
 ;             D = Device index, 1 to 7
 ;             E = LUN index, 1 to 7
 ;             H = Primary partition number (1 to 4)
+;                 bit 7: 0 = Get partition information
+;                        1 = Get partition table absolute sector
 ;             L = Extended partition number (0 for primary entry in MBR)
 ; Returns:    A = Error from DEV_RW or F_GDRVR, or .IPART; 0 if no error
-;             B = Partition type, 0 for non existing partition
-;             HLDE = Starting sector of partition
-;             IXIY = Partition size
+;             If "Get partition information":
+;               B = Partition type, 0 for non existing partition
+;               C = 80h if bootable partition
+;               HLDE = Starting sector of partition
+;               IXIY = Partition size
+;             If "Get partition table absolute sector":
+;               HLDE = Absolute sector that holds the partition table entry
+;                      (0 for primary partitions)
 ;
 ; In case of disk error when reading the device, an error code will
 ; be returned. We cannot invoke the standard disk error handling routine,
@@ -122,8 +130,9 @@ CHPUT:
 	jp	nc,UNEX_DEVL
 
 	ld	a,h
-	or	a
-	ret	z
+    and 01111111b
+	;or	a
+	jp	z,UNEX_PART
 	cp	5
 	jp	nc,UNEX_PART
 
@@ -146,6 +155,7 @@ CHPUT:
 	ld	bc,MBR_PSIZE
 
 	ld	a,h
+    and 01111111b
 PTENTRY_LOOP:
 	dec	a
 	jr	z,OK_PENTRY
@@ -160,22 +170,30 @@ OK_PENTRY:
 	or	a
 	jr	nz,DO_EXTPAR
 
+    ld	a,(ix+POFF_TYPE)
+    or	a
+	jp	z,UNEX_PART
+    ld  b,a
+
+    bit 7,h ;Partition table entry sector requested: it's always 0 for primary partitions
+    ld hl,0
+    ld de,0
+    ld a,0
+    ret nz
+
 	ld	e,(ix+POFF_PSIZE)
 	ld	d,(ix+POFF_PSIZE+1)
 	ld	l,(ix+POFF_PSIZE+2)
 	ld	h,(ix+POFF_PSIZE+3)
 	push	de
 	push	hl
-	ld	b,(ix+POFF_TYPE)
+    ld  c,(ix+POFF_STATUS)
 	ld	e,(ix+POFF_PSTART)
 	ld	d,(ix+POFF_PSTART+1)
 	ld	l,(ix+POFF_PSTART+2)
 	ld	h,(ix+POFF_PSTART+3)
 	pop	ix
 	pop	iy
-	ld	a,b
-	or	a
-	jp	z,UNEX_PART
 	xor	a
 	ret
 DO_EXTPAR:
@@ -217,6 +235,9 @@ EXTP_LOOP:
 	;    Get the base sector number for the primary entry
 	;    and return
 
+    bit 7,h ;Partition table entry sector requested: return its sector
+    jr nz,EXTP_ENTRYADD
+
 	ld	ix,($SECBUF##)
 	ld	bc,MBR_PSTART
 	add	ix,bc
@@ -224,10 +245,12 @@ EXTP_LOOP:
 	call	UPDATE_SEC
 
 	ld	b,(ix+POFF_TYPE)
+    ld  c,(ix+POFF_STATUS)
 	ld	e,(ix+POFF_PSIZE)
 	ld	d,(ix+POFF_PSIZE+1)
 	ld	l,(ix+POFF_PSIZE+2)
 	ld	h,(ix+POFF_PSIZE+3)
+EXTP_ENTRYADD:    
 	push	de
 	push	hl
 	ld	ix,TMP_SEC##

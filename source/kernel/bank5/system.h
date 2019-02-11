@@ -8,6 +8,7 @@
 #define ESC 27
 #define CURSOR_RIGHT 28
 #define CURSOR_LEFT 29
+#define KEY_1 49
 
 
 /* MSX BIOS routines */

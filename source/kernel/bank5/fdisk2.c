@@ -39,6 +39,8 @@ ulong mainExtendedPartitionFirstSector;
 uint sectorsPerTrack;
 
 #define Clear(address, len) memset(address, 0, len)
+#define ReadSectorFromDevice(driverSlot, deviceIndex, lunIndex, firstDeviceSector) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, firstDeviceSector, 0)
+#define WriteSectorToDevice(driverSlot, deviceIndex, lunIndex, firstDeviceSector) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, firstDeviceSector, 1)
 
 int remote_CreateFatFileSystem(byte* callerParameters);
 byte CreateFatFileSystem(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, ulong fileSystemSizeInK);
@@ -50,10 +52,12 @@ int remote_CalculateFatFileSystemParameters(byte* callerParameters);
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
-byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector);
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, byte write);
 int remote_PreparePartitionningProcess(byte* callerParameters);
 int remote_CreatePartition(byte* callerParameters);
 int CreatePartition(int index);
+int remote_ToggleStatusBit(byte* callerParameters);
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector);
 void putchar(char ch);
 void Locate(byte x, byte y);
 
@@ -73,6 +77,9 @@ int main(int bc, int hl)
 			break;
 		case f_CreatePartition:
 			return remote_CreatePartition((byte*)hl);
+			break;
+		case f_ToggleStatusBit:
+			return remote_ToggleStatusBit((byte*)hl);
 			break;
 		default:
 			return 0;
@@ -439,9 +446,9 @@ int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystem
 }
 
 
-byte WriteSectorToDevice(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector)
+byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, byte write)
 {
-	regs.Flags.C = 1;
+	regs.Flags.C = write;
 	regs.Bytes.A = deviceIndex;
 	regs.Bytes.B = 1;
 	regs.Bytes.C = lunIndex;
@@ -515,6 +522,7 @@ int CreatePartition(int index)
 		tableEntry->firstAbsoluteSector = 1;
 	}
 
+    tableEntry->status = partition->status;
 	tableEntry->partitionType = partition->partitionType;
 	tableEntry->sectorCount = partition->sizeInK * 2;
 
@@ -560,6 +568,29 @@ int CreatePartition(int index)
 	return CreateFatFileSystem(driverSlot, deviceIndex, selectedLunIndex, firstFileSystemSector, partition->sizeInK);
 }
 
+int remote_ToggleStatusBit(byte* callerParameters)
+{
+	return (int)ToggleStatusBit(
+        callerParameters[0],
+		*((ulong*)&callerParameters[1]));
+}
+
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector)
+{
+    int error;
+    masterBootRecord* mbr = (masterBootRecord*)sectorBuffer;
+    partitionTableEntry* entry;
+
+    error = ReadSectorFromDevice(driverSlot, deviceIndex, selectedLunIndex, partitonTablesector);
+    if(error != 0)
+        return error;
+
+    entry =&mbr->primaryPartitions[partitionTableEntryIndex];
+
+    entry->status ^= 0x80;
+
+    return WriteSectorToDevice(driverSlot, deviceIndex, selectedLunIndex, partitonTablesector);
+}
 
 void putchar(char ch) __naked
 {

@@ -115,6 +115,7 @@ void GoPartitionningMainMenuScreen();
 bool GetYesOrNo();
 byte GetDiskPartitionsInfo();
 void ShowPartitions();
+void TogglePartitionActive(byte partitionIndex);
 void PrintOnePartitionInfo(partitionInfo* info);
 void DeleteAllPartitions();
 void RecalculateAutoPartitionSize(bool setToAllSpaceAvailable);
@@ -132,6 +133,7 @@ void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemPara
 bool WritePartitionTable();
 void PreparePartitionningProcess();
 byte CreatePartition(int index);
+byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector);
 bool ConfirmDataDestroy(char* action);
 void ClearInformationArea();
 void GetDriversInformation();
@@ -845,6 +847,7 @@ byte GetDiskPartitionsInfo()
 				currentPartition->primaryIndex = primaryIndex;
 				currentPartition->extendedIndex = extendedIndex;
 				currentPartition->partitionType = regs.Bytes.B;
+                currentPartition->status = regs.Bytes.C;
 				((uint*)&(currentPartition->sizeInK))[0] = regs.UWords.IY;
 				((uint*)&(currentPartition->sizeInK))[1] = regs.UWords.IX;
 				currentPartition->sizeInK /= 2;
@@ -872,30 +875,60 @@ void ShowPartitions()
 	int lastPartitionIndexToShow;
 	bool isLastPage;
 	bool isFirstPage;
+    bool allPartitionsArePrimary;
 	byte key;
 	partitionInfo* currentPartition;
 
-	Locate(0, screenLinesCount-1);
-	DeleteToEndOfLine();
-	PrintCentered("Press ESC to return");
+    if(partitionsExistInDisk) {
+        allPartitionsArePrimary = true;
+        for(i=0; i<partitionsCount; i++) {
+            currentPartition = &partitions[i];
+            if(currentPartition->extendedIndex != 0) {
+                allPartitionsArePrimary = false;
+                break;
+            }
+        }
+    } else {
+        allPartitionsArePrimary = (partitionsCount <= 4);
+    }
 
 	while(true) {
 		isFirstPage = (firstShownPartitionIndex == 1);
 		isLastPage = (firstShownPartitionIndex + PARTITIONS_PER_PAGE) > partitionsCount;
 		lastPartitionIndexToShow = isLastPage ? partitionsCount : firstShownPartitionIndex + PARTITIONS_PER_PAGE - 1;
 
-		Locate(0, screenLinesCount-1);
-		print(isFirstPage ? "   " : "<--");
+    	Locate(0, screenLinesCount-1);
+    	DeleteToEndOfLine();
+        if(isFirstPage) {
+            sprintf(buffer, partitionsCount == 1 ? "1" : partitionsCount > 8 ? "1-8" : "1-%i", partitionsCount);
+            if(isLastPage) {
+                sprintf(buffer+4, "ESC = return, %s = toggle active (*)", buffer);
+            } else {
+                sprintf(buffer+4, "ESC=back, %s=toggle active (*)", buffer);
+            }
+            PrintCentered(buffer+4);
+        } else {
+	        PrintCentered("Press ESC to return");
+        }
 
-		Locate(currentScreenConfig.screenWidth - 4, screenLinesCount-1);
-		print(isLastPage ? "   " : "-->");
+        if(!(isFirstPage && isLastPage)) {
+            Locate(0, screenLinesCount-1);
+            print(isFirstPage ? "   " : "<--");
+
+            Locate(currentScreenConfig.screenWidth - 4, screenLinesCount-1);
+            print(isLastPage ? "   " : "-->");
+        }
 
 		ClearInformationArea();
 		Locate(0, 3);
 		if(partitionsCount == 1) {
 			PrintCentered(partitionsExistInDisk ? "One partition found on device" : "One new partition defined");
 		} else {
-			sprintf(buffer, partitionsExistInDisk ? "%i partitions found on device" : "%i new partitions defined", partitionsCount);
+            if(allPartitionsArePrimary) {
+                sprintf(buffer, partitionsExistInDisk ? "%i primary partitions found on device" : "%i new primary partitions defined", partitionsCount);
+            } else {
+			    sprintf(buffer, partitionsExistInDisk ? "%i partitions found on device" : "%i new partitions defined", partitionsCount);
+            }
 			PrintCentered(buffer);
 		}
 		NewLine();
@@ -925,23 +958,72 @@ void ShowPartitions()
 			} else if(key == CURSOR_RIGHT && !isLastPage) {
 				firstShownPartitionIndex += PARTITIONS_PER_PAGE;
 				break;
-			}
+			} else if(isFirstPage && key>=KEY_1 && key<KEY_1+partitionsCount && key<KEY_1+8) {
+                TogglePartitionActive(key-KEY_1);
+                break;
+            }
 		}
 	}
 }
 
+void TogglePartitionActive(byte partitionIndex)
+{
+    byte status, primaryIndex, extendedIndex;
+    partitionInfo* partition;
+    ulong partitionTableEntrySector;
+    int error;
+
+    partition = &partitions[partitionIndex];
+
+    if(!partitionsExistInDisk) {
+        partition->status ^= 0x80;
+        return;
+    }
+
+    status = partition->status;
+    primaryIndex = partition->primaryIndex;
+    extendedIndex = partition->extendedIndex;
+
+    sprintf(buffer, "%set active bit of partition %i? (y/n) ", status & 0x80 ? "Res" : "S", partitionIndex + 1);
+	PrintStateMessage(buffer);
+	if(!GetYesOrNo()) {
+		return;
+	}
+
+    regs.Bytes.A = selectedDriver->slot;
+	regs.Bytes.B = 0xFF;
+	regs.Bytes.D = selectedDeviceIndex;
+	regs.Bytes.E = selectedLunIndex + 1;
+	regs.Bytes.H = partition->primaryIndex | 0x80;
+	regs.Bytes.L = partition->extendedIndex;
+	DosCall(_GPART, REGS_ALL);
+	if(regs.Bytes.A != 0) {
+        return;
+    }
+
+	((uint*)&(partitionTableEntrySector))[0] = regs.UWords.DE;
+	((uint*)&(partitionTableEntrySector))[1] = regs.UWords.HL;
+
+    PreparePartitionningProcess();  //Needed to set up driver slot, device index, etc
+    error = ToggleStatusBit(extendedIndex == 0 ? primaryIndex-1 : 0, partitionTableEntrySector);
+    if(error == 0) {
+        partition->status ^= 0x80;
+    } else {
+        sprintf(buffer, "Error when accessing device: %i", error);
+        ClearInformationArea();
+        Locate(0,7);
+        PrintCentered(buffer);
+        PrintStateMessage("Press any key...");
+        WaitKey();
+    }
+
+    return;
+}
 
 void PrintOnePartitionInfo(partitionInfo* info)
 {
-	if(!partitionsExistInDisk && partitionsCount <= 4) {
-		putchar(info->primaryIndex == 1 ? '1' : info->extendedIndex + 1 + '0');
-	} else {
-		putchar(info->primaryIndex + '0');
-		if(info->extendedIndex != 0) {
-			printf("-%i", info->extendedIndex);
-		}
-	}
-	print(": ");
+	printf("%c %i: ", info->status & 0x80 ? '*' : ' ', info->extendedIndex == 0 ? info->primaryIndex : info->extendedIndex + 1);
+
 	if(info->partitionType == PARTYPE_FAT12) {
 		print("FAT12");
 	} else if(info->partitionType == PARTYPE_FAT16 || info->partitionType == PARTYPE_FAT16_SMALL || info->partitionType == PARTYPE_FAT16_LBA) {
@@ -1106,6 +1188,7 @@ void AddAutoPartition()
 {
 	partitionInfo* partition = &partitions[partitionsCount];
 
+    partition->status = partitionsCount == 0 ? 0x80 : 0;
 	partition->sizeInK = autoPartitionSizeInK;
 	partition->partitionType = 
 		partition->sizeInK > MAX_FAT12_PARTITION_SIZE_IN_K ? PARTYPE_FAT16 : PARTYPE_FAT12;
@@ -1350,6 +1433,15 @@ byte CreatePartition(int index)
 	return (byte)CallFunctionInExtraBank(f_CreatePartition, remoteCallParams);
 }
 
+byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector)
+{
+    byte* remoteCallParams = buffer;
+
+	remoteCallParams[0] = partitionTableEntryIndex;
+    *((ulong*)&remoteCallParams[1]) = partitionTablesector;
+	
+	return (byte)CallFunctionInExtraBank(f_ToggleStatusBit, remoteCallParams);
+}
 
 bool ConfirmDataDestroy(char* action)
 {
