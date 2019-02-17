@@ -1,6 +1,8 @@
 @echo off
 cls
 
+if .%1==.drivers goto :drivers
+
 echo .
 echo ****************
 echo ***  COMMON  ***
@@ -180,6 +182,8 @@ dd if=b4rd.bin of=dos250ba.dat bs=1 count=15 seek=65664
 copy dos250ba.dat Nextor-2.1.0-beta1.base.dat
 copy dos250ba.dat ..\..\bin\kernels\Nextor-2.1.0-beta1.base.dat
 
+:drivers
+
 echo .
 echo *****************
 echo ***  DRIVERS  ***
@@ -231,6 +235,18 @@ cd MegaFlashRomSD
 copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.MegaFlashSDSCC.ROM
 sjasm makerecoverykernel.asm kernel.dat
 copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.MegaFlashSDSCC.Recovery.ROM
+cd ..
+
+echo .
+echo ***
+echo ***  Driver: Sunrise IDE
+echo ***
+echo .
+
+cd SunriseIDE
+sjasm -c sunride.asm driver.bin
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta1.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.SunriseIDE.ROM
 cd ..
 
 echo .
