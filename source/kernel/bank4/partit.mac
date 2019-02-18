@@ -855,102 +855,87 @@ SETNUMD_NOUD:
 ;              1: No suitable device/partition found
 ;              2: Disk emulation mode entered
 
-;Temporary area BUF9 (9 bytes) is used as follows:
-;+0: Candidate device (a device which has a suitable partition,
-;    but has no NEXTOR.SYS file), device + 8*LUN (0 if no candidates found),
-;    bit 7 is the removable device flag, bit 6 is the hot-plug device flag
-;+1: Sector number of first suitable partition found
-;+5: Sector number of partition being currently examined
-;
-;Also, NXTEMP is used to store a pre-candidate device
-;(a device that exists but has not been checked yet for partitions),
-;NXT7+2 is used to store the value of A at input, and
-;NXT7+3 is used to store the stack pointer at input so that we can easily
-;discard the stack contents when entering disk emulation mode.
-;NXT7+5 stores the status byte of the partition being examined.
-;NXT7+6 stores the index of the partition being examined.
+;CURR = current deivce/partition being examined
+;CAND = candidate device/partition, will be assigned if no one has the active flag set in status byte
+
+AAD_UNIT_DESCRIPTOR equ 0
+AAD_LOOP_DEV_INDEX equ 2
+AAD_LOOP_LUN_INDEX equ 3
+AAD_DRIVER_SLOT equ 4
+AAD_CURR_PART_DEVLUN equ 5
+AAD_CURR_PART_INDEX equ 6 ;Bit 7 set when examining extended partitions, FFh when examining the MBR
+AAD_CURR_PART_SECTOR equ 7
+AAD_CURR_PART_STATUS_BYTE equ 11
+AAD_CAND_PART_DEVLUN equ 12
+AAD_CAND_PART_SECTOR equ 13
+AAD_FLAGS equ 17
+
+AAD_SIZE equ 18
+
+AAFLAG_ENTER_EMU_MODE equ 1
+AAFLAG_IS_AUTOASPART equ 80h
 
 	PROC	AUTO_ASPART
 
-	scf
-	jr AUTO_COMMON
+	or AAFLAG_IS_AUTOASPART
 
+meme::
 AUTO_ASSIGN:
-    or a
+    ld ix,-AAD_SIZE
+    add ix,sp
+    ld sp,ix
 
-AUTO_COMMON:
-  	ld	(NXT7##+2),a
+  	ld	(ix+AAD_FLAGS),a
 
-	ld	de,(NXTEMP##)	;Save lots of page 3 variables.
-	push	de			;This is necessary because AUTO_ASSIGN uses them
-	ld	de,(TMPDEV##)	;as temporary work area, which is OK in DOS 2 mode
-	push	de			;but in in DOS 1 mode these are actually used for something else.
-	ld	de,(NXT4##)
-	push	de
-	ld	de,(NXT4##+2)
-	push	de
+    ld (ix+AAD_UNIT_DESCRIPTOR),l
+    ld (ix+AAD_UNIT_DESCRIPTOR+1),h
+    push hl
+    pop iy
+    ld a,(iy+UD_SLOT##)
+    ld (ix+AAD_DRIVER_SLOT),a
+
 	call	AUTO_COMMON2
-	pop	de
-	ld	(NXT4##+2),de
-	pop	de
-	ld	(NXT4##),de
-	pop	de
-	ld	(TMPDEV##),de
-	pop	de
-	ld	(NXTEMP##),de
+
+    ld ix,AAD_SIZE
+    add ix,sp
+    ld sp,ix
+
 	ret
 
 AUTO_COMMON2:
-	jr nc,AUTO_COMMON3
+    bit 7,a
+	jr z,AUTO_COMMON3
 
 ;AUTO_ASPART:	
-	push hl
-	pop ix
-	ld a,b	    ;(ix+UD_DI##)
-	ld (TMPDEV##),a
-	ld a,c  	;(ix+UD_LI##)
-	ld (TMPLUN##),a
+	ld (ix+AAD_LOOP_DEV_INDEX),b
+	ld (ix+AAD_LOOP_LUN_INDEX),c
 	xor a
-	ld (BUF9##),a
-	ld (NXTEMP##),a
-	inc a
-	ld (NXT3##),a   ;AUTO_ASPART was called
+	ld (ix+AAD_CAND_PART_DEVLUN),a
+	ld (ix+AAD_CURR_PART_DEVLUN),a
 
 	jp AA_CHKDUP_OK 
 
 ;AUTO_ASSIGN:
 AUTO_COMMON3:
 	xor a
-	ld (BUF9##),a
-	ld (NXT3##),a
+	ld (ix+AAD_CAND_PART_DEVLUN),a
+	ld (ix+AAD_CURR_PART_STATUS_BYTE),a
 
-	xor	a
-	ld	(NXT7##+5),a
-
-	push	hl
-	pop	ix
-
-	ld	hl,0
-	add	hl,sp
-	ld	(NXT7##+3),hl
-
-	ld	a,1	;Device index
+	inc a	;Device index = 1
 AA_DLOOP:
-	ld	(TMPDEV##),a	;push	af
+	ld	(ix+AAD_LOOP_DEV_INDEX),a
 	ld	a,1	;LUN index
 AA_LLOOP:
-	ld	(TMPLUN##),a	;push	af
+	ld	(ix+AAD_LOOP_LUN_INDEX),a
 
 	xor	a
-	ld	(NXTEMP##),a
+	ld	(ix+AAD_CURR_PART_DEVLUN),a
 
 	;--- Check if the same slot+device+LUN has been assigned
 	;    to other drive already
 
-	ld	a,(TMPDEV##)
-	ld	d,a
-	ld	a,(TMPLUN##)
-	ld	e,a
+	ld	d,(ix+AAD_LOOP_DEV_INDEX)
+	ld	e,(ix+AAD_LOOP_LUN_INDEX)
 
 	ld	a,(DOS_VER##)	;Skip in DOS 1
 	or	a
@@ -968,7 +953,7 @@ AA_CHKDUP_DOS1:
 
 AA_CHKDUP_LOOP1:
 	ld	a,(iy+UD_SLOT##)
-	cp	(ix+UD_SLOT##)
+	cp	(ix+AAD_DRIVER_SLOT)
 	jr	nz,AA_CHKDUP_NEXT1
 
 	ld	a,(iy+UD1_DI##)
@@ -1012,7 +997,7 @@ AA_CHKDUP_LOOP:
 	jr	z,AA_CHKDUP_NEXT	;Unit descriptor in use?
 
 	ld	a,(iy+UD_SLOT##)
-	cp	(ix+UD_SLOT##)
+	cp	(ix+AAD_DRIVER_SLOT)
 	jr	nz,AA_CHKDUP_NEXT
 
 	ld	a,(iy+UD_DI##)
@@ -1035,14 +1020,13 @@ AA_CHKDUP_OK:
 
 	;--- Obtain device information
 
-	ld	a,(ix+UD_SLOT##)
+	ld	a,(ix+AAD_DRIVER_SLOT)
 	ld_iyh_a
 	ld	hl,LUN_INFO##
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF##)
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	push	ix
 	ld	ix,CALDRV##
 	call	CALSLT	;Call LUN_INFO
@@ -1077,15 +1061,14 @@ AA_CHKDUP_OK:
 	;* Mark the device as candidate for autoassign,
 	;  unless this was done before
 
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	sla	b
 	sla	b
 	sla	b
 	or	b
 	or	d	;Include removable flag
-	ld (NXTEMP##),a	;Device + 8*LUN, bit 7 is removable flag
+	ld (ix+AAD_CURR_PART_DEVLUN),a	;Device + 8*LUN, bit 7 is removable flag
 AA_OK_CANDIDATE:
 
 	;--- Device parameters OK.
@@ -1093,7 +1076,7 @@ AA_OK_CANDIDATE:
 
     ld a,1
 AA_PXLOOP:
-    ld (NXT7##+6),a
+    ld (ix+AAD_CURR_PART_INDEX),a
     ld h,a
     ld l,0
     bit 7,a ;We are examining extended partitions?
@@ -1103,11 +1086,9 @@ AA_PXLOOP:
     dec a
     ld l,a
 AA_PX_1ST:
-    ld	a,(TMPLUN##)
-	ld	e,a
-	ld	a,(TMPDEV##)
-    ld  d,a
-    ld	c,(ix+UD_SLOT##)
+    ld	e,(ix+AAD_LOOP_LUN_INDEX)
+	ld	d,(ix+AAD_LOOP_DEV_INDEX)
+    ld	c,(ix+AAD_DRIVER_SLOT)
     ld  b,0FFh
 
     push ix
@@ -1118,12 +1099,11 @@ AA_PX_1ST:
     or a
     jp	nz,AA_LLOOP_NEXT	;Not ready or partition not available
 AA_PX_POK:
-    ld  a,c
-    ld  (NXT7##+5),a
+    ld  (ix+AAD_CURR_PART_STATUS_BYTE),c
     ld	a,b	;Partition type
     cp  PT_EXT
     jr  nz,AA_PX_NOEX
-    ld a,(NXT7##+6)
+    ld a,(ix+AAD_CURR_PART_INDEX)
     or 80h
     jr AA_PXLOOP
 AA_PX_NOEX:    
@@ -1136,11 +1116,11 @@ AA_PX_NOEX:
 	cp	PT_FAT16
 	jr	z,AA_PLOOP_OKTYPE
 	cp	PT_FAT16_S
-	jr	z,AA_PLOOP_OKTYPE
+ 	jr	z,AA_PLOOP_OKTYPE
 	cp	PT_FAT16_L
 	jr	z,AA_PLOOP_OKTYPE
 AA_PLOOP_NEXT:
-    ld a,(NXT7##+6)
+    ld a,(ix+AAD_CURR_PART_INDEX)
     inc a     ;FFh if no more partitions left (we were examining the MBR itself)
     jp z,AA_LLOOP_NEXT
     cp 5    ;We examine the first 4 primary partitions only...
@@ -1154,20 +1134,22 @@ AA_PLOOP_END:
     ld	hl,0            ;No suitable partitions found: try the MBR itself as last resort
 	ld	de,0
     xor a
-    ld  (NXT7##+6),a    ;Clear any stale active partition flag
+    ld  (ix+AAD_CURR_PART_STATUS_BYTE),a    ;Clear any stale active partition flag
     dec a
-    ld  (NXT7##+6),a    ;Partition # = 0FFh -> no more partitions
+    ld  (ix+AAD_CURR_PART_INDEX),a    ;Partition # = 0FFh -> no more partitions
 
     ;* Read first sector of partition
 
 AA_PLOOP_OKTYPE:
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	ld	(TMP_SEC##),de
-	ld	(BUF9##+5),de
+    ld  (ix+AAD_CURR_PART_SECTOR),e
+    ld  (ix+AAD_CURR_PART_SECTOR+1),d
 	ld	(TMP_SEC##+2),hl
-	ld	(BUF9##+7),hl
+    ld  (ix+AAD_CURR_PART_SECTOR+2),l
+    ld  (ix+AAD_CURR_PART_SECTOR+3),h
+    ld  c,(ix+AAD_DRIVER_SLOT)
 
 	call	AA_RSEC
 	jr	nz,AA_PLOOP_NEXT
@@ -1177,7 +1159,6 @@ AA_PLOOP_OKTYPE:
 AA_CHECK_BOOT:
 	call	CHECK_FAT_BOOT
 	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
-	jr	AA_CHECK_BOOT2
 
 AA_CHECK_BOOT2:
 
@@ -1199,16 +1180,20 @@ AA_SPC_OK:
 
 	push ix
 	push iy
-	ld h,(ix+UD_SLOT##)
-	ld l,(ix+UD_SEG##)
-	ld a,(TMPDEV##)
-	ld d,a
-	ld a,(TMPLUN##)
-	ld e,a
+	ld h,(ix+AAD_DRIVER_SLOT)
+	ld l,0FFh   ;(ix+UD_SEG##)
+    ld e,(ix+AAD_UNIT_DESCRIPTOR)
+    ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
+    push de
+	ld d,(ix+AAD_LOOP_DEV_INDEX)
+	ld e,(ix+AAD_LOOP_LUN_INDEX)
 	exx
-	ld de,(BUF9##+5)
-	ld hl,(BUF9##+7)
+    ld  e,(ix+AAD_CURR_PART_SECTOR)
+    ld  d,(ix+AAD_CURR_PART_SECTOR+1)
+    ld  l,(ix+AAD_CURR_PART_SECTOR+2)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+3)
 	exx
+    pop ix
 
 	call CHECK_MAP_IN_USE
 	pop iy
@@ -1216,31 +1201,37 @@ AA_SPC_OK:
 	jp nz,AA_PLOOP_NEXT
 
 	;* All checks ok, partition is good.
-    ;  If it has the active flag set, we've found our partition.
+    ;  If it has the active flag set, go ahead and assign it.
     ;  Otherwise mark it as candidate.
 
-    ld a,(NXT7##+5)
+    ld a,(ix+AAD_CURR_PART_STATUS_BYTE)
     and 80h
     jr z,AA_NOT_ACTIVE
 
-	ld	hl,(BUF9##+5)
-	ld	(BUF9##+1),hl
-	ld	hl,(BUF9##+7)
-	ld	(BUF9##+3),hl
+    ld  l,(ix+AAD_CURR_PART_SECTOR)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+1)
+    ld  (ix+AAD_CAND_PART_SECTOR),l
+    ld  (ix+AAD_CAND_PART_SECTOR+1),h
+    ld  l,(ix+AAD_CURR_PART_SECTOR+2)
+    ld  h,(ix+AAD_CURR_PART_SECTOR+3)
+    ld  (ix+AAD_CAND_PART_SECTOR+2),l
+    ld  (ix+AAD_CAND_PART_SECTOR+3),h
 	jp	AA_DO_ASSIGN
 
 AA_NOT_ACTIVE:
-	ld	a,(BUF9##)
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)
 	or	a
 	jp	nz,AA_PLOOP_NEXT
 
-	ld	a,(NXTEMP##)
-	ld	(BUF9##),a		;Valid partition: mark as candidate device
+	ld	a,(ix+AAD_CURR_PART_DEVLUN)
+	ld	(ix+AAD_CAND_PART_DEVLUN),a  ;Valid partition: mark as candidate device
 
-	ld	hl,(TMP_SEC##)	;If this is the first partition being examined,
-	ld	(BUF9##+1),hl	;save its number
+	ld	hl,(TMP_SEC##)	;If this is the first partition being examined, save its number
+    ld (ix+AAD_CAND_PART_SECTOR),l
+    ld (ix+AAD_CAND_PART_SECTOR+1),h
 	ld	hl,(TMP_SEC##+2)
-	ld	(BUF9##+3),hl
+    ld (ix+AAD_CAND_PART_SECTOR+2),l
+    ld (ix+AAD_CAND_PART_SECTOR+3),h
 
     jp  AA_PLOOP_NEXT
 
@@ -1248,16 +1239,16 @@ AA_NOT_ACTIVE:
 	;    so jump to the next device or LUN
 
 AA_LLOOP_NEXT:
-	ld a,(NXT3##)
-	or a
+  	ld	a,(ix+AAD_FLAGS)
+	and AAFLAG_IS_AUTOASPART
 	jr nz,AA_LLOOP_END
 
-	ld	a,(TMPLUN##)
+	ld	a,(ix+AAD_LOOP_LUN_INDEX)
 	inc	a
 	cp	8
 	jp	nz,AA_LLOOP
 
-	ld	a,(TMPDEV##)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
 	inc	a
 	cp	8
 	jp	nz,AA_DLOOP
@@ -1267,7 +1258,7 @@ AA_LLOOP_END:
 	;    If a candidate device was identified, use it,
 	;    otherwise return an error
 
-	ld	a,(BUF9##)
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)
 	or	a
 	jr	z,AA_END_NOFOUND
 
@@ -1279,30 +1270,34 @@ AA_LLOOP_END:
 	ld	b,a	;B=LUN
 	ld	a,c
 	and	111b	;A=Device
-	ld	(TMPDEV##),a
-	ld	a,b
-	ld	(TMPLUN##),a
+	ld	(ix+AAD_LOOP_DEV_INDEX),a
+	ld	(ix+AAD_LOOP_LUN_INDEX),b
 	jp	AA_DO_ASSIGN
 
 AA_END_NOFOUND:
 	ld	a,1
 	ret	;Error, no suitable device/partition found
 
-	;--- A suitable device has been found.
+	;--- A suitable device has been found (the candidate device).
 	;    Assign it to the drive.
 
 AA_DO_ASSIGN:
+    ld l,(ix+AAD_UNIT_DESCRIPTOR)
+    ld h,(ix+AAD_UNIT_DESCRIPTOR+1)
+    push hl
+    pop iy
+
 	ld a,(DOS_VER##)
 	or a
 	jr z,AA_DO_ASSDOS1
 
-	set	UF_FOK,(ix+UD_DFLAGS##)	;Tell that the partition information is valid
-	ld	b,(ix+UD_SLOT##)
-	ld	c,(ix+UD_PHYS##)
+	set	UF_FOK,(iy+UD_DFLAGS##)	;Tell that the partition information is valid
+	ld	b,(iy+UD_SLOT##)
+	ld	c,(iy+UD_PHYS##)
 	push	bc
 
-	ld	a,(ix+UD_DFLAGS##)
-	push	ix	;First clear the current unit descriptor
+	ld	a,(iy+UD_DFLAGS##)
+	push	iy	;First clear the current unit descriptor
 	pop	hl
 	push	hl
 	pop	de
@@ -1310,63 +1305,66 @@ AA_DO_ASSIGN:
 	ld	(hl),0
 	ld	bc,UD_SZ##-1
 	ldir
-	ld	(ix+UD_DFLAGS##),a
+	ld	(iy+UD_DFLAGS##),a
 
 	pop	bc
-	ld	(ix+UD_SLOT##),b
-	ld	(ix+UD_PHYS##),c
-	ld	a,(TMPLUN##)
-	ld	b,a
-	ld	a,(TMPDEV##)
-	ld	(ix+UD_LI##),b
-	ld	(ix+UD_DI##),a
-	ld	(ix+UD_SEG##),0FFh
+	ld	(iy+UD_SLOT##),b
+	ld	(iy+UD_PHYS##),c
+	ld	b,(ix+AAD_LOOP_LUN_INDEX)
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
+	ld	(iy+UD_LI##),b
+	ld	(iy+UD_DI##),a
+	ld	(iy+UD_SEG##),0FFh
 
-	ld	hl,(BUF9##+1)
-	ld	(ix+UD_FSEC##),l
-	ld	(ix+UD_FSEC##+1),h
-	ld	hl,(BUF9##+3)
-	ld	(ix+UD_FSEC##+2),l
-	ld	(ix+UD_FSEC##+3),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+1)
+	ld	(iy+UD_FSEC##),l
+	ld	(iy+UD_FSEC##+1),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR+2)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+3)
+	ld	(iy+UD_FSEC##+2),l
+	ld	(iy+UD_FSEC##+3),h
 
-	ld	(ix+UD_CDIR##+1),0FFh	;set current dir -ve => root
-	ld	(ix+UD_CDIR##),0FFh
+	ld	(iy+UD_CDIR##+1),0FFh	;set current dir -ve => root
+	ld	(iy+UD_CDIR##),0FFh
 
-	ld	a,(BUF9##)	;Retrieve removable unit flag
+	ld	a,(ix+AAD_CAND_PART_DEVLUN)	;Retrieve removable unit flag
 	rlca
 	rlca
 	rlca
 	and	4
 	or	UFM_DB		;Set "device based driver"
-	or	(ix+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
-	ld	(ix+UD_DFLAGS##),a
+	or	(iy+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
+	ld	(iy+UD_DFLAGS##),a
 
 	ld	hl,$DPBLIST##
-	ld	c,(ix+UD_PHYS##)
+	ld	c,(iy+UD_PHYS##)
 	dec	c
 	sla	c
 	ld	b,0
 	add	hl,bc
 	ld	a,(hl)
-	ld	(ix+UD_DPB##),a
+	ld	(iy+UD_DPB##),a
 	inc	hl
 	ld	a,(hl)
-	ld	(ix+UD_DPB##+1),a
+	ld	(iy+UD_DPB##+1),a
 
 	xor	a
 	ret
 
 AA_DO_ASSDOS1:
-	ld	a,(TMPDEV##)
-	ld	(ix+UD1_DI##),a
-	ld	a,(TMPLUN##)
-	ld	(ix+UD1_LI##),a
-	ld	hl,(BUF9##+1)
-	ld	(ix+UD1_FSEC##),l
-	ld	(ix+UD1_FSEC##+1),h
-	ld	hl,(BUF9##+3)
-	ld	(ix+UD1_FSEC##+2),l
-	ld	(ix+UD1_FSEC##+3),h
+	ld	a,(ix+AAD_LOOP_DEV_INDEX)
+	ld	(iy+UD1_DI##),a
+	ld	a,(ix+AAD_LOOP_LUN_INDEX)
+	ld	(iy+UD1_LI##),a
+    ld  l,(ix+AAD_CAND_PART_SECTOR)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+1)
+	ld	(iy+UD1_FSEC##),l
+	ld	(iy+UD1_FSEC##+1),h
+    ld  l,(ix+AAD_CAND_PART_SECTOR+2)
+    ld  h,(ix+AAD_CAND_PART_SECTOR+3)
+	ld	(iy+UD1_FSEC##+2),l
+	ld	(iy+UD1_FSEC##+3),h
 
 	xor	a
 	ret
@@ -1379,15 +1377,14 @@ EMUDAT:
 ;This subroutine reads a sector from the device to SECBUF.
 ;Input: A  = Device index
 ;       B  = LUN
-;       IX = Address of unit descriptor
+;       C  = Driver slot
 ;       (TMP_SEC) = sector number
 ;Output: NZ on error
 ;Preserves IX
 
 AA_RSEC:
 	push	af
-	ld	a,(ix+UD_SLOT##)
-	ld_iyh_a
+	ld_iyh_c
 	pop	af
 	ld	hl,DEV_RW##
 	ld	(BK4_ADD##),hl
@@ -1626,6 +1623,7 @@ GOEMU3:
 	ld	a,(TMPLUN##)
 	ld	b,a
 	ld	a,(TMPDEV##)
+    ld  c,(ix+UD_SLOT##)
 	call	AA_RSEC
 	ld	a,0
 	ret	nz

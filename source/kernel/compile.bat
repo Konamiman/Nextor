@@ -179,8 +179,8 @@ dd if=bank5\fdisk.dat of=dos250ba.dat bs=1 count=16000 seek=82176
 dd if=bank5\fdisk2.dat of=dos250ba.dat bs=1 count=8000 seek=98560
 copy bank4\b4rd.bin
 dd if=b4rd.bin of=dos250ba.dat bs=1 count=15 seek=65664
-copy dos250ba.dat Nextor-2.1.0-beta1.base.dat
-copy dos250ba.dat ..\..\bin\kernels\Nextor-2.1.0-beta1.base.dat
+copy dos250ba.dat Nextor-2.1.0-beta1-r2.base.dat
+copy dos250ba.dat ..\..\bin\kernels\Nextor-2.1.0-beta1-r2.base.dat
 
 :drivers
 
@@ -216,8 +216,8 @@ cpm32 L80 /P:7fd0,CHGBNK,CHGBNK/N/X/Y/E
 hex2bin -s 4000 driver.hex
 hex2bin -s 7FD0 CHGBNK.hex
 
-..\..\..\..\wintools\mknexrom  ..\..\Nextor-2.1.0-beta1.base.dat Nextor-2.1.0-beta1.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
-copy Nextor-2.1.0-beta1.%%~nc.ROM ..\..\..\..\bin\kernels
+..\..\..\..\wintools\mknexrom  ..\..\Nextor-2.1.0-beta1-r2.base.dat Nextor-2.1.0-beta1-r2.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
+copy Nextor-2.1.0-beta1-r2.%%~nc.ROM ..\..\..\..\bin\kernels
 del b6.mac
 del *.rom
 cd ..
@@ -231,10 +231,10 @@ echo ***
 echo .
 
 cd MegaFlashRomSD
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta1.base.dat nextor2.rom /d:driver.bin /m:Mapper.ASCII8.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.MegaFlashSDSCC.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta1-r2.base.dat nextor2.rom /d:driver.bin /m:Mapper.ASCII8.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1-r2.MegaFlashSDSCC.ROM
 sjasm makerecoverykernel.asm kernel.dat
-copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.MegaFlashSDSCC.Recovery.ROM
+copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1-r2.MegaFlashSDSCC.Recovery.ROM
 cd ..
 
 echo .
@@ -244,9 +244,11 @@ echo ***
 echo .
 
 cd SunriseIDE
+if exist driver.mac goto :okide
 sjasm -c sunride.asm driver.bin
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta1.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1.SunriseIDE.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta1-r2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta1-r2.SunriseIDE.ROM
+:okide
 cd ..
 
 echo .
