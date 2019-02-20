@@ -1191,7 +1191,7 @@ void AddAutoPartition()
     partition->status = partitionsCount == 0 ? 0x80 : 0;
 	partition->sizeInK = autoPartitionSizeInK;
 	partition->partitionType = 
-		partition->sizeInK > MAX_FAT12_PARTITION_SIZE_IN_K ? PARTYPE_FAT16 : PARTYPE_FAT12;
+		partition->sizeInK > MAX_FAT12_PARTITION_SIZE_IN_K ? PARTYPE_FAT16_LBA : PARTYPE_FAT12;
 	if(partitionsCount == 0) {
 		partition->primaryIndex = 1;
 		partition->extendedIndex = 0;
