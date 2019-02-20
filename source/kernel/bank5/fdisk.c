@@ -105,13 +105,13 @@ void ShowDeviceSelectionScreen();
 void GetDevicesInformation();
 void EnsureMaximumStringLength(char* string, int maxLength);
 void GoLunSelectionScreen(byte deviceIndex);
-void InitializePartitionningVariables(byte lunIndex);
+void InitializePartitioningVariables(byte lunIndex);
 void ShowLunSelectionScreen();
 void PrintSize(ulong sizeInK);
 byte GetRemainingBy1024String(ulong value, char* destination);
 void GetLunsInformation();
 void PrintDeviceInfoWithIndex();
-void GoPartitionningMainMenuScreen();
+void GoPartitioningMainMenuScreen();
 bool GetYesOrNo();
 byte GetDiskPartitionsInfo();
 void ShowPartitions();
@@ -131,7 +131,7 @@ byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK);
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 #endif
 bool WritePartitionTable();
-void PreparePartitionningProcess();
+void PreparePartitioningProcess();
 byte CreatePartition(int index);
 byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector);
 bool ConfirmDataDestroy(char* action);
@@ -208,7 +208,7 @@ void DoFdisk()
     SaveOriginalScreenConfiguration();
     ComposeWorkScreenConfiguration();
     SetScreenConfiguration(&currentScreenConfig);
-    InitializeWorkingScreen("Nextor disk partitionning tool");
+    InitializeWorkingScreen("Nextor disk partitioning tool");
 
 	GoDriverSelectionScreen();
 
@@ -504,9 +504,9 @@ void GoLunSelectionScreen(byte deviceIndex)
                 return;
             } else {
                 key -= '0';
-                if(key >= 1 && key <= MAX_LUNS_PER_DEVICE && luns[key - 1].suitableForPartitionning) {
-					InitializePartitionningVariables(key);
-                    GoPartitionningMainMenuScreen();
+                if(key >= 1 && key <= MAX_LUNS_PER_DEVICE && luns[key - 1].suitableForPartitioning) {
+					InitializePartitioningVariables(key);
+                    GoPartitioningMainMenuScreen();
                     break;
                 }
             }
@@ -515,7 +515,7 @@ void GoLunSelectionScreen(byte deviceIndex)
 }
 
 
-void InitializePartitionningVariables(byte lunIndex)
+void InitializePartitioningVariables(byte lunIndex)
 {
 	selectedLunIndex = lunIndex - 1;
 	selectedLun = &luns[selectedLunIndex];
@@ -558,7 +558,7 @@ void ShowLunSelectionScreen()
 
 	currentLun = &luns[0];
 	for(i = 0; i < MAX_LUNS_PER_DEVICE; i++) {
-		if(currentLun->suitableForPartitionning) {
+		if(currentLun->suitableForPartitioning) {
 			printf("\x1BK%i. Size: ", i + 1);
 			PrintSize(currentLun->sectorCount / 2);
 			NewLine();
@@ -646,13 +646,13 @@ void GetLunsInformation()
 			currentLun->sectorCount = fakeDeviceSizeInK * 2;
 		}
 #endif
-		currentLun->suitableForPartitionning =
+		currentLun->suitableForPartitioning =
 			(regs.Bytes.A == 0) &&
 			(currentLun->mediumType == BLOCK_DEVICE) &&
 			(currentLun->sectorSize == 512) &&
 			(currentLun->sectorCount >= MIN_DEVICE_SIZE_IN_K * 2) &&
 			((currentLun->flags & (READ_ONLY_LUN | FLOPPY_DISK_LUN)) == 0);
-		if(currentLun->suitableForPartitionning) {
+		if(currentLun->suitableForPartitioning) {
 			availableLunsCount++;
 		}
 
@@ -685,7 +685,7 @@ void PrintTargetInfo()
 }
 
 
-void GoPartitionningMainMenuScreen()
+void GoPartitioningMainMenuScreen()
 {
 	char key;
 	byte error;
@@ -1004,7 +1004,7 @@ void TogglePartitionActive(byte partitionIndex)
 	((uint*)&(partitionTableEntrySector))[0] = regs.UWords.DE;
 	((uint*)&(partitionTableEntrySector))[1] = regs.UWords.HL;
 
-    PreparePartitionningProcess();  //Needed to set up driver slot, device index, etc
+    PreparePartitioningProcess();  //Needed to set up driver slot, device index, etc
     error = ToggleStatusBit(extendedIndex == 0 ? primaryIndex-1 : 0, partitionTableEntrySector);
     if(error == 0) {
         partition->status ^= 0x80;
@@ -1382,8 +1382,8 @@ bool WritePartitionTable()
 	PrintStateMessage("Please wait...");
 
 	Locate(0, MESSAGE_ROW);
-	PrintCentered("Preparing partitionning process...");
-	PreparePartitionningProcess();
+	PrintCentered("Preparing partitioning process...");
+	PreparePartitioningProcess();
 
 	for(i = 0; i < partitionsCount; i++) {
 		Locate(0, MESSAGE_ROW);
@@ -1409,7 +1409,7 @@ bool WritePartitionTable()
 }
 
 
-void PreparePartitionningProcess()
+void PreparePartitioningProcess()
 {
 	byte* remoteCallParams = buffer;
 
@@ -1420,7 +1420,7 @@ void PreparePartitionningProcess()
 	*((partitionInfo**)&remoteCallParams[5]) = &partitions[0];
 	*((uint*)&remoteCallParams[7]) = luns[selectedLunIndex].sectorsPerTrack;
 
-	CallFunctionInExtraBank(f_PreparePartitionningProcess, remoteCallParams);
+	CallFunctionInExtraBank(f_PreparePartitioningProcess, remoteCallParams);
 }
 
 

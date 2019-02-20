@@ -3,7 +3,7 @@
 
 #define f_CalculateFatFileSystemParameters 1
 #define f_CreateFatFileSystem 2
-#define f_PreparePartitionningProcess 3
+#define f_PreparePartitioningProcess 3
 #define f_CreatePartition 4
 #define f_ToggleStatusBit 5
 

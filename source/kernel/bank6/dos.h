@@ -47,7 +47,7 @@ typedef struct {
 	uint cylinders;
 	byte heads;
 	byte sectorsPertrack;
-	bool suitableForPartitionning;
+	bool suitableForPartitioning;
 } lunInfo;
 
 

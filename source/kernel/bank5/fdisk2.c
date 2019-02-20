@@ -53,7 +53,7 @@ void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemPara
 int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, byte write);
-int remote_PreparePartitionningProcess(byte* callerParameters);
+int remote_PreparePartitioningProcess(byte* callerParameters);
 int remote_CreatePartition(byte* callerParameters);
 int CreatePartition(int index);
 int remote_ToggleStatusBit(byte* callerParameters);
@@ -72,8 +72,8 @@ int main(int bc, int hl)
 		case f_CreateFatFileSystem:
 			return remote_CreateFatFileSystem((byte*)hl);
 			break;
-		case f_PreparePartitionningProcess:
-			return remote_PreparePartitionningProcess((byte*)hl);
+		case f_PreparePartitioningProcess:
+			return remote_PreparePartitioningProcess((byte*)hl);
 			break;
 		case f_CreatePartition:
 			return remote_CreatePartition((byte*)hl);
@@ -460,7 +460,7 @@ byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firs
 }
 
 
-int remote_PreparePartitionningProcess(byte* callerParameters)
+int remote_PreparePartitioningProcess(byte* callerParameters)
 {
 	int i;
 	int sectorsRemaining;
