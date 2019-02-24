@@ -622,7 +622,7 @@ VER_CHK:
 ;
 ;	I am not the first.  check to see if I can be the new master.
 ;
-	ld	a,(PROCNM+9)	;If in disk emulation mode, disable myself
+	ld	a,(IN_EMU##)	;If in disk emulation mode, disable myself
 	or	a
 	ret	nz
 
@@ -704,7 +704,7 @@ SLAVE:
 	;PROCNM+6: Number of drives actually assigned
 	;PROCNM+7: 1 to boot in DOS 1 mode
 	;PROCNM+8: 1 if device-based driver
-	;PROCNM+9: 1 if in disk emulation mode (set by AUTODRV in partit.mac)
+	;IN_EMU: 1 if in disk emulation mode (set by AUTODRV in partit.mac)
     ;PROCNM+10: <>0 if the driver provides configuration
 
 	;Calculate how many work area space can be allocated, it will be:
@@ -2277,7 +2277,7 @@ CHECK_1KEY:
 ;===== start mod DOS2.50 (build type)
 	jr	nz,OLDDOS	;OLDDOS will do the rest of work.
 
-	ld	a,(PROCNM+9)	;If in disk emulation mode (set by AUTODRV from DOSINIT),
+	ld	a,(IN_EMU##)	;If in disk emulation mode (set by AUTODRV from DOSINIT),
 	or	a               ;switch to DOS 1 mode
 	jr	nz,OLDDOS
 
@@ -2371,7 +2371,7 @@ endif
 	;the work area is already created in BUF_1,
 	;so just jump to area relocation procedure.
 
-	ld	a,(PROCNM+9)
+	ld	a,(IN_EMU##)
 	or	a
 	jr	nz,MK_EMU_TBL
 
@@ -2395,9 +2395,7 @@ MK_EMU_TBL:
 	;then just copy from BUF_1 to it.
 	;Otherwise allocate space in page 3.
 
-	ld	ix,0F980h	;BUF_1##
-	ld	l,(ix+16)
-	ld	h,(ix+17)
+    ld hl,(EMU_WK_AREA##)
 	ld	a,h
 	or	l
 	jr	nz,OK_EMU_WK
@@ -2408,7 +2406,7 @@ MK_EMU_TBL:
 OK_EMU_WK:
 	push	hl
 	ex	de,hl
-	ld	hl,0F980h	;BUF_1##
+	ld	hl,EMU_TMP##
 	ld	bc,16
 	call	MEMCPY
 
@@ -2416,17 +2414,6 @@ OK_EMU_WK:
 	set	7,(hl)	;Disk emulation mode flag
 
 	ld	(DVB_TABLE##),hl
-		
-	ld	hl,NXT7##
-	ld	de,NXT7##+1
-	ld	bc,6
-	ld	(hl),0
-	ldir
-	ld	hl,TMP_FROOT##
-	ld	de,TMP_FROOT##+1
-	ld	bc,11
-	ld	(hl),0
-	ldir
 
 	jr	END_DVB_TBL
 

@@ -82,22 +82,31 @@ DIO_ENTRY::
 	call	IS_DVB
 	jp	nc,DIO_ENTRY_DO
 
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	or	a
 	jp	z,DISKERR
 
 	call	IS_EMU
-	jr	nc,DIOEN_NOEMU
+	jp	c,DIOEN_ISEMU
+
+    ;>>> NOT in disk emulation mode
+
+DIOEN_NOEMU:
+	call	HAS_PARTITION
+	call	nz,ASSIGN_PARTITION
+	jp	nz,POP_CONV_ERR
+	jr	DIOEN3
 
 	;>>> In disk emulation mode
 
+DIOEN_ISEMU:
 	pop	af
 	push	af
 	or	a
 
 	jp	nz,DISKERR	;Drive number must be 0
 
-	call	CHGFILE
+	call CHGFILE
 	jr	z,DIOCHGFOK
 	pop	bc
 	ld	b,0
@@ -109,8 +118,8 @@ DIOCHGFOK:
 	push	hl
 	push	de
 	ld	ix,(DVB_TABLE##)
-	ld	e,(ix+9)
-	ld	d,(ix+10)	;DE = dsk size in sectors
+	ld	e,(ix+DSK_SIZE##)
+	ld	d,(ix+DSK_SIZE##+1) ;DE = dsk size in sectors
 
 	pop	hl
 	push	hl
@@ -150,29 +159,36 @@ WVDP:
 	call	CAPSOFF
 	ret
 
-	;>>> NOT in disk emulation mode
-
-DIOEN_NOEMU:
-	call	HAS_PARTITION
-	call	nz,ASSIGN_PARTITION
-	jp	nz,POP_CONV_ERR
-	jr	DIOEN3
-
 DIOEN2:
 	push	af
+    ld iy,(DVB_TABLE)
 DIOEN3:
+
+    ; In this point one of these is true:
+    ;
+    ; - We are in disk emulation mode, and IY points to the beginning
+    ;   of the work area for emulation mode.
+    ;
+    ; - We are in normal DOS 1 mode, and IY points to the entry
+    ;   for the drive in DVB_TABLE.
+    ;
+    ; The following code is common to both cases, that's why
+    ; device index, LUN index and first sector number must be stored
+    ; at the same offset in both the DVB_TABLE entries (UD1_*)
+    ; and the disk emulation work area (DSK_*).
+
 	ld	a,1
 	ld	(KSLOT##),a	;KSLOT=1 -> device-based
 
 	push	hl
-	ld	l,(iy+4)
-	ld	h,(iy+5)
+	ld	l,(iy+UD1_FSEC##)
+	ld	h,(iy+UD1_FSEC##+1)
 	add	hl,de
 	ld	ix,TMP_SEC##
 	ld	(ix),l	;Calculate absolute sector number
 	ld	(ix+1),h
-	ld	l,(iy+6)
-	ld	h,(iy+7)
+	ld	l,(iy+UD1_FSEC##+2)
+	ld	h,(iy+UD1_FSEC##+3)
 	ld	de,0
 	adc	hl,de
 	ld	(ix+2),l
@@ -180,9 +196,9 @@ DIOEN3:
 	pop	hl		;Restore transfer address
 	ld	de,TMP_SEC##
 	
-	ld	c,(iy+3)	;Set LUN index
-	pop	af		;From here Cy must be kept untouched
-	ld	a,(iy+2)	;Set device index
+	ld	c,(iy+UD1_LI##) ;Set LUN index
+	pop	af                   ;From here Cy must be kept untouched
+	ld	a,(iy+UD1_DI##) ;Set device index
 	jr	DIO_ENTRY_DO_2
 
 		
@@ -421,7 +437,7 @@ CHGF3:
 
 	;> Do nothing if chosen file is the same currently in use
 
-	ld	a,(ix)
+	ld	a,(ix+DSK_IDX##)
 	and	7Fh
 	cp	c
 	call	z,CAPSOFF
@@ -431,7 +447,7 @@ CHGF3:
 
 	push	bc
 
-	ld	a,(ix+2)	;.DAT file dev index + 16 * LUN index
+	ld	a,(ix+EMU_DEVLUN##) ;.DAT file dev index + 16 * LUN index
 	ld	d,a
 	rrca
 	rrca
@@ -442,11 +458,11 @@ CHGF3:
 	ld	a,d
 	and	111b	;Device
 
-	ld	l,(ix+12)
-	ld	h,(ix+13)
+	ld	l,(ix+EMU_FSEC##)
+	ld	h,(ix+EMU_FSEC##+1)
 	ld	(TMP_SEC##),hl
-	ld	l,(ix+14)
-	ld	h,(ix+15)
+	ld	l,(ix+EMU_FSEC##+2)
+	ld	h,(ix+EMU_FSEC##+3)
 	ld	(TMP_SEC##+2),hl
 
 	ld	iy,(0F348h-1)	;Master controller slot
@@ -470,9 +486,9 @@ CHGF3:
 	;> Set the new file data in work area
 
 	ld	a,c
-	ld	(ix),a
-	set	7,(ix)
-	set	7,(ix+2)	;File changed flag
+	ld	(ix+DSK_IDX##),a
+	set	7,(ix+DSK_IDX##)
+	set	7,(ix+EMU_DEVLUN##) ;File changed flag
 	
 	dec	a
 	add	a,a		;Each entry is 8 bytes
@@ -487,8 +503,7 @@ CHGF3:
 	push	ix
 	pop	de
 	inc	de
-	inc	de
-	inc	de
+	inc	de  ;DE must point to DSK_DEV in work area
 	ld	bc,8
 	ldir
 
@@ -500,7 +515,7 @@ CHGF3:
 	;Input: IX = Pointer to entry in DVB_TABLE
 
 GETCURKEY:
-	ld	b,(ix+11)
+	ld	b,(ix+DSK_COUNT##)
 	ld	hl,CHGTBL
 	ld	d,-1
 	ld	c,1
@@ -604,7 +619,7 @@ CHG_ENTRY::
 	jp	nc,DO_CALBNK
 
 	ld	d,a
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	or	a
 	jp	z,DISKERR
 
@@ -622,8 +637,8 @@ CHG_ENTRY::
 
 	xor	a
 	ld	ix,(DVB_TABLE##)
-	bit	7,(ix+2)
-	res	7,(ix+2)
+	bit	7,(ix+EMU_DEVLUN##)
+	res	7,(ix+EMU_DEVLUN##)
 	ld	b,1
 	ret	z
 	ld	a,d
@@ -636,9 +651,9 @@ CHGEN_NOEMU:
 	;Drive-based mapping:
 	;Return "changed" if partition has changed, "unchanged" otherwise
 
-	ld	a,(iy+1)
+	ld	a,(iy+UD1_REL##)
 	ld	c,a
-	res	7,(iy+1)
+	res	7,(iy+UD1_REL##)
 	and	10000000b	;Check partition changed flag
 	ld	b,-1
 	ld	a,c
@@ -676,17 +691,17 @@ DO_MKDPB:
 
 DPBEN2:
 	push	hl
-	ld	a,(iy+4)
+	ld	a,(iy+UD1_FSEC##)
 	ld	(TMP_SEC##),a
-	ld	a,(iy+5)
+	ld	a,(iy+UD1_FSEC##+1)
 	ld	(TMP_SEC##+1),a
-	ld	a,(iy+6)
+	ld	a,(iy+UD1_FSEC##+2)
 	ld	(TMP_SEC##+2),a
-	ld	a,(iy+7)
+	ld	a,(iy+UD1_FSEC##+3)
 	ld	(TMP_SEC##+3),a
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	ld	b,1
-	ld	c,(iy+3)
+	ld	c,(iy+UD1_LI##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
@@ -821,7 +836,7 @@ IS_DVB_LOOP:
 	pop bc	
 	jr	nz,DIO_NEXT
 
-	ld	a,(iy+1)
+	ld	a,(iy+UD1_REL##)
 	and	01111111b	;Ignore partition changed flag
 	cp	c
 	jr	nz,DIO_NEXT
@@ -870,10 +885,10 @@ IS_EMU:
 ; Return A=0, Z if partition assigned; A<>0, NZ if NO partition assigned.
 
 HAS_PARTITION:
-	ld	a,(iy+4)	;No partition assigned
-	and	(iy+5)		;if sector number is -1
-	and	(iy+6)
-	and	(iy+7)
+	ld	a,(iy+UD1_FSEC##)  ;No partition assigned
+	and	(iy+UD1_FSEC##+1)  ;if sector number is -1
+	and	(iy+UD1_FSEC##+2)
+	and	(iy+UD1_FSEC##+3)
 	inc	a
 	jr	z,RET_NZ
 	xor	a
@@ -909,6 +924,9 @@ ASSIGN_PARTITION:
 	ld b,(iy+UD1_DI##)
 	ld c,(iy+UD1_LI##)
 	ld	a,4
+    ex af,af'
+    xor a
+    ex af,af'
 	ld	ix,AUTO_ASPART##
 	call	CALBNK##
 
@@ -933,9 +951,9 @@ READ_BOOT:
 	ld	de,0
 	ld	(TMP_SEC##),de
 	ld	(TMP_SEC##+2),de
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DI##)
 	ld	b,1
-	ld	c,(iy+3)
+	ld	c,(iy+UD1_LI##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a

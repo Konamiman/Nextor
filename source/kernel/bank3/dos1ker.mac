@@ -4191,8 +4191,7 @@ T5696:	defb	080H,09AH,"E" ,"A" ,08EH,"A" ,08FH,080H
 ;	Inputs		
 ;	Outputs		________________________
 
-A56D0:	
-	jp	NODOS1F
+A56D0:
 	;xor	a
 	;ld	b,a
 	;ret
@@ -4202,20 +4201,21 @@ A56D0:
 ;	Outputs		________________________
 
 A56D3:
-	call	DO_BDOS
-	;ei
-	;ld	a,1
-	ld	(YF306),a		; assume CP/M compatible call
+	ei
+	ld	(YF306),a		; save A (required for extra functions)
 	ld	a,c
 	cp	031H			; valid BDOS function ?
-	jr	nc,A56D0		; nope, unsupported BDOS call
+	jp	nc,NODOS1F		; nope, unsupported BDOS call
 	sub	011H			; Search First BDOS function ?
 	jr	nz,A56E6
 	ld	(YF307),de		; yep, save address FCB for Search Next
 A56E6:	dec	a			; Search Next BDOS function ?
 	jr	nz,A56ED
 	ld	de,(YF307)		; yep, get saved address FCB Search First
-A56ED:	push	hl
+A56ED:
+    ld a,1
+    ld	(YF306),a		; assume CP/M compatible call
+	push	hl
 	ld	hl,T5700
 	ex	(sp),hl			; after BDOS routine, fill HL in a CP/M compatible manner
 	push	hl
@@ -8824,6 +8824,7 @@ TOBASREQ2:
 NEWCMD:	db	'NEW',0
 
 ; Entry point for non DOS 1 function call
+; The value of A is in (YF306)
 
 NODOS1F:
 	push	hl
@@ -8841,7 +8842,7 @@ NODOS1F_LOOP:
 	ld	h,(hl)
 	ld	l,a
 	ld	(BK4_ADD##),hl
-	ld	a,(BUF9##)
+	ld	a,(YF306)
 	ld	c,a
 	pop	hl
 	jp	?C4PBK##
@@ -8855,15 +8856,6 @@ NODOS1F_ERR:
 	pop	hl
 	xor	a
 	ld	b,a
-	ret
-
-; Save register A on BDOS call (it is normally corrupted),
-; this is needed for the additional function calls.
-
-DO_BDOS:
-	ld	(BUF9##),a
-	ei
-	ld	a,1
 	ret
 
 ; Entries for additional function calls,
@@ -9102,7 +9094,7 @@ NEW_ERRS:
 	;many games to not work)
 
 ALLFBUF:
-	ld	a,(PROCNM+9)
+	ld	a,(IN_EMU##)
 	or	a
 	jp	z,A5EC8		;Jump to actual allocation if not in emulation mode...
 

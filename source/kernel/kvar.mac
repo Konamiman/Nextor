@@ -225,6 +225,10 @@ size	macro	name
 ;*****************************************************************************
 
 ; Entry in the device-based drives table (pointed by DVB_TABLE) in MSX-DOS 1 mode
+;
+; The table consists of one byte with the number of entries, followed by
+; the entries themselves.
+;
 ; WARNING: UD1_SLOT needs to be at the same position as UD_SLOT
 
 	ifield	0		;Start at offset zero
@@ -238,6 +242,43 @@ size	macro	name
 
     size	UD1_SZ		;Total size of unit descriptor
 
+;-----------------------------------------------------------------------------
+;
+; Work area for the disk emulation mode (pointed by DVB_TABLE)
+;
+; Bit 7 of DSK_IDX is kept set to indicate that we are in disk emulation mode
+; (if reset, it's the count of entries for the device-based drives table 
+;  in normal DOS 1 mode, see UD1_*)
+;
+; Bit 7 of EMU_DEVLUN is set after the current image file is changed
+; and reset again when disk change is checked.
+;
+; WARNING: DSK_DEV, DSK_LUN and DSK_FSEC must have the same offset
+; as the DI_* equivalents; this is required by DIO_ENTRY in drv.mac.
+
+	ifield	0		;Start at offset zero
+
+	field	1,DSK_IDX	  ;Index of current disk image file
+	field   1,EMU_DEVLUN  ;Device + 16 * LUN of emulation data mode
+	field   1,DSK_DEV     ;Device index of current disk image file
+    field   1,DSK_LUN     ;LUN index of current disk image file
+	field   4,DSK_FSEC	  ;First sector of current disk image file
+    field   2,DSK_SIZE    ;Size of current disk image file in sectors
+    field   1,DSK_COUNT   ;Number of emulated disk images
+    field   4,EMU_FSEC    ;Sector number of the emulation data file
+
+    size    EMU_SZ		;Total size of unit descriptor
+
+    ;Temporary location of work area used when setting up disk emulation mode
+
+    const   EMU_TMP,0F980h    
+
+    ;Temporary variables used when setting up disk emulation mode
+
+    ifield EMU_TMP+EMU_SZ
+
+    field  1,IN_EMU
+    field  2,EMU_WK_AREA   ;Address of work area as read from the emulation data file
 ;
 ;-----------------------------------------------------------------------------
 ;

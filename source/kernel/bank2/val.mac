@@ -1395,6 +1395,7 @@ build_upb_do_findpart:
 		push ix
 	    push iy
 
+        xor a
 		ld	ix,AUTO_ASPART##
         ld	(BK4_ADD##),ix
         ld	ix,?CALL4##
