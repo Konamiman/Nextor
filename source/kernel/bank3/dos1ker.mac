@@ -8719,7 +8719,13 @@ A738E:	add	hl,sp
 ;	Outputs		________________________
 ;	Remark		is copied to 0F1C9H
 
-A7397:	call	XF36B			; enable ram on page 1
+A7397:	
+    call	XF368			; enable system diskrom
+    jp KSTROUT
+    ds 16-6
+
+    if 0
+    call	XF36B			; enable ram on page 1
 	ld	a,(de)
 	call	XF368			; enable system diskrom
 	inc	de
@@ -8727,6 +8733,7 @@ A7397:	call	XF36B			; enable ram on page 1
 	ret	z			; end of string, quit
 	call	A53A8			; console output
 	jr	A7397			; next
+    endif
 
 ;	Subroutine	XFER (transfer)
 ;	Inputs		HL = source address, DE = destition address, BC = size
@@ -9082,6 +9089,7 @@ NEW_ERRS:
 	defb	'Partition already in use', 0
 	defb	'Illegal in emulation', 0
 
+
 	;Allocate page 3 memory for the FAT buffer of a drive.
 	;Input:  IX = pointer to DPB
 	;        HL = Amount of memory to allocate
@@ -9125,6 +9133,34 @@ TRRAMAD:
 TRRAMEND:
 	ld	a,(H.STKE+0)
 	ret
+
+
+    ;STROUT routine residing in kernel ROM, borrowed from the DOS 2 kernel.
+    ;Replacing the original 16 bytes code with a simple call to this routine
+    ;gives us 10 precious bytes in page 3 that we can use for Nextor specific
+    ;functionality.
+
+KSTROUT:
+	ld	hl,1Ah+0C9h*256	;"LD A,(DE)" then "RET"
+	push	hl
+	call	RD_MEM
+	pop	hl
+	cp	"$"
+	ret	z
+	push	de
+	ld	e,a
+	call	A53A8       ; console output
+	pop	de
+	inc	de
+	jr	KSTROUT
+;
+RD_MEM:
+	ld	hl,XF368        ; enable system diskrom
+	push	hl
+	ld	hl,4
+	add	hl,sp
+	push	hl
+	jp	XF36B           ; enable system diskrom
 
 ; DRV.MAC is to be placed here.
 

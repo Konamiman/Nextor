@@ -449,7 +449,16 @@ map_jump_loop:	ld	e,(hl)			;Get next offset from table
 		inc	bc
 		jr	map_jump_loop		;Loop for next one.
 ;
-map_jumps_done:	pop	de			;Get RAM code address back
+map_jumps_done:	
+        ld hl,_IRQ
+        pop de      ;Get RAM code address back
+        add hl,de
+        ld a,0C3h
+        ld ($IRQ##),a
+        ld a,l
+        ld ($IRQ##+1),a
+        ld a,h
+        ld ($IRQ##+2),a
 ;
 ;	+++++  ADJUST ALL ABSOLUTE REFERENCES  +++++
 ;
@@ -2022,7 +2031,7 @@ P3_OFFSET_TAB:
 		defw	_GO_DRV
 		defw	_JP_VECT
 ;
-		defw	_IRQ
+		;defw	_IRQ    ;We set this one manually
 ;
 		defw	_RDSLT
 		defw	_WRSLT

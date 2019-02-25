@@ -50,11 +50,19 @@ ram_ad	defl	DATABASE
 ;	------------------------
 ;
 	var	PRTBUF,6,F1C9	;MSX-DOS1 compatible string output routine
-	spare	4
+	
+;   ------------------------
+
+; These are available in MSX-DOS 1 mode too tahnks to the modification
+; of the STROUT routine, see dos1ker.mac
+    
+    var2 BK4_ADD,ARG+5	;Address of routine to be called in bank 4
+    var TMP_SEC,4       ;Used for temporary storage of a 32 bit sector number
+	spare	1
 ;
 ;	------------------------
 ;
-	var0	JUMPBASE,F1D3	;Start of jump table.
+	var0	JUMPBASE,F1D6	;Start of jump table.
 ;
 	var3	RD_LDIR		;inter-slot LDIR routine for RAMdisk
 	var3	P0_LDIR		;Data transfer routine used by read/write code
@@ -63,7 +71,8 @@ ram_ad	defl	DATABASE
 	var3	GO_DRV		;Call driver routine
 	var3	JP_VECT		;DOS1 compatible error jump
 ;
-	var3	$IRQ		;Interrupt entry point
+	;var3	$IRQ        ;Moved below DTA_ADDR to make room right before JUMPBASE
+                        ;(which was F1D3 originally)
 ;
 	var3	$RDSLT		;Inter-slot read
 	var3	$WRSLT		;Inter-slot write
@@ -104,7 +113,8 @@ ram_ad	defl	DATABASE
 	var1	CUR_DRV		;Current logical drive (1=A:)
 	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
 ;
-	spare	7
+	var3	$IRQ		;Interrupt entry point
+	spare	4
 ;
 	var1	DIRBFD, F246	;** May be corrupted sometimes.
 ;
@@ -248,16 +258,18 @@ ram_ad	defl	DATABASE
 ;
 	var1	DOS_VER		;DOS version number 2.x
 ;
-	var0	DVB_TABLE	;Pointer to table of device-based drives for DOS1
 	var1	P0_64K		;\   These are the basic 64k RAM segment
 	var1	P1_64K		; \  numbers which should never be changed
 	var1	P2_64K		; /  by anyone (including the system).
 	var1	P3_64K		;/
+
+    const   DVB_TABLE,P0_64K  ;Pointer to table of device-based drives for DOS1
+    const   KSLOT,P2_64K  ;Slot of disk controller being called (used in DOS 1 mode)
 ;
 ;===== start mod DOS2.50 (support MegaSCSI)
 	var1	NXT_VER		;Nextor version numbr
 	var1	MAIN_BANK
-	var	KER250,4	;MSX-DOS 2.50 kernel slots,
+	var	KER250,4	;Nextor kernel slots,
                     ;bit 6 is set if timer interrupt routine is to be called
 					;bit 5 is set if the driver provides configuration
 	var	_TIME_IRQ,5,F31E
@@ -271,15 +283,6 @@ ram_ad	defl	DATABASE
 ;
 	var	AUXBODY,10,F327	;Actually 10
 
-	;These variables are declared inside ARG, a 16 byte area used by math-pack.
-	;There should be no conflict since DOS kernel and math-pack
-	;are not intended to use this area at the same time.
-
-ARG	equ	0F847h
-	const	KSLOT,ARG 	;Slot of disk controller being called (used in DOS 1 mode)
-	const	TMP_SEC,ARG+1	;Used to temporary storage of a 32 bit sector number
-	const	BK4_ADD,ARG+5	;Address of routine to be called in bank 4
-;
 	spare	2
 	var2	$DOS1		;MSX-DOS1 compatible page-1 BDOS entry
 	spare	1

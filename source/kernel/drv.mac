@@ -830,7 +830,7 @@ IS_DVB_NOEMU:
 IS_DVB_LOOP:
     push bc
 	ld	a,(KSLOT##)
-	ld b,(iy)
+	ld b,(iy+UD1_SLOT##)
 	res 6,b
 	cp b
 	pop bc	
