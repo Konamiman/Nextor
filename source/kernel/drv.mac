@@ -29,7 +29,7 @@ $$DRIVE::
 
 	;*** This should be compiled at 781Fh
 
-SNSMAT	equ	0141h
+SCANKEYS equ 41EFh-3    ;As defined in init.mac
 
 ;-----------------------------------------------------------------------------
 ;
@@ -385,9 +385,9 @@ DIO_INC_DE_DVB_END:
 
 ;This routine is invoked in disk emulation mode prior to any disk access.
 ;If checks if a valid file change key is being pressed, and if so,
-;reloads the NEXT_DSK.DAT file and updates the information in DVB_TABLE.
+;reloads the emulation data file and updates the information in DVB_TABLE.
 ;If no suitable key is being pressed, or if change is performed ok, returns Z.
-;If there is an error reading NEXT_DSK.DAT, returns NZ and A=Error code.
+;If there is an error reading the emulation data file, returns NZ and A=Error code.
 
 CHGFILE:
 	push	hl
@@ -406,28 +406,25 @@ CHGFILE:
 CHGF2:
 	ld	ix,(DVB_TABLE##)
 
-	ld	a,6		;Check GRAPH key
-	call	SNSKEY
-	and	100b
-	jr	nz,NOGRAPH
+    call GETCURKEY
+    or a
+    ret z
+    cp 0FFh
+    jr nz,CHGF3
 
-CHGWAIT:
 	call	CAPSON
-	call	GETCURKEY	;GRAPH pressed: wait for other keys to release...
-	or	a
-	jr	nz,CHGWAIT
+    call WAIT_KEY_RELEASE ;GRAPH pressed: wait for other keys to release...
 
 CHGWA2:
 	call	GETCURKEY	;...then to be pressed again.
 	or	a
 	jr	z,CHGWA2
 
-	jr	CHGF3
+    cp 0FFh      ;User changed his mind and pressed GRAPH 
+    jr nz,CHGF3
 
-NOGRAPH:	
-	call	GETCURKEY
-	or	a
-	ret	z
+    call WAIT_KEY_RELEASE
+    ret
 
 CHGF3:
 	ld	c,a
@@ -438,16 +435,16 @@ CHGF3:
 	;> Do nothing if chosen file is the same currently in use
 
 	ld	a,(ix+DSK_IDX##)
-	and	7Fh
+	and	3Fh
 	cp	c
 	call	z,CAPSOFF
 	ret	z
 
-	;> Read .DAT file
+	;> Read emulation data file
 
 	push	bc
 
-	ld	a,(ix+EMU_DEVLUN##) ;.DAT file dev index + 16 * LUN index
+	ld	a,(ix+EMU_DEVLUN##) ;data file dev index + 16 * LUN index
 	ld	d,a
 	rrca
 	rrca
@@ -485,9 +482,12 @@ CHGF3:
 
 	;> Set the new file data in work area
 
+    ld a,(ix+DSK_IDX##)
+    and 11000000b   ;In emulation mode flag + Russian keyboard flag
+    ld b,a
 	ld	a,c
+    or b
 	ld	(ix+DSK_IDX##),a
-	set	7,(ix+DSK_IDX##)
 	set	7,(ix+EMU_DEVLUN##) ;File changed flag
 	
 	dec	a
@@ -511,86 +511,53 @@ CHGF3:
 	ret
 
 
-	;Return in A the index of currently pressed key, 0 if none
-	;Input: IX = Pointer to entry in DVB_TABLE
+WAIT_KEY_RELEASE:
+    call	GETCURKEY
+	or	a
+	jr	nz,WAIT_KEY_RELEASE
+    ret
 
+
+	;Return in A the index of currently pressed key, 0 if none, FFh is GRAPH
+	;Input: IX = Pointer to emulation data area
 GETCURKEY:
-	ld	b,(ix+DSK_COUNT##)
-	ld	hl,CHGTBL
-	ld	d,-1
-	ld	c,1
+    ex af,af'
+    ld a,(ix+DSK_IDX##)
+    rlca
+    rlca
+    rlca
+    and 1   ;Russian keyboard?
+    ex af,af'
+    push ix
+	ld	ix,SCANKEYS
+	xor a
+	call	CALBNK##
+    pop ix
+    bit 6,h
+    ld a,0FFh
+    ret nz
+    ld c,b
+	ld b,(ix+DSK_COUNT##)
+    ld a,1
 
-	;B=Number of keys left to test
-	;HL=Pointer to current key in table
-	;D=Last keyboard row checked
-	;E=Last keyboard row value obtained
-	;C=Current key number
+    ;HLDEC = key statuses
+    ;B = Keys left to check
+    ;A = Current key index
+    ;We do an initial rotation because we want to start at key 1.
 CHGLOOP:
-	ld	a,(hl)
-	inc	hl
-	cp	d
-	jr	z,IHAVEROW
-	ld	d,a
-	call	SNSKEY
-	ld	e,a
-IHAVEROW:
-	ld	a,(hl)
-	inc	hl
-	and	e
-	ld	a,c
-	ret	z
-	inc	c
-	djnz	CHGLOOP
+    sra c
+    rr e
+    rr d
+    rr l
+    rr h
+    bit 0,c
+    ret nz
 
-	xor	a	;No suitable key pressed
-	ret
+    inc a
+    djnz CHGLOOP
 
-SNSKEY::
-	push	bc
-	ld	c,a
-	di
-	in	a,(0AAh)
-	and 0F0h
-	add	a,c
-	out	(0AAh),a
-	ei
-	in	a,(0A9h)
-	pop	bc
-	ret
-
-CHGTBL:
-	db	0,2	;1
-	db	0,4	;2
-	db	0,8	;3
-	db	0,16	;4
-	db	0,32	;5
-	db	0,64	;6
-	db	0,128	;7
-	db	1,1		;8
-	db	1,2		;9
-	db	2,64	;A
-	db	2,128	;B
-	db	3,1	;C
-	db	3,2	;D
-	db	3,4	;E
-	db	3,8	;F
-	db	3,16	;G
-	db	3,32	;H
-	db	3,64	;I
-	db	3,128	;J
-	db	4,1	;K
-	db	4,2	;L
-	db	4,4	;M
-	db	4,8	;N
-	db	4,16	;O
-	db	4,32	;P
-	db	4,64	;Q
-	db	4,128	;R
-	db	5,1	;S
-	db	5,2	;T
-	db	5,4	;U
-	db	5,8	;V
-	db	5,16	;W
+    xor a
+    ret
 
 CAPSON:
 	in	a,(0AAh)

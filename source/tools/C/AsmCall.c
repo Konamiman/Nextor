@@ -1,43 +1,18 @@
-#include "asm.h"
 #include "asmcall.h"
 
 //The following is required in the main program:
 //byte ASMRUT[4];
 //byte OUT_FLAGS;
 //Z80_registers regs;
+//
+//Also the following initialization is required:
+//ASMRUT[0] = 0xC3;
 
 
-void DriverCall(byte slot, uint routineAddress)
+void DosCall(byte function, Z80_registers* regs, register_usage inRegistersDetail, register_usage outRegistersDetail)
 {
-	byte registerData[8];
-	int i;
-
-	memcpy(registerData, &regs, 8);
-
-	regs.Bytes.A = slot;
-	regs.Bytes.B = 0xFF;
-	regs.UWords.DE = routineAddress;
-	regs.Words.HL = (int)registerData;
-
-	DosCall(_CDRVR, REGS_ALL);
-
-	if(regs.Bytes.A == 0) {
-		regs.Words.AF = regs.Words.IX;
-	}
-}
-
-
-void DosCall(byte function, register_usage outRegistersDetail)
-{
-    regs.Bytes.C = function;
-    SwitchSystemBankThenCall((int)0xF37D, outRegistersDetail);
-}
-
-
-void SwitchSystemBankThenCall(int routineAddress, register_usage outRegistersDetail)
-{
-	*((int*)BK4_ADD) = routineAddress;
-	AsmCall(CALLB0, &regs, REGS_ALL, outRegistersDetail);
+    regs->Bytes.C = function;
+    AsmCall(0x0005,regs,inRegistersDetail < REGS_MAIN ? REGS_MAIN : inRegistersDetail, outRegistersDetail);
 }
 
 

@@ -313,13 +313,19 @@ NOBOOT:
 		jr	z,msxdos_fail
 ;
 retry_dos:
-		ld	de,BOOT_NAME		;Try to open the "MSXDOS.SYS"
-		xor	a			; file on the default drive.
+		ld	de,BOOT_NAME    ;Try to open the "NEXTOR.SYS"
+		xor	a               ;file on the default drive.
+		ld	c,_OPEN##
+		call	BOOT_BDOS
+        jr z,msxdos_bootok
+
+        ld	de,OLD_BOOT_NAME    ;Fallback to try "MSXDOS.SYS"
+		xor	a
 		ld	c,_OPEN##
 		call	BOOT_BDOS
 		jr	nz,msxdos_fail		;Jump if file not found
 ;
-
+msxdos_bootok:
 		ld	de,100h
 		ld	hl,3F00h		;Try to read the file in at
 		ld	c,_READ##		; 100h up to the top of
@@ -352,7 +358,7 @@ msxdos_fail:
 ;
 ;
 BOOT_NAME:	db	"\NEXTOR.SYS",0
-;
+OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ;
 ;-----------------------------------------------------------------------------
 ;

@@ -1,13 +1,7 @@
 #ifndef __ASM_H
 #define __ASM_H
 
-#ifndef uint
-typedef unsigned int uint;
-#endif
-
-#ifndef byte
-typedef unsigned char byte;
-#endif
+#include "types.h"
 
 #ifndef NULL
 #define NULL 0

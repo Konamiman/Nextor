@@ -4947,7 +4947,7 @@ I5B0F:	DEFB	LOW RDSLT,C63F4-C63F4
 
 T5B1A:	defb	0,"AUTOEXECBAS",0
 
-T5B27:	defb	'RUN"AUTOEXEC.BAS',0
+T5B27:	defb	'RUN',34,'AUTOEXEC.BAS',0
 
 T5B38:	defw	A5B92			; start DiskBASIC in direct mode
 
@@ -8796,29 +8796,18 @@ A7397:
 
 	defb	31,28,31,30,31,30,31,31,30,31,30,31
 
+BOOTKEYS equ 0F992h    ;Defined in kvar.mac
+
 TO_BASIC_REQUIRED:
 	LD	A,0FFH
 	LD	(YF246),A		; dirsector buffer is invalid
-	push	bc
-	push	ix
-	push	iy
-	ld	ix,SNSMAT
-	ld	iy,(0FCC1h-1)
-	ld	a,0			;Do not try to boot from disk if "3" key is pressed
-	call	CALSLT
-	and	8
-	pop	iy
-	pop	ix
-	pop	bc
+    ld a,(BOOTKEYS)
+    and 00001000b       ;Do not try to boot from disk if "3" key is pressed
 	LD	A,(DEFDPB##+1)
 	LD	C,A
-	jr	nz,TBR2
-
-	scf
-	ret
-
-TBR2:
-	or	a
+    scf
+    ret nz
+	or a
 	ret
 
 TOBASREQ2:

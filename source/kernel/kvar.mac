@@ -250,6 +250,8 @@ size	macro	name
 ; (if reset, it's the count of entries for the device-based drives table 
 ;  in normal DOS 1 mode, see UD1_*)
 ;
+; Bit 6 of DSK_IDX is set if we have a Russian keyboard
+;
 ; Bit 7 of EMU_DEVLUN is set after the current image file is changed
 ; and reset again when disk change is checked.
 ;
@@ -269,16 +271,21 @@ size	macro	name
 
     size    EMU_SZ		;Total size of unit descriptor
 
-    ;Temporary location of work area used when setting up disk emulation mode
+;-----------------------------------------------------------------------------
 
-    const   EMU_TMP,0F980h    
+    ;Temporary work area used at boot time
 
-    ;Temporary variables used when setting up disk emulation mode
+    const BOOT_TMP,0F980h
 
-    ifield EMU_TMP+EMU_SZ
+    ifield BOOT_TMP
 
-    field  1,IN_EMU
+    field  EMU_SZ,EMU_TMP   ;Temporary location of work area used when setting up disk emulation mode
+    field  1,IN_EMU        ;Set to 1 when disk emulation mode has been entered
     field  2,EMU_WK_AREA   ;Address of work area as read from the emulation data file
+    ;NOTE! BOOTKEYS is used in dos1ker.mac, it must be manually updated if it changes
+    field  5,BOOTKEYS      ;To store the state of boot keys
+    field  1,I_AM_RUSSIAN
+    field  1,HAVE_KEYS
 ;
 ;-----------------------------------------------------------------------------
 ;

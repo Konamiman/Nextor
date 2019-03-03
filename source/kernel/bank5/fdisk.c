@@ -15,13 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "asm.h"
-#include "system.h"
-#include "dos.h"
-#include "types.h"
-#include "partit.h"
+#include "../../tools/C/system.h"
+#include "../../tools/C/dos.h"
+#include "../../tools/C/types.h"
+#include "../../tools/C/asmcall.h"
+#include "drivercall.h"
+#include "../../tools/C/partit.h"
 #include "fdisk.h"
-#include "asmcall.h"
 
 //#define FAKE_DEVICE_INFO
 //#define FAKE_DRIVER_INFO
@@ -838,7 +838,7 @@ byte GetDiskPartitionsInfo()
 		regs.Bytes.E = selectedLunIndex + 1;
 		regs.Bytes.H = primaryIndex;
 		regs.Bytes.L = extendedIndex;
-		DosCall(_GPART, REGS_ALL);
+		DosCallFromRom(_GPART, REGS_ALL);
 		error = regs.Bytes.A;
 		if(error == 0) {
 			if(regs.Bytes.B == PARTYPE_EXTENDED) {
@@ -996,7 +996,7 @@ void TogglePartitionActive(byte partitionIndex)
 	regs.Bytes.E = selectedLunIndex + 1;
 	regs.Bytes.H = partition->primaryIndex | 0x80;
 	regs.Bytes.L = partition->extendedIndex;
-	DosCall(_GPART, REGS_ALL);
+	DosCallFromRom(_GPART, REGS_ALL);
 	if(regs.Bytes.A != 0) {
         return;
     }
@@ -1132,7 +1132,7 @@ void AddPartition()
 
 		buffer[0] = 6;
 		regs.Words.DE = (int)buffer;
-		DosCall(_BUFIN, REGS_NONE);
+		DosCallFromRom(_BUFIN, REGS_NONE);
 		lineLength = buffer[1];
 		if(lineLength == 0) {
 			return;
@@ -1281,7 +1281,7 @@ void PrintDosErrorMessage(byte code, char* header)
 
 	regs.Bytes.B = code;
 	regs.Words.DE = (int)buffer;
-	DosCall(_EXPLAIN, REGS_NONE);
+	DosCallFromRom(_EXPLAIN, REGS_NONE);
 	if(strlen(buffer) > currentScreenConfig.screenWidth) {
 		print(buffer);
 	} else {
@@ -1508,7 +1508,7 @@ void GetDriversInformation()
     while(error == 0 && driverIndex <= MAX_INSTALLED_DRIVERS) {
         regs.Bytes.A = driverIndex;
         regs.Words.HL = (int)currentDriver;
-        DosCall(_GDRVR, REGS_AF);
+        DosCallFromRom(_GDRVR, REGS_AF);
         if((error = regs.Bytes.A) == 0 && (currentDriver->flags & (DRIVER_IS_DOS250 | DRIVER_IS_DEVICE_BASED) == (DRIVER_IS_DOS250 | DRIVER_IS_DEVICE_BASED))) {
             installedDriversCount++;
             TerminateRightPaddedStringWithZero(currentDriver->driverName, DRIVER_NAME_LENGTH);
@@ -1543,7 +1543,7 @@ byte WaitKey()
 byte GetKey()
 {
 	regs.Bytes.E = 0xFF;
-	DosCall(_DIRIO, REGS_AF);
+	DosCallFromRom(_DIRIO, REGS_AF);
 	return regs.Bytes.A;
 }
 
@@ -1683,5 +1683,6 @@ int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer)
 }
 
 
-#include "asmcall.c"
-#include "printf.c"
+#include "../../tools/C/printf.c"
+#include "../../tools/C/asmcall.c"
+#include "drivercall.c"

@@ -15,13 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "asm.h"
-#include "system.h"
-#include "dos.h"
-#include "types.h"
-#include "partit.h"
+#include "../../tools/C/types.h"
+#include "../../tools/C/system.h"
+#include "../../tools/C/dos.h"
+#include "../../tools/C/asmcall.h"
+#include "drivercall.h"
+#include "../../tools/C/partit.h"
 #include "fdisk.h"
-#include "asmcall.h"
 
 byte sectorBuffer[512];
 byte sectorBufferBackup[512];
@@ -614,4 +614,5 @@ void Locate(byte x, byte y)
 }
 
 
-#include "asmcall.c"
+#include "../../tools/C/asmcall.c"
+#include "drivercall.c"

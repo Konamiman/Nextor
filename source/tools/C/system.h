@@ -14,6 +14,7 @@
 /* MSX BIOS routines */
 
 #define SYNCHR 0x0008
+#define CALSLT 0x001C
 #define INITXT 0x006C
 #define INIT32 0x006F
 #define CHPUT 0x00A2
@@ -41,7 +42,6 @@
 #define VALTYP 0xF663
 #define DAC 0xF7F6
 #define SCRMOD 0xFCAF
-
-
+#define EXPTBL 0xFCC1
 
 #endif   //__SYSTEM_H

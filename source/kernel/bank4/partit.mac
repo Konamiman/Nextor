@@ -9,7 +9,6 @@
 ;
 
 DISKID	equ	0FD99h
-SNSMAT	equ	0141h		;sense key matrix
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
@@ -1131,15 +1130,9 @@ AA_PX_POK:
     push hl
     pop iy  ;IY = First entry of partition table
 
-    xor a
-    call SNSKEY   ;"0" key pressed?
-    and 1
-    jr z,AA_PX_KILLEMU
-
-    ld a,9
-    call SNSKEY   ;"0" key pressed in numeric keyboard?
-    and 1000b
-    jr nz,AA_PX_DOEMU
+    ld a,(BOOTKEYS##)
+    and 00000001b       ;"0" key pressed?
+    jr z,AA_PX_DOEMU
 
     ;* Reset emulation mode flag from status byte in partition table, then boot normally
 
@@ -1745,6 +1738,15 @@ GOEMU_WAOK:
 	ld	a,(ix+17)	;Boot file index
 	ld	(iy+DSK_IDX##),a
 	set	7,(iy)
+
+    ld c,a
+    ld a,(I_AM_RUSSIAN##)
+    or a
+    jr z,GOEMU_NORUS
+    set 6,(iy)
+GOEMU_NORUS:
+    ld a,c
+
 	dec	a
 	add	a,a		;Each entry is 8 bytes
 	add	a,a
@@ -5819,7 +5821,8 @@ GET_DISKID_HL:
 ;    Output: A = number of drives.
 
     push bc
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
+    and 00100000b
     pop bc
     ld c,a
 
@@ -5916,7 +5919,8 @@ DRVS1LOOP:
 	cp  100b	;Provides config?
 	jr nz,DRVS1NX3 ;No: skip but check "5" key
 
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
+    and 00100000b
     ld c,a
 	ld hl,DV_CONFIG##
 	ld	(BK4_ADD##),hl
@@ -5944,7 +5948,7 @@ DRVS1NX2:
 	ret
 
 DRVS1NX3:
-    call SCAN_5_KEY
+    ld a,(BOOTKEYS##)   ;5 key pressed?
     and 00100000b
     ld b,1
     jr nz,DRVS1CHG
@@ -6214,27 +6218,6 @@ GET_DV_TYPE:
 	ld	hl,DV_TYPE##
 	ld	ix,CALDRV##
 	call	CALSLT##
-	ret
-
-SCAN_5_KEY:
-	xor	a
-	call	SNSKEY
-	and	00100000b
-    xor 00100000b   ;A=00100000b if "5" key pressed, 0 if not
-    ret
-
-
-SNSKEY:
-	push	bc
-	ld	c,a
-	di
-	in	a,(0AAh)
-	and 0F0h
-	add	a,c
-	out	(0AAh),a
-	ei
-	in	a,(0A9h)
-	pop	bc
 	ret
 
 	finish <PARTIT>

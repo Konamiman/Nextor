@@ -13,7 +13,6 @@ P2_REG		equ	0FEh
 P3_REG		equ	0FFh
 
 MSXVER	equ	002Dh
-SNSMAT	equ	0141h
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -147,8 +146,8 @@ if (BUILTIN AND STURBO)
 		ld	a,b
 		jr	nz,NOTR2
 		ld	b,a
-		ld	a,(NUMKEYS)
-		and	00010000b
+		ld	a,(BOOTKEYS##)
+		and	00010000b   ;4 key pressed?
 		ld	a,b
 		jr	nz,NOTR2
 		sub	4
@@ -183,7 +182,7 @@ if (BUILTIN AND STURBO)
 ;;if 1 ;;HYBRID
 ;===== end mod DOS2.50
 
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
 		ld	a,6
 		jr	nz,SYSSEGSCOUNT
@@ -251,13 +250,13 @@ if (BUILTIN AND STURBO)
 		jr	nz,NOTURBOR
 
 		;ld	d,a
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
-		;ld	a,d					;On Turbo-R, the "6" key causes
-		jr	nz,NOTURBOR	;the bigger mapper to be used as primary
+		;ld	a,d	                ;On Turbo-R, the "4" key causes
+		jr	nz,NOTURBOR         ;the bigger mapper to be used as primary
 
 		dec	hl			;Always mark last 4
-		dec	(hl)			; segments as allocated
+		dec	(hl)		; segments as allocated
 		dec	hl			; to system.
 		dec	(hl)
 		dec	hl
@@ -312,13 +311,6 @@ MAP_SCAN::
 ;
 ;    *****  LOOP TO FIND MAPPERS AND BUILD UP TEMPORARY MAPPER RECORDS  *****
 ;
-		ld	d,a
-		xor	a
-		call	SNSMAT
-		cpl
-		ld	(NUMKEYS),a
-		ld	a,d
-
 		di				;Remember current page-2 slot
 		push	af			; for fail safe.
 ;
@@ -353,9 +345,9 @@ sec_slot_loop:	push	hl
 		jr	nz,NO_PRIM_INTERNAL
 
 		ld	d,a
-		ld	a,(NUMKEYS)
+		ld	a,(BOOTKEYS##)
 		and	00010000b
-		ld	a,d					;On Turbo-R, the "5" key causes
+		ld	a,d					;On Turbo-R, the "4" key causes
 		jr	nz,NO_PRIM_INTERNAL	;the bigger mapper to be used as primary
 
 ;===== start mod DOS2.50 (build type)
