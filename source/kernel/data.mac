@@ -57,9 +57,10 @@ ram_ad	defl	DATABASE
 ; of the STROUT routine, see dos1ker.mac
     
     ;NOTE! BK4_ADD is manually defined in bank5/dos.h, and must be updated if it changes
+    var0 IS_FIRST_BOOT
     var2 BK4_ADD        ;Address of routine to be called in bank 4
     var TMP_SEC,4       ;Used for temporary storage of a 32 bit sector number
-	spare	1
+	spare   1
 ;
 ;	------------------------
 ;

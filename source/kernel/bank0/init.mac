@@ -1645,8 +1645,18 @@ endif
 ;
 REBOOT::
 	ld	a,(BOOT_DRV##)
+    push af
+    xor a
+    jr DO_BOOT
 ;
 FIRST_BOOT:
+    push af
+    ld a,0FFh
+
+DO_BOOT:
+    ld (IS_FIRST_BOOT##),a
+    pop af
+
 	ld	sp,BOOTAD+512		;Must have stack in safe place.
 	push	hl
 	ld	hl,BASIC		;Set jump address when MSXDOS cannot
@@ -3496,6 +3506,10 @@ GO_DOS2:
 ;(so don't run NEXTOR.SYS, AUTOEXEC.BAS or the boot sector code)
 
 TO_BASIC_REQUIRED::
+    ld a,(IS_FIRST_BOOT##)
+    inc a
+    ret nz
+
     ld a,(BOOTKEYS##)
     and 00001000b
     xor 00001000b
