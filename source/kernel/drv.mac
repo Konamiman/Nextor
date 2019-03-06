@@ -890,10 +890,8 @@ ASSIGN_PARTITION:
 
 	ld b,(iy+UD1_DI##)
 	ld c,(iy+UD1_LI##)
-	ld	a,4
-    ex af,af'
-    xor a
-    ex af,af'
+	ld a,4
+    ld d,0
 	ld	ix,AUTO_ASPART##
 	call	CALBNK##
 

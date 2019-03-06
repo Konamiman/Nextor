@@ -874,6 +874,11 @@ DRV_CONFIG_2:
 ;          B = Number of sectors actually read/written
 
 DEV_RW:
+    ;jr nc,kk
+    ;ld a,0F8h   ;.WPROT
+    ;ld b,0
+    ;ret
+kk:
 	push	af
 
 	ld	a,b	;Swap B and C

@@ -614,7 +614,7 @@ AUTODRV_DRVL2:
 	push ix
 	pop hl
 
-	ld	a,1
+	ld	d,1
 	call	AUTO_ASSIGN
 AUTODRV_DRVL3:    
 
@@ -746,7 +746,7 @@ AUTOD_UDFND3:
 
 	push	ix
 	pop	hl
-	ld	a,1
+	ld	d,1
 	call	AUTO_ASSIGN
 
 	cp	2			;Did we enter disk emulation mode?
@@ -853,7 +853,7 @@ SETNUMD_NOUD:
 ;                  Address of entry in device-based drives table, must have UD_SLOT set
 ;         B = Device index (AUTO_ASPART only)
 ;         C = LUN index (AUTO_ASPART only)
-;         A  = 0: Do NOT try to enter disk emulation mode
+;         D  = 0: Do NOT try to enter disk emulation mode
 ;              1: Enter disk emulation mode if possible 
 ;
 ; Output: A  = Error code
@@ -883,14 +883,14 @@ AAFLAG_IS_AUTOASPART equ 7
 
 	PROC	AUTO_ASPART
 
-	or AAFLAG_IS_AUTOASPART
+	set AAFLAG_IS_AUTOASPART,d
 
 AUTO_ASSIGN:
     ld ix,-AAD_SIZE
     add ix,sp
     ld sp,ix
 
-  	ld	(ix+AAD_FLAGS),a
+  	ld	(ix+AAD_FLAGS),d
 
     ld (ix+AAD_UNIT_DESCRIPTOR),l
     ld (ix+AAD_UNIT_DESCRIPTOR+1),h
@@ -908,7 +908,7 @@ AUTO_ASSIGN:
 	ret
 
 AUTO_COMMON2:
-    bit 7,a
+    bit 7,d
 	jr z,AUTO_COMMON3
 
 ;AUTO_ASPART:	
@@ -2876,7 +2876,7 @@ MAP_DEF_DEVB_NOCFG:
 	push	hl
 	push	ix
 	pop	hl
-	xor	a
+	ld d,0
 	call	AUTO_ASSIGN
 	pop	hl
 	or	a
@@ -3634,7 +3634,7 @@ MAPDOS1_DEF_NOCFG:	;No config provided by driver, use AUTO_ASSIGN
 	push ix
 	pop hl
 	push hl
-    xor a
+    ld d,0
 	call AUTO_ASSIGN
 	pop ix
 	pop hl
@@ -3656,7 +3656,7 @@ if 0
 	pop	hl
 	push	ix
 	push	hl
-	xor	a
+	ld d,0
 	call	AUTO_ASSIGN
 	pop	hl
 	ld	(hl),0FFh	;Mark FAT buffer as invalid again
@@ -6182,7 +6182,7 @@ ASKDRVCFG_NEXT:
 	push ix
 	pop hl
 	push hl
-    ld a,d
+    ;ld a,d
 	call AUTO_ASPART
 	pop ix
     cp 2
