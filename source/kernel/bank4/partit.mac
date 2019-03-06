@@ -8,6 +8,8 @@
 	INCLUDE b0labels.inc
 ;
 
+EMU_RAM_ADDRESS equ 0A000h
+
 DISKID	equ	0FD99h
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
@@ -908,6 +910,21 @@ AUTO_ASSIGN:
 	ret
 
 AUTO_COMMON2:
+    bit 0,d
+    jr z,AUTO_NOEMU
+    push bc
+    push de
+    push hl
+    xor a
+    call TRY_RAM_EMU
+    pop hl
+    pop de
+    pop bc
+    or a
+    ld a,2
+    ret nz
+AUTO_NOEMU:
+
     bit 7,d
 	jr z,AUTO_COMMON3
 
@@ -1454,6 +1471,54 @@ AA_DO_ASSDOS1:
 	ret
 
 
+    ;Try to enter emulation mode from data in RAM
+    ;Returns A=1 on success, 0 on failure
+
+TRY_RAM_EMU:
+    call GET_P2##
+    ld b,a
+    ld a,(P2_TPA##)
+    call PUT_P2##
+
+    ld hl,EMU_RAM_ADDRESS
+    ld de,EMURAMSIG
+    call STRCOMP
+    jr nz,TRY_RAM_EMU_NO_SIG
+
+    xor a            ;Disable emulation for next boot
+    ld (EMU_RAM_ADDRESS),a    ;(in case the code of the emulated disk doesn't do it itself)
+
+    push bc          ;Save original page 2 segment
+
+    ld bc,(0F348h)
+    push ix
+    ld ix,EMU_RAM_ADDRESS+10h
+    ld a,(ix)
+    ld b,(ix+1)
+    ld h,(ix+2)
+    ld l,(ix+3)
+    ld d,(ix+4)
+    ld e,(ix+5)
+    pop ix
+
+    ex (sp),hl
+    push af
+    ld a,h          ;Restore original page 2 segment
+    call PUT_P2##
+    pop af
+    ex (sp),hl
+    inc sp          ;Discard saved segment number without affecting any register
+    inc sp
+
+    jp GO_EMU
+
+TRY_RAM_EMU_NO_SIG:
+    ld a,b  ;Previous segment
+    call PUT_P2##
+    xor a
+    ret
+
+
 ;This subroutine reads (AA_RSEC) or writes (AA_WSEC) a sector from the device to SECBUF.
 ;Input: A  = Device index
 ;       B  = LUN
@@ -1674,17 +1739,9 @@ GO_EMU:
 	push	ix
 	pop	hl
 	ld	de,NDATSIG
-GOEMU_SIG1:
-	ld	a,(de)
-	cp	(hl)
-	ld	a,0
+    call STRCOMP
+    ld	a,0
 	ret	nz
-	or	a
-	jr	z,GOEMU_SIG2
-	inc	hl
-	inc	de
-	jr	GOEMU_SIG1
-GOEMU_SIG2:
 
 	;> Number of entries must be between 1 and 32
 
@@ -1769,6 +1826,7 @@ GOEMU_NORUS:
 	ret
 
 NDATSIG:	db	"Nextor DSK file",0
+EMURAMSIG:  db  "NEXTOR_EMU_DATA",0
 
 ;-----------------------------------------------------------------------------
 ;
@@ -6219,6 +6277,21 @@ GET_DV_TYPE:
 	ld	ix,CALDRV##
 	call	CALSLT##
 	ret
+
+
+; Compare zero terminated strings pointed by HL and DE
+; Return Z if they are equal, NZ if not
+; Modifies AF, HL, DE
+
+STRCOMP:
+    ld	a,(de)
+	cp	(hl)
+	ret	nz
+	or	a
+	ret	z
+	inc	hl
+	inc	de
+	jr	STRCOMP
 
 	finish <PARTIT>
 	end

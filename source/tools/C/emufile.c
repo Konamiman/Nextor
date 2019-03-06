@@ -66,11 +66,13 @@ typedef struct {
 
 #define MaxFilesToProcess 32
 
+#define SetupRAMAddress ((byte*)0xA000)
+
 
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation data file creation tool for Nextor v1.1\r\n"
+    "Disk image emulation tool for Nextor v1.1\r\n"
     "By Konamiman, 3/2019\r\n"
     "\r\n";
     
@@ -94,20 +96,25 @@ const char* strHelp=
     "-a <address>: Page 3 address for the 16 byte work area.\r\n"
     "              Must be a hexadecimal number between C000 and FFEF.\r\n"
     "              If missing or 0, the work area is allocated at boot time.\r\n"
-    "-p : Print filenames and associated keys.\r\n"
+    "-p : Print filenames and associated keys after creating the data file.\r\n"
     "\r\n"
     "TYPE /B the generated file to see the names of the registered files.\r\n"
     "\r\n"
     "\r\n"
     "* To setup an existing emulation data file for booting:\r\n"
     "\r\n"
-    "emufile set <data file> [r] [<device index> [<LUN index>]]\r\n"
+    "emufile set <data file> [t|p[<device index>[<LUN index>]]]\r\n"
     "\r\n"
+    "t: transient emulation (store emulation data file pointer in RAM).\r\n"
+    "This is the default if only <data file> is specified.\r\n"
+    "\r\n"
+    "p: persistent emulation (store emulation data file pointer in partition table).\r\n"
     "Use <device index> and <LUN index> to specify the device whose\r\n"
-    "partition table will be written. Default is the device where the\r\n"
-    "emulation data file is located.\r\n"
+    "partition table will be written. Default device (if only 'p' is specified)\r\n"
+    "is the device where the emulation data file is located.\r\n"
+    "Default <LUN index> (if only 'p<device index>' is specified) is 1.\r\n"
     "\r\n"
-    "r: reset the computer after successfully finishing the setup.\r\n";
+    "The computer will reset after successfully finishing the setup.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
@@ -132,7 +139,7 @@ byte* fileNamesAppendAddress;
 byte fileHandle;
 int setupPartitionDeviceIndex;
 int setupPartitionLunIndex;
-bool resetComputer;
+bool setupAsPersistent;
 
 /* Some handy code defines */
 
@@ -194,16 +201,8 @@ int main(char** argv, int argc)
 
     if(isSetupFile) {
         SetupFile();
-        if(resetComputer) {
-            printf("Done. Resetting computer...");
-            ResetComputer();
-        }
-        else {
-            printf(
-                "Done. Reset the computer to start in disk emulation mode.\r\n"
-                "Remember: press 0 while booting to disable disk emulation mode.\r\n");
-            Terminate(null);
-        }
+        printf("Done. Resetting computer...");
+        ResetComputer();
     }
     if(totalFilesProcessed > 0) {
         GenerateFile();
@@ -324,9 +323,9 @@ void ProcessCreateFileArguments(char** argv, int argc)
 
 void ProcessSetupFileArguments(char** argv, int argc)
 {
-    int deviceArgIndex;
+    byte paramFirstChar;
 
-    resetComputer = false;
+    setupAsPersistent = false;
     setupPartitionDeviceIndex = 0;
     setupPartitionLunIndex = 0;
 
@@ -336,31 +335,38 @@ void ProcessSetupFileArguments(char** argv, int argc)
         return;
     }
 
-    if((argv[2][0] | 32) == 'r') {
-        resetComputer = true;
-        deviceArgIndex = 3;
+    paramFirstChar = argv[2][0] | 32;
+
+    if(paramFirstChar == 't') {
+        return;
     }
-    else {
-        deviceArgIndex = 2;
+    else if(paramFirstChar != 'p') {
+        InvalidParameter();
     }
 
-    if(argc <= deviceArgIndex) {
+    setupAsPersistent = true;
+
+    if(argv[2][1] == '\0') {
         return;
     }
 
-    setupPartitionDeviceIndex = atoi(argv[deviceArgIndex]);
-    if(setupPartitionDeviceIndex < 1) {
+    setupPartitionDeviceIndex = argv[2][1] - '0';
+    if(setupPartitionDeviceIndex < 1 || setupPartitionDeviceIndex > 9) {
         Terminate("Invalid device index");
     }
 
-    if(argc <= deviceArgIndex + 1) {
+    if(argv[2][2] == '\0') {
         setupPartitionLunIndex = 1;
         return;
     }
 
-    setupPartitionLunIndex = atoi(argv[deviceArgIndex + 1]);
-    if(setupPartitionLunIndex < 1) {
+    setupPartitionLunIndex = argv[2][2] - '0';
+    if(setupPartitionLunIndex < 1 || setupPartitionLunIndex > 9) {
         Terminate("Invalid LUN index");
+    }
+
+    if(argv[2][3] != '\0') {
+        InvalidParameter();
     }
 }
 
@@ -640,19 +646,29 @@ void SetupFile()
         TerminateWithDosError(error);
     }
 
-    partition = &(sectorBuffer->primaryPartitions[0]);
-    partition->status |= 1;
-    partition->chsOfFirstSector[0] = driveInfo->deviceIndex;
-    partition->chsOfFirstSector[1] = driveInfo->logicalUnitNumber;
-    partition->chsOfFirstSector[2] = ((byte*)&sector)[3];   //MSB
-    partition->chsOfLastSector[0] = ((byte*)&sector)[2];
-    partition->chsOfLastSector[1] = ((byte*)&sector)[1];
-    partition->chsOfLastSector[2] = ((byte*)&sector)[0];    //LSB
+    if(setupAsPersistent) {
+        partition = &(sectorBuffer->primaryPartitions[0]);
+        partition->status |= 1;
+        partition->chsOfFirstSector[0] = driveInfo->deviceIndex;
+        partition->chsOfFirstSector[1] = driveInfo->logicalUnitNumber;
+        partition->chsOfFirstSector[2] = ((byte*)&sector)[3];   //MSB
+        partition->chsOfLastSector[0] = ((byte*)&sector)[2];
+        partition->chsOfLastSector[1] = ((byte*)&sector)[1];
+        partition->chsOfLastSector[2] = ((byte*)&sector)[0];    //LSB
 
-    error = WriteDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
-    if(error != 0) {
-        print("*** Error when writing MBR of device:");
-        TerminateWithDosError(error);
+        error = WriteDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
+        if(error != 0) {
+            print("*** Error when writing MBR of device:");
+            TerminateWithDosError(error);
+        }
+    } else {
+        strcpy(SetupRAMAddress, "NEXTOR_EMU_DATA");
+        SetupRAMAddress[0x10] = driveInfo->deviceIndex;
+        SetupRAMAddress[0x11] = driveInfo->logicalUnitNumber;
+        SetupRAMAddress[0x12] = ((byte*)&sector)[3];   //MSB
+        SetupRAMAddress[0x13] = ((byte*)&sector)[2];
+        SetupRAMAddress[0x14] = ((byte*)&sector)[1];
+        SetupRAMAddress[0x15] = ((byte*)&sector)[0];   //LSB
     }
 }
 
@@ -707,6 +723,9 @@ void ResetComputer()
     regs.Bytes.IYh = *(byte*)EXPTBL;
     regs.Words.IX = 0;
     AsmCall(CALSLT, &regs, REGS_ALL, REGS_NONE);
+
+    //Just in case, but we should never reach here
+    Terminate(null);
 }
 
 void Terminate(const char* errorMessage)
