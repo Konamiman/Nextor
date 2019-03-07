@@ -115,6 +115,8 @@ FATSIZ	equ	16		;size of FAT in sectors
 FAT	equ	19		;pointer to FAT
 DPBSIZE	equ	21		;number of bytes per one DPB
 
+SCANKEYS_RAM_BASE equ 0A100h
+
 ;
 ;	MACROs
 ;
@@ -259,7 +261,7 @@ DISABLE_KEY:
 	ret
 
 ; 0: 76543210
-; 1: FEDCBA89
+; 1: FEDCBA98
 ; 2: NMLKJIHG
 ; 3: VUTSRQPO
 ; 4: ....ZYXW
@@ -288,6 +290,35 @@ DISABLE_TBL:
 	ALIGN	41EFh-3
     jp SCANKEYS
 CPMVER:	CALLDOS	0Ch	;Return CP/M version number
+
+    ALIGN   4200h
+
+    ;--- BOOT KEY INVERTERS ---
+    ;
+    ; These two bytes have one bit assigned for each key that has meaning at boot time.
+    ; If the bit for one key is set, then the meaning of the key is inverted.
+    ;
+    ; E.g. if the bit for the SHIFT key is set, then all MSX-DOS kernels will be
+    ; disabled by default, but will be enabled if the SHIFT key is pressed
+    ; during boot (the opposite of the normal behavior).
+    ;
+    ; This does NOT have effect when setting the boot keys in RAM
+    ; (if boot keys are set in RAM, the keyboard is completely ignored)
+    ;
+    ; These bytes are fixed at offset 200h (starting at 0) in ROM.
+    ; They should be changed in the ROM file before flashing in the hardware.
+    ;
+    ; Bits are assigned to keys as follows:
+    ;
+    ; 0: ..54321.
+    ; 1: ..CS.... (C = CTRL, S = SHIFT)
+    ;
+    ; "." bits are currently unused and should always be 0 to ensure compatibility
+    ; with possible future extensions.
+
+KEYS_INV_0: db 00h
+KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
+
 ;
 ;=======================================================================
 ;
@@ -605,6 +636,30 @@ CHECK_IS_RUSSIAN: ; in case of ZF
     ret
 
 
+    ;Read key status from RAM.
+    ;Out: Z if status read ok, NZ if not
+    ;     BEDLH = same as SCANKEYS (if Z)
+
+SCANKEYS_RAM:
+    ld b,a
+    ld hl,SCANKEYS_RAM_BASE
+    ld de,RAMKEYSIG
+    call STRCOMP
+    ld a,b
+    ret nz
+
+    push af
+    xor a
+    ld (SCANKEYS_RAM_BASE),a
+    ld a,(SCANKEYS_RAM_BASE+17) ;After signature, which is 17 bytes long including terminator
+    ld b,a
+    ld de,(SCANKEYS_RAM_BASE+18)
+    ld hl,(SCANKEYS_RAM_BASE+20)
+    pop af
+    ret
+
+RAMKEYSIG: db "NEXTOR_BOOT_KEYS",0
+
 	ALIGN	436Ch
 FDEL:	CALLDOS	13h	;;Delete file (FCB)
 ;
@@ -780,26 +835,10 @@ INIT2:
 
 	call	CHK_DUP	;Will just POP and RET if slot already processed
 
-    ld a,(HAVE_KEYS##)
-    or a
-    jr nz,NOSCANKEYS
-
-    call CHECK_IS_RUSSIAN
-    ld (I_AM_RUSSIAN##),a
-
-    call SCANKEYS
-    ld a,b
-    ld (BOOTKEYS##),a
-    ld (BOOTKEYS##+1),de
-    ld (BOOTKEYS##+3),hl
-
-    ld a,0FFh
-    ld (HAVE_KEYS##),a
-NOSCANKEYS:    
+    call DO_KEYS_INIT
 
 	call	DISABLE_KEY
 	ret	nz
-
 ;
 if 0 ;; If 0, will boot on MSX1 machine (with calendar clock problem).
 	ld	a,(VERSION)
@@ -942,6 +981,8 @@ INIHOOK:
     rrca
     rrca
     rrca
+    rrca
+    xor 2
 	ld	(TARGET##),a
 ;
 	ld	a,BELL		;tell user scanning is over
@@ -2459,6 +2500,42 @@ GSLT_SLTTBL:
 
 	PRINTL	INIT,%($-$$INIT)
 
+
+    ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
+
+DO_KEYS_INIT:
+    ld a,(HAVE_KEYS##)
+    or a
+    ret nz
+
+    call CHECK_IS_RUSSIAN
+    ld (I_AM_RUSSIAN##),a
+
+    call SCANKEYS_RAM
+    jr z,DO_KEYS_INIT2
+    call SCANKEYS
+    
+    ld a,(KEYS_INV_0)
+    and 00111110b
+    xor b
+    ld b,a
+
+    ld a,(KEYS_INV_1)
+    and 00110000b
+    xor h
+    ld h,a
+  
+DO_KEYS_INIT2:
+    ld a,b
+    ld (BOOTKEYS##),a
+    ld (BOOTKEYS##+1),de
+    ld (BOOTKEYS##+3),hl
+
+    ld a,0FFh
+    ld (HAVE_KEYS##),a
+    ret
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ;	End of hole.
@@ -2516,6 +2593,21 @@ SETDEFDPB:
 	ALIGN	5006h
 SNEXT:	CALLDOS	12h	;;Search for next (FCB)
 ;
+
+; Compare zero terminated strings pointed by HL and DE
+; Return Z if they are equal, NZ if not
+; Modifies AF, HL, DE
+
+STRCOMP:
+    ld	a,(de)
+	cp	(hl)
+	ret	nz
+	or	a
+	ret	z
+	inc	hl
+	inc	de
+	jr	STRCOMP
+
 	ALIGN	501Eh
 FSIZE:	CALLDOS	23h	;;Get file size (FCB)
 ;

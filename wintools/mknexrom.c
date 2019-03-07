@@ -1,8 +1,8 @@
 /* MKNEXROM - Make a Nextor kernel ROM
-   By Konamiman, 4/2014
+   By Konamiman, 3/2019
 
    Usage:
-   mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>] [/8:<8K bank select address>]
+   mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>] [/8:<8K bank select address>] [/k:<boot keys inverter>]
 
    This program creates a Nextor kernel ROM from a base file and a driver file,
    as per the recipe specified in the driver development guide. It also allows modifying
@@ -71,6 +71,10 @@
    inc	a
    ld	(6800h),a
    ret
+
+
+   <boot keys inverter> is a hexadecimal number that contains the value of the boot key invert bytes,
+   LSB is byte 0 and MSX is byte 1. For example 1002 to invert keys SHIFT and 1.
 */
 
 /* v1.01 (4/2011):
@@ -90,7 +94,10 @@
 
    v1.05 (4/2014):
    Added the <8K bank select address> parameter.
-   
+
+   v1.06 (3/2019):
+   Added the <boot keys inverter> parameter.
+   Existing full ROM files can now be updated, <newfile> is optional for these.
 */
 
 
@@ -114,6 +121,7 @@
 #define _8K_INIT_PATCH_ADDRESS 0x00F7	//File position where the patch for 8K bank mapper must be written
 #define LD_XXXX_A_OPCODE 0x32
 #define MAPPER_CODE_HEADER_SIZE 3
+#define BOOT_KEYS_INVERTER_OFFSET 0x200
 
 #define safeClose(file) {if(file!=NULL) {fclose(file); file=NULL;}}
 
@@ -140,6 +148,11 @@ int main(int argc, char* argv[])
 	int i;
 	unsigned short position;
 	int First8KMappingAddress=0;
+    int hasBootKeys=0;
+    int bootKeys=0;
+    char byteBuffer;
+    int modifyOriginalFile;
+    int firstModifierArgumentIndex;
 
 	char* baseFilename=NULL;
 	char* newFilename=NULL;
@@ -160,14 +173,23 @@ int main(int argc, char* argv[])
 	//* Get command line parameters
 
 	printf("\r\n");
-	if(argc<4) {
+	if(argc<3) {
 		DisplayInfo();
 		DoExit(0);
 	}
 
 	baseFilename=argv[1];
-	newFilename=argv[2];
-	for(i=3; i<argc; i++) {
+
+    if(argv[2][0]=='/') {
+        modifyOriginalFile=1;
+        firstModifierArgumentIndex=2;
+    } else {
+        modifyOriginalFile=0;
+        firstModifierArgumentIndex=3;
+        newFilename=argv[2];
+    }
+
+	for(i=firstModifierArgumentIndex; i<argc; i++) {
 		if(IsParam(argv[i], 'd')) {
 			driverFilename=argv[i]+3;
 		} else if(IsParam(argv[i], 'm')) {
@@ -176,7 +198,13 @@ int main(int argc, char* argv[])
 			extraFilename=argv[i]+3;
 		} else if (IsParam(argv[i], '8')) {
 			_First8KMappingAddress=argv[i]+3;
-		} else {
+		} else if (IsParam(argv[i], 'k')) {
+            hasBootKeys = 1;
+            sscanf(argv[i]+3, "%4x", &bootKeys);
+            if(bootKeys == 0) {
+                printf("--- WARNING: the value of the boot keys inverter is 0. If that's what you intended, fine; otherwise please check the value and try again.\r\n");
+            }
+        } else {
 			DisplayInfo();
 			DoExit(0);
 		}
@@ -215,7 +243,6 @@ int main(int argc, char* argv[])
 		DoExit(1);
 	}
 
-
 	//* Check for the presence or absence of driver file, this depends on the base file size
 
 	if(driverFilename!=NULL && hasDriver) {
@@ -224,7 +251,10 @@ int main(int argc, char* argv[])
 	} else if(driverFilename==NULL && !hasDriver) {
 		printf("*** No driver file has been specified, but the base file does not have driver.\r\n");
 		DoExit(1);
-	}
+	} if(!hasDriver && modifyOriginalFile) {
+        printf("*** No new file to create specified, but the base file does not have driver.\r\n");
+        DoExit(1);
+    }
 
 
 	//* Read the mapper code file, if specified;
@@ -310,22 +340,31 @@ int main(int argc, char* argv[])
 	}
 
 
-	//* Create the new ROM file, initially as a copy of the base file
+	//* Create the new ROM file, initially as a copy of the base file;
+    //  or reopen the file to modify, this time with write access
 
-	newFile=fopen(newFilename, "wb+");
+    if(modifyOriginalFile) {
+        safeClose(baseFile);
+        newFile=fopen(baseFilename, "rb+");
+    } else {
+	    newFile=fopen(newFilename, "wb+");
+    }
 	if(newFile==NULL) {
 		printf("*** Can't create the ROM file: %s\r\n", newFilename);
 		DoExit(1);
 	}
-	while(!feof(baseFile)) {
-		readCount=fread(dataBuffer, 1, DATABUFFER_SIZE, baseFile);
-		writeCount=fwrite(dataBuffer, 1, readCount, newFile);
-		if(writeCount!=readCount) {
-			printf("*** Can't write to the ROM file: %s\r\n", newFilename);
-			DoExit(1);
-		}
-	}
-	safeClose(baseFile);
+
+    if(!modifyOriginalFile) {
+        while(!feof(baseFile)) {
+            readCount=fread(dataBuffer, 1, DATABUFFER_SIZE, baseFile);
+            writeCount=fwrite(dataBuffer, 1, readCount, newFile);
+            if(writeCount!=readCount) {
+                printf("*** Can't write to the ROM file: %s\r\n", newFilename);
+                DoExit(1);
+            }
+        }
+        safeClose(baseFile);
+    }
 
 
 	//* Copy the driver contents at the end of the new ROM file, if necessary
@@ -455,10 +494,30 @@ int main(int argc, char* argv[])
 		}
 	}
 
+    //* Set the boot keys inverter if necessary
+
+    if(hasBootKeys) {
+        fseek(newFile, BOOT_KEYS_INVERTER_OFFSET, SEEK_SET);
+
+        byteBuffer=(char)(bootKeys & 0xFF);
+        writeCount=fwrite(&byteBuffer, 1, 1, newFile);
+        byteBuffer=(char)((bootKeys & 0xFF00) >> 8);
+        writeCount+=fwrite(&byteBuffer, 1, 1, newFile);
+
+        if(writeCount!=2) {
+			printf("*** Can't write boot keys inverter bytes to the ROM file: %s\r\n", newFilename);
+			DoExit(1);
+		}
+    }
 
 	//* Done
 
-	printf("ROM file %s created successfully.", newFilename);
+    if(modifyOriginalFile) {
+        printf("ROM file %s updated successfully.", baseFilename);
+    } else {
+    	printf("ROM file %s created successfully.", newFilename);
+    }
+
 	DoExit(0);
 }
 
@@ -467,12 +526,12 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.05 - Make a Nextor kernel ROM\r\n"
-		   "By Konamiman, 4/2014\r\n"
+	printf("MKNEXROM v1.06 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 3/2019\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
-		   "mknexrom <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>]\r\n"
-		   "         [/e:<extrafile>] [/8:<8K bank select address>]\r\n"
+		   "mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>]\r\n"
+		   "         [/e:<extrafile>] [/8:<8K bank select address>] [/k:<boot keys inverter>]\r\n"
 		   );
 }
 

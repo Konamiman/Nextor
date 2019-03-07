@@ -1,6 +1,7 @@
 syntax: glob
 
 .vs/
+.vscode/
 bin/**
 *.sym
 *.SYM
