@@ -142,9 +142,11 @@ READ_BOOT_SEC::
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-		ld	hl,BOOT_DISKVECT	;Setup disk error and break
+        call SET_BOOT_DISK_ABORT_VECTORS
+
+		ld	hl,DISKBREAK##    ;BOOT_DISKVECT	;Setup disk error and break
 		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOT_BREAKVECT	; errors while booting.
+		ld	hl,BOOTBREAK##    ;BOOT_BREAKVECT	; errors while booting.
 		ld	(BREAKVECT##),hl
 ;
 		ld	de,($SECBUF##)		;Set the DTA address ready
@@ -281,25 +283,14 @@ TRY_MSX_DOS::
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
+        call SET_BOOT_DISK_ABORT_VECTORS
+
 		ld	(CUR_DRV##),a		;Setup default drive.
 
-		;push	af
-		;ld	a,(NOTFIRST##)
-		;or	a
-		;jr	nz,NOBOOT
-		;ld	e,a
-		;ld	a,1
-		;ld	bc,0FF00h + _LOCK##
-		;call	BOOT_BDOS
-		;ld	hl,MFLAGS##
-		;set	1,(hl)
-
 NOBOOT:
-		;pop	af
-
-		ld	hl,BOOT_DISKVECT	;Setup disk error and break
+		ld	hl,DISKBREAK##  ;BOOT_DISKVECT	;Setup disk error and break
 		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOT_BREAKVECT	; errors while booting.
+		ld	hl,BOOTBREAK##  ;BOOT_BREAKVECT	; errors while booting.
 		ld	(BREAKVECT##),hl
 ;
 		ld	b,0			;Unassign all drives (does
@@ -362,6 +353,29 @@ OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ;
 ;-----------------------------------------------------------------------------
 ;
+
+; Originally, the abort vector was set pointing to BOOT_BREAKVECT whenever
+; NEXTOR.SYS was about to be loaded. If the user pressed CTRL+STOP at this time,
+; the abort routine kicked in and it tried to read the address at BOOT_BREAK
+; and execute it - but since the user paging had been restored before that,
+; a random value was being read instead, and thus random code was executed
+; and the computer crashed. Similarly on disk error.
+;
+; Solution: since these default disk error and abort routines are very short
+; (3 bytes), just store them at an unused place in page 3 and point to
+; these instead.
+
+SET_BOOT_DISK_ABORT_VECTORS:
+        push af
+        push hl
+        ld hl,(BOOT_DISK)
+        ld (DISKBREAK##),hl
+        ld a,0C9h
+        ld (DISKBREAK##+2),a
+        pop hl
+        pop af
+        ret
+
 BOOT_BDOS:	call	BDOS##			;Routine for calling BDOS.
 		cp	.ABORT##
 		jr	nz,not_abort_err	;If we have an aborted disk

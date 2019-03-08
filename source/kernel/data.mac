@@ -116,7 +116,9 @@ ram_ad	defl	DATABASE
 	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
 ;
 	var3	$IRQ		;Interrupt entry point
-	spare	4
+    var2    DISKBREAK
+    var1    BOOTBREAK
+	spare	1
 ;
 	var1	DIRBFD, F246	;** May be corrupted sometimes.
 ;
