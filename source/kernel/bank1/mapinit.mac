@@ -737,7 +737,8 @@ MAPBIO3:
 
 EXB_NEX:	;WIP...
 ;
-;       Call the EXTBIO routine of Nextor kernels other than the master one
+;   Call the EXTBIO routine of Nextor kernels other than the master one
+;   Out: D'=1 if system hook must be called, 0 otherwise
 ;
 	exx
 	ex	af,af'
@@ -808,6 +809,7 @@ EXB_DJNZ:
 	jr	EXB_LOOP
 
 EXB_RAM_FIN:
+    set 0,d     ;System hook must be called
 	ex	af,af'
 	exx
 	push	af
