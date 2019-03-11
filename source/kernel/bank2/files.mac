@@ -59,6 +59,8 @@
 ;
 	PROC	RDWR_FAB
 ;
+        if 1
+
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
 		cp	1
@@ -84,13 +86,13 @@
 		push	hl
 		ld	hl,(RW_OVER##+18)
 		push	hl
-		;ld	hl,(PHYS_UNIT##)
-		;push	hl
 
 OKLEVEL:
 		inc	a
 		ld	(RW_LEVEL##),a
 		ex	af,af'
+
+        endif
 
 		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
 		jp	nz,rdwr_device		; and writes separately.
@@ -139,15 +141,13 @@ rdwr_error:	or	a
 rdwr_ret_ok:	xor	a			; of file error.
 		
 RDWR_END:
+        if 1
+
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
 		cp	2
 		jr	nz,OKLEVEL2
 
-		;ex	af,af'
-		;pop	hl
-		;ld	a,l
-		;ld	(PHYS_UNIT##),a
 		pop	hl
 		ld	(RW_OVER##+18),hl
 		pop	hl
@@ -168,12 +168,13 @@ RDWR_END:
 		ld	(RW_OVER##+2),hl
 		pop	hl
 		ld	(RW_OVER##),hl
-		;ex	af,af'
 
 OKLEVEL2:
 		dec	a
 		ld	(RW_LEVEL##),a
 		ex	af,af'
+
+        endif
 
 RDWR_END2:
 		ret
@@ -181,17 +182,13 @@ RDWR_END2:
 ;	----------------------------------------
 ;
 rdwr_device:
-		call	rdwrdev2
-		jp	RDWR_END
-
-rdwrdev2:
 		ld	h,a			;Store the paging mode
 		and	RFM_PG			; flag in the FAB ready for
 		ld	(ix+FAB_PG##),a		; passing to GET_SEGMENT
 ;
 		ld	a,b			;Do nothing if zero bytes
 		or	c			; requested
-		ret	z
+		jr z,RDWR_END
 ;
 		bit	RF_READ,h
 		jr	nz,read_device		;Skip if read.
