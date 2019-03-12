@@ -365,6 +365,7 @@ OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ; (3 bytes), just store them at an unused place in page 3 and point to
 ; these instead.
 
+SBDAVEC::
 SET_BOOT_DISK_ABORT_VECTORS:
         push af
         push hl

@@ -1733,12 +1733,7 @@ endif
 	call	SET_XFER		; then call the boot sector with
 	scf				; carry flag set to boot up MSXDOS.
 ;
-JP_BOOT_SEC:
-	ld	hl,DISKVECT##		;Jump into the MSX-DOS boot code
-	ld	de,$DOSON##		; with necessary parameters in hand.
-	ld	a,(NOTFIRST##)
-	jp	BOOTAD+1Eh
-;
+    jp JP_BOOT_SEC
 
 	subttl	Set up for disk BASIC
 
@@ -2621,6 +2616,14 @@ COUNTDRV:
 	ld	(BK4_ADD##),hl
 	call	?C4PBK##
 	ret
+
+JP_BOOT_SEC:
+    call SBDAVEC##
+
+	ld	hl,DISKVECT##		;Jump into the MSX-DOS boot code
+	ld	de,$DOSON##		; with necessary parameters in hand.
+	ld	a,(NOTFIRST##)
+	jp	BOOTAD+1Eh
 
 	ALIGN	504Eh
 LOGIN:	CALLDOS	18h	;Get login vector

@@ -1229,7 +1229,7 @@ AA_PLOOP_NEXT:
     jp c,AA_PXLOOP
     bit 7,a
     jr z,AA_PLOOP_END
-    cp 80h+9    ;...or up to 9 extended partitions
+    cp 80h+10    ;...or up to 9 extended partitions
     jp c,AA_PXLOOP
 
 AA_PLOOP_END:
@@ -1846,43 +1846,43 @@ EMURAMSIG:  db  "NEXTOR_EMU_DATA",0
 	ld	(iy+0),a	;Media ID
 
 	ld	hl,512
-	ld	(iy+1),l	;Tamanyo sector
+	ld	(iy+1),l	;Sector size
 	ld	(iy+2),h
 	ld	a,15
-	ld	(iy+3),a	;(Tamanyo sector/32)-1
+	ld	(iy+3),a	;(Sector size/32)-1
 	ld	a,4
-	ld	(iy+4),a	;Num unos en el anterior
+	ld	(iy+4),a	;Bits set to 1 in previous value
 
 	ld	a,(ix+13)
 	dec	a
-	ld	(iy+5),a	;(Sectores por cluster)-1
+	ld	(iy+5),a	;(Sectors per cluster)-1
 	ld	b,0
 MKDPB_CNT1S:
 	inc	b
 	rrca
 	jr	c,MKDPB_CNT1S
-	ld	(iy+6),b	;Num unos en el anterior+1
+	ld	(iy+6),b	;Bits set to 1 in previous value+1
 
-	ld	a,(ix+14)	;Sector inicio FAT=Sectores reservados
+	ld	a,(ix+14)	;FAT first sector=reserved sectors
 	ld	(iy+7),a
 	ld	a,(ix+15)
 	ld	(iy+8),a
 
-	ld	a,(ix+16)	;Numero FATs
+	ld	a,(ix+16)	;Number of FATs
 	ld	(iy+9),a
 
 	ld	a,(ix+18)
 	or	a
 	ld	a,254
 	jr	nz,DIRENT
-	ld	a,(ix+17)	;Num entradas directorio
+	ld	a,(ix+17)	;Number of directory entries
 DIRENT:
 	ld	(iy+10),a
 
-	ld	e,(ix+22)	;Sectores por FAT
-	ld	(iy+15),e	;(2 bytes en sector 0, 1 byte en DPB)
+	ld	e,(ix+22)	;Sectors per FAT
+	ld	(iy+15),e	;(2 bytes in sector 0, 1 byte in DPB)
 
-	;1er sector directorio=(Sectores reservados+Num FATs*Sectores por FAT)
+	;1st sector directory=(Reserved sectors+Number of FATs*Sectors per FAT)
 
 	ld	d,0
 	ld	b,(ix+16)
@@ -1899,10 +1899,10 @@ CALC_1SECDIR:
 	ld	(iy+17),h
 	ex	de,hl
 
-	;1er sector datos=(Sectores reservados+Num FATs*Sectores por FAT)+
-	;                 (32*Entradas dir/512)
+	;1er data sector =(Reserved sectors+Num FATs*Sectors per FAT)+
+	;                 (32*Directory entries/512)
 
-	ld	l,(ix+17)	;Calcula Entradas dir/16
+	ld	l,(ix+17)	;Calculate directory entries/16
 	ld	h,(ix+18)
 	ld	b,4
 CALC_1SECDAT:
@@ -1914,7 +1914,7 @@ CALC_1SECDAT:
 	ld	(iy+11),l
 	ld	(iy+12),h
 
-	;Num clusters+1=((Sectores totales-1er sector datos)/Sectores por cluster)+1
+	;Num clusters+1=((Total sectors-1st data sector)/Sectors per cluster)+1
 
 	push	hl
 	pop	bc	;DE=1st data sector
@@ -1936,9 +1936,9 @@ OK_SMALLSEC:
 	sbc	hl,bc
 	ex	de,hl		;DEHL=total sectors - 1st data sector
 
-	ld	a,(ix+13)	;Divide teniendo en cuenta que
+	ld	a,(ix+13)	;Divide taking in account that
 CALC_NUMCLUS:
-	rrca		;sectores por cluster es potencia de 2
+	rrca		;sectors por cluster is a power of 2
 	jr	c,CALC_NUMCLUS1
 	sra	d
 	rr	e

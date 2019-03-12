@@ -889,7 +889,7 @@ void ShowPartitions()
             }
         }
     } else {
-        allPartitionsArePrimary = (partitionsCount <= 4);
+        allPartitionsArePrimary = false;
     }
 
 	while(true) {
@@ -900,7 +900,7 @@ void ShowPartitions()
     	Locate(0, screenLinesCount-1);
     	DeleteToEndOfLine();
         if(isFirstPage) {
-            sprintf(buffer, partitionsCount == 1 ? "1" : partitionsCount > 8 ? "1-8" : "1-%i", partitionsCount);
+            sprintf(buffer, partitionsCount == 1 ? "1" : partitionsCount > 9 ? "1-9" : "1-%i", partitionsCount);
             if(isLastPage) {
                 sprintf(buffer+4, "ESC = return, %s = toggle active (*)", buffer);
             } else {
@@ -958,7 +958,7 @@ void ShowPartitions()
 			} else if(key == CURSOR_RIGHT && !isLastPage) {
 				firstShownPartitionIndex += PARTITIONS_PER_PAGE;
 				break;
-			} else if(isFirstPage && key>=KEY_1 && key<KEY_1+partitionsCount && key<KEY_1+8) {
+			} else if(isFirstPage && key>=KEY_1 && key<KEY_1+partitionsCount && key<KEY_1+9) {
                 TogglePartitionActive(key-KEY_1);
                 break;
             }
@@ -1368,11 +1368,8 @@ bool WritePartitionTable()
 	//masterBootRecord* mbr = (masterBootRecord*)buffer + 80;
 	byte error;
 
-	if(partitionsCount <= 4) {
-		sprintf(buffer, "Create %i primary partitions on device", partitionsCount);
-	} else {
-		sprintf(buffer, "Create %i partitions on device", partitionsCount);
-	}
+	sprintf(buffer, "Create %i partitions on device", partitionsCount);
+
 	if(!ConfirmDataDestroy(buffer)) {
 		return false;
 	}

@@ -502,25 +502,12 @@ int CreatePartition(int index)
 	ulong firstFileSystemSector;
 	ulong extendedPartitionFirstAbsoluteSector;
 	partitionTableEntry* tableEntry;
-	bool onlyPrimaryPartitions = (partitionsCount <= 4);
 	ulong x;
 
-	if(onlyPrimaryPartitions) {
-		mbrSector = 0;
-		tableEntry = &(mbr->primaryPartitions[index]);
-		if(index == 0) {
-			ClearSectorBuffer();
-			nextDeviceSector = 1;
-		} else {
-			memcpy(sectorBuffer, sectorBufferBackup, 512);
-		}
-		tableEntry->firstAbsoluteSector = nextDeviceSector;
-	} else {
-		mbrSector = nextDeviceSector;
-		tableEntry = &(mbr->primaryPartitions[0]);
-		ClearSectorBuffer();
-		tableEntry->firstAbsoluteSector = 1;
-	}
+    mbrSector = nextDeviceSector;
+	tableEntry = &(mbr->primaryPartitions[0]);
+	ClearSectorBuffer();
+	tableEntry->firstAbsoluteSector = 1;
 
     tableEntry->status = partition->status;
 	tableEntry->partitionType = partition->partitionType;
@@ -528,13 +515,9 @@ int CreatePartition(int index)
 
 	firstFileSystemSector = mbrSector + tableEntry->firstAbsoluteSector;
 
-	if(onlyPrimaryPartitions){
-		nextDeviceSector = tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
-	} else {
-		nextDeviceSector += tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
-	}
+	nextDeviceSector += tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
 
-	if(!onlyPrimaryPartitions && index != (partitionsCount - 1)) {
+	if(index != (partitionsCount - 1)) {
 		tableEntry++;
 		tableEntry->partitionType = PARTYPE_EXTENDED;
 		tableEntry->firstAbsoluteSector = nextDeviceSector;

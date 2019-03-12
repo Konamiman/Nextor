@@ -1290,7 +1290,7 @@ DO_MEDIA_CHANGE:
 	ld	e,(ix+UD_LI##)
 	ld	ix,UNMAPALL##
 	ld	(BK4_ADD##),ix
-	ld	ix,?CALL4##
+	ld	ix,?C4PBK##
 	ld	iy,(MASTER_SLOT##-1)
 	call	CALSLT##
 
@@ -1422,7 +1422,7 @@ build_upb_do_findpart:
         ld d,0
 		ld	ix,AUTO_ASPART##
         ld	(BK4_ADD##),ix
-        ld	ix,?CALL4##
+        ld	ix,?C4PBK##
         ld	iy,(MASTER_SLOT##-1)
         call	CALSLT##		
 
