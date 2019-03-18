@@ -231,10 +231,15 @@ echo ***
 echo .
 
 cd MegaFlashRomSD
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:Mapper.ASCII8.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver-1slot.dat /m:Mapper.ASCII8.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.1-slot.ROM
 sjasm makerecoverykernel.asm kernel.dat
-copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.Recovery.ROM
+copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.1-slot.Recovery.ROM
+del nextor2.rom
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver-2slots.dat /m:Mapper.ASCII8.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.2-slots.ROM
+sjasm makerecoverykernel.asm kernel.dat
+copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.2-slots.Recovery.ROM
 cd ..
 
 echo .
