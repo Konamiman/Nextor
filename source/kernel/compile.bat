@@ -250,6 +250,7 @@ echo .
 
 cd SunriseIDE
 
+del ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.emulators.ROM
 ren ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.ROM Nextor-2.1.0-beta2.SunriseIDE.emulators.ROM 
 sjasm -c sunride.asm driver.bin
 ..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin

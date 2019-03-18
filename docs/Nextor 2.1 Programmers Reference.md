@@ -794,7 +794,7 @@ Nextor will enter the one-time disk emulation mode if it finds the following inf
 | A000h   | Signature string `NEXTOR_EMU_DATA`, zero terminated        |
 | A010h   | Number of the device that contains the emulation data      |
 | A011h   | Number of the logical unit that contains the emulation data |
-| A012h   | Absolute device sector number that contains the emulation data (4 bytes, big endian) |
+| A012h   | Absolute device sector number that contains the emulation data (4 bytes, little endian) |
 
 If the above information is not found, Nextor will enter the persistent disk emulation mode if it finds the following information in the first partition table entry of any of the available devices in the primary Nextor controller:
 

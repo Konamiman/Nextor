@@ -655,10 +655,10 @@ void SetupFile()
         strcpy(SetupRAMAddress, "NEXTOR_EMU_DATA");
         SetupRAMAddress[0x10] = driveInfo->deviceIndex;
         SetupRAMAddress[0x11] = driveInfo->logicalUnitNumber;
-        SetupRAMAddress[0x12] = ((byte*)&sector)[3];   //MSB
-        SetupRAMAddress[0x13] = ((byte*)&sector)[2];
-        SetupRAMAddress[0x14] = ((byte*)&sector)[1];
-        SetupRAMAddress[0x15] = ((byte*)&sector)[0];   //LSB
+        SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
+        SetupRAMAddress[0x13] = ((byte*)&sector)[1];
+        SetupRAMAddress[0x14] = ((byte*)&sector)[2];
+        SetupRAMAddress[0x15] = ((byte*)&sector)[3];   //MSB
     }
 }
 
