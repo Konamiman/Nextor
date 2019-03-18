@@ -101,7 +101,7 @@ M_BSY	equ	10000000b ;(1 SHL BSY)
 M_DRDY	equ	1000000b ;(1 SHL DRDY)
 M_DF	equ	100000b ;(1 SHL DF)
 M_DRQ	equ	1000b ;(1 SHL DRQ)
-M_ERR	equ	1b (1 SHL ERR)
+M_ERR	equ	1b ;(1 SHL ERR)
 
 ; Bits in the device control register register
 

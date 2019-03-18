@@ -244,7 +244,8 @@ echo ***
 echo .
 
 cd SunriseIDE
-if exist driver.mac goto :okide
+
+ren ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.ROM Nextor-2.1.0-beta2.SunriseIDE.emulators.ROM 
 sjasm -c sunride.asm driver.bin
 ..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
 copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.ROM
@@ -259,7 +260,7 @@ echo .
 
 cd Flashjacks
 sjasm flashjacks.asm driver.bin
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.dat
 copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.Flashjacks.ROM
 cd ..
 
