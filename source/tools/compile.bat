@@ -1,10 +1,10 @@
 @echo off
 cls
 
-copy ..\msxdos25\macros.inc
-copy ..\msxdos25\const.inc
-copy ..\msxdos25\codes.mac
-copy ..\msxdos25\data.mac
+copy ..\kernel\macros.inc
+copy ..\kernel\const.inc
+copy ..\kernel\codes.mac
+copy ..\kernel\data.mac
 for %%A in (CODES,DATA,SHARED) do cpm32 M80 =%%A
 del codes.mac
 del data.mac

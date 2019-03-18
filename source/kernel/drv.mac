@@ -12,7 +12,28 @@
 ;
 ;-----------------------------------------------------------------------------
 ;
-$$DRIVE::
+SCANKEYS equ 41EFh-3    ;As defined in init.mac
+
+PRINTL	macro	NAME,VALUE
+	if2
+	.PRINTX % Size of NAME = VALUE bytes %
+	endif
+	endm
+
+ALIGN	macro	ADDR
+    if $-START gt ADDR-ORIGIN
+	error	<Code overwraps at ADDR>
+	PRINTL	<wrap at ADDR>,%($-START)-(ADDR-ORIGIN)
+	org	ADDR-ORIGIN
+    else
+	PRINTL	<hole at ADDR>,%(ADDR-ORIGIN)-($-START)
+	defs	(ADDR-ORIGIN)-($-START),0
+    endif
+endm
+
+ORIGIN	equ	7700h
+
+    ALIGN 7700h
 ;
 ;       External Routines.
 ;
@@ -27,10 +48,203 @@ $$DRIVE::
 	public	DEFDPB
 ;
 
-	;*** This should be compiled at 781Fh
 
-SCANKEYS equ 41EFh-3    ;As defined in init.mac
+;-----------------------------------------------------------------------------
 
+;This routine is invoked in disk emulation mode prior to any disk access.
+;If checks if a valid file change key is being pressed, and if so,
+;reloads the emulation data file and updates the information in DVB_TABLE.
+;If no suitable key is being pressed, or if change is performed ok, returns Z.
+;If there is an error reading the emulation data file, returns NZ and A=Error code.
+
+CHGFILE:
+	push	hl
+	push	de
+	push	bc
+	push	ix
+	push	iy
+	call	CHGF2
+	pop	iy
+	pop	ix
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+CHGF2:
+	ld	ix,(DVB_TABLE##)
+
+    call GETCURKEY
+    or a
+    ret z
+    cp 0FFh
+    jr nz,CHGF3
+
+	call	CAPSON
+    call WAIT_KEY_RELEASE ;GRAPH pressed: wait for other keys to release...
+
+CHGWA2:
+	call	GETCURKEY	;...then to be pressed again.
+	or	a
+	jr	z,CHGWA2
+
+    cp 0FFh      ;User changed his mind and pressed GRAPH 
+    jr nz,CHGF3
+
+    call WAIT_KEY_RELEASE
+    ret
+
+CHGF3:
+	ld	c,a
+	call	CAPSON
+
+	;--- The key with index C is pressed
+
+	;> Do nothing if chosen file is the same currently in use
+
+	ld	a,(ix+DSK_IDX##)
+	and	3Fh
+	cp	c
+	call	z,CAPSOFF
+	ret	z
+
+	;> Read emulation data file
+
+	push	bc
+
+	ld	a,(ix+EMU_DEVLUN##) ;data file dev index + 16 * LUN index
+	ld	d,a
+	rrca
+	rrca
+	rrca
+	rrca
+	and	111b
+	ld	b,a	;LUN
+	ld	a,d
+	and	111b	;Device
+
+	ld	l,(ix+EMU_FSEC##)
+	ld	h,(ix+EMU_FSEC##+1)
+	ld	(TMP_SEC##),hl
+	ld	l,(ix+EMU_FSEC##+2)
+	ld	h,(ix+EMU_FSEC##+3)
+	ld	(TMP_SEC##+2),hl
+
+	ld	iy,(0F348h-1)	;Master controller slot
+	ld	hl,DEV_RW##
+	ld	(BK4_ADD##),hl
+	ld	c,b
+	ld	b,1
+	ld	hl,($SECBUF##)
+	ld	de,TMP_SEC##
+	or	a
+
+	push	ix
+	ld	ix,CALDRV##
+	call	CALSLT##	;Call DEV_RW
+	pop	ix
+	pop	bc
+	call	CAPSOFF
+	or	a
+	ret	nz
+
+	;> Set the new file data in work area
+
+    ld a,(ix+DSK_IDX##)
+    and 11000000b   ;In emulation mode flag + Russian keyboard flag
+    ld b,a
+	ld	a,c
+    or b
+	ld	(ix+DSK_IDX##),a
+	set	7,(ix+EMU_DEVLUN##) ;File changed flag
+	
+	dec	a
+	add	a,a		;Each entry is 8 bytes
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	h,0
+	ld	bc,24
+	add	hl,bc
+	ld	de,($SECBUF##)
+	add	hl,de	;HL = Pointer to boot file data
+	push	ix
+	pop	de
+	inc	de
+	inc	de  ;DE must point to DSK_DEV in work area
+	ld	bc,8
+	ldir
+
+	xor	a
+	ret
+
+
+WAIT_KEY_RELEASE:
+    call	GETCURKEY
+	or	a
+	jr	nz,WAIT_KEY_RELEASE
+    ret
+
+
+	;Return in A the index of currently pressed key, 0 if none, FFh is GRAPH
+	;Input: IX = Pointer to emulation data area
+GETCURKEY:
+    ex af,af'
+    ld a,(ix+DSK_IDX##)
+    rlca
+    rlca
+    rlca
+    and 1   ;Russian keyboard?
+    ex af,af'
+    push ix
+	ld	ix,SCANKEYS
+	xor a
+	call	CALBNK##
+    pop ix
+    bit 6,h
+    ld a,0FFh
+    ret nz
+    ld c,b
+	ld b,(ix+DSK_COUNT##)
+    ld a,1
+
+    ;HLDEC = key statuses
+    ;B = Keys left to check
+    ;A = Current key index
+    ;We do an initial rotation because we want to start at key 1.
+CHGLOOP:
+    sra c
+    rr e
+    rr d
+    rr l
+    rr h
+    bit 0,c
+    ret nz
+
+    inc a
+    djnz CHGLOOP
+
+    xor a
+    ret
+
+CAPSON:
+	in	a,(0AAh)
+	and	10111111b
+	out	(0AAh),a
+	ret
+
+CAPSOFF:
+	push	af
+	in	a,(0AAh)
+	or	01000000b
+	out	(0AAh),a
+	pop	af
+	ret
+
+
+
+
+    ALIGN 781Fh
 ;-----------------------------------------------------------------------------
 ;
 ; Null message. The address of this message can be returned by
@@ -52,9 +266,9 @@ null_message:
 ; Calls to these addresses will be translated to calls to the DV_DIRECTx
 ; entry points in the driver bank.
 
-	ds	7850h-7843h	;Can't do "ds 7850h-$", the compiler complaints
+    ALIGN 7850h
 
-DIRCALL::
+DIRCALL:
 	call	DO_DIRCALL
 	call	DO_DIRCALL
 	call	DO_DIRCALL
@@ -380,199 +594,6 @@ DIO_INC_DE_DVB:
 DIO_INC_DE_DVB_END:
 	pop	hl
 	ret
-
-;-----------------------------------------------------------------------------
-
-;This routine is invoked in disk emulation mode prior to any disk access.
-;If checks if a valid file change key is being pressed, and if so,
-;reloads the emulation data file and updates the information in DVB_TABLE.
-;If no suitable key is being pressed, or if change is performed ok, returns Z.
-;If there is an error reading the emulation data file, returns NZ and A=Error code.
-
-CHGFILE:
-	push	hl
-	push	de
-	push	bc
-	push	ix
-	push	iy
-	call	CHGF2
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	de
-	pop	hl
-	ret
-
-CHGF2:
-	ld	ix,(DVB_TABLE##)
-
-    call GETCURKEY
-    or a
-    ret z
-    cp 0FFh
-    jr nz,CHGF3
-
-	call	CAPSON
-    call WAIT_KEY_RELEASE ;GRAPH pressed: wait for other keys to release...
-
-CHGWA2:
-	call	GETCURKEY	;...then to be pressed again.
-	or	a
-	jr	z,CHGWA2
-
-    cp 0FFh      ;User changed his mind and pressed GRAPH 
-    jr nz,CHGF3
-
-    call WAIT_KEY_RELEASE
-    ret
-
-CHGF3:
-	ld	c,a
-	call	CAPSON
-
-	;--- The key with index C is pressed
-
-	;> Do nothing if chosen file is the same currently in use
-
-	ld	a,(ix+DSK_IDX##)
-	and	3Fh
-	cp	c
-	call	z,CAPSOFF
-	ret	z
-
-	;> Read emulation data file
-
-	push	bc
-
-	ld	a,(ix+EMU_DEVLUN##) ;data file dev index + 16 * LUN index
-	ld	d,a
-	rrca
-	rrca
-	rrca
-	rrca
-	and	111b
-	ld	b,a	;LUN
-	ld	a,d
-	and	111b	;Device
-
-	ld	l,(ix+EMU_FSEC##)
-	ld	h,(ix+EMU_FSEC##+1)
-	ld	(TMP_SEC##),hl
-	ld	l,(ix+EMU_FSEC##+2)
-	ld	h,(ix+EMU_FSEC##+3)
-	ld	(TMP_SEC##+2),hl
-
-	ld	iy,(0F348h-1)	;Master controller slot
-	ld	hl,DEV_RW##
-	ld	(BK4_ADD##),hl
-	ld	c,b
-	ld	b,1
-	ld	hl,($SECBUF##)
-	ld	de,TMP_SEC##
-	or	a
-
-	push	ix
-	ld	ix,CALDRV##
-	call	CALSLT##	;Call DEV_RW
-	pop	ix
-	pop	bc
-	call	CAPSOFF
-	or	a
-	ret	nz
-
-	;> Set the new file data in work area
-
-    ld a,(ix+DSK_IDX##)
-    and 11000000b   ;In emulation mode flag + Russian keyboard flag
-    ld b,a
-	ld	a,c
-    or b
-	ld	(ix+DSK_IDX##),a
-	set	7,(ix+EMU_DEVLUN##) ;File changed flag
-	
-	dec	a
-	add	a,a		;Each entry is 8 bytes
-	add	a,a
-	add	a,a
-	ld	l,a
-	ld	h,0
-	ld	bc,24
-	add	hl,bc
-	ld	de,($SECBUF##)
-	add	hl,de	;HL = Pointer to boot file data
-	push	ix
-	pop	de
-	inc	de
-	inc	de  ;DE must point to DSK_DEV in work area
-	ld	bc,8
-	ldir
-
-	xor	a
-	ret
-
-
-WAIT_KEY_RELEASE:
-    call	GETCURKEY
-	or	a
-	jr	nz,WAIT_KEY_RELEASE
-    ret
-
-
-	;Return in A the index of currently pressed key, 0 if none, FFh is GRAPH
-	;Input: IX = Pointer to emulation data area
-GETCURKEY:
-    ex af,af'
-    ld a,(ix+DSK_IDX##)
-    rlca
-    rlca
-    rlca
-    and 1   ;Russian keyboard?
-    ex af,af'
-    push ix
-	ld	ix,SCANKEYS
-	xor a
-	call	CALBNK##
-    pop ix
-    bit 6,h
-    ld a,0FFh
-    ret nz
-    ld c,b
-	ld b,(ix+DSK_COUNT##)
-    ld a,1
-
-    ;HLDEC = key statuses
-    ;B = Keys left to check
-    ;A = Current key index
-    ;We do an initial rotation because we want to start at key 1.
-CHGLOOP:
-    sra c
-    rr e
-    rr d
-    rr l
-    rr h
-    bit 0,c
-    ret nz
-
-    inc a
-    djnz CHGLOOP
-
-    xor a
-    ret
-
-CAPSON:
-	in	a,(0AAh)
-	and	10111111b
-	out	(0AAh),a
-	ret
-
-CAPSOFF:
-	push	af
-	in	a,(0AAh)
-	or	01000000b
-	out	(0AAh),a
-	pop	af
-	ret
-
 
 ;-----------------------------------------------------------------------------
 ;
@@ -999,6 +1020,10 @@ DEFDPB:
 	DB	3		
 	DW	7
 ;
+
+    ALIGN 7BD0h
+    ;Here goes the 1K free area at the end of banks 0 and 3
+
 	finish	<DRV>
 ;
 	end
