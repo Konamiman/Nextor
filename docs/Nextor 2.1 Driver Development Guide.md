@@ -102,7 +102,9 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.1.0 beta 1](#51-v210-beta-1)
+[5.1. v2.1.0 beta 2](#51-v210-beta-2)
+
+[5.2. v2.1.0 beta 1](#52-v210-beta-1)
 
 
 ## 1. Introduction
@@ -1018,6 +1020,10 @@ This section contains the change history for the different versions of Nextor. O
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Driver Development Guide](../../../blob/v2.0/docs/Nextor%202.0%20Driver%20Development%20Guide.md#5-change-history)_ document.
 
-### 5.1. v2.1 beta 1
+### 5.1. v2.1.0 beta 2
+
+Fix: there was Nextor kernel code in the 1K free area in pages 0 and 3, so putting anything here caused problems, e.g. DOS 1 mode didn't work.
+
+### 5.2. v2.1.0 beta 1
 
 Added the "User is requesting reduced drive count" flag to the input of [the DRV_INIT routine](#443-drv_init-4136h) and [the DRV_CONFIG routine](#448-drv_config-4151h). 

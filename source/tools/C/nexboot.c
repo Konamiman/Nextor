@@ -30,7 +30,7 @@
 /* Strings */
 
 const char* strTitle=
-    "Temporary boot keys configuration tool for Nextor v1.0\r\n"
+    "One-time boot keys configuration tool for Nextor v1.0\r\n"
     "By Konamiman, 3/2019\r\n"
     "\r\n";
     

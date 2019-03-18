@@ -303,7 +303,7 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; during boot (the opposite of the normal behavior).
     ;
     ; This does NOT have effect when setting the boot keys in RAM
-    ; (if boot keys are set in RAM, the keyboard is completely ignored)
+    ; (if boot keys are set in RAM, the keyboard is completely ignored).
     ;
     ; These bytes are fixed at offset 200h (starting at 0) in ROM.
     ; They should be changed in the ROM file before flashing in the hardware.

@@ -1,4 +1,4 @@
-# Nextor 2.0 Getting Started Guide
+# Nextor 2.1 Getting Started Guide
 
 ## Index
 

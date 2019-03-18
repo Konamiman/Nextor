@@ -68,7 +68,7 @@ const char* strTitle=
     
 const char* strUsage=
     "Usage: emufile [<options>] <output file> <files> [<files> ...]\r\n"
-    "       emufile set <data file> [<device index> [<LUN index>]]\r\n"
+    "       emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
     "       emufile ?\r\n";
 
 const char* strHelp=
@@ -93,9 +93,9 @@ const char* strHelp=
     "\r\n"
     "* To setup an existing emulation data file for booting:\r\n"
     "\r\n"
-    "emufile set <data file> [t|p[<device index>[<LUN index>]]]\r\n"
+    "emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
     "\r\n"
-    "t: transient emulation (store emulation data file pointer in RAM).\r\n"
+    "o: one-time emulation (store emulation data file pointer in RAM).\r\n"
     "This is the default if only <data file> is specified.\r\n"
     "\r\n"
     "p: persistent emulation (store emulation data file pointer in partition table).\r\n"
@@ -327,7 +327,7 @@ void ProcessSetupFileArguments(char** argv, int argc)
 
     paramFirstChar = argv[2][0] | 32;
 
-    if(paramFirstChar == 't') {
+    if(paramFirstChar == 'o') {
         return;
     }
     else if(paramFirstChar != 'p') {
