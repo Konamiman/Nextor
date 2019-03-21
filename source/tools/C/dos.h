@@ -114,7 +114,7 @@ typedef struct {
 #define LUN_INFO 0x4169
 
 
-#define BK4_ADD 0xF1CF
+#define BK4_ADD 0xF1D0
 
 
 #endif   //__DOS_H

@@ -1,4 +1,4 @@
-    ; Dummy disk driver for Nextor 2.0
+    ; Dummy disk driver for Nextor 2.1
     ; By Konamiman, 8/2018
     ;
     ; This code can be used as the basis for developing
@@ -21,7 +21,7 @@ DRV_START:
 ;This is a 2 byte buffer to store the address of code to be executed.
 ;It is used by some of the kernel page 0 routines.
 
-CODE_ADD:	equ	0F84Ch
+CODE_ADD:	equ	0F1D0h
 
 
 ;-----------------------------------------------------------------------------
