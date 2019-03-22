@@ -140,11 +140,17 @@ abs_rw_dorw:
 		pcall	INV_UD			; buffers for this drive
 
 		;If the disk has actually a FAT12 or FAT16 filesystem,
-		;set unit descriptor as having UPB but needing validation;
-		;otherwise, set unit descriptor as not having UPB.
+        ;and it's NOT a device-based driver,
+        ;set unit descriptor as having UPB
+        ;but needing validation; otherwise (no FAT filesystem),
+		;set unit descriptor as not having UPB.
 
-		ld	de,UD_FLAGS##
+		ld	de,UD_DFLAGS##
 		add	hl,de
+        bit UF_DBD,(hl)
+        jr nz,abs_common_end
+
+        dec hl  ;UD_FLAGS
 		ld	a,(hl)
 		and	UFM_F2+UFM_F6
 		ld	a,0

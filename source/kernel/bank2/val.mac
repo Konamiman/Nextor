@@ -1280,23 +1280,14 @@ DO_MEDIA_CHANGE:
 	push	de
 	push	hl
 	push	iy
-	ex	af,af'
-	push	af
-	ex	af,af'
 
 	ld	b,(ix+UD_SLOT##)
 	ld	c,(ix+UD_SEG##)
 	ld	d,(ix+UD_DI##)
 	ld	e,(ix+UD_LI##)
 	ld	ix,UNMAPALL##
-	ld	(BK4_ADD##),ix
-	ld	ix,?C4PBK##
-	ld	iy,(MASTER_SLOT##-1)
-	call	CALSLT##
+	call CALL4_PRESERVE_ALT
 
-	ex	af,af'
-	pop	af
-	ex	af,af'
 	pop	iy
 	pop	hl
 	pop	de
@@ -1421,10 +1412,7 @@ build_upb_do_findpart:
 
         ld d,0
 		ld	ix,AUTO_ASPART##
-        ld	(BK4_ADD##),ix
-        ld	ix,?C4PBK##
-        ld	iy,(MASTER_SLOT##-1)
-        call	CALSLT##		
+        call CALL4_PRESERVE_ALT
 
         pop iy
         pop ix
@@ -1632,8 +1620,6 @@ MKDPB_DEVBASED:
 		push	iy
 		ex	af,af'
 		push	af
-		ld	de,MKDPB##
-		ld	(BK4_ADD##),de
 		push	ix
 		ex	(sp),hl
 		pop	ix
@@ -1641,9 +1627,8 @@ MKDPB_DEVBASED:
 		ld	d,(ix+UD_DPB##+1)
 		inc	de
 
-		ld	iy,(MASTER_SLOT##-1)
-		ld	ix,?C4PBK##
-		call	CALSLT##	;Since we don't know state of page 1 when KBDOS is called.
+        ld ix,MKDPB##
+        call CALL4_PRESERVE_ALT ;Since we don't know state of page 1 when KBDOS is called.
 		
 		pop	af
 		ex	af,af'
@@ -3395,6 +3380,35 @@ COMP16:
 	ld	a,l
 	sub	e
 	ret
+
+    ;Call a routine in bank 4 of master slot, preserving alternate registers.
+    ;Input: IX=Routine to call
+CALL4_PRESERVE_ALT:
+    exx
+    ex af,af'
+    push af
+    push bc
+    push de
+    push hl
+    ex af,af'
+    exx
+
+	ld	(BK4_ADD##),ix
+	ld	ix,?C4PBK##
+	ld	iy,(MASTER_SLOT##-1)
+	call	CALSLT##
+
+    exx
+    ex af,af'
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ex af,af'
+    exx
+
+    ret
+
 
 FAT16_S:	db	"FAT16"
 
