@@ -142,13 +142,8 @@ READ_BOOT_SEC::
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-        call SET_BOOT_DISK_ABORT_VECTORS
+        call SET_BOOT_VECTORS
 
-		ld	hl,DISKBREAK##    ;BOOT_DISKVECT	;Setup disk error and break
-		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOTBREAK##    ;BOOT_BREAKVECT	; errors while booting.
-		ld	(BREAKVECT##),hl
-;
 		ld	de,($SECBUF##)		;Set the DTA address ready
 		ld	c,_SETDTA##		; for reading the boot
 		call	BOOT_BDOS		; sector in.
@@ -283,15 +278,10 @@ TRY_MSX_DOS::
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-        call SET_BOOT_DISK_ABORT_VECTORS
-
 		ld	(CUR_DRV##),a		;Setup default drive.
 
 NOBOOT:
-		ld	hl,DISKBREAK##  ;BOOT_DISKVECT	;Setup disk error and break
-		ld	(DISKVECT##),hl		; vector for trapping
-		ld	hl,BOOTBREAK##  ;BOOT_BREAKVECT	; errors while booting.
-		ld	(BREAKVECT##),hl
+        call SET_BOOT_VECTORS
 ;
 		ld	b,0			;Unassign all drives (does
 		ld	d,b			; not waste very much time)
@@ -359,22 +349,21 @@ OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ; the abort routine kicked in and it tried to read the address at BOOT_BREAK
 ; and execute it - but since the user paging had been restored before that,
 ; a random value was being read instead, and thus random code was executed
-; and the computer crashed. Similarly on disk error.
+; and the computer crashed.
 ;
-; Solution: since these default disk error and abort routines are very short
-; (3 bytes), just store them at an unused place in page 3 and point to
-; these instead.
+; Solution: since this default abort routine is just one byte (a RET),
+; just store it at an unused place in page 3 and point to it instead.
 
 SBDAVEC::
-SET_BOOT_DISK_ABORT_VECTORS:
-        push af
-        push hl
-        ld hl,(BOOT_DISK)
-        ld (DISKBREAK##),hl
+SET_BOOT_VECTORS:
+        ld hl,BOOT_DISKVECT
+        ld (DISKVECT##),hl
         ld a,0C9h
-        ld (DISKBREAK##+2),a
-        pop hl
-        pop af
+        ld (RAM_ABORT##),a
+        ld hl,RAM_ABORT##
+        ld (RAM_ABORT##+1),hl
+        ld hl,RAM_ABORT##+1
+        ld (BREAKVECT##),hl
         ret
 
 BOOT_BDOS:	call	BDOS##			;Routine for calling BDOS.

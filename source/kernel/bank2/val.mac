@@ -619,10 +619,16 @@ NEW_BOOT_SZ	equ	$-NEW_BOOT
 ;		---------------------------------
 ;
 		pop	hl
-		call	IS_FIXED_OR_LOCKED		;Skip all if disk is locked
+        push hl
+        ld	bc,UD_TIME##		; unit descriptor and skip if
+		add	hl,bc			; it is zero since this means
+		ld	a,(hl)			; that there is no current
+		or	a			; UPB for this unit.
+        jr z,valfib2
+		call	IS_FIXED_OR_LOCKED		;Skip all if disk is fixed or locked
 		ld	a,0
 		ret	c
-		push	hl
+valfib2:
 
 		dec	b			;Skip if B<>1
 		jr	nz,not_opened

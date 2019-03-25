@@ -116,8 +116,7 @@ ram_ad	defl	DATABASE
 	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
 ;
 	var3	$IRQ		;Interrupt entry point
-    var2    DISKBREAK
-    var1    BOOTBREAK
+    var3    RAM_ABORT   ;Stores a RET and a pointer to it (see SET_BOOT_VECTORS in dosboot.mac)
 	spare	1
 ;
 	var1	DIRBFD, F246	;** May be corrupted sometimes.
@@ -285,7 +284,7 @@ ram_ad	defl	DATABASE
 	var2	DISKVECT,F323	;BDOS_GO disk error vector
 	var2	BREAKVECT,F325	;BDOS_GO ctrl-stop vector
 ;
-	var	AUXBODY,10,F327	;Actually 10
+	var	AUXBODY,10,F327
 
 	spare	2
 	var2	$DOS1		;MSX-DOS1 compatible page-1 BDOS entry
