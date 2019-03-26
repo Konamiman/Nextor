@@ -774,10 +774,12 @@ Each entry in the disk image files table is as follows:
 
 | Offset | Meaning |
 |:------:|---------|
-|   +0   | Number of the device that contains the file        |
-|   +1   | Number of the logical unit that contains the file  |
+|   +0   | Number of the device that contains the file (0 = same as emulation data file) |
+|   +1   | Number of the logical unit that contains the file (if device number is not 0)  |
 |   +2   | Absolute device sector number where the file starts (4 bytes, little endian) |
 |   +6   | Size of the file in sectors (2 bytes, little endian) |
+
+If the device number in a disk image files table entry is zero, then Nextor will assume that the disk image file is located at the same device and logical unit as the emulation data file (the logical unit number in the table entry is ignored in this case). The `EMUFILE.COM` tool sets the device number to 0 for all entries if all the disk image files are located in the same device and logical unit as the emulation data file that is being created.
 
 Any contents in the emulation data file past the last entry in the disk images file table is ignored by the Nextor kernel. The `EMUFILE.COM` tool places here a printable list of the disk image filenames, it can be displayed by executing `TYPE /B datafile` in the command prompt.
 

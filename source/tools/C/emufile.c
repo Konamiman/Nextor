@@ -154,6 +154,7 @@ void GetDriveInfoForFileInFib();
 void CheckControllerForFileInFib();
 ulong GetFirstFileSectorForFileInFib();
 void AddFileInFibToFilesTable(ulong sector);
+void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
 void AddFileInFibToFilenamesInfo();
 void GenerateFile();
 void AddFileExtension(char* fileName);
@@ -195,6 +196,7 @@ int main(char** argv, int argc)
         ResetComputer();
     }
     if(totalFilesProcessed > 0) {
+        SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
         GenerateFile();
         printf(
             "%s%s successfully generated!\r\n%i disk image file(s) registered\r\n",
@@ -545,6 +547,40 @@ void AddFileInFibToFilenamesInfo()
     fileNamesAppendAddress += strlen(fib->filename);
     *fileNamesAppendAddress++ = '\r';
     *fileNamesAppendAddress++ = '\n';
+}
+
+void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile()
+{
+    GeneratedFileTableEntry* tableEntry;
+    int i;
+
+    regs.Bytes.B = 0;
+    regs.Words.DE = (int)outputFileName;
+    DoDosCall(_PARSE);
+    printf("!!! %i\r\n",regs.Bytes.C);
+    regs.Bytes.A = regs.Bytes.C - 1;    //drive number of the data file
+    regs.Words.HL = (int)driveInfo;
+    DoDosCall(_GDLI);
+
+    tableEntry = (GeneratedFileTableEntry*)(fileContentsBase + sizeof(GeneratedFileHeader));
+
+    for(i=0; i<totalFilesProcessed; i++)
+    {
+        printf("*** %i %i vs %i %i\r\n",tableEntry->deviceIndex,tableEntry->logicalUnitNumber,driveInfo->deviceIndex,driveInfo->logicalUnitNumber);
+        if(tableEntry->deviceIndex != driveInfo->deviceIndex || tableEntry->logicalUnitNumber != driveInfo->logicalUnitNumber) {
+            return;
+        }
+        tableEntry++;
+    }
+
+    tableEntry = (GeneratedFileTableEntry*)(fileContentsBase + sizeof(GeneratedFileHeader));
+
+    for(i=0; i<totalFilesProcessed; i++)
+    {
+        tableEntry->deviceIndex = 0;
+        tableEntry->logicalUnitNumber = 0;
+        tableEntry++;
+    }
 }
 
 void GenerateFile() 

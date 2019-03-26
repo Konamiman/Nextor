@@ -1820,8 +1820,24 @@ GOEMU_NORUS:
 	ld	bc,8
 	ldir
 
+    ld a,(iy+DSK_DEV##) ;set DSK_DEV and DSK_LUN as same of data file if 0
+    or a
+    jr nz,GOEMU_END
+    ld a,(iy+EMU_DEVLUN##)
+    ld b,a
+    and 00000111b
+    ld (iy+DSK_DEV##),a
+    ld a,b
+    rrca
+    rrca
+    rrca
+    rrca
+    and 00000111b
+    ld (iy+DSK_LUN##),a
+
 	;--- All done
 
+GOEMU_END:
 	ld	a,1
 	ld	(IN_EMU##),a
 	ret
