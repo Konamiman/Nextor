@@ -109,6 +109,8 @@ const char* strHelp=
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
 
+const char* emuDataSignature = "NEXTOR_EMU_DATA";
+
 /* Global variables */
 
 Z80_registers regs;
@@ -557,7 +559,6 @@ void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile()
     regs.Bytes.B = 0;
     regs.Words.DE = (int)outputFileName;
     DoDosCall(_PARSE);
-    printf("!!! %i\r\n",regs.Bytes.C);
     regs.Bytes.A = regs.Bytes.C - 1;    //drive number of the data file
     regs.Words.HL = (int)driveInfo;
     DoDosCall(_GDLI);
@@ -566,7 +567,6 @@ void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile()
 
     for(i=0; i<totalFilesProcessed; i++)
     {
-        printf("*** %i %i vs %i %i\r\n",tableEntry->deviceIndex,tableEntry->logicalUnitNumber,driveInfo->deviceIndex,driveInfo->logicalUnitNumber);
         if(tableEntry->deviceIndex != driveInfo->deviceIndex || tableEntry->logicalUnitNumber != driveInfo->logicalUnitNumber) {
             return;
         }
@@ -597,7 +597,7 @@ void GenerateFile()
     }
     
     header = (GeneratedFileHeader*)fileContentsBase;
-    strcpy(header->signature, "Nextor DSK file");
+    strcpy(header->signature, emuDataSignature);
     header->numberOfEntriesInImagesTable = totalFilesProcessed;
     header->indexOfImageToMountAtBoot = bootFileIndex;
     header->workAreaAddress = workAreaAddress;
@@ -688,7 +688,7 @@ void SetupFile()
             TerminateWithDosError(error);
         }
     } else {
-        strcpy(SetupRAMAddress, "NEXTOR_EMU_DATA");
+        strcpy(SetupRAMAddress, emuDataSignature);
         SetupRAMAddress[0x10] = driveInfo->deviceIndex;
         SetupRAMAddress[0x11] = driveInfo->logicalUnitNumber;
         SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
@@ -709,7 +709,7 @@ void VerifyDataFileSignature(byte* sectorBuffer)
     regs.Words.HL = 16;
     DoDosCall(_READ);
 
-    if(regs.Words.HL < 16 || strcmpi((char*)sectorBuffer, "Nextor DSK file") != 0) {
+    if(regs.Words.HL < 16 || strcmpi((char*)sectorBuffer, emuDataSignature) != 0) {
         Terminate("Invalid emulation data file");
     }
 }

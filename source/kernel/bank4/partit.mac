@@ -1481,7 +1481,7 @@ TRY_RAM_EMU:
     call PUT_P2##
 
     ld hl,EMU_RAM_ADDRESS
-    ld de,EMURAMSIG
+    ld de,EMUDATASIG
     call STRCOMP
     jr nz,TRY_RAM_EMU_NO_SIG
 
@@ -1739,7 +1739,7 @@ GO_EMU:
 
 	push	ix
 	pop	hl
-	ld	de,NDATSIG
+	ld	de,EMUDATASIG
     call STRCOMP
     ld	a,0
 	ret	nz
@@ -1842,8 +1842,7 @@ GOEMU_END:
 	ld	(IN_EMU##),a
 	ret
 
-NDATSIG:	db	"Nextor DSK file",0
-EMURAMSIG:  db  "NEXTOR_EMU_DATA",0
+EMUDATASIG:  db  "NEXTOR_EMU_DATA",0
 
 ;-----------------------------------------------------------------------------
 ;

@@ -764,7 +764,7 @@ The disk emulation data file, used by Nextor to know which disk image files must
 
 | Offset | Meaning |
 |:------:|---------|
-|   +0   | Signature string `Nextor DSK file`, zero terminated |
+|   +0   | Signature string `NEXTOR_EMU_DATA`, zero terminated |
 |   +16  | Number of entries in the disk image files table     |
 |   +17  | 1-based index of the file to mount at boot time     |
 |   +18  | Address to use as work area during the emulation session, or 0 if this area must be allocated (2 bytes, little endian) |
@@ -817,7 +817,7 @@ For example, if the emulation data is located at device 1, logical unit 2, secto
 
 Note that the condition for Nextor entering emulation mode is that bit 0 of the status byte must be set **and** the partition type code must be non-zero (but can be any other value, not necessarily FAT). Also note that the device and logical unit information here refers to the emulation data file only - the disk image files themselves can be located at a different device.
 
-Also worth noting: Nextor will check that the emulation data actually starts with the `Nextor DSK file` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
+Also worth noting: Nextor will check that the emulation data actually starts with the `NEXTOR_EMU_DATA` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
 
 
 ## 8. Change history
