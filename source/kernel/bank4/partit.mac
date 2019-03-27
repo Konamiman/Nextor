@@ -1318,6 +1318,8 @@ AA_SPC_OK:
     ld  h,(ix+AAD_CURR_PART_SECTOR+3)
     ld  (ix+AAD_CAND_PART_SECTOR+2),l
     ld  (ix+AAD_CAND_PART_SECTOR+3),h
+    ld	a,(ix+AAD_CURR_PART_DEVLUN)
+	ld	(ix+AAD_CAND_PART_DEVLUN),a
 	jp	AA_DO_ASSIGN
 
 AA_NOT_ACTIVE:
