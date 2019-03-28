@@ -1145,6 +1145,8 @@ This list contains the changes for the 2.1 branch only. For the change history o
 
 - Fix: [#29 wrong stack management hangedd the computer when a file handle was read or written to a number of times](https://github.com/Konamiman/Nextor/issues/29).
 
+- Fix: computer crashing when more than one Nextor kernel was present as soon as the extended BIOS hook was called (for example, when loading COMMAND2.COM).
+
 
 ### 5.2. v2.1.0 beta 1
 

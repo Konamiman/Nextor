@@ -767,8 +767,6 @@ EXB_LOOP:
 	cp	c
 	jr	z,EXB_DJNZ	;Skip master kernel as we have processed it already
 
-	ld	a,c
-	ld	h,40h
 	push	ix
 	push	iy
 	ex	af,af'
@@ -777,11 +775,14 @@ EXB_LOOP:
 	push	bc
 	push	de
 	push	hl
+    ld a,(ix)
+    and 10001111b
+   	ld	h,40h
 	call	ENASLT
 	ld	hl,DV_EXTBIO##
 	ld (BK4_ADD##),hl
 	exx
-	ld	de,0100h
+	ld	de,0100h    ;Pass D'=1 by default
 	exx
 	pop	hl
 	pop	de
