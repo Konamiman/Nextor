@@ -106,11 +106,10 @@ ram_ad	defl	DATABASE
 	var3	PUT_P3		; /
 	var3	GET_P3		;/
 
-	;var3	ALL_BK		;Assembler complaints if these are defined (?)
-	;var3	FR_BK
-	;spare	6
-;
-	spare	12		;For future expansion
+    var3    CALL_MAP    ;UNAPI RAM helper compliant routines
+    var3    RD_MAP
+    var3    CALL_MAPI
+    var3    WR_MAP
 ;
 	var1	CUR_DRV		;Current logical drive (1=A:)
 	var2	DTA_ADDR,F23D	;DMAADD used by MSXDOS1.SYS - can not move.
@@ -485,9 +484,6 @@ ram_ad	defl	4100h
 	var3	F_SETRND
 	var3	F_RDBLK
 	var3	F_WRBLK
-
-	var3	ALL_BK
-	var3	FR_BK
 
 	var3	F_GPART
 	var3	GDRIVER

@@ -724,18 +724,32 @@ MAPBIO3:
 
 		;Need to push EXACTLY these registers and in this order,
 		;since CHK_DEV changes the pushed values
-		push	de
-		push	af
-		call	CHK_DEV
-		pop	af
-		pop	de
 		exx
 		set	0,d
 		exx
+		push	de
+		push	af
+		call	CHK_DEV
+        exx
+        ex af,af'
+        bit 0,d
+        jr z,MAPB_DONT_CALL_OLD
+
+        ex af,af'   ;D'=0 at return: must call old hook with original registers
+        exx    
+		pop	af
+		pop	de
 		ret
+
+MAPB_DONT_CALL_OLD:
+        pop af      ;D'=1 at return: don't call old hook, keep returned registers
+        pop af
+        ex af,af'
+        exx
+        ret
 ;
 
-EXB_NEX:	;WIP...
+EXB_NEX:
 ;
 ;   Call the EXTBIO routine of Nextor kernels other than the master one
 ;   Out: D'=1 if system hook must be called, 0 otherwise
@@ -831,12 +845,38 @@ EXB_RAM_END:
 
 CHK_DEV:	ld	a,d
 		or	e
-		jr	nz,CHK_MAPDEV
+		jr	nz,CHK_UNAPI
 ;
 BROADCAST_BIO:	ld	a,MAP_DEV	;Build device number table function.
 		call	EXTWRT		;+0 set our device number
-		jp	EXTWRT		;+1 reserved field
+		call	EXTWRT		;+1 reserved field
+        jp RESET_EXX_D
 ;
+CHK_UNAPI:
+        ld  a,d
+        cp  22h
+        jr  nz,CHK_MAPDEV
+        ld  a,e
+        cp  22h
+        jr  nz,CHK_MAPDEV
+
+        ld  a,h
+        or  l
+        ret nz
+
+        pop de
+        pop af
+        cp 0FFh
+        push af
+        push de
+        ld de,2222h
+        ret nz
+
+        ld hl,MAP_VECT##+30h
+        ld bc,0
+        ld a,4  ;Number of RAM helper compatible routines
+        jp  RESET_EXX_D
+
 CHK_MAPDEV:	ld	a,d
 		cp	MAP_DEV		;Mapper device?
 		ret	nz
@@ -871,7 +911,8 @@ MAPBIO_0:	push	hl		;Build table function.
 		call	EXTWRT		;+4 set number of available segments
 		call	EXTWRT		;+5 reserved field
 		call	EXTWRT		;+6 reserved field
-		jp	EXTWRT		;+7 reserved field
+		call	EXTWRT		;+7 reserved field
+        jp RESET_EXX_D
 ;
 MAPBIO_1:	pop	de
 		pop	af		;Pop off saved AF
@@ -879,7 +920,7 @@ MAPBIO_1:	pop	de
 		ld	a,(hl)
 		push	af
 		push	de
-		ret
+		jp RESET_EXX_D
 ;
 MAPBIO_2:	pop	de
 		pop	af		;Pop off saved AF
@@ -892,7 +933,7 @@ MAPBIO_2:	pop	de
 		ld	hl,MAP_VECT##	;HL = address of jump vector
 		push	af
 		push	de
-		ret
+		jp RESET_EXX_D
 ;
 ;	Fill the table entry B:HL with [A], then advance HL.
 ;
@@ -906,6 +947,12 @@ EXTWRT:		push	bc
 		inc	hl
 		xor	a
 		ret
+
+RESET_EXX_D:
+    exx
+    res 0,d
+    exx
+    ret
 
 
 ; Returns NZ for superturbo mode, Z otherwise
