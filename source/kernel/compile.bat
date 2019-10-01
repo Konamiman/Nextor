@@ -179,8 +179,8 @@ dd if=bank5\fdisk.dat of=dos250ba.dat bs=1 count=16000 seek=82176
 dd if=bank5\fdisk2.dat of=dos250ba.dat bs=1 count=8000 seek=98560
 copy bank4\b4rd.bin
 dd if=b4rd.bin of=dos250ba.dat bs=1 count=15 seek=65664
-copy dos250ba.dat Nextor-2.1.0-beta2.base.dat
-copy dos250ba.dat ..\..\bin\kernels\Nextor-2.1.0-beta2.base.dat
+copy dos250ba.dat Nextor-2.1.0.base.dat
+copy dos250ba.dat ..\..\bin\kernels\Nextor-2.1.0.base.dat
 
 :drivers
 
@@ -216,8 +216,8 @@ cpm32 L80 /P:7fd0,CHGBNK,CHGBNK/N/X/Y/E
 hex2bin -s 4000 driver.hex
 hex2bin -s 7FD0 CHGBNK.hex
 
-..\..\..\..\wintools\mknexrom  ..\..\Nextor-2.1.0-beta2.base.dat Nextor-2.1.0-beta2.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
-copy Nextor-2.1.0-beta2.%%~nc.ROM ..\..\..\..\bin\kernels
+..\..\..\..\wintools\mknexrom  ..\..\Nextor-2.1.0.base.dat Nextor-2.1.0.%%~nc.ROM /d:driver.bin /m:chgbnk.bin
+copy Nextor-2.1.0.%%~nc.ROM ..\..\..\..\bin\kernels
 del b6.mac
 del *.rom
 cd ..
@@ -231,15 +231,15 @@ echo ***
 echo .
 
 cd MegaFlashRomSD
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver-1slot.dat /m:Mapper.ASCII8.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.1-slot.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0.base.dat nextor2.rom /d:driver-1slot.dat /m:Mapper.ASCII8.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0.MegaFlashSDSCC.1-slot.ROM
 sjasm makerecoverykernel.asm kernel.dat
-copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.1-slot.Recovery.ROM
+copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0.MegaFlashSDSCC.1-slot.Recovery.ROM
 del nextor2.rom
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver-2slots.dat /m:Mapper.ASCII8.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.2-slots.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0.base.dat nextor2.rom /d:driver-2slots.dat /m:Mapper.ASCII8.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0.MegaFlashSDSCC.2-slots.ROM
 sjasm makerecoverykernel.asm kernel.dat
-copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.MegaFlashSDSCC.2-slots.Recovery.ROM
+copy kernel.dat ..\..\..\..\bin\kernels\Nextor-2.1.0.MegaFlashSDSCC.2-slots.Recovery.ROM
 cd ..
 
 echo .
@@ -250,11 +250,11 @@ echo .
 
 cd SunriseIDE
 
-del ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.emulators.ROM
-ren ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.ROM Nextor-2.1.0-beta2.SunriseIDE.emulators.ROM 
+del ..\..\..\..\bin\kernels\Nextor-2.1.0.SunriseIDE.emulators.ROM
+ren ..\..\..\..\bin\kernels\Nextor-2.1.0.SunriseIDE.ROM Nextor-2.1.0.SunriseIDE.emulators.ROM 
 sjasm -c sunride.asm driver.bin
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.SunriseIDE.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0.base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0.SunriseIDE.ROM
 :okide
 cd ..
 
@@ -266,8 +266,8 @@ echo .
 
 cd Flashjacks
 sjasm flashjacks.asm driver.bin
-..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0-beta2.base.dat nextor2.rom /d:driver.bin /m:chgbnk.dat
-copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0-beta2.Flashjacks.ROM
+..\..\..\..\wintools\mknexrom ..\..\Nextor-2.1.0.base.dat nextor2.rom /d:driver.bin /m:chgbnk.dat
+copy nextor2.rom ..\..\..\..\bin\kernels\Nextor-2.1.0.Flashjacks.ROM
 cd ..
 
 echo .
