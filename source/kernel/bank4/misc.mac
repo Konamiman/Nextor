@@ -457,7 +457,14 @@ FGC_ISEVEN:
     ld (ix+6),a
     ld (ix+7),0
 
-    ;TODO: +0, +2
+    ld hl,(TEMP_FCB##)  ;FAT sector number
+    ld (ix),l
+    ld (ix+1),h
+    ld hl,(TEMP_FCB##+2)  ;Offset of cluster entry in FAT
+    ld a,h
+    and 1   ;Convert to offset relative to the FAT sector
+    ld (ix+2),l
+    ld (ix+3),a
 
 FGC_END:
     xor a

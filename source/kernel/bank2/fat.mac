@@ -354,7 +354,8 @@ endif
 		srl	h
 		rr	l
 find_fat16:	push	af			;Save odd/even flag (carry)
-		push	hl			;Save byte number
+		push	hl			    ;Save byte number
+        ld  (TEMP_FCB##+2),hl   ;Save also for F_GETCLUS
 ;
 ;===== start mod FAT16 (support BUF_1 patch)
 		ld	e,h			;DE := byte/512 = relative
@@ -368,6 +369,7 @@ find_fat16:	push	af			;Save odd/even flag (carry)
 		ld	l,(ix+UD_RES##)
 		ld	h,(ix+UD_RES##+1)	;Add on reserved sectors to get
 		add	hl,de			; sector number required.
+        ld  (TEMP_FCB##),hl   ; Save FAT sector number, needed by F_GETCLUS
 		ex	de,hl
 		pcall	BF_FAT_SECTOR		;Get FAT sector into buffer.
 ;
