@@ -360,7 +360,52 @@ dspace_c2k_loop:
 dspace_end:
 	xor	a
 	ret
+
 ;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GETCLUS
+
+; Get information about a cluster on a FAT drive.
+;
+; Entry:    C (A) = drive number (0=default)
+;	        DE = cluster number
+;		    HL = address of a 16 byte buffer to get information
+; Returns:  A = error code
+;           Information in (HL) as follows:
+;           +0 (2): Absolute FAT sector number that contains the entry for the cluster
+;           +2 (2): Offset in the FAT sector for the entry for the cluster (0-511)
+;           +4 (4): Absolute sector number in the device the cluster refers to
+;           +8 (2): Next cluster number, 0FFFFh if it's the last one (even on FAT12)
+;           +10 (1): Sectors per cluster of the drive
+;           +11 (1): Flags
+;                    bit 0: set if the drive is FAT16
+;                    bit 1: set if it's an odd entry (always 0 on FAT16)
+;                    bit 7: set if the cluster number is valid (if 0, everything else is meaningless)
+;           +12..+15: Unused, always zero
+;
+    push hl
+    push de
+    ;ld	c,a			;Validate the specified
+	ld	b,0			; drive and return if
+	ld	ix,FIB_1##		; any error detected.
+	pcall	VAL_FIB
+	or	a
+	pop	de
+    pop ix  ;IX=user buffer
+	ret	nz
+
+    ;WIP: ;Always return "invalid cluster" for now
+    ld (ix+11),0
+
+FGCEND:
+    xor a
+    ld (ix+12),a
+    ld (ix+13),a
+    ld (ix+14),a
+    ld (ix+15),a    
+    ret
+
 	finish	<MISC>
 	end
 ;

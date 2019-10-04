@@ -141,6 +141,7 @@ name	 equ	 (value)		;; constants.
 	const	_MAPDRV,  7Ch   ;Map a drive letter to a drive or device/LUN/partition
 
 	const	_Z80MODE, 7Dh	;Enable or disable the Z80 access mode for a driver
+    const   _GETCLUS, 7Eh   ;Get information about a cluster on a FAT drive
 ;
 ;
 ;-----------------------------------------------------------------------------
