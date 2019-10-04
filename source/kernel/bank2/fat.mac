@@ -50,6 +50,14 @@ retry_fat_err:
 		jr	z,retry_fat_err		;No point retrying.
 		jr	return_0ffffh		;Ignore - return 0FFFFh
 ;
+
+    ;Convert pointer to FAT entry returned by FIND_FAT_ENTRY
+    ;into the value of the FAT entry.
+    ;Input:  HL = address of unit descriptor
+    ;        DE and F from FIND_FAT_ENTRY
+    ;Output: DE = Value of FAT entry
+
+  PROC  RDFATENTRY
 no_fat_error:	push	hl
 		ld	a,(de)
 		ld	l,a			;A:L := 2 bytes from the FAT
@@ -287,6 +295,7 @@ pop_de_ret:
 ;
 ;------------------------------------------------------------------------------
 ;
+    PROC FNDFAT
 FIND_FAT_ENTRY:
 ;
 ;    This  routine  is  given a FAT entry number which it checks for validity,

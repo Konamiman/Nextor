@@ -376,7 +376,10 @@ dspace_end:
 ;           +0 (2): Absolute FAT sector number that contains the entry for the cluster
 ;           +2 (2): Offset in the FAT sector for the entry for the cluster (0-511)
 ;           +4 (4): Absolute sector number in the device the cluster refers to
-;           +8 (2): Next cluster number, 0FFFFh if it's the last one (even on FAT12)
+;           +8 (2): Value of the FAT entry: 
+;                   0: Unused cluster
+;                   0FFFFh: last cluster of the file (even on FAT12)
+;                   Other: next cluster of the file
 ;           +10 (1): Sectors per cluster of the drive
 ;           +11 (1): Flags
 ;                    bit 0: set if the drive is FAT16
@@ -395,15 +398,74 @@ dspace_end:
     pop ix  ;IX=user buffer
 	ret	nz
 
-    ;WIP: ;Always return "invalid cluster" for now
-    ld (ix+11),0
+    ;Cluster numbers 0 and 1 are invalid
 
-FGCEND:
+    ld (ix+11),0
+    dec de
+    dec de
+    bit 7,d
+    jr nz,FGC_END
+    inc de
+    inc de
+
+    ;Set the drive parameters in the result
+
+    push ix
+    push hl ;Unit descriptor
+    pop ix
+
     xor a
-    ld (ix+12),a
-    ld (ix+13),a
-    ld (ix+14),a
-    ld (ix+15),a    
+    bit	UF_F16,(ix+UD_FLAGS##)
+    jr z,FGC_NOF16
+    or 1
+FGC_NOF16:
+    ld c,a  ;Flags for the result
+    ld b,(ix+UD_CMSK##)
+    inc b   ;Sectors per cluster
+
+    push ix
+    pop hl
+
+    pop ix
+    ld (ix+10),b
+    ld (ix+11),c
+
+    ;Get cluster info
+
+    push de
+
+    push ix
+    pcall FNDFAT
+    pop ix
+    jr nz,FGCPOPEND
+
+    set 7,(ix+11)   ;Cluster is valid
+    jr nc,FGC_ISEVEN
+    set 1,(ix+11)   ;It's an odd entry
+FGC_ISEVEN:
+
+    pcall RDFATENTRY
+    ld (ix+8),e     ;Next cluster number
+    ld (ix+9),d
+
+    pop de
+
+    xor a
+    pcall CLU_TO_SEC
+    ld (ix+4),e     ;First absolute data sector number
+    ld (ix+5),d
+    ld (ix+6),a
+    ld (ix+7),0
+
+    ;TODO: +0, +2
+
+FGC_END:
+    xor a
+    ret
+
+FGCPOPEND:
+    pop de
+    xor a
     ret
 
 	finish	<MISC>
