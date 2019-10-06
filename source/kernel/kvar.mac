@@ -815,6 +815,8 @@ endif
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain
 	var2	VAR_BOT			;End of RAM chain marker
+
+    var     TEMP_FAT,6
 ;
 	.radix	16
 	pr_hex	<Bottom of fixed data area is address>,%VAR_BOT

@@ -378,12 +378,15 @@ dspace_end:
 ;           +4 (4): Absolute sector number in the device the cluster refers to
 ;           +8 (2): Value of the FAT entry: 
 ;                   0: Unused cluster
-;                   0FFFFh: last cluster of the file (even on FAT12)
+;                   0FF7h-0FFFh (FAT12) or FFF7h-FFFFh (FAT16): last cluster of the file
 ;                   Other: next cluster of the file
 ;           +10 (1): Sectors per cluster of the drive
 ;           +11 (1): Flags
-;                    bit 0: set if the drive is FAT16
-;                    bit 1: set if it's an odd entry (always 0 on FAT16)
+;                    bit 0: set if the drive is FAT12
+;                    bit 1: set if the drive is FAT16
+;                    bit 2: set if it's an odd entry (always 0 on FAT16)
+;                    bit 3: set if it's the last cluster of a file
+;                    bit 4: set if it's an unused cluster
 ;                    bit 7: set if the cluster number is valid (if 0, everything else is meaningless)
 ;           +12..+15: Unused, always zero
 ;
@@ -398,37 +401,36 @@ dspace_end:
     pop ix  ;IX=user buffer
 	ret	nz
 
-    ;Cluster numbers 0 and 1 are invalid
-
-    ld (ix+11),0
-    dec de
-    dec de
-    bit 7,d
-    jr nz,FGC_END
-    inc de
-    inc de
-
     ;Set the drive parameters in the result
 
     push ix
     push hl ;Unit descriptor
     pop ix
 
-    xor a
-    bit	UF_F16,(ix+UD_FLAGS##)
-    jr z,FGC_NOF16
-    or 1
-FGC_NOF16:
-    ld c,a  ;Flags for the result
     ld b,(ix+UD_CMSK##)
     inc b   ;Sectors per cluster
+    ld a,(ix+UD_FLAGS##)
 
     push ix
     pop hl
-
     pop ix
+
+    and 11b ;FAT12/16 flags
+    ld (ix+11),a
+    or a
+    ld a,.NDOS##
+    ret z   ;Drive is neither FAT12 nor FAT16
     ld (ix+10),b
-    ld (ix+11),c
+
+    ;Cluster numbers 0 and 1 are invalid
+
+    dec de
+    dec de
+    xor a
+    bit 7,d
+    ret nz
+    inc de
+    inc de
 
     ;Get cluster info
 
@@ -441,12 +443,22 @@ FGC_NOF16:
 
     set 7,(ix+11)   ;Cluster is valid
     jr nc,FGC_ISEVEN
-    set 1,(ix+11)   ;It's an odd entry
+    set 2,(ix+11)   ;It's an odd entry
 FGC_ISEVEN:
 
     pcall RDFATENTRY
-    ld (ix+8),e     ;Next cluster number
+    jr nc,FGC_NOLAST
+    set 3,(ix+11)
+    ld de,(TEMP_FAT##+4)
+FGC_NOLAST:
+    ld (ix+8),e     ;FAT entry value
     ld (ix+9),d
+
+    ld a,d
+    or e
+    jr nz,FGC_ISUSED
+    set 4,(ix+11)
+FGC_ISUSED:  
 
     pop de
 
@@ -457,10 +469,10 @@ FGC_ISEVEN:
     ld (ix+6),a
     ld (ix+7),0
 
-    ld hl,(TEMP_FCB##)  ;FAT sector number
+    ld hl,(TEMP_FAT##)  ;FAT sector number
     ld (ix),l
     ld (ix+1),h
-    ld hl,(TEMP_FCB##+2)  ;Offset of cluster entry in FAT
+    ld hl,(TEMP_FAT##+2)  ;Offset of cluster entry in FAT
     ld a,h
     and 1   ;Convert to offset relative to the FAT sector
     ld (ix+2),l
