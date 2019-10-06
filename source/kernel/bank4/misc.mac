@@ -387,7 +387,6 @@ dspace_end:
 ;                    bit 2: set if it's an odd entry (always 0 on FAT16)
 ;                    bit 3: set if it's the last cluster of a file
 ;                    bit 4: set if it's an unused cluster
-;                    bit 7: set if the cluster number is valid (if 0, everything else is meaningless)
 ;           +12..+15: Unused, always zero
 ;
     push hl
@@ -428,6 +427,7 @@ dspace_end:
     dec de
     xor a
     bit 7,d
+    ld a,.ICLUS##
     ret nz
     inc de
     inc de
@@ -439,9 +439,8 @@ dspace_end:
     push ix
     pcall FNDFAT
     pop ix
-    jr nz,FGCPOPEND
+    jr nz,FGC_BADCLUS
 
-    set 7,(ix+11)   ;Cluster is valid
     jr nc,FGC_ISEVEN
     set 2,(ix+11)   ;It's an odd entry
 FGC_ISEVEN:
@@ -478,13 +477,16 @@ FGC_ISUSED:
     ld (ix+2),l
     ld (ix+3),a
 
-FGC_END:
     xor a
+    ld (ix+12),a
+    ld (ix+13),a
+    ld (ix+14),a
+    ld (ix+15),a
     ret
 
-FGCPOPEND:
+FGC_BADCLUS:
     pop de
-    xor a
+    ld a,.ICLUS##
     ret
 
 	finish	<MISC>

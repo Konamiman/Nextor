@@ -233,7 +233,8 @@ name	 equ	 (value)		;; constants.
 	const	.PUSED, 0B3h	;Partition is already in use
 	const	.FMNT,  0B2h	;File is mounted
 	const	.BFSZ,  0B1h    ;Bad file size
-				;0B0h \
+    const   .ICLUS, 0B0h    ;Invalid cluster number
+				;0AFh \
 				; ..   > Reserved for future use
 				;0A0h /
 ;
