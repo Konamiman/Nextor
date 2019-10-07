@@ -52,6 +52,8 @@
 
 [3.13. Enable or disable the Z80 access mode for a driver (_Z80MODE, 7Dh)](#313-enable-or-disable-the-z80-access-mode-for-a-driver-_z80mode-7dh)
 
+[3.14. Get information for a cluster on a FAT drive (_GETCLUS, 7Eh)](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh)
+
 [4. New error codes](#4-new-error-codes)
 
 [5. Extended mapper support routines](#5-extended-mapper-support-routines)
@@ -629,6 +631,91 @@ Note that the Z80 access mode is enabled or disabled for a whole driver, affecti
 
 The Z80 access mode applies to MSX-DOS drivers only. Nextor will never change the CPU when accessing drive-based and device-based drivers.
 
+
+### 3.14. Get information for a cluster on a FAT drive (_GETCLUS, 7Eh)
+
+```
+Parameters:  C = 7EH (_GETCLUS)
+             A = Drive number (0=default, 1=A: etc.)
+             DE = Cluster number
+             HL = Pointer to a 16 byte buffer
+Results:     A = Error code
+```
+
+This function fills a user buffer with information related to a given cluster number for a given drive,
+provided that the drive is mapped to a FAT12 or FAT16 filesystem. This function, in combination with
+[RDDRV](#33-read-absolute-sectors-from-drive-_rddrv-73h) and [WRDRV](#34-write-absolute-sectors-to-drive-_wrdrv-74h),
+can be useful for tools that perform low-level disk manipulation such as defragmenters.
+
+The information returned in the buffer is as follows:
+
+* +0: FAT sector number that contains the entry for the cluster (2 bytes)
+* +2: Offset in the FAT sector where the entry for the cluster is located (0-511) (2 bytes)
+* +4: First data sector number the cluster refers to (4 bytes)
+* +8: Value of the FAT entry for the cluster (2 bytes)
+* +10: Size of a cluster in sectors for the drive (1 byte)
+* +11: Flags (1 byte)
+  * bit 0: set if the drive is FAT12
+  * bit 1: set if the drive is FAT16
+  * bit 2: set if the FAT entry for the cluster is an odd entry (FAT12 only)
+  * bit 3: set if the cluster is the last one of a file
+  * bit 4: set if the cluster is free
+  * bits 5-7: unused, always zero
+* +12-+15: Unused, always zero
+
+If the drive is neither FAT12 nor FAT16, this function will return a .NDOS error; this means that either
+the FAT12 flag or the FAT16 flag will always be set if the function returns no error. Note however that this might not
+be true in future versions of Nextor (in case that support for other FAT variants is added), therefore
+you should always check both flags and not assume that one being clear means that the other one is set.
+
+If the supplied cluster number doesn't exist in the specified drive, an .ICLUS error will be returned.
+Note that 0 and 1 are always invalid cluster numbers (the bytes for these entries in the first FAT sector are unused).
+
+The value of the FAT entry for the cluster has the usual meaning in a FAT filesystem:
+
+* 0 means that the cluster is free
+* 0FF8h-0FFFh for FAT 12 and FFF8h-FFFFh for FAT16 mean that the cluster is the last one of a file
+* Other value is the number of the next cluster where the data for a file continues
+
+For convenience, the "cluster is free" and "cluster is the last one of a file" flags are provided so that
+the first two cases can be easily detected without checking the value of the FAT entry itself.
+
+FAT entries for FAT12 can be even or odd, as indicated by the "entry is odd" flag. The value is stored differently in each case; 
+if "X" is the value of "offset in the FAT sector" and "peek(X)" is the byte value stored in X, then the value is:
+
+* For even entries: `peek(X) + ((peek(X+1) and &HF) * 256)`
+* For odd entries: `((peek(X) \ 16) and &HF) + (peek(X+1) * 16)`
+
+For convenience here's a diagram showing an example of FAT12 even and odd entries, based on the one present at 
+[MSX2 Technical Handbook, chapter 3](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter3.md):
+
+```
+                |4 bits |4 bits |
+     FAT        -----------------
+start address ->|   F       0   |  Media ID
+                |---------------|
+             +1 |   F       F   |  dummy entry
+                |---------------|
+             +2 |   F       F   |  dummy entry
+                |---------------|
+             +3 |   1       2   |  Entry for cluster 2 : offset = 3, value = 412h (even entry)
+                |---------------|
+             +4 |   3   |   4   |  Entry for cluster 3 : offset = 4, value = 563h (odd entry)
+                |---------------|
+             +5 |   5       6   |
+                |---------------|
+             +6 |   7   |   8   |  Entry for cluster 4 : offset = 6, value = 978h (even entry)
+                |---------------|
+             +7 |       |   9   |
+                        ---------
+```
+
+For FAT16 entries it's much simpler: these are stored in the byte at the specified offset and the next one in little endian, so `peek(X) + (256 * peek(X+1))`.
+
+Note that if the offset in the FAT sector is 511, then the entry is split between the last byte in "FAT sector number that contains the entry" and the first byte of the next sector.
+This can happen on FAT12 only.
+
+
 ## 4. New error codes
 
 New error codes are defined to handle error conditions when managing the new features of Nextor. These errors are returned in MSX-DOS 1 mode as well by the new functions supported in this mode.
@@ -658,6 +745,10 @@ An attempt to open or alter a mounted file, or to perform any other disallowed o
 * Bad file size (.BFSZ, 0B1h)
 
 Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
+
+* Invalid cluster number (.ICLUS, 0B0h)
+
+The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive.
 
 
 ## 5. Extended mapper support routines
