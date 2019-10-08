@@ -62,8 +62,8 @@ typedef struct {
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v1.1\r\n"
-    "By Konamiman, 3/2019\r\n"
+    "Disk image emulation tool for Nextor v1.2\r\n"
+    "By Konamiman, 10/2019\r\n"
     "\r\n";
     
 const char* strUsage=
@@ -94,6 +94,10 @@ const char* strHelp=
     "* To setup an existing emulation data file for booting:\r\n"
     "\r\n"
     "emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
+    "\r\n"
+    "Default extension for <data file> is EMU. A directory can be specified instead,\r\n"
+    "in that case, a file with the same name and .EMU extension inside the directory\r\n"
+    "will be used.\r\n"
     "\r\n"
     "o: one-time emulation (store emulation data file pointer in RAM).\r\n"
     "This is the default if only <data file> is specified.\r\n"
@@ -151,14 +155,17 @@ int ProcessOption(char optionLetter, char* optionValue);
 void ProcessFilename(char* fileName);
 void TooManyFiles();
 void StartSearchingFiles(char* fileName);
+bool DirectoryExists(char* dirName);
 void ProcessFileFound();
 void GetDriveInfoForFileInFib();
 void CheckControllerForFileInFib();
+void CheckConsecutiveClustersForFileInFib();
 ulong GetFirstFileSectorForFileInFib();
 void AddFileInFibToFilesTable(ulong sector);
 void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
 void AddFileInFibToFilenamesInfo();
 void GenerateFile();
+void ConvertDirectoryToFilename(char* fileOrDirectoryName);
 void AddFileExtension(char* fileName);
 void ProcessBootIndexOption(char* optionValue);
 void ProcessWorkAreaAddressOption(char* optionValue);
@@ -387,6 +394,24 @@ int ProcessOption(char optionLetter, char* optionValue)
 	return 0;
 }
 
+void ConvertDirectoryToFilename(char* fileOrDirectoryName)
+{
+    int dirNameLength;
+
+    if(!DirectoryExists(fileOrDirectoryName))
+        return;
+
+    regs.Bytes.B = 0;
+    regs.Words.DE = (int)fileOrDirectoryName;
+    DoDosCall(_PARSE);
+
+    dirNameLength = strlen((char*)regs.Words.HL);
+
+    strcat(fileOrDirectoryName, "\\");
+    strncat(fileOrDirectoryName, (char*)regs.Words.HL, dirNameLength);
+    strcat(fileOrDirectoryName, ".EMU");
+}
+
 void AddFileExtension(char* fileName)
 {
     strcpy(outputFileName, fileName);
@@ -462,6 +487,21 @@ void StartSearchingFiles(char* fileName)
     DoDosCall(_FFIRST);
 }
 
+bool DirectoryExists(char* dirName)
+{
+    regs.Words.DE = (int)dirName;
+    regs.Bytes.B = FILEATTR_DIRECTORY;
+    regs.Words.IX = (int)fib;
+    
+    DosCall(_FFIRST, &regs, REGS_ALL, REGS_ALL);
+    if(regs.Bytes.A == _NOFIL)
+        return false;
+    if(regs.Bytes.A != 0)
+        TerminateWithDosError(regs.Bytes.A);
+
+    return (regs.Bytes.B & FILEATTR_DIRECTORY) != 0;
+}
+
 void ProcessFileFound()
 {
     char key;
@@ -469,6 +509,7 @@ void ProcessFileFound()
 
 	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
+    CheckConsecutiveClustersForFileInFib();
     
     if(fib->fileSize < 512) {
         printf("*** %s is too small (< 512 bytes) or empty - skipped\r\n", fib->filename);
@@ -504,6 +545,38 @@ void CheckControllerForFileInFib()
     if(driveInfo->driveStatus != DRIVE_STATUS_ASSIGNED_TO_DEVICE || driveInfo->driverSlotNumber != PrimaryControllerSlot()) {
         printf("*** Drive %c: is not controlled by the primary Nextor kernel\r\n", fib->logicalDrive - 1 + 'A');
         Terminate(null);
+    }
+}
+
+void CheckConsecutiveClustersForFileInFib()
+{
+    uint currentCluster;
+    clusterInfo* ci;
+
+    currentCluster = fib->startCluster;
+    ci = malloc(sizeof(clusterInfo));
+
+    printf("Checking FAT chain for %s... ", fib->filename);
+    while(true)
+    {
+        regs.Bytes.A = fib->logicalDrive;
+        regs.Words.HL = (int)ci;
+        regs.UWords.DE = currentCluster;
+        DoDosCall(_GETCLUS);
+
+        if(ci->flags.isLastClusterOfFile)
+        {
+            printf("Ok!\r\n");
+            return;
+        }
+
+        if(ci->fatEntryValue != currentCluster + 1)
+        {
+            printf("Error!\r\n*** The file is not stored across consecutive sectors in disk");
+            Terminate(null);
+        }
+
+        currentCluster++;
     }
 }
 
@@ -645,11 +718,12 @@ void SetupFile()
     partitionTableEntry* partition;
     byte error;
 
+    ConvertDirectoryToFilename(outputFileName);
     AddFileExtension(outputFileName);
     StartSearchingFiles(outputFileName);
 	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
-    
+  
     if(fib->fileSize == 0) {
         Terminate("*** The emulation data file is empty");
     }
