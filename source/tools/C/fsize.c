@@ -4,18 +4,9 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          asm.lib fsize.c
+        --no-std-crt0 crt0_msxdos_advanced.rel 
+        fsize.c
    hex2bin -e com fsize.ihx
-   
-   ASM.LIB, MSXCHAR.LIB and crt0msx_msxdos_advanced.rel
-   are available at www.konamiman.com
-   
-   (You don't need MSXCHAR.LIB if you manage to put proper PUTCHAR.REL,
-   GETCHAR.REL and PRINTF.REL in the standard Z80.LIB... I couldn't manage to
-   do it, I get a "Library not created with SDCCLIB" error)
-   
-   Comments are welcome: konamiman@konamiman.com
 */
 
 
@@ -26,32 +17,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include "asmcall.h"
+#include "types.h"
+#include "dos.h"
 
-//These are available at www.konamiman.com
-#include "asm.h"
-
-	/* Typedefs */
-
-typedef unsigned char bool;
-typedef unsigned long ulong;
-
-	/* Defines */
-
-#define false (0)
-#define true (!(false))
-#define null ((void*)0)
+/* Defines */
 
 #define Buffer 0x9000
-
-#define _TERM0 0
-#define _FFIRST 0x40
-#define _OPEN 0x43
-#define _CREATE 0x44
-#define _CLOSE 0x45
-#define _WRITE 0x49
-#define _SEEK 0x4A
-#define _TERM 0x62
-#define _DOSVER 0x6F
 
 /* Strings */
 
@@ -78,6 +50,8 @@ const char* strCRLF = "\r\n";
 
 /* Global variables */
 
+byte ASMRUT[4];
+byte OUT_FLAGS;
 Z80_registers regs;
 char* fileName;
 bool isAbsoluteSize;
@@ -110,6 +84,7 @@ int main(char** argv, int argc)
 	byte fileHandle;
 	ulong oldSize;
 
+    ASMRUT[0] = 0xC3;
 	fileName = (char*)0x8000;
 
 	print(strTitle);
@@ -253,7 +228,7 @@ bool FileExists(char* fileName)
 {
 	regs.Bytes.B = 0;
 	regs.Words.DE = (int)fileName;
-	regs.Words.IX = Buffer;
+	regs.Words.IX = (int)Buffer;
 	DosCall(_FFIRST, &regs, REGS_ALL, REGS_AF);
 	return regs.Bytes.A == 0;
 }
@@ -334,3 +309,7 @@ void WriteOneByte(byte fileHandle, byte value)
 		TerminateWithDosError(regs.Bytes.A);
 	}
 }
+
+#define COM_FILE
+#include "printf.c"
+#include "asmcall.c"

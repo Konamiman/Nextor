@@ -4,8 +4,7 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          emufile.c
+          --no-std-crt0 crt0_msxdos_advanced.rel emufile.c
    hex2bin -e com emufile.ihx
 */
 
@@ -40,10 +39,6 @@ typedef struct {
 } GeneratedFileTableEntry;
     
 	/* Defines */
-
-#define false (0)
-#define true (!(false))
-#define null ((void*)0)
 
 #define IS_NEXTOR (1 << 7)
 #define IS_DEVICE_BASED (1)
