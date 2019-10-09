@@ -115,8 +115,8 @@ copy ..\data.rel
 copy ..\chgbnk.rel
 copy ..\bank2\b2labels.inc
 copy ..\bank0\b0labels.inc
-for %%A in (B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV,TIME,SEG,MISC) do cpm32 M80 =%%A
-cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,BKALLOC,PARTIT,RAMDRV,TIME,SEG,MISC,/p:7fd0,chgbnk,B4/N/X/Y/E
+for %%A in (B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC) do cpm32 M80 =%%A
+cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC,/p:7fd0,chgbnk,B4/N/X/Y/E
 hex2bin -s 4000 b4.hex
 ..\SymToEqus b4.sym b4rdlabs.inc "R4_[1-9]"
 for %%A in (RAMDRVH) do cpm32 M80 =%%A
