@@ -13,12 +13,20 @@ typedef unsigned char byte;
 typedef unsigned long ulong;
 #endif
 
+#ifndef bool
+typedef unsigned char bool;
+#endif
+
+#ifndef false
+#define false (0)
+#endif
+
+#ifndef true
+#define true (!(false))
+#endif
+
 #ifndef null
 #define null ((void*)0)
 #endif
-
-typedef unsigned char bool;
-#define false (0)
-#define true (!(false))
 
 #endif   //__TYPES_H

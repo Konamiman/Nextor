@@ -4,20 +4,10 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          asm.lib vsft.c
+        --no-std-crt0 crt0_msxdos_advanced.rel
+        vsft.c
    hex2bin -e com vsft.ihx
-   
-   ASM.LIB, MSXCHAR.LIB and crt0msx_msxdos_advanced.rel
-   are available at www.konamiman.com
-   
-   (You don't need MSXCHAR.LIB if you manage to put proper PUTCHAR.REL,
-   GETCHAR.REL and PRINTF.REL in the standard Z80.LIB... I couldn't manage to
-   do it, I get a "Library not created with SDCCLIB" error)
-   
-   Comments are welcome: konamiman@konamiman.com
 */
-
 	
 	/* Includes */
 
@@ -27,14 +17,11 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include "strcmpi.h"
-
-//These are available at www.konamiman.com
-#include "asm.h"
+#include "asmcall.h"
+#include "types.h"
+#include "dos.h"
 
 	/* Typedefs */
-
-typedef unsigned char bool;
-typedef unsigned long ulong;
 
 typedef struct {
 	byte jumpInstruction[3];
@@ -76,21 +63,6 @@ typedef struct {
 
 	/* Defines */
 
-#define false (0)
-#define true (!(false))
-#define null ((void*)0)
-	
-#define _TERM0 0x00
-#define _SETDTA 0x1A
-#define _ALLOC 0x1B
-#define _RDABS 0x2F
-#define _WRABS 0x30
-#define _DPARM 0x31
-#define _TERM 0x62
-#define _DOSVER 0x6F
-#define _RDDRV 0x73
-#define _WRDRV 0x74
-
 #define MAX_FAT12_CLUSTER_COUNT 4084
 #define MAX_12BIT_CLUSTER_COUNT 4095
 #define MAX_FAT16_CLUSTER_COUNT 65524
@@ -123,11 +95,13 @@ const char* strCRLF = "\r\n";
 
 	/* Global variables */
 
+byte ASMRUT[4];
+byte OUT_FLAGS;
 Z80_registers regs;
 bool isNextor;
 fatBootSector* Buffer = (fatBootSector*)0x8000;
 bool isFat16;
-byte driveNumber;		//0=A:, etc
+int driveNumber;		//0=A:, etc
 bool doFix;
 uint totalClusters;
 ulong totalSectors;
@@ -137,7 +111,7 @@ int sectorsToDecreaseForFix;
 
     /* Some handy code defines */
 
-#define PrintNewLine() print(strCRLF)
+#define PrintNewLine() printf(strCRLF)
 #define StringIs(a, b) (strcmpi(a,b)==0)
 
 
@@ -145,7 +119,6 @@ int sectorsToDecreaseForFix;
 
 void Terminate(const char* errorMessage);
 void TerminateWithDosError(byte errorCode);
-void print(char* s);
 void CheckDosVersion();
 void ExtractParameters(char** argv, int argc);
 void GetDriveInfo();
@@ -163,10 +136,11 @@ void WritebootSector();
 
 int main(char** argv, int argc)
 {
-	print(strTitle);
+    ASMRUT[0] = 0xC3;
+	printf(strTitle);
 
     if(argc == 0) {
-        print(strUsage);
+        printf(strUsage);
         Terminate(null);
     }
 	
@@ -177,7 +151,7 @@ int main(char** argv, int argc)
 	CalculateSectorsToDecreaseForFix();
 	
 	if(sectorsToDecreaseForFix == 0) {
-		print("\r\nVolume size is correct. No need to fix it.\r\n");
+		printf("\r\nVolume size is correct. No need to fix it.\r\n");
 		Terminate(null);
 	} else if(doFix) {
 		DoFix();
@@ -210,37 +184,11 @@ void TerminateWithDosError(byte errorCode)
 }
 
 
-void print(char* s) __naked
-{
-    __asm
-    push    ix
-    ld     ix,#4
-    add ix,sp
-    ld  l,(ix)
-    ld  h,1(ix)
-loop:
-    ld  a,(hl)
-    or  a
-    jr  z,end
-    ld  e,a
-    ld  c,#2
-    push    hl
-    call    #5
-    pop hl
-    inc hl
-    jr  loop
-end:
-    pop ix
-    ret
-    __endasm;    
-}
-
-
 void CheckDosVersion()
 {
 	regs.Bytes.B = 0x5A;
 	regs.Words.HL = 0x1234;
-	regs.Words.DE = 0xABCD;
+	regs.UWords.DE = 0xABCD;
 	regs.Words.IX = 0;
     DosCall(_DOSVER, &regs, REGS_ALL, REGS_ALL);
 	
@@ -311,7 +259,7 @@ void PrintDriveInfo()
 	printf("Size:  "); PrintSizeInK(totalSectors/2); PrintNewLine();
 	printf("Cluster count: %u\r\n", totalClusters);
 	if(sectorsPerCluster == 1) {
-		print("Cluster size:  512 bytes\r\n");
+		printf("Cluster size:  512 bytes\r\n");
 	} else {
 		printf("Cluster size:  %i KBytes\r\n", sectorsPerCluster / 2);
 	}
@@ -321,7 +269,7 @@ void PrintDriveInfo()
 	} else if(totalClusters > MAX_12BIT_CLUSTER_COUNT) {
 		Terminate("Cluster count does not fit in 12 bits - this is not supposed to be supported by MSX-DOS!");
 	} else {
-		print("Filesystem:    FAT12 assumed (MSX-DOS does not support anything else)\r\n");
+		printf("Filesystem:    FAT12 assumed (MSX-DOS does not support anything else)\r\n");
 	}
 }
 
@@ -370,7 +318,7 @@ void DoFix()
 	ReadBootSector();
 	FixVolumeSize();
 	WritebootSector();
-	print("Fix applied!\r\n");
+	printf("Fix applied!\r\n");
 }
 
 
@@ -380,13 +328,13 @@ void PrintFixInfo()
 		(isFat16 ? MAX_FAT16_CLUSTER_COUNT : MAX_FAT12_CLUSTER_COUNT));
 	printf("This can be fixed by reducing the volume size by %i KBytes.\r\n",
 		sectorsToDecreaseForFix/2);
-	print("Run the tool again adding the 'fix' parameter to apply the fix.\r\n");
+	printf("Run the tool again adding the 'fix' parameter to apply the fix.\r\n");
 }
 
 
 void ReadBootSector()
 {
-	print("\r\nReading boot sector...\r\n");
+	printf("\r\nReading boot sector...\r\n");
 
 	regs.Words.DE = (int)Buffer;
 	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
@@ -432,7 +380,7 @@ void FixVolumeSize()
 
 void WritebootSector()
 {
-	print("Writing updated boot sector...\r\n");
+	printf("Writing updated boot sector...\r\n");
 
 	regs.Words.DE = (int)Buffer;
 	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
@@ -455,4 +403,7 @@ void WritebootSector()
 	}
 }
 
+#define COM_FILE
+#include "printf.c"
+#include "asmcall.c"
 #include "strcmpi.c"
