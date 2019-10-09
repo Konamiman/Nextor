@@ -9,6 +9,8 @@
 #define DRIVER_NAME_LENGTH 32
 #define MAX_INFO_LENGTH 64
 
+#define FILEATTR_DIRECTORY (1<<4)
+
 
 /* MSX-DOS/Nextor data structures */
 
@@ -76,6 +78,22 @@ typedef struct {
 	bool suitableForPartitioning;
 } lunInfo;
 
+typedef struct {
+    uint fatSectorNumber;
+    uint entryOffsetInFatSector;
+    ulong dataSectorNumber;
+    uint fatEntryValue;
+    byte sectorsPerCluster;
+    struct {
+		unsigned isFat12:1;
+		unsigned isFat16:1;
+		unsigned isOddEntry:1;
+		unsigned isLastClusterOfFile:1;
+		unsigned isUnusedCluster:1;
+		unsigned unused:3;
+	} flags;
+    byte reserved[4];
+} clusterInfo;
 
 /* MSX-DOS functions */
 
@@ -91,6 +109,7 @@ typedef struct {
 #define _READ 0x48
 #define _WRITE 0x49
 #define _PARSE 0x5B
+#define _WPATH 0x5E
 #define _TERM 0x62
 #define _EXPLAIN 0x66
 #define _DOSVER 0x6F
@@ -98,6 +117,7 @@ typedef struct {
 #define _GPART 0x7A
 #define _CDRVR 0x7B
 #define _GDLI 0x79
+#define _GETCLUS 0x7E
 
 /* MSX-DOS error codes */
 

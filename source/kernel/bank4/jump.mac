@@ -81,6 +81,7 @@ jentry	macro	name
 
     jentry  DRVS2
 	jentry  AUTO_ASPART
+    jentry  F_GETCLUS
 
 	finish <JUMP>
 	end

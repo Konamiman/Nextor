@@ -411,6 +411,7 @@ FUNTAB:	DEFW	@TERM0		;Terminate program with no error.
 	DEFW	@MAPDRV		; Map a drive letter to a drive or device/LUN/partition
 
 	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
+    DEFW    @GETCLUS    ; Get information about a cluster in a FAT drive
 ;
 MAXFN	EQU	($-FUNTAB)/2	;Largest function number.
 ;
@@ -908,6 +909,7 @@ STRCPY:	LD	A,(HL)		;Get character from string.
 ;
 @GDRVR:
 @GDLI:
+@GETCLUS:
 	push	hl
 	LD	HL,(BUF_3##)
 	call	GO_BDOS##

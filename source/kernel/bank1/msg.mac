@@ -237,8 +237,9 @@ ERR_MSG_TABLE:
 	err	.IDEVL, <"Invalid device or logical unit">
 	err	.IPART, <"Invalid partition number">
 	err	.PUSED, <"Partition is already in use">
-	err .FMNT,  <"File is mounted">
-	err .BFSZ,  <"Bad file size">
+	err	.FMNT,  <"File is mounted">
+	err	.BFSZ,  <"Bad file size">
+	err	.ICLUS, <"Invalid cluster number">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.
@@ -436,7 +437,9 @@ ERR_KMSG_TABLE:
 	err	.IDEVL,  <"無効なデバイスまたは論理ユニットです">	;<"Invalid device or logical unit">
 	err	.IPART, <"無効なパーティション番号">	;<"Invalid partition number">
 	err	.PUSED, <"パーティションが使用中です">	;<"Partition is already in use">
-
+	err	.FMNT,  <"ファイルがマウントされています">     ;<"File is mounted">
+	err	.BFSZ,  <"無効なファイルサイズ">           ;<"Bad file size">
+	err	.ICLUS, <"無効なクラスター番号">		;<"Invalid cluster number">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.
