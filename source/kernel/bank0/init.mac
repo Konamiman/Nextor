@@ -2789,6 +2789,9 @@ endif
 	xor	a
 	ld	(DOS_VER##),a	;Needed for AUTODRV
 
+	ld (0F242h),a  ;data buffer changed flag in DOS 1
+	ld (0F23Bh),a  ;console output to printer flag in DOS 1
+
 	;If we are in disk emulation mode (set by AUTODRV from DOSINIT),
 	;the work area is already created in BUF_1,
 	;so just jump to area relocation procedure.
