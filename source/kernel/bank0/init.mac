@@ -240,6 +240,10 @@ _GO_BIOS:
 ;For unexpanded slots, the key for subslot 0 applies (U, Q, A, Z)
 
 DISABLE_KEY:
+	ld a,(BOOTKEYS##+2)
+	and 80h
+	ret nz	;"N" key pressed?
+
 	call	GSLOT1##
 	and	00001111b
 	add	a,a

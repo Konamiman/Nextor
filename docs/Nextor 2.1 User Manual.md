@@ -265,7 +265,9 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **SHIFT**: Prevent MSX-DOS kernels from booting, but allow Nextor kernels to boot normally. This is useful to disable the internal floppy disk drive in order to get some extra TPA memory, especially in MSX-DOS 1 mode.
 
-*  **slot key**: Prevent the Nextor kernel associated to the specified slot key from booting. This is useful when the kernel ROM must be updated so you need to disable it. The associated keys for each slot are:
+* **N**: Prevent any Nextor kernel present from booting. This is useful when the kernel ROM must be updated from an storage device controlled by a non-Nextor controller (e.g. the internal floppy disk drive).
+
+*  **slot key**: Prevent the Nextor kernel associated to the specified slot key from booting. This is useful when the kernel ROM must be updated from a device controlled by another Nextor controller. The associated keys for each slot are:
 
     * Q for primary slot 1
     * A for primary slot 2
@@ -649,10 +651,12 @@ Note: do not use this tool with NEXTOR.SYS versions older than 2.0 beta 2.
 The NEXBOOT.COM tool allows to easily configure the keys to be used as [one-time boot keys](#292-one-time-boot-keys) in the next reset. The syntax is:
 
 ```
-NEXBOOT <boot keys>|. [<slot> [<slot>... ]]
+NEXBOOT <boot keys>|. [*|<slot> [<slot>... ]]
 ```
 
 where the boot keys are the numeric keys, C for CTRL and S for shift, and `<slot>` are the slot numbers of the Nextor kernels to be disabled. For example `NEXBOOT 1C` will invert CTRL and 1 keys, `NEXBOOT S 1 23` will invert the SHIFT keys and disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
+
+When using version 1.1 or newer of NEXBOOT.COM you can also specify `*` to disable all the Nextor kernels, this is equivalent to pressing `N` while booting. Note however that this will only with Nextor kernels whose version is 2.1 or newer.
 
 In all cases, the tool resets the computer immediately after apporpriately setting the keys information in RAM.
 
