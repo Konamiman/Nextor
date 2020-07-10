@@ -304,7 +304,26 @@ got_entry:	ld	(DE_E_LEFT##),a		;Record number of entries left
 		ex	de,hl			;Get entry address into DE and
 		pop	hl			; restore HL & BC.
 		pop	bc
-got_dev_entry:	ld	a,(de)			;Get first byte of entry
+got_dev_entry:
+		ld	a,(de)			;Get first byte of entry
+		or a
+		ret z
+		cp 0E5h
+		jr z,got_dve_end_2
+
+		push ix				;If it's an used entry and the attributes byte is 0Fh
+		push de             ;then it's along filename entry, so ignore it
+		pop ix				;and go get the next one
+		ld a,(ix+DR_ATTR##)
+		cp 0Fh
+		jr nz,got_dev_entry_end
+		pop ix
+		jp DI_NEXT
+
+got_dev_entry_end:
+		pop ix
+		ld a,(de)
+got_dve_end_2:		
 		or	a
 		ret				;Return Z if never been used
 ;
