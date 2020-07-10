@@ -360,7 +360,135 @@ dspace_c2k_loop:
 dspace_end:
 	xor	a
 	ret
+
 ;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GETCLUS
+
+; Get information about a cluster on a FAT drive.
+;
+; Entry:    C (A) = drive number (0=default)
+;	        DE = cluster number
+;		    HL = address of a 16 byte buffer to get information
+; Returns:  A = error code
+;           Information in (HL) as follows:
+;           +0 (2): Absolute FAT sector number that contains the entry for the cluster
+;           +2 (2): Offset in the FAT sector for the entry for the cluster (0-511)
+;           +4 (4): Absolute sector number in the device the cluster refers to
+;           +8 (2): Value of the FAT entry: 
+;                   0: Unused cluster
+;                   0FF7h-0FFFh (FAT12) or FFF7h-FFFFh (FAT16): last cluster of the file
+;                   Other: next cluster of the file
+;           +10 (1): Sectors per cluster of the drive
+;           +11 (1): Flags
+;                    bit 0: set if the drive is FAT12
+;                    bit 1: set if the drive is FAT16
+;                    bit 2: set if it's an odd entry (always 0 on FAT16)
+;                    bit 3: set if it's the last cluster of a file
+;                    bit 4: set if it's an unused cluster
+;           +12..+15: Unused, always zero
+;
+    push hl
+    push de
+    ;ld	c,a			;Validate the specified
+	ld	b,0			; drive and return if
+	ld	ix,FIB_1##		; any error detected.
+	pcall	VAL_FIB
+	or	a
+	pop	de
+    pop ix  ;IX=user buffer
+	ret	nz
+
+    ;Set the drive parameters in the result
+
+    push ix
+    push hl ;Unit descriptor
+    pop ix
+
+    ld b,(ix+UD_CMSK##)
+    inc b   ;Sectors per cluster
+    ld a,(ix+UD_FLAGS##)
+
+    push ix
+    pop hl
+    pop ix
+
+    and 11b ;FAT12/16 flags
+    ld (ix+11),a
+    or a
+    ld a,.NDOS##
+    ret z   ;Drive is neither FAT12 nor FAT16
+    ld (ix+10),b
+
+    ;Cluster numbers 0 and 1 are invalid
+
+    dec de
+    dec de
+    xor a
+    bit 7,d
+    ld a,.ICLUS##
+    ret nz
+    inc de
+    inc de
+
+    ;Get cluster info
+
+    push de
+
+    push ix
+    pcall FNDFAT
+    pop ix
+    jr nz,FGC_BADCLUS
+
+    jr nc,FGC_ISEVEN
+    set 2,(ix+11)   ;It's an odd entry
+FGC_ISEVEN:
+
+    pcall RDFATENTRY
+    jr nc,FGC_NOLAST
+    set 3,(ix+11)
+    ld de,(TEMP_FAT##+4)
+FGC_NOLAST:
+    ld (ix+8),e     ;FAT entry value
+    ld (ix+9),d
+
+    ld a,d
+    or e
+    jr nz,FGC_ISUSED
+    set 4,(ix+11)
+FGC_ISUSED:  
+
+    pop de
+
+    xor a
+    pcall CLU_TO_SEC
+    ld (ix+4),e     ;First absolute data sector number
+    ld (ix+5),d
+    ld (ix+6),a
+    ld (ix+7),0
+
+    ld hl,(TEMP_FAT##)  ;FAT sector number
+    ld (ix),l
+    ld (ix+1),h
+    ld hl,(TEMP_FAT##+2)  ;Offset of cluster entry in FAT
+    ld a,h
+    and 1   ;Convert to offset relative to the FAT sector
+    ld (ix+2),l
+    ld (ix+3),a
+
+    xor a
+    ld (ix+12),a
+    ld (ix+13),a
+    ld (ix+14),a
+    ld (ix+15),a
+    ret
+
+FGC_BADCLUS:
+    pop de
+    ld a,.ICLUS##
+    ret
+
 	finish	<MISC>
 	end
 ;
