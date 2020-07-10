@@ -863,7 +863,7 @@ SETNUMD_NOUD:
 ;              1: No suitable device/partition found
 ;              2: Disk emulation mode was entered
 
-;CURR = current deivce/partition being examined
+;CURR = current device/partition being examined
 ;CAND = candidate device/partition, will be assigned if no one has the active flag set in status byte
 
 AAD_UNIT_DESCRIPTOR equ 0
@@ -1076,6 +1076,8 @@ AA_CHKDUP_OK:
 	inc	hl
 	inc	hl
 	ld	a,(hl)	;Flags
+	bit 3,a
+	jp  nz,AA_LLOOP_NEXT	;Device should not be used for automapping
 	and	1
 	rrca
 	ld	d,a	;Save removable device flag for later

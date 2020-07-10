@@ -402,9 +402,10 @@ The internal disk drive would not have any drives attached if you pressed SHIFT 
 
 After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. Each drive is mapped to the first partition found that meets the following conditions:
 
-1. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
-2. Has the "active" flag set in the partition table (this can be set using [FDISK](#35-the-built-in-partitioning-tool))
-3. No drives have been already mapped to partitions in the same device
+1. The device doesn't have the "don't use for automapping" flag set (this flag is set by the driver)
+2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
+3. Has the "active" flag set in the partition table (this can be set using [FDISK](#35-the-built-in-partitioning-tool))
+4. No drives have been already mapped to partitions in the same device
 
 If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "active" flag check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort before leaving the drive unmapped.
 

@@ -977,7 +977,8 @@ The information to be returned is a 12 byte block with the following structure:
         bit 0: 1 if the medium is removable
         bit 1: 1 if the medium is read only
         bit 2: 1 if the logical unit is a floppy disk drive
-        bits 3-7: Unused, must be zero
+        bit 3: 1 if the logical unit should not be used for automapping
+        bits 4-7: Unused, must be zero
 +8 (2): Number of cylinders
 +10 (1): Number of heads
 +11 (1): Number of sectors per track
