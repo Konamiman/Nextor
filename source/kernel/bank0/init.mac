@@ -1679,24 +1679,12 @@ if 1
 FASTBOOT:
 endif
 	ld	hl,NULL_CMD
-	jr	FIRST_BOOT
 
 ;
 ; HL = null terminated command line.
 ;
 REBOOT::
 	ld	a,(BOOT_DRV##)
-    push af
-    xor a
-    jr DO_BOOT
-;
-FIRST_BOOT:
-    push af
-    ld a,0FFh
-
-DO_BOOT:
-    ld (IS_FIRST_BOOT##),a
-    pop af
 
 	ld	sp,BOOTAD+512		;Must have stack in safe place.
 	push	hl
@@ -2499,10 +2487,6 @@ GSLT_SLTTBL:
     ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
 
 DO_KEYS_INIT:
-    ld a,(HAVE_KEYS##)
-    or a
-    ret nz
-
     call CHECK_IS_RUSSIAN
     ld (I_AM_RUSSIAN##),a
 
@@ -2526,8 +2510,6 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+1),de
     ld (BOOTKEYS##+3),hl
 
-    ld a,0FFh
-    ld (HAVE_KEYS##),a
     ret
 
 
@@ -3601,8 +3583,9 @@ GO_DOS2:
 ;(so don't run NEXTOR.SYS, AUTOEXEC.BAS or the boot sector code)
 
 TO_BASIC_REQUIRED::
-    ld a,(IS_FIRST_BOOT##)
+    ld a,(NOTFIRST##)
     inc a
+	dec a
     ret nz
 
     ld a,(BOOTKEYS##)

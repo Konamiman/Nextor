@@ -58,7 +58,6 @@ ram_ad	defl	DATABASE
     
     spare   1
     ;NOTE! BK4_ADD is manually defined in bank5/dos.h, and must be updated if it changes
-    var0 IS_FIRST_BOOT
     var2 BK4_ADD,F1D0   ;Address of routine to be called in bank 4
     var TMP_SEC,4       ;Used for temporary storage of a 32 bit sector number
 ;

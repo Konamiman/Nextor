@@ -653,7 +653,7 @@ _$DOSVER::
 ?41C1:	;defb	" MSX-DOS ver. 2.2 Copyright 1984 by Microsoft "
 	db	"MSX-DOS kernel version 1.1",0
 
-DO_SYSTEM:
+DO_SYSTEM::
 	ld	sp,0C200h	;Needed for CALL SYSTEM when there aremany drives
 	jp	A5A11
 
@@ -8803,20 +8803,30 @@ BOOTKEYS equ 0F992h    ;Defined in kvar.mac
 TO_BASIC_REQUIRED:
 	LD	A,0FFH
 	LD	(YF246),A		; dirsector buffer is invalid
+
+	ld a,(YF340)	;0 if it's first boot
+	or a
+	scf
+	ccf
+	jr nz,TOBASREQ3
+
     ld a,(BOOTKEYS)
     and 00001000b       ;Do not try to boot from disk if "3" key is pressed
-	LD	A,(DEFDPB##+1)
-	LD	C,A
     scf
-    ret nz
+    jr nz,TOBASREQ3
 	or a
-	ret
+	jr TOBASREQ3
 
 TOBASREQ2:
 	call	TO_BASIC_REQUIRED
 	ld	hl,T5B27
 	ret	nc
 	ld	hl,NEWCMD
+	ret
+
+TOBASREQ3:
+	LD	A,(DEFDPB##+1)
+	LD	C,A
 	ret
 
 NEWCMD:	db	'NEW',0
