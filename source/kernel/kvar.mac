@@ -811,13 +811,13 @@ endif
 	var	CH_BUF,   CHB_SZ	;\  6 bytes for cursor on and off
 	var	ESEQ_BUF, 6		; > sequences must be immediately
 					;/  below the BIOS output buffer.
+
+    var     TEMP_FAT,6
 ;
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain
 	var2	VAR_BOT			;End of RAM chain marker
 
-    var     TEMP_FAT,6
-;
 	.radix	16
 	pr_hex	<Bottom of fixed data area is address>,%VAR_BOT
 	.radix	10
