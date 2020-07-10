@@ -42,6 +42,8 @@
 
 [4.2.8. CHGBNK (7FD0h)](#428-chgbnk-7fd0h)
 
+[4.2.9 PROMPT (41E8h)](#429-prompt-41e8h)
+
 [4.3. The driver header](#43-the-driver-header)
 
 [4.3.1. DRV_SIGN (4100h)](#431-drv_sign-4100h)
@@ -102,9 +104,11 @@
 
 [5. Change history](#5-change-history)
 
-[5.1. v2.1.0 beta 2](#51-v210-beta-2)
+[5.1. v2.1.0 final](#51-v210-final)
 
-[5.2. v2.1.0 beta 1](#52-v210-beta-1)
+[5.2. v2.1.0 beta 2](#52-v210-beta-2)
+
+[5.3. v2.1.0 beta 1](#53-v210-beta-1)
 
 
 ## 1. Introduction
@@ -489,6 +493,25 @@ Input:     A = Bank number
 Output:    -
 Corrupts:  AF
 ```
+
+#### 4.2.9 PROMPT (41E8h)
+
+Starting with Nextor kernel 2.1.0 you can call the PROMPT routine to display a "Insert disk for drive X: and strike a key when ready" message and wait for the user to press a key. This routine is available at address 41E8h in the main bank, and you can invoke it using [CALLB0](#423-callb0-403fh) as follows:
+
+```
+PROMPT:   equ 41E8h
+CODE_ADD: equ 0F1D0h
+CALLB0:   equ 403Fh
+
+    ld hl,PROMPT
+    ld (CODE_ADD),hl
+    call CALLB0
+```
+
+The following work area is used by this routine:
+
+* The zero-based drive number is taken from TARGET, at address F33Fh.
+* The H.PROMPT hook at address F24Fh is called with the zero-based drive number in A before the routine is executed.
 
 ### 4.3. The driver header
 
@@ -1021,12 +1044,18 @@ This section contains the change history for the different versions of Nextor. O
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Driver Development Guide](../../../blob/v2.0/docs/Nextor%202.0%20Driver%20Development%20Guide.md#5-change-history)_ document.
 
-### 5.1. v2.1.0 beta 2
+### 5.1. v2.1.0 final
+
+- [LUN_INFO](#464-lun_info-4169h) can now return a flag indicating that the device/LUN should not be used for automapping.
+
+- Added the [PROMPT](#429-prompt-41e8h) routine.
+
+### 5.2. v2.1.0 beta 2
 
 - **BREAKING CHANGE:** The address of CODE_ADD, used by [the CALLB0 routine](#423-callb0-403fh), has changed to F1D0h (it was F84Ch).
 
 - Fix: there was Nextor kernel code in the 1K free area in pages 0 and 3, so putting anything here caused problems, e.g. DOS 1 mode didn't work.
 
-### 5.2. v2.1.0 beta 1
+### 5.3. v2.1.0 beta 1
 
 Added the "User is requesting reduced drive count" flag to the input of [the DRV_INIT routine](#443-drv_init-4136h) and [the DRV_CONFIG routine](#448-drv_config-4151h). 

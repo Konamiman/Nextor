@@ -291,6 +291,9 @@ DISABLE_TBL:
 	db	1, 10000000b	;2-3: F 
 	db	3, 10000000b	;3-3: V
 
+	ALIGN   41E8h
+	jp PROMPT
+
 	ALIGN	41EFh-3
     jp SCANKEYS
 CPMVER:	CALLDOS	0Ch	;Return CP/M version number
@@ -2235,7 +2238,7 @@ T250_DJNZ:
 	ret
 
 ;
-	public	PROMPT
+	;public	PROMPT
 PROMPT:
 	ld	a,(TARGET##)	;get 0 based target drive number
 	add	a,"A"		;make a drive name

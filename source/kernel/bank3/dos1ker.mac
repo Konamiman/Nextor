@@ -657,6 +657,9 @@ DO_SYSTEM::
 	ld	sp,0C200h	;Needed for CALL SYSTEM when there aremany drives
 	jp	A5A11
 
+	ALIGN   41E8h
+	jp PROMPT
+
 	ALIGN	41EFh
 
 ;	Subroutine	BDOS 0C (return version number)
