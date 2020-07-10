@@ -7,6 +7,10 @@
 	INCLUDE	CONST.INC
 ;
 
+;WARNING: These routines are no longer part of Nextor as of v2.1.0.
+;They are kept here for reference, so that applications can incorporate them
+;as part of their own code if necessary.
+
 	const	BK_PTR,0BFFEh
 
 ;-----------------------------------------------------------------------------

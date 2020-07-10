@@ -28,6 +28,11 @@ ld_iyl_a	macro
 	ld	l,a
 	endm
 
+ld_iyl_e	macro
+	db	0FDh
+	ld	l,e
+	endm
+
 ld_iyh_b	macro
 	db	0FDh
 	ld	h,b

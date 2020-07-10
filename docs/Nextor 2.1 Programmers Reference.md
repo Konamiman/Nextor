@@ -56,9 +56,17 @@
 
 [5. Extended mapper support routines](#5-extended-mapper-support-routines)
 
-[5.1. BLK_ALLOC: Allocate a memory block](#51-blk_alloc-allocate-a-memory-block)
+[5.1: CALL_MAP: Call a routine in a mapped RAM segment](#51-call_map-call-a-routine-in-a-mapped-ram-segment)
 
-[5.2. BLK_FREE: Free a memory block](#52-blk_free-free-a-memory-block)
+[5.2: RD_MAP: Read a byte from a RAM segment](#52-rd_map-read-a-byte-from-a-ram-segment)
+
+[5.3: CALL_MAPI: Call a routine in a mapped RAM segment, with inline routine identification](#53-call_mapi-call-a-routine-in-a-mapped-ram-segment-with-inline-routine-identification)
+
+[5.4: WR_MAP: Write a byte to a RAM segment](#54-wr_map-write-a-byte-to-a-ram-segment)
+
+[5.5. The UNAPI RAM Helper discovery procedure](#55-the-unapi-ram-helper-discovery-procedure)
+
+[5.6. Breaking change notice](#56-breaking-change-notice)
 
 [6. Other features](#6-other-features)
 
@@ -662,43 +670,119 @@ Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
 ## 5. Extended mapper support routines
 
-The original MSX-DOS 2 mapper support routines have been extended with two new functions that allow the allocation of small blocks of memory (from 1 to 16378 bytes) within an allocated or TPA segment. Entries for these functions are available as an extension of the mapper support routines jump table whose address can be obtained by using extended BIOS. The names and locations in the jump table of these new routines are:
+The original MSX-DOS 2 mapper support routines (see "5. Mapper support routines" in [MSX-DOS 2 Program Interface Specification](https://github.com/Konamiman/Nextor/blob/v2.1/docs/DOS2-PIS.TXT))
+have been extended with four new routines that allow reading data, writing data and calling routines placed in another RAM segment; they work
+much like the existing routines RD_SEG, WR_SEG, CAL_SEG and CALLS but they accept a pair of slot number + RAM segment number as input instead of only the RAM segment number.
+These routines are compatible with the [UNAPI RAM helper specification](https://github.com/Konamiman/MSX-UNAPI-specification/blob/master/docs/MSX%20UNAPI%20specification%201.1.md#4-the-ram-helper),
+including the extended BIOS based discovery mechanism; this means that any application program that relies on the presence of the UNAPI RAM helper will work out of the box
+with Nextor, without needing to first install a standalone helper.
+
+The names and locations of these routines in the mapper support routines jump table is as follows:
 
 ```
-+30h: BLK_ALLOC
-+33h: BLK_FREE
++30h: CALL_MAP
++33h: RD_MAP
++36h: CALL_MAPI
++39h: WR_MAP
 ```
 
-Both routines work on the memory that is switched on page 2 at the moment of calling them. It may be an explicitly allocated segment, a TPA segment, or even non-mapped RAM: they will work on any writable memory that is visible on page 2. However a segment will be assumed to be switched on page 2 for documentation purposes.
 
-Following is the description of these routines.
+### 5.1: CALL_MAP: Call a routine in a mapped RAM segment
 
-### 5.1. BLK_ALLOC: Allocate a memory block
+* Input:
+  * IYh = Slot number
+  * IYl = Segment number
+  * IX = Target routine address (must be a page 1 address)
+  * AF, BC, DE, HL = Parameters for the target routine
+* Output:
+  * AF, BC, DE, HL, IX, IY = Parameters returned from the target routine
 
-```
-Entry:    HL = Required size (1 to 16378 bytes)
-Returns:  On success:
-            HL = Address of the allocated block (always a page 2 address)
-            A  = 0 and Z set
-          On error (not enough free space on segment):
-            HL = 0
-            A  = .NORAM and Z reset
-```
+The routine will be called by switching the specified slot and segment in page 1, therefore the routine address must be in page 1 as well.
 
-This routine tries to allocate a memory block of the specified size on the segment currently switched on page 2, and returns the address of the allocated block if it succeeds, or a "Not enough memory" error if not. The segment must have been previously initialized by calling the BLK_FREE routine with HL=0, otherwise the result is unpredictable.
 
-### 5.2. BLK_FREE: Free a memory block
+### 5.2: RD_MAP: Read a byte from a RAM segment
 
-```
-Entry:  HL =  Address of the allocated block as returned by BLK_ALLOC,
-              or 0 to initialize the segment
-```
+* Input:
+  * A = Slot number
+  * B = Segment number
+  * HL = Address to be read from (higher two bits will be ignored)
+* Output:
+  * A = Data read from the specified address
+  * F, BC, DE, HL, IX, IY preserved
 
-This routine frees a memory block on the segment currently switched on page 2. The specified address must be a block address previously returned by the BLK_ALLOC routine on the same segment, otherwise the result is unpredictable. The freed space will become available for new allocations.
 
-All the state information about allocated and free blocks is stored on the segment itself, Nextor does not store any internal information about block memory allocation. This means that when all the allocated blocks on a given segment are no longer needed, it is not needed to explicitly free all blocks one by one; instead, the segment may be overwritten with any other data, the segment itself may be freed, or (in case of TPA segments) application may terminate directly.
+### 5.3: CALL_MAPI: Call a routine in a mapped RAM segment, with inline routine identification
 
-When called with HL=0, this routine initializes the segment currently switched on page 2 for block memory allocation. It is necessary to do this once before performing any block allocation on the segment. Also, this is useful on segments that already have allocated blocks, as a fast way to free all blocks at once.
+* Input:
+  * AF, BC, DE, HL = Parameters for the target routine
+* Output:
+  * AF, BC, DE, HL, IX, IY = Parameters returned from the target routine
+
+The routine is to be called as follows:
+
+    CALL CALLSEG
+
+    CALLSEG:
+      CALL <address of CALL_MAPI>
+      DB &Bmmeeeeee
+      DB <segment number>
+      ;no RET is needed here
+
+ where
+
+* `mm` is the mapper slot, as an index (0 to 3) in the mapper variables table provided by the standard mapper support routines
+(see "5.2 Mapper variables and routines" in [MSX-DOS 2 Program Interface Specification](https://github.com/Konamiman/Nextor/blob/v2.1/docs/DOS2-PIS.TXT)).
+
+* `eeeeee` is the routine to be called, as an index (0 to 63) of a jump table that starts at address 4000h of the segment. That is, 0 means 4000h, 1 means 4003h, 2 means 4006h, etc.
+
+The way to specify the mapper slot and the segment number is weird, but it allows to pack the entire call in five bytes. This allows to use this routine with hooks in the same way
+it's usually done with the BIOS routine CALLF.
+
+
+### 5.4: WR_MAP: Write a byte to a RAM segment
+
+* Input:
+  * A = Slot number
+  * B = Segment number
+  * E = Byte to write
+  * HL = Address to be written to (higher two bits will be ignored)
+* Output:
+  * A = Data readed from the specified address
+  * F, BC, DE, HL, IX, IY preserved
+
+
+### 5.5. The UNAPI RAM Helper discovery procedure
+
+Nextor implements the UNAPI RAM Helper discovery procedure in order to make these new mapper support routines compatible with the already existing 
+[UNAPI RAM Helper specification](https://github.com/Konamiman/MSX-UNAPI-specification/blob/master/docs/MSX%20UNAPI%20specification%201.1.md#4-the-ram-helper).
+For reference, the discovery procedure is repeated here:
+
+> To check for the presence of a RAM helper, and to obtain the address of its routines, EXTBIO (0FFCAh) must be called with DE=2222h, HL=0, and A=FFh. If the RAM helper is not installed, then HL=0
+> at output; otherwise the following register values will be returned:
+>
+> * HL = Address of a jump table in page 3
+> * BC = Address of the reduced mappers table in page 3 (zero if not provided)
+> * A = Number of entries in the jump table
+
+In the case of Nextor the following applies:
+
+* HL will point to the location of CALL_MAP (offset +30h from the start of the mapper support routines jump table).
+* BC will always be returned as zero (the reduced mappers table is mandatory for UNAPI RAM Helpers only when the mapper support routines are not present).
+* A will always be 4 (in the MSX UNAPI specification it's 3 since the WR_MAP routines is not defined - this is a non-breaking change).
+
+
+### 5.6. Breaking change notice
+
+In versions of Nextor older than 2.1.0, including the alphas and betas of 2.1.0, the mapper support routines jump table area that is now used for the RD_MAP, WR_MAP, CALL_MAP and CALL_MAPI
+entry points was used for two different routines that are not available anymore, BLK_ALLOC and BLK_FREE; this represents a breaking change and existing applications making use of them
+will need changes.
+
+Although not used by Nextor anymore, the source code of these removed routines is kept as part of the Nextor code base
+(at [source/kernel/bank4/bkalloc.mac](https://github.com/Konamiman/Nextor/blob/v2.1/source/kernel/bank4/bkalloc.mac)).
+This way, if you have an application that makes use of these routines you can simply incorporate the code from that file to your application and call the routines directly.
+
+You can read the documentation for the removed routines in [the Programmers Reference for Nextor 2.0](https://github.com/Konamiman/Nextor/blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#5-extended-mapper-support-routines).
+
 
 ## 6. Other features
 
