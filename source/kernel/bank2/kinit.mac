@@ -221,8 +221,12 @@ link_dev_done:
 ;
 ;	+++++  INITIALISE RAM DISK +++++
 ;
-		pcall	ZAP_RAMD		;Just kill the RAMdisk boot
-						; sector.
+		push	iy			;Just kill the RAMdisk boot sector.
+		ex	af,af'
+		ld	a,4
+		ld	ix,ZAP_RAMD##
+		call	CALBNK##
+		pop	iy
 ;
 ;	+++++  INITIALISE BIOS CHARACTER I/O VARIABLES  +++++
 ;
@@ -778,7 +782,7 @@ kbdos_table:
 	dw	?F_EXPLAI##-OFFSET	;Explain error code
 ;
 	dw	?F_FMT##   -OFFSET	;Format a disk
-	dw	?F_RAMD##  -OFFSET	;Create or destroy RAMdisk
+	dw	F_RAMD##			;Create or destroy RAMdisk
 	dw	?F_BUFFER##-OFFSET	;Allocate sector buffers
 	dw	?F_ASSIGN##-OFFSET	;Logical drive assignment
 ;
