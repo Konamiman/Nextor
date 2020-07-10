@@ -4,8 +4,8 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          nexboot.c
+        --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
+        nexboot.c
    hex2bin -e com emufile.ihx
 */
 
@@ -17,13 +17,8 @@
 #include "system.h"
 #include "dos.h"
 #include "asmcall.h"
-#include "strcmpi.h"
 
 /* Defines */
-
-#define false (0)
-#define true (!(false))
-#define null ((void*)0)
 
 #define RamKeysAddress ((byte*)0xA100)
 
