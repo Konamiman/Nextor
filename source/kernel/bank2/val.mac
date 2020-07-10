@@ -2483,7 +2483,19 @@ CUN_RW:
 		push	bc
 		exx
 		push	bc
+		exx
+		ld de,(RW_PSEC##)
+		push de
+		ld de,(RW_DTA##)
+		push de
+		exx
 		call	CUN_RW2
+		exx
+		pop de
+		ld (RW_DTA##),de
+		pop de
+		ld (RW_PSEC##),de
+		exx
 		pop	bc
 		exx
 		pop	bc
