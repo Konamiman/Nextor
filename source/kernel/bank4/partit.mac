@@ -739,7 +739,6 @@ AUTOD_UDFND2:
 	or a
 	jr z,AUTOD_OK
 	set UF_PAP,(ix+UD_DFLAGS##) ;Partition will be assigned on first access
-	set UF_NCH,(ix+UD_DFLAGS##)
 	jr	AUTOD_OK
 
 AUTOD_UDFND3:
