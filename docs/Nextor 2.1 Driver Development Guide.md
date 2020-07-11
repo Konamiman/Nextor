@@ -636,7 +636,7 @@ Please note also the following:
 
 #### 4.4.4. DRV_BASSTAT (4139h)
 
-This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 entry](#423-callb0-403fh) in kernel page 0.
+This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2, "Expansion of CMD command"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), and [MSX2 Technical Handbook, chapter 5, "Developing Cartridge Software"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter5.md) for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 entry](#423-callb0-403fh) in kernel page 0.
 
 If the driver does not handle BASIC extended statements, it must simply set the carry flag and return.
 
