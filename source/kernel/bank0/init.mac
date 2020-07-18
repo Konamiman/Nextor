@@ -740,29 +740,6 @@ chkslots:
 	ld	(ix),b
 	ret
 
-	;Invoke DEV_STATUS on all possible devices of the driver.
-	;This is necessary to flush any possible "device changed" status
-	;that the driver may return the first time the routine is invoked.
-
-DEVSTAT_ALL:
-	ld	a,1
-DEVSTLOOP1:
-	ld	b,7
-DEVSTLOOP2:
-	push	af
-	push	bc
-	ld	ix,DEV_STATUS##	;Call init routine for my driver
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
-	pop	bc
-	pop	af
-	djnz	DEVSTLOOP2
-	inc	a
-	cp	8
-	jr	c,DEVSTLOOP1
-	ret
-
 PRT_CRLF:
 	push	af
 	ld	a,CR
@@ -1200,10 +1177,6 @@ DO_INIT_ENV:
     ld a,1
     call CALL_DV_INIT   ;Initialize environment and hardware
 INITENV_DONE:
-
-	ld	a,(PROCNM+8)
-	or	a	
-	call	nz,DEVSTAT_ALL
 
 	;Set entry in KER250 table
 
