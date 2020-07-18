@@ -485,6 +485,29 @@ GDRV_OK_ROM:
 ; primary controller); if found and its contents are valid, the whole
 ; assignment procedure is aborted and we enter disk emulation mode.
 
+	;We disable the PROMPT routine temporarily while AUTODRV runs,
+	;since we don't want it to be run when devices are read to search for partitions.
+	;The prompt routine is disabled by placing two INC SP instructions
+	;in the hook, so that the routine terminates immediately.
+
+	ld a,(H.PROMPT##)
+	push af
+	ld hl,(H.PROMPT##+1)
+	push hl
+	ld hl,3333h ;"INC SP" x 2
+	ld (H.PROMPT##),hl
+	ld a,0C9h ;"RET"
+	ld (H.PROMPT##+2),a
+
+	call _AUTODRV
+
+	pop hl
+	ld (H.PROMPT##+1),hl
+	pop af
+	ld (H.PROMPT##),a
+	ret
+
+_AUTODRV:
 	ld	hl,0
 	add	hl,sp
 	ld	(SPSAVE##),hl

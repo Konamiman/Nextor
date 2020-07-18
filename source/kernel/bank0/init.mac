@@ -2709,6 +2709,11 @@ CHECK_BAS2:
 ;
 ;
 OLDDOS::
+	ld a,0C9h
+	ld (H.PROMPT##),a
+	ld (H.PROMPT##+1),a
+	ld (H.PROMPT##+2),a
+
 	ld	a,1
 	ld	(PROCNM+7),a
 	ld	a,3
