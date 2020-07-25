@@ -1098,8 +1098,11 @@ AA_CHKDUP_OK:
 	inc	hl
 	inc	hl
 	ld	a,(hl)	;Flags
+	bit AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
+	jr nz,AA_NO_SKIP_AUTOMAP
 	bit 3,a
 	jp  nz,AA_LLOOP_NEXT	;Device should not be used for automapping
+AA_NO_SKIP_AUTOMAP:	
 	and	1
 	rrca
 	ld	d,a	;Save removable device flag for later
