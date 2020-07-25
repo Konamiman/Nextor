@@ -1019,7 +1019,7 @@ COMP16:
 ;
 ; Default DPB, it contains data for a 720K disk drive
 
-	ALIGN 7BB0h
+	ALIGN 7BAAh
 
 DEFDPB:
 	DB	0FFh
