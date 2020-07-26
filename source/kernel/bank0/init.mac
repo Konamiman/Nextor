@@ -240,6 +240,10 @@ _GO_BIOS:
 ;For unexpanded slots, the key for subslot 0 applies (U, Q, A, Z)
 
 DISABLE_KEY:
+	ld a,(BOOTKEYS##+2)
+	and 80h
+	ret nz	;"N" key pressed?
+
 	call	GSLOT1##
 	and	00001111b
 	add	a,a
@@ -286,6 +290,9 @@ DISABLE_TBL:
 	db	3, 00001000b	;1-3: R
 	db	1, 10000000b	;2-3: F 
 	db	3, 10000000b	;3-3: V
+
+	ALIGN   41E8h
+	jp PROMPT
 
 	ALIGN	41EFh-3
     jp SCANKEYS
@@ -733,29 +740,6 @@ chkslots:
 	ld	(ix),b
 	ret
 
-	;Invoke DEV_STATUS on all possible devices of the driver.
-	;This is necessary to flush any possible "device changed" status
-	;that the driver may return the first time the routine is invoked.
-
-DEVSTAT_ALL:
-	ld	a,1
-DEVSTLOOP1:
-	ld	b,7
-DEVSTLOOP2:
-	push	af
-	push	bc
-	ld	ix,DEV_STATUS##	;Call init routine for my driver
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
-	pop	bc
-	pop	af
-	djnz	DEVSTLOOP2
-	inc	a
-	cp	8
-	jr	c,DEVSTLOOP1
-	ret
-
 PRT_CRLF:
 	push	af
 	ld	a,CR
@@ -1193,10 +1177,6 @@ DO_INIT_ENV:
     ld a,1
     call CALL_DV_INIT   ;Initialize environment and hardware
 INITENV_DONE:
-
-	ld	a,(PROCNM+8)
-	or	a	
-	call	nz,DEVSTAT_ALL
 
 	;Set entry in KER250 table
 
@@ -1679,24 +1659,12 @@ if 1
 FASTBOOT:
 endif
 	ld	hl,NULL_CMD
-	jr	FIRST_BOOT
 
 ;
 ; HL = null terminated command line.
 ;
 REBOOT::
 	ld	a,(BOOT_DRV##)
-    push af
-    xor a
-    jr DO_BOOT
-;
-FIRST_BOOT:
-    push af
-    ld a,0FFh
-
-DO_BOOT:
-    ld (IS_FIRST_BOOT##),a
-    pop af
 
 	ld	sp,BOOTAD+512		;Must have stack in safe place.
 	push	hl
@@ -2243,7 +2211,7 @@ T250_DJNZ:
 	ret
 
 ;
-	public	PROMPT
+	;public	PROMPT
 PROMPT:
 	ld	a,(TARGET##)	;get 0 based target drive number
 	add	a,"A"		;make a drive name
@@ -2499,10 +2467,6 @@ GSLT_SLTTBL:
     ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
 
 DO_KEYS_INIT:
-    ld a,(HAVE_KEYS##)
-    or a
-    ret nz
-
     call CHECK_IS_RUSSIAN
     ld (I_AM_RUSSIAN##),a
 
@@ -2526,8 +2490,6 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+1),de
     ld (BOOTKEYS##+3),hl
 
-    ld a,0FFh
-    ld (HAVE_KEYS##),a
     ret
 
 
@@ -2747,6 +2709,11 @@ CHECK_BAS2:
 ;
 ;
 OLDDOS::
+	ld a,0C9h
+	ld (H.PROMPT##),a
+	ld (H.PROMPT##+1),a
+	ld (H.PROMPT##+2),a
+
 	ld	a,1
 	ld	(PROCNM+7),a
 	ld	a,3
@@ -2799,6 +2766,9 @@ endif
 
 	xor	a
 	ld	(DOS_VER##),a	;Needed for AUTODRV
+
+	ld (0F242h),a  ;data buffer changed flag in DOS 1
+	ld (0F23Bh),a  ;console output to printer flag in DOS 1
 
 	;If we are in disk emulation mode (set by AUTODRV from DOSINIT),
 	;the work area is already created in BUF_1,
@@ -3601,8 +3571,9 @@ GO_DOS2:
 ;(so don't run NEXTOR.SYS, AUTOEXEC.BAS or the boot sector code)
 
 TO_BASIC_REQUIRED::
-    ld a,(IS_FIRST_BOOT##)
+    ld a,(NOTFIRST##)
     inc a
+	dec a
     ret nz
 
     ld a,(BOOTKEYS##)

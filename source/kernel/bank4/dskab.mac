@@ -1,0 +1,29 @@
+    .z80
+
+; Disk error handler and abort hooks for page 4.
+; See KABJ and KDERJ at the end of bank0/drv.mac
+; for an explanation of why this is needed.
+
+    INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+    
+    ;org 7FC0h
+
+; This is KABJ in bank 0
+    xor a
+    call CHGBNK##
+    ; Here is "jp KABR" in the bank 0 counterpart of the hook
+    nop
+    nop
+    nop
+
+; This is KDERJ in bank 0
+    xor a
+    call CHGBNK##
+    ; Here is "jp KDERJ" in the bank 0 counterpart of the hook
+    nop
+    nop
+    nop
+
+    finish	<DSKAB>
+	end

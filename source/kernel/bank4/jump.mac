@@ -83,5 +83,8 @@ jentry	macro	name
 	jentry  AUTO_ASPART
     jentry  F_GETCLUS
 
+	jentry  F_RAMD
+	jentry  ZAP_RAMD
+
 	finish <JUMP>
 	end

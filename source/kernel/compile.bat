@@ -38,7 +38,7 @@ copy ..\drv.rel
 for %%A in (DOSHEAD,40FF,B0,INIT,ALLOC,DSKBASIC,DOSBOOT,BDOS,RAMDRV) do cpm32 M80 =%%A
 cpm32 l80 /p:4000,CODES,KVAR,DATA,REL,DOSHEAD,40FF,B0,INIT,ALLOC,DSKBASIC,DOSBOOT,BDOS,RAMDRV,/p:7700,drv,/p:7fd0,chgbnk,b0/n/x/y/e
 hex2bin b0.hex
-..\SymToEqus b0.sym b0labels.inc "\?[^ \t]+|DOSV0|GETERR|BDOSE"
+..\SymToEqus b0.sym b0labels.inc "\?[^ \t]+|DOSV0|GETERR|BDOSE|KDERR|KABR"
 ..\SymToEqus b0.sym b0lab_b3.inc "INIT|TIMINT|MAPBIO|GWRK|R_[^ \t]+"
 
 echo .
@@ -99,7 +99,6 @@ copy ..\bank0\40FF.rel
 copy ..\bank0\b0lab_b3.inc b0labels.inc
 for %%A in (DOS1KER,B3) do cpm32 M80 =%%A
 cpm32 l80 /p:4000,CODES,KVAR,DATA,DOSHEAD,40FF,B3,DOS1KER,/p:7700,drv,/p:7fd0,chgbnk,b3/N/X/Y/E
-rem cpm32 l80 /p:4000,CODES,KVAR,DATA,DOSHEAD,40FF,B3,DOS1KER,drv,/p:7fd0,chgbnk,b3/N/X/Y/E
 hex2bin -s 4000 b3.hex
 
 echo .
@@ -115,8 +114,8 @@ copy ..\data.rel
 copy ..\chgbnk.rel
 copy ..\bank2\b2labels.inc
 copy ..\bank0\b0labels.inc
-for %%A in (B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC) do cpm32 M80 =%%A
-cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC,/p:7fd0,chgbnk,B4/N/X/Y/E
+for %%A in (B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC,DSKAB) do cpm32 M80 =%%A
+cpm32 L80 /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC,/p:7bc0,DSKAB,/p:7fd0,chgbnk,B4/N/X/Y/E
 hex2bin -s 4000 b4.hex
 ..\SymToEqus b4.sym b4rdlabs.inc "R4_[1-9]"
 for %%A in (RAMDRVH) do cpm32 M80 =%%A

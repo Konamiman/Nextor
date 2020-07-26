@@ -82,14 +82,36 @@ abs_common_no24:
 		jr	c,abs_rw_overf
 		add	a,b			;Return an error if transfer
 abs_rw_overf:	ld	a,.OV64K##		; would over-run the top of
-		jr	c,abs_common_end	; the 64k of RAM.
+		jp	c,abs_common_end	; the 64k of RAM.
 ;
 try_rw_val:	push	bc			;Remember sector count and 32 bit sector flag
 		ld	ix,FIB_1##
 		ld	b,2			;Validate the drive, without
 		res	7,c
-		inc	c			; actually checking the
-		pcall	VAL_FIB			; boot sector (B=2).
+		inc	c			; actually checking the boot sector (B=2).
+
+		ld a,(RW_EX_PSEC##)	;When the drive has a file mounted VAL_FIB may
+		ld d,a              ;corrupt the variables we've set so far, so save them.
+		ld a,(RW_FLAGS##)
+		ld e,a
+		push de
+		ld de,(RW_PSEC##)
+		push de
+		ld de,(RW_DTA##)
+		push de
+		pcall	VAL_FIB
+		pop de
+		ld (RW_DTA##),de
+		pop de
+		ld (RW_PSEC##),de
+		ld b,a
+		pop de
+		ld a,e
+		ld (RW_FLAGS##),a
+		ld a,d
+		ld (RW_EX_PSEC##),a
+		ld a,b
+
 		pop	bc			;B := sector count, C:7 set if 24 or 32 bit sector number
 		or	a
 		jr	nz,abs_common_end
