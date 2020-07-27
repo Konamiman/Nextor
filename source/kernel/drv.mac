@@ -814,7 +814,6 @@ IS_DVB:
 	and	80h
 	jr	z,IS_DVB_NOEMU
 
-	inc	iy
 	pop	af	;In emulation mode: return Cy=1 only if drive is 0
 	or	a
 	scf
