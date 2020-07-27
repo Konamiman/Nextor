@@ -117,25 +117,7 @@ endif
 ;
 		pop	hl			;HL -> first buffer on chain
 
-		;MODIFICATION TO SUPPORT FILE MOUNTING:
-		;If a file is mounted, the call to RW_UNIT por pre-read
-		;will cause this routine to re-enter. In that case,
-		;the first buffer in the chain will end up having a wrong
-		;combination of unit+sector number and actual sector data.
-		;To prevent this, we check if we are re-entering,
-		;and in this case we use the second buffer in the chain
-		;instead of the frist one.
-
-		ld	a,(BF_LEVEL##)
-		or	a
-		jr	z,okbuflevel
-		ld	a,(hl)
-		inc	hl
-		ld	h,(hl)
-		ld	l,a
-okbuflevel:
-
-		;End of modification for file mounting
+		call ADJ_BUF_NUM
 
 		inc	hl
 		inc	hl
@@ -238,19 +220,7 @@ bf_multi_read:	push	de			;Save registers which are
 ;===== end mod DOS2.50
 		ld	a,RD_CMD##		;Get READ command code
 
-		push	af
-		ld	a,(BF_LEVEL##)
-		inc	a
-		ld	(BF_LEVEL##),a	;To support re-enter check
-		pop	af
-
-		pcall	RW_UNIT			;Try to read the sector
-
-		push	af
-		ld	a,(BF_LEVEL##)
-		dec	a
-		ld	(BF_LEVEL##),a
-		pop	af
+		call	DO_RW			;Try to read the sector
 
 		pop	bc			;Get copy count & separation
 		pop	de			;Get sector number back
@@ -738,6 +708,8 @@ bf_find_loop:	ld	e,(hl)		;Get next buffer address (BD_LINK)
 ;              BD_EX_SECT=8
 ;
 ;
+		call ADJ_BUF_NUM
+
 		set	FF_DBUF,(iy+@FAT_FLAGS##) ;Set directory buffer flag
 ;
 		push	hl		;Save buffer pointer
@@ -814,7 +786,7 @@ bf_flush_loop:	push	de		;Save registers which are
 ;;		ld	c,a
 ;===== end mod DOS2.50
 		ld	a,WR_CMD##	;A:=write command code
-		pcall	RW_UNIT		;Call the unit handler
+		call	DO_RW		;Call the unit handler
 		pop	bc
 		pop	de		;Restore parameters
 ;
@@ -872,6 +844,57 @@ pop_hl_ret:	pop	hl		;Restore buffer pointer
 ;
 ;------------------------------------------------------------------------------
 ;
+		;Read or write unit with adjustment of BF_LEVEL.
+		;
+		;If a file is mounted, the call to RW_UNIT por pre-read/write
+		;will cause the BF_FLUSH or BF_SECTOR routine to re-enter.
+		;We use the BF_LEVEL variable to keep track of when that happens
+		;and act accordingly (see ADJ_BUF_NUM below).
+		;
+		;Input, output, modifies: same as RW_UNIT.
+DO_RW:
+		push	af
+		ld	a,(BF_LEVEL##)
+		inc	a
+		ld	(BF_LEVEL##),a	;To support re-enter check
+		pop	af
+
+		pcall	RW_UNIT			;Try to read the sector
+
+		push	af
+		ld	a,(BF_LEVEL##)
+		dec	a
+		ld	(BF_LEVEL##),a
+		pop	af
+
+		ret
+
+
+		;Adjust sector buffer pointer if necessary.
+		;
+		;If a file is mounted, the call to RW_UNIT por pre-read/write
+		;will cause the BF_FLUSH or BF_SECTOR routine to re-enter.
+		;In that case, the first buffer in the chain will end up having
+		;a wrong combination of unit+sector number and actual sector data.
+		;To prevent this, we check if we are re-entering,
+		;and in this case we use the second buffer in the chain
+		;instead of the first one.
+		;
+		;Input:  HL = Pointer to sector buffer.
+		;Output: HL = Pointer to same sector buffer, 
+		;             if case of routine re-entrance.
+		;Modifies: AF
+
+ADJ_BUF_NUM:
+		ld	a,(BF_LEVEL##)
+		or	a
+		ret	z
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+		ret
+
 	finish	<BUF>
 	end
 ;

@@ -993,27 +993,6 @@ MEDIA_CHECK:
 		ret
 
 MCHK0:
-		call MCHK2
-
-		push ix
-		push af
-
-		push hl
-		pop ix
-		bit UF_NCH,(ix+UD_DFLAGS##)
-		jr z,MCHK1
-
-		res UF_NCH,(ix+UD_DFLAGS##)
-		ex	(sp),hl	;retrieve pushed AF
-		set 6,l		;set Z to force "not changed"
-		ex  (sp),hl
-MCHK1:
-		pop af
-		pop ix
-		ret
-
-MCHK2:
-
 		call	_MCHECK
 		ret	z
 		ret	nc	;If not "not sure interpret as changed", return
@@ -2483,7 +2462,19 @@ CUN_RW:
 		push	bc
 		exx
 		push	bc
+		exx
+		ld de,(RW_PSEC##)
+		push de
+		ld de,(RW_DTA##)
+		push de
+		exx
 		call	CUN_RW2
+		exx
+		pop de
+		ld (RW_DTA##),de
+		pop de
+		ld (RW_PSEC##),de
+		exx
 		pop	bc
 		exx
 		pop	bc

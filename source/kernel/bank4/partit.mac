@@ -485,6 +485,29 @@ GDRV_OK_ROM:
 ; primary controller); if found and its contents are valid, the whole
 ; assignment procedure is aborted and we enter disk emulation mode.
 
+	;We disable the PROMPT routine temporarily while AUTODRV runs,
+	;since we don't want it to be run when devices are read to search for partitions.
+	;The prompt routine is disabled by placing two INC SP instructions
+	;in the hook, so that the routine terminates immediately.
+
+	ld a,(H.PROMPT##)
+	push af
+	ld hl,(H.PROMPT##+1)
+	push hl
+	ld hl,3333h ;"INC SP" x 2
+	ld (H.PROMPT##),hl
+	ld a,0C9h ;"RET"
+	ld (H.PROMPT##+2),a
+
+	call _AUTODRV
+
+	pop hl
+	ld (H.PROMPT##+1),hl
+	pop af
+	ld (H.PROMPT##),a
+	ret
+
+_AUTODRV:
 	ld	hl,0
 	add	hl,sp
 	ld	(SPSAVE##),hl
@@ -739,7 +762,6 @@ AUTOD_UDFND2:
 	or a
 	jr z,AUTOD_OK
 	set UF_PAP,(ix+UD_DFLAGS##) ;Partition will be assigned on first access
-	set UF_NCH,(ix+UD_DFLAGS##)
 	jr	AUTOD_OK
 
 AUTOD_UDFND3:
@@ -863,7 +885,7 @@ SETNUMD_NOUD:
 ;              1: No suitable device/partition found
 ;              2: Disk emulation mode was entered
 
-;CURR = current deivce/partition being examined
+;CURR = current device/partition being examined
 ;CAND = candidate device/partition, will be assigned if no one has the active flag set in status byte
 
 AAD_UNIT_DESCRIPTOR equ 0
@@ -1076,6 +1098,11 @@ AA_CHKDUP_OK:
 	inc	hl
 	inc	hl
 	ld	a,(hl)	;Flags
+	bit AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
+	jr nz,AA_NO_SKIP_AUTOMAP
+	bit 3,a
+	jp  nz,AA_LLOOP_NEXT	;Device should not be used for automapping
+AA_NO_SKIP_AUTOMAP:	
 	and	1
 	rrca
 	ld	d,a	;Save removable device flag for later

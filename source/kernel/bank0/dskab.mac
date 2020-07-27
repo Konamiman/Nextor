@@ -1,0 +1,21 @@
+    .z80
+
+    INCLUDE	MACROS.INC
+	INCLUDE	CONST.INC
+    
+    ;org 7FC0h
+
+    nop
+    nop
+    nop
+    nop
+    jp KABR##
+
+    nop
+    nop
+    nop
+    nop
+    jp KDSKR##
+
+    finish	<DSKAB>
+	end

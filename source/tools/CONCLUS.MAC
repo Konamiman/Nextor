@@ -1,0 +1,173 @@
+	.z80
+
+	jp	START
+
+INFO:
+	db	13
+	db	"CONCLUS - Check if a file is stored across consecutive clusters",13,10
+	db	13,10
+	db	"Usage: CONCLUS <file path>",13,10
+	db	1Ah
+    db  "$"
+
+START:
+    
+    call CHECK_NEXTOR_21
+
+    ;--- Get file info, terminate on any error
+
+    ld hl,PARAMETERS_S
+    ld de,BUF
+    ld b,255
+    ld c,_GENV##
+    call 5
+
+    ld de,BUF
+    call REMOVE_SPACES
+    ex de,hl
+
+    ld a,(hl)
+    or a
+    ld de,INFO
+    jp z,PRINT_ERR_TERM ;No filename provided?
+
+    ld c,_FFIRST##
+    ex de,hl
+    push de
+    ld ix,FIB
+    ld b,0
+    call 5
+    pop de
+
+    ld b,a
+    ld c,_TERM##
+    jp nz,5     ;Error searching the file?
+
+    ld a,(FIB+25)
+    ld (DRIVE),a
+
+    ld hl,(FIB+19)  ;First cluster of the file
+
+    ;--- Loop to check all the clusters of the file.
+    ;    Input: HL = Last cluster checked
+
+GETCLUS_LOOP:
+    ex de,hl
+    ld c,_GETCLUS##
+    ld hl,BUF
+    ld a,(DRIVE)
+    push de
+    call 5
+
+    ld b,a
+    ld c,_TERM##
+    jp nz,5     ;Error getting cluster info?
+
+    ld e,"."
+    ld c,_CONOUT##
+    call 5
+
+    ld a,(BUF+11)
+    and 1000b   ;Last cluster of the file?
+    ld de,YESCON_S
+    jp nz,PRINT_TERM
+
+    ld de,(BUF+8)   ;Value of FAT entry (next cluster number)
+    pop hl          ;Previous cluster number
+    inc hl
+    push hl
+    or a
+    sbc hl,de
+    ld a,h
+    or l
+    pop hl
+    jr z,GETCLUS_LOOP
+
+    ld e,'*'
+    ld c,_CONOUT##
+    call 5
+    ld de,NOCON_S
+    jp PRINT_TERM
+
+
+    ;>>> Subroutines
+
+    ;--- Remove leading spaces from string pointed by DE
+    ;    (returns DE pointing to first non-space)
+
+REMOVE_SPACES:
+    ld  a,(de)
+    cp ' '
+    ret nz
+    inc de
+    jr REMOVE_SPACES
+
+    ;--- Check Nextor kernel and NEXTOR.SYS versions
+
+CHECK_NEXTOR_21:
+	ld	b,05Ah
+	ld	hl,01234h
+	ld	de,0ABCDh
+	ld	c,_DOSVER##
+	ld	ix,0
+	call	5
+	push de
+    pop  hl
+
+	ld	de,BADKER_MSG
+	ld	a,b
+	cp	2
+	jr	c,PRINT_ERR_TERM    ;Error if MSX-DOS 1
+
+	push	ix
+	pop	bc
+	ld	a,b
+	cp	1	;NEXTOR_ID
+	jr	nz,PRINT_ERR_TERM   ;Not Nextor
+	ld	a,c
+	cp	3
+    ret nc  ;Nextor >= 3.0
+    cp  2
+	jr	c,PRINT_ERR_TERM    ;Nextor < 2.0
+    push iy
+    pop bc
+    ld a,b
+    or a
+    jr	z,PRINT_ERR_TERM    ;Nextor 2.0
+
+	ld	de,BADSYS_MSG
+	ld	a,h
+	cp	2
+	jr	c,PRINT_ERR_TERM  ;NEXTOR.SYS < 2.0
+    ld a,l
+    cp 011h
+    ret nc  ;NEXTOR>SYS > 2.11: ok
+
+PRINT_ERR_TERM:
+    ld  b,1
+PRINT_TERM:
+	ld	c,_STROUT##
+	call	5
+	ld	c,_TERM##
+	jp	5
+
+BADKER_MSG:
+	db	"*** This program requires Nextor 2.1 or later",13,10,"$"
+BADSYS_MSG:
+	db	"*** Bad version of NEXTOR.SYS, version 2.11 or later is required",13,10,"$"
+
+
+    ;>>> Strings and data
+
+PARAMETERS_S: db "PARAMETERS",0
+
+YESCON_S:
+    db 13,10,"The file is stored across consecutive clusters :-)",13,10,"$"
+
+NOCON_S:
+    db 13,10,"The file is NOT stored across consecutive clusters! :-(",13,10,"$"
+
+DRIVE: db 0
+FIB: ds 64
+BUF:
+

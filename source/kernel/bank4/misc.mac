@@ -360,7 +360,294 @@ dspace_c2k_loop:
 dspace_end:
 	xor	a
 	ret
+
 ;
+;------------------------------------------------------------------------------
+;
+	PROC	F_GETCLUS
+
+; Get information about a cluster on a FAT drive.
+;
+; Entry:    C (A) = drive number (0=default)
+;	        DE = cluster number
+;		    HL = address of a 16 byte buffer to get information
+; Returns:  A = error code
+;           Information in (HL) as follows:
+;           +0 (2): Absolute FAT sector number that contains the entry for the cluster
+;           +2 (2): Offset in the FAT sector for the entry for the cluster (0-511)
+;           +4 (4): Absolute sector number in the device the cluster refers to
+;           +8 (2): Value of the FAT entry: 
+;                   0: Unused cluster
+;                   0FF7h-0FFFh (FAT12) or FFF7h-FFFFh (FAT16): last cluster of the file
+;                   Other: next cluster of the file
+;           +10 (1): Sectors per cluster of the drive
+;           +11 (1): Flags
+;                    bit 0: set if the drive is FAT12
+;                    bit 1: set if the drive is FAT16
+;                    bit 2: set if it's an odd entry (always 0 on FAT16)
+;                    bit 3: set if it's the last cluster of a file
+;                    bit 4: set if it's an unused cluster
+;           +12..+15: Unused, always zero
+;
+    push hl
+    push de
+    ;ld	c,a			;Validate the specified
+	ld	b,0			; drive and return if
+	ld	ix,FIB_1##		; any error detected.
+	pcall	VAL_FIB
+	or	a
+	pop	de
+    pop ix  ;IX=user buffer
+	ret	nz
+
+    ;Set the drive parameters in the result
+
+    push ix
+    push hl ;Unit descriptor
+    pop ix
+
+    ld b,(ix+UD_CMSK##)
+    inc b   ;Sectors per cluster
+    ld a,(ix+UD_FLAGS##)
+
+    push ix
+    pop hl
+    pop ix
+
+    and 11b ;FAT12/16 flags
+    ld (ix+11),a
+    or a
+    ld a,.NDOS##
+    ret z   ;Drive is neither FAT12 nor FAT16
+    ld (ix+10),b
+
+    ;Cluster numbers 0 and 1 are invalid
+
+    dec de
+    dec de
+    xor a
+    bit 7,d
+    ld a,.ICLUS##
+    ret nz
+    inc de
+    inc de
+
+    ;Get cluster info
+
+    push de
+
+    push ix
+    pcall FNDFAT
+    pop ix
+    jr nz,FGC_BADCLUS
+
+    jr nc,FGC_ISEVEN
+    set 2,(ix+11)   ;It's an odd entry
+FGC_ISEVEN:
+
+    pcall RDFATENTRY
+    jr nc,FGC_NOLAST
+    set 3,(ix+11)
+    ld de,(TEMP_FAT##+4)
+FGC_NOLAST:
+    ld (ix+8),e     ;FAT entry value
+    ld (ix+9),d
+
+    ld a,d
+    or e
+    jr nz,FGC_ISUSED
+    set 4,(ix+11)
+FGC_ISUSED:  
+
+    pop de
+
+    xor a
+    pcall CLU_TO_SEC
+    ld (ix+4),e     ;First absolute data sector number
+    ld (ix+5),d
+    ld (ix+6),a
+    ld (ix+7),0
+
+    ld hl,(TEMP_FAT##)  ;FAT sector number
+    ld (ix),l
+    ld (ix+1),h
+    ld hl,(TEMP_FAT##+2)  ;Offset of cluster entry in FAT
+    ld a,h
+    and 1   ;Convert to offset relative to the FAT sector
+    ld (ix+2),l
+    ld (ix+3),a
+
+    xor a
+    ld (ix+12),a
+    ld (ix+13),a
+    ld (ix+14),a
+    ld (ix+15),a
+    ret
+
+FGC_BADCLUS:
+    pop de
+    ld a,.ICLUS##
+    ret
+
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	F_RAMD
+;
+;    This is the "create/destroy RAM disk" KBDOS function.  It is  passed  the
+; number  of  segments to use for the RAM disk in register B.  If this is 0FFh
+; then it will simply return the current RAM disk size.  If B=00h then the RAM
+; disk  will  be destroyed, otherwise a new one will be created with a maximum
+; size as specified in register B.
+;
+;    This routine has the job of allocating  and  freeing  the  segments,  and
+; setting  up  the RAM disk unit descriptor.  The setting up of the UPB in the
+; boot sector is done by the RAM disk itself when "VAL_FIB" is called, and the
+; initialising of the FATs and root directory is done by  the  "FAT_INIT"  and
+; "ZERO_CLUSTER" routines which are called by this routine.
+;
+; Entry:      B =     00h => destroy RAMdisk
+;                 1...FEh => create RAMdisk with this maximum size
+;                     FFh => return current RAMdisk size
+; Returns:    A = Error code
+;             B = Current RAMdisk size, 0 => no RAMdisk
+;
+RAMD_NUM	equ	"H"-"A"+1
+;
+		push	bc
+		ld	b,RAMD_NUM		;Un-assign the RAM disk's
+		ld	d,b			; logical drive.
+		pcall	F_ASSIGN
+		pop	bc
+;
+		inc	b			;Skip if just asking how
+		jp	z,ramdisk_ret_ok	; big the RAM disk is.
+		dec	b			;Skip if killing an existing
+		jp	z,kill_ramdisk		; RAM disk.
+;
+;       ----------------------------------------
+;
+		ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;If unit descriptor for
+		ld	a,h			   ; "H:" already exists
+		or	l			   ; then give an error as
+		ld	c,.RAMDX##		   ; we can't have two
+		jp	nz,ramdisk_ret_c	   ; RAM disks.
+;
+		call	ZAP_RAMD		;Zero the boot sector to give
+						; a nice clean starting point
+;
+		ld	de,RD_LIST##		;Loop to allocate system
+		ld	hl,RD_COUNT##		; segments until we run out
+all_seg_loop:	exx				; or we have got the required
+		ld	a,1			; number of segments. (B=30h
+		ld	b,00110000b		; => only use primary mapper
+		pcall	ALL_SEG			;    as "last resort".
+		jr	c,no_free_seg		;Exit if no free segments
+		push	bc
+		exx
+		inc	(hl)			;Bump segment count
+		ld	(de),a			;Record segment number
+		inc	de
+		pop	af
+		ld	(de),a			;Record slot number.
+		inc	de
+		djnz	all_seg_loop
+no_free_seg:
+;
+		ld	a,(RD_COUNT##)		;If we could not allocate
+		or	a			; any segments at all then
+		ld	a,c			; exit with an error.
+		ld	c,.NORAM##
+		jp	z,ramdisk_ret_c
+;
+		ld	hl,(RM_UD##)		   ;Record the RAM disk's unit
+		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; descriptor address.
+;
+		ld	a,RAMD_NUM
+		push	hl			;Setup a few important fields
+		pop	ix			; of the unit descriptor.
+		ld	(ix+UD_PHYS##),a	;Physical unit number
+		ld	(ix+UD_TIME##),0	;No current UPB
+		ld	(ix+UD_CDIR##+1),0FFh	;Current directory is root
+;===== start add FAT16 (DOS2.50 original patch)
+		ld	(ix+UD_CDIR##),0FFh
+;===== end add FAT16
+;
+		ld	c,a			;Validate the RAM disk, this
+		ld	ix,FIB_1		; will set up the UPB but
+		ld	b,0			; won't initialise the root
+		pcall	VAL_FIB			; directory or FAT's
+;
+		ld	a,0FFh			;Setup FAT's with a fixed
+		pcall	FAT_INIT		; media byte value.
+		ld	de,0
+		pcall	ZERO_CLUSTER		;Setup root directory
+		pcall	FL_UD			;Flush buffers to disk.
+if 0
+		ld	hl,$NUMDRV##
+		inc	(hl)			;Count one more drive
+endif
+		jr	ramdisk_ret_ok		;Jump to return no error
+;
+;       ----------------------------------------
+;
+kill_ramdisk:	ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;Don't do anything if
+		ld	a,h			   ; there is no RAM disk
+		or	l			   ; to destroy.
+		jr	z,ramdisk_ret_ok
+;
+		ld	a,RAMD_NUM		;Invalidate any buffers for
+		pcall	INV_PHYS		; the RAM disk.
+;
+		ld	hl,0			   ;Remove the RAM disk from
+		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; the unit descr. table.
+;
+if 0
+		ld	hl,$NUMDRV##		;Count one less physical
+		dec	(hl)			; drive present.
+;
+endif
+		xor	a			;Set RAM disk segment count
+		ld	(RD_COUNT##),a		; to zero.
+;
+		ld	hl,RD_LIST##
+kill_ramd_loop:	ld	c,(hl)			;Now loop through the
+		inc	hl			; segment list, freeing
+		ld	b,(hl)			; each segment in turn until
+		inc	hl			; we reach slot number
+		ld	a,b			; zero which indicates end of
+		or	a			; the list.
+		jr	z,ramdisk_ret_ok
+		push	hl
+		ld	a,c
+		pcall	FRE_SEG
+		pop	hl
+		jr	kill_ramd_loop
+;
+;       ----------------------------------------
+;
+ramdisk_ret_ok:	ld	c,0
+ramdisk_ret_c:	ld	a,(RD_COUNT##)		;Always return with RAM disk
+		ld	b,a			; size in B and error code
+		ld	a,c			; in A.
+		ret
+;
+;
+;       ----------------------------------------
+;
+	PROC	ZAP_RAMD
+;
+		ld	hl,RD_BOOT##		;Simple routine to zero
+		ld	de,RD_END##-RD_BOOT##	; the RAM disk boot sector.
+zap_boot_loop:	ld	(hl),0
+		inc	hl
+		dec	de
+		ld	a,d
+		or	e
+		jr	nz,zap_boot_loop
+		ret	
+
 	finish	<MISC>
 	end
 ;

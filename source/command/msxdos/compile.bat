@@ -1,9 +1,9 @@
 @echo off
 cls
 
-copy ..\..\msxdos25\*.inc
-copy ..\..\msxdos25\codes.mac
-copy ..\..\msxdos25\data.mac
+copy ..\..\kernel\*.inc
+copy ..\..\kernel\codes.mac
+copy ..\..\kernel\data.mac
 for %%A in (CODES,DATA,KMSG,MESSAGES,REAL,REF,RELOC,VER,END) do cpm32 M80 =%%A
 copy NOKMSG.MAC USEKMSG.MAC
 cpm32 M80 =SYS

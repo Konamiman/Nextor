@@ -141,6 +141,7 @@ name	 equ	 (value)		;; constants.
 	const	_MAPDRV,  7Ch   ;Map a drive letter to a drive or device/LUN/partition
 
 	const	_Z80MODE, 7Dh	;Enable or disable the Z80 access mode for a driver
+    const   _GETCLUS, 7Eh   ;Get information about a cluster on a FAT drive
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -232,7 +233,8 @@ name	 equ	 (value)		;; constants.
 	const	.PUSED, 0B3h	;Partition is already in use
 	const	.FMNT,  0B2h	;File is mounted
 	const	.BFSZ,  0B1h    ;Bad file size
-				;0B0h \
+    const   .ICLUS, 0B0h    ;Invalid cluster number
+				;0AFh \
 				; ..   > Reserved for future use
 				;0A0h /
 ;

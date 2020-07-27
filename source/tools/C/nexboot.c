@@ -4,8 +4,8 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
-          nexboot.c
+        --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
+        nexboot.c
    hex2bin -e com emufile.ihx
 */
 
@@ -17,25 +17,22 @@
 #include "system.h"
 #include "dos.h"
 #include "asmcall.h"
-#include "strcmpi.h"
 
 /* Defines */
 
-#define false (0)
-#define true (!(false))
-#define null ((void*)0)
-
 #define RamKeysAddress ((byte*)0xA100)
+#define DisableAllKernelsKeyOffset 2
+#define DisableAllKernelsBitMask 0x80
 
 /* Strings */
 
 const char* strTitle=
-    "One-time boot keys configuration tool for Nextor v1.0\r\n"
-    "By Konamiman, 3/2019\r\n"
+    "One-time boot keys configuration tool for Nextor v1.1\r\n"
+    "By Konamiman, 6/2020\r\n"
     "\r\n";
     
 const char* strUsage=
-    "Usage: nexboot <keys>|. [<slot> [<slot> ...]]\r\n"
+    "Usage: nexboot <keys>|. [*|<slot> [<slot> ...]]\r\n"
     "\r\n"
     "<keys>: keys that will be considered as pressed in next boot.\r\n"
     "<keys> can include the numbers 1 to 9, C (for CTRL) and S (for SHIFT)\r\n,"
@@ -43,6 +40,7 @@ const char* strUsage=
     "\r\n"
     "<slot>s: slot numbers of the Nextor kernels to disable in the next boot.\r\n"
     "They can be followed by a subslot number, e.g. 13 for slot 1, subslot 3.\r\n"
+    "Or * to disable all the Nextor kernels (being v2.1 or newer)."
     "\r\n"
     "The computer will reset after successfully setting the keys.\r\n";
 
@@ -156,6 +154,12 @@ void GetSlotDisableKeys(int count, char** slots)
 
     for(i=0; i<count; i++) {
         slot = slots[i];
+
+        if(slot[0] == '*') {
+            keyFlags[DisableAllKernelsKeyOffset] |= DisableAllKernelsBitMask;
+            continue;
+        }
+
         if(slot[0] < '0' || slot[0] > '3') {
             Terminate(strInvSlot);
         }

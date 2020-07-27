@@ -38,9 +38,6 @@ jentry	macro	name
 	jentry	F_RDBLK
 	jentry	F_WRBLK
 
-	jentry	ALL_BK
-	jentry	FR_BK
-
 	jentry	F_GPART
 	jentry	GDRIVER
 	jentry	AUTODRV
@@ -84,6 +81,10 @@ jentry	macro	name
 
     jentry  DRVS2
 	jentry  AUTO_ASPART
+    jentry  F_GETCLUS
+
+	jentry  F_RAMD
+	jentry  ZAP_RAMD
 
 	finish <JUMP>
 	end

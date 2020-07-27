@@ -52,6 +52,7 @@ endif
 ;-----------------------------------------------------------------------------
 ;
 KAB_ROUTINE:
+KABR::
 ;
 ;    This  is the KBDOS abort routine which is set up whenever the 0F37Dh BDOS
 ; entry is active.  It is set up by  the  "KB_INIT"  routine  above  and  will
@@ -59,6 +60,9 @@ KAB_ROUTINE:
 ; restores the slot switching and RAM paging to the state which it was  in  on
 ; the  first  BDOS  call,  switches  back to the user's stack and jumps to the
 ; user's defined "BREAKVECT" routine.
+;
+; The hook at KAB_VECT is set to an intermediate hook KABJ instead of pointing
+; directly here, see KABJ at the end of drv.mac for an explanation of why.
 ;
 ;
 		exx				;Save error code in B'
@@ -73,6 +77,7 @@ KAB_ROUTINE:
 ;-----------------------------------------------------------------------------
 ;
 KDSK_ROUTINE:
+KDERR::
 ;
 ;    This is the KBDOS disk error routine which is set up whenever the  0F37Dh
 ; BDOS  entry is active.  It is set up by the "KB_INIT" routine above and will
@@ -81,6 +86,9 @@ KDSK_ROUTINE:
 ; "BDOS_GO" was called and then calls the user's "DISKVECT" routine.  If  this
 ; routine  returns then the KBDOS paging is re-enabled and control returned to
 ; the KBDOS.
+;
+; The hook at KDSK_VECT is set to an intermediate hook KDERJ instead of pointing
+; directly here, see KDERJ at the end of drv.mac for an explanation of why.
 ;
 ; Entry:    A' = Old error code (passed to DISKVECT in C)
 ;	    A  = New error code (passed to DISKVECT in A')
@@ -195,9 +203,14 @@ if 1
 ; Insure error vectors are directed to us.  Just for bad mannered applications
 ; that call 0005h at one time and F37Dh at another time.  ...HF...
 ;
-		ld	hl,KAB_ROUTINE		;Setup the disk vector and
+; Note: KABJ and KDERJ need to be defined at the same address as defined at drv.mac
+
+KABJ    equ 7BC0h
+KDERJ   equ KABJ+7
+
+		ld	hl,KABJ		;		;Setup the disk vector and
 		ld	(KAB_VECT##),hl		; abort vector routines for
-		ld	hl,KDSK_ROUTINE		; MSX-DOS 1.0 compatability.
+		ld	hl,KDERJ	;		; MSX-DOS 1.0 compatability.
 		ld	(KDSK_VECT##),hl	;
 endif
 		LD	HL,(BDOS_STACK##)
@@ -411,6 +424,7 @@ FUNTAB:	DEFW	@TERM0		;Terminate program with no error.
 	DEFW	@MAPDRV		; Map a drive letter to a drive or device/LUN/partition
 
 	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
+    DEFW    @GETCLUS    ; Get information about a cluster in a FAT drive
 ;
 MAXFN	EQU	($-FUNTAB)/2	;Largest function number.
 ;
@@ -908,6 +922,7 @@ STRCPY:	LD	A,(HL)		;Get character from string.
 ;
 @GDRVR:
 @GDLI:
+@GETCLUS:
 	push	hl
 	LD	HL,(BUF_3##)
 	call	GO_BDOS##

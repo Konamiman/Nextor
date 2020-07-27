@@ -285,7 +285,6 @@ size	macro	name
     ;NOTE! BOOTKEYS is used in dos1ker.mac, it must be manually updated if it changes
     field  5,BOOTKEYS      ;To store the state of boot keys
     field  1,I_AM_RUSSIAN
-    field  1,HAVE_KEYS
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -811,11 +810,13 @@ endif
 	var	CH_BUF,   CHB_SZ	;\  6 bytes for cursor on and off
 	var	ESEQ_BUF, 6		; > sequences must be immediately
 					;/  below the BIOS output buffer.
+
+    var     TEMP_FAT,6
 ;
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain
 	var2	VAR_BOT			;End of RAM chain marker
-;
+
 	.radix	16
 	pr_hex	<Bottom of fixed data area is address>,%VAR_BOT
 	.radix	10

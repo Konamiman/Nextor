@@ -1544,17 +1544,143 @@ _all_fre_go:	push	de			;Must preserve everything
 		pop	hl
 		ret
 
-; Page 2 block memory allocation routines
+;
+;-----------------------------------------------------------------------------
+;
+; UNAPI RAM helper compatible routines
 
-_FR_BK:		ld	ix,FR_BK##
-		jr	_bk_go
-_ALL_BK:	ld	ix,ALL_BK##
+        ;--- Routine to call code in a RAM segment
+        ;    Input:
+        ;    IYh = Slot number
+        ;    IYl = Segment number
+        ;    IX = Target routine address (must be a page 1 address)
+        ;    AF, BC, DE, HL = Parameters for the target routine
+        ;Output:
+        ;    AF, BC, DE, HL, IX, IY = Parameters returned from the target
+        ;    routine
 
-_bk_go:		ld	(BK4_ADD##),ix
-		ld	iy,(MASTER_SLOT##-1)
-		ld	ix,?CALL4##
-		jp	CALSLT##
+_U_CALLRAM:
+        ex      af,af
+...	      < call	_GET_P1 >
+        push    af
+        ld_a_iyl
+...	      < call	_PUT_P1 >
+        ex      af,af
+        call    CALSLT##
+        ex      af,af
+        pop     af
+...	      < call	_PUT_P1 >
+        ex      af,af
+        ret
 
+
+        ;--- Routines to read or writea byte from a RAM segment
+        ;Input:
+        ;    A = Slot number
+        ;    B = Segment number
+        ;    E = Data to write (only WRITERAM)
+        ;    HL = Address to be read/written from
+        ;       (higher two bits will be ignored)
+        ;Output:
+        ;    A = Data read from the specified address (only READRAM)
+        ;    BC, DE, HL preserved
+
+_U_READRAM:
+        push ix
+        ld ix,RDSLT##
+        jr _U_RW
+
+_U_WRITERAM:
+        push ix
+        ld ix,WRSLT##
+
+_U_RW:
+        push bc
+        push de
+        push hl
+        ex      af,af
+...	      < call	_GET_P1 >
+        push    af
+        ld      a,b
+...	      < call	_PUT_P1 >
+        res     7,h
+        set     6,h
+        ex      af,af
+...	      < call	_U_JPIX >
+        ex      af,af
+        pop     af
+...	      < call	_PUT_P1 >
+        ex      af,af
+        pop hl
+        pop de
+        pop bc
+        pop ix
+        ret
+
+_U_JPIX:
+        jp (ix)        
+
+
+        ;--- Routine to call code in a RAM segment
+        ;    (code location specified in the stack)
+        ;Input:
+        ;    AF, BC, DE, HL = Parameters for the target routine
+        ;Output:
+        ;    AF, BC, DE, HL, IX, IY = Parameters returned from the target
+        ;    routine
+        ;Call as:
+        ;    CALL CALLRAM2
+        ;
+        ;CALLRAM2:
+        ;    CALL <routine address>
+        ;    DB bMMAAAAAA
+        ;    DB <segment number>
+        ;
+        ;    MM = Slot as the index of the entry in the mapper table.
+        ;    AAAAAA = Routine address index:
+        ;             0=4000h, 1=4003h, ..., 63=40BDh
+
+_U_CALLRAM2:
+        exx
+        ex      af,af'
+
+        pop     ix
+        ld      e,(ix+1)        ;Segment number
+        ld      d,(ix)  ;Slot and entry point number
+        dec     ix
+        dec     ix
+        push    ix
+        ld_iyl_e
+
+        ld      a,d
+        and     00111111b
+        ld      b,a
+        add     a,a
+        add     a,b     ;A = Address index * 3
+        ld      l,a
+        ld      h,40h
+        push    hl
+        pop     ix      ;IX = Address to call
+
+        ld      a,d
+        and     11000000b
+        rlca
+        rlca
+        rlca            ;A = Mapper table index * 8
+        rlca
+        rlca
+        ld      l,a
+        ld      h,0
+        ld      bc,(MAP_TAB##)
+        add     hl,bc
+        ld      a,(hl)  ;A = Slot to call
+        ld_iyh_a
+
+        ex      af,af'
+        exx
+        inc     sp
+        inc     sp
+        jr      _U_CALLRAM
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -2061,11 +2187,11 @@ P3_OFFSET_TAB:
 		defw	_PUT_P3
 		defw	_GET_P3
 
-		defw	_ALL_BK
-		defw	_FR_BK
-;
-		dw	0
-		dw	0
+		defw	_U_CALLRAM
+		defw	_U_READRAM
+        defw	_U_CALLRAM2
+		defw	_U_WRITERAM
+        dw 0
 ;
 ;	----------------------------------------
 ;

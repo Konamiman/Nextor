@@ -663,6 +663,8 @@ DEV_STATUS:
 ;               be write protected or write enabled is not considered
 ;               to be read-only.
 ;        bit 2: 1 if the LUN is a floppy disk drive.
+;        bit 3: 1 if this LUN shouldn't be used for automapping.
+;        bits 4-7: must be zero.
 ;+8 (2): Number of cylinders
 ;+10 (1): Number of heads
 ;+11 (1): Number of sectors per track

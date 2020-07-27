@@ -814,7 +814,6 @@ IS_DVB:
 	and	80h
 	jr	z,IS_DVB_NOEMU
 
-	inc	iy
 	pop	af	;In emulation mode: return Cy=1 only if drive is 0
 	or	a
 	scf
@@ -1019,6 +1018,8 @@ COMP16:
 ;
 ; Default DPB, it contains data for a 720K disk drive
 
+	ALIGN 7BAAh
+
 DEFDPB:
 	DB	0FFh
 
@@ -1036,6 +1037,46 @@ DEFDPB:
 	DB	3		
 	DW	7
 ;
+
+	ALIGN 7BC0h
+
+; Hooks to jump to KABR (kernel disk error abort routine) and KDERR 
+; (kernel disk error handler routine) on disk error.
+;
+; When MSX-BASIC starts the KAB_VECT and KDSK_VECT vectors need to be set to 
+; KAB_ROUTINE and KDSK_ROUTINE, respectively, which are defined in bdos.mac.
+; This is done at the start of BDOS_GO, also in bdos.mac.
+;
+; In MSX-DOS 2 and Nextor 2.0 the vectors are set to point directly to
+; these routines. However in Nextor 2.1 we need an intermediate step since
+; the old CP/M-style file handling functions have been moved to bank 4. Otherwise,
+; if these functions throw an error, the routines are wrongly invoked while bank 4
+; is still switched (see GO_ABORT and GO_EXIT in bank2/err.mac),
+; causing the computer to crash since the routines are actually in bank 0.
+;
+; Thus, the vectors are set to point to these intermediate KABJ and KDERJ hooks.
+; These exist also in bank 4 (see banck/dskab.mac), where they have
+; "xor a - call CHGBNK" at the same address of the four "nop"s here. Thus right after
+; bank 0 is restored, the jp KABR/KDERR is executed and the error handler
+; continues as expected.
+;
+; Note that this file is also included in bank 3, where KABR and KDERR are not
+; undefined and thus the linker complaints about that ("2 Undefined Globals"),
+; just ignore that as these intermediate hooks are not used in MSX-DOS 1 mode.
+
+KABJ:
+	nop
+    nop
+    nop
+    nop
+    jp KABR##
+
+KDERJ:
+    nop
+    nop
+    nop
+    nop
+    jp KDERR##
 
     ALIGN 7BD0h
     ;Here goes the 1K free area at the end of banks 0 and 3
