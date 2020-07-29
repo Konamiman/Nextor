@@ -57,8 +57,8 @@ typedef struct {
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v1.2\r\n"
-    "By Konamiman, 10/2019\r\n"
+    "Disk image emulation tool for Nextor v1.21\r\n"
+    "By Konamiman, 7/2020\r\n"
     "\r\n";
     
 const char* strUsage=
@@ -494,7 +494,7 @@ bool DirectoryExists(char* dirName)
     if(regs.Bytes.A != 0)
         TerminateWithDosError(regs.Bytes.A);
 
-    return (regs.Bytes.B & FILEATTR_DIRECTORY) != 0;
+    return (fib->attributes & FILEATTR_DIRECTORY) != 0;
 }
 
 void ProcessFileFound()
