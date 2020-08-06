@@ -175,9 +175,10 @@ DOSV0::
 	defb	0
 ;
 _$DSKBASIC::
-	defb	 "Nextor BASIC version ", BASVER##+"0"
-	defb	 ".", BASV_HI##+"0", BASV_LO##+"0"
-	INCLUDE betainfo.mac
+	defb	 "Nextor "
+	defb	NXTVER##+"0", ".", NXTV_HI##+"0" 
+	defb    ".", NXTV_LO##+"0"
+	defb     " BASIC"
 	defb	 0
 ;
 ;===== start mod DOS2.50 (change Copyright string)
