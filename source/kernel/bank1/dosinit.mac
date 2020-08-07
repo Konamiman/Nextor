@@ -110,7 +110,7 @@ NEEDZ80_LOOP:
 
 		inc	hl
 		ld	c,(hl)
-		ld	de,(KER250##)
+		ld	de,(KERNEX##)
 		ld	a,d
 		and	10001111b
 		cp	c
@@ -119,7 +119,7 @@ NEEDZ80_LOOP:
 		and	10001111b
 		cp	c
 		jr	z,NEEDZ80_NEXT
-		ld	de,(KER250##+2)
+		ld	de,(KERNEX##+2)
 		ld	a,d
 		and	10001111b
 		cp	c
@@ -691,7 +691,6 @@ bios_is_ram:	push	de
 		pop	de
 ;
 bios_not_exp:
-;===== start add DOS2.50 (build type)
 ;
 ;	+++++  SET UP SUPPORT SUPER TURBO MODE RUTINE  +++++
 ;
@@ -724,7 +723,6 @@ endif
 ;
 bios_not_superturbo:
 endif
-;===== end add DOS2.50
 ;
 ;	+++++  SET UP AUXIN, AUXOUT AND BDOS JUMPS  +++++
 ;
@@ -968,12 +966,9 @@ _JP_VECT:	ei
 		ld	d,(hl)
 		ex	de,hl
 		pop	de
-;===== start mod DOS2.50
 		push	hl
 		ld	hl,(ERR_EX_SECTOR##)
 		ret
-;;		jp	(hl)
-;===== end mod DOS2.50
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -984,13 +979,9 @@ _GO_DRV:
 ;
 		ex	af,af'
 ...	      < call	_drv_prompt >
-;===== start mod DOS2.50 (build type)
+
 if STURBO
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
-;===== start add DOS2.50 (support build type)
 _patch_70:	jr	_go_drv_skip1_super_turbo
-;===== end add DOS2.50
 		push	ix
 		ld	ix,0183h	;GETCPU
 		call	P0_CALL##
@@ -1006,13 +997,9 @@ endif
 		ex	af,af'
 ;
 		call	CALSLT##
-;===== start mod DOS2.50 (build type)
+
 if STURBO
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
-;===== start add DOS2.50 (support build type)
 _patch_71:	jr	_go_drv_skip2_super_turbo
-;===== end add DOS2.50
 		ex	af,af'
 		pop	af
 		push	ix
@@ -1217,10 +1204,8 @@ if 1
 ; slot switching routine or interrupt vector may not be in the TPA segment.
 ; [HF]
 ;
-;===== start mod DOS2.50 (build type)
+
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 ...	      <	call	_GET_P2 >
 		push	af
 ...	      <	call	_GET_P0>
@@ -1237,10 +1222,8 @@ endif
 		ex	af,af'
 ...	      < call	_P0_RAM >
 if 1 ;[HF]
-;===== start mod DOS2.50 (build type)
+
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 		pop	af
 ...	      <	call	_PUT_P0 >
 		pop	af

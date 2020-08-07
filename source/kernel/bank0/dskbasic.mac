@@ -3981,15 +3981,10 @@ PNOEXT:
 ;		caller of PARDEV	(i.e., NAMSCN)
 ;	HL ->	caller of H.PARD	(i.e., PARDEV)
 ;
-;===== start mod DOS2.50 (avoid assembler bug)
 	ld	de,RETURN
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-;;	ld	(hl),low RETURN
-;;	inc	hl
-;;	ld	(hl),high RETURN
-;===== end mod DOS2.50
 	inc	hl
 	inc	hl
 	inc	hl
@@ -4137,17 +4132,12 @@ REMHOK:
 	ld	l,12+EXPSTK
 REMPRM:	add	hl,sp		;point to where the return address of
 				;hook is stored
-;===== start mod DOS2.50 (avoid assembler bug)
 	push	de
 	ld	de,RETURN
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
 	pop	de
-;;	ld	(hl),low RETURN
-;;	inc	hl
-;;	ld	(hl),high RETURN
-;===== end mod DOS2.50
 	pop	af
 	pop	hl
 	ret

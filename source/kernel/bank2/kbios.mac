@@ -25,14 +25,9 @@ MSX_CNSDFG	equ	0F3DEh
 ;   This routine just returns the number of rows and columns of the screen
 ; in register DE.
 ;
-;===== start mod DOS2.50
 		;assume MSX_LINLEN+1 = MSX_CRTCNT
 		ld	de,(MSX_LINLEN)		;E := number of columns
 		ld	a,d
-;;		ld	a,(MSX_LINLEN)
-;;		ld	e,a
-;;		ld	a,(MSX_CRTCNT)
-;===== end mod DOS2.50
 		ld	hl,MSX_CNSDFG
 		add	a,(hl)
 		ld	d,a			;D := number of rows
@@ -122,45 +117,6 @@ if 1 ;==HF== Skip buffering fiddle at the moment...
 		pop	ix
 		ret
 endif
-;===== start del DOS2.50 (not use)
-;		ld	e,a			;Save character in E.
-;;
-;		cp	ESC			;Always flush buffer before
-;		call	z,CH_FLUSH		; putting an ESC in.
-;;
-;		ld	hl,CH_16FLG##		;If 16-bit character flag is
-;		bit	0,(hl)			; set then clear it (this
-;		res	0,(hl)			; must be 2nd byte of 16-bit
-;		jr	nz,not_16_char		; char).
-;		pcall	CHK_16_CHAR		;If not set then test this
-;		jr	nc,not_16_char		; character and set or clear
-;		set	0,(hl)			; the flag appropriately.
-;not_16_char:
-;		ld	a,CH_TMOUT##		;Reset buffer flush timeout
-;		ld	(CH_COUNT##),a		; to its maximum value
-;		ld	a,(CH_PTR##)		;Get character buffer index
-;		ld	c,a			; and turn it into a buffer
-;		ld	b,0			; pointer.
-;		ld	hl,CH_BUF##
-;		add	hl,bc
-;		ld	(hl),e			;Store the character in buffer
-;		inc	a			; and update buffer index.
-;		ld	(CH_PTR##),a
-;		cp	CHB_SZ##		;Flush the buffer if
-;		jr	z,FLUSH_BUF		; it is full.
-;;
-;		ld	a,(ESCCNT##)		;If in escape sequence then
-;		or	a			; must flush buffer straight
-;		jr	nz,FLUSH_BUF		; away without cursor control.
-;;
-;		ld	a,e
-;		cp	LF			;Also flush if character is
-;		jr	z,FLUSH_BUF		; an LF or BELL, else return.
-;		cp	BELL
-;		jr	z,FLUSH_BUF
-;		ret
-;===== end del DOS2.50
-;
 ;
 ;------------------------------------------------------------------------------
 ;

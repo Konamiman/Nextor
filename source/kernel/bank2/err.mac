@@ -69,21 +69,16 @@ ignore_ok:
 		jr	z,read_error		; if the error was while
 		set	0,c			; writing.
 read_error:
-;===== start mod DOS2.50 (add 23bit sector address support)
 		ld	a,b
 		ld	(ERR_EX_SECTOR##),a
 		and	d
-;;		ld	a,d
-;===== end mod DOS2.50
 		and	e			;If sector number is not
 		inc	a			; 0FFh:0FFFFh then set the sector
 		jr	z,sector_invalid	; valid flag.
-;===== start add DOS2.50 (add 23bit sector address support)
 		set	4,c			;Set extended sector valid flag.
 		inc	b			;If sector number is less than
 		dec	b			; 10000h then set sector
 		jr	nz,sector_invalid	; valid flag.
-;===== end add DOS2.50
 		set	3,c
 sector_invalid:
         push ix
@@ -193,10 +188,8 @@ endif
 		ld	hl,PUT_BDOS##
 		ex	(sp),hl
 		push	hl
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	hl,(ERR_EX_SECTOR##)
 		ld	h,0
-;===== end add DOS2.50
 		jp	PUT_USER##
 ;
 ;

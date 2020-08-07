@@ -261,11 +261,9 @@ retry_transfer:	push	bc			;Save sector count & segment
 		push	de
 		push	de
 		ex	(sp),ix			;IX -> DTA address
-;===== start add FAT16 (RAMRED patch)
 		ld	e,(iy+@RW_EX_PSEC##)	;DIO_EX_SECTOR := sector number (bit16-22)
 		ld	(iy+@DIO_EX_SECTOR##),e
 
-;===== end add FAT16
 		ld	de,(RW_PSEC##)		;DE := sector number
 		push	de
 		dec	a			;Don't do a disk transfer
@@ -289,11 +287,9 @@ no_error_skip:	ex	af,af'			;Save error code in A'
 		ld	h,0			;Adjust sector number for
 		add	hl,de			; any sucessfully read
 		ld	(RW_PSEC##),hl		; sectors.
-;===== start add FAT16 (NUM_1 patch)
 		jr	nc,rw_many_not_carry
 		inc	(iy+@RW_EX_PSEC##)
 rw_many_not_carry:
-;===== end add FAT16
 		pop	hl
 ;
 		pop	de
@@ -310,13 +306,10 @@ rw_many_not_carry:
 		ex	af,af'
 		push	de			;Tell user about error,
 		ld	de,(RW_PSEC##)		; including which sector
-;===== start mod DOS2.50 (add 23bit sector address support)
 		push	bc
 		ld	bc,(RW_EX_PSEC##-1)
 		pcall	nz,NC_DISK_ERR		; it was on.  Ignore is OK.
 		pop	bc
-;;		pcall	nz,NC_DISK_ERR		; it was on.  Ignore is OK.
-;===== end mod DOS2.50
 		pop	de
 		inc	b			;If more sectors to do then
 		dec	b			; loop back to retry if A=0
@@ -349,10 +342,8 @@ boundary_sec:	pop	hl
 		inc	(iy+@RW_PSEC##)
 		jr	nz,bound_sec_done	;Adjust physical sector number
 		inc	(iy+@RW_PSEC##+1)	; for next sector.
-;===== start add FAT16 (NUM_2 patch)
 		jr	nz,bound_sec_done	;Adjust physical sector number
 		inc	(iy+@RW_EX_PSEC##)	; for next sector.
-;===== end add FAT16
 bound_sec_done:	jp	sector_loop
 ;
 ;
@@ -396,24 +387,17 @@ correct_loop:	push	bc
 		ld	e,(hl)			;DE := sector number from this
 		inc	hl			;      buffer.
 		ld	d,(hl)
-;===== start add FAT16 (DSKBUF patch)
 		ld	bc,BD_EX_SECT##-BD_SECT##-1
 		add	hl,bc
 		ld	a,(hl)			;A := sector number (bit16-22)
 						; from this buffer
-;===== end add FAT16
 		ex	de,hl
 		ld	bc,(RW_PSEC##)		;Compare with sector number
 		sbc	hl,bc			; of transfer just done.
-;===== start add FAT16 (DSKBUF patch)
 		ld	bc,(RW_EX_PSEC##)
 		sbc	a,c
-;===== end add FAT16
 		pop	bc
-;===== start mod FAT16 (DSKBUF patch)
 		and	h			;A=H=0FFh ?
-;;		ld	a,h
-;===== end mod FAT16
 		inc	a
 		jr	nz,correct_next		;If sector is not one of those
 		ld	a,l			; just transferred then jump
@@ -527,9 +511,7 @@ must_read_sec:	ld	b,3
 		code	lxi hl
 dont_read_sec:	ld	b,2
 		ld	de,(RW_PSEC##)		;DE := sector number
-;===== start add FAT16 (BUF_2 patch)
 		ld	a,(RW_EX_PSEC##)	;A := sector number (bit16-22)
-;===== end add FAT16
 		pcall	BF_SECTOR		;Get a buffer for the sector
 ;
 		pop	de			;DE := start offset in sector

@@ -56,10 +56,7 @@ MAP_INIT::
 
 PROCNM	equ	0FD89h
 
-;===== start mod DOS2.50 (build type)
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 		ld	(RAMAD2##),a
 endif
 		ld	b,a
@@ -122,10 +119,8 @@ fill_null_rec:	ld	(de),a
 		ld	a,(hl)
 		push	hl
 		ld	(RAMAD3##),a		;Record all the RAM slots as
-;===== start mod DOS2.50 (build type)
+
 if NOT BUILTIN
-;;if 0 ;;HYBRID
-;===== end mod DOS2.50
 		ld	(RAMAD2##),a		; the primary mapper slot and
 endif
 		ld	(RAMAD1##),a		; enable the mapper slot in
@@ -136,10 +131,8 @@ endif
 ;
 		inc	hl
 		ld	a,(hl)
-;===== start mod DOS2.50 (build type)
+
 if (BUILTIN AND STURBO)
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 		ld	b,a
 		ld	a,(MSXVER)
 		cp	3
@@ -177,11 +170,8 @@ ISTR3:
 		inc	hl
 		ld	(hl),a			;Record number of free segments
 		inc	hl
-;===== start mod DOS2.50 (build type)
-if (BUILTIN AND STURBO)
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 
+if (BUILTIN AND STURBO)
 		ld	a,(BOOTKEYS##)
 		and	00010000b
 		ld	a,6
@@ -240,11 +230,8 @@ zero_p2_loop:	ld	(hl),0			; data segment up to the
 		inc	hl			;Setup MAP_TBL entry and
 		push	hl			; segment list for primary
 		call	SETUP_MAP_TBL		; mapper.
-;===== start mod DOS2.50 (build type)
-if (BUILTIN AND STURBO)
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 
+if (BUILTIN AND STURBO)
 		ld	a,(MSXVER)
 		cp	3
 		jr	nz,NOTURBOR
@@ -350,10 +337,7 @@ sec_slot_loop:	push	hl
 		ld	a,d					;On Turbo-R, the "4" key causes
 		jr	nz,NO_PRIM_INTERNAL	;the bigger mapper to be used as primary
 
-;===== start mod DOS2.50 (build type)
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 		or	a
 		jr	z,not_primary		;Found one, no primary yet.
 		ld	a,b
@@ -379,10 +363,8 @@ endif
 NO_PRIM_INTERNAL:
 		cp	c			; swap this slot & segment
 		jr	c,not_primary		; count with the primary
-;===== start mod DOS2.50 (build type)
+
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 is_primary:
 endif
 		ld	(hl),c			; mapper.
@@ -767,7 +749,7 @@ EXB_NEX:
 
 	;--- From here is copied to RAM
 EXB_RAM:
-	ld	ix,KER250##
+	ld	ix,KERNEX##
 	ld	iy,0400h
 EXB_LOOP:
 	exx

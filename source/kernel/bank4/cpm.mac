@@ -372,16 +372,10 @@ NEW_CREATE:	LD	(IY+@SE_FLAGS##),0	;Extent is zero or file does
 ;
 		ld	iy,RAM_BASE##
 
-;===== start mod DOS2.50
 		ld	bc,00FFh		;Store result on stack.
 		push	bc			;Save on stack throughout.
 		ld	(iy+@BUF_UNIT##),c	;Flag no file deleted yet
 						;Invalidate buffer just in case
-;;		LD	A,0FFh
-;;		LD	(BUF_UNIT##),A
-;;		LD	BC,00FFh
-;;		PUSH	BC
-;===== end mod DOS2.50
 
 		LD	(IY+@SE_FLAGS##),SEM_SR	;Search rather than create.
 		XOR	A			;Don't delete hidden files.
@@ -608,7 +602,6 @@ if 1
 		AND	0Fh			;Ignore user code.  [HF]
 endif
 		LD	(IX+FAB_DRV##),A
-;===== start add FAT16 (CLUST patch)
 		ld	bc,CP_S1##		;restore FAB_ATTR and FAB_ACC
 		add	hl,bc
 		ld	a,(hl)
@@ -622,56 +615,21 @@ NOT_MOD2:	ld	(ix+FAB_ACC##),b
 		jr	z,NOT_DEV2
 		ld	a,MDM_DEV+MDM_CPM+MDM_ASC
 NOT_DEV2:	ld	(ix+FAB_MODE##),a
-;===== end add FAT16
 		LD	DE,FIB_1##+FAB_SIZE##	;Copy size field.
-;===== start mod FAT16 (support CLUST patch)
 		ld	bc,CP_SIZ##-CP_S1##
-;;		LD	BC,CP_SIZ##
-;===== end mod FAT16
 		ADD	HL,BC			;Point to the FCB size field.
-;===== start mod DOS2.50
 		;assume B=0 (CP_SIZ-CP_S1 < 256)
 		ld	c,4
-;;		LD	BC,4
-;===== end mod DOS2.50
 		LDIR
 		LD	DE,FIB_1##+FAB_ID##	;Now the volume id.
-;===== start mod DOS2.50
 		;assume B=0 (set "ldir")
 		ld	c,4
-;;		LD	BC,4
-;===== end mod DOS2.50
 		LDIR
 		LD	DE,FIB_1##+FAB_FDC##	;Now the cluster bytes.
-;===== start mod DOS2.50
 		;assume B=0 (set "ldir")
 		ld	c,8
-;;		LD	BC,8
-;===== end mod DOS2.50
 		LDIR
-;===== start del FAT16 (support CLUST patch)
-;;		LD	A,(IX+FAB_LPC##+1)	;Contains the saved flags.
-;;		LD	B,0			;Check R/O first.
-;;		BIT	CP_RO,A
-;;		JR	Z,NOT_RO2
-;;		LD	B,ATM_RO
-;;NOT_RO2:	LD	(IX+FAB_ATTR##),B
-;;		LD	B,0
-;;		BIT	CP_DEV,A		  ;Now check device flag and
-;;		JR	Z,NOT_DEV2		  ; if it is a device, then
-;;		LD	B,MDM_DEV+MDM_CPM+MDM_ASC ; set the device, ASCII and
-;;NOT_DEV2:	BIT	CP_EOF,A		  ; CP/M mode flags.
-;;		JR	Z,NOT_EOF2
-;;		SET	MD_EOF,B		  ;Also set end-of-file
-;;NOT_EOF2:	LD	(IX+FAB_MODE##),B	  ; flag if required.
-;;		LD	B,0
-;;		BIT	CP_MOD,A
-;;		JR	Z,NOT_MOD2
-;;		LD	B,ACM_MOD
-;;NOT_MOD2:	LD	(IX+FAB_ACC##),B
-;;		AND	00001111b		;Remove flags from cluster
-;;		LD	(IX+FAB_LPC##+1),A	; number.
-;===== end del FAT16
+
 if 1
 		XOR	A
 		BIT	MD_DEV,(IX+FAB_MODE##)	;If this seems to be device FCB
@@ -776,16 +734,10 @@ S_F_F:
 ;
 ;
 
-;===== start mod DOS2.50
 		ld	(iy+@APPEND_FLAG##),0	;Firstly reset the append
 						; flag so that the drive
 						; in the FCB will not be
 						; changed.
-;;		PUSH	AF
-;;		XOR	A
-;;		LD	(APPEND_FLAG##),A
-;;		POP	AF
-;===== end mod DOS2.50
 		LD	B,A			;Save search attributes.
 		PUSH	BC			;Save append flag.
 		LD	(FCB_ADR##),DE		;Save address of the FCB.
@@ -838,14 +790,8 @@ FOUND_FILE:	OR	A
 S_F_F_ERR:	POP	BC			;Append flag.
 		BIT	0,C
 		JR	NZ,TRY_APPEND
-;===== start mod DOS2.50
 		LD	(iy+@APPEND_FLAG##),0	;Reset append flag as failed.
 						;A temporary address.
-;;		PUSH	AF
-;;		XOR	A
-;;		LD	(APPEND_FLAG##),A
-;;		POP	AF
-;===== end mod DOS2.50
 		OR	A			;Signify error and return.
 		RET
 ;
@@ -853,13 +799,8 @@ TRY_APPEND:	LD	(CPM_BUFF##+300),A	;Save error code.
 		PUSH	BC			;Save search attributes.
 		LD	HL,APPEND_STRING	;"APPEND",0
 		LD	DE,CPM_BUFF##		;Where to store append path.
-;===== start mod DOS2.50
 		ld	b,0FFh			;Maximum size allowed.
 		ld	(iy+@BUF_UNIT##),b	;Invalidate any info there.
-;;		LD	A,0FFh
-;;		LD	(BUF_UNIT##),A
-;;		LD	B,255
-;===== end mod DOS2.50
 		LD	A,1			;=> copy to current paging.
 		;The following was PCALL GET_ENV (now cpm.mac and env.mac are in bank 4)
 		CALL	GET_ENV##		;Find string.
@@ -889,11 +830,7 @@ TRY_APPEND:	LD	(CPM_BUFF##+300),A	;Save error code.
 		LD	A,B			;Parse flags.
 		AND	PFM_A+PFM_DR		;If both clear => nothing to
 		JR	Z,RESTORE_ERROR		; do.
-;===== start mod DOS2.50
 		LD	(iy+@APPEND_FLAG##),0FFh
-;;		LD	A,0FFh			;Signal doing an append.
-;;		LD	(APPEND_FLAG##),A
-;===== end mod DOS2.50
 		PUSH	DE			;Search attributes.
 		LD	HL,(STR_PTR##)		;-> terminating character.
 		LD	A,B			;If string looks like a
@@ -997,7 +934,6 @@ endif
 ;
 		POP	HL			;Get random record number
 		POP	AF			; into HL:A.
-;===== start mod DOS2.50
 		add	a,a
 		adc	hl,hl			;Calculate extent number by
 		ld	(ix+CP_EXL##),l		; multiplying top 17 bits
@@ -1006,17 +942,6 @@ endif
 						;Record current extent.
 		srl	a			;Record bottom 7 bits as the
 		ld	(ix+CP_CR##),a		; current record number.
-;;		LD	B,A
-;;		ADD	A,A
-;;		ADC	HL,HL			;Calculate extent number by
-;;		LD	A,L
-;;		LD	(IX+CP_EXL##),A
-;;		LD	A,H
-;;		LD	(IX+CP_EXH##),A
-;;		LD	A,B
-;;		AND	07Fh			;Record bottom 7 bits as the
-;;		LD	(IX+CP_CR##),A		; current record number.
-;===== end mod DOS2.50
 ;
 		XOR	A			;User paging mode -> A'.
 		EX	AF,AF'			;Get function code back.
@@ -1045,11 +970,7 @@ BUFFER_SECTOR:
 		CALL	CHK_FILE_BUF		;Return NZ if buffer is not
 		RET	NZ			; for this file.
 ;
-;===== start mod DOS2.50
 		ld	bc,(BUF_REC##+0-1)	;Get buffer sector into DE:B
-;;		LD	A,(BUF_REC##)
-;;		LD	B,A
-;===== end mod DOS2.50
 		LD	DE,(BUF_REC##+1)
 		LD	A,(IX+CP_RR##)		;Get required logical sector
 		LD	L,(IX+CP_RR##+1)	; into HL:A
@@ -1080,28 +1001,18 @@ XORET:		XOR	A
 PURGE_BUF:	CALL	CHK_FILE_BUF		;Test if buffer is for this
 		RET	NZ			; file and return if not.
 ;
-;===== start mod DOS2.50
 		ld	(iy+@BUF_UNIT##),0FFh	;If buffer is for this file
 						; then kill it.
-;;		LD	A,0FFh
-;;		LD	(BUF_UNIT##),A
-;===== end mod DOS2.50
 		RET
 ;
 ;
 ;------------------------------------------------------------------------------
 ;
 CHK_FILE_BUF:
-;===== start mod DOS2.50
 		ld	a,(BUF_UNIT##)		;Compare unit number in CP/M
 		cp	(IX+CP_DRV##)		; FCB with the one for the
 						; buffer and return NZ if
 						; they are different.
-;;		LD	A,(IX+CP_DRV##)
-;;		LD	B,A
-;;		LD	A,(BUF_UNIT##)
-;;		CP	B
-;===== end mod DOS2.50
 		RET	NZ
 ;
 		LD	L,(IX+CP_FPC##)		;Compare first physical
@@ -1133,12 +1044,8 @@ READ_BUFFER:
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-;===== start mod DOS2.50
 		ld	(iy+@BUF_UNIT##),0FFh	;Invalidate the buffer in case
 						; of any error.
-;;		LD	A,0FFh
-;;		LD	(BUF_UNIT##),A
-;===== end mod DOS2.50
 ;
 		LD	A,(IX+CP_RR##)		;Number of 128 byte records to
 		AND	03h			; read is the size of the
@@ -1170,11 +1077,7 @@ BUF_READ_OK:	LD	A,B
 		LD	HL,127			;Calculate number of sectors
 		ADD	HL,BC			; read, rounding up to the
 		ADD	HL,HL			; nearest one above.
-;===== start mod DOS2.50
 		LD	(iy+@BUF_COUNT##),h	;Record number of sectors read
-;;		LD	A,H
-;;		LD	(BUF_COUNT##),A
-;===== end mod DOS2.50
 ;
 		XOR	A
 		LD	B,A
@@ -1191,22 +1094,13 @@ endif
 		LD	BC,CP_RR##
 		ADD	HL,BC			;Save random record number
 		LD	DE,BUF_REC##		; in "BUF_REC" for later
-;===== start mod DOS2.50
 		;assume B=0 (CP_RR < 256)
 		LD	C,3			; testing in "BUFFER_SECTOR".
-;;		LD	BC,3
-;===== end mod DOS2.50
 		LDIR
 ;
-;===== start mod DOS2.50
 		ld	l,(ix+CP_FPC##)		;Record unit number and first
 		ld	h,(ix+CP_FPC##+1)	; checking for same file.
 		ld	(BUF_FPC##),hl		; physical cluster number for
-;;		LD	A,(IX+CP_FPC##)
-;;		LD	(BUF_FPC##),A
-;;		LD	A,(IX+CP_FPC##+1)
-;;		LD	(BUF_FPC##+1),A
-;===== end mod DOS2.50
 		LD	A,(IX+CP_DRV##)
 		LD	(BUF_UNIT##),A
 ;
@@ -1292,7 +1186,6 @@ INC_CURR_RECORD:
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-;===== start mod DOS2.50
 		inc	(ix+CP_CR##)		;Increment current record and
 		ret	p			; return if same extent
 ;
@@ -1302,23 +1195,6 @@ INC_CURR_RECORD:
 		jr	nz,no_carry_cur_ext	; start next extent.
 		inc	(ix+CP_EXH##)
 no_carry_cur_ext:
-;;		LD	A,(IX+CP_EXL##)
-;;		LD	L,A
-;;		LD	A,(IX+CP_EXH##)
-;;		LD	H,A
-;;		LD	A,(IX+CP_CR##)
-;;		INC	A
-;;		JP	P,SAME_EXTENT
-;;		INC	HL
-;;		LD	A,0
-;;SAME_EXTENT:
-;;		LD	(IX+CP_CR##),A
-;;		LD	A,L
-;;		LD	(IX+CP_EXL##),A
-;;		LD	A,H
-;;		LD	(IX+CP_EXH##),A
-;;		RET	P
-;===== end mod DOS2.50
 		 ;	;
 		 ;	;
 ;       Drop through to set up record count byte
@@ -1381,13 +1257,8 @@ SRC10:		LD	A,(FIB_1##+FAB_PTR##+1)
 ;
 PAST_EOF_EXT:
 FULL_EXTENT:
-;===== start mod DOS2.50
 		ld	(ix+CP_RC##),b		;Record the record count
 						; for this extent.
-;;		LD	A,B
-;;		LD	(IX+CP_RC##),A
-;===== end mod DOS2.50
-;
 		RET
 ;
 ;
@@ -1409,16 +1280,8 @@ FULL_EXTENT:
 ;
 SET_RAND_REC:	LD	A,(IX+CP_CR##)
 SET_EXT_REC:
-;===== start mod DOS2.50
 		ld	b,(IX+CP_EXH##)		;Get current extent and record
 		ld	c,(IX+CP_EXL##)		; number into HL and A.
-;;		PUSH	AF
-;;		LD	A,(IX+CP_EXH##)
-;;		LD	B,A
-;;		LD	A,(IX+CP_EXL##)
-;;		LD	C,A
-;;		POP	AF
-;===== end mod DOS2.50
 ;
 		ADD	A,A			;Convert extent and record
 		SRL	B			; into logical record by
@@ -1472,28 +1335,18 @@ SAVE_FAB:
 		ADD	HL,BC			;Address in FCB to store size.
 		EX	DE,HL
 		LD	HL,FIB_1##+FAB_SIZE##	;File size.
-;===== start mod DOS2.50
 		;assume B=0 (CP_SIZ < 256)
 		LD	C,4			;Size is 4 bytes long.
-;;		LD	BC,4
-;===== end mod DOS2.50
 		LDIR
 		LD	HL,FIB_1##+FAB_ID##	;Volume id in FAB.
-;===== start mod DOS2.50
 		;assume B=0 (set "ldir")
 		LD	C,4			;Again 4 bytes long.
-;;		LD	BC,4
-;===== end mod DOS2.50
 		LDIR				;Follows after size in FCB.
 		LD	HL,FIB_1##+FAB_FDC##	;Start of 8 data bytes to copy.
-;===== start mod DOS2.50
 		;assume B=0 (set "ldir")
 		LD	C,8
-;;		LD	BC,8
-;===== end mod DOS2.50
 		LDIR				;Again follows on directly.
 ;
-;===== start mod FAT16 (CLUST2 patch)
 		ld	a,(FIB_1##+FAB_ACC##)	;CP_S1(file attribute) <- all FAB_ATTR bits and AC_MOD bit
 		bit	AC_MOD,a
 		ld	a,(FIB_1##+FAB_ATTR##)
@@ -1501,28 +1354,6 @@ SAVE_FAB:
 		jr	z,NOT_MOD
 		set	AT_RES,a
 NOT_MOD:	ld	(ix+CP_S1##),a
-;;		LD	A,(IX+CP_LPC##+1)	;Where to store flags.
-;;		AND	00001111b		;Clear all the flags.
-;;		LD	B,A
-;;		LD	A,(FIB_1##+FAB_ATTR##)	;RO bit of attr byte.
-;;		BIT	AT_RO,A
-;;		JR	Z,NOT_RO		;Nothing to do, if not set.
-;;		SET	CP_RO,B			;Use bit 6 of first physical.
-;;NOT_RO:	LD	A,(FIB_1##+FAB_MODE##)	;Device flag.
-;;		BIT	MD_DEV,A
-;;		JR	Z,NOT_DEV
-;;		SET	CP_DEV,B
-;;NOT_DEV:	LD	A,(FIB_1##+FAB_MODE##)	;End of file flag
-;;		BIT	MD_EOF,A
-;;		JR	Z,NOT_EOF
-;;		SET	CP_EOF,B
-;;NOT_EOF:	LD	A,(FIB_1##+FAB_ACC##)	;Get modified flag.
-;;		BIT	AC_MOD,A
-;;		JR	Z,NOT_MOD
-;;		SET	CP_MOD,B
-;;NOT_MOD:	LD	(IX+CP_LPC##+1),B	;Put back in FCB.
-;===== end mod FAT16
-;
 		RET
 ;
 ;------------------------------------------------------------------------------
@@ -1716,16 +1547,9 @@ MSX_WHOLE:
 		LD	(IX+CP_RR##),L		; number in CP/M FCB.
 		LD	(IX+CP_RR##+1),H
 		JR	NC,NO_RR_CARRY
-;===== start mod DOS2.50
 		inc	(IX+CP_RR##+2)		;Increment high word if any
 		jr	nz,NO_RR_CARRY		; overflow from low word.
 		inc	(IX+CP_RR##+3)
-;;		LD	L,(IX+CP_RR##+2)
-;;		LD	H,(IX+CP_RR##+3)
-;;		INC	HL
-;;		LD	(IX+CP_RR##+2),L
-;;		LD	(IX+CP_RR##+3),H
-;===== end mod DOS2.50
 NO_RR_CARRY:
 		EX	AF,AF'			;A := 0/1 return code
 		JR	MSX_EXIT_OK		;DE := records transferred

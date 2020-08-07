@@ -570,9 +570,7 @@ no_free_seg:
 		ld	(ix+UD_PHYS##),a	;Physical unit number
 		ld	(ix+UD_TIME##),0	;No current UPB
 		ld	(ix+UD_CDIR##+1),0FFh	;Current directory is root
-;===== start add FAT16 (DOS2.50 original patch)
 		ld	(ix+UD_CDIR##),0FFh
-;===== end add FAT16
 ;
 		ld	c,a			;Validate the RAM disk, this
 		ld	ix,FIB_1		; will set up the UPB but

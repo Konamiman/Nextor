@@ -596,14 +596,10 @@ FIRST_DIR:
 		inc	hl
 		ld	d,(hl)
 
-;===== start mod FAT16 (CLST_1 patch)
 		ld	a,d			;If cluster number is -ve then
 		and	e			; no current directory path so
 		inc	a			; jump to use root directory.
 		jr	z,start_root_nz
-;;		bit	7,d
-;;		jr	nz,start_root_nz
-;===== end mod FAT16
 ;
 ;
 				;CURRENT DIRECTORY IS DEFINED
@@ -659,7 +655,6 @@ got_cdir_clu:	pop	hl
 		ld	(STR_PTR##),bc		;Restore string pointer
 		set	PC_DISK,(iy+@PC_FLAGS##);Restore disk access flag
 ;
-;===== start mod FAT16 (CLST_2 patch)
 		ld	a,d
 		and	e
 		inc	a			;If cluster is -ve then we
@@ -676,21 +671,6 @@ dont_zap_path:	pop	hl
 		pop	bc
 		pcall	DI_SUB			;Initialise start cluster for
 		ret				; root or sub-directory as
-;;		bit	7,d
-;;		jr	z,dont_zap_path
-;;		inc	hl
-;;		inc	hl
-;;		ld	(hl),0
-;;dont_zap_path:
-;;start_root_nz:pop	hl
-;;		pop	bc
-;;		jr	nz,start_root
-;;		pcall	DI_SUB
-;;		ret
-;;start_root:	call	INIT_WPTH
-;;		pcall	DI_ROOT
-;;		ret
-;===== end mod FAT16
 ;
 ;
 ;------------------------------------------------------------------------------

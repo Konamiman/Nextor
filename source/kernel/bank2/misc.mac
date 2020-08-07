@@ -33,7 +33,6 @@
 		call	F_FLUSH
 		ld	a,1			;H.F
 		ld	(CUR_DRV##),a		;H.F
-;===== start mod DOS2.50
 		ld	de,80h
 ;
 ;	----------------------------------------
@@ -43,9 +42,6 @@
 ;    This function simply sets the current disk transfer address from DE.
 ;
 		ld	(DTA_ADDR##),de
-;;		ld	hl,80h
-;;		ld	(DTA_ADDR##),hl
-;===== end mod DOS2.50
 		xor	a
 		ld	h,a
 		ld	l,a
@@ -117,32 +113,11 @@ not_login:	djnz	login_loop		;Loop 'til done all drives
 ;
 ;    This function simply returns the current drive.
 ;
-;===== start mod DOS2.50
 		ld	hl,(CUR_DRV##)		;Get current drive and
 		dec	l			; adjust it so 0=A:.
-;;		ld	a,(CUR_DRV##)
-;;		dec	a
-;;		ld	l,a
-;===== end mod DOS2.50
 		xor	a
 		ld	h,a
 		ret
-;===== start del DOS2.50 (move to F_DSKRST)
-;;;
-;;;
-;;;------------------------------------------------------------------------------
-;;;
-;;	PROC	F_DTA
-;;;
-;;;    This function simply sets the current disk transfer address from DE.
-;;;
-;;		ld	(DTA_ADDR##),de
-;;		xor	a
-;;		ld	h,a
-;;		ld	l,a
-;;		ret
-;===== end del DOS2.50
-;
 ;
 ;------------------------------------------------------------------------------
 ;
@@ -510,25 +485,18 @@ endif
 if 0
 		inc	b
 endif
-;===== start mod FAT16 (0CBAh patch)
 		;assume A=0 and Cy=0 (set "xor a")
 		code	MVI C			;Skip "ADD HL,HL" first time
 dp_shift_lp:	add	hl,hl			;Shift this according to the
 		adc	a,a			; cluster shift to get
-;;		jr	dp_shift_st
-;;dp_shift_lp:	add	hl,hl
-;===== end mod FAT16
 dp_shift_st:	djnz	dp_shift_lp		; number of data sectors.
 		ld	c,(ix+UD_SDAT##)
 		ld	b,(ix+UD_SDAT##+1)	;Add on the first data sector
 		add	hl,bc			; number to get the total
-;===== start add FAT16 (0CBAh patch)
 		adc	a,0
-;===== end add FAT16
 		ex	de,hl			; number of sectors and put
 		dec	hl			; it in the user's data
 		dec	hl			; block at the correct place.
-;===== start add FAT16 (ALLSEC patch)
 		or	a			;ADE < 10000h ?
 		jr	z,f_dparm_fat12		;yes
 
@@ -549,7 +517,6 @@ f_dparm_bigsec:
 		dec	hl
 		ld	(hl),a			;+26 : high
 		dec	hl
-;===== end add FAT16
 		ld	(hl),d			;+25 : middle
 		dec	hl
 		ld	(hl),e			;+24 : low
@@ -941,11 +908,7 @@ unassign_all:	ld	(hl),a			;Walk through UNIT_TAB setting
 set_dchk_on:	ld	(DSK_CHK##),a		;Set new value.
 ;
 dont_set_dchk:
-;===== start mod DOS2.50
 		ld	bc,(DSK_CHK##-1)	;Get current value into B.
-;;		ld	a,(DSK_CHK##)
-;;		ld	b,a
-;===== end mod DOS2.50
 		xor	a
 		ret
 ;

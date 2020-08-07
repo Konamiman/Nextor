@@ -19,14 +19,12 @@
 	RAMMOD
 ;
 ;
-;===== start mod DOS2.50 (change version number)
 	const	DOSVER,2	;Major version number
 	const	DOSV_HI,3	;Minor version number, high nybble
 	const	DOSV_LO,1	;Minor version number, low nybble
 	const	NXTVER,2
 	const	NXTV_HI,1
 	const	NXTV_LO,0
-;===== end mod DOS2.50
 ;
 ;
 	const	MIN_BUFS,2	;Minimum number of sector buffers
@@ -330,10 +328,7 @@ size	macro	name
 	field	2,BD_SECT	;Absolute sector number of contents (bit0-15)
 	field	1,BD_COPY	;Number of disk copies
 	field	1,BD_SEP	;Number of sectors between copies
-;===== start mod FAT16 (DSKEX workarea)
 	field	1,BD_EX_SECT	;Absolute sector number of contents (bit16-22) : compatible "DSKEX" in FAT16PATCH
-;;	field	1
-;===== end mod FAT16
 	field	2,BD_UD		;Address of owning unit descriptor
 ;
 	field	512,BD_DATA	;Space for one sectors worth of data
@@ -369,14 +364,9 @@ size	macro	name
 	field	1,FIB_SA	;Search attributes
 ;
 	field	11,FIB_PAT	;Expanded pattern matching filename
-;===== start mod FAT16 (SDIR_1/SDIR_2/SDIR_3 workarea)
 	field	13,FIB_DVAR	;Storage for directory variables (size = DE_FSTV-DE_LSTV = 13) : compatible "SDIR_1", "SDIR_2", "SDIR_3" in FAT16PATCH
 ;
 	field	8		;Spare
-;;	field	12,FIB_DVAR
-;;	field	9
-;===== end mod FAT16
-;
 ;
 	size	FIB_SZ		;Size of fileinfo block (should be 64 bytes)
 ;
@@ -426,9 +416,7 @@ size	macro	name
 ;
 	field	2,FAB_UD	;Unit descriptor address  \  Only used for
 	field	2,FAB_DSEC	;Directory sector          > comparing in
-;===== start add FAT16 (add Extended sector number in FAB)
 	field	1,FAB_EX_DSEC	;Directory sector (bit16-22)
-;===== end add FAT16
 	field	1,FAB_ENT	;Entries number in sector / "FAB_SCAN".
 ;
 	field	2,FAB_FDC	;First directory cluster (-ve => root)
@@ -626,9 +614,7 @@ endif
 	iy_var2	DE_CLUSTER	;Current directory cluster. -ve => root dir
 	iy_var2	DE_NEXT_CLU	;Next directory cluster. -ve => end of dir
 	iy_var2	DE_SECTOR	;Current directory sector
-;===== start add FAT16 (add Extended sector number in DE_* workarea)
 	iy_var1	DE_EX_SECTOR	;Extended Current directory sector (bit16-22) : compatible "SDIR_1", "SDIR_2", "SDIR_3" in FAT16PATCH
-;===== end add FAT16
 	iy_var1	DE_S_LEFT	;Number of sectors left in current cluster
 	iy_var1	DE_E_LEFT	;Number of entries left in current sector
 	iy_var1	DE_ENT		;Total number of entries in current sector
@@ -649,9 +635,7 @@ endif
 	iy_var1	RW_MSEC		;Sectors per cluster
 	iy_var2	RW_PCLU		;Current physical cluster number
 	iy_var2	RW_PSEC		;Physical sector number
-;===== start add FAT16 (add Extended sector number in RW_* workarea)
 	iy_var1	RW_EX_PSEC	;Extended Physical sector number (bit16-22) : compatible "BIT16" in FAT16PATCH
-;===== end add FAT16
 	iy_var2	RW_OVER		;Overflow past EOF to suppres pre-reads.
 ;
 	iy_var2	STR_2		;String termination address used by PARSE_PATH
@@ -667,11 +651,8 @@ endif
 ;
 	iy_var1	READ_COPIES	;Temporary variable used in BF_SECTOR
 ;
-;===== start add FAT16 (add Extended sector number for CALL_UNIT/DISK_ERR)
 	iy_var1	DIO_EX_SECTOR	;Extended Physical sector number (bit16-22) : compatible "RW_16" in FAT16PATCH
 	iy_var1	ERR_EX_SECTOR	;Extended Physical sector number (bit16-22) for DISK_ERR rutine
-;
-;===== end add FAT16
 ;
 	iy_var1	CH_FLAGS	;Character flags (see CONST.INC for bits)
 	iy_var1	PC_FLAGS	;Parse control flags (see CONST.INC for bits)

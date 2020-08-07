@@ -1,20 +1,14 @@
 	.z80
 	title	INIT - MSXDOS and DISK BASIC initializer
 
-;===== start add DOS2.50 (build type)
-;
 	INCLUDE	CONDASM.INC
 	INCLUDE CONST.INC
-;
-;===== end add DOS2.50
 ;
 ;	Conditional assembly switch
 ;
 NEW	equ	-1
 BANKED	equ	-1
-;===== start del DOS2.50 (include CONDASM.INC)
 ;HYBRID	equ	-1		;DOS1/DOS2 hybrid system
-;===== end del DOS2.50
 ;
 ;	Some yummy ASCII control characters
 ;
@@ -180,7 +174,6 @@ _$DSKBASIC::
 	INCLUDE betainfo.mac
 	defb	 0
 ;
-;===== start mod DOS2.50 (change Copyright string)
 	defb	"Copyright (C) "
 	defb	R_YEAR##/1000 mod 10 + "0"
 	defb	R_YEAR##/ 100 mod 10 + "0"
@@ -202,7 +195,6 @@ if 0
 	defb	R_YEAR##      mod 10 + "0"
 	defb	" Keiko Mizuo",0
 endif
-;===== end mod DOS2.50
 ;
 ;
 BIOS_STAT::
@@ -673,8 +665,8 @@ FDEL:	CALLDOS	13h	;;Delete file (FCB)
 
 INITVARS:
 	ld	hl,0
-	ld	(KER250##),hl
-	ld	(KER250##+2),hl
+	ld	(KERNEX##),hl
+	ld	(KERNEX##+2),hl
 
 	ld	hl,HOKVLD	;Initialize the extended BIOS entry
 	bit	0,(hl)		; if none had already done it.
@@ -835,19 +827,13 @@ endif
 	call	GET_DISKID_HL	;(This part removed to allow SHIFT+4)
 	ld	a,(hl)	; (DISKID)	;Am I supposed to be the master?
 	or	a
-;===== start mod DOS2.50 (build type)
 if STURBO
-;;if HYBRID
-;===== end mod DOS2.50
 	jp	m,KILL_DISK
 else
 	ret	m		;Disk system had been disabled
 endif
 ;
-;===== start mod DOS2.50 (build type)
 if STURBO
-;;if HYBRID
-;===== end mod DOS2.50
 	jp	nz,VER_CHK	;Skip if I am not the first cartridge
 else
 	jr	nz,VER_CHK	;Skip if I am not the first cartridge
@@ -892,7 +878,7 @@ NOFFKILL:
 	ld	a,b
 	inc	a
 	jr	nz,NOTKILL
-;===== start mod DOS2.50 (build type)
+
 if STURBO
 	ld	a,(VERSION)
 	cp	3		;MSXturboR?
@@ -903,14 +889,6 @@ if STURBO
 	ld	a,82h		;If "1" key is NOT being pressed
 	call z,CHGCPU	; switch to Super-Turbo mode.
 endif
-;;if HYBRID
-;;	xor	a
-;;	call	SNSMAT
-;;	bit	1,a
-;;	ld	a,82h
-;;	call	nz,CHGCPU
-;;endif
-;===== end mod DOS2.50
 	ret
 ;
 NOTKILL:
@@ -1016,15 +994,10 @@ OVERRIDE:
 	inc	hl
 	ld	(hl),a
 	inc	hl
-;===== start mod DOS2.50 (avoid assembler bug)
 	ld	de,CLEAN
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-;;	ld	(hl),low(CLEAN)
-;;	inc	hl
-;;	ld	(hl),high(CLEAN)
-;===== end mod DOS2.50
 	inc	hl
 	ld	(hl),0C9h	;instruction code for "RET"
 	;	;
@@ -1039,9 +1012,9 @@ OVERRIDE:
 ;	I am the slave.
 ;
 SLAVE:
-	ld	a,(KER250##+3)
+	ld	a,(KERNEX##+3)
 	or	a
-	ret	nz	;Return if four 2.50 kernels initialized already
+	ret	nz	;Return if four Nextor kernels initialized already
 
 	call	VALTBL		;get number of drives declared so far
 	ret	z		;no room is left
@@ -1178,17 +1151,17 @@ DO_INIT_ENV:
     call CALL_DV_INIT   ;Initialize environment and hardware
 INITENV_DONE:
 
-	;Set entry in KER250 table
+	;Set entry in KERNEX table
 
 	call	GSLT1
 	ld	b,a
 
-	ld	hl,KER250-1
-FINDKER250:
+	ld	hl,KERNEX-1
+FINDKERNEX:
 	inc	hl
 	ld	a,(hl)
 	or	a
-	jr	nz,FINDKER250
+	jr	nz,FINDKERNEX
 
 	ld	a,(PROCNM+4)
 	and	1
@@ -1485,11 +1458,9 @@ endif
 	ld	de,TIMI_SAVE##	; in our data area.
 	ld	bc,5
 	ldir
-;===== start add DOS2.50 (support MegaSCSI)
 	ld	hl,_TIME_IRQ##
 	ld	de,@TIME_IRQ##
 	call	MYHOOK
-;===== end add DOS2.50
 	pop	hl		;Now set up an inter-slot call
 
 	;This "patch for MegaSCSI" was causing the kanji mode to not work
@@ -1497,7 +1468,6 @@ endif
 	;since the Kanji ROM timer interrupt routine assumes that the
 	;previous hook is either a RET or a RST 30h (not a CALL!)
 if 0
-;===== start mod DOS2.50 (support MegaSCSI)
 	ld	de,_TIME_IRQ##	; to our timer interrupt
 	ld	(hl),0;NOP	; routine in this ROM page.
 	inc	hl
@@ -1513,9 +1483,6 @@ else
 	call	MYHOOK
 endif
 
-;;	ld	de,@TIME_IRQ##
-;;	call	MYHOOK
-;===== end mod DOS2.50
 ;
 ;	Establish extended BIOS hook
 ;
@@ -1594,10 +1561,7 @@ BASROM	equ	0FBB1h
 	jr	nz,GO_BASIC
 endif
 	call	CANCEL_XFER
-;===== start mod DOS2.50 (build type)
 if BUILTIN
-;;if HYBRID
-;===== end mod DOS2.50
 	ld	a,(RAMAD3##)
 	ld	(RAMAD2##),a
 endif
@@ -1639,14 +1603,11 @@ if HYBRID
 	ccf
 	call	z,JP_BOOT_SEC	;If DOS 2.20 sector, call sector code with NC (???)
 else
-;===== start mod FAT16 (DOS2.50 original patch)
 	call	BSEC_TYPE
 	cp	2
 	scf
 	ccf
 	call	nz,JP_BOOT_SEC		;Call the boot sector with carry clear.
-;;	call	JP_BOOT_SEC
-;===== end mod FAT16
 endif
 ;
 	ld	hl,(BOTTOM##)		;If RAM is not available down
@@ -1688,10 +1649,7 @@ REBOOT::
 	call	READ_BOOT_SEC##		;Attempt to read the boot sector and
 	ret	z			; give up if could not read one.
 ;
-;===== start mod DOS2.50 (build type)
 if HYBRID
-;;if 1 ;HYBRID
-;===== end mod DOS2.50
 	call	BSEC_TYPE		;If this is not the MSX-DOS2 2.20/2.3x media
 	cp	1
 	ret	nz			; don't attempt to reboot.
@@ -2114,7 +2072,7 @@ TIMINT::
 
 	;Interrupt handler, DOS 1 version
 
-	call	TIMI_250	;Call 2.50 kernels driver interrupt routine.
+	call	TIMI_NEX	;Call Nextor kernels driver interrupt routine.
 	ex	af,af'
 	pop	af		;Restore VDP status
 	ex	af,af'
@@ -2127,7 +2085,7 @@ TIMINT::
 DOS2INT:
 	call	TIME_IRQ##	;Call the master interrupt routine.
 	call	TIMI_DRV	;Call driver interrupt routine in turn.
-	call	TIMI_250	;Call 2.50 kernels driver interrupt routine.
+	call	TIMI_NEX	;Call Nextor kernels driver interrupt routine.
 	pop	af		;Restore VDP status
 	jp	TIMI_SAVE##
 
@@ -2181,16 +2139,16 @@ call_drv:
 	jp	(ix)		;Was me, just call my slot.
 ;
 ;
-TIMI_250:
+TIMI_NEX:
 ;
-;       Call the interrupt routine of DOS 2.50 kernels
+;       Call the interrupt routine of Nextor kernels
 ;
-	ld	hl,KER250
+	ld	hl,KERNEX
 	ld	b,4
-T250_LOOP:
+TNEX_LOOP:
 	ld	a,(hl)
 	bit	6,a	;Zero if empty entry or if no interrupt declared
-	jr	z,T250_DJNZ
+	jr	z,TNEX_DJNZ
 
 	push	hl
 	push	bc
@@ -2205,9 +2163,9 @@ T250_LOOP:
 	pop	bc
 	pop	hl
 
-T250_DJNZ:
+TNEX_DJNZ:
 	inc	hl
-	djnz	T250_LOOP
+	djnz	TNEX_LOOP
 	ret
 
 ;
@@ -2669,7 +2627,6 @@ if HYBRID
 CHECK_1KEY:
     ld a,(BOOTKEYS##) ;If "1" or "2" key is pressed at THIS (oops) moment, force MSX-DOS1
     and 00000110b
-;===== start mod DOS2.50 (build type)
 	jr	nz,OLDDOS	;OLDDOS will do the rest of work.
 
 	ld	a,(IN_EMU##)	;If in disk emulation mode (set by AUTODRV from DOSINIT),
@@ -2689,10 +2646,6 @@ if STURBO
 else
 	ret
 endif
-;;	ld	a,82h
-;;	jp	nz,CHGCPU
-;;	jr	OLDDOS
-;===== end mod DOS2.50
 ;
 ; Comes here when H.STKE is set.  Start ROM application.
 CHECK_BAS2:
@@ -2719,7 +2672,6 @@ OLDDOS::
 	ld	a,3
 	ld	(MAIN_BANK##),a
 
-;===== start mod DOS2.50 (build type)
 if STURBO
 	ld	a,(VERSION)
 	cp	3			;MSXturboR?
@@ -2733,10 +2685,7 @@ if STURBO
 DOCHCPU:
 	call	CHGCPU
 NOCHCPU:
-endif
-;;	ld	a,80h
-;;	call	CHGCPU
-;===== end mod DOS2.50
+    endif
 ;
 	ld	a,(RAMAD2##)		;Restore slot-2 in case of
 	ld	h,80h			; BASIC text cartridge.
@@ -2852,9 +2801,9 @@ AUTODRV_OK2:
 	;End of creation of DVB_TABLE
 
 END_DVB_TBL:
-	ld	hl,(KER250##)		;Preserve KER250 and DVB_TABLE since
+	ld	hl,(KERNEX##)		;Preserve KERNEX and DVB_TABLE since
 	push	hl                      ;the next ldir will erase it
-	ld	hl,(KER250##+2)
+	ld	hl,(KERNEX##+2)
 	push	hl
 	ld	hl,(DVB_TABLE##)
 	push	hl
@@ -2872,9 +2821,9 @@ END_DVB_TBL:
 	pop	hl
 	ld	(DVB_TABLE##),hl
 	pop	hl
-	ld	(KER250##+2),hl
+	ld	(KERNEX##+2),hl
 	pop	hl
-	ld	(KER250##),hl
+	ld	(KERNEX##),hl
 ;
 	ld	de,DRVTBL
 	ld	hl,HOOKSAV
@@ -2958,8 +2907,6 @@ olddos_9:
 	ld	a,3			; INIT.Z80, not INIT.MAC (this code).
 	jp	CHGBNK##
 ;
-;
-;===== start add DOS2.50 (build type)
 else
 if STURBO
 ;
@@ -2973,7 +2920,6 @@ CHECK_1KEY:
 	jp	CHGCPU		; (lighting indicator also) and return.
 endif
 ;
-;===== end add DOS2.50
 endif
 	subttl	MSX-DOS1 compatible ROM entries (part 3)
 

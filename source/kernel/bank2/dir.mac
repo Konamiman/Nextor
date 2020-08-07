@@ -84,21 +84,14 @@ no_chk_clu:	pop	hl
 ;
 						;Get first directory cluster
 		ld	de,(DE_START##)		; and if it is +ve then jump
-;===== start mod FAT16 (CLST_4 patch)
 		ld	a,d
 		and	e
 		inc	a			; into DE_NEXT to set up
 		jr	nz,SUB_DI_FIRST		; for this new cluster.
-;;		bit	7,d
-;;		jr	z,SUB_DI_FIRST
-;===== end mod FAT16
-;
 ;
 				;ROOT DIRECTORY
-;===== start add FAT16 (support GETSUB patch)
 		;assume A=0
 		ld	(DE_EX_SECTOR##),a	;first directory sector number (bit16-22)
-;===== end add FAT16
 		push	bc			;Save user's BC
 		push	hl
 		ld	bc,UD_ODE##
@@ -111,17 +104,11 @@ no_chk_clu:	pop	hl
 		ld	e,(hl)
 		inc	hl			;DE := first directory sector
 		ld	d,(hl)			;      number
-;===== start mod FAT16 (support CLST_1 ~ CLST_A patch)
 		ld	hl,0FFFFh		;Set current cluster and next
 		ex	(sp),hl			; cluster (both on stack) -ve
 		push	hl			; to flag root directory and
 		ld	hl,0FFFFh		; restore unit descriptor ptr.
 		ex	(sp),hl
-;;		pop	hl
-;;		ld	b,0FFh
-;;		push	bc
-;;		push	bc
-;===== end mod FAT16
 		jr	ROOT_DI_FIRST		; jump to setup variables.
 ;
 ;
@@ -201,13 +188,11 @@ new_sector:
 						; the same buffer.
 ;
 		inc	de			;Bump sector no in anticipation
-;===== start add FAT16 (SUB_16 patch)
 		ld	a,d
 		or	e
 		jr	nz,new_sector_not_carry
 		inc	(iy+@DE_EX_SECTOR##)
 new_sector_not_carry:
-;===== end add FAT16
 		ld	a,(DE_S_LEFT##)		;If there are any whole sectors
 		dec	a			; left to do then jump to start
 		jr	nz,same_cluster		; next sector of cluster.
@@ -217,18 +202,12 @@ new_sector_not_carry:
 ;
 						;Get next cluster number and
 		ld	de,(DE_NEXT_CLU##)	; return with carry set if it
-;===== start mod FAT16 (CLST_9 patch)
 		ld	a,d			; is -ve which means end of
 		and	e			; directory has been reached.
 		inc	a			;Return with carry-flag set
 		scf				; if end of directory.
 		pop	bc
 		ret	z
-;;		bit	7,d
-;;		scf
-;;		pop	bc
-;;		ret	nz
-;===== end mod FAT16
 ;
 SUB_DI_FIRST:	push	bc
 		push	de			;Remember new cluster number
@@ -240,9 +219,7 @@ SUB_DI_FIRST:	push	bc
 		xor	a			;Get sector number for first
 		pcall	CLU_TO_SEC		; sector of this cluster and
 		push	de			; shove that on the stack also
-;===== start add FAT16 (GETSUB patch)
 		ld	(DE_EX_SECTOR##),a	;Record new sector number bit16-22
-;===== end add FAT16
 ;
 		ex	de,hl
 		ld	hl,UD_CMSK##		;Get UD_CMSK+1 from unit
@@ -279,9 +256,7 @@ not_odd_sec:					; sectors left back to 1.
 get_dir_sector:	ex	(sp),ix			;IX -> unit descriptor
 		push	af
 		ld	b,1
-;===== start add FAT16 (BUF_4 patch)
 		ld	a,(DE_EX_SECTOR##)
-;===== end add FAT16
 		pcall	BF_SECTOR		;Get sector into a buffer.
 		pop	bc			;Get DE_E_LEFT value into B
 		ex	(sp),ix			;Restore IX

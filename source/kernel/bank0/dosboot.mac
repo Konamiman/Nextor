@@ -191,20 +191,10 @@ read_boot_ok:	ld	a,c			;Set current drive to the
 if 1
 PPAT1:
 		push	hl
-;===== start mod DOS2.50 (avoid assembler bug)
 		ld	l,0C3h	;JP
 		ld	(H.PROMPT##),hl
 		ld	hl,PCODE1
 		ld	(H.PROMPT##+1),hl
-;;		ld	hl,H.PROMPT##
-;;		code	MVI M
-;;		code	JMP
-;;		inc	hl
-;;		ld	(hl),low PCODE1
-;;		inc	hl
-;;		ld	(hl),high PCODE1
-;;		inc	hl
-;===== end mod DOS2.50
 		pop	hl
 		ret
 PCODE1:

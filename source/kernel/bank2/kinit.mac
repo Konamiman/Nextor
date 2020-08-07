@@ -123,11 +123,7 @@ if 0
 		ld	(hl),0FFh		;Invalid physical unit
 endif
 		ld	de,RM_DPB##		;Get address of DPB pointer
-;===== start mod DOS2.50
 		ld	bc,(MASTER_SLOT##)	;C := RAM disk slot number
-;;		ld	a,(MASTER_SLOT##)
-;;		ld	c,a
-;===== end mod DOS2.50
 		ld	l,80h			;D := offset to entry table
 		ld	b,1			;Only one unit.
 		call	INIT_UNITS		;Create a unit descriptor
@@ -366,9 +362,7 @@ init_ramunit:	add	hl,hl			; UNIT_TAB depending on the
 		ld	(ix+UD_REL##),a		;Store relative unit number
 		inc	a			; and increment for next time.
 		ld	(ix+UD_CDIR##+1),0FFh	;set current dir -ve => root
-;===== start add FAT16 (01BDh patch)
 		ld	(ix+UD_CDIR##),0FFh
-;===== end add FAT16
 ;
 		ld	(ix+UD_SEG##),0FFh
 		djnz	init_unit_loop		;Loop for next unit

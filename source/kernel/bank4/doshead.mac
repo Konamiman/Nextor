@@ -241,7 +241,7 @@ CBNK_CONT:
 ; it will call DV_TIRQ via TIMI_DRV.
 ;
 ; It is necessary to do this in this way to support
-; DOS 2.50 kernels acting as slaves.
+; Nextor kernels acting as slaves.
 
 @TIME_IRQ::	push	af		;Preserve VDP status
 		ld	a,(BNK_ID##)	;Save current bank

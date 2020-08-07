@@ -926,14 +926,10 @@ zero_ent_loop:	inc	hl			;Fill rest of entry with
 		djnz	zero_ent_loop
 ;
 		pop	de			;Get cluster start number and
-;===== start mod FAT16 (CLST_8 patch)
 		ld	a,d
 		and	e
 		inc	a			; if it is -ve then set it to
 		jr	nz,not_root		; zero (indicates root dir.).
-;;		bit	7,d
-;;		jr	z,not_root
-;===== end mod FAT16
 		ld	d,b
 		ld	e,b
 not_root:	ld	bc,-4			;Point back at start cluster
@@ -1129,17 +1125,12 @@ no_match:	xor	a			; return NC to indicate no
 ;
 					; DIRECTORY FULL
 no_free_ent:	ld	de,(DE_CLUSTER##)	;If it is root directory (-ve)
-;===== start mod FAT16 (CLST_3 patch)
 		ld	a,d			; then just return a .DRFUL
 		and	e			; error as it cannot be
 		inc	a			; extended.
 		jr	nz,fr_ent_subdir
 		or	.DRFUL##		;A = .DRFUL## / Cy = 0
 		jr	fr_ent_err_1
-;;		bit	7,d
-;;		ld	a,.DRFUL##
-;;		jr	nz,fr_ent_err_1
-;===== end mod FAT16
 ;
 fr_ent_subdir:	ld	a,0FFh			;If sub-directory then try to
 		ld	bc,1			; allocate one more cluster

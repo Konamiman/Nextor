@@ -1147,13 +1147,8 @@ dec_ref_done:
 		ex	de,hl			; handle vector pointer.
 		ld	(HANDLES##),hl
 ;
-;===== start mod DOS2.50
 		dec	(iy+@PROC_ID##)		;Decrement the current
 		ld	a,(PROC_ID##)		; process id by one.
-;;		ld	a,(PROC_ID##)
-;;		dec	a
-;;		ld	(PROC_ID##),a
-;===== end mod DOS2.50
 		inc	b			;If requested process id
 		dec	b			; is zero then loop until
 		jr	z,dec_proc_loop		; no handles left.
@@ -1165,12 +1160,8 @@ dec_ref_done:
 		dec	de			; so that we know when to
 		ld	(de),a			; stop closing files.
 null_handles:
-;===== start mod DOS2.50
 		ld	(iy+@PROC_ID##),b	;Store new process id, since
 						; it may be wrong if B=0.
-;;		ld	a,b
-;;		ld	(PROC_ID##),a
-;===== end mod DOS2.50
 ;
 ;
 ;
@@ -1265,12 +1256,8 @@ in_not_redir:
 		set	1,c			;Flag output as redirected
 out_not_redir:
 ;
-;===== start mod DOS2.50
 		ld	(iy+@IO_RDR##),c	;Store the I/O redirection
 						; flags.
-;;		ld	a,c
-;;		ld	(IO_RDR##),a
-;===== end mod DOS2.50
 		pop	ix
 		pop	hl
 		pop	de
@@ -1409,14 +1396,9 @@ DEC_FAB_REF:
 ; Corrupts:   AF
 ;
 ;
-;===== start mod DOS2.50
 		dec	(ix+FAB_CNT##)		;Decrement the reference
 		ld	a,(ix+FAB_CNT##)	; count by one and return
 						; if it is not zero.
-;;		ld	a,(ix+FAB_CNT##)
-;;		dec	a
-;;		ld	(ix+FAB_CNT##),a
-;===== end mod DOS2.50
 		ret	nz
 ;
 		push	de
@@ -1728,10 +1710,8 @@ REOPEN_FAB:	pcall	DI_SAME			;Make sure entry is still
 		ld	bc,(DE_SECTOR##)	; entry number within this
 		ld	(ix+FAB_DSEC##),c	; sector.
 		ld	(ix+FAB_DSEC##+1),b	;These fields are only used in
-;===== start add FAT16 (STOR_3 patch)
 		ld	a,(DE_EX_SECTOR##)
 		ld	(ix+FAB_EX_DSEC##),a
-;===== end add FAT16
 		ld	a,(DE_ENT##)		; "FAB_SCAN" to check for the
 		sub	(iy+@DE_E_LEFT##)	; same file being accessed.
 		ld	(ix+FAB_ENT##),a
@@ -1862,7 +1842,6 @@ no_fab_match:	push	bc
 		ret	nz
 ;
 		push	hl
-;===== start mod FAT16 (STOR_4 patch)
 		ld	hl,(DE_SECTOR##)	;Return with no match if it
 		ld	a,(DE_EX_SECTOR##)
 		ld	e,(ix+FAB_DSEC##)	; is not the same directory
@@ -1872,12 +1851,6 @@ no_fab_match:	push	bc
 		pop hl
 		ret nz
 		sub	(ix+FAB_EX_DSEC##)
-;;		ld	de,(DE_SECTOR##)
-;;		ld	l,(ix+FAB_DSEC##)
-;;		ld	h,(ix+FAB_DSEC##+1)
-;;		or	a
-;;		sbc	hl,de
-;===== end mod FAT16
 		ret	nz
 ;
 		ld	e,(ix+FAB_UD##)		;Return with no match if it is

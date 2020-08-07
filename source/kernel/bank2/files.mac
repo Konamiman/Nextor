@@ -114,13 +114,8 @@ OKLEVEL:
 		or	c			; set then return immediately
 		jr	z,RDWR_END			; with no error.
 ;
-;===== start mod DOS2.50
 		ld	hl,0			;Zero bytes transferred
 		ld	(RW_SZ_DONE##),hl	; so far.
-;;		xor	a
-;;		ld	(RW_SZ_DONE##),a
-;;		ld	(RW_SZ_DONE##+1),a
-;===== end mod DOS2.50
 		ld	(RW_SIZE##),bc		;Store required transfer size
 		ld	(RW_DTA##),de		;Store disk transfer address
 		call	READ_WRITE		;Do the function
@@ -575,18 +570,12 @@ NEXT_SEC:
 		ld	de,(RW_PCLU##)		;Get next physical cluster
 		pcall	FAT_LOOKUP		; number in the chain.
 		ld	(RW_PCLU##),de
-;===== start mod FAT16 (299Bh patch)
 		ld	a,d
 		and	e
 		inc	a
 		pop	de			;Return an error if end of
 		ld	a,.FILE##		; chain is reached.
 		ret	z
-;;		bit	7,d
-;;		pop	de			;Return an error if end of
-;;		ld	a,.FILE##		; chain is reached.
-;;		ret	nz
-;===== end mod FAT16
 		xor	a
 ;
 got_next_sec:	ld	(RW_LSEC##),a		;Store new "RW_LCLU" and return
@@ -611,9 +600,7 @@ GET_PHYS_SEC:
 		ld	de,(RW_PCLU##)
 		pcall	CLU_TO_SEC
 		ld	(RW_PSEC##),de
-;===== start add FAT16 (DOS2.50 original patch)
 		ld	(RW_EX_PSEC##),a
-;===== end add FAT16
 		pop	de
 		ret
 ;
@@ -782,18 +769,12 @@ ret_err_3_nz:	jr	nz,ret_err_3		;(Error if DECODE_PTR failed)
 		jr	nz,ret_err_1		; cluster number.
 		push	de		   ;LV3
 		pcall	FAT_LOOKUP		;Lookup value of this cluster
-;===== start mod FAT16 (2A5Eh patch)
 		ld	a,d			; and free and any remaining
 		and	e			; clusters from the chain.
 		inc	a
 		pcall	nz,FR_CHAIN
 		pop	de		   ;LV3
 		ld	bc,0FFFFh		;Mark the new end of the
-;;		bit	7,d
-;;		pcall	z,FR_CHAIN
-;;		pop	de
-;;		ld	b,0FFh
-;===== end mod FAT16
 		pcall	FAT_ASET		; cluster chain.
 		ld	c,(ix+FAB_FPC##)	;Jump to reset cached cluster
 		ld	b,(ix+FAB_FPC##+1)	; to start of file in case it
@@ -819,15 +800,10 @@ extend_file:	pop	hl		   ;LV3
 		and	RFM_ZF			; clusters, zeroing them if
 		pcall	AL_CLUSTERS		; "write with zero fill" flag
 		jr	nz,ret_err_2		; is set. Give up if disk full.
-;===== start mod FAT16 (DOS2.50 original patch)
 		ld	a,d
 		or	e
 		dec	de
 		jr	z,first_cluster
-;;		dec	de
-;;		bit	7,d
-;;		jr	nz,first_cluster
-;===== end mod FAT16
 		push	bc		   ;LV3
 		call	LOG_PHYS_CLU		;Find the last cluster of file
 		pop	bc		   ;LV3	; in order to chain the new
@@ -1033,14 +1009,10 @@ chain_lp:	ld	a,b			;Return with no error when
 		ret	z			; cluster.
 		dec	bc
 		pcall	FAT_LOOKUP		;Get next cluster number and
-;===== start mod FAT16 (2B74h patch)
 		ld	a,d			; loop if not end of chain.
 		and	e
 		inc	a
 		jr	nz,chain_lp
-;;		bit	7,d
-;;		jr	z,chain_lp
-;===== end mod FAT16
 		code	mvi a
 null_file:	pop	hl			;Restore unit descriptor
 		ld	a,.FILE##		;Return error if premature
