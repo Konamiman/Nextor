@@ -17,11 +17,6 @@
 		scf			;Set carry => don't allow ignore
 ;
 	PROC	DISK_ERR
-if 0
-		or	a
-		ld	a,1
-		ret
-else
 ;
 ;    This routine is called when an error  has  been  received  from  a  unit
 ; handler  or  generated within MSX-DOS. If the media check timeout (UD_TIME)
@@ -175,7 +170,7 @@ stop_abort:	push	af
 		pcall	INV_UD			;Invalidate buffers for this
 		pop	af			; drive.
 ;
-endif
+
 	PROC	GO_ABORT
 		ld	hl,(KAB_VECT##)
 	PROC	GO_EXIT

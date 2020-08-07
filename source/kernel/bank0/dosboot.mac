@@ -92,24 +92,9 @@ setup_cmd_loop:	ld	a,(hl)			; by HL to the buffer at
 		or	a			; in register A then try that
 		call	nz,TRY_MSX_DOS		; one.
 ;
-if 1
 		pop	af			;If that drive failed then
 		call	TRY_MSX_DOS		; try default drive.
 		ret
-else
-		ld	b,MAX_UNITS##
-		ld	c,1
-try_dos_loop:	push	bc			;If that drive failed then
-		ld	a,c			; try each drive in turn
-		call	TRY_MSX_DOS		; starting from drive "A:".
-		pop	bc
-		inc	c
-		djnz	try_dos_loop
-;
-		pop	af			;If it all failed then restore
-		ld	(CUR_DRV##),a		; default drive and jump to
-		ret				; disk BASIC in disgrace.
-endif
 ;
 ;
 JUMP_TABLE:	dw	RDSLT##,   $RDSLT##	;Jumps in page-0
@@ -157,13 +142,9 @@ try_boot_loop:	push	bc
 		ld	de,0			; boot sector in.
 		ld	hl,0
 		ld	c,_RDDRV##
-if 1
 		call	PPAT1
-endif
 		call	BOOT_BDOS
-if 1
 		call	PPAT2
-endif
 		pop	bc			;Jump if we managed to
 		jr	nz,try_boot_next	; read the boot sector OK
 		ld	hl,($SECBUF##)		; and the first byte of it has
@@ -188,7 +169,7 @@ read_boot_ok:	ld	a,c			;Set current drive to the
 		or	a
 		ret
 ;
-if 1
+
 PPAT1:
 		push	hl
 		ld	l,0C3h	;JP
@@ -251,7 +232,6 @@ PP30:
 		pop	hl
 		pop	af
 		ret
-endif
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -313,12 +293,11 @@ msxdos_bootok:
 ;
 		ld	a,(CUR_DRV##)		;Record the drive in case
 		ld	(BOOT_DRV##),a		; we ever need to reboot.
-if 1
+
 		ld	a,0C3h
 		ld	($DOSON##),a		;Activate these routines.
 		ld	($DOSOFF##),a		;
 		ld	(XFER##),a		;
-endif
 		
 		jp	100h			;Start up MSXDOS.SYS
 ;

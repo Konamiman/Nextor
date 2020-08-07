@@ -232,11 +232,7 @@ fre_not_prim:	and	00001111b
 		or	h
 		jr	z,fre_bad_seg		;Error if no mapper.
 ;
-if 1 ;H.F.
 		ld	a,(de)			;Check that segment number is
-else
-		ld	a,(hl)			;Check that segment number is
-endif
 		cp	c			; smaller than the total
 		jr	c,fre_bad_seg		; segments for this mapper and
 		jr	z,fre_bad_seg		; error if not.

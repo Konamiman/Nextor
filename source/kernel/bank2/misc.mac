@@ -454,7 +454,6 @@ FCISN:
 		ld	bc,1+2+2+2+1+4		; sector, data sector, max
 		ldir				; clusters, dirty flag and
 						; volume-id.
-if 1
 		push	de			;Adjust max clusters
 		ex	de,hl			; which is actually a number of
 		ld	bc,-(2+1+4)		; FAT entries.
@@ -465,7 +464,7 @@ if 1
 		inc	(hl)
 dp_clu_noinc:	ex	de,hl
 		pop	de
-endif
+
 		ld	b,32-24
 		xor	a
 dp_clear_loop:	ld	(de),a			;Clear the rest of the
@@ -477,14 +476,9 @@ dp_clear_loop:	ld	(de),a			;Clear the rest of the
 ;
 		ld	l,(ix+UD_NCLU##)	;Get maximum cluster number
 		ld	h,(ix+UD_NCLU##+1)	; and subtract 2 to get the
-		dec	hl			; actual number of data
-if 0
-		dec	hl			; clusters.
-endif
+		dec	hl			; actual number of data clusters.
 		ld	b,(ix+UD_CSHFT##)
-if 0
-		inc	b
-endif
+
 		;assume A=0 and Cy=0 (set "xor a")
 		code	MVI C			;Skip "ADD HL,HL" first time
 dp_shift_lp:	add	hl,hl			;Shift this according to the

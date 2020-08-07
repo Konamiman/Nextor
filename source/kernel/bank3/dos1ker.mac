@@ -8729,17 +8729,6 @@ A7397:
     jp KSTROUT
     ds 16-6
 
-    if 0
-    call	XF36B			; enable ram on page 1
-	ld	a,(de)
-	call	XF368			; enable system diskrom
-	inc	de
-	cp	'$'
-	ret	z			; end of string, quit
-	call	A53A8			; console output
-	jr	A7397			; next
-    endif
-
 ;	Subroutine	XFER (transfer)
 ;	Inputs		HL = source address, DE = destition address, BC = size
 ;	Outputs		________________________
@@ -8959,8 +8948,6 @@ DO_CALL_CMD:
 ; if more than 3 sectors requested, return error,
 ; otherwise the computer will hang.
 
-	if 1
-
 READ_FAT:
 	ld	a,b
 	or	a
@@ -9015,10 +9002,6 @@ READ_CHECK_CLUS:
 	scf
 	ret
 
-	endif
-
-	if 1
-
 CHK_CLUSNUM:
 	push	af
 	ld	a,(ix+0Eh+1)
@@ -9040,8 +9023,6 @@ CLUSNUM_ERR:
 	inc	sp
 	inc	sp
 	jp	A450A
-
-	endif
 
 
 ; CALL commands table is moved here to add support for CALL FDISK.

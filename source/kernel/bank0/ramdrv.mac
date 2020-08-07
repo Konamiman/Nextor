@@ -72,9 +72,8 @@ R_DSKIO::
 ;                                     B = number of remaining sectors
 ;
 ;
-if 1
 		ei
-endif
+
 		ld	(RD_SNUM##),de		;Save sector number
 		ld	(RD_ADDR##),hl		;Save transfer address
 		ld	a,b
@@ -147,7 +146,7 @@ sec_slot_loop:	ld	c,a			; registers.  This vile code
 		and	00111111b		; does not necessarily preserve
 		or	c			; the secondary slot register
 		ld	e,(hl)			; for any slots which were
-if 1 ;;S1990BUG
+        
 		push	hl
 		dec	hl
 		dec	hl
@@ -157,10 +156,7 @@ if 1 ;;S1990BUG
 		pop	hl
 		inc	hl			; used for mapper segments.
 		call	nz,SSLOTE##
-else
-		inc	hl			; used for mapper segments.
-		call	SSLOTE##
-endif
+
 		ld	a,c
 		add	a,01000000b
 		jr	nz,sec_slot_loop
@@ -243,7 +239,6 @@ FIND_SECTOR:
 		ret
 ;
 not_sector_0:
-if 1
 		call	GET_P2##
 		push	af			;Put kernel data segment into
 		ld	a,(DATA_SEG##)		; page-2, saving previous
@@ -257,9 +252,7 @@ if 1
 		add	hl,hl
 		pop	af
 		call	PUT_P2##
-else
-		ld	hl,255*32		;If sector number is larger
-endif
+
 		sbc	hl,de			; than could possibly fit
 		ld	a,12			; in 255 segments then
 		ret	c			; return an error.
@@ -338,12 +331,12 @@ make_upb_ok:	exx
 		inc	hl
 ;
 		ld	(hl),1			;One sector per cluster
-if 1
+
 		cp	4096/32+1		;If number of clusters won't
 		jr	c,fit_12bit_1		; fit 12-bit, two sectors
 		inc	(hl)			; per cluster
 fit_12bit_1:
-endif
+
 		inc	hl
 ;
 		ld	(hl),1			;One reserved sector
@@ -360,9 +353,9 @@ endif
 		add	a,4			;   = number of dir sectors
 		ld	e,a
 		ld	d,0
-if 1
+
 		push	de			;Save this for later
-endif
+
 		ex	de,hl
 		add	hl,hl			;Multiply this by 16 to get
 		add	hl,hl			; the number of entries.
@@ -382,9 +375,9 @@ endif
 		add	hl,hl
 		add	hl,hl
 		add	hl,hl
-if 1
+
 		inc	hl			; and one more for boot sector
-endif
+
 		ex	de,hl
 		ld	(hl),e
 		inc	hl			;Store number of sectors
@@ -395,7 +388,7 @@ endif
 		inc	hl
 ;
 		ex	de,hl			;Calculate sectors/FAT
-if 1
+
 		ld	a,c
 		dec	hl			;Overhead for boot sector
 		pop	bc			;Get back number of dir sectors
@@ -407,7 +400,6 @@ if 1
 		srl	h			;Divide by two
 		rr	l			; to get number of clusters
 fit_12bit_2:
-endif
 		ld	b,h
 		ld	c,l
 		add	hl,bc

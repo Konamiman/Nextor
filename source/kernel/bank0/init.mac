@@ -161,9 +161,7 @@ DOSV0::
 	defb	"Nextor kernel version "
 	defb	NXTVER##+"0", ".", NXTV_HI##+"0" 
 	
-	if 1
 	defb ".", NXTV_LO##+"0"
-	endif
 
 	INCLUDE betainfo.mac
 	defb	0
@@ -186,15 +184,6 @@ _$DSKBASIC::
 	defb	R_DATE##/  10 mod 10 + "0"
 	defb	R_DATE##      mod 10 + "0"
 	defb	0
-;
-if 0
-	defb	"Copyright (C) 2001-"
-	defb	R_YEAR##/1000 mod 10 + "0"
-	defb	R_YEAR##/ 100 mod 10 + "0"
-	defb	R_YEAR##/  10 mod 10 + "0"
-	defb	R_YEAR##      mod 10 + "0"
-	defb	" Keiko Mizuo",0
-endif
 ;
 ;
 BIOS_STAT::
@@ -1434,8 +1423,7 @@ NODOSINIT:
 OKDOSINIT:
 
 ;
-if 1 ;These buffers should be permanent.  [HF]
-
+	;These buffers should be permanent.  [HF]
 	ld	hl,LEN_1##+LEN_2##+LEN_3##+64
 	call	PALLOC
 	ld	(BUF_1##),hl	;Allocate space for the buffers for strings,
@@ -1449,7 +1437,6 @@ if 1 ;These buffers should be permanent.  [HF]
 	add	hl,de
 	ld	(ERR_BUF##),hl
 ;
-endif
 	ld	hl,(HIMEM##)	;save HIMEM
 	ld	(HIMSAV##),hl	;
 ;
@@ -1463,26 +1450,8 @@ endif
 	call	MYHOOK
 	pop	hl		;Now set up an inter-slot call
 
-	;This "patch for MegaSCSI" was causing the kanji mode to not work
-	;(CALL KANJI hanging the computer)
-	;since the Kanji ROM timer interrupt routine assumes that the
-	;previous hook is either a RET or a RST 30h (not a CALL!)
-if 0
-	ld	de,_TIME_IRQ##	; to our timer interrupt
-	ld	(hl),0;NOP	; routine in this ROM page.
-	inc	hl
-	ld	(hl),0CDh;CALL
-	inc	hl
-	ld	(hl),e
-	inc	hl
-	ld	(hl),d
-	inc	hl
-	ld	(hl),0C9h;RET
-else
 	ld	de,@TIME_IRQ##
 	call	MYHOOK
-endif
-
 ;
 ;	Establish extended BIOS hook
 ;
@@ -1517,9 +1486,7 @@ endif
 ;
 	call	PBAS_HOOK
 ;
-if 1
 	ld	sp,BOOTAD+512	;set stack pointer to a safe area
-endif
 if (HYBRID OR STURBO)
 	ld	a,(PROCNM+7)
 	cp	1
@@ -1539,19 +1506,6 @@ WATLOP	equ	7D0Dh
 ;
 ;	See if entered from TEXT entry of ROM cartridge
 ;
-if 0
-WORKOK	equ	7E09h
-;
-	ld	ix,WORKOK+11	;where we once belonged
-	ld	hl,SLTATR##
-	ld	b,64
-SRCBAS:
-	ld	a,(hl)
-	add	a,a
-	jp	c,CALBAS	;BASIC cartridge found
-	inc	hl
-	djnz	SRCBAS
-else
 SRCBAS	equ	7DEEh
 BASROM	equ	0FBB1h
 ;
@@ -1559,7 +1513,6 @@ BASROM	equ	0FBB1h
 	or	a
 	ld	ix,SRCBAS-5	;Because BASIC cartridge is no more enabled.
 	jr	nz,GO_BASIC
-endif
 	call	CANCEL_XFER
 if BUILTIN
 	ld	a,(RAMAD3##)
@@ -1571,12 +1524,10 @@ GO_BASIC:
 	call	CHECK_BAS2	;See if we can start Disk-BASIC 2.
 ;
 ;******************************************************************************
-if 1
 ; For 'EMMY II' and 'Professional Baseball' (by ASCII).
 ; THIS MUST BE AT OFFSET -10H FROM RETURN ADDRESS OF 'CALL JP_BOOT'.
 ;
 	call	SET_DISKBASIC
-endif
 ;******************************************************************************
 ;
 	jp	CALBAS
@@ -1616,9 +1567,7 @@ endif
 	ret	nz			; cannot boot up MSX-DOS.
 ;
 	ld	a,(CUR_DRV##)
-if 1
 FASTBOOT:
-endif
 	ld	hl,NULL_CMD
 
 ;
@@ -1829,11 +1778,6 @@ SET_DISKBASIC::
 	ld	bc,($MAXSEC##)	;Allocate sector buffer for DSKI$, DSKO$
 	call	RESERVE_BASIC
 	ld	($DIRBUF##),hl
-if 0
-;
-	ld	bc,64		;Allocate space for the
-	call	RESERVE_BASIC	; pathname buffer.
-endif
 	ld	(PATHNAM##),hl	;Reuse this as Disk BASIC's pathname buffer
 ;
 ;	Set BLOAD and BSAVE routine
@@ -2250,48 +2194,11 @@ CALROM:
 ;
 GET_SLTWRK_ENTRY:
 
-if 1
 	xor	a
 	call	GWRK
 	push	ix
 	pop	hl
 	ret
-else
-	in	a,(PPI.AR)	;read primary slot #
-	and	00001100b	;extract page-1
-	rrca			;move it to bit 0,1 of [Acc]
-	rrca
-	ld	hl,EXPTBL##	;get pointer to EXPTBL for this slot
-	call	ADDHLBC
-	add	a,a
-	add	a,a
-	add	a,a
-	add	a,a
-	inc	a
-	ld	c,a		;[C] now has 00PP0001
-	ld	a,(hl)
-	add	a,a
-	sbc	a,a		;form mask pattern
-	and	00001100b
-	inc	hl		;point to SLTTBL entry
-	inc	hl
-	inc	hl
-	inc	hl
-	and	(hl)		;get what is currently output to
-				;expansion slot register
-	or	c
-;
-;	Now, we have the sequence number for this cartridge as follows.
-;
-;	00PPSSBB
-;	  ||||||
-;	  ||||++-- higher 2 bits of memory address
-;	  ||++---- secondary slot # (0..3)
-;	  ++------ primary slot # (0..3)
-;
-	add	a,a		;double since word table
-	ld	hl,SLTWRK##	;point to entry in SLTWRK table
-endif
 
 ADDHLBC:
 	ld	c,a

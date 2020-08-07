@@ -110,13 +110,12 @@ no_char_ready:	xor	a			;No character ready so return
 ; up with cursor control escape sequences.
 ;
 		call	H_CHOUT##		;Call a hook in page-3
-if 1 ;==HF== Skip buffering fiddle at the moment...
+        ;==HF== Skip buffering fiddle at the moment...
 		push	ix
 		ld	ix,MSX_CHPUT
 		call	GO_BIOS
 		pop	ix
 		ret
-endif
 ;
 ;------------------------------------------------------------------------------
 ;
@@ -184,7 +183,6 @@ FLUSH_BUF:
 		push	hl
 		push	ix
 		push	iy
-if 1
 ;
 ;   Modified by Hal_F
 ;	This line must be here, or "no_flush_16ch" will corrupt first
@@ -192,7 +190,6 @@ if 1
 ;	also optimized.
 ;
 		ld	hl,CH_BUF##
-endif
 		ld	a,(CH_16FLG##)		;If last character is first
 		bit	0,a			; of a 16-bit character then
 		push	af			; decrement the buffer index
@@ -201,7 +198,7 @@ endif
 		dec	a			;If count goes to zero then
 		jr	z,no_flush_16ch		; skip the actual flushing.
 not_1st_of_16:
-if 1	; by Hal_F
+
 		ld	b,a			;If we are in the middle of an
 		ld	a,(ESCCNT##)		; escape sequence then do not
 		or	a			; include the "cursor off"
@@ -212,19 +209,6 @@ if 1	; by Hal_F
 		inc	b			; start of the buffer.
 do_no_cursor_off:
 		call	$FLUSH##		;Write out the buffer.
-else
-		add	a,3			;Set buffer pointer and count
-		ld	b,a			; to include the "cursor off"
-		ld	hl,CH_BUF##-3		; escape sequence at the
-		ld	a,(ESCCNT##)		; start of the buffer in
-		or	a			; anticipation.
-		jr	z,do_cursor_off		;If we are in the middle of an
-		dec	b			; escape sequence then adjust
-		dec	b			; the pointer and count to
-		dec	b			; not include this sequence.
-		ld	hl,CH_BUF##
-do_cursor_off:	call	$FLUSH##		;Write out the buffer.
-endif
 ;
 		push	hl
 		ld	hl,CH_BUF##-6		;If we are not in the middle

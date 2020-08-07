@@ -118,10 +118,6 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 ;
 ;	+++++  SETUP RAMDISK UNIT DESCRIPTOR  +++++
 ;
-if 0
-		ld	(RM_DPB##),hl		;Record address of RAMdisk DPB
-		ld	(hl),0FFh		;Invalid physical unit
-endif
 		ld	de,RM_DPB##		;Get address of DPB pointer
 		ld	bc,(MASTER_SLOT##)	;C := RAM disk slot number
 		ld	l,80h			;D := offset to entry table
@@ -226,9 +222,7 @@ link_dev_done:
 ;
 ;	+++++  INITIALISE BIOS CHARACTER I/O VARIABLES  +++++
 ;
-if 1
 		pcall	CHAR_INIT
-endif
 		ld	hl,CURSOR_SEQS		;Copy cursor on and off
 		ld	de,CH_BUF##-6		; escape sequences to start
 		ld	bc,6			; of BIOS screen buffer.

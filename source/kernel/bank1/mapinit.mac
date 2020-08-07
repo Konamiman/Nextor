@@ -411,14 +411,7 @@ not_exp_slot_2:	inc	hl
 ;
 		push	hl
 		inc	hl
-if 0
-		call	GSLOT3##		;If primary mapper slot is
-		inc	hl			; not the same as the current
-		cp	(hl)			; page-3 RAM slot then change
-		call	nz,SWAP_RAM_SLOT	; the RAM slot.
-else
 		call	SWAP_RAM_SLOT		; the RAM slot.
-endif
 		pop	hl
 		xor	a
 		ret
@@ -542,11 +535,6 @@ SWAP_RAM_SLOT:
 		xor	a			; page segment zero of this
 		out	(P2_REG),a		; slot into page-2.
 ;
-if 0
-		ld	hl,0C000h		;Copy the whole 16k of page-3
-		ld	de,08000h		; RAM from the old mapper slot
-		ld	bc,04000h		; to the new one in page-2.
-else
 		ld	hl,0			;Copy (SP)~FFFFh of page-3
 		sbc	hl,sp			; RAM from the old slot to the
 		ld	c,l			; new mapper slot in page-2.
@@ -556,20 +544,15 @@ else
 		ld	e,l
 		ld	d,h
 		res	6,d
-endif
 		ldir
 ;
-if 1
 		out	(P3_REG),a
-endif
 		inc	a			;Select the original segment
 		out	(P2_REG),a		; in page-2.
-if 1
 		inc	a
 		out	(P1_REG),a
 		inc	a
 		out	(P0_REG),a
-endif
 ;
 		pop	af
 		ld	hl,0			;Save current stack pointer

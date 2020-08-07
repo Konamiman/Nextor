@@ -3743,49 +3743,6 @@ MAPDOS1_DEF_NOCFG:	;No config provided by driver, use AUTO_ASSIGN
 	pop hl
 	jr MAPDOS1_DEF_OK	;Note that on error we just leave the drive unassigned
 
-if 0
-
-	push	ix	;Save pointer to page 3 table entry
-
-	push	hl
-	ld	l,(ix)	;Driver slot
-	ld	h,(ix+UD1_REL##)	;Relative unit
-	ld	(ix+UD1_DI##),0	;At the moment leave the drive unmapped
-	pop	ix			;Use FAT buffer for the fake unit descriptor
-	ld	(ix+UD_SLOT##),l
-	ld	(ix+UD_PHYS##),h
-
-	push	ix
-	pop	hl
-	push	ix
-	push	hl
-	ld d,0
-	call	AUTO_ASSIGN
-	pop	hl
-	ld	(hl),0FFh	;Mark FAT buffer as invalid again
-	pop	ix
-	pop	iy	;Retrieve pointer to page 3 table entry
-	or	a
-	ld	a,0
-	ret	nz	;If no suitable partition found, leave drive unmapped and return no error
-
-	ld	a,(ix+UD_DI##)
-	ld	(iy+2),a
-	ld	a,(ix+UD_LI##)
-	ld	(iy+3),a
-	ld	a,(ix+UD_FSEC##)
-	ld	(iy+4),a
-	ld	a,(ix+UD_FSEC##+1)
-	ld	(iy+5),a
-	ld	a,(ix+UD_FSEC##+2)
-	ld	(iy+6),a
-	ld	a,(ix+UD_FSEC##+3)
-	ld	(iy+7),a
-
-	push	iy
-	pop	ix
-endif
-
 MAPDOS1_DEF_OK:
 	ld (hl),0FFh	;Mark FAT buffer as invalid again
 

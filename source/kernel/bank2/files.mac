@@ -59,7 +59,6 @@
 ;
 	PROC	RDWR_FAB
 ;
-        if 1
 
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
@@ -101,8 +100,6 @@ OKLEVEL:
 		inc	a
 		ld	(RW_LEVEL##),a
 		ex	af,af'
-
-        endif
 
 		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
 		jp	nz,rdwr_device		; and writes separately.
@@ -146,8 +143,6 @@ rdwr_error:	or	a
 rdwr_ret_ok:	xor	a			; of file error.
 		
 RDWR_END:
-        if 1
-
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
 		cp	2
@@ -188,8 +183,6 @@ OKLEVEL2:
 		dec	a
 		ld	(RW_LEVEL##),a
 		ex	af,af'
-
-        endif
 
 RDWR_END2:
 		ret
@@ -262,12 +255,7 @@ read_device:	ld	l,(ix+FAB_ID##+2)	;HL -> first entry in jump
 		ld	h,(ix+FAB_ID##+3)	; table which is READ routine.
 ;
 		push	bc			;Save total number of bytes
-if 0
-		xor	a			;If it is end-of-file (must be
-		bit	MD_EOF,(ix+FAB_MODE##)	; ASCII mode) then clear the
-		res	MD_EOF,(ix+FAB_MODE##)	; flag and jump to return
-		jr	nz,read_finished	; zero characters.
-else
+
 		res	MD_EOF,(ix+FAB_MODE##)	;Clear end-of-file condition.
 endif
 rd_dev_loop:	push	bc
@@ -306,16 +294,11 @@ rdch_normal:
 ;
 		ld	a,c			;A = end-of-line/file flag
 		pop	bc
-if 0
-		inc	de			;Adjust pointer and byte
-		dec	bc			; counter for one more char.
-endif
+
 		dec	a
 		jr	z,read_file_end		;Stop if end of file found
-if 1
 		inc	de			;Adjust pointer and byte
 		dec	bc			; counter for one more char.
-endif
 		dec	a
 		jr	z,read_finished		;Stop if end of line found
 		ld	a,b			;Loop back if there are any
@@ -381,12 +364,6 @@ write_check:	bit	AC_WR,(ix+FAB_ACC##)	;For a write operation, error
 		bit	AT_RO,(ix+FAB_ATTR##)	; only file.
 		ret	nz
 ;
-if 0
-access_ok:	ld	hl,(RW_DTA##)
-		add	hl,bc			;If transfer would go over
-		ld	a,.OV64K##		; 64k boundary then return
-		ret	c			; an error.
-else
 access_ok:	bit	0,(iy+@LAZY##)
 		jr	z,skip_ov64k
 		ld	hl,(RW_DTA##)
@@ -394,7 +371,6 @@ access_ok:	bit	0,(iy+@LAZY##)
 		ld	a,.OV64K##		; 64k boundary then return
 		ret	c			; an error.
 skip_ov64k:
-endif
 ;
 		ld	c,(ix+FAB_DRV##)	;Validate the drive specified
 		ld	b,1			; in the FAB and give up if
@@ -944,11 +920,9 @@ DECODE_PTR:
 		pop	af
 ;
 		inc	hl
-		ld	b,(hl)			;Get cluster shift count from
-if 0
-		inc	b			; unit descriptor and jump
-endif
-		jr	cshft_lp_start		; into loop.
+		ld	b,(hl)			;Get cluster shift count from unit descriptor
+
+		jr	cshft_lp_start		; and jump into loop.
 cshft_loop:	srl	d
 		rr	e			;Shift logical sector number
 		rra				; right enough times to get

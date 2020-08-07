@@ -549,16 +549,11 @@ size	macro	name
 ram_p	defl	0C000h			;Top of RAM segment
 ;
 	var0	RD_END
-if 1
+
 	var	RD_LIST,0100h*2		;RAM disk segment/slot list
 	var1	RD_COUNT		;RAM disk segment count
 	var	RD_BOOT,UPB_SPARE	;RAM disk boot sector start
-else
-	var	RD_LIST,255*2		;RAM disk segment/slot list
-	var1	RD_SPARE
-	var1	RD_COUNT		;RAM disk segment count
-	var	RD_BOOT,512		;RAM disk boot sector start
-endif
+
 	var	MHANDLES,8			;Pseudo-file handles table for mounted filed (4 entries)
 	var RW_LEVEL,1
 	var BF_LEVEL,1
@@ -576,21 +571,12 @@ iy_flag defl	true			;Enable IY range checking
 ;
 ;       ---------------------------------
 ;
-if 1
 	iy_var1	LAZY		;Skip various validation checks
-endif
-if 0
-	iy_var2	DTA_ADDR	;Current CP/M disk transfer address
-endif
-if 1
+
 	iy_var1	PROC_ID		;Current process id.
-endif
 ;
 	iy_var1	LAST_ERR	;Error code from last function
 ;
-if 0
-	iy_var2	RM_DPB		;Address of MSX DPB for RAM disk
-endif
 	iy_var2	RM_UD		;Address of unit descriptor for RAM disk
 ;
 	iy_var1	B_COUNT		;Current number of sector buffers
@@ -712,9 +698,6 @@ endif
 ;                 VARIABLES FOR BIOS CHARACTER FUNCTIONS
 ;               ==========================================
 ;
-if 0
-	iy_var1	CH_COUNT	;Number of deci-sec 'til screen buffer flush.
-endif
 	iy_var1	CH_PTR		;Index into BIOS screen buffer
 	iy_var1	CH_16FLG	;b0 set => last character in buffer is first
 				;          byte of a 16-bit char.
@@ -727,8 +710,6 @@ endif
 iy_flag defl	FALSE			; Suppress +/- 128 byte checking
 ;
 ;
-if 1
-;
 ;                 TABLES INITIALIZED AT BOOT UP TIME
 ;               ======================================
 ;
@@ -736,7 +717,6 @@ if 1
 ;
 	var	MAP_TBL, 16*4		;Mapper slot table.
 ;
-endif
 ;
 ;                 MISCELLANEOUS BUFFER AREAS
 ;               ==============================

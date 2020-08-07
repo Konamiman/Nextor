@@ -79,11 +79,7 @@ bf_a_copies:	ld	(READ_COPIES##),a	;Remember number of copies
 						; sector not found.
 bf_sector_loop:	ld	c,(ix+UD_PHYS##)	;C := physical unit number
 		call	BF_CMP			;See if this buffer has the
-if 0
-		jr	z,already_in_buf	; right sector and jump if so
-else
 		jp	z,already_in_buf	; right sector and jump if so
-endif
 		ld	c,a			;preserve A
 		ld	a,(hl)
 		inc	hl			;Get address of next buffer
@@ -147,7 +143,7 @@ first_buf_ok:
 		inc	hl			; buffer descriptor.
 		inc	hl
 		push	hl
-if 1
+
 		ld	e,l			;Pad out the sector buffer
 		ld	d,h			; with zero to make a clean
 		inc	de			; starting point for new
@@ -156,7 +152,7 @@ if 1
 		ld	bc,512-1
 		ldir
 		pop	bc
-endif
+
 		ex	(sp),ix			;IX := data address
 		pop	hl			;HL := unit descriptor
 		ld	(ix-2),l		;Save unit descriptor address

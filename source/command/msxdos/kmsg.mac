@@ -30,9 +30,6 @@
 ;
 MSG	MACRO	NAME,TEXT
 __&NAME	 EQU	MSGNO		;; Define message number label.
-if 0
-GLOBAL	 __&NAME		;; And declare it public.
-endif
 MSGNO	 DEFL	MSGNO+1
 	 IFNB	<TEXT>		;; Define the text, if given.
 	  DEFB	'&TEXT',0
@@ -97,13 +94,13 @@ CR	EQU	0DH
 
 ;
 	MSG	READING			; Part (c), one leading space.
-	 DEFB	" (“Ç‚Ý",0
+	 DEFB	" (ï¿½Ç‚ï¿½",0
 ;
 	MSG	WRITING			; Part (d), one leading psace.
-	 DEFB	" (‘‚«",0
+	 DEFB	" (ï¿½ï¿½ï¿½ï¿½",0
 ;
 	MSG	DRIVE			; Part (e).
-	 DEFB	"ž‚Ý’†) ƒhƒ‰ƒCƒu‚Í",0
+	 DEFB	"ï¿½ï¿½ï¿½Ý’ï¿½) ï¿½hï¿½ï¿½ï¿½Cï¿½uï¿½ï¿½",0
 ;
 	MSG	ARIDRV			; Printed after the drive letter.
 	 DEFB	':',0
@@ -118,10 +115,10 @@ CR	EQU	0DH
 ;
 ;
 	MSG	AR		; Message for when 'ignore' is not recommended.
-	 DEFB	"’†Ž~(A)/ÄŽŽs(R)? ",0
+	 DEFB	"ï¿½ï¿½ï¿½~(A)/ï¿½ÄŽï¿½ï¿½s(R)? ",0
 ;
 	MSG	ARI		; Message for when 'ignore' isn't so dangerous.
-	 DEFB	"’†Ž~(A)/ÄŽŽs(R)/–³Ž‹(I)? ",0
+	 DEFB	"ï¿½ï¿½ï¿½~(A)/ï¿½ÄŽï¿½ï¿½s(R)/ï¿½ï¿½ï¿½ï¿½(I)? ",0
 ;
 ;
 ;
@@ -178,20 +175,20 @@ CR	EQU	0DH
 	 DEFB	0
 ;
 	MSG	INSERT			; Part (d)
-	 DEFB	"COMMAND2.COM‚Ì“ü‚Á‚½ƒfƒBƒXƒN‚ðƒhƒ‰ƒCƒu ",0
+	 DEFB	"COMMAND2.COMï¿½Ì“ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½fï¿½Bï¿½Xï¿½Nï¿½ï¿½ï¿½hï¿½ï¿½ï¿½Cï¿½u ",0
 ;
 	MSG	INSDRV			; Part (e).
-	 DEFB	": ‚É“ü‚ê‚Ä",0
+	 DEFB	": ï¿½É“ï¿½ï¿½ï¿½ï¿½",0
 ;
 	MSG	PAUSE			; Part (f), one
 					;   trailing space.
-	 DEFB	"‰½‚©ƒL[‚ð‰Ÿ‚µ‚Ä‚­‚¾‚³‚¢. ",0
+	 DEFB	"ï¿½ï¿½ï¿½ï¿½ï¿½Lï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½. ",0
 ;
 	MSG	NOMEM
-	 DEFB	"ƒƒ‚ƒŠ‚ª‘«‚è‚Ü‚¹‚ñ. ƒVƒXƒeƒ€‚Í’âŽ~‚µ‚Ü‚µ‚½",0
+	 DEFB	"ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½. ï¿½Vï¿½Xï¿½eï¿½ï¿½ï¿½Í’ï¿½~ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½",0
 ;
 	MSG	BADVER
-	 DEFB	"MSX-DOS‚Ìƒo[ƒWƒ‡ƒ“‚ªˆá‚¢‚Ü‚·. ƒVƒXƒeƒ€‚Í’âŽ~‚µ‚Ü‚µ‚½",0
+	 DEFB	"MSX-DOSï¿½Ìƒoï¿½[ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½á‚¢ï¿½Ü‚ï¿½. ï¿½Vï¿½Xï¿½eï¿½ï¿½ï¿½Í’ï¿½~ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½",0
 ;
 ;
 ;

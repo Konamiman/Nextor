@@ -105,10 +105,7 @@ return_0ffffh:
 ;
 		ld	b,(ix+UD_CSHFT##)	;Get cluster shift from
 						; unit descriptor and add
-						; one to it for the loop
-if 0
-		inc	b			; below.
-endif
+						; one to it for the loop below.
 		ex	de,hl
 		dec	hl			;HL = cluster number - 2
 		dec	hl
@@ -279,11 +276,8 @@ FIND_FAT_ENTRY:
 		res	FF_OVR,(iy+@FAT_FLAGS##) ;Clear sector boundary flag
 ;
 		ld	l,(ix+UD_NCLU##)	;Get cluster number from
-		ld	h,(ix+UD_NCLU##+1)	; unit descriptor and check
-if 0
-		dec	hl			; that it is within valid
-endif
-		xor	a			; range. (A=0 for below)
+		ld	h,(ix+UD_NCLU##+1)	; unit descriptor and check that it is within
+		xor	a			; valid range. (A=0 for below)
 		sbc	hl,de			;If out of range then jump
 		jr	c,fat_error		; to return an error (NZ)
 ;
@@ -531,9 +525,6 @@ init_fat_loop:	inc	de
 		inc	hl
 		ld	h,(hl)
 		ld	l,a
-if 0
-		dec	hl
-endif
 		sbc	hl,de
 		pop	hl
 		jr	nz,init_fat_loop
@@ -583,11 +574,7 @@ all_clu_loop_2:	inc	de			;Try next cluster number
 		ld	l,a			; same then we have got to the
 		sbc	hl,de			; end of the disk so jump to
 		pop	hl			; free clusters and give a
-if 0
-		jr	z,disk_full		; disk full error.
-else
 		jr	c,disk_full		; disk full error.
-endif
 		push	de
 		call	FAT_LOOKUP		;Loop at the FAT entry for
 		ld	a,d			; this cluster and if it is
@@ -619,9 +606,7 @@ not_1st_clust:	call	nz,FAT_?SET		; new one.
 ;
 		ld	bc,0FFFFh		;Set FAT entry for last cluster
 		call	FAT_?SET		; to 0FFFh/0FFFFh to mark end of chain
-if 1
 		call	CLEAN_DISK		;Ensure that disk is clean.
-endif
 ;
 ;
 		ld	bc,(FAT_CHAIN##)	;Return cluster number of

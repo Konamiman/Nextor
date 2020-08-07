@@ -399,7 +399,7 @@ PAR_NAME:
 ;
 ;
 		ld	d,0
-if 1 ;HF
+
 		inc	c
 		call	GET_CHAR
 		jr	z,name_end
@@ -407,7 +407,7 @@ if 1 ;HF
 		cp	" "			; anyway.
 		jr	z,name_end
 		dec	c
-endif
+
 p_name_loop_1:	inc	c
 p_name_loop:	call	GET_CHAR		;Get a character and jump to
 		jr	z,name_end		; exit if end of string.
@@ -1302,11 +1302,9 @@ UNGET_CHAR:
 		res	CF_2ND,c		;Flag not second of 16-bit
 ;
 		set	CF_16B,c		;Check for first byte of a
-if 0
-		call	CHK_16_CHAR		; 16-bit character and set
-else
+
 		call	CHK_16_CHAR_K		; 16-bit character and set
-endif
+
 		jr	c,chk_char_ret		; the flag if it is, else
 		res	CF_16B,c		; clear it.
 ;
@@ -1323,7 +1321,6 @@ chk_char_ret:	or	a			;Ensure Z-flag is correct.
 		set	CF_TE,c			;Ensure that null is always
 		ret				; a terminator, even if it
 						; is 2nd byte of 16-bit char.
-if 1
 ;
 ;    Kernel's idea of 16-bit character, that is different from console
 ; driver.  As this is the quick hack, there's no country verification.
@@ -1336,7 +1333,6 @@ CHK_16_CHAR_K:
 KKANJTBL:
 		db	080h,0A0h
 		db	0E0h,0FDh
-endif
 ;
 ;
 ;----------------------------------------------------------------------------
@@ -1360,11 +1356,7 @@ endif
 ;
 		push	hl
 		ld	hl,KANJTABLE##
-if 0
-		inc	(hl)			;Look at first pair of limits
-		dec	(hl)			; and exit if zero.
-		jr	z,not_16bit_2
-endif
+
 		cp	(hl)
 		inc	hl			;Skip if character is below
 		jr	c,not_16bit_1		; the lower limit.
@@ -1372,11 +1364,6 @@ endif
 		jr	c,is_16bit		;Jump if it is within limits
 ;
 not_16bit_1:	inc	hl
-if 0
-		inc	(hl)			;Test second pair of limits
-		dec	(hl)			; and skip if it is zero
-		jr	z,not_16bit_2		; (no limits).
-endif
 		cp	(hl)
 		jr	c,not_16bit_2		;Skip if character is below
 		inc	hl			; lower limit.
@@ -1570,14 +1557,10 @@ not_terminator:	pop	bc
 		ret
 ;
 ;
-if 0
-term_list:	db	"/<>|()",07Fh,0FFh
-else
 term_list:
 		db	07Fh,"|"
 ;;term_list:
 		db	"<>/",0FFh
-endif
 vol_term_length equ	$-term_list
 		db	" :;.,=+\""[]"
 term_length	equ	$-term_list

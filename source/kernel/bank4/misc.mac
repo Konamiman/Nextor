@@ -582,10 +582,7 @@ no_free_seg:
 		ld	de,0
 		pcall	ZERO_CLUSTER		;Setup root directory
 		pcall	FL_UD			;Flush buffers to disk.
-if 0
-		ld	hl,$NUMDRV##
-		inc	(hl)			;Count one more drive
-endif
+
 		jr	ramdisk_ret_ok		;Jump to return no error
 ;
 ;       ----------------------------------------
@@ -600,12 +597,7 @@ kill_ramdisk:	ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;Don't do anything if
 ;
 		ld	hl,0			   ;Remove the RAM disk from
 		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; the unit descr. table.
-;
-if 0
-		ld	hl,$NUMDRV##		;Count one less physical
-		dec	(hl)			; drive present.
-;
-endif
+
 		xor	a			;Set RAM disk segment count
 		ld	(RD_COUNT##),a		; to zero.
 ;
