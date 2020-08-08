@@ -520,13 +520,6 @@ f_dparm_bigsec:
 		ld	a,0
 		jr	z,f_dparm_fsystem
 		inc	a
-		;ld	l,(ix+17)		;Filesystem: FAT16 if max cluster >=0FF0
-		;ld	h,(ix+18)
-		;ld	de,0FF0h
-		;xor	a
-		;sbc	hl,de			;Cy set if HL<DE
-		;jr	c,f_dparm_fsystem
-		;inc	a
 f_dparm_fsystem:
 		ld	(ix+28),a		;+28: 0 for FAT12, 1 for FAT16
 

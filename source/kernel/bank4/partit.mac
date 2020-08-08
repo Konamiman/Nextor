@@ -2924,7 +2924,6 @@ MAP_FOUND:
 	;  perform a drive auto-assign
 
 	ld	c,0
-	;ld	d,(ix+UD_SLOT##)
 	ld	e,0FFh
 	push	hl
 	ld	hl,($SECBUF##)
@@ -4839,10 +4838,6 @@ LOCKDRV_SHOW:
 	add	a,'A'
 	call	CHPUT
 
-	;xor	a
-	;ld	c,_LOCK##
-	;call BASIC_DOS
-	;ld	a,b
 	pop	af
 	or	a
 	ld	hl,NOTLOCK_S
@@ -5150,9 +5145,6 @@ GDRL_NOCUR:
 
 	dec	a
 	ret
-
-	;ld	e,13
-	;jp	nz,BASIC_ERR
 
 GDL_GO:
 	inc	sp	;Discard pushed HL

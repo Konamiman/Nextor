@@ -1276,26 +1276,6 @@ NO_DUMMY:
 	rrca
 	and	111b		;Extract date format
 	ld	(COUNTRY##),a	;copy it in RAM
-
-;**DOS2 	ld	a,-1
-;**DOS2 	ld	(BUFDRNO),a	;invalidate $BUFFER
-;**DOS2 	ld	(DIRBFDRV),a	;invalidate $DIRBUF
-;**DOS2 	ld	(DAYCNT+1),a	;cancel current date
-;**DOS2 	ld	hl,365*4+1	;set default date to 1984-1-1
-;**DOS2 	ld	(CURDATE),hl
-;**DOS2 	ld	a,CR		;set CONBUF terminator
-;**DOS2 	ld	(CONBUF+130),a
-;**DOS2 ;
-;**DOS2 ;	Set jump instructions
-;**DOS2 ;
-;**DOS2 	ld	hl,JUMP_VECTORS
-;**DOS2 	ld	b,VECTORS
-;**DOS2 SET0C3H:
-;**DOS2 	ld	(hl),0C3h
-;**DOS2 	inc	hl
-;**DOS2 	inc	hl
-;**DOS2 	inc	hl
-;**DOS2 	djnz	SET0C3H
 ;
 ;	Set up $AUXIN, $AUXOUT and BDOS entry
 ;
@@ -2162,8 +2142,6 @@ MSG_DE:
 	jr	MSG_DE
 
 _GET_CHAR:
-;**DOS2 	xor	a		;invalidate KEYCHR
-;**DOS2 	ld	(KEYVLD),a
 	push	ix
 	push	hl
 	ld	ix,KILBUF	;flush input buffer
@@ -2798,13 +2776,6 @@ olddos_9:
 	ld	ix,SET1INT##
 	ld	hl,@TIME_IRQ##
 	call	CALBNK##
-
-	;ld	a,(FCALSAV##)	;TODO: Investigate why FCALSAV is all zeros
-	;or	a		;at this point (should be all RETs)
-	;jr	nz,FCALSAV_OK
-	;ld	a,0C9h	;Code for RET
-	;ld	(FCALSAV##),a
-;FCALSAV_OK:
 	
 	ld	a,3
 	ld	(MAIN_BANK##),a

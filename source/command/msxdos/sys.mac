@@ -960,8 +960,6 @@ zstr_slow:
 @DOSVER:
 	call	FUNC_WITH_IXIY
 	ld	de,(VERNUM)
-	;LD	D,VERSION##	; Return MSX-DOS.SYS version too.
-	;LD	E,RELEASE##+(RELEASE##/256)*16
 	ret
 
 FUNC_WITH_IXIY:

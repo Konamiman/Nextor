@@ -762,11 +762,8 @@ not_sure:	call	DO_MEDIA_CHANGE		; assume same one. !!!
 		jr	no_curr_upd_done
 
 no_curr_upb:
-		;ld	a,(MFLAGS##)
-		;and	2
-		;jr	nz,no_curr_upb2
-		call	MEDIA_CHECK	;!!!
-		call	nz,DO_MEDIA_CHANGE	;!!!
+		call	MEDIA_CHECK
+		call	nz,DO_MEDIA_CHANGE
 no_curr_upb2:
 		call	BUILD_UPB		;Get the new UPB.
 no_curr_upd_done:
@@ -2683,7 +2680,6 @@ rdwr_devcmd:
 	ret
 rdwr_devcmd_ok:
 	pop	bc	;On success, return transferred sectors=required sectors
-	;ld	b,c   ;WTF?????
 	ret	
 ;
 ;	---------------------------------
@@ -2740,7 +2736,6 @@ dp_devcmd_routine:
 ;
 ch_devcmd_routine:
 	ld	a,.IFORM##
-	;ld	hl,741Fh
 	ret
 	;TODO: Handle formatting
 ;
@@ -2777,19 +2772,6 @@ CALL_DRV:
 		pcall	CH_FLUSH		;Flush any screen buffer
 ;		pcall	STOP_TST		;Check for ctrl-STOP
 ;
-		;push	af
-		;push	hl
-		;ld	hl,MAIN_BANK##
-		;ld	a,(BNK_ID##)
-		;cp	(hl)
-		;jr	z,CALLDRV2
-
-		;ld	hl,(CALLDRV3)
-		;ld	(BK4_ADD##),hl
-		;pop	hl
-		;pop	af
-		;call	CALLB0##
-
 CALLDRV2:
 		;pop		hl
 		;pop		af

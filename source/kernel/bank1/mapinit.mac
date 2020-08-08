@@ -144,25 +144,12 @@ if (BUILTIN AND STURBO)
 		ld	a,b
 		jr	nz,NOTR2
 		sub	4
-
-		;bit	2,a
-		;jr	z,not_super_turbo
-		;add	a,4
-		;ld	(hl),a
-not_super_turbo:
-		;sub	4			;
 NOTR2:
 endif
 		dec	a			;Record the last segment number
 		ld	(DATA_SEG##),a		; as the kernel data segment.
 		dec	a			;Record the next segment number
 		ld	(CODE_SEG##),a		; as the kernel code segment.
-
-		;ld	b,a
-		;ld	a,(MSXVER)
-		;cp	3
-		;ld	a,b
-		;jr	z,ISTR3
 
 		sub	4
 ISTR3:
@@ -184,8 +171,6 @@ if (BUILTIN AND STURBO)
 		ld	a,6
 SYSSEGSCOUNT:
 		ld	(hl),a
-
-;		;ld	(hl),6+4		;Record ten system segment
 else
 		ld	(hl),6			;Record six system segment
 endif
@@ -236,10 +221,8 @@ if (BUILTIN AND STURBO)
 		cp	3
 		jr	nz,NOTURBOR
 
-		;ld	d,a
-		ld	a,(BOOTKEYS##)
+		ld	a,(BOOTKEYS##)      ;On Turbo-R, the "4" key causes
 		and	00010000b
-		;ld	a,d	                ;On Turbo-R, the "4" key causes
 		jr	nz,NOTURBOR         ;the bigger mapper to be used as primary
 
 		dec	hl			;Always mark last 4
