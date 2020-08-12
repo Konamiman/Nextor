@@ -633,15 +633,28 @@ endif
 ; Corrupts:    AF,BC
 ;
 ;
+		push de			;Remember caller's DE
+
+		call _AL_CLUS
+
+		ld de,(FAT_CHAIN##)
+		jr z,alclus_end
+		ld de,1
+alclus_end:	
+		call ACLU_SET
+
+		pop de
+		ret
+
+_AL_CLUS:
 		ld	(AL_FLAGS##),a		;Record zero flag
-		push	de			;Remember caller's DE
 ;
 		push	bc			;Initialise cluster chain to
 		ld	de,0FFFFh		; empty.
 		ld	(FAT_CHAIN##),de
 		push	de			;Previous cluster -ve => first
-		ld	de,1			;Skip to start search loop
-		jr	all_clu_loop_2		; from cluster number 1.
+		call ACLU_GET       ;Skip to start search loop
+		jr	all_clu_loop_2	; from the stored lower free cluster number.
 ;
 all_clu_loop:	push	bc			;Remember cluster count
 		push	de			;Remember previous cluster
@@ -707,8 +720,7 @@ endif
 ;
 ;
 		ld	bc,(FAT_CHAIN##)	;Return cluster number of
-		pop	de			; start of chain and a zero
-		xor	a			; error code.
+		xor	a			; start of chain and a zero error code.
 		ret
 ;
 ;
@@ -723,7 +735,6 @@ disk_full:	pop	de			;Disk full.  Free all clusters
 ;;		bit	7,d
 ;;		call	z,FR_CHAIN
 ;===== end mod FAT16
-		pop	de
 		ld	a,.DKFUL##		;Return with an error code.
 		or	a
 		ret
@@ -869,6 +880,25 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 ; Corrupts:    AF,BC,DE
 ;
 ;
+		;Update UD_ACLU to the number of the first cluster to be freed -1,
+		;but only if the new value would be smaller than the current value.
+		;This is to ensure that UD_ACLU is always either 1 or the
+		;lower free cluster number available -1.
+
+		push de
+		pop bc			;BC = first cluster to free (new value+1)
+		push hl
+		call ACLU_GET	;DE = current value of UD_ACLU
+		push bc
+		pop hl          ;HL = first cluster to free (new value+1)
+		ex de,hl        ;HL = current value, DE = new value+1
+		dec de          ;DE = new value
+		or a
+		sbc hl,de       ;HL = current value - new value, Cy=1 if new > current
+		pop hl          ;HL = address of unit descriptor
+		call nc,ACLU_SET
+		inc de          ;Restore first cluster number to its original value
+
 free_chain_lp:	push	de			;Save cluster number
 		call	FAT_LOOKUP		;Get the next cluster number
 		pop	bc			; in the chain and save for
@@ -915,6 +945,45 @@ DTY_ADD:
 	ret	nz
 	dec	hl
 	ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	ACLU_SET
+;
+;    Sets the UD_ACLU field of a unit descriptor.
+;
+; Entry:   DE = Value to set
+;	       HL = Address of unit descriptor
+; Returns:     None
+; Corrupts:    None
+;
+	push ix	
+	push hl
+	pop ix
+	ld (ix+UD_ACLU##),e
+	ld (ix+UD_ACLU##+1),d
+	pop ix
+	ret
+;
+;
+;------------------------------------------------------------------------------
+;
+;    Gets the UD_ACLU field of a unit descriptor.
+;
+; Entry:   HL = Address of unit descriptor
+; Returns: DE = Value
+; Corrupts:    None
+;
+ACLU_GET:
+	push ix	
+	push hl
+	pop ix
+	ld e,(ix+UD_ACLU##)
+	ld d,(ix+UD_ACLU##+1)
+	pop ix
+	ret
+
 	finish	<FAT>
 	end
 ;

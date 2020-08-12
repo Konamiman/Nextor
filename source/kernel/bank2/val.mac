@@ -1852,7 +1852,7 @@ endif
 ; Assumes:      UPB_DIRT=UPB_VOLID+6       UPB_ID=UPB_DIRT+1
 ;		  (UD_CMSK, UD_CSHFT, UD_RES, UD_NFAT, UD_ODE, UD_WDS
 ;		   UD_SFAT, UD_SDIR, UD_SDAT, UD_NCLU, UD_DIRT, UD_ID,
-;		   and UD_MBYTE) must all be sequential.
+;		   UD_MBYTE and UD_ACLU) must all be sequential.
 ;
 ;
 		call	_NEW_UPB
@@ -2155,7 +2155,13 @@ upb_dos220:
 ;
 		ld	a,(ix+UPB_MBYTE##)	;Copy MEDIA DESCRIPTOR BYTE
 						; from UPB to unit descriptor
-new_upb_fat12:	ld	(hl),a
+        ld	(hl),a
+
+		inc hl	  ;Initialize next cluster to check for allocation to 2
+		ld (hl),1 ;(it's stored as value-1)
+		inc hl
+		ld (hl),0
+
 		pop	hl
 
 		;--- If drive is FAT16, calculate reduced cluster count
