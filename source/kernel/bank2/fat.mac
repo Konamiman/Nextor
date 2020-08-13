@@ -642,6 +642,7 @@ endif
 		ld de,1
 alclus_end:	
 		call ACLU_SET
+		or a	;Because ACLU_SET corrupts F
 
 		pop de
 		ret
@@ -885,12 +886,9 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		;This is to ensure that UD_ACLU is always either 1 or the
 		;lower free cluster number available -1.
 
-		push de
-		pop bc			;BC = first cluster to free (new value+1)
-		push hl
+		push de		    ;SP = First cluster number in chain
 		call ACLU_GET	;DE = current value of UD_ACLU
-		push bc
-		pop hl          ;HL = first cluster to free (new value+1)
+		ex (sp),hl      ;HL = first cluster to free (new value+1), SP = Address of unit descriptor
 		ex de,hl        ;HL = current value, DE = new value+1
 		dec de          ;DE = new value
 		or a
@@ -956,14 +954,17 @@ DTY_ADD:
 ; Entry:   DE = Value to set
 ;	       HL = Address of unit descriptor
 ; Returns:     None
-; Corrupts:    None
+; Corrupts:    F
 ;
-	push ix	
-	push hl
-	pop ix
-	ld (ix+UD_ACLU##),e
-	ld (ix+UD_ACLU##+1),d
-	pop ix
+	push	hl
+	push    de
+	ld	de, UD_ACLU##
+	add	hl,de
+	pop     de
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	pop	hl
 	ret
 ;
 ;
@@ -973,15 +974,16 @@ DTY_ADD:
 ;
 ; Entry:   HL = Address of unit descriptor
 ; Returns: DE = Value
-; Corrupts:    None
+; Corrupts:    F
 ;
 ACLU_GET:
-	push ix	
-	push hl
-	pop ix
-	ld e,(ix+UD_ACLU##)
-	ld d,(ix+UD_ACLU##+1)
-	pop ix
+    push	hl
+	ld	de,UD_ACLU##
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	pop	hl
 	ret
 
 	finish	<FAT>
