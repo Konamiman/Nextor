@@ -884,7 +884,6 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		;We'll use FAT_CHAIN to temporarliy store the number of the
 		;lowest cluster number freed.
 
-		ld (FAT_CHAIN##),de	
 		call free_chain_lp
 
 		;Update UD_ACLU to the number of the lowest cluster that has been
@@ -903,23 +902,22 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		pop hl          ;Restore address of unit descriptor
 		ret
 
-free_chain_lp:
+frchlp3:
 		push hl			;Preserve address of unit descriptor
 		ld hl,(FAT_CHAIN##)
 		or a
 		sbc hl,de   	;HL = last cluster freed - cluster to free 
+		pop hl			;Restore address of unit descriptor
 		jr c,frchlp2	;Cy = 1 means last cluster freed < cluster to free
+free_chain_lp:
 		ld (FAT_CHAIN##),de
 frchlp2:
-		pop hl			;Restore address of unit descriptor
-
-        push	de			;Save cluster number
-		call	FAT_LOOKUP		;Get the next cluster number
-		pop	bc			; in the chain and save for
-		push	de			; later.  Get cluster back.
-		ld	d,b
-		ld	e,c			;Set FAT entry for this
-		ld	bc,0			; cluster to 0 to free it.
+		push	de			; Save cluster number
+		call	FAT_LOOKUP	; Get the next cluster number in the chain
+		ex	de,hl		; HL = next cluster number, DE = unit descriptor
+		ex	(sp),hl		; HL = saved cluster number, (SP) = next cluster number
+		ex	de,hl		; HL = unit descriptor, DE = saved cluster number
+		ld	bc,0		; Set FAT entry for this cluster to 0 to free it
 		call	FAT_?SET
 		pop	de			;Get next cluster number
 		ld	a,d			; back and return if it is
@@ -929,7 +927,7 @@ frchlp2:
 		ld	a,d
 		and	e
 		inc	a
-		jr	nz,free_chain_lp	;Loop if not end of chain.
+		jr	nz,frchlp3	;Loop if not end of chain.
 ;;		bit	7,d
 ;;		jr	z,free_chain_lp
 ;===== end mod FAT16
