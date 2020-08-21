@@ -413,12 +413,9 @@ int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystem
 
 	dataSectorsCount = (fileSystemSizeInK * 2) - (FAT16_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR) - 1;
 	clusterCount = dataSectorsCount >> sectorsPerClusterPower;
-	sectorsPerFat = clusterCount + 2;
+	sectorsPerFat = (clusterCount + 2) >> 8;
 
-	if((sectorsPerFat & 0x3FF) == 0) {
-		sectorsPerFat >>= 8;
-	} else {
-		sectorsPerFat >>= 8;
+	if(((clusterCount + 2) & 0x3FF) != 0) {
 		sectorsPerFat++;
 	}
 
