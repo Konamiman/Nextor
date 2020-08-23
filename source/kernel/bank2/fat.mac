@@ -633,15 +633,29 @@ endif
 ; Corrupts:    AF,BC
 ;
 ;
+		push de			;Remember caller's DE
+
+		call _AL_CLUS
+
+		ld de,(FAT_CHAIN##)
+		jr z,alclus_end
+		ld de,1
+alclus_end:	
+		call ACLU_SET
+		or a	;Because ACLU_SET corrupts F
+
+		pop de
+		ret
+
+_AL_CLUS:
 		ld	(AL_FLAGS##),a		;Record zero flag
-		push	de			;Remember caller's DE
 ;
 		push	bc			;Initialise cluster chain to
 		ld	de,0FFFFh		; empty.
 		ld	(FAT_CHAIN##),de
 		push	de			;Previous cluster -ve => first
-		ld	de,1			;Skip to start search loop
-		jr	all_clu_loop_2		; from cluster number 1.
+		call ACLU_GET       ;Skip to start search loop
+		jr	all_clu_loop_2	; from the stored lower free cluster number.
 ;
 all_clu_loop:	push	bc			;Remember cluster count
 		push	de			;Remember previous cluster
@@ -707,8 +721,7 @@ endif
 ;
 ;
 		ld	bc,(FAT_CHAIN##)	;Return cluster number of
-		pop	de			; start of chain and a zero
-		xor	a			; error code.
+		xor	a			; start of chain and a zero error code.
 		ret
 ;
 ;
@@ -723,7 +736,6 @@ disk_full:	pop	de			;Disk full.  Free all clusters
 ;;		bit	7,d
 ;;		call	z,FR_CHAIN
 ;===== end mod FAT16
-		pop	de
 		ld	a,.DKFUL##		;Return with an error code.
 		or	a
 		ret
@@ -869,13 +881,43 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 ; Corrupts:    AF,BC,DE
 ;
 ;
-free_chain_lp:	push	de			;Save cluster number
-		call	FAT_LOOKUP		;Get the next cluster number
-		pop	bc			; in the chain and save for
-		push	de			; later.  Get cluster back.
-		ld	d,b
-		ld	e,c			;Set FAT entry for this
-		ld	bc,0			; cluster to 0 to free it.
+		;We'll use FAT_CHAIN to temporarliy store the number of the
+		;lowest cluster number freed.
+
+		call free_chain_lp
+
+		;Update UD_ACLU to the number of the lowest cluster that has been
+		;freed -1, but only if the new value would be smaller than the
+		;current value. This is to ensure that UD_ACLU is always either 1
+		;or the lower free cluster number available -1.
+
+		push hl         ;Preserve address of unit descriptor
+		call ACLU_GET	;DE = current value of UD_ACLU
+		ld hl,(FAT_CHAIN##)  ;HL = Lowest cluster number freed (new value+1)
+		ex de,hl        ;HL = current value, DE = new value+1
+		dec de          ;DE = new value
+		or a
+		sbc hl,de       ;HL = current value - new value, Cy=1 if new > current
+		call nc,ACLU_SET
+		pop hl          ;Restore address of unit descriptor
+		ret
+
+frchlp3:
+		push hl			;Preserve address of unit descriptor
+		ld hl,(FAT_CHAIN##)
+		or a
+		sbc hl,de   	;HL = last cluster freed - cluster to free 
+		pop hl			;Restore address of unit descriptor
+		jr c,frchlp2	;Cy = 1 means last cluster freed < cluster to free
+free_chain_lp:
+		ld (FAT_CHAIN##),de
+frchlp2:
+		push	de			; Save cluster number
+		call	FAT_LOOKUP	; Get the next cluster number in the chain
+		ex	de,hl		; HL = next cluster number, DE = unit descriptor
+		ex	(sp),hl		; HL = saved cluster number, (SP) = next cluster number
+		ex	de,hl		; HL = unit descriptor, DE = saved cluster number
+		ld	bc,0		; Set FAT entry for this cluster to 0 to free it
 		call	FAT_?SET
 		pop	de			;Get next cluster number
 		ld	a,d			; back and return if it is
@@ -885,7 +927,7 @@ free_chain_lp:	push	de			;Save cluster number
 		ld	a,d
 		and	e
 		inc	a
-		jr	nz,free_chain_lp	;Loop if not end of chain.
+		jr	nz,frchlp3	;Loop if not end of chain.
 ;;		bit	7,d
 ;;		jr	z,free_chain_lp
 ;===== end mod FAT16
@@ -915,6 +957,49 @@ DTY_ADD:
 	ret	nz
 	dec	hl
 	ret
+;
+;
+;------------------------------------------------------------------------------
+;
+	PROC	ACLU_SET
+;
+;    Sets the UD_ACLU field of a unit descriptor.
+;
+; Entry:   DE = Value to set
+;	       HL = Address of unit descriptor
+; Returns:     None
+; Corrupts:    F
+;
+	push	hl
+	push    de
+	ld	de, UD_ACLU##
+	add	hl,de
+	pop     de
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	pop	hl
+	ret
+;
+;
+;------------------------------------------------------------------------------
+;
+;    Gets the UD_ACLU field of a unit descriptor.
+;
+; Entry:   HL = Address of unit descriptor
+; Returns: DE = Value
+; Corrupts:    F
+;
+ACLU_GET:
+    push	hl
+	ld	de,UD_ACLU##
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	pop	hl
+	ret
+
 	finish	<FAT>
 	end
 ;

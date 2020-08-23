@@ -192,6 +192,8 @@ size	macro	name
 	field	1,UD_DIRT	;Dirty disk flag
 	field	4,UD_ID		;Current volume ID
 	field	1,UD_MBYTE	;Media descriptor byte
+
+	field   2,UD_ACLU	;Next cluster to check for allocation -1
 ;
 	field	2,UD_CDIR	;First cluster of current directory
 				;  -ve   => root directory

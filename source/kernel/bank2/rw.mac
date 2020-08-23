@@ -153,6 +153,12 @@ abs_common_doerr:
 		jr	try_rw_val
 
 abs_rw_dorw:
+		push de		;If writing, reset number of next cluster to allocate
+		bit	RF_READ,(iy+@RW_FLAGS##) ;just in case we're messing up with FAT
+		ld de,1
+		pcall z,ACLU_SET
+		pop de
+
 		pcall	FL_UD			;Flush and invalidate any
 		pcall	INV_UD			; buffers for this drive.
 ;
