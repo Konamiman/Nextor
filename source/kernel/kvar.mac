@@ -193,8 +193,6 @@ size	macro	name
 	field	4,UD_ID		;Current volume ID
 	field	1,UD_MBYTE	;Media descriptor byte
 
-	field   2,UD_ACLU	;Next cluster to check for allocation -1
-;
 	field	2,UD_CDIR	;First cluster of current directory
 				;  -ve   => root directory
 				;  0000h => cluster not known
@@ -209,6 +207,8 @@ size	macro	name
                         ;(for device-based drivers this is only used if the driver
 						; provides configuration, in order to get the default mapping
 						; for the drive)
+	field   2,UD_ACLU	;Next cluster to check for allocation -1
+
 ;
 	;--- Extra fields used when mounting files
 	;    This extra space should NOT be allocated unless a file is mounted to the drive

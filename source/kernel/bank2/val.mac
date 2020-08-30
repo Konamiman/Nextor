@@ -1852,7 +1852,7 @@ endif
 ; Assumes:      UPB_DIRT=UPB_VOLID+6       UPB_ID=UPB_DIRT+1
 ;		  (UD_CMSK, UD_CSHFT, UD_RES, UD_NFAT, UD_ODE, UD_WDS
 ;		   UD_SFAT, UD_SDIR, UD_SDAT, UD_NCLU, UD_DIRT, UD_ID,
-;		   UD_MBYTE and UD_ACLU) must all be sequential.
+;		   and UD_MBYTE) must all be sequential.
 ;
 ;
 		call	_NEW_UPB
@@ -2157,9 +2157,12 @@ upb_dos220:
 						; from UPB to unit descriptor
         ld	(hl),a
 
-		inc hl	  ;Initialize next cluster to check for allocation to 2
-		ld (hl),1 ;(it's stored as value-1)
-		inc hl
+		pop hl
+		push hl
+		ld bc,UD_ACLU##
+		add hl,bc  
+		ld (hl),1     ;Initialize next cluster to check for allocation to 2
+		inc hl        ;(it's stored as value-1)
 		ld (hl),0
 
 		pop	hl
