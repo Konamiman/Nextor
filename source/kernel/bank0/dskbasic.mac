@@ -53,10 +53,7 @@ ATM_DIR	equ	00010000b
 ;
 	extrn	REBOOT
 	extrn	HOKFMT
-if 0
-	extrn	MUL16		;HL:BC = BC * DE
-	extrn	MULADD		;HL:BC = BC * DE + HL
-endif
+
 	extrn	GSLOT1
 ;
 	extrn	BLDCHK
@@ -517,80 +514,6 @@ CHDRV:
 	ld	ix,CCHDRV##
 	jp	CALBNK##
 
-if 0	;Command moved to bank 4, also it works in DOS 1 mode
-
-	push	hl
-	SYNCHK	'('
-	pop	hl
-	inc	hl	;CHRGTR returns invalid HL when a number is found after the '('... (???)
-
-	push	hl
-	ld	ix,FRMEVL
-	call	CALBAS
-	ld	a,(VALTYP)
-	cp	3
-	jr	z,CHDRV2
-
-	pop	hl
-	ld	ix,GETBYT
-	call	CALBAS
-	push	af
-	SYNCHK	')'
-	pop	af
-	or	a
-	jp	z,JDERBDN
-	cp	8+1
-	jp	nc,JDERBDN
-	push	hl
-	jp		CHDRV_DO
-
-CHDRV2:
-	pop	hl
-	call	CALL_NAMSCN
-	SYNCHK	')'
-	push	hl		; save text pointer
-if 0
-	ld	hl,(PATHNAM)
-	inc	hl
-	inc	hl
-	ld	a,(hl)		; must be 2 characters in length
-	and	a
-	jp	nz,JDERBDN
-	dec	hl
-	ld	a,(hl)		; must be followed by ":"
-	cp	':'
-	jp	nz,JDERBDN
-	dec	hl
-	ld	a,(hl)		; get drive name
-	and	0DFh		; force upper
-	sub	'A'		; make it zero based
-				; 0 -> A:
-				; 1 -> B:
-				; 7 -> H:
-	cp	7+1
-	jp	nc,JDERBDN	; bad drive name
-	inc	a
-else
-	ld	bc,0*256+_PARSE##
-	call	PATH_BDOSE
-	ex	de,hl
-	ld	a,b
-	and	00000101b	; b2 => drive parsed, b0 => others parsed
-	xor	00000100b	; give bad drive name error if drive not
-	or	(hl)		; parsed, anything parsed after drive or
-	jp	nz,JDERBDN	; anything remains
-	ld	a,c
-endif
-CHDRV_DO:
-	call	VAL_DRV		; validate the drive
-	dec	a		; make it zero based (A=0,B=1,etc.)
-	ld	e,a
-	ld	c,_SELDSK##
-	call	BDOS
-	pop	hl		; restore text pointer
-	ret
-endif
-
 VAL_DRV:
 	push	af
 	ld	c,_LOGIN##	; get login vector into [HL]
@@ -977,12 +900,7 @@ SRCFST_DIR:
 	ld	de,FIB		; do the first search on the same FIB
 	push	de
 	pop	ix
-if 0
-	ld	hl,(PATHNAM)	; pass file name portion in HL
-	ld	(hl),0
-else
 	ld	hl,NULSTR	; pass file name portion in HL (null string)
-endif
 	ld	c,_FFIRST##
 	call	BDOSE
 	pop	bc		; restore drive number
@@ -1916,7 +1834,7 @@ GET_HANDLE_0:
 	pop	hl
 	ret
 
-if	1
+
 	subttl	DSKI$/DSKO$
 ;
 ;	DSKI$(<drive_number>,<sector_number>)
@@ -1952,18 +1870,10 @@ DSKO$1:
 ;
 ;	Ask DOS to validate disk
 ;
-if 0
-	ld	e,c		; move drive number to [E]
-	ld	c,_ALLOC##	; get possible new media ID and physical drive
-	call	BDOS
-	inc	a		; 0ffh (error) returned?
-	jp	z,JDERBDN	; yes, bad drive name
-else
 	ld	de,DSKTMP	; temp for new DPB
 	ld	l,c		; move drive number to [L]
 	ld	c,_DPARM##	; validate possible new media
 	call	BDOSE
-endif
 ;
 ;	Set transfer address, and read/write
 ;
@@ -1972,10 +1882,10 @@ endif
 	call	BDOS
 	pop	hl		; restore logical drive number in L
 	dec	l		; make it zero based (FF => default)
-if 1
+
 	ld	c,_CURDRV##
 	call	m,BDOS		; default (0) was specified, get default drive
-endif
+
 	pop	de		; restore logical sector number
 	pop	bc		; C = read/write function number
 	ld	b,1		; read only 1 sector
@@ -2000,7 +1910,6 @@ GET_PARAM:
 	pop	hl
 	pop	bc		; restore drive number in [C]
 	ret
-endif
 
 ; Convert the sector number in DAC to 32 bit integer in HLDE
 ; Returns error code in A:
@@ -2027,11 +1936,6 @@ DAC2LONG::
 	jr	nz,D2L_NOTINT
 
 	ld	de,(DAC+2)
-if	0	;if 1 to disallow negative numbers
-	bit	7,d
-	ld	a,69
-	ret	nz
-endif
 	ld	hl,0
 	xor	a
 	ret
@@ -2849,7 +2753,7 @@ PAD_SPACE:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-if	1
+if	1	;If 0, "FILES ,L" displays the file dates and times too
 	ret
 else
 	ld	hl,(FIB+17)	; get date
@@ -3240,21 +3144,7 @@ endif
 ;
 $HOOK	DSKF
 
-	if 0
-
-	call	REMHOK		; remove hook
-	ld	ix,CONINT	; convert to integer in [A]
-	call	CALBAS
-	and	a		; default drive?
-	call	nz,VAL_DRV	; validate drive number if not
-	ld	e,a		; move drive number in [E]
-	ld	c,_ALLOC##	; get number of free clusters
-	call	BDOS
-	jp	MAKINT		; return as integer
-
-	endif
-
-	if 1	;Return free Ks instead of free clusters (reduced allocation info mode does NOT apply)
+	;Return free Ks instead of free clusters (reduced allocation info mode does NOT apply)
 
 	call	REMHOK		; remove hook
 	ld	ix,CONINT	; convert to integer in [A]
@@ -3268,8 +3158,6 @@ $HOOK	DSKF
 	push	de
 	pop	bc
 	jp	TO_FLOAT
-
-	endif
 
 
 	subttl	COPY command
@@ -3313,10 +3201,8 @@ DKCLOP:
 	ld	(SRC_DATE+2),hl
 	ld	a,0FFH		; say destination not open yet
 	ld	(DST_HANDLE),a
-if 1
 	ld	hl,CPABORT
 	ld	(BREAKVECT##),hl
-endif
 ;
 ;	Determine what should be used as a temporary buffer for
 ;	copy process.
@@ -3325,19 +3211,6 @@ endif
 	ld	e,c		; set buffer pointer
 	ld	d,b
 COPYBL:
-if 0
-	push	hl		; save buffer size
-	ld	a,(SRC_HANDLE)
-	ld	b,a
-	push	de		; save buffer pointer
-	ld	c,_READ##
-	call	BDOS
-	cp	.EOF##		; already at EOF?
-	jr	z,SRC_EOF	; yes
-	and	a		; any other errors?
-	jp	nz,ABORT_COPY	; yes, terminate copy
-SRC_EOF:
-else
 	push	hl		; save buffer size
 	push	de		; save buffer pointer
 COPYL:
@@ -3368,7 +3241,6 @@ READ_OK:
 	pop	de		; DE -> buffer pointer
 	push	de
 	sbc	hl,de		; HL = number of byte read so far
-endif
 ;
 ;	See if destination file handle created
 ;
@@ -3434,10 +3306,8 @@ DST_OPEN:
 	ld	b,a
 	ld	c,_CLOSE##
 	call	COPY_BDOS
-if 1
 	ld	hl,DBABORT
 	ld	(BREAKVECT##),hl
-endif
 	call	SRCNXT
 	jp	nc,DKCLOP
 	pop	hl		;restore text pointer
@@ -3476,10 +3346,8 @@ COPY_BDOS:
 	ret	z
 ABORT_COPY:
 	push	af		; save error code
-if 1
 	ld	hl,DBABORT
 	ld	(BREAKVECT##),hl
-endif
 	ld	a,(SRC_HANDLE)	; always close source
 	ld	b,a
 	ld	c,_CLOSE##
@@ -3941,7 +3809,6 @@ NOT_DBCS:
 	dec	c
 	jr	z,MODIFY_END
 NOT_DOT:
-if 1
 	ld	b,3		;parse the extension of the file name
 	call	DO_FIELD
 	jr	z,MODIFY_END	;done if parsed to the end
@@ -3949,11 +3816,6 @@ if 1
 	cp	" "		; terminator and ignore garbage after that
 	jp	nz,JDERBFN	;
 	ld	c,0		;
-else
-	ld	b,c		;parse to the end of the file name
-	call	DO_FIELD
-	jp	nz,JDERBFN	;error if anything remains
-endif
 ;
 MODIFY_END:
 	ld	(ix),c		;make it ASCIZ
@@ -3973,15 +3835,10 @@ PNOEXT:
 ;		caller of PARDEV	(i.e., NAMSCN)
 ;	HL ->	caller of H.PARD	(i.e., PARDEV)
 ;
-;===== start mod DOS2.50 (avoid assembler bug)
 	ld	de,RETURN
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-;;	ld	(hl),low RETURN
-;;	inc	hl
-;;	ld	(hl),high RETURN
-;===== end mod DOS2.50
 	inc	hl
 	inc	hl
 	inc	hl
@@ -4129,17 +3986,12 @@ REMHOK:
 	ld	l,12+EXPSTK
 REMPRM:	add	hl,sp		;point to where the return address of
 				;hook is stored
-;===== start mod DOS2.50 (avoid assembler bug)
 	push	de
 	ld	de,RETURN
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
 	pop	de
-;;	ld	(hl),low RETURN
-;;	inc	hl
-;;	ld	(hl),high RETURN
-;===== end mod DOS2.50
 	pop	af
 	pop	hl
 	ret

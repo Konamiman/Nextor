@@ -155,9 +155,7 @@ AT_SYS  equ     2       ;Set => System file
 AT_VOL  equ     3       ;Set => Volume name entry
 AT_DIR  equ     4       ;Set => Sub-directory entry
 AT_ARC  equ     5       ;Set => File needs to be archived
-;===== start add FAT16 (for CP/M compatible FCB file access)
-AT_RES  equ     6	;Reserved bit
-;===== end add FAT16
+AT_RES  equ     6	;Reserved bit (for CP/M compatible FCB file access)
 AT_DEV  equ     7       ;Set => Device file (all other bits clear)
 ;
 ;

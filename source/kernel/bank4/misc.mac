@@ -570,9 +570,7 @@ no_free_seg:
 		ld	(ix+UD_PHYS##),a	;Physical unit number
 		ld	(ix+UD_TIME##),0	;No current UPB
 		ld	(ix+UD_CDIR##+1),0FFh	;Current directory is root
-;===== start add FAT16 (DOS2.50 original patch)
 		ld	(ix+UD_CDIR##),0FFh
-;===== end add FAT16
 ;
 		ld	c,a			;Validate the RAM disk, this
 		ld	ix,FIB_1		; will set up the UPB but
@@ -584,10 +582,7 @@ no_free_seg:
 		ld	de,0
 		pcall	ZERO_CLUSTER		;Setup root directory
 		pcall	FL_UD			;Flush buffers to disk.
-if 0
-		ld	hl,$NUMDRV##
-		inc	(hl)			;Count one more drive
-endif
+
 		jr	ramdisk_ret_ok		;Jump to return no error
 ;
 ;       ----------------------------------------
@@ -602,12 +597,7 @@ kill_ramdisk:	ld	hl,(UNIT_TAB##+2*RAMD_NUM) ;Don't do anything if
 ;
 		ld	hl,0			   ;Remove the RAM disk from
 		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; the unit descr. table.
-;
-if 0
-		ld	hl,$NUMDRV##		;Count one less physical
-		dec	(hl)			; drive present.
-;
-endif
+
 		xor	a			;Set RAM disk segment count
 		ld	(RD_COUNT##),a		; to zero.
 ;

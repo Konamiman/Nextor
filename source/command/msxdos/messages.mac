@@ -46,9 +46,7 @@ CTRL_C	EQU	3
 LF	EQU	0AH
 CR	EQU	0DH
 ;
-if 1
 	DEFW	END_MSG-$
-endif
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -112,15 +110,6 @@ endif
 ;
 ;
 
-if 0
-	MSG	AR		; Message for when 'ignore' is not recommended.
-	 DEFB	'AR '		; One trailing space.
-	 DEFB	0
-;
-	MSG	ARI		; Message for when 'ignore' isn't so dangerous.
-	 DEFB	'ARI '	; One trailing space.
-	 DEFB	0
-else
 	MSG	AR		; Message for when 'ignore' is not recommended.
 	 DEFB	'Abort or Retry (A/R)? '		; One trailing space.
 	 DEFB	0
@@ -128,7 +117,6 @@ else
 	MSG	ARI		; Message for when 'ignore' isn't so dangerous.
 	 DEFB	'Abort, Retry or Ignore (A/R/I)? '	; One trailing space.
 	 DEFB	0
-endif
 
 ;
 ;
@@ -179,7 +167,6 @@ endif
 ;
 ;
 
-if 1
 	MSG	SPLATS, <*** >				; Part (a), one
 							;   trailing space.
 ;
@@ -199,31 +186,8 @@ if 1
 	MSG	BADVER, <W>
 ;
 
-else
 
-	MSG	SPLATS, <*** >				; Part (a), one
-							;   trailing space.
-;
-	MSG	EREND					; Part (c)
-	 DEFB	0					;   (null in English).
-;
-	MSG	INSERT, <Insert COMMAND2.COM disk in drive >	; Part (d),
-							;   one trailing space.
-;
-	MSG	INSDRV, <:>				; Part (e).
-;
-	MSG	PAUSE, <Press any key to continue... >	; Part (f), one
-							;   trailing space.
-;
-	MSG	NOMEM, <Not enough memory, system halted>
-;
-	MSG	BADVER, <Wrong version of MSX-DOS, system halted>
-;
-endif
-
-if 1
 END_MSG:
-endif
 ;
 ;
 	END

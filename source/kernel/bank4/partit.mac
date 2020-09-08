@@ -383,15 +383,15 @@ DEV_READ:
 ; based on a index number.
 ;
 ; ROM driver slots are searched in both DRVTBL (the DOS 1/2.3x compatible
-; drivers table) and KER250 (the new DOS 2.50 kernels table), taking
+; drivers table) and KERNEX (the new Nextor kernels table), taking
 ; care for duplicates. This is because ROM drivers can be registered in
 ; only one of these tables, or in both:
 ;
 ; - Drivers embedded in a DOS 1/2.3x kernel are registered in DRVTBL only.
-; - Drivers embedded in a DOS 2.50 kernel, and which have at least one
+; - Drivers embedded in a Nextor kernel, and which have at least one
 ;   drive letter allocated at boot time, are registered in both tables.
-; - Drivers embedded in a DOS 2.50 kernel, and which have no drive
-;   letters allocated at boot time, are registered in KER250 only.
+; - Drivers embedded in a Nextor kernel, and which have no drive
+;   letters allocated at boot time, are registered in KERNEX only.
 ;
 ; The latter may happen in two cases:
 ;
@@ -430,11 +430,11 @@ GDRV_LOOP:
 GDRV_NEXT:
 	djnz	GDRV_LOOP	;Loop for entries in DRVTBL
 
-	;--- Then search in KER250
+	;--- Then search in KERNEX
 
-	ld	b,4	;D=Entries in KER250
+	ld	b,4	;D=Entries in KERNEX
 	ld	ix,DRVTBL##
-	ld	hl,KER250##
+	ld	hl,KERNEX##
 GDRV_LOOP3:
 	ld	a,(hl)
 	inc	hl
@@ -455,7 +455,7 @@ GDRV_LOOP3:
 	ld	d,a
 	jr	z,GDRV_OK_ROM
 GDRV_NEXT2:
-	djnz	GDRV_LOOP3	;Loop for entries in KER250
+	djnz	GDRV_LOOP3	;Loop for entries in KERNEX
 
 	;--- No driver found with that index
 
@@ -710,28 +710,28 @@ AUTOD_UDFND:
 	ld_iyh_a
 
 	ld	c,a
-	ld	a,(KER250##)
+	ld	a,(KERNEX##)
 	and	10001111b
 	cp	c
-	jr	z,AUTOD_OK250
-	ld	a,(KER250##+1)
+	jr	z,AUTOD_OKNEX
+	ld	a,(KERNEX##+1)
 	and	10001111b
 	cp	c
-	jr	z,AUTOD_OK250
-	ld	a,(KER250##+2)
+	jr	z,AUTOD_OKNEX
+	ld	a,(KERNEX##+2)
 	and	10001111b
 	cp	c
-	jr	z,AUTOD_OK250
-	ld	a,(KER250##+3)
+	jr	z,AUTOD_OKNEX
+	ld	a,(KERNEX##+3)
 	and	10001111b
 	cp	c
-	jr	z,AUTOD_OK250
+	jr	z,AUTOD_OKNEX
 	inc	hl
 	inc	hl
 	djnz	AUTOD_LOOP
 	jp	SETNUMDRV
 
-AUTOD_OK250:
+AUTOD_OKNEX:
 	push	bc
 	push	hl
 	push	ix
@@ -853,7 +853,7 @@ SETNUMD_NOUD:
 ; AUTO_ASSIGN
 ;
 ; This routine automatically assigns the appropriate device and partition
-; to a drive associated to a device-based DOS 2.50 driver. It does so by
+; to a drive associated to a device-based Nextor driver. It does so by
 ; searching an available block devices, then searching a FAT12 or FAT16
 ; partition (unless the MBR has no partition table), the checking the
 ; validity of the FAT boot sector. Other existing unit descriptors
@@ -2024,7 +2024,7 @@ CALC_NUMCLUS1:
 ;                                    0 => Hot-plug devices not supported
 ;                             bit 2: 2 => Driver provides configuration
 ;                                    0 => Driver does not provide configuration
-;                             bit 7: 1 => MSX-DOS 2.50 driver
+;                             bit 7: 1 => Nextor driver
 ;                                    0 => Legacy driver (MSX-DOS 1/2.20/2.3x kernel)
 ;                     +5 (1): Driver main version number
 ;                     +6 (1): Driver secondary version number
@@ -2108,7 +2108,7 @@ GDRVR_DRVTBL_LOOP:
 	inc	iy
 	inc	iy
 	djnz	GDRVR_DRVTBL_LOOP
-	jr	GDRVR_CHECK_KER250
+	jr	GDRVR_CHECK_KERNEX
 
 	;* Driver found in DRVTBL
 
@@ -2119,21 +2119,21 @@ GDRVR_FOUND_DRVTBL:
 	ld	(ix+2),a
 	ld	a,d
 
-	;--- Search the driver in KER250
+	;--- Search the driver in KERNEX
 
-GDRVR_CHECK_KER250:
-	ld	iy,KER250##
+GDRVR_CHECK_KERNEX:
+	ld	iy,KERNEX##
 	ld	d,a
 	ld	b,4	;B=Entries left in DRVTBL
-GDRVR_KER250_LOOP:
+GDRVR_KERNEX_LOOP:
 	ld	a,(iy)
 	and	10001111b
 	cp	d
-	jr	z,GDRV_IS_KER250
+	jr	z,GDRV_IS_KERNEX
 	inc	iy
-	djnz	GDRVR_KER250_LOOP
+	djnz	GDRVR_KERNEX_LOOP
 
-	;* Driver not found in KER250:
+	;* Driver not found in KERNEX:
 	;  it is a legacy driver,
 	;  so all the the available information
 	;  about the driver is already set.
@@ -2142,9 +2142,9 @@ GDRVR_KER250_LOOP:
 	xor	a
 	ret
 
-	;--- The driver is DOS 2.50: get driver information
+	;--- The driver is Nextor: get driver information
 
-GDRV_IS_KER250:
+GDRV_IS_KERNEX:
 	ld	d,a
 	push	ix
 	push	de
@@ -2924,7 +2924,6 @@ MAP_FOUND:
 	;  perform a drive auto-assign
 
 	ld	c,0
-	;ld	d,(ix+UD_SLOT##)
 	ld	e,0FFh
 	push	hl
 	ld	hl,($SECBUF##)
@@ -3743,49 +3742,6 @@ MAPDOS1_DEF_NOCFG:	;No config provided by driver, use AUTO_ASSIGN
 	pop hl
 	jr MAPDOS1_DEF_OK	;Note that on error we just leave the drive unassigned
 
-if 0
-
-	push	ix	;Save pointer to page 3 table entry
-
-	push	hl
-	ld	l,(ix)	;Driver slot
-	ld	h,(ix+UD1_REL##)	;Relative unit
-	ld	(ix+UD1_DI##),0	;At the moment leave the drive unmapped
-	pop	ix			;Use FAT buffer for the fake unit descriptor
-	ld	(ix+UD_SLOT##),l
-	ld	(ix+UD_PHYS##),h
-
-	push	ix
-	pop	hl
-	push	ix
-	push	hl
-	ld d,0
-	call	AUTO_ASSIGN
-	pop	hl
-	ld	(hl),0FFh	;Mark FAT buffer as invalid again
-	pop	ix
-	pop	iy	;Retrieve pointer to page 3 table entry
-	or	a
-	ld	a,0
-	ret	nz	;If no suitable partition found, leave drive unmapped and return no error
-
-	ld	a,(ix+UD_DI##)
-	ld	(iy+2),a
-	ld	a,(ix+UD_LI##)
-	ld	(iy+3),a
-	ld	a,(ix+UD_FSEC##)
-	ld	(iy+4),a
-	ld	a,(ix+UD_FSEC##+1)
-	ld	(iy+5),a
-	ld	a,(ix+UD_FSEC##+2)
-	ld	(iy+6),a
-	ld	a,(ix+UD_FSEC##+3)
-	ld	(iy+7),a
-
-	push	iy
-	pop	ix
-endif
-
 MAPDOS1_DEF_OK:
 	ld (hl),0FFh	;Mark FAT buffer as invalid again
 
@@ -4070,7 +4026,7 @@ CHKLEGACY_LOOP:
 	jp	IDRVR_RET
 
 CHKLEGACY_STEP2:
-	ld	hl,KER250##
+	ld	hl,KERNEX##
 	ld	b,4
 CHKLEGACY_STEP2_LOOP:
 	ld	a,(hl)
@@ -4882,10 +4838,6 @@ LOCKDRV_SHOW:
 	add	a,'A'
 	call	CHPUT
 
-	;xor	a
-	;ld	c,_LOCK##
-	;call BASIC_DOS
-	;ld	a,b
 	pop	af
 	or	a
 	ld	hl,NOTLOCK_S
@@ -5193,9 +5145,6 @@ GDRL_NOCUR:
 
 	dec	a
 	ret
-
-	;ld	e,13
-	;jp	nz,BASIC_ERR
 
 GDL_GO:
 	inc	sp	;Discard pushed HL
@@ -5844,7 +5793,7 @@ SLOFDR_FOUND:
 ; Check if a slot number is a Nextor kernel
 ; Input:    E = Slot number
 ; Output:   Cy = 0 if Nextor kernel, 1 if NOT a Nextor kernel
-;           HL = Pointer to entry in KER250
+;           HL = Pointer to entry in KERNEX
 ; Modifies: AF, HL, B
 
 IS_NEXTOR_KER:
@@ -5852,7 +5801,7 @@ IS_NEXTOR_KER:
 	or a
 	scf
 	ret z
-	ld	hl,KER250
+	ld	hl,KERNEX
 	ld	b,4
 IS_NEX_LOOP:
 	ld	a,(hl)

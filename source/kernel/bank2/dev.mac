@@ -223,15 +223,10 @@ PROC	DEV_LST
 ;
 ;
 lst_wrch:	pcall	LST_OUT			;Just send output characters
-if 0
-		xor	a			; to the printer BIOS routine.
-		ret
-else
 		jr	nc,nul_wrch
 		res	0,(iy+@PR_ECHO##)	;Disable possible printer echo.
 		ld	a,.STOP##
 		ret
-endif
 ;
 lst_status:	pcall	LST_ST			;Find out if the printer is
 		ld	e,a			; ready for output and return

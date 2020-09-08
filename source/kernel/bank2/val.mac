@@ -648,9 +648,9 @@ wfile_loop:	push	ix
 		ex	de,hl
 ;
 		pop	hl
-if 1
+
 		call	UD_TICK			;Make UD_TIME up to date.
-endif
+
 		push	ix
 		push	hl			;Look at UD_TIME field of
 		ld	c,UD_TIME##		; unit descriptor and skip if
@@ -710,9 +710,7 @@ cur_volid_2:	jr	current_volid
 ;
 wrong_volid:	ld	a,.WFILE##		;Tell the user that he is
 		ld	de,0FFFFh		; trying to access the file on
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	b,d
-;===== end add DOS2.50
 		pcall	C_DISK_ERR		; the wrong disk and get his
 						; response (no IGNORE)
 		pop	hl			;If IGNORE jump to alter FIB
@@ -727,20 +725,14 @@ wrong_volid:	ld	a,.WFILE##		;Tell the user that he is
 not_opened:	pop	hl			;Flush all buffers for this
 		pcall	FL_UD			; physical unit.
 ;
-if 1
 		call	UD_TICK			;Make UD_TIME up to date.
-endif
+
 		push	ix
 		push	hl			;Look at UD_TIME field of
 		ld	de,UD_TIME##		; unit descriptor and if it is
 		add	hl,de			; 0 or 1 then jump to get a new
 		ld	a,(hl)			; UPB for this unit.
-if 0
-		sub	2
-		ld	d,a			;Remember UD_TIME for later
-		pop	hl
-		jr	c,no_curr_upb
-else
+
 		pop	hl
 if 0 ;900725	;Was "if 1" in DOS 2.3x
 		dec	b			;If B=2 on entry then skip
@@ -748,19 +740,16 @@ if 0 ;900725	;Was "if 1" in DOS 2.3x
 endif
 		or	a
 		jr	z,no_curr_upb
-endif
 ;
 if 1 ;900725	;Was "if 0" in DOS 2.3x
 		dec	b			;If B=2 on entry then skip
 		jr	z,got_new_volid		; to assume current disk.
 endif
 ;
-if 1
 		dec	a			;If timeout is 1 then always
 		jr	z,no_curr_upb		; get a new UPB.
 		dec	a			;If timeout >2 then assume
 		jr	nz,got_old_volid	; same UPB.  Otherwise 2.
-endif
 		call	IS_FIXED_OR_LOCKED		;Assume disk unchanged
 		jr	c,got_old_volid     ;if drive is locked
 		call	CHECK_MNT		;or has a file mounted
@@ -773,11 +762,8 @@ not_sure:	call	DO_MEDIA_CHANGE		; assume same one. !!!
 		jr	no_curr_upd_done
 
 no_curr_upb:
-		;ld	a,(MFLAGS##)
-		;and	2
-		;jr	nz,no_curr_upb2
-		call	MEDIA_CHECK	;!!!
-		call	nz,DO_MEDIA_CHANGE	;!!!
+		call	MEDIA_CHECK
+		call	nz,DO_MEDIA_CHANGE
 no_curr_upb2:
 		call	BUILD_UPB		;Get the new UPB.
 no_curr_upd_done:
@@ -874,9 +860,9 @@ CHECK_MNT:
 		call	CALL_UNIT		;Do the read/write operation
 ;
 SET_TIMEOUT:	push	hl			;Set media check timeout to
-if 1
+
 		call	UD_TICK			;Make UD_TIME up to date.
-endif
+
 		ex	(sp),ix			; maximum value since unit
 		ld	(ix+UD_TIME##),UD_TMOUT##; has just been accessed.  If
 		ex	(sp),ix			; DISK_ERR is called then this
@@ -944,9 +930,7 @@ chk_same_loop:	call	DO_MEDIA_CHANGE		; from the unit handler.
 ;
 		ld	a,.WDISK##		;WRONG DISK IN DRIVE.  Report
 		ld	de,0FFFFh		; to user, not allowing
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	b,d
-;===== end add DOS2.50
 		pcall	C_DISK_ERR		; an ignore response and
 		jr	chk_same_loop		; with invalid sector number.
 ;
@@ -1077,28 +1061,13 @@ _MCHECK:
 		push	bc
 		push	de
 ;
-if 0
-		push	hl
-		ld	de,UD_DPB##
-		add	hl,de
-		ld	a,(hl)			;Get DPB pointer from
-		inc	hl			; unit descriptor into
-		ld	h,(hl)			; IX for passing to disk
-		ld	l,a			; driver.
-		ex	(sp),hl
-		ex	(sp),ix
-endif
 		ld	a,MC_CMD		;Media check command
 		call	CALL_UNIT		;Call the device driver
-if 0
-		pop	ix
-endif
+
 		jr	z,no_media_err
 		cp	.NRDY##			;Only "not ready" is reported
 		ld	de,0FFFFh		; to user, all other errors
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	b,d
-;===== end add DOS2.50
 		pcall	z,C_DISK_ERR		; are suppressed and "disk
 		ld	b,0FFh			; changed" is returned.
 ;
@@ -1359,19 +1328,10 @@ build_upb_srchpar:
 		ld	ix,UPB_BUF##
 ;
 try_build_upb:	ld	de,0			;Try to read the boot sector
-;===== start mod DOS2.50
 		ld	bc,(DATA_SEG##)		; from the disk and if there
 		ld	b,1			; was any error then jump to
 						; moan to the user about it.
-;;		ld	b,1
-;;		ld	a,(DATA_SEG##)
-;;		ld	c,a
-;===== end mod DOS2.50
-;===== start mod DOS2.50
 		call	READ_UNIT
-;;		ld	a,RD_CMD
-;;		call	CALL_UNIT
-;===== end mod DOS2.50
 		pop	hl
 		jp	nz,build_upb_err
 
@@ -1454,7 +1414,6 @@ build_upb_notfind:
 		ld	a,1
 		jr	nz,found_upb
 
-;===== start mod FAT16 (332Ch patch/add 23bit sector address support)
 build_upb_ndos:
 		ld	a,.NDOS##
 build_upb_err:	ld	b,a
@@ -1475,34 +1434,6 @@ found_upb2:	pop	de
 		or a
 		ret
 
-;;		ld	de,1			;If no UPB in boot sector
-;;		ld	b,1			; then try to read the second
-;;		ld	a,(DATA_SEG##)		; sector of the disk which
-;;		ld	c,a			; should be the first FAT
-;;		ld	a,RD_CMD		; sector.
-;;		call	CALL_UNIT
-;;		jr	nz,build_upb_err	;Winge if couldn't read it
-;;		ld	a,(ix+1)
-;;		and	(ix+2)			;Check that 1st byte is
-;;		inc	a			; 0F8h...0FFh and that next
-;;		jr	nz,not_dos_disk		; two bytes are both 0FFh.
-;;		ld	a,(ix+0)		; If not then give an error
-;;		cp	0F8h
-;;		jr	c,not_dos_disk
-;;		call	MAKE_UPB		;Create UPB from FATID byte.
-;;if 1
-;;		jr	nz,build_upb_err
-;;		ld	(IX+UPB_VOLID##),0	;Ensure no "VOL_ID" string
-;;						; present.
-;;endif
-;;found_upb:	pop	de
-;;		pop	bc
-;;		ret
-;;not_dos_disk:	ld	a,.NDOS##
-;;build_upb_err:ld	de,0FFFFh		;If any error then tell
-;;		pcall	C_DISK_ERR		; the user and loop back
-;;		jr	try_build_upb		; to try it again.
-;===== end mod FAT16
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -1561,8 +1492,6 @@ FIND_UPB:
 		ld	de,UPB_SFAT##-(UPB_NDIR##+1);Ignore "total sectors"
 		add	hl,de			;  and "media byte".
 
-;===== start mod FAT16 (3389h patch)
-
 		ld	e,(hl)			;Number of sectors per
 		inc	hl			; FAT less than 256.
 		ld	d,(hl)
@@ -1579,20 +1508,6 @@ FIND_UPB:
 		ld	b,(ix+UPB_MBYTE##)
 		ld	a,DP_CMD
 		call	CALL_UNIT
-;;		ld	a,(hl)
-;;		inc	hl
-;;		dec	a
-;;		cp	12
-;;		jr	nc,upb_not_found
-;;		ld	a,(hl)
-;;		or	a
-;;		pop	hl			;Return with Z-flag set
-;;if 1 ;v2.3
-;;		ld	b,(ix+UPB_MBYTE##)
-;;		ld	a,DP_CMD
-;;		call	z,CALL_UNIT
-;;endif
-;===== end mod FAT16
 		ret				; if UPB was OK.
 ;
 ;
@@ -1643,110 +1558,6 @@ MAKE_UPB:
 ; Corrupts:    AF,BC,DE
 ;
 ;
-if 0
-		push	ix
-		ex	(sp),hl			;Point HL at buffer
-		ld	c,a			;Also keep FATID in C
-;
-if 0
-		ld	de,UPB_VOLID##+6	  ;Zero enough of the UPB to
-		add	hl,de			  ; ensure that there is no
-		ld	b,UPB_VOLID##+6-UPB_SSZ## ; "VOL_ID" string present.
-else
-		ld	de,UPB_BOOT##		;Zero enough of the UPB.
-		add	hl,de
-		ld	b,UPB_BOOT##-UPB_SSZ##
-endif
-zero_upb_loop:	dec	hl
-		ld	(hl),0
-		djnz	zero_upb_loop
-;
-;
-		ld	b,2			;Set sector size to 512.
-		inc	hl
-		ld	(hl),b
-		inc	hl
-;
-		inc	(hl)
-		and	00000101b		;Set sectors per cluster to 2
-		sub	00000100b		; unless media byte is 0FCh or
-		jr	z,make_upb_1		; 0FEh (sided, 40 track), in
-		inc	(hl)			; which case set it to 1.
-make_upb_1:	inc	hl
-;
-		inc	(hl)			;Set number of reserved
-		inc	hl			; sectors to 1.
-		inc	hl
-;
-		ld	(hl),b			;Set number of FATs to 2
-		inc	hl
-;
-		ld	(hl),64			;Set number of root directory
-		or	a			; entries to 64 if one sector
-		jr	z,make_upb_2		; per cluster and to 112 if
-		ld	(hl),112		; two sectors per cluster.
-make_upb_2:	inc	hl
-		inc	hl
-;
-;
-		push	hl			;Save UPB pointer
-		ld	a,c			;A := media byte
-		ld	hl,320			;Start with 320 sectors
-		ld	bc,40			;Extra 40 if 9 sectors/track
-		ld	de,8*256+1		;Start with 8 sectors/track
-						; and 1 side.
-;
-		bit	1,a			;If 9 sectors/track, add 40 to
-		jr	nz,eight_sectors	; total sectors & increase
-		inc	d			; sectors/track by one.
-		add	hl,bc
-eight_sectors:
-		bit	0,a			;If double sided, increment
-		jr	z,one_side		; number of sides and double
-		inc	e			; total number of sectors.
-		add	hl,hl
-one_side:
-		bit	2,a			;If 40 tracks, double total
-		jr	nz,forty_tracks		; number of sectors.
-		add	hl,hl
-forty_tracks:
-;
-		ex	de,hl			;DE := total sectors
-		ex	(sp),hl			;HL := UPB pointer
-;
-		ld	(hl),e			;Record total number of sectors
-		inc	hl			; in the UPB.
-		ld	(hl),d
-		inc	hl
-		ld	(hl),a			;Record media byte in the UPB.
-		inc	hl
-;
-;
-		inc	(hl)			;Start sectors/FAT at one.
-		cp	0FEh
-		jr	nc,sect_per_fat		;Leave at one if 0FEh or 0FFh
-		sub	0FAh
-		jr	z,sect_per_fat		;Also leave at one if 0FAh
-		inc	(hl)
-		inc	a			;Otherwise set to two sect/FAT
-		jr	nz,sect_per_fat		; unless media byte is 0F9h,
-		inc	(hl)			; in which case set it to
-sect_per_fat:	inc	hl			; three sect/FAT.
-		inc	hl
-;
-;
-		pop	de			;Record number of sectors/track
-		ld	(hl),d
-		inc	hl
-		inc	hl
-;
-		ld	(hl),e			;Record number of sides.
-;
-						;Leave hidden sectors as zero.
-;
-		pop	hl			;Restore HL (unit descriptor)
-		ret
-else
 		ld	b,a
 		ld	a,DP_CMD		;Try to get a DPB for this
 		call	CALL_UNIT		; FATid byte and give up if
@@ -1830,7 +1641,6 @@ secsize_loop:	add	hl,hl
 		pop	ix			;Restore buffer address
 		pop	hl			; and unit descriptor.
 		ret				;Return with no error (zero).
-endif
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -1908,11 +1718,7 @@ _NEW_UPB:
 		ld	(hl),a
 		inc	hl
 ;
-if 0
-		ld	c,0FFh
-else
 		ld	c,0
-endif
 cshft_loop:	inc	c			;Set CLUSTER SHIFT to:
 		rrca				; LOG (sectors per cluster) + 1
 		jr	c,cshft_loop
@@ -1963,17 +1769,12 @@ no_partial_sec:					; reserved for directory.
 		ld	e,a
 		xor	a
 		ld	d,a
-;===== start mod FAT16 (FSIZE3 patch)
 sfat_loop:	inc	e			;DE :=   (sectors per FAT)
 		dec	e			;      * (number of FATs)
 		jr	z,sfat_no_8bit
 		add	a,e
 		jr	nc,sfat_no_cy
 sfat_no_8bit:	inc	d
-;;sfat_loop:	add	a,e
-;;		jr	nc,sfat_no_cy
-;;		inc	d
-;===== end mod FAT16
 sfat_no_cy:	djnz	sfat_loop
 		ld	e,a
 ;
@@ -1997,7 +1798,6 @@ sfat_no_cy:	djnz	sfat_loop
 		push	hl
 		ld	l,(ix+UPB_SEC##)	;Get total number of sectors
 		ld	h,(ix+UPB_SEC##+1)
-;===== start mod FAT16 (TALCLS patch)
 		ld	a,l
 		or	h
 		ld	a,0
@@ -2007,26 +1807,15 @@ sfat_no_cy:	djnz	sfat_loop
 		ld	a,(ix+UPB_BIGSEC##+2)
 nclu_fat12:	sbc	hl,de			;HL := (data sectors)
 		sbc	a,0
-;;		or	a
-;;		sbc	hl,de
-;===== end mod FAT16
-if 0
-		inc	c
-endif
+
 nclu_loop:	dec	c
 		jr	z,nclu_done		;Shift this by the CLUSTER
-;===== start mod FAT16 (TALCLS patch)
 		srl	a			; SHIFT to get number of
 		rr	h			; clusters (rounded down to
-;;		srl	h
-;===== end mod FAT16
 		rr	l			; nearest whole cluster).
 		jr	nclu_loop
 nclu_done:
 		inc	hl			;+2 to get maximum cluster
-if 0
-		inc	hl			; number + 1 for UPB.
-endif
 ;
 		ex	de,hl
 		pop	hl			;Record MAXIMUM CLUSTER in
@@ -2070,16 +1859,6 @@ endif
 		pop	hl
 		jr	nz,ok_fattype
 
-		if 0
-		ld	a,d		;Check if maximum cluster number
-		cp	10h	;0fh		;is greater than 4079 (0FEFh).
-		jr	c,ok_fattype	;If so, set the FAT16 flag.
-		;jr	nz,is_fat16
-		;ld	a,e
-		;cp	0F0h
-		;jr	c,ok_fattype
-		endif
-
 is_fat16:	ex	(sp),hl
 		push	hl
 		ld	bc,UD_FLAGS##
@@ -2095,36 +1874,6 @@ ok_fattype:
 		dec	hl			; descriptor (using default if not present).
 
 		jr	nz,upb_noundel
-
-if 0
-
-		push	hl
-		push	de
-		push	ix
-		pop	hl
-		ld	bc,UPB_MANU##	;Check if manufacturer starts with "MSXDOS"
-		add	hl,bc
-		ld	de,msxdos_str
-		ld	b,6
-		call	CP_FLSTR
-		pop	de
-		pop	hl
-		jr	z,ok_upb_undel
-
-		push	hl
-		push	de
-		push	ix
-		pop	hl
-		ld	bc,UPB_MANU##	;Check if manufacturer starts with "NEXTOR"
-		add	hl,bc
-		ld	de,nextor_str
-		ld	b,6
-		call	CP_FLSTR
-		pop	de
-		pop	hl
-		jr	nz,upb_noundel
-
-endif
 
 ok_upb_undel:
 		ex	(sp),hl
@@ -2243,7 +1992,6 @@ z80mode_done:
 		pop	hl
 		pop	af
 
-if 1
 ;
 ; Build MSX DPB from unit descriptor.
 ; Assumes:  UD_DPB=2, ...etc.
@@ -2293,13 +2041,11 @@ if 1
 		ldir
 		pop	hl
 ;
-endif
 ;
 	PROC	ZAP_CD
 ;
 		push	hl
 		push	bc
-;===== start mod FAT16 (CLST_A patch)
 		ld	bc,UD_CDIR##
 		add	hl,bc			;Look at current dir cluster
 		pop	bc
@@ -2309,13 +2055,6 @@ endif
 		inc	a			;Skip if it is -ve (root dir)
 		jr	z,no_cur_dir
 		xor	a
-;;		ld	bc,UD_CDIR##+1
-;;		add	hl,bc
-;;		pop	bc
-;;		xor	a
-;;		bit	7,(hl)
-;;		jr	nz,no_cur_dir
-;===== end mod FAT16
 		ld	(hl),a
 		dec	hl			;If not -ve then set it to
 		ld	(hl),a			; zero to indicate unknown.
@@ -2336,7 +2075,6 @@ COMPHLDE:
 ;
 ;------------------------------------------------------------------------------
 ;
-;===== start add DOS2.50
 
 ; Input for READ_UNIT and WRITE_UNIT:
 ; B  = Number of sectors
@@ -2366,7 +2104,6 @@ READ_UNIT:
 		ld a,c
 		ret
 
-;===== end add DOS2.50
 CALL_UNIT:
 ;
 ;    This  routine calls a specified disk driver function.  The required  disk
@@ -2688,9 +2425,9 @@ call_unit_drvbased:
 		inc	hl
 		ld	h,(hl)
 		ld	l,a
-if 1
+
 		ld	a,(P2_TPA##)		;A':= default page-2 segment
-endif
+
 		ex	af,af'			;A := relative unit number
 		call	jp_hl			;Go to do the command
 ;
@@ -2754,7 +2491,6 @@ rd_wr_cmd:	ex	af,af'			;Put unit number in A'
 		ld	hl,4000h		;DSKIO is first jump
 		exx
 		ld	a,c			;A := page-2 segment
-;===== start mod FAT16 (SETNUM patch/add 23bit sector address support)
 		push	af
 		bit	UF_F16,(ix+UD_FLAGS##)	;Check FAT16 flag
 		ld	a,(ix+UD_MBYTE##)
@@ -2764,8 +2500,6 @@ rd_wr_cmd:	ex	af,af'			;Put unit number in A'
 rd_wr_cmd_16bit_sec:
 		ld	c,a
 		pop	af
-;;		ld	c,(ix+UD_MBYTE##)
-;===== end mod FAT16
 		push	bc			;Save sector count (in B)
 		call	CALL_DRV		;Call the disk driver
 		jr	c,rdwr_cmd_err
@@ -2787,13 +2521,11 @@ mc_cmd_routine:	ex	af,af'			;Put unit number in A'
 		exx
 		ld	b,0			;B := 0 initially
 		ld	c,(ix+UD_MBYTE##)	;C := media descriptor byte
-;===== start add FAT16 (DOS2.50 original patch)
 		set	7,c			;ignore FAT12 flag
-;===== end add FAT16
-if 1
+
 		ld	l,(ix+UD_DPB##)		;HL := DPB pointer
 		ld	h,(ix+UD_DPB##+1)
-endif
+
 		call	CALL_DRV		;Call the disk driver
 		jr	c,mchk_cmd_err
 		xor	a			; A=0 and B=disk change
@@ -2809,13 +2541,11 @@ dp_cmd_routine:	ex	af,af'			;Put unit number in A'
 		exx
 						;B := FATid byte
 		ld	c,(ix+UD_MBYTE##)	;C := media descriptor byte
-;===== start add FAT16 (DOS2.50 original patch)
 		set	7,c			;ignore FAT12 flag
-;===== end add FAT16
-if 1
+
 		ld	l,(ix+UD_DPB##)		;HL := DPB pointer
 		ld	h,(ix+UD_DPB##+1)
-endif
+
 		call	CALL_DRV		;Call the disk driver
 		ld	a,.NCOMP##		;Incompatible media if error
 		ret	c
@@ -2950,7 +2680,6 @@ rdwr_devcmd:
 	ret
 rdwr_devcmd_ok:
 	pop	bc	;On success, return transferred sectors=required sectors
-	;ld	b,c   ;WTF?????
 	ret	
 ;
 ;	---------------------------------
@@ -3007,7 +2736,6 @@ dp_devcmd_routine:
 ;
 ch_devcmd_routine:
 	ld	a,.IFORM##
-	;ld	hl,741Fh
 	ret
 	;TODO: Handle formatting
 ;
@@ -3044,27 +2772,11 @@ CALL_DRV:
 		pcall	CH_FLUSH		;Flush any screen buffer
 ;		pcall	STOP_TST		;Check for ctrl-STOP
 ;
-		;push	af
-		;push	hl
-		;ld	hl,MAIN_BANK##
-		;ld	a,(BNK_ID##)
-		;cp	(hl)
-		;jr	z,CALLDRV2
-
-		;ld	hl,(CALLDRV3)
-		;ld	(BK4_ADD##),hl
-		;pop	hl
-		;pop	af
-		;call	CALLB0##
-
 CALLDRV2:
 		;pop		hl
 		;pop		af
 CALLDRV3:
 
-if 0
-		di
-endif
 		exx				;Work out the address of the
 		bit	UF_DBD,(IX+UD_DFLAGS##) ; routine to call (UD_OFFSET
 		jr	nz,CALDRV_DEVBASED	; routine to call (UD_OFFSET
@@ -3076,10 +2788,6 @@ CALDRV_DEVBASED:
 		ld	(BK4_ADD##),hl	;Call via CALDRV is needed 
 		ld	hl,CALDRV##	;for device-based drivers.
 CALDRV_NEXT:
-
-if 0
-		ld	(DRV_ADDR##),hl
-endif
 
 		ld	b,(ix+UD_SLOT##)	;Get disk driver slot number
 		bit	UF_Z80,(ix+UD_FLAGS##)
@@ -3104,26 +2812,14 @@ endif
 		ld	bc,CALDRV_RET_Z80
 CALDRV_NOZ80:
 
-if 0
-		ld	a,b			;Store the disk driver slot
-		ld	(DRV_SLOT##),a		; number in page-3.
-else
 		pop	iy			;Get the disk driver's slot number in IYh.
 		pop	ix			;Get routine address in IX.
-endif
 		push	bc		;Push GO_DRV return address into the stack
 
 		exx
 		ex	af,af'
 ;
-if 0
-		ld	iy,(MASTER_SLOT##-1)	;Call the driver via the
-		ld	ix,(GO_DRV##)		; routine "GO_DRV" in the
-		call	CALSLT##		; master ROM in page-1.
-else
-
 		jp	GO_DRV##	;We have set the return address in stack previously
-endif
 
 CALDRV_RET_Z80:
 		exx			;Disable again Z80 switching code
@@ -3236,41 +2932,6 @@ log_unit_ok:
 ;
 ;-----------------------------------------------------------------------------
 ;
-if 0
-	PROC	UD_TICK
-;
-;    This  routine is called each deci-second to decrement the "UD_TIME" field
-; of each unit descriptor if required.  The value is  decremented  down  to  a
-; limit  of 2 at which value it sticks.  If the value is 0 or 1 then it is not
-; decremented.  This timeout is used to control calls  to  the  disk  driver's
-; "media check" routine.
-;
-; Entry:     None
-; Returns:   None
-; Corrupts:  AF,BC,DE,HL,IX
-;
-;
-		ld	hl,UNIT_TAB##+2		;Look through each entry
-		ld	b,MAX_UNITS##		; in UNIT_TAB in turn.
-ud_tick_loop:	ld	e,(hl)
-		inc	hl
-		ld	d,(hl)
-		inc	hl			;If this unit descriptor does
-		ld	a,d			; not exist then don't try
-		or	e			; to do anything to it.
-		jr	z,ud_tick_next
-;
-		push	de
-		pop	ix			;If the UD_TIME field is
-		ld	a,(ix+UD_TIME##)	; 2 or less then leave it
-		cp	3			; unaltered, else decrement
-		adc	a,0FFh			; it by one.
-		ld	(ix+UD_TIME##),a
-;
-ud_tick_next:	djnz	ud_tick_loop		;Loop 'til done all units.
-		ret
-;
-else
 UD_TICK:
 ;
 ;    This  routine is called each deci-second to decrement the "UD_TIME" field
@@ -3293,13 +2954,8 @@ UD_TICK:
 		inc	a			; be verified.
 		jr	nz,fat_not_invalid
 		ld	(hl),0			;Set it to 'clean' once seen.
-;===== start mod DOS2.50
 		push	de
 		ld	de,(TARGET##)
-;;		ld	a,(TARGET##)
-;;		push	de
-;;		ld	e,a
-;===== end mod DOS2.50
 		ld	d,0
 		ld	hl,UNIT_TAB##+2
 		add	hl,de
@@ -3358,7 +3014,6 @@ ud_tick_ret:	pop	hl
 		pop	af
 		ret
 ;
-endif
 ;
 
 ;--- Compare strings of fixed length

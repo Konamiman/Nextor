@@ -30,22 +30,6 @@ DB_INIT::
 		ld	a,(P2_64K##)
 		call	PUT_P2##
 ;
-if 0
-		ld	bc,LEN_1##		;Allocate space for the
-		call	DB_PALLOC##		; three buffers for
-		ld	(BUF_1##),hl		; strings, FIBs and FCB's
-		ld	bc,LEN_2##		; in BDOS_GO.
-		call	DB_PALLOC##
-		ld	(BUF_2##),hl
-		ld	bc,LEN_3##
-		call	DB_PALLOC##
-		ld	(BUF_3##),hl
-;
-		ld	bc,64			;Allocate space for the
-		call	DB_PALLOC##		; error message buffer.
-		ld	(ERR_BUF##),hl
-;
-endif
 		ret
 ;
 ;
@@ -198,8 +182,6 @@ DOS1_GO::
 		EX	AF,AF'			;Save parameters to BDOS
 		EXX				; function.
 ;
-if 1
-;
 ; Insure error vectors are directed to us.  Just for bad mannered applications
 ; that call 0005h at one time and F37Dh at another time.  ...HF...
 ;
@@ -212,7 +194,7 @@ KDERJ   equ KABJ+7
 		ld	(KAB_VECT##),hl		; abort vector routines for
 		ld	hl,KDERJ	;		; MSX-DOS 1.0 compatability.
 		ld	(KDSK_VECT##),hl	;
-endif
+
 		LD	HL,(BDOS_STACK##)
 		OR	A			;If the current stack pointer
 		SBC	HL,SP			; value is in the "BDOS_STACK"

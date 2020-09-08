@@ -67,9 +67,7 @@ DOSINIT::
 		ld	a,(DATA_SEG##)		;Put kernel data segment in
 		call	PUT_P2##		; page-2.
 ;
-if 1
 		call	BUILD_UC_TAB		;Build upper casing table there
-endif
 
 		ld	hl,$DPBLIST##		;Set the default media bytes table
 		ld	ix,MB_DEF##
@@ -110,7 +108,7 @@ NEEDZ80_LOOP:
 
 		inc	hl
 		ld	c,(hl)
-		ld	de,(KER250##)
+		ld	de,(KERNEX##)
 		ld	a,d
 		and	10001111b
 		cp	c
@@ -119,7 +117,7 @@ NEEDZ80_LOOP:
 		and	10001111b
 		cp	c
 		jr	z,NEEDZ80_NEXT
-		ld	de,(KER250##+2)
+		ld	de,(KERNEX##+2)
 		ld	a,d
 		and	10001111b
 		cp	c
@@ -138,21 +136,10 @@ NEEDZ80_NEXT:
 NEEDZ80_DONE:
 
 ;
-if 0
-		ld	a,1
-		call	ALL_SEG##		;Allocate a system segment
-		ld	h,a
-		ld	a,3
-		ret	c			; for the code segment.
-		ld	a,h
-		ld	(CODE_SEG##),a
-		call	PUT_P0##		;Put it in page-0.
-else
 		ld	a,(CODE_SEG##)		;Put kernel code segment in
 		call	PUT_P0##		; page-0.
-endif
 ;
-if 1
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ;	Transfer kernel code to mapper RAM
@@ -181,55 +168,14 @@ if 1
 		call	P0_RAM##		;Enable RAM in page-0
 		ld	hl,OFFSET
 		ld	de,0			;Copy 16k of kernel code
-if 1
 		ld	bc,7FF0h - OFFSET
-else
-		ld	bc,-OFFSET and 3FFFh	; from ROM into RAM.
-endif
 ;
 		ld	a,B.KERNEL##		;Switch to bank of kernel code
 		jp	CHGBNK##		;
 ;
 copy_done:	pop	hl
 		pop	hl
-else
-		ld	a,(MASTER_SLOT##)	;Enable disk ROM into page-2
-		ld	h,80h			; (contains kernel code)
-		call	ENASLT##
-		call	P0_RAM##		;Enable RAM in page-0
-		ld	hl,8000h
-		ld	de,0			;Copy 16k of kernel code
-		ld	bc,4000h		; from ROM into RAM.
-		ldir
-		ld	a,(RAMAD3##)		;Put RAM back into page-2
-		ld	h,80h			; (will use new version of
-		call	ENASLT##		;  ENASLT in downloaded code)
-endif
 ;
-if 0
-		ld	hl,GO_DRV_ROUTINE	;Record address of routine
-		ld	(GO_DRV##),hl		; to call disk drivers.
-		ld	hl,ERR_MSG##		;Record address of error
-		ld	($ERR_MSG##),hl		; message routine.
-;
-		ld	hl,H.TIMI##
-		push	hl
-		ld	de,TIMI_SAVE##		;Save the current setting of
-		ld	bc,5			; the timer interrupt hook
-		ldir				; in our data area.
-		pop	hl
-		ld	(hl),0F7h
-		inc	hl
-		ld	a,(MASTER_SLOT##)	;Now set up an inter-slot call
-		ld	(hl),a			; to our timer interrupt
-		inc	hl			; routine in this ROM page.
-		ld	(hl),LOW TIME_IRQ##
-		inc	hl
-		ld	(hl),HIGH TIME_IRQ##
-		inc	hl
-		ld	(hl),0C9h
-;
-endif
 		call	KINIT##			;Call main kernel init routine
 		ex	af,af'			; in downloaded code.
 ;
@@ -246,7 +192,7 @@ endif
 		ex	af,af'			;Return with carry flag from
 		ret				; KINIT to indicate success
 						; or failure.
-if 1
+
 BUILD_UC_TAB:
 		ld	a,(ID_BYTE##)		;Extract and record character
 		and	00001111b		; generator type for upper
@@ -381,7 +327,6 @@ inter_conv_table equ	$-080h
 		db	0B0h,0B0h,0B2h,0B2h,0B4h,0B4h,0B6h,0B6h
 		db	0B8h,0B8h,0BAh,0BBh,0BCh,0BDh,0BEh,0BFh
 ;
-endif
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -485,13 +430,12 @@ adjust_loop:	ld	c,(hl)			;Loop to adjust all absolute
 		jr	adjust_loop		;Loop for next entry.
 ;
 adjust_done:
-if 1 ;[HF] an interim solution while kernel is paged in.
+        ;[HF] an interim solution while kernel is paged in.
 		ld	a,(CODE_SEG##)
 		ld	hl,_patch_53+1		;Patch segment number of
 		add	hl,de			; kernel code int IRQ.
 		ld	(hl),a
 ;
-endif
 ;
 ;	+++++  PATCH P0_RAM SWITCHING ROUTINE  +++++
 ;
@@ -502,7 +446,6 @@ endif
 		ld	(hl),a
 		ld	c,a			;Save primary slot number
 		ld	b,0			; in BC.
-if 1
 		rlca
 		rlca
 		rlca
@@ -511,7 +454,6 @@ if 1
 		ld	hl,_patch_65+1		;Patch primary RAM slot
 		add	hl,de			; number into PUT_BDOS
 		ld	(hl),a
-endif
 ;
 		ld	a,(RAMAD3##)
 		bit	7,a			;Skip if RAM slot is not
@@ -521,7 +463,6 @@ endif
 		ld	(hl),b			;If RAM slot is expanded then
 		inc	hl			; patch out the relative jump.
 		ld	(hl),b
-if 1
 		ld	hl,_patch_60
 		add	hl,de
 		ld	(hl),b
@@ -536,8 +477,7 @@ if 1
 		ld	hl,_patch_16
 		add	hl,de
 		code	mvi m			;Patch the RET at RE_RAM.
-		 code	sta
-endif
+		code	sta
 ;
 		rrca
 		rrca				;Patch secondary RAM slot
@@ -545,7 +485,6 @@ endif
 		ld	hl,_patch_13+1		; code.
 		add	hl,de
 		ld	(hl),a
-if 1
 		ld	l,a
 		rlca
 		rlca
@@ -555,22 +494,12 @@ if 1
 		ld	hl,_patch_63+1		;Patch secondary RAM slot
 		add	hl,de			; number into PUT_BDOS
 		ld	(hl),a
-endif
 ;
 		push	de
 		ld	hl,SLTTBL##		;Work out the address of the
 		add	hl,bc			; correct secondary slot reg
 		ex	de,hl			; image variable depending
-if 0
-		ld	bc,_patch_12+1		; on the primary RAM slot.
-		add	hl,bc
-		ld	(hl),e			;Patch this address into
-		inc	hl			; the P0_RAM code in both
-		ld	(hl),d			; places where it occurs
-		ld	bc,_patch_14-_patch_12-1
-else
 		ld	bc,_patch_14+1
-endif
 		add	hl,bc
 		ld	(hl),e
 		inc	hl
@@ -580,7 +509,7 @@ endif
 		ld	(hl),e
 		inc	hl
 		ld	(hl),d
-if 1
+
 		ld	bc,_patch_61-_patch_16-1
 		add	hl,bc
 		ld	(hl),e
@@ -591,7 +520,7 @@ if 1
 		ld	(hl),e
 		inc	hl
 		ld	(hl),d
-endif
+
 		pop	de
 ;
 ram_not_exp:
@@ -634,18 +563,12 @@ ram_not_exp:
 		jr	nz,bios_not_ram		; case code to directly
 		ld	hl,_patch_26		; access the secondary slot
 		add	hl,de			; register in page-3.
-if 0
-		ld	(hl),b
-		inc	hl
-		ld	(hl),b
-else
 		code	mvi m
 		 code	sta
 		inc	hl
 		ld	(hl),0FFh
 		inc	hl
 		ld	(hl),0FFh
-endif
 		jr	bios_is_ram
 ;
 bios_not_ram:	code	mvi a			;If BIOS slot is expanded and
@@ -691,7 +614,6 @@ bios_is_ram:	push	de
 		pop	de
 ;
 bios_not_exp:
-;===== start add DOS2.50 (build type)
 ;
 ;	+++++  SET UP SUPPORT SUPER TURBO MODE RUTINE  +++++
 ;
@@ -724,16 +646,8 @@ endif
 ;
 bios_not_superturbo:
 endif
-;===== end add DOS2.50
 ;
 ;	+++++  SET UP AUXIN, AUXOUT AND BDOS JUMPS  +++++
-;
-if 0
-		ld	a,(MASTER_SLOT##)
-		ld	hl,_patch_01		;Patch our slot number into
-		add	hl,de			; the BDOS jump code.
-		ld	(hl),a
-endif
 ;
 		ld	hl,P3_JUMP_TABLE	;Loop to set up the page-3
 jump_tab_loop:	ld	c,(hl)			; fixed jumps.
@@ -819,11 +733,8 @@ _$DOSON:	push	af
 _$DOSOFF:	push	af
 		ld	a,i
 		push	af
-if 0
-		ld	a,(RAMAD3##)		;Get RAM slot address
-else
+
 		ld	a,(RAMAD1##)		;Get RAM slot address
-endif
 ;
 _dos_on_off:	push	hl
 		push	de
@@ -856,11 +767,7 @@ _XFER:
 		push	bc
 		call	GETSLOT##		;Find our current slot
 		push	af			; address.
-if 0
-		ld	a,(RAMAD3##)
-else
 		ld	a,(RAMAD1##)
-endif
 		ld	h,040h
 		call	ENASLT##		;Enable RAM slot in page-1
 		pop	af
@@ -871,9 +778,6 @@ endif
 		push	hl
 		push	de
 		push	bc
-if 0
-		call	$DOSON##		;Secondary slot bug fix.
-endif
 		ld	h,040h			;Re-enable the original
 		call	ENASLT##		; slot in page-1.
 		pop	bc
@@ -901,60 +805,34 @@ _RD_LDIR:
 		ld	a,b
 		ld	h,040h			;Select required slot into
 		call	ENASLT##		; page-1.
-if 1
 ;
 ; Unless we enable interrupt here, interrupt will be disabled for about  105ms
 ; in  the  worst  (full  page  transfer)  case.   This  is  too  much  for the
 ; communication devices.  [HF]
 ;
 		ei
-endif
 		pop	de
 		pop	bc
 		ld	hl,(RD_ADDR##)
 		ex	af,af'
 		jr	c,write_noswap		;Swap source and destination
-if 0 ;;R800-BUG
-		push	de
-		ex	(sp),hl
-		pop	de
-else
 		ex	de,hl			; addresses if reading.
-endif
+
 write_noswap:	ex	af,af'
 		ldir				;Copy the data
 		ld	a,(MASTER_SLOT##)
 		ld	h,040h			;Restore master disk ROM to
-if 1
 		call	ENASLT##		; page-1 and return
 		ei
 		ret
-else
-		jp	ENASLT##		; page-1 and return
-endif
 ;
 ;
 ;-----------------------------------------------------------------------------
 ;
-if 0 ;[HF]
-_AUXIN_JUMP:	ld	a,CTRL_Z	;AUXIN code, simply returns an
-		ret			; EOF character.
-		db	0,0
-;
-_AUXOUT_JUMP:	ret			;AUXOUT code, simply returns
-		db	0,0,0,0		; without doing anything.
-;
-_BDOS_JUMP:	ld	(IX_BDOS##),ix	;IX doesn't survive inter-slot call
-		rst	30h		;Inter-slot jump for BDOS entry from
-_patch_01:	db	0		; F37Dh, to call the routine below.
-		dw	BDOS_GO##	; Slot number is patched into this
-		ret			; when it is copied to system RAM.
-else
 _BDOS_JUMP:	ld	(IX_BDOS##),ix	;IX doesn't survive inter-slot call.
 		ld	iy,(MASTER_SLOT##-1)
 		ld	ix,($BDOS##)
 		jp	CALSLT##
-endif
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -968,12 +846,9 @@ _JP_VECT:	ei
 		ld	d,(hl)
 		ex	de,hl
 		pop	de
-;===== start mod DOS2.50
 		push	hl
 		ld	hl,(ERR_EX_SECTOR##)
 		ret
-;;		jp	(hl)
-;===== end mod DOS2.50
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -984,13 +859,9 @@ _GO_DRV:
 ;
 		ex	af,af'
 ...	      < call	_drv_prompt >
-;===== start mod DOS2.50 (build type)
+
 if STURBO
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
-;===== start add DOS2.50 (support build type)
 _patch_70:	jr	_go_drv_skip1_super_turbo
-;===== end add DOS2.50
 		push	ix
 		ld	ix,0183h	;GETCPU
 		call	P0_CALL##
@@ -1006,13 +877,9 @@ endif
 		ex	af,af'
 ;
 		call	CALSLT##
-;===== start mod DOS2.50 (build type)
+
 if STURBO
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
-;===== start add DOS2.50 (support build type)
 _patch_71:	jr	_go_drv_skip2_super_turbo
-;===== end add DOS2.50
 		ex	af,af'
 		pop	af
 		push	ix
@@ -1038,10 +905,8 @@ _PROMPT:
 ;
 ...	      <	call	_app_prompt >
 ;
-if 1 ;PANABUG
 		push	iy
 		push	de
-endif
 		call	GETSLOT##
 		push	af
 ...	      < call	_GET_P2 >
@@ -1058,10 +923,8 @@ endif
 		pop	af
 		ld	h,40h
 		call	ENASLT##
-if 1 ;PANABUG
 		pop	de
 		pop	iy
-endif
 ;
 _drv_prompt:	code	mvi a		;Kill $DOSON routine while disk driver
 		 code	ret		; is active.
@@ -1205,7 +1068,7 @@ _P0_CALL:
 ...	      < call	_P0_BIOS >		; and save old secondary slot
 _patch_30:	nop				; register if BIOS slot is
 						; expanded.
-if 1
+
 ;
 ; We  set  the  mapper  segments to the TPA segments, in anticipation that the
 ; called BIOS is hooked and the hook calls/refers/modifies the  page-0  and/or
@@ -1217,10 +1080,8 @@ if 1
 ; slot switching routine or interrupt vector may not be in the TPA segment.
 ; [HF]
 ;
-;===== start mod DOS2.50 (build type)
+
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 ...	      <	call	_GET_P2 >
 		push	af
 ...	      <	call	_GET_P0>
@@ -1231,16 +1092,13 @@ endif
 		ld	a,(P2_TPA##)
 ...	      < call	_PUT_P2 >
 		ei
-endif
+
 		ex	af,af'
 		call	_JP_IX			;Call the routine
 		ex	af,af'
 ...	      < call	_P0_RAM >
-if 1 ;[HF]
-;===== start mod DOS2.50 (build type)
+
 if BUILTIN
-;;if 1 ;;HYBRID
-;===== end mod DOS2.50
 		pop	af
 ...	      <	call	_PUT_P0 >
 		pop	af
@@ -1251,7 +1109,7 @@ else
 		ld	a,(DATA_SEG##)
 ...	      < call	_PUT_P2 >
 endif
-endif
+
 _patch_31:	jr	_bios_not_exp2		;If BIOS slot is expanded then
 		pop	af			; restore the secondary slot
 ...	      < call	_RE_BIOS >		; register for it.
@@ -1277,36 +1135,33 @@ _FLUSH:
 ...	      < call	_P0_BIOS >		;Put the MSX BIOS ROM in and
 _patch_40:	nop				; save old secondary slot
 						; value if expanded
-if 1
+
 		ld	a,(P0_TPA##)		;Put the application segments
 ...	      < call	_PUT_P0 >		; into page-0 and page-2.
-endif
+
 _flush_loop:	push	hl			;Loop to write out each
 		push	bc			; character from the buffer
-if 1
+
 		ld	b,(hl)			; in turn using the CHPUT
 		ld	a,(P2_TPA##)
 ...	      < call	_PUT_P2 >
 		ld	a,b
 		ei
-else
-		ld	a,(hl)			; in turn using the CHPUT
-endif
+
 		call	000A2h			; routine in the MSX BIOS
-if 1
+
 		di
 		ld	a,(DATA_SEG##)
 ...	      < call	_PUT_P2 >
-endif
+
 		pop	bc			; ROM.
 		pop	hl
 		inc	hl
 		djnz	_flush_loop
 ;
-if 1
 		ld	a,(CODE_SEG##)		;Restore page-0 to kernel
 ...	      < call	_PUT_P0 >		; segment.
-endif
+
 ...	      < call	_P0_RAM >		;Re-enable mapper RAM in page-0
 _patch_41:	jr	_bios_not_exp3		;If BIOS slot is expanded then
 		pop	af			; restore the secondary slot
@@ -1358,7 +1213,7 @@ _irq_return:	pop	bc
 _GO_IRQ:
 ...	      < call	_P0_BIOS >	;Enable BIOS ROM slot in page-0 &
 _patch_50:	nop			; save sec. slot register if expanded
-if 1
+
 ;
 ; We  set  the  mapper  segments  to the application, in anticipation that the
 ; interrupts are hooked and are directed to the application  RAM.   This  will
@@ -1395,7 +1250,7 @@ _patch_53:	cp	??????		;If page-0 was not the kernel segment
 ...	      < call	_PUT_P0 >
 		jr	_p0_not_kernel
 _tpa_irq:
-endif
+
 		call	INTRPT##	;Call main interrupt routine (38h)
 ;
 _p0_not_kernel:
@@ -1452,13 +1307,6 @@ _patch_23:	or	??????			; BIOS secondary slot number
 _patch_24:	ld	(??????),a		; in page-0.
 ;
 _patch_26:
-if 0
-		jr	_bios_not_ram		;If BIOS is in same primary
-		ld	(0FFFFh),a		; slot as RAM then write direct
-		jr	_bios_not_exp		; to secondary slot register.
-;
-_bios_not_ram:
-endif
 ...	      < call	_RE_BIOS >		;Patched to "ld (0FFFFh),a" if
 						; BIOS is in same primary
 						; slot as RAM.
@@ -1490,12 +1338,8 @@ _P0_RAM:
 		di				;This jump will be patched
 _patch_11:	jr	_ram_not_exp3		; out if slot is expanded.
 ;
-if 0
-_patch_12:	ld	a,(??????)		;Get secondary slot register
-else
 		ld	a,(0FFFFh)		;Get secondary slot register
 		cpl
-endif
 		ld	(SS_TEMP##),a		; image variable, remember it
 		and	11111100b		; for returning and insert
 _patch_13:	or	??????			; required slot in page-0.
@@ -1854,13 +1698,7 @@ _WRSLT:		set	6,d
 _rdslt_wrslt:	di
 ;
 ...	      < ld	(_rdwrslt_addr+1),hl >	;Store address for later
-if 0 ;;R800-BUG
-		push	de
-		ex	(sp),hl
-		pop	de
-else
 		ex	de,hl
-endif
 ...	      < ld	(_rdwrslt_value+1),hl >	;Store WRSLT flag & value
 		ld	c,a			;C := slot number
 		ld	b,d			;B := page number
@@ -1957,24 +1795,18 @@ _calslt_exp:
 		exx
 		ex	af,af'			;Save results
 ;
-if 1
 		pop	bc
-else
-		pop	af			;Z flag set => RAM slot
-						;A = primary slot setting for
-						;    accessing secondary slot.
-endif
 		pop	hl			;HL -> image variable
-if 1
+
 		ld	a,i			;Get current interrupt flag.
 		di
-endif
+
 		pop	de			;E = secondary slot value
-if 1
+
 		push	af			;A = primary slot setting for
 		ld	a,b			;    accessing secondary slot.
 		cp	d			;Z flag set => RAM slot
-endif
+
 		ld	b,d			;B = primary slot setting
 		jr	nz,_not_ram_slt2	;Restore secondary slot
 		ld	a,e			; register setting directly if
@@ -1982,12 +1814,10 @@ endif
 _not_ram_slt2:	call	nz,SSLOTE##		; page-0 routine if not.
 		ld	(hl),e			;Restore image variable
 ;
-if 1
 		pop	af			;Restore interrupt flag.
 ...	      < jp	po,_calslt_was_di >
 		ei
 _calslt_was_di:
-endif
 		ex	af,af'			;Restore results to main
 		exx				; registers.
 		ret
@@ -2209,24 +2039,6 @@ _adjtab		 defl	 _adjtab+1		; downloaded code which need
 ;
 		dw	0
 ;
-if 0
-;
-;-----------------------------------------------------------------------------
-;
-GO_DRV_ROUTINE:
-;
-;    This pathetic little routine is called via an  interslot  call  from  the
-; kernel  code  segment,  and  simply  does  another inter-slot call to a disk
-; driver ROM.  It is necessary to go through the master ROM so that  the  slot
-; switching  bug  fix  in  old  disk drivers will work.  This bug fix involves
-; extra calls to "$DOSON" before re-enabling the disk driver ROM in page-1.
-;
-;
-		ld	ix,(DRV_ADDR##)
-		ld	iy,(DRV_SLOT##-1)
-		jp	CALSLT##
-;
-endif
 ;
 ;-----------------------------------------------------------------------------
 ;

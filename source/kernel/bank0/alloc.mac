@@ -37,11 +37,11 @@ ALLOC:
 	add	hl,sp		;[HL] = [SP] - size
 	ccf
 	ret	c		;size too big
-if 1
+
 	ld	a,h
 	cp	high (BOOTAD+512)
 	ret	c		;no room left
-endif
+
 	ld	de,(BOTTOM)	;get current RAM bottom
 	sbc	hl,de		;get memory space left after allocation
 	ret	c		;no space left

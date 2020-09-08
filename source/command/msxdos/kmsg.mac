@@ -30,9 +30,6 @@
 ;
 MSG	MACRO	NAME,TEXT
 __&NAME	 EQU	MSGNO		;; Define message number label.
-if 0
-GLOBAL	 __&NAME		;; And declare it public.
-endif
 MSGNO	 DEFL	MSGNO+1
 	 IFNB	<TEXT>		;; Define the text, if given.
 	  DEFB	'&TEXT',0

@@ -33,20 +33,13 @@
 		jr	z,no_fat_error
 ;
 retry_fat_err:
-;===== start mod DOS2.50
 		ld	(iy+@DSK_RW##),0	;Set flag to indicate reading
-;;		xor	a
-;;		ld	(DSK_RW##),a
-;===== end mod DOS2.50
 		ld	a,.IFAT##		;If there is an error then
 		ld	de,0FFFFh		; report it to user as an
-;===== start mod DOS2.50 (add 23bit sector address support)
 		push	bc
 		ld	b,d
 		pcall	NC_DISK_ERR		; ".IFAT" error and get reply.
 		pop	bc
-;;		pcall	NC_DISK_ERR
-;===== end mod DOS2.50
 		jr	z,retry_fat_err		;No point retrying.
 		jr	return_0ffffh		;Ignore - return 0FFFFh
 ;
@@ -64,14 +57,12 @@ no_fat_error:	push	hl
 		ld	l,a			;A:L := 2 bytes from the FAT
 		inc	de
 		ld	a,(de)
-;===== start add FAT16 (FATRED/ALLOC patch)
 		ld	de,0FFF7h
 		ex	(sp),ix
 		bit	UF_F16,(ix+UD_FLAGS##)
 		ex	(sp),ix
 		jr	nz,lookup_fat16
 		ld	d,0Fh
-;===== end add FAT16
 		jr	nc,even_fat_entry
 		ld	h,a
 		call	HL_MUL_16		;If its an odd numbered entry
@@ -80,10 +71,7 @@ even_fat_entry:	and	0Fh			;Ensure that the top nybble
 lookup_fat16:	ld	h,a			; is zero.
 ;
 		ex	de,hl			;If value of entry is above
-;===== start mod FAT16 (FATRED/ALLOC patch)
 		or	a			; 0FF7h/0FFF7h then set returned
-;;		ld	hl,0FF7h
-;===== end mod FAT16
 		sbc	hl,de			; value to 0FFFFh.
 		pop	hl
 		ret	nc
@@ -111,65 +99,36 @@ return_0ffffh:
 ; Preserves:  BC,HL,IX,AF',BC',DE',HL'
 ;
 ;
-;===== start mod FAT16 (support 2DD4h/GETSEC patch)
 		push	hl			;ix = unit descriptor
 		ex	(sp),ix
 		push	bc			;save user BC
 ;
 		ld	b,(ix+UD_CSHFT##)	;Get cluster shift from
 						; unit descriptor and add
-						; one to it for the loop
-;;		push	hl
-;;		push	bc
-;;		ld	bc,UD_CSHFT##
-;;		add	hl,bc
-;;		ld	b,(hl)
-;===== end mod FAT16
-if 0
-		inc	b			; below.
-endif
+						; one to it for the loop below.
 		ex	de,hl
 		dec	hl			;HL = cluster number - 2
 		dec	hl
-;===== start mod FAT16 (2DD4h patch)
 		ld	c,0
 		jr	sft_cshft_loop		;Skip "ADD HL,HL" and "RL C" first time
 cshft_loop:	add	hl,hl			;Double the cluster number
 		rl	c
 sft_cshft_loop:	djnz	cshft_loop		; UD_CSHFT times.
-;;		code	mvi c
-;;cshft_loop:	add	hl,hl
-;;		djnz	cshft_loop
-;===== end mod FAT16
 ;
 		add	a,l			;Add on the relative sector
 		ld	l,a			; number.
 ;
-;===== start mod FAT16 (2DD4/GETSEC patch)
 		ld	e,(ix+UD_SDAT##)
 		ld	d,(ix+UD_SDAT##+1)
 		add	hl,de
 		ld	a,c
 		;assume B=0 (set "djnz")
 		adc	a,b
-;;		ex	de,hl
-;;		ld	c,UD_SDAT##-UD_CSHFT##
-;;		add	hl,bc
-;;		ld	a,(hl)
-;;		inc	hl
-;;		ld	h,(hl)
-;;		ld	l,a
-;;		add	hl,de
-;===== end mod FAT16
 		ex	de,hl
 ;
-;===== start mod FAT16 (support 2DD4h/GETSEC patch)
 		pop	bc			;Restore registers and return
 		ex	(sp),ix
 		pop	hl
-;;		pop	bc
-;;		pop	hl
-;===== end mod FAT16
 		ret
 ;
 ;
@@ -200,12 +159,10 @@ sft_cshft_loop:	djnz	cshft_loop		; UD_CSHFT times.
 ;
 ;
 		push	de			;Save FAT entry number
-;===== start add FAT16 (support FATWRT patch)
 		push	hl			;ix = unit descriptor
 		ex	(sp),ix
 		bit	UF_F16,(ix+UD_FLAGS##)
 		jr	nz,not_negative		;is FAT16
-;===== end add FAT16
 		ld	a,b			;If BC is greater than 0FFFh
 		cp	10h			; (for example -ve) then set
 		jr	c,not_negative		; it to 0FFFh.
@@ -215,16 +172,10 @@ not_negative:
 		jr	z,no_set_err		; entry & skip if no error.
 ;
 retry_set_err:
-;===== start mod DOS2.50
 		ld	(iy+@DSK_RW##),0FFh	;Set flag to indicate writing
-;;		ld	a,0FFh
-;;		ld	(DSK_RW##),a
-;===== end mod DOS2.50
 		ld	a,.IFAT##		;If the FAT entry was invalid
 		ld	de,0FFFFh		; then report a ".IFAT" error
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	b,d
-;===== end add DOS2.50
 		pcall	NC_DISK_ERR		; and return without doing
 		jr	z,retry_set_err		; anything more if the user
 		jr	pop_de_ret		; selects IGNORE.
@@ -235,11 +186,9 @@ no_set_err:	push	hl
 		ld	a,c			;If in is an even FAT entry
 		ld	(de),a			; then insert new value into
 		inc	de			; bits 0...11 of the word at
-;===== start add FAT16 (support FATWRT patch)
 		ld	a,b
 		bit	UF_F16,(ix+UD_FLAGS##)
 		jr	nz,fat_set_fat16
-;===== end add FAT16
 		ld	a,(de)			; (DE)(DE+1).
 		and	0F0h
 		or	b
@@ -273,9 +222,6 @@ done_fat_entry:	pcall	DIRT_CACHE		 ;Flag the buffer as dirty.
 ;
 		ld	de,(FAT_OSECT##)	;Get first sector number which
 						; was saved by FIND_FAT_ENTRY
-;===== start del FAT16 (support FATWRT patch)
-;		ex	(sp),ix
-;===== end del FAT16
 		push	af			;Save low byte of FAT entry
 		pcall	BF_FAT_SECTOR		;Get FAT sector into a buffer
 ;
@@ -285,14 +231,9 @@ done_fat_entry:	pcall	DIRT_CACHE		 ;Flag the buffer as dirty.
 		pop	af			       ; and store low byte of
 		ld	(hl),a			       ; FAT entry there.
 ;
-;===== start del FAT16 (support FATWRT patch)
-;		ex	(sp),ix
-;===== end del FAT16
 pop_hlde_ret:	pop	hl
 pop_de_ret:
-;===== start add FAT16 (support FATWRT patch)
 		pop	ix
-;===== end add FAT16
 		pop	de
 		ret
 ;
@@ -335,25 +276,20 @@ FIND_FAT_ENTRY:
 		res	FF_OVR,(iy+@FAT_FLAGS##) ;Clear sector boundary flag
 ;
 		ld	l,(ix+UD_NCLU##)	;Get cluster number from
-		ld	h,(ix+UD_NCLU##+1)	; unit descriptor and check
-if 0
-		dec	hl			; that it is within valid
-endif
-		xor	a			; range. (A=0 for below)
+		ld	h,(ix+UD_NCLU##+1)	; unit descriptor and check that it is within
+		xor	a			; valid range. (A=0 for below)
 		sbc	hl,de			;If out of range then jump
 		jr	c,fat_error		; to return an error (NZ)
 ;
 		ld	h,d
 		ld	l,e
 		add	hl,hl			;FAT entry * 2
-;===== start add FAT16 (support BUF_1 patch)
 		;assume A=0 (set "xor a")
 		adc	a,a
 		bit	UF_F16,(ix+UD_FLAGS##)
 		;assume Cy=0 (set "adc a,a")
 		jr	nz,find_fat16
 		xor	a
-;===== end add FAT16
 		add	hl,de			;(FAT entry * 2 + FAT entry) / 2
 		srl	h
 		rr	l
@@ -361,15 +297,10 @@ find_fat16:	push	af			;Save odd/even flag (carry)
 		push	hl			    ;Save byte number
         ld  (TEMP_FAT##+2),hl   ;Save also for F_GETCLUS
 ;
-;===== start mod FAT16 (support BUF_1 patch)
 		ld	e,h			;DE := byte/512 = relative
 		rra				;      cluster number within
 		rr	e			;      the FAT.
 		ld	d,0
-;;		ld	e,h
-;;		srl	e
-;;		ld	d,a
-;===== end mod FAT16
 		ld	l,(ix+UD_RES##)
 		ld	h,(ix+UD_RES##+1)	;Add on reserved sectors to get
 		add	hl,de			; sector number required.
@@ -509,10 +440,8 @@ cl_dirt_loop:	push	bc
 		ld	b,0			; sector without reading and
 		jr	nz,cleaning_disk	; skip to flush & invalidate
 						; it.
-;===== start add FAT16 (BUF_3 patch)
 		;assume A=0 (set "dec a" and "jr nz")
 						;A := 0 (first FAT sector bit16-22)
-;===== end add FAT16
 		pcall	BF_SECTOR
 		jr	fat_flush
 ;
@@ -542,14 +471,10 @@ set_dirt_flag:	ld	a,b			;If dirty disk flag is already
 		jr	z,dirt_flag_ok		; return.
 ;
 		push	bc			;Save dirty disk flag value
-;===== start mod FAT16 (BUF_3 patch)
 		xor	a			;Get sector 0 (boot sector)
 		ld	d,a
 		ld	e,a
 		ld	b,1
-;;		ld	de,0
-;;		ld	b,1
-;===== end mod FAT16
 		pcall	BF_SECTOR		; into a buffer.
 		pcall	BF_START		;Don't want to keep this buffer
 		pcall	DIRT_CACHE		;Mark buffer as dirty
@@ -583,10 +508,7 @@ CL_DIRT_RET:	ex	(sp),ix			;Restore all the registers
 ;
 		ld	de,0			;Set the first FAT entry
 		ld	c,a			; to the FATID byte, with
-;===== start mod FAT16 (DOS2.50 original patch)
 		ld	b,0FFh			; the top nybble/byte set to
-;;		ld	b,0Fh
-;===== end mod FAT16
 		call	FAT_ASET		; 0Fh/0FFh.
 ;
 		inc	de			;Set the second FAT entry
@@ -603,9 +525,6 @@ init_fat_loop:	inc	de
 		inc	hl
 		ld	h,(hl)
 		ld	l,a
-if 0
-		dec	hl
-endif
 		sbc	hl,de
 		pop	hl
 		jr	nz,init_fat_loop
@@ -655,11 +574,7 @@ all_clu_loop_2:	inc	de			;Try next cluster number
 		ld	l,a			; same then we have got to the
 		sbc	hl,de			; end of the disk so jump to
 		pop	hl			; free clusters and give a
-if 0
-		jr	z,disk_full		; disk full error.
-else
 		jr	c,disk_full		; disk full error.
-endif
 		push	de
 		call	FAT_LOOKUP		;Loop at the FAT entry for
 		ld	a,d			; this cluster and if it is
@@ -671,22 +586,12 @@ endif
 		ld	c,e			;If this is first cluster
 		pop	de			; (DE -ve) then store its
 		push	bc			; number as start of chain,
-;===== start mod FAT16 (CLST_5 patch)
 		ld	a,d			; otherwise add the cluster to
 		and	e			; the chain by setting previous
 		inc	a			; cluster to the value of the
 		jr	nz,not_1st_clust
 		ld	(FAT_CHAIN##),bc
 not_1st_clust:	call	nz,FAT_?SET		; new one.
-;;		bit	7,d
-;;		jr	z,not_1st_clust
-;;		ld	(FAT_CHAIN##),bc
-;;if 0
-;;not_1st_clust:call	z,FAT_ASET
-;;else
-;;not_1st_clust:call	z,FAT_?SET
-;;endif
-;===== end mod FAT16
 		pop	de
 ;
 		ld	a,(AL_FLAGS##)		;Zero the newly allocated
@@ -701,9 +606,7 @@ not_1st_clust:	call	nz,FAT_?SET		; new one.
 ;
 		ld	bc,0FFFFh		;Set FAT entry for last cluster
 		call	FAT_?SET		; to 0FFFh/0FFFFh to mark end of chain
-if 1
 		call	CLEAN_DISK		;Ensure that disk is clean.
-endif
 ;
 ;
 		ld	bc,(FAT_CHAIN##)	;Return cluster number of
@@ -715,14 +618,10 @@ endif
 disk_full:	pop	de			;Disk full.  Free all clusters
 		pop	de			; on the chain unless there
 		ld	de,(FAT_CHAIN##)	; are none.
-;===== start mod FAT16 (CLST_6 patch)
 		ld	a,d
 		and	e
 		inc	a
 		call	nz,FR_CHAIN
-;;		bit	7,d
-;;		call	z,FR_CHAIN
-;===== end mod FAT16
 		pop	de
 		ld	a,.DKFUL##		;Return with an error code.
 		or	a
@@ -748,17 +647,14 @@ disk_full:	pop	de			;Disk full.  Free all clusters
 ; Corrupts:    AF,BC
 ;
 ;
-;===== start add FAT16 (support BUF_5/BUF_2 patch)
 		push	hl
 		ex	(sp),ix			;IX := unit descriptor
-;===== end add FAT16
 		push	de
 		ld	a,d
 		or	e			;Skip if it is an ordinary
 		jr	nz,not_root_dir		; cluster, not root directory.
 ;
 		push	hl
-;===== start mod FAT16 (support BUF_5/BUF_2 patch)
 		ld	c,(ix+UD_SDIR##)	;BC := first root dir sector
 		ld	b,(ix+UD_SDIR##+1)
 		ld	e,(ix+UD_SDAT##)	;DE := first data sector
@@ -766,29 +662,13 @@ disk_full:	pop	de			;Disk full.  Free all clusters
 		ld	h,d
 		ld	l,e			;Number of root directory
 		sbc	hl,bc			; sectors is the difference
-;;		ld	bc,UD_SDIR##
-;;		add	hl,bc
-;;		ld	c,(hl)
-;;		inc	hl
-;;		ld	b,(hl)
-;;		inc	hl
-;;		ld	e,(hl)
-;;		inc	hl
-;;		ld	d,(hl)
-;;		ld	h,d
-;;		ld	l,e
-;;		sbc	hl,bc
-;===== end mod FAT16
-;===== start add FAT16 (BUF_5 patch)
 		ld	c,0			; C := last root dir sector (bit16-22)
-;===== end add FAT16
 		ld	b,l			; B := sector count
 		dec	b
 		dec	de
 		pop	hl
 		jr	now_zero_clu
 ;
-;===== start mod FAT16 (suport BUF_2 patch)
 not_root_dir:	ld	a,(ix+UD_CMSK##)	;Get number of sectors per
 						; cluster - 1 from unit
 						; descriptor.
@@ -798,45 +678,22 @@ not_root_dir:	ld	a,(ix+UD_CMSK##)	;Get number of sectors per
 		ld	b,(ix+UD_CMSK##)	; B := sector count
 ;
 now_zero_clu:	inc	b
-;;not_root_dir:	push	hl
-;;		ld	bc,UD_CMSK##
-;;		add	hl,bc
-;;		ld	b,(hl)
-;;		pop	hl
-;;		ld	a,b
-;;		call	CLU_TO_SEC
-;;now_zero_clu:	ld	a,b
-;;		inc	a
-;;		pop	bc
-;;		push	hl
-;;		ex	(sp),ix
-;;		push	bc
-;;		ld	b,a
-;===== end mod FAT16
 ;
 init_dclu_loop:	push	bc
 		jr	nz,not_bf_start
 		pcall	BF_START		;Put last sector on start of
 not_bf_start:	ld	b,0			; chain and get buffer for
 						; next one.
-;===== start add FAT16 (BUF_2 patch)
 		ld	a,c			; A := last root dir sector (bit16-22)
-;===== end add FAT16
 		pcall	BF_SECTOR
 		push	hl
 		ld	bc,BD_DATA##
 		add	hl,bc
-;===== start mod FAT16 (support BUF_2 patch)
 		;assume B=0 (BD_DATA < 256)
 		ld	c,b			;Loop to write 512 zeroes into
 zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		inc	hl
 		ld	(hl),c
-;;		xor	a
-;;zero_dsec_loop:ld	(hl),a
-;;		inc	hl
-;;		ld	(hl),a
-;===== end mod FAT16
 		inc	hl
 		djnz	zero_dsec_loop
 ;
@@ -881,14 +738,10 @@ free_chain_lp:	push	de			;Save cluster number
 		ld	a,d			; back and return if it is
 		or	e			; zero or -ve (end of chain).
 		ret	z
-;===== start mod FAT16 (CLST_7 patch)
 		ld	a,d
 		and	e
 		inc	a
 		jr	nz,free_chain_lp	;Loop if not end of chain.
-;;		bit	7,d
-;;		jr	z,free_chain_lp
-;===== end mod FAT16
 		ret
 ;
 ;

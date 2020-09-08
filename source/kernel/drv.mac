@@ -721,23 +721,6 @@ DPBEN2:
 	ld	(BK4_ADD##),bc
 	call	?C4PBK##
 
-	if 0
-
-spfat::
-	ld	a,(DOS_VER##)
-	or	a
-	jr	nz,MKDPB_OK_SECPERFAT
-	ld	ix,($SECBUF##)
-	ld	a,(ix+17h)
-	or	a
-	jp	nz,DISKERR
-	ld	a,(ix+16h)
-	cp	4
-	jp	nc,DISKERR
-MKDPB_OK_SECPERFAT:
-
-	endif
-
 	xor	a
 	ret
 	

@@ -148,7 +148,6 @@ clear_buff_lp:	ld	(hl),CR
 		ld	l,a			; output routine.
 		ret
 ;
-if 1
 direct_io_in:	bit	0,(iy+@IO_RDR##)	;Jump to use file handle if
 		ld	c,0			; the input is redirected.
 		jr	nz,CON_IN_REDIR		; (C=0 indicates binary mode.)
@@ -162,21 +161,6 @@ direct_io_in:	bit	0,(iy+@IO_RDR##)	;Jump to use file handle if
 		ld	l,a			; and jump to read it if so,
 		ld	h,a			; otherwise return A=HL=0;
 		ret
-else
-direct_io_in:	ld	hl,CHAR_BUF##		;If there is no character in
-		cp	(hl)			; the input buffer then
-		jr	z,dir_empty_buf		; skip to do BIOS status call.
-;
-		bit	0,(iy+@IO_RDR##)	;If there is a character in the
-		jr	z,dir_in_getch		; buffer then jump to get it
-						; unless input is redirected.
-;
-dir_empty_buf:	pcall	CHR_ST			;No buffered char, so ask BIOS
-		jr	nz,dir_in_getch		; if it has a character ready
-		ld	l,a			; and jump to read it if so,
-		ld	h,a			; otherwise return A=HL=0;
-		ret
-endif
 ;
 ;	----------------------------------------
 ;
@@ -643,12 +627,7 @@ clear_cur_z:	jp	z,CLEAR_CUR
 		jp	z,BEGIN_LINE
 ;
 		ld	e,a			;Save character.
-if 0
-		ld	a,b			;Check room in the buffer.
-		cp	c
-		jp	z,BUF_FULL
-;
-endif
+
 		ld	a,(INS_FLAG##)		;In insert mode?
 		or	a
 		jp	nz,INS_CHAR		;Go & insert character if yes.
@@ -658,7 +637,6 @@ endif
 		jr	z,AT_END		;Go if yes.
 ;
 		inc	hl			;Next address in buffer.
-if 1
 		ld	a,e
 		pcall	CHK_16_CHAR		;1st byte of 16 bit char?
 		jr	nc,new_8_char		; no
@@ -687,7 +665,6 @@ not_at_end16:	ld	a,(hl)
 new_8_char:	call	PAD_16_CHAR		;If we are replacing 16 bit
 		jr	c,RE_PRINT		; pad 2nd byte.
 ;
-endif
 		ld	a,(hl)			;Get old character.
 		cp	' '			;control char?
 		jr	c,RE_PRINT		;yes, always reprint
@@ -700,12 +677,10 @@ endif
 AT_END:		cp	c			;Room in buffer for character?
 		jr	nc,BUF_FULL		;Go & ping if not.
 ;
-if 1
 		ld	a,e
 		pcall	CHK_16_CHAR
 		jr	c,INS_CHAR_16		;16 bit char
 ;
-endif
 		inc	hl
 ;
 ONE_PRINT:	ld	(hl),e			;Else put in buffer.
@@ -717,7 +692,6 @@ ONE_PRINT:	ld	(hl),e			;Else put in buffer.
 ;
 ;
 INS_CHAR:
-if 1
 		ld	a,e			;inserting 16 bit char?
 		pcall	CHK_16_CHAR
 		jr	nc,not_ins16		;no
@@ -759,7 +733,6 @@ RE_PRINT_16:	ld	(hl),e			;set 1st byte
 		jp	LEFT_TO_B
 ;
 not_ins16:
-endif
 		ld	a,(IN_COUNT##)
 		cp	c			;Room to insert character?
 		jr	nc,BUF_FULL		;Go if yes, else 'ping'.
@@ -790,11 +763,9 @@ RE_PRINT:	ld	(hl),e			;Insert character into buffer.
 		jp	LEFT_TO_B		;Move cursor back again.
 ;
 ;
-if 1
 BUF_FULL_16:
 		call	CN_IN			;Eat 2nd byte of 16 bit char.
 ;
-endif
 BUF_FULL:	ld	a,BELL
 		push	bc
 		push	hl			;Send the BELL direct to the
@@ -838,7 +809,7 @@ JOY_RIGHT:	ld	a,(IN_COUNT##)
 		inc	hl			;Move cursor by getting the
 		inc	b			; character and calling the
 		ld	a,(hl)			; routine to print it. This
-if 1
+
 		pcall	CHK_16_CHAR		;1st byte of 16 bit char?
 		jp	nc,OUT_CHAR		;no
 ;
@@ -846,7 +817,7 @@ if 1
 		inc	hl
 		inc	b
 		ld	a,(hl)
-endif
+
 		jp	OUT_CHAR		; takes care of tabs etc.
 ;
 ;	----------------------------------------
@@ -880,7 +851,7 @@ LEFT_TO_B:
 ;
 count_loop:	inc	hl
 		ld	a,(hl)			;Get next character in buffer.
-if 1
+
 		pcall	CHK_16_CHAR
 		jr	nc,not_16_char		;Go if not 16 bit char.
 ;
@@ -895,7 +866,6 @@ if 1
 		jr	count_done
 not_16_char:
 ;
-endif
 		cp	TAB
 		jr	nz,not_tab_count	;Go if not tab.
 ;
@@ -947,7 +917,7 @@ DEL_RIGHT:	ld	a,(IN_COUNT##)
 		ld	(IN_COUNT##),a		;Decrement character count.
 SHIFT:		sub	b			;A=number of chars to right.
 		jr	z,NO_SHIFT2
-if 1
+
 		ld	e,a			;save it
 		inc	hl			;on 1st byte of 16 bit char?
 		ld	a,(hl)
@@ -978,7 +948,6 @@ if 1
 		jr	no_shift2
 ;
 del_not16:
-endif
 ;
 		push	bc
 		push	hl
@@ -1047,7 +1016,6 @@ DOWN_LINE:	pop	hl
 		call	DEL_LINE
 		ld	a,2
 		ret
-if 1
 ;
 ;	----------------------------------------
 ;
@@ -1058,7 +1026,6 @@ PAD_16_CHAR:	ld	a,(hl)			;If we are replacing
 		ld	(hl),' '
 		dec	hl
 		ret
-endif
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -1104,12 +1071,10 @@ LOP_OTE:	ld	a,' '			;Else space until max position
 ;
 		ld	(MAX_CUR_POS##),de	; Reset maximum position.
 NO_SPC:
-if 1
 		ld	a,ESC
 		pcall	CHR_OUT
 		ld	a,'K'
 		pcall	CHR_OUT
-endif
 		pop	hl
 		pop	de
 		pop	bc

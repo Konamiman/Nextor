@@ -394,14 +394,10 @@ not_05h_fiddle:	ld	(hl),a			; being 05h.
 		and	ATM_DIR			; found or if it is not a
 		ret	z			; sub-directory (???).
 ;
-;===== start mod FAT16 (DOS2.50 original patch)
 		ld	a,b			;If parent directory is root
 		and	c			; then must store is as zero
 		inc	a
 		jr	nz,not_root_parent
-;;		bit	7,b
-;;		jr	z,not_root_parent
-;===== end mod FAT16
 		ld	bc,0			; rather than -ve.
 not_root_parent:
 		push	hl

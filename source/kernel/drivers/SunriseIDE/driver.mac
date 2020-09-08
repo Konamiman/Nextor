@@ -343,9 +343,6 @@ DRV_INIT:
 	ld	a,2
 	ret	z			;Note that Cy is 0 (no interrupt hooking needed)
 
-	;xor a
-	;ld (TESTADD),a
-
 	ld	de,INFO_S
 	call	PRINT
 
@@ -874,11 +871,6 @@ DRV_CONFIG_2:
 ;          B = Number of sectors actually read/written
 
 DEV_RW:
-    ;jr nc,kk
-    ;ld a,0F8h   ;.WPROT
-    ;ld b,0
-    ;ret
-kk:
 	push	af
 
 	ld	a,b	;Swap B and C
@@ -1281,9 +1273,6 @@ DEV_STATUS:
 
 	ld	a,1	;Never changed
 	ret
-
-	;ld	a,1
-	;ret
 
 	ld	a,e
 	cp	2

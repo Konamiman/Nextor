@@ -252,7 +252,6 @@ bad_time:	ld	c,0FFh			;Return an error if the
 ; Corrupts:   AF
 ;
 ;
-if 1
 		CLKIN	0Dh			;leave alarm bit
 		and	0100b			;
 		ld	b,a
@@ -260,12 +259,6 @@ if 1
 		out	(CLOCK_DATA),a		;
 		CLKOUT	0Ah,01h			;insure 24-hour mode
 		CLKOUT	0Dh,b
-else
-		CLKOUT	0Dh,0Ah
-		CLKOUT	0Dh,09h
-		CLKOUT	0Ah,01h
-		CLKOUT	0Dh,00h
-endif
 ;
 		ld	bc,0D00h
 clk_loop_1:	CLKIN	c
@@ -288,11 +281,7 @@ CLK_END:	CLKIN	0Dh
 		ret
 ;
 ;
-if 1
 CLK_START:	CLKIN	0Dh
-else
-CLK_START:	call	CLK_END
-endif
 		and	04h
 		out	(CLOCK_DATA),a
 		ret
@@ -376,13 +365,12 @@ SET_TIME:	ld	l,e
 		jr	set_date_time
 ;
 SET_DATE:
-if 1
 		call	CLK_START
 		or	0001b			;select alarm bank
 		out	(CLOCK_DATA),a		;
 		CLKOUT	0Bh,d			;set leap-year counter
 		call	CLK_START
-endif
+
 		call	CLK_START
 		ld	e,7
 set_date_time:	ld	a,l

@@ -17,11 +17,7 @@ PPI.AR		equ	0A8h		;PPI Port A data read
 
 
 ROMST::		defb	"AB"		;Indicates valid ROM
-if 1
 		defw	DOINIT		;Banked ROM initialization entry point
-else
-		defw	INIT##		;Initialization entry point
-endif
 		defw	STATEMENT##	;BASIC statement handler entry point
 		defw	BASDEV		;Extension device is handled by driver
 		defw	0		;No BASIC program text
@@ -92,24 +88,6 @@ $DOSVER::	defw	_$DOSVER##	;DOS version string.
 EXTB_RET:	exx
 		ex	af,af'
 		ret
-		
-;
-;-----------------------------------------------------------------------------
-;
-; Call a routine in another bank (used by DOS 2 kernel code only)
-
-if 0
-
-CALBNK:
-		call	CHGBNK##	;Select desired bank
-		ex	af,af'		;Restore AF
-		call	JPIX		;Go do the function
-		ex	af,af'
-		xor	a
-		call	CHGBNK##	;Always re-select bank #0
-		ex	af,af'
-		ret
-endif
 ;
 JPHL	equ	$+1
 JPIX:		jp	(ix)
@@ -241,7 +219,7 @@ CBNK_CONT:
 ; it will call DV_TIRQ via TIMI_DRV.
 ;
 ; It is necessary to do this in this way to support
-; DOS 2.50 kernels acting as slaves.
+; Nextor kernels acting as slaves.
 
 @TIME_IRQ::	push	af		;Preserve VDP status
 		ld	a,(BNK_ID##)	;Save current bank

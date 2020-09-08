@@ -158,31 +158,23 @@ rdch_disk_file:	push	bc
 		ret	nz			; name.
 ;
 		pcall	NEW_FIB			;Create the new entry and
-if 1
+
 		ret	nz			;Give up if error
 		ld	b,0FFh			;If it is a sub-directory then
 		bit	AT_DIR,a		; jump to return no error
 		jr	nz,open_directory	; and B=0FFh.
-endif
 		jr	f_create_open		; jump into common code
 ;
 ;
 	PROC	F_OPEN
 		ex	af,af'			;Save access mode byte
 		pcall	MOC_FIB			;Find the directory entry
-if 0
-;
-f_create_open:	ret	nz			;Give up if error
-		ld	b,0FFh			;If it is a sub-directory then
-		bit	AT_DIR,a		; jump to return no error
-		jr	nz,open_directory	; and B=0FFh.
-else
+
 		ret	nz			;Give up if error
 		bit	AT_DIR,a		;If it is a sub-directory then
 		ld	a,.DIRX##		; report it.
 		ret	nz
 f_create_open:
-endif
 ;
 ;
 		push	hl			;Save unit descriptor address
@@ -544,11 +536,7 @@ chk_in_status:	bit	AC_RD,(ix+FAB_ACC##)	;Never ready from input if
 		call	chk_file_end		;For disk file see if we are
 		bit	MD_EOF,e		; at end of file and return
 		jr	nz,status_not_rdy	; "ready" unless we are.
-if 0
-		ld	b,0
-else
 		ld	e,0
-endif
 		ret
 ;
 chk_out_status:	bit	AC_WR,(ix+FAB_ACC##)	;Never ready for output if
@@ -558,11 +546,7 @@ chk_out_status:	bit	AC_WR,(ix+FAB_ACC##)	;Never ready for output if
 		inc	hl			; routine.
 		bit	MD_DEV,(ix+FAB_MODE##)
 		jr	nz,chk_dev_status	;Disk file is always ready
-if 0
-status_not_rdy:	ld	b,0FFh			; for output.
-else
 status_not_rdy:	ld	e,0FFh			; for output.
-endif
 		ret
 ;
 chk_dev_status:	ld	bc,3*2			;For device FAB's just call
@@ -1147,13 +1131,8 @@ dec_ref_done:
 		ex	de,hl			; handle vector pointer.
 		ld	(HANDLES##),hl
 ;
-;===== start mod DOS2.50
 		dec	(iy+@PROC_ID##)		;Decrement the current
 		ld	a,(PROC_ID##)		; process id by one.
-;;		ld	a,(PROC_ID##)
-;;		dec	a
-;;		ld	(PROC_ID##),a
-;===== end mod DOS2.50
 		inc	b			;If requested process id
 		dec	b			; is zero then loop until
 		jr	z,dec_proc_loop		; no handles left.
@@ -1165,12 +1144,8 @@ dec_ref_done:
 		dec	de			; so that we know when to
 		ld	(de),a			; stop closing files.
 null_handles:
-;===== start mod DOS2.50
 		ld	(iy+@PROC_ID##),b	;Store new process id, since
 						; it may be wrong if B=0.
-;;		ld	a,b
-;;		ld	(PROC_ID##),a
-;===== end mod DOS2.50
 ;
 ;
 ;
@@ -1209,12 +1184,7 @@ close_hand_done:
 		jr	nz,not_zero_id		; process and open the
 		call	F_FORK			; default file handles.
 		call	OPEN_DEF_HAND
-if 0
-		pcall	ENV_KILL		;Re-initialise environment
-		pcall	CHAR_INIT		;Re-initialise character I/O
-else
 		pcall	EAT_CBUF		;Re-initialize character I/O
-endif
 not_zero_id:	call	CHECK_REDIR
 		pcall	CHL_KILL		;Zap console line input buffer
 		xor	a
@@ -1265,12 +1235,8 @@ in_not_redir:
 		set	1,c			;Flag output as redirected
 out_not_redir:
 ;
-;===== start mod DOS2.50
 		ld	(iy+@IO_RDR##),c	;Store the I/O redirection
 						; flags.
-;;		ld	a,c
-;;		ld	(IO_RDR##),a
-;===== end mod DOS2.50
 		pop	ix
 		pop	hl
 		pop	de
@@ -1409,14 +1375,9 @@ DEC_FAB_REF:
 ; Corrupts:   AF
 ;
 ;
-;===== start mod DOS2.50
 		dec	(ix+FAB_CNT##)		;Decrement the reference
 		ld	a,(ix+FAB_CNT##)	; count by one and return
 						; if it is not zero.
-;;		ld	a,(ix+FAB_CNT##)
-;;		dec	a
-;;		ld	(ix+FAB_CNT##),a
-;===== end mod DOS2.50
 		ret	nz
 ;
 		push	de
@@ -1553,11 +1514,7 @@ DEF_TABLE:	dw	CON_NAME
 		dw	CON_NAME
 		db	ACM_RD+ACM_INH
 		dw	CON_NAME
-if 1
 		db	ACM_INH
-else
-		db	ACM_RD+ACM_INH
-endif
 		dw	AUX_NAME
 		db	ACM_INH
 		dw	PRN_NAME
@@ -1728,10 +1685,8 @@ REOPEN_FAB:	pcall	DI_SAME			;Make sure entry is still
 		ld	bc,(DE_SECTOR##)	; entry number within this
 		ld	(ix+FAB_DSEC##),c	; sector.
 		ld	(ix+FAB_DSEC##+1),b	;These fields are only used in
-;===== start add FAT16 (STOR_3 patch)
 		ld	a,(DE_EX_SECTOR##)
 		ld	(ix+FAB_EX_DSEC##),a
-;===== end add FAT16
 		ld	a,(DE_ENT##)		; "FAB_SCAN" to check for the
 		sub	(iy+@DE_E_LEFT##)	; same file being accessed.
 		ld	(ix+FAB_ENT##),a
@@ -1862,7 +1817,6 @@ no_fab_match:	push	bc
 		ret	nz
 ;
 		push	hl
-;===== start mod FAT16 (STOR_4 patch)
 		ld	hl,(DE_SECTOR##)	;Return with no match if it
 		ld	a,(DE_EX_SECTOR##)
 		ld	e,(ix+FAB_DSEC##)	; is not the same directory
@@ -1872,12 +1826,6 @@ no_fab_match:	push	bc
 		pop hl
 		ret nz
 		sub	(ix+FAB_EX_DSEC##)
-;;		ld	de,(DE_SECTOR##)
-;;		ld	l,(ix+FAB_DSEC##)
-;;		ld	h,(ix+FAB_DSEC##+1)
-;;		or	a
-;;		sbc	hl,de
-;===== end mod FAT16
 		ret	nz
 ;
 		ld	e,(ix+FAB_UD##)		;Return with no match if it is
@@ -1885,7 +1833,6 @@ no_fab_match:	push	bc
 		xor	a			; address, and with a match
 		sbc	hl,de			; if it is the same.
 		add	hl,de
-if 1 ;v2.30
 		ret	nz
 ;
 		push	hl
@@ -1900,7 +1847,6 @@ if 1 ;v2.30
 		PCALL	CP_VOLID
 		pop	bc
 		pop	hl
-endif
 		ret
 ;
 ;

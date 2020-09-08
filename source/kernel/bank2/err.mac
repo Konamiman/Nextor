@@ -17,11 +17,6 @@
 		scf			;Set carry => don't allow ignore
 ;
 	PROC	DISK_ERR
-if 0
-		or	a
-		ld	a,1
-		ret
-else
 ;
 ;    This routine is called when an error  has  been  received  from  a  unit
 ; handler  or  generated within MSX-DOS. If the media check timeout (UD_TIME)
@@ -69,21 +64,16 @@ ignore_ok:
 		jr	z,read_error		; if the error was while
 		set	0,c			; writing.
 read_error:
-;===== start mod DOS2.50 (add 23bit sector address support)
 		ld	a,b
 		ld	(ERR_EX_SECTOR##),a
 		and	d
-;;		ld	a,d
-;===== end mod DOS2.50
 		and	e			;If sector number is not
 		inc	a			; 0FFh:0FFFFh then set the sector
 		jr	z,sector_invalid	; valid flag.
-;===== start add DOS2.50 (add 23bit sector address support)
 		set	4,c			;Set extended sector valid flag.
 		inc	b			;If sector number is less than
 		dec	b			; 10000h then set sector
 		jr	nz,sector_invalid	; valid flag.
-;===== end add DOS2.50
 		set	3,c
 sector_invalid:
         push ix
@@ -180,7 +170,7 @@ stop_abort:	push	af
 		pcall	INV_UD			;Invalidate buffers for this
 		pop	af			; drive.
 ;
-endif
+
 	PROC	GO_ABORT
 		ld	hl,(KAB_VECT##)
 	PROC	GO_EXIT
@@ -193,10 +183,8 @@ endif
 		ld	hl,PUT_BDOS##
 		ex	(sp),hl
 		push	hl
-;===== start add DOS2.50 (add 23bit sector address support)
 		ld	hl,(ERR_EX_SECTOR##)
 		ld	h,0
-;===== end add DOS2.50
 		jp	PUT_USER##
 ;
 ;

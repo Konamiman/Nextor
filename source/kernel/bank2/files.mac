@@ -59,7 +59,6 @@
 ;
 	PROC	RDWR_FAB
 ;
-        if 1
 
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
@@ -102,8 +101,6 @@ OKLEVEL:
 		ld	(RW_LEVEL##),a
 		ex	af,af'
 
-        endif
-
 		bit	MD_DEV,(ix+FAB_MODE##)	;Jump to handle device reads
 		jp	nz,rdwr_device		; and writes separately.
 ;
@@ -114,13 +111,8 @@ OKLEVEL:
 		or	c			; set then return immediately
 		jr	z,RDWR_END			; with no error.
 ;
-;===== start mod DOS2.50
 		ld	hl,0			;Zero bytes transferred
 		ld	(RW_SZ_DONE##),hl	; so far.
-;;		xor	a
-;;		ld	(RW_SZ_DONE##),a
-;;		ld	(RW_SZ_DONE##+1),a
-;===== end mod DOS2.50
 		ld	(RW_SIZE##),bc		;Store required transfer size
 		ld	(RW_DTA##),de		;Store disk transfer address
 		call	READ_WRITE		;Do the function
@@ -151,8 +143,6 @@ rdwr_error:	or	a
 rdwr_ret_ok:	xor	a			; of file error.
 		
 RDWR_END:
-        if 1
-
 		ex	af,af'
 		ld	a,(RW_LEVEL##)
 		cp	2
@@ -193,8 +183,6 @@ OKLEVEL2:
 		dec	a
 		ld	(RW_LEVEL##),a
 		ex	af,af'
-
-        endif
 
 RDWR_END2:
 		ret
@@ -267,12 +255,7 @@ read_device:	ld	l,(ix+FAB_ID##+2)	;HL -> first entry in jump
 		ld	h,(ix+FAB_ID##+3)	; table which is READ routine.
 ;
 		push	bc			;Save total number of bytes
-if 0
-		xor	a			;If it is end-of-file (must be
-		bit	MD_EOF,(ix+FAB_MODE##)	; ASCII mode) then clear the
-		res	MD_EOF,(ix+FAB_MODE##)	; flag and jump to return
-		jr	nz,read_finished	; zero characters.
-else
+
 		res	MD_EOF,(ix+FAB_MODE##)	;Clear end-of-file condition.
 endif
 rd_dev_loop:	push	bc
@@ -311,16 +294,11 @@ rdch_normal:
 ;
 		ld	a,c			;A = end-of-line/file flag
 		pop	bc
-if 0
-		inc	de			;Adjust pointer and byte
-		dec	bc			; counter for one more char.
-endif
+
 		dec	a
 		jr	z,read_file_end		;Stop if end of file found
-if 1
 		inc	de			;Adjust pointer and byte
 		dec	bc			; counter for one more char.
-endif
 		dec	a
 		jr	z,read_finished		;Stop if end of line found
 		ld	a,b			;Loop back if there are any
@@ -386,12 +364,6 @@ write_check:	bit	AC_WR,(ix+FAB_ACC##)	;For a write operation, error
 		bit	AT_RO,(ix+FAB_ATTR##)	; only file.
 		ret	nz
 ;
-if 0
-access_ok:	ld	hl,(RW_DTA##)
-		add	hl,bc			;If transfer would go over
-		ld	a,.OV64K##		; 64k boundary then return
-		ret	c			; an error.
-else
 access_ok:	bit	0,(iy+@LAZY##)
 		jr	z,skip_ov64k
 		ld	hl,(RW_DTA##)
@@ -399,7 +371,6 @@ access_ok:	bit	0,(iy+@LAZY##)
 		ld	a,.OV64K##		; 64k boundary then return
 		ret	c			; an error.
 skip_ov64k:
-endif
 ;
 		ld	c,(ix+FAB_DRV##)	;Validate the drive specified
 		ld	b,1			; in the FAB and give up if
@@ -575,18 +546,12 @@ NEXT_SEC:
 		ld	de,(RW_PCLU##)		;Get next physical cluster
 		pcall	FAT_LOOKUP		; number in the chain.
 		ld	(RW_PCLU##),de
-;===== start mod FAT16 (299Bh patch)
 		ld	a,d
 		and	e
 		inc	a
 		pop	de			;Return an error if end of
 		ld	a,.FILE##		; chain is reached.
 		ret	z
-;;		bit	7,d
-;;		pop	de			;Return an error if end of
-;;		ld	a,.FILE##		; chain is reached.
-;;		ret	nz
-;===== end mod FAT16
 		xor	a
 ;
 got_next_sec:	ld	(RW_LSEC##),a		;Store new "RW_LCLU" and return
@@ -611,9 +576,7 @@ GET_PHYS_SEC:
 		ld	de,(RW_PCLU##)
 		pcall	CLU_TO_SEC
 		ld	(RW_PSEC##),de
-;===== start add FAT16 (DOS2.50 original patch)
 		ld	(RW_EX_PSEC##),a
-;===== end add FAT16
 		pop	de
 		ret
 ;
@@ -782,18 +745,12 @@ ret_err_3_nz:	jr	nz,ret_err_3		;(Error if DECODE_PTR failed)
 		jr	nz,ret_err_1		; cluster number.
 		push	de		   ;LV3
 		pcall	FAT_LOOKUP		;Lookup value of this cluster
-;===== start mod FAT16 (2A5Eh patch)
 		ld	a,d			; and free and any remaining
 		and	e			; clusters from the chain.
 		inc	a
 		pcall	nz,FR_CHAIN
 		pop	de		   ;LV3
 		ld	bc,0FFFFh		;Mark the new end of the
-;;		bit	7,d
-;;		pcall	z,FR_CHAIN
-;;		pop	de
-;;		ld	b,0FFh
-;===== end mod FAT16
 		pcall	FAT_ASET		; cluster chain.
 		ld	c,(ix+FAB_FPC##)	;Jump to reset cached cluster
 		ld	b,(ix+FAB_FPC##+1)	; to start of file in case it
@@ -819,15 +776,10 @@ extend_file:	pop	hl		   ;LV3
 		and	RFM_ZF			; clusters, zeroing them if
 		pcall	AL_CLUSTERS		; "write with zero fill" flag
 		jr	nz,ret_err_2		; is set. Give up if disk full.
-;===== start mod FAT16 (DOS2.50 original patch)
 		ld	a,d
 		or	e
 		dec	de
 		jr	z,first_cluster
-;;		dec	de
-;;		bit	7,d
-;;		jr	nz,first_cluster
-;===== end mod FAT16
 		push	bc		   ;LV3
 		call	LOG_PHYS_CLU		;Find the last cluster of file
 		pop	bc		   ;LV3	; in order to chain the new
@@ -968,11 +920,9 @@ DECODE_PTR:
 		pop	af
 ;
 		inc	hl
-		ld	b,(hl)			;Get cluster shift count from
-if 0
-		inc	b			; unit descriptor and jump
-endif
-		jr	cshft_lp_start		; into loop.
+		ld	b,(hl)			;Get cluster shift count from unit descriptor
+
+		jr	cshft_lp_start		; and jump into loop.
 cshft_loop:	srl	d
 		rr	e			;Shift logical sector number
 		rra				; right enough times to get
@@ -1033,14 +983,10 @@ chain_lp:	ld	a,b			;Return with no error when
 		ret	z			; cluster.
 		dec	bc
 		pcall	FAT_LOOKUP		;Get next cluster number and
-;===== start mod FAT16 (2B74h patch)
 		ld	a,d			; loop if not end of chain.
 		and	e
 		inc	a
 		jr	nz,chain_lp
-;;		bit	7,d
-;;		jr	z,chain_lp
-;===== end mod FAT16
 		code	mvi a
 null_file:	pop	hl			;Restore unit descriptor
 		ld	a,.FILE##		;Return error if premature

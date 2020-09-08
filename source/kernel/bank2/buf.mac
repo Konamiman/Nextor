@@ -47,10 +47,7 @@
 ;
 	PROC	BF_FAT_SECTOR
 ;
-;===== start mod FAT16 (BUF_1 patch)
 		ld	bc,0100h		;B = Flag read required & no ignore / C = 0 (sector number (bit16-22))
-;;		ld	b,1
-;===== end mod FAT16
 		ld	a,(ix+UD_NFAT##)	;If disk is clean then set
 		bit	0,(ix+UD_DIRT##)	; number of copies to UD_NFAT
 		jr	z,bf_a_copies		; (all copies of the FAT).
@@ -61,9 +58,7 @@
 ;
 	PROC	BF_SECTOR
 ;
-;===== start add FAT16 (BUF_2 patch)
 		ld	c,a			;C := sector number (bit16-22)
-;===== end add FAT16
 		ld	a,1			;Normal sector - one copy
 bf_a_copies:	ld	(READ_COPIES##),a	;Remember number of copies
 ;
@@ -71,44 +66,27 @@ bf_a_copies:	ld	(READ_COPIES##),a	;Remember number of copies
 ;
 				; SEE IF SECTOR ALREADY BUFFERED
 ;
-;===== start mod FAT16 (support BUF_1/BUF_2/SECNUM/REDBUF patch)
 		ld	hl,(B_CACHE##)		;Get last used buffer address
 		ld	a,h
 		sub	1			;If cache<>0 then test if it
 		ld	a,c			;A := sector number (bit16-22)
 		ld	c,(ix+UD_PHYS##)	;C := physical unit number
-;;		ld	c,(ix+UD_PHYS##)
-;;		ld	hl,(B_CACHE##)
-;;		ld	a,h
-;;		sub	1
-;===== end mod FAT16
 		call	nc,BF_CMP		; contains the correct unit and
 		ret	z			; sector, and return if so.
 ;
 		ld	hl,(B_CHAIN##)		;Point at start of chain and
 		push	hl			; save this address in case
 						; sector not found.
-;===== start mod FAT16 (support BUF_1/BUF_2/SECNUM/REDBUF patch)
 bf_sector_loop:	ld	c,(ix+UD_PHYS##)	;C := physical unit number
 		call	BF_CMP			;See if this buffer has the
-;;bf_sector_loop:call	BF_CMP
-;===== end mod FAT16
-if 0
-		jr	z,already_in_buf	; right sector and jump if so
-else
 		jp	z,already_in_buf	; right sector and jump if so
-endif
-;===== start add FAT16 (support BUF_1/BUF_2/SECNUM/REDBUF patch)
 		ld	c,a			;preserve A
-;===== end add FAT16
 		ld	a,(hl)
 		inc	hl			;Get address of next buffer
 		ld	h,(hl)
 		ld	l,a
 		or	h			;Test for end of chain and
-;===== start add FAT16 (support BUF_1/BUF_2/SECNUM/REDBUF patch)
 		ld	a,c			;restore A
-;===== end add FAT16
 		jr	nz,bf_sector_loop	; loop if not reached it yet.
 ;
 ;
@@ -134,11 +112,8 @@ first_buf_ok:
 ;
 		inc	hl
 		inc	hl
-;===== start mod FAT16 (support BUF_1/BUF_2/SECNUM/REDBUF patch)
 		ld	a,(ix+UD_PHYS##)	;Record physical unit number
 		ld	(hl),a
-;;		ld	(hl),c
-;===== end mod FAT16
 		inc	hl
 ;
 		ld	a,b			;Flag buffer not dirty, and
@@ -155,7 +130,6 @@ first_buf_ok:
 		ld	(hl),a			; the buffer descriptor
 		inc	hl
 ;
-;===== start mod FAT16 (SECNUM/REDBUF patch)
 		ld	a,(ix+UD_SFAT##)	;Record copy separation in
 		ld	(hl),a			; buffer descriptor.  This is
 		inc	hl			; just the number of sectors
@@ -163,17 +137,13 @@ first_buf_ok:
 		ld	(hl),c			;Record sector number (bit16-22)
 		ld	(iy+@DIO_EX_SECTOR##),c	;DIO_EX_SECTOR := Sector number (bit16-22)
 		ld	c,a
-;;		ld	c,(ix+UD_SFAT##)
-;;		ld	(hl),c
-;;		inc	hl
-;===== end mod FAT16
 ;
 		push	de			;Save sector number
 		inc	hl			;Point HL at data area of
 		inc	hl			; buffer descriptor.
 		inc	hl
 		push	hl
-if 1
+
 		ld	e,l			;Pad out the sector buffer
 		ld	d,h			; with zero to make a clean
 		inc	de			; starting point for new
@@ -182,7 +152,7 @@ if 1
 		ld	bc,512-1
 		ldir
 		pop	bc
-endif
+
 		ex	(sp),ix			;IX := data address
 		pop	hl			;HL := unit descriptor
 		ld	(ix-2),l		;Save unit descriptor address
@@ -211,13 +181,8 @@ multi_read_lp:	ld	a,e			;DE+:=C, i.e. adjust sector
 ;
 bf_multi_read:	push	de			;Save registers which are
 		push	bc			; corrupted by RW_UNIT.
-;===== start mod DOS2.50
 		ld	bc,(DATA_SEG##)		;C:=Data segment
 		ld	b,1			;B:=Sector count
-;;		ld	b,1
-;;		ld	a,(DATA_SEG##)
-;;		ld	c,a
-;===== end mod DOS2.50
 		ld	a,RD_CMD##		;Get READ command code
 
 		call	DO_RW			;Try to read the sector
@@ -235,13 +200,10 @@ buf_noupb_err:	pop	de
 		bit	1,b			; report it to user, only
 		jr	nz,allow_ignore		; allowing IGNORE if the flag
 		scf				; was set on entry.
-;===== start mod DOS2.50 (add 23bit sector address support)
 allow_ignore:	push	bc
 		ld	bc,(DIO_EX_SECTOR##-1)
 		pcall	DISK_ERR
 		pop	bc
-;;allow_ignore:	pcall	DISK_ERR
-;===== end mod DOS2.50
 		jr	z,try_read_loop		;Loop to try again if RETRY.
 ;
 ;
@@ -283,14 +245,10 @@ BF_CMP:
 ;
 ;
 		push	hl
-;===== start add FAT16 (support CMPSEC/BUF_1/BUF_2/SECNUM/REDBUF patch)
 		push	bc
-;===== end add FAT16
 		inc	hl
 		inc	hl
-;===== start add FAT16 (support CMPSEC/BUF_1/BUF_2/SECNUM/REDBUF patch)
 		ld	b,a			;preserve A
-;===== end add FAT16
 		ld	a,(hl)			;compare unit number
 		sub	c
 		jr	nz,bf_cmp_ret
@@ -302,18 +260,14 @@ BF_CMP:
 		inc	hl			;compare sector number (bit8-15)
 		ld	a,(hl)
 		sub	d
-;===== start add FAT16 (CMPSEC patch)
 		jr	nz,bf_cmp_ret
 		inc	hl			;compare sector number (bit16-22)
 		inc	hl
 		inc	hl
 		ld	a,(hl)
 		sub	b
-;===== end add FAT16
 bf_cmp_ret:	ld	a,b			;restore A
-;===== start add FAT16 (support CMPSEC/BUF_1/BUF_2/SECNUM/REDBUF patch)
 		pop	bc
-;===== end add FAT16
 		pop	hl
 		ret
 ;
@@ -740,15 +694,11 @@ flush_retry:	push	hl
 ;
 		jr	z,not_last_fat	 ;If the "last FAT only" flag is set
 		ld	a,e		 ; then adjust the sector number by
-;===== start mod FAT16 (FSIZE1 patch)
 last_fat_loop:	inc	(hl)		 ; adding BD_COPY*BD_SEP on to it.
 		dec	(hl)
 		jr	z,no_lfat_8bit	 ;force incriment D if BD_SEP = 0(UPB_SFAT = 256)
 		add	a,(hl)
 		jr	nc,no_lfat_carry ;This is used by clean disk and
-;;last_fat_loop:add	a,(hl)
-;;		jr	nc,no_lfat_carry
-;===== end mod FAT16
 no_lfat_8bit:	inc	d		 ; BD_COPY must be UD_NFAT-1 so that
 no_lfat_carry:	djnz	last_fat_loop	 ; this points to the last copy of
 		ld	e,a		 ; the FAT sector.
@@ -757,10 +707,8 @@ not_last_fat:
 ;
 		push	de		;Save sector number
 		inc	hl
-;===== start add FAT16 (WRTBUF patch)
 		ld	a,(hl)		;DIO_EX_SECTOR := sector number from buffer descriptor (bit16-22)
 		ld	(DIO_EX_SECTOR##),a
-;===== end add FAT16
 		inc	hl
 		ld	e,(hl)		;DE := address of unit descriptor
 		inc	hl		;      from BD_UD field of buffer
@@ -778,13 +726,8 @@ not_last_fat:
 		push	de		; stack in case of error.
 bf_flush_loop:	push	de		;Save registers which are
 		push	bc		; corrupted by CALL_UNIT.
-;===== start mod DOS2.50
 		ld	bc,(DATA_SEG##)	;C:=data segment
 		ld	b,1		;B:=Sector count
-;;		ld	b,1
-;;		ld	a,(DATA_SEG##)
-;;		ld	c,a
-;===== end mod DOS2.50
 		ld	a,WR_CMD##	;A:=write command code
 		call	DO_RW		;Call the unit handler
 		pop	bc
@@ -800,14 +743,10 @@ flush_err:				; done OK.
 not_noupb_err:				 ; by DISK_ERR.
 ;
 		push	af
-;===== start mod FAT16 (FSIZE2 patch)
 		ld	a,(ix+BD_SEP##-BD_DATA##);DE+:=BD_SEP, i.e. adjust
 		or	a			 ; sector number for next
 		jr	z,flush_no_8bit		 ; copy of data to write.	;force incriment D if BD_SEP = 0 (UPB_SFAT = 256)
 		add	a,e
-;;		ld	a,e
-;;		add	a,(ix+BD_SEP##-BD_DATA##)
-;===== end mod FAT16
 		ld	e,a
 		jr	nc,flush_no_cy
 flush_no_8bit:	inc	d
@@ -824,11 +763,8 @@ flush_no_cy:	pop	af
 		bit	1,(ix+BD_FLAGS##-BD_DATA##)
 		jr	nz,ignore_allowed	   ;Report the error to the
 		scf				   ; user, allowing IGNORE
-;===== start mod DOS2.50 (add 23bit sector address support)
 ignore_allowed:	ld	bc,(DIO_EX_SECTOR##-1)	   ; only if buffer says so.
 		pcall	DISK_ERR
-;;ignore_allowed:pcall	DISK_ERR
-;===== end mod DOS2.50
 no_flush_err:	pop	hl			   ;If user requests a RETRY
 		jr	z,flush_retry		   ; then loop back.
 ;

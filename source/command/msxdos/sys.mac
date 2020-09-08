@@ -99,35 +99,6 @@ VERMSG:	DEFB	'NEXTOR.SYS version '
 	DEFB	0
 ;
 ;
-;
-;------------------------------------------------------------------------------
-;
-;        This is the sign-on message that gets printed when MSX-DOS.SYS starts
-; up.  If  the  testing version is assembled, then extra text is included as a
-; warning.
-;
-if 0
-SIGNON:	DEFB	'Nextor version '
-	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0'
-	DEFB	CR,LF
-	DEFB	'Copyright ('
-	DEFB	CRYEAR##/1000 MOD 10 +'0'
-	DEFB	CRYEAR##/ 100 MOD 10 +'0'
-	DEFB	CRYEAR##/  10 MOD 10 +'0'
-	DEFB	CRYEAR##      MOD 10 +'0'
-	DEFB	') Konamiman',CR,LF
-;
-	IF	TEST
-	 DEFB	CR,LF
-	 DEFB	'*** MZED-compatible testing version ***'
-	 DEFB	CR,LF
-	ENDIF
-;
-	DEFB	CR,LF
-	DEFB	0
-endif
-;
-;
 ;------------------------------------------------------------------------------
 ;
 ;        This is the initial start up entry point. As in CP/M, this is entered
@@ -148,13 +119,6 @@ endif
 STARTUP:LD	HL,P3BDOS	; Character outputs initially go through page 3
 	LD	(OVEC),HL	;   entry point.
 ;
-if 0 ;v2.31
-	LD	A,(NOTFIRST##)	; Print sign-on message through page 3 entry,
-	LD	DE,SIGNON	;   but only if the first time.
-	OR	A
-	CALL	Z,DSTR
-;
-endif
 	LD	C,_DOSVER##	; Get the version number.
 	CALL	P3BDOS		; In case it's an old system.
 	LD	A,B
@@ -328,14 +292,6 @@ MEMOK:	LD	SP,BIOS_STACK	; Use MSX-DOS.SYS's own stack in page 3.
 	LD	C,_CURDRV##	; Get the current drive and put it at 4 for
 	CALL	BDOS		;   CP/M compatibility.
 	LD	(4),A
-;
-if 0 ;Hal_F
-	LD	HL,(6)		; Make the F37D entry point jump to the same
-	LD	(P3BDOS+1),HL	;   place as the normal entry point at 5.
-	CODE	MVI A
-	 CODE	JMP
-	LD	(P3BDOS),A
-endif
 ;
 	LD	A,(ERROR)	; Get error code from COMMAND without doing a
 	CP	.BADCMD##	;   JOIN, and don't reload if .BADCMD or .OKCMD
@@ -553,7 +509,7 @@ BDOS:
 	LD	A,(ENTERS)	; Get re-entrancy count.
 	INC	A		; First entry?
 	LD	(ENTERS),A
-if 1
+
 	jr	z,BDOS05
 	ld	(BIOS_SP),sp
 	ld	sp,BIOS_STACK-100
@@ -574,9 +530,6 @@ BDOS02:	pop	bc
 	xor	a
 	ld	(ENTERS),a
 BDOS05:
-else
-	JR	NZ,BDOS10	; Go if not, else switch stacks.
-endif
 ;
 	LD	(LOAD_FLAG##),A	; Gets set to 0 on every BDOS call.
 	LD	(BDOS_SP),SP
@@ -593,12 +546,12 @@ BDOS10:	EX	AF,AF'		; Save alternate register set, as the KBDOS
 	PUSH	IX		; A couple of routines below change the values
 	PUSH	IY		;   of these saved IX and IYs.
 	LD	(SP_SAVE),SP	; Save SP for abort entry.
-if 1 ;v2.30
+
 	LD	HL,DISK_ERROR	; Set up disk error handler vector.
 	LD	(KDSK_VECT##),HL
 	LD	HL,ABORT	; Set up abort routine vector.
 	LD	(KAB_VECT##),HL
-endif
+
 	LD	HL,BDOS_DONE	; Call KBDOS then return to BDOS_DONE.
 	PUSH	HL
 ;
@@ -872,10 +825,6 @@ MAXFN	EQU	($-FNTAB)/2	; Largest function number.
 @INNOE:
 @CONST:
 @CPMVER:
-if 0
-@DSKRST:
-@SELDSK:
-endif
 @SNEXT:
 @LOGIN:
 @CURDRV:
@@ -888,7 +837,6 @@ endif
 	RET
 ;
 ;
-if 1
 @DSKRST:
 	LD	E,0
 @SELDSK:
@@ -903,7 +851,6 @@ BAD_DRIVE:
 	LD	A,L
 	LD	B,H
 	RET
-endif
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -1013,8 +960,6 @@ zstr_slow:
 @DOSVER:
 	call	FUNC_WITH_IXIY
 	ld	de,(VERNUM)
-	;LD	D,VERSION##	; Return MSX-DOS.SYS version too.
-	;LD	E,RELEASE##+(RELEASE##/256)*16
 	ret
 
 FUNC_WITH_IXIY:
