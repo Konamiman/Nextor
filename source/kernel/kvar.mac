@@ -23,8 +23,8 @@
 	const	DOSVER,2	;Major version number
 	const	DOSV_HI,3	;Minor version number, high nybble
 	const	DOSV_LO,1	;Minor version number, low nybble
-	const	NXTVER,2
-	const	NXTV_HI,1
+	const	NXTVER,3
+	const	NXTV_HI,0
 	const	NXTV_LO,0
 ;===== end mod DOS2.50
 ;
