@@ -2,6 +2,7 @@
 	;
 	; Version Beta 5 by Piter Punk
 	; Based on version 0.1 by Konamiman
+	; Adapted to Nextor 3 driver system by Konamiman
 
 DRV_START:
 
@@ -11,18 +12,6 @@ TESTADD	equ	0F3F5h
 ;
 ; Driver configuration constants
 ;
-
-;Driver type:
-;   0 for drive-based
-;   1 for device-based
-
-DRV_TYPE	equ	1
-
-;Hot-plug devices support (device-based drivers only):
-;   0 for no hot-plug support
-;   1 for hot-plug support
-
-DRV_HOTPLUG	equ	0
 
 DEBUG	equ	0	;Set to 1 for debugging, 0 to normal operation
 
@@ -236,34 +225,21 @@ CALDRV	equ	4048h
 
 ;-----------------------------------------------------------------------------
 ;
-; Built-in format choice strings
-;
-
-NULL_MSG  equ     741Fh	;Null string (disk can't be formatted)
-SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
-
-
-;-----------------------------------------------------------------------------
-;
 ; Driver signature
 ;
 	db	"NEXTOR_DRIVER",0
 
-; Driver flags:
-;    bit 0: 0 for drive-based, 1 for device-based
-;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
-;    bit 2: 1 if the driver provides configuration
-;             (implements the DRV_CONFIG routine)
+; Driver flags
 
-	db 1+(2*DRV_HOTPLUG)+4
+	db 83h
 
 ;Reserved byte
 	db	0
 
-;Driver name
+;Driver name (unused in Nextor 3)
 
 DRV_NAME:
-	db	"Sunrise IDE"
+	db	"Nextor 3 driver"
 	ds	32-($-DRV_NAME)," "
 
 ;Jump table
@@ -279,16 +255,21 @@ DRV_NAME:
     jp  DRV_DIRECT2
     jp  DRV_DIRECT3
     jp  DRV_DIRECT4
-    jp  DRV_CONFIG
+    jp  DRV_QUERY
+	jp  DEV_QUERY
 
-	ds	12
+	ds	9
 
 	jp	DEV_RW
-	jp	DEV_INFO
-	jp	DEV_STATUS
-	jp	LUN_INFO
-	jp	DEV_FORMAT
-	jp	DEV_CMD
+
+	ld a,1	;Old DEV_INFO
+	ret
+
+	ld a,0	;Old DEV_STATUS
+	ret
+
+	ld a,1	;Old LUN_INFO
+	ret
 
 
 ;-----------------------------------------------------------------------------
@@ -307,10 +288,12 @@ DRV_TIMI:
 ; 1) First execution, for information gathering.
 ;    Input:
 ;      A = 0
-;      B = number of available drives (drive-based drivers only)
 ;      HL = maximum size of allocatable work area in page 3
+;      C: bit 5 set if user is requesting reduced drive count
+;               (by pressing the 5 key)
+;         other bits: 0
+;      DE = 0 (could have information in future versions)
 ;    Output:
-;      A = number of required drives (for drive-based driver only)
 ;      HL = size of required work area in page 3
 ;      Cy = 1 if DRV_TIMI must be hooked to the timer interrupt, 0 otherwise
 ;
@@ -318,19 +301,16 @@ DRV_TIMI:
 ;    Input:
 ;      A = 1
 ;      B = number of allocated drives for this controller
-;          (255 if device-based driver, unless 4 is pressed at boot)
+;      C: bit 5 set if user is requesting reduced drive count
+;               (by pressing the 5 key)
+;         bit 7 set on error (not enough page 3 work area to allocate)
+;         other bits: 0
 ;
 ;    The work area address can be obtained by using GWORK.
 ;
 ;    If first execution requests more work area than available,
-;    second execution will not be done and DRV_TIMI will not be hooked
-;    to the timer interrupt.
-;
-;    If first execution requests more drives than available,
-;    as many drives as possible will be allocated, and the initialization
-;    procedure will continue the normal way
-;    (for drive-based drivers only. Device-based drivers always
-;     get two allocated drives.)
+;    second execution will be done with with bit 7 of C set,
+;    and DRV_TIMI will not be hooked to the timer interrupt.
 
 TEMP_WORK	equ	0C000h
 
@@ -722,7 +702,7 @@ DEVNAME_LOOP:
 
 ;-----------------------------------------------------------------------------
 ;
-; Obtain driver version
+; Obtain driver version (deprecated in Nextor 3)
 ;
 ; Input:  -
 ; Output: A = Main version number
@@ -730,9 +710,9 @@ DEVNAME_LOOP:
 ;         C = Revision number
 
 DRV_VERSION:
-	ld	a,VER_MAIN
-	ld	b,VER_SEC
-	ld	c,VER_REV
+	xor a
+	ld	b,a
+	ld	c,a
 	ret
 
 
@@ -787,7 +767,7 @@ DRV_DIRECT4:
 
 ;-----------------------------------------------------------------------------
 ;
-; Get driver configuration
+; Driver query
 ;
 ; Input:
 ;   A = Configuration index
@@ -797,35 +777,30 @@ DRV_DIRECT4:
 ;   A = 0: Ok
 ;       1: Configuration not available for the supplied index
 ;   BC, DE, HL = Depends on the configuration
-;
-; * Get number of drives at boot time (for device-based drivers only):
-;   Input:
-;     A = 1
-;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
-;   Output:
-;     B = number of drives
-;
-; * Get default configuration for drive
-;   Input:
-;     A = 2
-;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
-;     C = Relative drive number at boot time
-;   Output:
-;     B = Device index
-;     C = LUN index
 
-DRV_CONFIG:
-    ld a,1
-    ret
-
+DRV_QUERY:
     dec a
-    jr z,DRV_CONFIG_1
+    jr z,DRV_QUERY_1
     dec a
-    jr z,DRV_CONFIG_2
+    jr z,DRV_QUERY_2
+	dec a
+	jr z,DRV_QUERY_3
+	dec a
+	jr z,DRV_QUERY_4
+	dec a
+	jp z,DRV_QUERY_5
+	dec a
+	jp z,DRV_QUERY_6
 	ld a,1
 	ret
 
-DRV_CONFIG_1:
+	;--- Query 1: Get number of drives at boot time
+	;    Input:
+	;      B = 0 for DOS 2 mode, 1 for DOS 1 mode
+	;    Output:
+	;      B = number of drives
+
+DRV_QUERY_1:
     ld a,b
     ld b,2
     or a
@@ -834,13 +809,339 @@ DRV_CONFIG_1:
     dec b
     ret
 
-DRV_CONFIG_2:
+	;--- Query 2: Get default configuration for drive
+	;    Input:
+	;      B = 0 for DOS 2 mode, 1 for DOS 1 mode
+	;      C = Relative drive number at boot time
+	;    Output:
+	;      B = Device index
+
+DRV_QUERY_2:
     ld b,c
     inc b
-    ld c,1
     xor a
     ret
-    
+
+	;--- Query 3: Get driver capabilities (not implemented)
+
+DRV_QUERY_3:
+	ld a,1
+	ret
+
+	;--- Query 4: Get driver identification information
+	;    Input:
+	;          HL = Pointer to buffer in RAM
+	;          DE = Buffer size in bytes
+	;               (will always be at least 64 when called from Nextor kernel)
+	;          B  = Information id:
+	;               1: Hardware name
+	;               2: Hardware manufacturer name
+	;               3: Hardware designer name
+	;               4: Hardware serial number
+	;               5: Driver name
+	;               6: Driver developer name
+	;               255: Additional information
+	;    Output: A = 0: Ok
+	;               1: Information not available
+	;               80h: Ok, but the output is truncated (buffer too small)
+
+DRV_QUERY_4:
+	ld a,b
+	push de
+	pop bc
+	ex de,hl	;Now DE = Destination, BC = max length
+
+	ld hl,I_HW_NAME
+	dec a
+	jp z,RET_STRING
+	ld hl,I_HW_M_NAME
+	dec a
+	jp z,RET_STRING
+	ld hl,I_HW_D_NAME
+	dec a
+	jp z,RET_STRING
+	ld hl,I_HW_S_NUMBER
+	dec a
+	jp z,RET_STRING
+	ld hl,I_DV_NAME
+	dec a
+	jp z,RET_STRING
+	ld hl,I_DV_D_NAME
+	dec a
+	jp z,RET_STRING
+	ld hl,I_MORE_INFO
+	cp 255-6
+	jp z,RET_STRING
+
+	ld a,1
+	ret
+
+I_HW_NAME:
+	db "Sunrise IDE or compatible",0
+I_HW_M_NAME:
+	db "Some hardware manufacturer",0
+I_HW_D_NAME:
+	db "Some hardware designer",0
+I_HW_S_NUMBER:
+	db "SerialNumber-1234567890",0
+I_DV_NAME:	
+	db "Sunrise IDE driver for emulators",0
+I_DV_D_NAME:
+	db "Konamiman & Piter Punk",0
+I_MORE_INFO:
+	db "Some more info about the driver, this one can be very long, up to 512 bytes.",0
+
+	;--- Query 5: Get driver version number
+	;    Input:  B = What to get the version for:
+	;                0: Hardware
+	;                1: Driver
+	;    Output: A = 0: Ok
+	;                1: Unknown value of B or no version number available
+	;            HL = Main version number
+	;            DE = Secondary version number
+	;            BC = Revision number
+
+DRV_QUERY_5:
+	ld a,b
+	
+	ld hl,1234h
+	ld de,5678h
+	ld bc,9ABCh
+	or a
+	ret z
+
+	ld hl,VER_MAIN
+	ld de,VER_SEC
+	ld bc,VER_REV
+	dec a
+	ret z
+
+	ld a,1
+	ret
+
+	;--- Query 6: Get maximum supported device number
+	;    Input:  -
+	;    Output: B = Maximum supported device number
+
+DRV_QUERY_6:
+	ld b,2
+	xor a
+	ret
+
+; Return a string.
+; Input: HL = String to return
+;        DE = Destination address
+;        BC = Maximum length
+; Output: A = 0: Ok
+;             80h: Output is truncated
+
+RET_STRING:
+	ld a,b
+	or c
+	ld a,80h
+	ret z
+
+RET_STR_DO:
+	ld a,(hl)
+	ldi
+	jp po,RET_STR_Z	;jp if BC became zero
+	or a
+	ret z
+	jr RET_STR_DO
+
+RET_STR_Z:
+	or a
+	ret z
+	ld a,80h
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Device query
+;
+; Input:
+;   A = Configuration index
+;   C = Device number
+;   BC, DE, HL = Depends on the configuration
+;
+; Output:
+;   A = 0: Ok
+;       1: Configuration not available for the supplied index
+;   BC, DE, HL = Depends on the configuration
+
+DEV_QUERY:
+    dec a
+    jr z,DEV_QUERY_1
+    dec a
+    jr z,DEV_QUERY_2
+	dec a
+	jr z,DEV_QUERY_3
+	dec a
+	jr z,DEV_QUERY_4
+	dec a
+	jp z,DEV_QUERY_5
+	dec a
+	jp z,DEV_QUERY_6
+	ld a,1
+	ret
+
+	;--- Query 1: Get basic device information
+	;    Input:  A = 1
+	;            C = Device number
+	;    Output: A = 0: Ok, 1 if device doesn’t exist
+	;            C = Flags:
+	;                bit 0: set if removable device
+	;                bit 1: set if read-only device
+	;                bit 2: set if it's a floppy disk drive
+	;                bit 3: set if shouldn't be used for automapping
+	;                bit 4: set if hot-pluggable device (it can cease to exist)
+	;                bit 5: set if NOT a block device
+	;                bits 5-7: always zero
+	;            B, DE, HL: always zero
+
+DEV_QUERY_1:
+	ld a,c
+    call CHECK_DEV_LUN
+	ret c
+
+	xor	a
+	ld hl,0
+	ld de,0
+	ld bc,0
+	ret
+
+	;--- Query 2: Get device or medium change status
+	;    Input:  A = 2
+	;            C = Device number
+	;    Output: A = 0 if ok, 1 if device doesn’t exist
+	;            B = Status of the medium:
+	;                0: The device exists but no medium is inserted
+	;                   (for removable devices only)
+	;                1: The medium has not changed since the last status request
+	;                   (non-removable devices should always return this)
+	;                2: The medium has changed since the last status request
+	;                3: The medium is available, but it is not
+	;                   possible to determine whether it has been changed
+	;                   or not since the last status request.
+
+DEV_QUERY_2:
+	ld a,c
+    call CHECK_DEV_LUN
+	ret c
+
+	ld b,1
+	call DEV_STATUS
+	ld b,a
+	xor a
+	ret
+
+	;--- Query 3: Get device or medium identification
+	;    Input:  A = 3
+	;            C = Device number
+	;            B = Identification information to return:
+	;                1: Device name string
+	;                2: Device manufacturer name string
+	;                3: Device serial number string
+	;                4: Medium name string
+	;                5: Medium manufacturer name string
+	;                6: Medium serial number string
+	;                255: Additional information
+	;            HL = Pointer to a buffer in RAM
+	;            DE = Size of buffer (at least 64 when called from Nextor kernel)
+	;     Output: A = 0: Ok
+	;                 1: Device doesn't exist, or information not available
+	;                 80h: Ok, but output is truncated (not enough buffer space)
+	;
+	;     All the information is optional and not used in normal Nextor operation,
+	;     only in FDISK and CALL commands or tools that list devices.
+
+DEV_QUERY_3:
+	ld a,c
+    call CHECK_DEV_LUN
+	ret c
+
+	ld a,b
+	dec a
+	ld b,2
+	jp z,DEV_INFO
+	dec a
+	ld hl,I_DEV_MANUF
+	jp z,RET_STRING
+	dec a
+	jp z,DEV_INFO
+	dec a
+	ld hl,I_MED_NAME
+	jp z,RET_STRING
+	dec a
+	ld hl,I_MED_MANUF
+	jp z,RET_STRING
+	dec a
+	ld hl,I_MED_SERIAL
+	jp z,RET_STRING
+	cp 255-6
+	ld hl,I_DEV_MORE
+	jp z,RET_STRING
+
+	ld a,1
+	ret
+
+I_DEV_MANUF:
+	db "Some device manufacturer",0
+I_MED_NAME:
+	db "Some medium name",0
+I_MED_MANUF:
+	db "Some medium manufacturer",0
+I_MED_SERIAL:
+	db "MediumSerial-A1234567890",0
+I_DEV_MORE:
+	db "Some more info about the device, this one can be very long, up to 512 bytes.",0
+
+	;--- Get device size
+	;    Input:  A = 4
+	;            C = Device number
+	;    Output: A = 0: Ok
+	;                1: Device doesn't exist, or information not available
+	;            HLDE = Device size in sectors
+
+DEV_QUERY_4:
+	ld a,c
+    call CHECK_DEV_LUN
+	ret c
+
+	ld	b,a
+	call	IDE_ON
+	ld	a,b
+
+	dec	a
+	jr	z,DQ4_2
+	ld	a,M_DEV
+DQ4_2:
+	ld	e,a
+	call	WAIT_CMD_RDY
+	jr	c,LUN_INFO_ERROR
+	ld	a,e
+
+	ld	(IDE_HEAD),a
+
+	ld	a,0ECh
+	call	DO_IDE
+	jr	c,DEV_INFO_ERR1
+
+	;Get maximum sector number
+
+	ld	b,60	;Skip until word 60
+DQ4_SKIP:
+	ld	de,(IDE_DATA)
+	djnz	DQ4_SKIP
+
+	ld	de,(IDE_DATA)	;DE = Low word
+	ld	hl,(IDE_DATA)	;HL = High word
+
+	xor a
+	ret
+
+;WIP
 
 ;=====
 ;=====  BEGIN of DEVICE-BASED specific routines
@@ -1056,78 +1357,16 @@ DEV_RW_NODEV:
 ;
 ;Input:   A = Device index, 1 to 7
 ;         B = Information to return:
-;             0: Basic information
-;             1: Manufacturer name string
 ;             2: Device name string
 ;             3: Serial number string
 ;         HL = Pointer to a buffer in RAM
+;         DE = Size of buffer
 ;Output:  A = Error code:
 ;             0: Ok
-;             1: Device not available or invalid device index
-;             2: Information not available, or invalid information index
-;         When basic information is requested,
-;         buffer filled with the following information:
-;
-;+0 (1): Numer of logical units, from 1 to 8. 1 if the device has no logical
-;        drives (which is functionally equivalent to having only one).
-;+1 (1): Flags, always zero
-;
-; The strings must be printable ASCII string (ASCII codes 32 to 126),
-; left justified and padded with spaces. All the strings are optional,
-; if not available, an error must be returned.
-; If a string is provided by the device in binary format, it must be reported
-; as an hexadecimal, upper-cased string, preceded by the prefix "0x".
-; The maximum length for a string is 64 characters;
-; if the string is actually longer, the leftmost 64 characters
-; should be provided.
-;
-; In the case of the serial number string, the same rules for the strings
-; apply, except that it must be provided right-justified,
-; and if it is too long, the rightmost characters must be
-; provided, not the leftmost.
+;             1: Device not available
+;             80h: Ok, but string is truncated
 
 DEV_INFO:
-	or	a	;Check device index
-	jr	z,DEV_INFO_ERR1
-	cp	3
-	jr	nc,DEV_INFO_ERR1
-
-	call	MY_GWORK
-
-	ld	c,a
-	ld	a,b
-	or	a
-	jr	nz,DEV_INFO_STRING
-
-	;--- Obtain basic information
-
-	ld	a,(ix)
-	or	a	;Device available?
-	jr	z,DEV_INFO_ERR1
-
-	ld	(hl),1	;One single LUN
-	inc	hl
-	ld	(hl),0	;Always zero
-	xor	a
-	ret
-
-	;--- Obtain string information
-
-DEV_INFO_STRING:
-	push	hl
-	push	bc
-	push	hl
-	pop	de
-	inc	de
-	ld	(hl)," "
-	ld	bc,64-1
-	ldir
-	pop	bc
-	pop	hl
-
-	call	IDE_ON
-
-	ld	a,c
 	dec	a
 	jr	z,DEV_INFO_STRING2
 	ld	a,M_DEV
@@ -1136,20 +1375,27 @@ DEV_INFO_STRING2:
 	ld	c,a	;C=Device flag for the HEAD register
 	ld	a,b
 
-	dec	a
-	jr	z,DEV_INFO_ERR2	;Manufacturer name
+	dec a
+	dec a
+	jr z,DEV_INFO_NAME
+	dec a
+	jr z,DEV_INFO_SERIAL
+	ld a,1
+	ret
 
 	;--- Device name
 
-	dec	a
-	jr	nz,DEV_STRING_NO1
+	call IDE_ON
 
+	push hl
 	ld	b,27
+	ld h,20
 	call	DEV_STING_PREPARE
+	pop hl
 	jr	c,DEV_INFO_ERR1
 
-	ld	b,20
 DEV_STRING_LOOP:
+	push af	;Save 0 or 80h from DEV_STING_PREPARE
 	ld	de,(IDE_DATA)
 	ld	a,d
 	cp	33
@@ -1172,22 +1418,21 @@ DEVSTRLOOP_2:
 	djnz	DEV_STRING_LOOP
 
 	call	IDE_OFF
-	xor	a
+	pop	af
 	ret
 
-DEV_STRING_NO1:
+DEV_INFO_SERIAL:
 
 	;--- Serial number
 
-	dec	a
-	jr	nz,DEV_INFO_ERR2	;Unknown string
-
+	push hl
 	ld	b,10
+	ld  h,10
 	call	DEV_STING_PREPARE
 	jr	c,DEV_INFO_ERR1
 
-	ld	bc,44
-	add	hl,bc	;Since the string is 20 chars long
+	;ld	bc,44
+	;add	hl,bc	;Since the string is 20 chars long
 	ld	b,10
 	jr	DEV_STRING_LOOP
 	
@@ -1207,43 +1452,51 @@ DEV_INFO_ERR2:
 
 ;Common processing for obtaining a device information string
 ;Input: B  = Offset of the string in the device information (words)
-;       HL = Destination address for the string
 ;       C  = Device flag for the HEAD register
-;Corrupts AF, DE
+;       DE = Size of buffer
+;       H  = Size of string
+;Output: B = Adjusted size of string
+;        A = 0, 1 or 80h
+;        Cy = 1 if error 1
+;Corrupts F, DE
 
 DEV_STING_PREPARE:
+	ld l,h  ;L = Value to return in B
+	ld a,d
+	or a
+	jr nz,DSTP2
+
+	ld a,h
+	cp e
+	ld a,0
+	jr c,DSTP2
+	ld a,80h
+	ld l,e	;String is too big for buffer, we'll truncate
+	dec l	;To make room for terminating 0
+
+DSTP2:
+	push af
 	call	WAIT_CMD_RDY
 	ld	a,c		;Issue IDENTIFY DEVICE command
 	ld	(IDE_HEAD),a
 	ld	a,0ECh
 	call	DO_IDE
+	ld a,1
 	ret	c
-
-	push	hl		;Fill destination with spaces
-	push	bc
-	push	hl
-	pop	de
-	inc	de
-	ld	(hl)," "
-	ld	bc,64-1
-	ldir
-	pop	bc
-	pop	hl
 
 DEV_STRING_SKIP:
 	ld	de,(IDE_DATA)	;Skip device data until the desired string
 	djnz	DEV_STRING_SKIP
 
+	ld b,l
 	ret
 
 
 ;-----------------------------------------------------------------------------
 ;
-; Obtain device status
+; Old "obtain device status" from Nextor 2, with LUN checking removed
 ;
 ;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7.
-;             0 to return the status of the device itself.
 ;Output:  A = Status for the specified logical unit,
 ;             or for the whole device if 0 was specified:
 ;                0: The device or logical unit is not available, or the
@@ -1259,27 +1512,11 @@ DEV_STRING_SKIP:
 ;                3: The device or logical unit is available, but it is not
 ;                   possible to determine whether it has been changed
 ;                   or not since the last status request.
-;
-; Devices not supporting hot-plugging must always return status value 1.
-; Non removable logical units may return values 0 and 1.
 
 DEV_STATUS:
-	set	0,b	;So that CHECK_DEV_LUN admits B=0
-
-	call	CHECK_DEV_LUN
-	ld	e,a
-	ld	a,0
-	ret	c
-
 	ld	a,1	;Never changed
 	ret
 
-	ld	a,e
-	cp	2
-	ld	a,1
-	ret	nz
-
-	ld	a,e
 	dec	a	;FOR TESTING:
 	ld	a,2	;Return "Unchanged" for device 1, "Unknown" for device 2
 	ret	z
@@ -1411,73 +1648,7 @@ LUN_INFO_ERROR:
 	ret
 
 
-;-----------------------------------------------------------------------------
-;
-; Physical format a device
-;
-;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7
-;         C = Format choice, 0 to return choice string
-;Output:
-;        When C=0 at input:
-;        A = 0: Ok, address of choice string returned
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        HL = Address of format choice string (in bank 0 or 3),
-;             only if A=0 returned.
-;             Zero, if only one choice is available.
-;
-;        When C<>0 at input:
-;        A = 0: Ok, device formatted
-;            Other: error code, same as DEV_RW plus:
-;            .IPARM: Invalid format choice
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        B = Media ID if the device is a floppy disk, zero otherwise
-;            (only if A=0 is returned)
-;
-; Media IDs are:
-; F0h: 3.5" Double Sided, 80 tracks per side, 18 sectors per track (1.44MB)
-; F8h: 3.5" Single sided, 80 tracks per side, 9 sectors per track (360K)
-; F9h: 3.5" Double sided, 80 tracks per side, 9 sectors per track (720K)
-; FAh: 5.25" Single sided, 80 tracks per side, 8 sectors per track (320K)
-; FBh: 3.5" Double sided, 80 tracks per side, 8 sectors per track (640K)
-; FCh: 5.25" Single sided, 40 tracks per side, 9 sectors per track (180K)
-; FDh: 5.25" Double sided, 40 tracks per side, 9 sectors per track (360K)
-; FEh: 5.25" Single sided, 40 tracks per side, 8 sectors per track (160K)
-; FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
 
-DEV_FORMAT:
-	ld	a,.IFORM
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Execute direct command on a device
-;
-;Input:    A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7 (if applicable)
-;          HL = Address of input buffer
-;          DE = Address of output buffer, 0 if not necessary
-;Output:   Output buffer appropriately filled (if applicable)
-;          A = Error code:
-;              0: Ok
-;              1: Invalid device number or logical unit number,
-;                 or device not ready
-;              2: Invalid or unknown command
-;              3: Insufficient output buffer space
-;              4-15: Reserved
-;              16-255: Device specific error codes
-;
-; The first two bytes of the input and output buffers must contain the size
-; of the buffer, not incuding the size bytes themselves.
-; For example, if 16 bytes are needed for a buffer, then 18 bytes must
-; be allocated, and the first two bytes of the buffer must be 16, 0.
-
-DEV_CMD:
-	ld	a,2
-	ret
 
 ;=====
 ;=====  END of DEVICE-BASED specific routines
@@ -1616,26 +1787,18 @@ MY_GWORK:
 
 ;-----------------------------------------------------------------------------
 ;
-; Check the device index and LUN
-; Input:  A = device index, B = lun
-; Output: Cy=0 if OK, 1 if device or LUN invalid
+; Check the device index
+; Input:  A = device index
+; Output: Cy=0 and A unchanged if OK
+;         Cy=1 and A=1 if device index is invalid
 ;         IX = Work area for the device
 ; Modifies F, C
 
 CHECK_DEV_LUN:
-	or	a	;Check device index
-	scf
-	ret	z
+	or	a
+	jr	z,RET_ERR_1
 	cp	3
-	ccf
-	ret	c
-
-	ld	c,a
-	ld	a,b	;Check LUN number
-	cp	1
-	ld	a,c
-	scf
-	ret	nz
+	jr	nc,RET_ERR_1
 
 	push	hl
 	push	de
@@ -1646,10 +1809,14 @@ CHECK_DEV_LUN:
 	ld	a,(ix)
 	or	a
 	ld	a,c
-	scf
-	ret	z
+	jr	z,RET_ERR_1
 
 	or	a
+	ret
+
+RET_ERR_1:
+	ld a,1
+	scf
 	ret
 
 
