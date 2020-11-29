@@ -15,12 +15,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef MAKEBUILD
+#include "types.h"
+#include "system.h"
+#include "dos.h"
+#include "AsmCall.h"
+#include "drivercall.h"
+#include "partit.h"
+#else
 #include "../../tools/C/types.h"
 #include "../../tools/C/system.h"
 #include "../../tools/C/dos.h"
 #include "../../tools/C/asmcall.h"
 #include "drivercall.h"
 #include "../../tools/C/partit.h"
+#endif
 #include "fdisk.h"
 
 byte sectorBuffer[512];
@@ -578,6 +587,9 @@ void Locate(byte x, byte y)
 	AsmCall(POSIT, &regs, REGS_MAIN, REGS_NONE);
 }
 
-
+#ifdef MAKEBUILD
+#include "AsmCall.c"
+#else
 #include "../../tools/C/asmcall.c"
+#endif
 #include "drivercall.c"

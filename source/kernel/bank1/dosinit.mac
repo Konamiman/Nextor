@@ -5,6 +5,7 @@
 ;
 	INCLUDE	MACROS.INC
 	INCLUDE	CONST.INC
+	INCLUDE	VERSION.INC
 	INCLUDE	CONDASM.INC
 
 MAXDRV	equ	8		;max number of drives supported by disk

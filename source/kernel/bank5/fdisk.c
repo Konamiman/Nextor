@@ -15,12 +15,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
+#ifdef MAKEBUILD
+#include <system.h>
+#include "dos.h"
+#include "types.h"
+#include "AsmCall.h"
+#include "drivercall.h"
+#include "partit.h"
+#else
 #include "../../tools/C/system.h"
 #include "../../tools/C/dos.h"
 #include "../../tools/C/types.h"
 #include "../../tools/C/asmcall.h"
 #include "drivercall.h"
 #include "../../tools/C/partit.h"
+#endif
+
 #include "fdisk.h"
 
 //#define FAKE_DEVICE_INFO
@@ -1679,7 +1690,11 @@ int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer)
 	return regs.Words.HL;
 }
 
-
+#ifdef MAKEBUILD
+#include "printf.c"
+#include "AsmCall.c"
+#else
 #include "../../tools/C/printf.c"
 #include "../../tools/C/asmcall.c"
+#endif
 #include "drivercall.c"

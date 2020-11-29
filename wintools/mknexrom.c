@@ -276,7 +276,7 @@ int main(int argc, char* argv[])
 		}
 		int fileSize = GetFileSize(mapperFile);
 		if (fileSize > (MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE)) {
-			printf("*** The mapper code file has not the expected size (%i bytes, or %i bytes if it has a header)\r\n", MAPPER_CODE_SIZE, MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE);
+			printf("*** The mapper code file '%s', has not the expected size (%i bytes, or %i bytes if it has a header).  Size is: %d\r\n", mapperFilename, MAPPER_CODE_SIZE, MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE, fileSize);
 			DoExit(1);
 		}
 		readCount = fread(mapperCode, 1, MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE, mapperFile);
@@ -326,7 +326,7 @@ int main(int argc, char* argv[])
 			DoExit(1);
 		}
 		if(GetFileSize(driverFile)<DRIVER_MIN_SIZE) {
-			printf("*** The driver file is too small", driverFilename);
+			printf("*** The driver file is too small. '%s'", driverFilename);
 			DoExit(1);
 		}
 		fseek(driverFile, PAGE0_SIZE, SEEK_SET);
@@ -526,13 +526,23 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.06 - Make a Nextor kernel ROM\r\n"
+#if defined(__linux__)
+	printf("MKNEXROM v1.07 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 3/2019\r\n"
+		   "\r\n"
+		   "Usage:\r\n"
+		   "mknexrom <basefile> <newfile> [-d:<driverfile>] [-m:<mapperfile>]\r\n"
+		   "         [-e:<extrafile>] [-8:<8K bank select address>]\r\n"
+		   );
+#else
+	printf("MKNEXROM v1.07 - Make a Nextor kernel ROM\r\n"
 		   "By Konamiman, 3/2019\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
 		   "mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>]\r\n"
 		   "         [/e:<extrafile>] [/8:<8K bank select address>] [/k:<boot keys inverter>]\r\n"
 		   );
+#endif
 }
 
 int GetFileSize(FILE* file)
@@ -548,9 +558,15 @@ int GetFileSize(FILE* file)
 	return end;
 }
 
+#if defined(__linux__)
+#define SWITCH_CHAR '-'
+#else
+#define SWITCH_CHAR '/'
+#endif
+
 int IsParam(char* arg, char paramLetter)
 {
-	return arg[0]=='/' && ((arg[1] | 0x20) == (paramLetter | 0x20)) && arg[2]==':';
+	return arg[0] == SWITCH_CHAR && ((arg[1] | 0x20) == (paramLetter | 0x20)) && arg[2]==':';
 }
 
 void DoExit(int code)
