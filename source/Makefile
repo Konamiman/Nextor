@@ -67,7 +67,7 @@ drivers: drivers/sunrise
 
 .PHONY: hdddsk
 ## Build a FAT12 hard disk image containing nextor.sys, command2.com and all other tools
-hdddsk: msxdos command chkdsk tools ## sdfsdf
+hdddsk: msxdos command chkdsk tools
 	@sudo umount -df /media/hdddsk > /dev/null 2>&1 || true
 	rm -f ../bin/hdd.dsk
 	mkfs.vfat -C "../bin/hdd.dsk" 10000
@@ -232,7 +232,7 @@ deps:
 
 .PHONY: tools
 ## Build all the tools binaries into bin/cli
-tools: kernel
+tools: command kernel
 	@$(call prepdir,$(TOOLS_WRK_DIR))
 	linkfiles.sh "tools/*.mac" "$(TOOLS_WRK_DIR)"
 	linkfiles.sh "tools/*.MAC" "$(TOOLS_WRK_DIR)"

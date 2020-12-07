@@ -1,14 +1,19 @@
 
 .PHONY: all
-all: drvinfo.com delall.com
-	@:
+all: drvinfo.com delall.com conclus.com drivers.com fastout.com lock.com mapdrv.com
+	@
 
 .ONESHELL:
+.SHELLFLAGS := -eu -o pipefail -c
+.DELETE_ON_ERROR:
+MAKEFLAGS += --warn-undefined-variables
 
-drvinfo.hex: drvinfo.rel codes.rel data.rel shared.rel
-	@l80.sh drvinfo.hex /P:100,CODES,DATA,DRVINFO,SHARED,DRVINFO/N/X/Y/E
+TOOL_DEPS := codes.rel data.rel shared.rel
+define buildtool =
+	l80.sh $@ /P:100,CODES,DATA,$(basename $<),SHARED,$(basename $<)/N/X/Y/E
+endef
 
-delall.hex: delall.rel codes.rel data.rel shared.rel
-	@l80.sh delall.hex /P:100,CODES,DATA,DELALL,SHARED,DELALL/N/X/Y/E
+%.hex: %.rel $(TOOL_DEPS)
+	$(buildtool)
 
 include rules.mk
