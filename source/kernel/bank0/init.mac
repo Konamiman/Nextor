@@ -3,6 +3,7 @@
 
 ;===== start add DOS2.50 (build type)
 ;
+	INCLUDE	VERSION.INC
 	INCLUDE	CONDASM.INC
 	INCLUDE CONST.INC
 ;
@@ -379,12 +380,20 @@ SCANKEYS::
     call SK_GET_ROWS
 
     pop af
+
+ifndef EX_RUSSIAN
     or a
     jr nz,SCANK_RUSSIAN
+endif
+
     call SK_INTERNATIONAL
+
+ifndef EX_RUSSIAN
     jr SCANK_DONE
 SCANK_RUSSIAN:
     call SK_RUSSIAN
+endif
+
 SCANK_DONE:
 
     ld b,(ix+SK_B)
@@ -530,7 +539,7 @@ SK_COMMON:
 
     ret
 
-
+ifndef EX_RUSSIAN
     ;* Russian keyboard layout version
 
 ;0: 654321.9
@@ -545,40 +554,40 @@ SK_COMMON:
 ;10: ...98765
 
 SK_RUSSIAN:
-    ld a,(ix+SK_ROW_0)
-    ld c,a
-    ld b,(ix+SK_ROW_1)
-    ld e,0
+	ld	a, (ix+SK_ROW_0)
+	ld	c, a
+	ld	b, (ix+SK_ROW_1)
+	ld	e, 0
 
-    and 11111100b   ;654321..
+	and	11111100b   		; 654321..
 
-    srl b   ;Cy = 7
-    rra     ;7654321.
-    srl a   ;.7654321
+	srl	b			; Cy = 7
+	rra     			; 7654321.
+	srl	a			; .7654321
 
-    srl c   ;Cy = 9
-    rl e    ;E = .......9
+	srl	c			; Cy = 9
+	rl	e			; E = .......9
 
-    srl b   ;Cy = 8
-    rl e    ;E = ......98
+	srl	b			; Cy = 8
+	rl	e			; E = ......98
 
-    srl b   ;Cy = 0
-    rl a    ;76543210
+	srl	b			; Cy = 0
+	rl	a			; 76543210
 
-    ld (ix+SK_B),a
-    ld (ix+SK_E),e
+	ld	(ix+SK_B), a
+	ld	(ix+SK_E), e
 
-    ;I'm sorry but that's it, only 9 disk image files supported in Russian keyboards.
-    ;Pull request implementing the (hellish) conversion of the rest of the keys will be welcome.
+	;I'm sorry but that's it, only 9 disk image files supported in Russian keyboards.
+	;Pull request implementing the (hellish) conversion of the rest of the keys will be welcome.
 
-    xor a
-    ld (ix+SK_D),a
-    ld (ix+SK_L),a
-    ld (ix+SK_H),a
+	xor	a
+	ld	(ix+SK_D), a
+	ld	(ix+SK_L), a
+	ld	(ix+SK_H), a
 
-    ld h,a
-    jp SK_COMMON
-
+	ld	h, a
+	jp	SK_COMMON
+endif
 
     ;Input:  HL = First work area address, B=Rows count, C=First row
     ;Output: HL = Last work area address used + 1
@@ -614,34 +623,35 @@ CLIKSW	EQU	0F3DBH
 KILBUF	EQU	0156H
 CHGET	EQU     09FH
 
+ifndef EX_RUSSIAN
     ;Returns A=1 if we have a Russian keyboard, A=0 otherwise
 CHECK_IS_RUSSIAN: ; in case of ZF
 	DI
-	CALL KILBUF
-	LD HL,(CAPST)
-	LD A,(CLIKSW)
-	PUSH AF
-	PUSH HL
-	XOR A
-	LD (KANAST),A   ; KANA OFF
-	LD (CLIKSW),A   ; Shut up!
-	DEC A
-	LD (CAPST),A    ; CAPS ON
-	LD (NEWKEY+6),A ; No SHIFT, CTRL etc.
-	LD A,64
-	LD B,7
-	CALL 0D89H
-	POP HL
-	POP AF
-	LD (CLIKSW),A
-	LD (CAPST),HL
-	CALL CHGET
-	CP "J"
-    ld a,1
-	RET z
-    dec a
-    ret
-
+	CALL	KILBUF
+	LD	HL, (CAPST)
+	LD	A, (CLIKSW)
+	PUSH	AF
+	PUSH	HL
+	XOR	A
+	LD	(KANAST), A   ; KANA OFF
+	LD	(CLIKSW), A   ; Shut up!
+	DEC	A
+	LD	(CAPST), A    ; CAPS ON
+	LD	(NEWKEY+6), A ; No SHIFT, CTRL etc.
+	LD	A, 64
+	LD	B, 7
+	CALL	0D89H
+	POP	HL
+	POP	AF
+	LD	(CLIKSW), A
+	LD	(CAPST), HL
+	CALL	CHGET
+	CP	"J"
+	ld	a, 1
+	RET	z
+	dec	a
+	ret
+endif
 
     ;Read key status from RAM.
     ;Out: Z if status read ok, NZ if not
@@ -816,7 +826,6 @@ BSC::
 	ret
 	ds	48-4
 INIT2:
-
 	call	CHK_DUP	;Will just POP and RET if slot already processed
 
     call DO_KEYS_INIT
@@ -2467,8 +2476,10 @@ GSLT_SLTTBL:
     ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
 
 DO_KEYS_INIT:
+ifndef EX_RUSSIAN
     call CHECK_IS_RUSSIAN
     ld (I_AM_RUSSIAN##),a
+endif
 
     call SCANKEYS_RAM
     jr z,DO_KEYS_INIT2

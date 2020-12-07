@@ -286,7 +286,10 @@ size	macro	name
     field  2,EMU_WK_AREA   ;Address of work area as read from the emulation data file
     ;NOTE! BOOTKEYS is used in dos1ker.mac, it must be manually updated if it changes
     field  5,BOOTKEYS      ;To store the state of boot keys
+
+ifndef EX_RUSSIAN
     field  1,I_AM_RUSSIAN
+endif
 ;
 ;-----------------------------------------------------------------------------
 ;

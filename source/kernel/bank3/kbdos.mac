@@ -1,0 +1,7 @@
+
+KDERR	equ	0
+	public	KDERR
+KABR	equ	0
+	public	KABR
+
+	end

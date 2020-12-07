@@ -161,9 +161,13 @@ fout_get:
 	jr	z,redv_get
 
 	ld	(iy+@RALL_VECT##),l
-if MAX_UNITS## GT 8
-	ld	(iy+@RALL_VECT##+1),h
-endif
+	
+	;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+	;          and compiles always the else clause.
+	;          Solve this if MAX_UNITS needs to grow over 8.
+; if MAX_UNITS## GT 8
+; 	ld	(iy+@RALL_VECT##+1),h
+; endif
 
 	;--- Now set the UF_RALL bit for each drive that exists
 
@@ -196,9 +200,12 @@ readv_loop:
 	;          Solve this if MAX_UNITS needs to grow over 8.
 
 	pop	hl	;HL = Vector
-if MAX_UNITS## GT 8
-	srl	h
-endif
+	;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+	;          and compiles always the else clause.
+	;          Solve this if MAX_UNITS needs to grow over 8.
+; if MAX_UNITS## GT 8
+; 	srl	h
+; endif
 	rr	l	;Cy = Value for current drive
 	jr	c,readv_set1
 
@@ -224,9 +231,12 @@ readv_nextdrive:
 redv_get:
 	ld	h,0
 	ld	l,(iy+@RALL_VECT##)
-if MAX_UNITS## GT 8
-	ld	h,(iy+@RALL_VECT##+1)
-endif
+	;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+	;          and compiles always the else clause.
+	;          Solve this if MAX_UNITS needs to grow over 8.
+; if MAX_UNITS## GT 8
+; 	ld	h,(iy+@RALL_VECT##+1)
+; endif
 
 	xor	a
 	ret
