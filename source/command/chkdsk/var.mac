@@ -1,7 +1,7 @@
 	title   MSX-DOS 2 CHKDKS Program - Variables & Data Areas
 	.z80
-	INCLUDE MACROS.INC
-	INCLUDE CONST.INC
+	INCLUDE CHMACROS.INC
+	INCLUDE CHCONST.INC
 ;******************************************************************************
 ;
 MULT_FLAGS::    db      0       ;   b0   - set if accessing FAT sector

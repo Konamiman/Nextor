@@ -1,7 +1,7 @@
 	title   MSX-DOS 2 CHKDSK Program - Miscellaneous Routines
 	.z80
-	INCLUDE MACROS.INC
-	INCLUDE CONST.INC
+	INCLUDE CHMACROS.INC
+	INCLUDE CHCONST.INC
 ;******************************************************************************
 ;
 G_FAT_BUFF::    call    GET_BUFF                ;Get a sector buffer

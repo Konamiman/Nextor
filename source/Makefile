@@ -15,7 +15,7 @@ override export BUILD_TYPE = std
 endif
 
 export SRC_ROOT_DIR=$(PWD)
-WRK_DIR=../bin/working
+export WRK_DIR=../bin/working
 KERNEL_WRK_DIR=$(WRK_DIR)/kernel
 COMMAND_WRK_DIR=$(WRK_DIR)/command
 TOOLS_WRK_DIR=$(WRK_DIR)/tools
@@ -31,216 +31,103 @@ CMD_WRK_DIR=$(COMMAND_WRK_DIR)/command
 CHKDSK_WRK_DIR=$(COMMAND_WRK_DIR)/chkdsk
 DRV_SUNRISE_WRK_DIR=$(KERNEL_WRK_DIR)/drivers/sunriseide
 
+SUBMAKE := $(MAKE) -C $(WRK_DIR) --no-print-directory
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 .ONESHELL:
-.DELETE_ON_ERROR:
 MAKEFLAGS += --warn-undefined-variables
+MAKEFLAGS += --no-builtin-rules
 
 export VERSION=2.1.1-alpha2
 
 export PATH := $(PWD)/../linuxtools/:$(PWD)/../linuxtools/prereq/sdcc-4.0.0/bin/:$(PWD)/../linuxtools/prereq/hex2bin/:$(PWD)/../linuxtools/prereq/cpm:$(PATH)
 
-define prepdir
-	mkdir -p $(1)
-	linkfile.sh "kernel/M80.CPM" "$(PWD)/$(1)/M80.COM"
-	linkfile.sh "kernel/L80.CPM" "$(PWD)/$(1)/L80.COM"
-	linkfile.sh "kernel/LIB80.CPM" "$(PWD)/$(1)/LIB80.COM"
-	linkfiles.sh "kernel/*.inc" "$(1)"
-	rm -f $(1)/condasm.inc
-	linkfile.sh "rules.mk" "$(PWD)/$(1)/"
-endef
+.PHONY: all
+all: prep
+	@$(SUBMAKE) -O -j
 
-## Primary Targets
+.PHONY: prep
+prep: $(SRC_FILES)
+	@mkdir -p $(WRK_DIR)
+	rm -f $(WRK_DIR)/*.mac
+	rm -f $(WRK_DIR)/*.h
+	sf "kernel/M80.CPM" "M80.COM"
+	sf "kernel/L80.CPM" "L80.COM"
+	sf "kernel/LIB80.CPM" "LIB80.COM"
+	sf "Makefile-main.mk" "Makefile"
+	sf "rules.mk"
+	sf -s kernel bank.inc const.inc macros.inc
+	sf "kernel/*.mac"
+	sf "kernel/bank0/*.mac"
+	sf "kernel/bank1/*.mac"
+	sf "kernel/bank2/*.mac"
+	sf "kernel/bank3/*.mac"
+	sf kernel/bank4/dskab.mac dskab4.mac
+	sf kernel/bank4/dskab.mac dskab4.mac
+	sf kernel/bank4/misc.mac misc4.mac
+	sf kernel/bank4/ramdrv.mac ramdrv4.mac
+	sf kernel/bank4/seg.mac seg4.mac
+	sf -s kernel/bank4 ramdrvh.mac env.mac b4.mac time.mac cpm.mac jump.mac partit.mac
+		# 40ff.mac and doshead.mac bkalloc.mac in bank4 are not used???
+	sf "kernel/bank5/*.mac"
+	sf "kernel/bank5/*.s"
+	sf "kernel/bank5/*.c"
+	sf "kernel/bank5/*.h"
+	sf "kernel/bank6/*.mac"
+	sf kernel/drivers/SunriseIDE/chgbnk.mac srchgbnk.mac
+	sf kernel/drivers/SunriseIDE/driver.mac sunrise.mac
+	sf "command/msxdos/*.mac"
+	sf command/command/files.mac cmdfiles.mac
+	sf command/command/messages.mac cmdmsgs.mac
+	sf command/command/misc.mac cmdmisc.mac
+	sf command/command/ver.mac cmdver.mac
+	sf -s command/command start.mac cli.mac cmd.mac copy.mac dirs.mac io.mac jtext.mac var.mac command.inc
+	sf "command/chkdsk/main.mac"  main.mac
+	sf "command/chkdsk/text.mac"  text.mac
+	sf "command/chkdsk/jtext.mac" chjtext.mac
+	sf "command/chkdsk/var.mac" chvar.mac
+	sf "command/chkdsk/end.mac" chend.mac
+	sf "command/chkdsk/misc.mac" chmisc.mac
+	sf "command/chkdsk/nodebug.mac" nodebug.mac
+	sf "command/chkdsk/dir.mac" chdir.mac
+	sf "command/chkdsk/*.inc"
+	sf "tools/*.MAC"
 
-# Build all units excluding hdddsk
-all: drivers tools msxdos command chkdsk
-	@:
+## Build the common tools
+tools: prep
+	@$(SUBMAKE) tools -j -O
 
-## Build the sunrise rom image into bin/drivers/sunriseide
-sunrise: drivers/sunrise
-	@:
+## Build the sunrise kernel rom
+sunrise: prep
+	@$(SUBMAKE) nextor-$(VERSION).sunriseide.rom
 
-## Build all drivers
-drivers: drivers/sunrise
-	@:
+## Build the chkdsk.com
+chkdsk: prep
+	@$(SUBMAKE) chkdsk
 
-.PHONY: hdddsk
+## Build the command2.com
+command2: prep
+	@$(SUBMAKE) command2.com
+
+## Build the nextor.sys
+nextor: prep
+	@$(SUBMAKE) nextor.sys
+
+## Build the nextork.sys
+nextork: prep
+	@$(SUBMAKE) nextork.sys
+
 ## Build a FAT12 hard disk image containing nextor.sys, command2.com and all other tools
-hdddsk: msxdos command chkdsk tools
-	@sudo umount -df /media/hdddsk > /dev/null 2>&1 || true
-	rm -f ../bin/hdd.dsk
-	mkfs.vfat -C "../bin/hdd.dsk" 10000
-	sudo mkdir -p /media/hdddsk
-	sudo mount -t vfat ../bin/hdd.dsk /media/hdddsk
-	sudo cp ../bin/cli/*.com /media/hdddsk
-	sudo cp ../bin/cli/nextor.sys /media/hdddsk
-	sudo umount -df /media/hdddsk
+hdddsk: prep
+	@$(SUBMAKE) hdd.dsk
 
-
-fdddsk: ../bin/fdd.dsk
 ## Build a FAT12 hard disk image containing nextor.sys, command2.com and all other tools
-../bin/fdd.dsk: ../bin/cli/command2.com ../bin/cli/nextor.sys ../bin/cli/drvinfo.com
-	@sudo umount -df /media/fdddsk > /dev/null 2>&1 || true
-	rm -f ../bin/fdd.dsk
-	dd if=/dev/zero of=../bin/fdd.dsk bs=64k count=1
-	mkfs.vfat -F 12 -f 1 ../bin/fdd.dsk
-	sudo mkdir -p /media/fdddsk
-	sudo mount -t vfat ../bin/fdd.dsk /media/fdddsk
-	sudo cp ../bin/cli/command2.com /media/fdddsk
-	sudo cp ../bin/cli/nextor.sys /media/fdddsk
-	sudo cp ../bin/cli/drvinfo.com /media/fdddsk
-	sudo umount -df /media/fdddsk
+fdddsk: prep
+	@$(SUBMAKE) fdd.dsk
 
-../bin/cli/nextor.sys: msxdos
-	@:
-../bin/cli/command2.com: command
-	@:
-../bin/cli/drvinfo.com: tools
-	@:
-
-.PHONY: msxdos
-## Build the nextor.sys and nextork.sys files (bin/cli/)
-msxdos: kernel
-	@$(call prepdir,$(MSXDOS_WRK_DIR))
-	linkfiles.sh "command/msxdos/*.mac" "$(MSXDOS_WRK_DIR)"
-	rm -f $(MSXDOS_WRK_DIR)/usekmsg.mac
-	linkfile.sh "Makefile-msxdos.mk" "$(MSXDOS_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(MSXDOS_WRK_DIR)"
-	$(MAKE) -C $(MSXDOS_WRK_DIR) --no-print-directory
-	mkdir -p ../bin/cli
-	cp -up $(MSXDOS_WRK_DIR)/*.sys ../bin/cli
-
-.PHONY: command
-## Build the bin/cli/command2.com unit
-command: kernel
-	@$(call prepdir,$(CMD_WRK_DIR))
-	linkfiles.sh "command/command/*.mac" "$(CMD_WRK_DIR)"
-	linkfiles.sh "command/command/*.MAC" "$(CMD_WRK_DIR)"
-	linkfiles.sh "command/command/*.inc" "$(CMD_WRK_DIR)"
-	linkfile.sh "Makefile-command.mk" "$(CMD_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(CMD_WRK_DIR)"
-	$(MAKE) -C $(CMD_WRK_DIR) --no-print-directory
-	mkdir -p ../bin/cli
-	cp -up $(CMD_WRK_DIR)/*.com ../bin/cli
-
-.PHONY: chkdsk
-## Build the bin/cli/chkdsk.com unit
-chkdsk: command kernel
-	@$(call prepdir,$(CHKDSK_WRK_DIR))
-	linkfiles.sh "command/chkdsk/*.mac" "$(CHKDSK_WRK_DIR)"
-	linkfiles.sh "command/chkdsk/*.MAC" "$(CHKDSK_WRK_DIR)"
-	linkfiles.sh "command/chkdsk/*.inc" "$(CHKDSK_WRK_DIR)"
-	linkfile.sh "$(CMD_WRK_DIR)/ver.rel" "$(CHKDSK_WRK_DIR)"
-	linkfile.sh "Makefile-chkdsk.mk" "$(CHKDSK_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(CHKDSK_WRK_DIR)"
-	$(MAKE) -C $(CHKDSK_WRK_DIR) --no-print-directory
-	mkdir -p ../bin/cli
-	cp -up $(CHKDSK_WRK_DIR)/*.com ../bin/cli
-
-
-../linuxtools/mknexrom: ../wintools/mknexrom.c
-	@gcc ../wintools/mknexrom.c -o ../linuxtools/mknexrom
-
-.PHONY: kernel
-kernel:
-	@$(call prepdir,$(KERNEL_WRK_DIR))
-	linkfiles.sh "kernel/*.mac" "$(KERNEL_WRK_DIR)"
-	linkfile.sh "Makefile-kernel.mk" "$(KERNEL_WRK_DIR)/Makefile"
-	$(MAKE) -C $(KERNEL_WRK_DIR) --no-print-directory
-
-bank0: kernel
-	@$(call prepdir,$(BANK0_WRK_DIR))
-	linkfiles.sh "kernel/bank0/*.mac" "$(BANK0_WRK_DIR)"
-	linkfile.sh "Makefile-bank0.mk" "$(BANK0_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK0_WRK_DIR)"
-	$(MAKE) -C $(BANK0_WRK_DIR) --no-print-directory
-
-bank1: bank0 kernel
-	@$(call prepdir,$(BANK1_WRK_DIR))
-	linkfiles.sh "kernel/bank1/*.mac" "$(BANK1_WRK_DIR)"
-	linkfile.sh "Makefile-bank1.mk" "$(BANK1_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK1_WRK_DIR)"
-	linkfiles.sh "$(BANK0_WRK_DIR)/*.rel" "$(BANK1_WRK_DIR)"
-	linkfiles.sh "$(BANK0_WRK_DIR)/b0*.inc" "$(BANK1_WRK_DIR)"
-	$(MAKE) -C $(BANK1_WRK_DIR) --no-print-directory
-
-bank2: bank0 kernel
-	@$(call prepdir,$(BANK2_WRK_DIR))
-	linkfiles.sh "kernel/bank2/*.mac" "$(BANK2_WRK_DIR)"
-	linkfile.sh "Makefile-bank2.mk" "$(BANK2_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK2_WRK_DIR)"
-	linkfiles.sh "$(BANK0_WRK_DIR)/b0*.inc" "$(BANK2_WRK_DIR)"
-	$(MAKE) -C $(BANK2_WRK_DIR) --no-print-directory
-
-bank3: bank0 kernel
-	@$(call prepdir,$(BANK3_WRK_DIR))
-	linkfiles.sh "kernel/bank3/*.mac" "$(BANK3_WRK_DIR)"
-	linkfile.sh "Makefile-bank3.mk" "$(BANK3_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK3_WRK_DIR)"
-	linkfile.sh "$(BANK0_WRK_DIR)/doshead.rel" "$(BANK3_WRK_DIR)/"
-	linkfile.sh "$(BANK0_WRK_DIR)/40ff.rel" "$(BANK3_WRK_DIR)/"
-	linkfile.sh "$(BANK0_WRK_DIR)/b0lab_b3.inc" "$(BANK3_WRK_DIR)/b0labels.inc"
-	$(MAKE) -C $(BANK3_WRK_DIR) --no-print-directory
-
-bank4: bank0 bank2 kernel
-	@$(call prepdir,$(BANK4_WRK_DIR))
-	linkfiles.sh "kernel/bank4/*.mac" "$(BANK4_WRK_DIR)"
-	linkfile.sh "Makefile-bank4.mk" "$(BANK4_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK4_WRK_DIR)"
-	linkfiles.sh "$(BANK0_WRK_DIR)/b0*.inc" "$(BANK4_WRK_DIR)"
-	linkfiles.sh "$(BANK2_WRK_DIR)/b2*.inc" "$(BANK4_WRK_DIR)"
-	$(MAKE) -C $(BANK4_WRK_DIR) --no-print-directory
-
-bank5: kernel
-	@$(call prepdir,$(BANK5_WRK_DIR))
-	linkfiles.sh "kernel/bank5/*.mac" "$(BANK5_WRK_DIR)"
-	linkfiles.sh "kernel/bank5/*.s" "$(BANK5_WRK_DIR)"
-	linkfiles.sh "kernel/bank5/*.c" "$(BANK5_WRK_DIR)"
-	linkfiles.sh "kernel/bank5/*.h" "$(BANK5_WRK_DIR)"
-	linkfile.sh "kernel/bank5/drivercall.h" "$(BANK5_WRK_DIR)/drivercall.h"
-	linkfile.sh "Makefile-bank5.mk" "$(BANK5_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK5_WRK_DIR)"
-	$(MAKE) -C $(BANK5_WRK_DIR) --no-print-directory
-
-bank6: kernel
-	@$(call prepdir,$(BANK6_WRK_DIR))
-	linkfiles.sh "kernel/bank6/*.mac" "$(BANK6_WRK_DIR)"
-	linkfile.sh "Makefile-bank6.mk" "$(BANK6_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(BANK6_WRK_DIR)"
-	$(MAKE) -C $(BANK6_WRK_DIR) --no-print-directory
-
-base: kernel bank0 bank1 bank2 bank3 bank4 bank5 bank6
-	@$(MAKE) -C $(KERNEL_WRK_DIR) dos250ba.dat -s
-
-.PHONY: ../bin/nextor-$(VERSION).sunriseide.rom
-../bin/nextor-$(VERSION).sunriseide.rom: base ../linuxtools/mknexrom
-	@$(call prepdir,$(DRV_SUNRISE_WRK_DIR))
-	linkfiles.sh "kernel/drivers/SunriseIDE/*.mac" "$(DRV_SUNRISE_WRK_DIR)"
-	linkfile.sh "Makefile-driver-sunrise-ide.mk" "$(DRV_SUNRISE_WRK_DIR)/Makefile"
-	linkfile.sh "kernel/bank6/b6.mac" "$(DRV_SUNRISE_WRK_DIR)"
-	linkfiles.sh "$(BANK0_WRK_DIR)/b0*.inc" "$(DRV_SUNRISE_WRK_DIR)"
-	$(MAKE) -C $(DRV_SUNRISE_WRK_DIR) --no-print-directory
-	cp -up $(DRV_SUNRISE_WRK_DIR)/*.rom ../bin/
-
-.PHONY: drivers/sunrise
-drivers/sunrise: ../bin/nextor-$(VERSION).sunriseide.rom
-
-deps:
-	findmacincls.sh > ./Makefile.deps.mk
-
-
-.PHONY: tools
-## Build all the tools binaries into bin/cli
-tools: command kernel
-	@$(call prepdir,$(TOOLS_WRK_DIR))
-	linkfiles.sh "tools/*.mac" "$(TOOLS_WRK_DIR)"
-	linkfiles.sh "tools/*.MAC" "$(TOOLS_WRK_DIR)"
-	linkfile.sh "Makefile-tools.mk" "$(TOOLS_WRK_DIR)/Makefile"
-	linkfiles.sh "$(KERNEL_WRK_DIR)/*.rel" "$(TOOLS_WRK_DIR)"
-	$(MAKE) -C $(TOOLS_WRK_DIR) --no-print-directory
-	mkdir -p ../bin/cli
-	cp -up $(TOOLS_WRK_DIR)/*.com ../bin/cli
+## build the mknexrom utility
+mknexrom: prep
+	@$(SUBMAKE) ../../linuxtools/mknexrom
 
 
 ## Other targets

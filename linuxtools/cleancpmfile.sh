@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
+set -e
+
 # trim file until a CTRL+Z is found
 
-FILE_CONTENTS=$(cat "$1")
+IFS= read -r -d '' FILE_CONTENTS < "$1" || [[ $FILE_CONTENTS ]]
 
 echo "" > "$1"
 

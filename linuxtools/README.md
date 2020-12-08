@@ -6,19 +6,7 @@ This document details the build process for linux.
 The makefiles for linux are:
 ```
 ./source/Makefile
-./source/Makefile-bank0.mk
-./source/Makefile-bank1.mk
-./source/Makefile-bank2.mk
-./source/Makefile-bank3.mk
-./source/Makefile-bank4.mk
-./source/Makefile-bank5.mk
-./source/Makefile-bank6.mk
-./source/Makefile-chkdsk.mk
-./source/Makefile-command.mk
-./source/Makefile-driver-sunrise-ide.mk
-./source/Makefile-kernel.mk
-./source/Makefile-msxdos.mk
-./source/Makefile-tools.mk
+./source/Makefile-main.mk
 ```
 
 ## Key Requirements
@@ -53,20 +41,20 @@ make <target>
 
 Where target is the desired target - eg `make msxdos` to make the nextor.sys binary.
 
-All outputs are places in the `bin` directory.
+All key outputs are places in the `bin` directory.
 
 The targets of interest are:
 
 ```
-                      Primary Targets
-
-sunrise:              Build the sunrise rom image into bin/drivers/sunriseide
-drivers:              Build all drivers
+tools:                Build the common tools
+sunrise:              Build the sunrise kernel rom
+chkdsk:               Build the chkdsk.com
+command2:             Build the command2.com
+nextor:               Build the nextor.sys
+nextork:              Build the nextork.sys
 hdddsk:               Build a FAT12 hard disk image containing nextor.sys, command2.com and all other tools
-msxdos:               Build the nextor.sys and nextork.sys files (bin/cli/)
-command:              Build the bin/cli/command2.com unit
-chkdsk:               Build the bin/cli/chkdsk.com unit
-tools:                Build all the tools binaries into bin/cli
+fdddsk:               Build a FAT12 hard disk image containing nextor.sys, command2.com and all other tools
+mknexrom:             build the mknexrom utility
 
                       Other targets
 
@@ -77,15 +65,10 @@ help:                 Display this help message
 
 ### Make process
 
-The process for building of the various units (eg: Bank0, tools, msxdos, etc) is a 2 phase process.
+The linux build process is as follows:
+1. Symlink all source files from the various directories into `bin/working`.  (Any name clashes are resolved by renaming some files with a prefix).
+2. Link in the `Makefile-main.mk` as `Makefile` into `bin/working`.
+3. Invoke the desired make target from within the `bin/working` directory.
+4. Specific targets will copy their output to bin.
 
-The first step is to create a working directory, symlinking in the relevant files, including a specific Makefile.
-Then, the next step, is to invoke the sub-make.
-
-In more details:
-
-1. Create a mirror directory under `bin/working/...` eg (`bin/working/kernel/bank0`)
-2. symlink the source files (eg: link the mac & inc files from `source/kernel/bank0` to `bin/working/kernel/bank0`)
-3. symlink in any of the dependencies from other directory structures (eg link in related rel and inc files)
-4. symlink in the unit's specific makefile (eg: `./source/Makefile-bank0.mk` -> `bin/working/kernel/bank0/Makefile`)
-5. Invoke the sub-make
+See the `source/Makefile`'s *prep* target for more details of the symlinking structure and name conflict resolutions.

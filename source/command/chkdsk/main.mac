@@ -1,8 +1,8 @@
 	title	MSX-DOS 2 Chkdsk Program - Main Section
 	.z80
 ;
-	INCLUDE	MACROS.INC
-	INCLUDE	CONST.INC
+	INCLUDE	CHMACROS.INC
+	INCLUDE	CHCONST.INC
 ;******************************************************************************
 ;
 	db	CR,LF
