@@ -170,7 +170,7 @@ if 1
 		push	hl			;
 		ld	hl,copy_done		;Where to return in this bank.
 		push	hl
-		ld	hl,CHGBNK##		;Where to call before return.
+		ld	hl,CHGBNK		;Where to call before return.
 		push	hl
 		ld	a,(BNK_ID##)		;What to pop after LDIR
 		push	af
@@ -188,7 +188,7 @@ else
 endif
 ;
 		ld	a,B.KERNEL##		;Switch to bank of kernel code
-		jp	CHGBNK##		;
+		jp	CHGBNK		;
 ;
 copy_done:	pop	hl
 		pop	hl

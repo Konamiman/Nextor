@@ -719,7 +719,7 @@ DPBEN2:
 	ld	hl,($SECBUF##)
 	ld	bc,MKDPB##
 	ld	(BK4_ADD##),bc
-	call	?C4PBK##
+	call	C4PBK##
 
 	if 0
 
@@ -1060,9 +1060,9 @@ DEFDPB:
 ; bank 0 is restored, the jp KABR/KDERR is executed and the error handler
 ; continues as expected.
 ;
-; Note that this file is also included in bank 3, where KABR and KDERR are not
-; undefined and thus the linker complaints about that ("2 Undefined Globals"),
-; just ignore that as these intermediate hooks are not used in MSX-DOS 1 mode.
+; KABR and KDERR are also defined in bank3/dos1ker.mac in order to prevent a
+; compilation error. The definitions there are stubs since these hooks are
+; never used in MSX-DOS 1 mode.
 
 KABJ:
 	nop

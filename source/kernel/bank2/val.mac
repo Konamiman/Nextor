@@ -2213,14 +2213,14 @@ reduce_set:
 		;          and compiles always the else clause.
 		;          Solve this if MAX_UNITS needs to grow over 8.
 
-;if MAX_UNITS## GT 8
+;if MAX_UNITS GT 8
 ;		ld	hl,(RALL_VECT##)
 ;else
 		ld	a,(RALL_VECT##)
 ;endif
 
 reduce_bit_loop:
-;if MAX_UNITS## GT 8
+;if MAX_UNITS GT 8
 ;		srl	h
 ;		rr	l
 ;else
@@ -3175,7 +3175,7 @@ CLDRV_RET_NOZ80:
 ; Corrupts:  AF,BC,DE,HL
 ;
 ;
-		ld	b,MAX_UNITS##
+		ld	b,MAX_UNITS
 zap_all_loop:	ld	a,b			;Get logical unit number
 		call	LG_TO_PHYS		;Get pointer to UNIT_TAB entry
 		ld	e,(hl)			; for this unit and see if it
@@ -3223,7 +3223,7 @@ no_zap_unit:	djnz	zap_all_loop		;Loop 'til done all units
 		ld	a,(CUR_DRV##)		; drive.
 not_default:
 		ld	c,.IDRV##		;Anticipate error code.
-		cp	MAX_UNITS##+1		;If unit number is too big
+		cp	MAX_UNITS+1		;If unit number is too big
 		jr	c,log_unit_ok		; then force it to zero.
 		xor	a
 log_unit_ok:
@@ -3260,7 +3260,7 @@ if 0
 ;
 ;
 		ld	hl,UNIT_TAB##+2		;Look through each entry
-		ld	b,MAX_UNITS##		; in UNIT_TAB in turn.
+		ld	b,MAX_UNITS		; in UNIT_TAB in turn.
 ud_tick_loop:	ld	e,(hl)
 		inc	hl
 		ld	d,(hl)
@@ -3338,7 +3338,7 @@ fat_not_invalid:
 		push	ix
 		ld	c,a
 		ld	hl,UNIT_TAB##+2		;Look through each entry
-		ld	b,MAX_UNITS##		; in UNIT_TAB in turn.
+		ld	b,MAX_UNITS		; in UNIT_TAB in turn.
 ud_tick_loop:	ld	e,(hl)
 		inc	hl
 		ld	d,(hl)
@@ -3404,7 +3404,7 @@ CALL4_PRESERVE_ALT:
     exx
 
 	ld	(BK4_ADD##),ix
-	ld	ix,?C4PBK##
+	ld	ix,C4PBK##
 	ld	iy,(MASTER_SLOT##-1)
 	call	CALSLT##
 

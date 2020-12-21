@@ -29,7 +29,7 @@ BNKID	equ	40FFh		;Where Bank ID is stored
 ;bank bit 1 -> register bit 6
 ;bank bit 2 -> register bit 5
 
-CHGBNK::
+CHGBNK:
 
 	rlca
 	ld	(6000h),a

@@ -5627,7 +5627,6 @@ A5FC2:	call	A5FCD			; get my SLTWRK entry
 ;	Inputs		-
 ;	Outputs		HL = pointer to SLTWRK entry
 
-GWORK::
 A5FCD:	call	A5FE7			; get my primairy slot
 	add	a,a
 	add	a,a
@@ -8856,7 +8855,7 @@ NODOS1F_LOOP:
 	ld	a,(YF306)
 	ld	c,a
 	pop	hl
-	jp	?C4PBK##
+	jp	C4PBK##
 
 NODOS1F_NEXT:
 	inc	hl
@@ -9165,6 +9164,11 @@ RD_MEM:
 	add	hl,sp
 	push	hl
 	jp	XF36B           ; enable system diskrom
+
+	;KABR and KDERR stubs, see drv.mac for details
+
+KABR::
+KDERR::
 
 ; DRV.MAC is to be placed here.
 

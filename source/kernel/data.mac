@@ -107,7 +107,7 @@ ram_ad	defl	DATABASE
 
     var3    CALL_MAP    ;UNAPI RAM helper compliant routines
     var3    RD_MAP
-    var3    CALL_MAPI
+    var3    CLL_MAPI
     var3    WR_MAP
 ;
 	var1	CUR_DRV		;Current logical drive (1=A:)

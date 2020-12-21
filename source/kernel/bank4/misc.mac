@@ -28,7 +28,7 @@ CHPUT	equ	00A2h
 	ld	iy,RAM_BASE##
 
 	ld	a,e
-	cp	MAX_UNITS##
+	cp	MAX_UNITS
 	ld	a,.IDRV##
 	ret	nc
 
@@ -161,7 +161,7 @@ fout_get:
 	jr	z,redv_get
 
 	ld	(iy+@RALL_VECT##),l
-if MAX_UNITS## GT 8
+if MAX_UNITS GT 8
 	ld	(iy+@RALL_VECT##+1),h
 endif
 
@@ -196,7 +196,7 @@ readv_loop:
 	;          Solve this if MAX_UNITS needs to grow over 8.
 
 	pop	hl	;HL = Vector
-if MAX_UNITS## GT 8
+if MAX_UNITS GT 8
 	srl	h
 endif
 	rr	l	;Cy = Value for current drive
@@ -216,7 +216,7 @@ readv_skipdrive:
 readv_nextdrive:
 	pop	af
 	inc	a
-	cp	MAX_UNITS##
+	cp	MAX_UNITS
 	jr	c,readv_loop
 
 	;--- Get current vector value
@@ -224,7 +224,7 @@ readv_nextdrive:
 redv_get:
 	ld	h,0
 	ld	l,(iy+@RALL_VECT##)
-if MAX_UNITS## GT 8
+if MAX_UNITS GT 8
 	ld	h,(iy+@RALL_VECT##+1)
 endif
 
@@ -448,7 +448,7 @@ FGC_ISEVEN:
     pcall RDFATENTRY
     jr nc,FGC_NOLAST
     set 3,(ix+11)
-    ld de,(TEMP_FAT##+4)
+    ld de,(TMP_FAT##+4)
 FGC_NOLAST:
     ld (ix+8),e     ;FAT entry value
     ld (ix+9),d
@@ -468,10 +468,10 @@ FGC_ISUSED:
     ld (ix+6),a
     ld (ix+7),0
 
-    ld hl,(TEMP_FAT##)  ;FAT sector number
+    ld hl,(TMP_FAT##)  ;FAT sector number
     ld (ix),l
     ld (ix+1),h
-    ld hl,(TEMP_FAT##+2)  ;Offset of cluster entry in FAT
+    ld hl,(TMP_FAT##+2)  ;Offset of cluster entry in FAT
     ld a,h
     and 1   ;Convert to offset relative to the FAT sector
     ld (ix+2),l

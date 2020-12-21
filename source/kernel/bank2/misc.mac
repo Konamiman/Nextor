@@ -93,7 +93,7 @@ dont_seldsk:
 ; seeing if the unit descriptor for this drive exists.  The RAM disk will only
 ; be included if it is enabled.
 ;
-		ld	b,MAX_UNITS##
+		ld	b,MAX_UNITS
 		ld	hl,0			;Initialise login vector
 login_loop:	add	hl,hl
 		push	hl
@@ -885,7 +885,7 @@ buffers_done:	ld	b,(iy+@B_COUNT##)	;Get current number of buffers
 		or	a			;Jump if un-assigning all
 		jr	z,unassign_all		; units.
 ;
-		cp	MAX_UNITS##+1		;Error if logical unit number
+		cp	MAX_UNITS+1		;Error if logical unit number
 		ld	a,.IDRV##		; is invalid.
 		ret	nc
 ;
@@ -897,7 +897,7 @@ buffers_done:	ld	b,(iy+@B_COUNT##)	;Get current number of buffers
 		jr	z,dont_assign		; just return current setting.
 		dec	a			;If physical unit = 000h then
 		jr	z,unassign_one		; reset this setting.
-		cp	MAX_UNITS##+1		;Check physical unit number
+		cp	MAX_UNITS+1		;Check physical unit number
 		ld	a,.IDRV##		; and give error if invalid.
 		ret	nc
 ;
@@ -911,7 +911,7 @@ dont_assign:	ld	d,(hl)			;Get current setting
 unassign_all:	ld	(hl),a			;Walk through UNIT_TAB setting
 		inc	hl			; each entry to its own value.
 		inc	a
-		cp	MAX_UNITS##+1
+		cp	MAX_UNITS+1
 		jr	nz,unassign_all
 		xor	a
 		ld	d,a

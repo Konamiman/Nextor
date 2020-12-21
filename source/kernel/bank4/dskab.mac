@@ -11,7 +11,7 @@
 
 ; This is KABJ in bank 0
     xor a
-    call CHGBNK##
+    call CHGBNK
     ; Here is "jp KABR" in the bank 0 counterpart of the hook
     nop
     nop
@@ -19,7 +19,7 @@
 
 ; This is KDERJ in bank 0
     xor a
-    call CHGBNK##
+    call CHGBNK
     ; Here is "jp KDERJ" in the bank 0 counterpart of the hook
     nop
     nop

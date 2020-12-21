@@ -40,7 +40,7 @@ DO_CALL:
 
 	ld	(A_SAVE##),a
 	ld	(BK4_ADD##),ix
-	ld	ix,?C4PBK##
+	ld	ix,C4PBK##
 	ld	iy,(MASTER_SLOT##-1)
 	call	CALSLT##
 

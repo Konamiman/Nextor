@@ -975,7 +975,7 @@ not_root:	ld	bc,-4			;Point back at start cluster
 		ex af,af'
 		ld	ix,GT_DATE_TIME##
 		ld	(BK4_ADD##),ix
-		ld	ix,?C4PBK##
+		ld	ix,C4PBK##
 		ld	iy,(MASTER_SLOT##-1)
 		call	CALSLT##
 		ex	af,af'

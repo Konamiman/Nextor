@@ -97,7 +97,7 @@ if 1
 		call	TRY_MSX_DOS		; try default drive.
 		ret
 else
-		ld	b,MAX_UNITS##
+		ld	b,MAX_UNITS
 		ld	c,1
 try_dos_loop:	push	bc			;If that drive failed then
 		ld	a,c			; try each drive in turn
@@ -149,7 +149,7 @@ READ_BOOT_SEC::
 		call	BOOT_BDOS		; sector in.
 ;
 		ld	c,1			;Start at drive "A:"
-		ld	b,MAX_UNITS##		;Try all drives
+		ld	b,MAX_UNITS		;Try all drives
 try_boot_loop:	push	bc
 		ld	a,c
 		dec	a			;Adjust drive for 0=A:
