@@ -4,3 +4,4 @@ condasm.inc
 const.inc
 macros.inc
 **/*.out
+nextor_base.dat
