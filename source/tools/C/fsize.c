@@ -4,11 +4,9 @@
    Compilation command line:
    
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel 
-        fsize.c
+        --no-std-crt0 crt0_msxdos_advanced.rel fsize.c
    hex2bin -e com fsize.ihx
 */
-
 
 /* Includes */
 
@@ -16,7 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include "asmcall.h"
 #include "types.h"
 #include "dos.h"
@@ -140,32 +137,6 @@ void TerminateWithDosError(byte errorCode)
 {
     regs.Bytes.B = errorCode;
     DosCall(_TERM, &regs, REGS_MAIN, REGS_NONE);
-}
-
-
-void print(char* s) __naked
-{
-    __asm
-    push    ix
-    ld     ix,#4
-    add ix,sp
-    ld  l,(ix)
-    ld  h,1(ix)
-loop:
-    ld  a,(hl)
-    or  a
-    jr  z,end
-    ld  e,a
-    ld  c,#2
-    push    hl
-    call    #5
-    pop hl
-    inc hl
-    jr  loop
-end:
-    pop ix
-    ret
-    __endasm;    
 }
 
 

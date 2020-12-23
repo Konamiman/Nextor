@@ -14,11 +14,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "types.h"
-#include "system.h"
-#include "dos.h"
-#include "partit.h"
 #include "asmcall.h"
+#include "types.h"
+#include "dos.h"
+#include "system.h"
+#include "partit.h"
 #include "strcmpi.h"
 
 	/* Typedefs */
@@ -561,13 +561,13 @@ void CheckConsecutiveClustersForFileInFib()
 
         if(ci->flags.isLastClusterOfFile)
         {
-            printf("Ok!\r\n");
+            print("Ok!\r\n");
             return;
         }
 
         if(ci->fatEntryValue != currentCluster + 1)
         {
-            printf("Error!\r\n*** The file is not stored across consecutive sectors in disk");
+            print("Error!\r\n*** The file is not stored across consecutive sectors in disk");
             Terminate(null);
         }
 
@@ -844,32 +844,6 @@ void TerminateWithDosError(byte errorCode)
 {
     regs.Bytes.B = errorCode;
     DoDosCall(_TERM);
-}
-
-
-void print(char* s) __naked
-{
-    __asm
-    push    ix
-    ld     ix,#4
-    add ix,sp
-    ld  l,(ix)
-    ld  h,1(ix)
-loop:
-    ld  a,(hl)
-    or  a
-    jr  z,end
-    ld  e,a
-    ld  c,#2
-    push    hl
-    call    #5
-    pop hl
-    inc hl
-    jr  loop
-end:
-    pop ix
-    ret
-    __endasm;    
 }
 
 

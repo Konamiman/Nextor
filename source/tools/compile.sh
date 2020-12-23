@@ -1,3 +1,5 @@
+#!/bin/sh
+
 hex2bin() {
     objcopy -I ihex -O binary $1 $2
 }
@@ -36,4 +38,4 @@ fi
 for ext in REL HEX SYM; do rm -f *.$ext; done
 
 echo
-echo Build completed succseefully!
+echo Build completed successfully!
