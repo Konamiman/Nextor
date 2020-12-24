@@ -10,8 +10,8 @@ BuildTool() {
     echo "***"
     echo
     sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 crt0_msxdos_advanced.rel $1.c
-    hex2bin $1.ihx $1.COM
-    cp $1.COM ../../../bin/tools
+    hex2bin $1.ihx $1.com
+    cp $1.com ../../../bin/tools
 }
 
 set -e
@@ -29,14 +29,14 @@ if [ ! -f "crt0_msxdos_advanced.rel" ] || [ "crt0_msxdos_advanced.s" -nt "crt0_m
 fi
 
 if [ -z "$1" ]; then
-    for file in $(find *.c ! -name printf.c ! -name AsmCall.c ! -name strcmpi.c | sed 's/\.c//'); do
+    for file in $(find *.c ! -name printf.c ! -name asmcall.c ! -name strcmpi.c ! -name print_msxdos.c | sed 's/\.c//'); do
         BuildTool $file
     done
 else
     BuildTool $1
 fi
 
-for ext in asm hex ihx lk lst map noi sym rel; do rm -f *.$ext; done
+for ext in asm hex ihx lk lst map noi sym rel com; do rm -f *.$ext; done
 
 echo
 echo Build completed succeesfully!

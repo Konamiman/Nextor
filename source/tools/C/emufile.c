@@ -900,6 +900,7 @@ void DoDosCall(byte functionCode)
 }
 
 #define COM_FILE
+#include "print_msxdos.c"
 #include "printf.c"
 #include "asmcall.c"
 #include "strcmpi.c"

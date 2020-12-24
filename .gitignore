@@ -13,6 +13,7 @@ bin/**
 *.hex
 *.HEX
 *.bin
+*.BIN
 *.ihx
 *.IHX
 *.lk

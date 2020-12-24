@@ -10,7 +10,7 @@ BuildTool() {
     echo "***"
     M80 =$1
     L80 /P:100,CODES,DATA,$1,SHARED,$1/n/x/y/e
-    hex2bin $1.hex $1.COM
+    hex2bin $1.HEX $1.COM
     cp $1.COM ../../bin/tools
 }
 
@@ -35,7 +35,7 @@ else
     BuildTool $1
 fi
 
-for ext in REL HEX SYM; do rm -f *.$ext; done
+for ext in REL HEX SYM COM; do rm -f *.$ext; done
 
 echo
 echo Build completed successfully!

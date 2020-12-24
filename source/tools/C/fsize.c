@@ -282,5 +282,6 @@ void WriteOneByte(byte fileHandle, byte value)
 }
 
 #define COM_FILE
+#include "print_msxdos.c"
 #include "printf.c"
 #include "asmcall.c"

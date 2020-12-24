@@ -7,7 +7,7 @@ hex2bin_full() {
 }
 
 hex2bin() {
-    hex2bin_full $1.hex $1.bin
+    hex2bin_full $1.HEX $1.BIN
 }
 
 SymToEqus() {
@@ -56,9 +56,9 @@ cd bank0
 #cp ../drv.rel .
 for file in DOSHEAD 40FF B0 INIT ALLOC DSKBASIC DOSBOOT BDOS RAMDRV; do M80 -p .. =$file; done
 L80 -p .. /p:4000,CODES,KVAR,DATA,REL,DOSHEAD,40FF,B0,INIT,ALLOC,DSKBASIC,DOSBOOT,BDOS,RAMDRV,/p:7700,drv,/p:7fd0,chgbnk,b0/n/x/y/e
-hex2bin b0
-SymToEqus b0.sym b0labels.inc "[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK"
-SymToEqus b0.sym b0lab_b3.inc "INIT|TIMINT|MAPBIO|GWRK|R_[^[:space:]]+"
+hex2bin B0
+SymToEqus B0.SYM b0labels.inc "[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK"
+SymToEqus B0.SYM b0lab_b3.inc "INIT|TIMINT|MAPBIO|GWRK|R_[^[:space:]]+"
 
 echo
 echo "****************"
@@ -75,7 +75,7 @@ cd ../bank1
 #cp ../bank0/b0labels.inc .
 for file in B1 DOSINIT MAPINIT MSG; do M80 -p ..,../bank0 =$file; done
 L80 -p ..,../bank0 /P:40FF,CODES,KVAR,DATA,B1,DOSINIT,MAPINIT,ALLOC,MSG,/p:7fd0,chgbnk,B1/N/X/Y/E
-hex2bin b1
+hex2bin B1
 
 echo 
 echo "****************"
@@ -97,8 +97,8 @@ L80 -p .. /P:40FF,CODES,KVAR,DATA,B2,KINIT,TEMP21,TEMP22,TEMP23,/p:7fd0,chgbnk,B
 rm TEMP21.REL
 rm TEMP22.REL
 rm TEMP23.REL
-hex2bin b2
-SymToEqus b2.sym b2labels.inc "[?][^[:space:]]+"
+hex2bin B2
+SymToEqus B2.SYM b2labels.inc "[?][^[:space:]]+"
 
 echo
 echo "****************"
@@ -117,7 +117,7 @@ cd ../bank3
 cp ../bank0/b0lab_b3.inc b0labels.inc
 for file in DOS1KER B3; do M80 -p ..,../bank0 =$file; done
 L80 -p ..,../bank0 /p:4000,CODES,KVAR,DATA,DOSHEAD,40FF,B3,DOS1KER,/p:7700,drv,/p:7fd0,chgbnk,b3/N/X/Y/E
-hex2bin b3
+hex2bin B3
 
 echo
 echo "****************"
@@ -134,11 +134,11 @@ cd ../bank4
 #cp ../bank0/b0labels.inc .
 for file in B4 JUMP ENV CPM PARTIT RAMDRV TIME SEG MISC DSKAB; do M80 -p ..,../bank0,../bank2 =$file; done
 L80 -p .. /P:40FF,CODES,KVAR,DATA,B4,JUMP,ENV,CPM,PARTIT,RAMDRV,TIME,SEG,MISC,/p:7bc0,DSKAB,/p:7fd0,chgbnk,B4/N/X/Y/E
-hex2bin b4
-SymToEqus b4.sym b4rdlabs.inc "R4_[1-9]"
+hex2bin B4
+SymToEqus B4.SYM b4rdlabs.inc "R4_[1-9]"
 M80 -p .. =RAMDRVH
 L80 -p .. /P:4080,RAMDRVH,B4RD/N/X/Y/E
-hex2bin b4rd
+hex2bin B4RD
 
 echo
 echo "****************"
@@ -155,7 +155,7 @@ sh ./compile_fdisk.sh
 #cp ../chgbnk.rel .
 M80 -p .. =B5
 L80 -p .. /P:40FF,CODES,KVAR,DATA,B5,/p:7fd0,chgbnk,B5/N/X/Y/E
-hex2bin b5
+hex2bin B5
 
 echo
 echo "****************"
@@ -170,7 +170,7 @@ cd ../bank6
 #cp ../chgbnk.rel .
 M80 -p .. =B6
 L80 -p .. /P:40FF,CODES,KVAR,DATA,B6,/p:7fd0,chgbnk,B6/N/X/Y/E
-hex2bin b6
+hex2bin B6
 
 echo
 echo "*******************"
@@ -180,17 +180,17 @@ echo
 
 cd ..
 dd if=/dev/zero of=255.bytes bs=1 count=255
-cat bank0/b0.bin 255.bytes bank1/b1.bin 255.bytes bank2/b2.bin bank3/b3.bin 255.bytes bank4/b4.bin 255.bytes bank5/b5.bin 255.bytes bank6/b6.bin > nextor_base.dat
+cat bank0/B0.BIN 255.bytes bank1/B1.BIN 255.bytes bank2/B2.BIN bank3/B3.BIN 255.bytes bank4/B4.BIN 255.bytes bank5/B5.BIN 255.bytes bank6/B6.BIN > nextor_base.dat
 rm 255.bytes
-dd conv=notrunc if=nextor_base.dat of=doshead.bin bs=1 count=255
-dd conv=notrunc if=doshead.bin of=nextor_base.dat bs=1 count=255 seek=16k
-dd conv=notrunc if=doshead.bin of=nextor_base.dat bs=1 count=255 seek=32k
-dd conv=notrunc if=doshead.bin of=nextor_base.dat bs=1 count=255 seek=64k
-dd conv=notrunc if=doshead.bin of=nextor_base.dat bs=1 count=255 seek=80k
-dd conv=notrunc if=doshead.bin of=nextor_base.dat bs=1 count=255 seek=96k
+dd conv=notrunc if=nextor_base.dat of=doshead.BIN bs=1 count=255
+dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=16k
+dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=32k
+dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=64k
+dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=80k
+dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16000 seek=82176
 dd conv=notrunc if=bank5/fdisk2.dat of=nextor_base.dat bs=1 count=8000 seek=98560
-dd conv=notrunc if=bank4/b4rd.bin of=nextor_base.dat bs=1 count=15 seek=65664
+dd conv=notrunc if=bank4/B4RD.BIN of=nextor_base.dat bs=1 count=15 seek=65664
 cp nextor_base.dat ../../bin/kernels/Nextor-$VERSION.base.dat
 
 fi #if [ $1 != "drivers" ];
@@ -218,17 +218,17 @@ for d in $(ls -d */ | sed 's#/##'); do
     #cp ../../kvar.rel .
     #cp ../../data.rel .
     #cp ../../chgbnk.rel .
-    #cp ../../bank6/b6.mac .
+    #cp ../../bank6/B6.mac .
     #cp ../../bank0/b0labels.inc .
     for file in B6 DRIVER CHGBNK; do M80 -p ../..,../../bank0,../../bank6 =$file; done
     L80 -p ../../ /P:4100,DRIVER,DRIVER/N/X/Y/E
     L80 /P:7fd0,CHGBNK,CHGBNK/N/X/Y/E
-    hex2bin driver
+    hex2bin DRIVER
     hex2bin CHGBNK
 
     dd if=/dev/zero of=256.bytes bs=1 count=256
-    cat 256.bytes driver.bin > _driver.bin
-    mknexrom  ../../nextor_base.dat Nextor-$VERSION.$d.ROM /d:_driver.bin /m:chgbnk.bin
+    cat 256.bytes DRIVER.BIN > _driver.BIN
+    mknexrom  ../../nextor_base.dat Nextor-$VERSION.$d.ROM /d:_driver.BIN /m:CHGBNK.BIN
     cp Nextor-$VERSION.$d.ROM ../../../../bin/kernels
     rm -f *.rom
     cd ..
@@ -245,12 +245,12 @@ cd MegaFlashRomSD
 M80 -p ../StandaloneASCII8 =CHGBNK
 L80 /P:7fd0,CHGBNK,CHGBNK/N/X/Y/E
 hex2bin CHGBNK
-mknexrom ../../nextor_base.dat nextor2.rom /d:driver-1slot.dat /m:CHGBNK.bin
+mknexrom ../../nextor_base.dat nextor2.rom /d:driver-1slot.dat /m:CHGBNK.BIN
 cp nextor2.rom ../../../../bin/kernels/Nextor-$VERSION.MegaFlashSDSCC.1-slot.ROM
 sjasm makerecoverykernel.asm kernel.rom
 cp kernel.rom ../../../../bin/kernels/Nextor-$VERSION.MegaFlashSDSCC.1-slot.Recovery.ROM
 rm nextor2.rom
-mknexrom ../../nextor_base.dat nextor2.rom /d:driver-2slots.dat /m:CHGBNK.bin
+mknexrom ../../nextor_base.dat nextor2.rom /d:driver-2slots.dat /m:CHGBNK.BIN
 cp nextor2.rom ../../../../bin/kernels/Nextor-$VERSION.MegaFlashSDSCC.2-slots.ROM
 sjasm makerecoverykernel.asm kernel.rom
 cp kernel.rom ../../../../bin/kernels/Nextor-$VERSION.MegaFlashSDSCC.2-slots.Recovery.ROM
@@ -266,8 +266,8 @@ cd SunriseIDE
 
 rm -f ../../../../bin/kernels/Nextor-$VERSION.SunriseIDE.emulators.ROM
 mv ../../../../bin/kernels/Nextor-$VERSION.SunriseIDE.ROM ../../../../bin/kernels/Nextor-$VERSION.SunriseIDE.emulators.ROM 
-sjasm -c sunride.asm driver.bin
-mknexrom ../../nextor_base.dat nextor2.rom /d:driver.bin /m:chgbnk.bin
+sjasm -c sunride.asm driver.BIN
+mknexrom ../../nextor_base.dat nextor2.rom /d:driver.BIN /m:CHGBNK.BIN
 cp nextor2.rom ../../../../bin/kernels/Nextor-$VERSION.SunriseIDE.ROM
 cd ..
 
@@ -278,8 +278,8 @@ echo "***"
 echo
 
 cd Flashjacks
-sjasm flashjacks.asm driver.bin
-mknexrom ../../nextor_base.dat nextor2.rom /d:driver.bin /m:chgbnk.dat
+sjasm flashjacks.asm driver.BIN
+mknexrom ../../nextor_base.dat nextor2.rom /d:driver.BIN /m:chgbnk.dat
 cp nextor2.rom ../../../../bin/kernels/Nextor-$VERSION.Flashjacks.ROM
 cd ..
 
