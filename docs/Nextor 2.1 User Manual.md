@@ -406,7 +406,7 @@ After all drives have been assigned to drivers, a device and partition to drive 
 
 1. The device doesn't have the "don't use for automapping" flag set (this flag is set by the driver)
 2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
-3. Has the "active" flag set in the partition table (this can be set using [FDISK](#35-the-built-in-partitioning-tool))
+3. Has the "active" flag set in the partition table (the most significant bit in the first byte of the partition table entry; this can be set using [FDISK](#35-the-built-in-partitioning-tool))
 4. No drives have been already mapped to partitions in the same device
 
 If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "active" flag check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort before leaving the drive unmapped.
@@ -518,7 +518,7 @@ If "d" is specified instead of a partition number, then the drive will be mapped
 
 * If at boot time the drive was assigned to a MSX-DOS driver unit, or to a Nextor drive-based unit, then it is mapped to the same unit.
 
-* If at boot time the drive was assigned to a Nextor device-based driver, then an automatic mapping procedure (equal to the one performed at boot time, except that the NEXTOR.DAT file is not searched) will be performed. This may or may not result in the drive having the same mapping it had at boot time, depending on the mapping state of the other drives.
+* If at boot time the drive was assigned to a Nextor device-based driver, then an automatic mapping procedure (equal to the one performed at boot time, except that "active" partition flags are not checked) will be performed. This may or may not result in the drive having the same mapping it had at boot time, depending on the mapping state of the other drives.
 
 If "u" is specified instead of a partition number, then the drive will be left unmapped
 
@@ -849,7 +849,7 @@ CALL MAPDRV(<drive>, -2)
 CALL MAPDRV(<drive>)
 ```
 
-Maps the specified drive to its default value. If at boot time the drive was unmapped or was mapped to a MSX-DOS driver or to a Nextor drive-based driver, then the drive will be reverted to its original mapping state. Otherwise, and automatic mapping procedure will be performed (the procedure is equal to the one performed at boot time except that the NEXTOR.DAT file will not be searched; see _[3.2. Booting Nextor](#32-booting-nextor)_ for more details); this may result or not on the drive having the same mapping it had at boot time, depending on which devices are available and how the other drives are mapped.
+Maps the specified drive to its default value. If at boot time the drive was unmapped or was mapped to a MSX-DOS driver or to a Nextor drive-based driver, then the drive will be reverted to its original mapping state. Otherwise, and automatic mapping procedure will be performed (the procedure is equal to the one performed at boot time except that "active" partition flags will not be checked; see _[3.2. Booting Nextor](#32-booting-nextor)_ for more details); this may result or not on the drive having the same mapping it had at boot time, depending on which devices are available and how the other drives are mapped.
 
 The command parameters syntax is as follows:
 
