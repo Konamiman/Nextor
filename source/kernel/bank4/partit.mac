@@ -853,18 +853,19 @@ SETNUMD_NOUD:
 ; AUTO_ASSIGN
 ;
 ; This routine automatically assigns the appropriate device and partition
-; to a drive associated to a device-based DOS 2.50 driver. It does so by
-; searching an available block devices, then searching a FAT12 or FAT16
+; to a drive associated to a device-based Nextor driver. It does so by
+; searching an available block device, then searching a FAT12 or FAT16
 ; partition (unless the MBR has no partition table), the checking the
 ; validity of the FAT boot sector. Other existing unit descriptors
 ; are checked to ensure that the same device and LUN is not assigned
 ; to more than one drive.
 ;
-; If there is a device whose first partition is a properly formatted FAT12
-; or FAT16 partition, which has a file named NEXTOR.DAT in the root
-; directory, then this device will be assigned regardless of its device
-; number. If there are more than one devices matching this, the one
-; with the smallest device number will be assigned.
+; If there is a device having a partition that is properly formatted in FAT12
+; or FAT16 and has the "active" flag set (the MSB of the first byte
+; of the partition table entry), then this device and that partition will be assigned
+; regardless of the device number. If there are more than one devices matching this, 
+; the one with the smallest device number will be assigned. If there are multiple
+; active partitions in the same device, the first one found will be assigned.
 ;
 ; There is also a second entry point, AUTO_ASPART.
 ; The difference is that this one searches for a suitable partition,
