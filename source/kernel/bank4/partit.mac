@@ -683,7 +683,7 @@ AUTODRV_END:
 
 AUTODRV_DOS2:
 	ld	hl,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 AUTOD_LOOP:
 	ld	e,(hl)
 	inc	hl
@@ -823,7 +823,7 @@ SETNUMDRV:
 	push	af
 
 	ld	hl,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 	ld	c,0
 SETNUMD_LOOP:
 	ld	e,(hl)
@@ -1026,7 +1026,7 @@ AA_CHKDUP_NEXT1:
 
 AA_CHKDUP_DOS2:
 	ld	hl,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 
 AA_CHKDUP_LOOP:
 	push	bc
@@ -2235,7 +2235,7 @@ GDRVR_NAME_LOOP:
 
 F_GDLI_GO:
 	ld	a,c
-	cp	MAX_UNITS##
+	cp	MAX_UNITS
 	ld	a,.IDRV##
 	ret	nc
 
@@ -2605,7 +2605,7 @@ GSLT_SLTTBL:
 	push	hl
 	pop	iy
 	ld	hl,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 UNMAP_LOOP:
 	push	hl
 	push	bc
@@ -2729,7 +2729,7 @@ F_MAPDRV_GO:
 
 FMPDRV2:
 	ld	a,c
-	cp	MAX_UNITS##
+	cp	MAX_UNITS
 	ld	a,.IDRV##
 	ret	nc
 
@@ -4147,7 +4147,7 @@ Z80MODE_SET_OF_LOOP:
 
 Z80MODE_SETUDS:
 	ld	ix,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 Z80_SETUDS_LOOP:
 	ld	l,(ix)
 	ld	h,(ix+1)
@@ -6086,7 +6086,7 @@ CMIU_DOS2:
 	push ix
 
 	ld	iy,UNIT_TAB##+2
-	ld	b,MAX_UNITS##
+	ld	b,MAX_UNITS
 CMIU_CHECK:
 
 	pop	de	;Target unit descriptor pointer

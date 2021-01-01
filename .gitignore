@@ -13,6 +13,7 @@ bin/**
 *.hex
 *.HEX
 *.bin
+*.BIN
 *.ihx
 *.IHX
 *.lk
@@ -47,3 +48,4 @@ source/tools/data.mac
 *.suo
 NEXTOR.SYS
 NEXTORK.SYS
+nextor_base.dat

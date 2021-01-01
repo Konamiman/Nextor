@@ -1,3 +1,4 @@
 *.asm
-!crt0*.asm
 *.com
+*.rel
+*.relx

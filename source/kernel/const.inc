@@ -1,4 +1,8 @@
 	.xlist
+
+MAX_UNITS	equ 	8	;Maximum number of total drives
+CHGBNK		equ		7FD0h	;Address of the bank change routine
+
 ;
 ;------------------------------------------------------------------------------
 ;

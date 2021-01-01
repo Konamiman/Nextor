@@ -632,7 +632,7 @@ kbdos_fn_ok:	ex	af,af'
 		pop	bc	;Restore original BC and HL
 		pop	hl
 		ld	c,a	
-		ld	ix,?C4PBK##
+		ld	ix,C4PBK##
 		ld	iy,(MASTER_SLOT##-1)
 		jp	CALSLT##
 

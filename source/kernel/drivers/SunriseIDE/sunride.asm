@@ -11,6 +11,8 @@ DRV_START:
 
 TESTADD	equ	0F3F5h
 
+TEMP_WORK equ 0C000h
+
 ;-----------------------------------------------------------------------------
 ;
 ; Driver configuration constants
@@ -509,7 +511,7 @@ DRV_INIT:
 
 .chkmaster:
 	ld	de,MASTER_S
-	ld	(TEMP_WORK.pDEVMSG),de
+	ld	(TEMP_WORK+WRKTEMP.pDEVMSG),de
 	call	PRINT
 
 	; Check for DIAGNOSTICS errors
@@ -550,7 +552,7 @@ DRV_INIT:
 
 .chkslave:
 	ld	de,SLAVE_S
-	ld	(TEMP_WORK.pDEVMSG),de
+	ld	(TEMP_WORK+WRKTEMP.pDEVMSG),de
 	call	PRINT
 
 	; Check for DIAGNOSTICS errors
@@ -615,7 +617,7 @@ INIT_MASTERFAIL:
 ;--- Subroutines for the INIT procedure
 
 ; Input: A=target device
-;        (TEMP_WORK.pDEVMSG): Pointer to the "Master" or "Slave" text
+;        (TEMP_WORK+WRKTEMP.pDEVMSG): Pointer to the "Master" or "Slave" text
 DETDEV:
 	ld	c,a			; c=target device
 	ld	de,DETECT_S		; Print "detecting"
@@ -658,18 +660,18 @@ DETDEV:
  ENDIF
 
 	;--- Get the name of the device 
-	;(IDENTIFY device data on TEMP_WORK.BUFFER)
+	;(IDENTIFY device data on TEMP_WORK+WRKTEMP.BUFFER)
 .getinfo:
-	ld	de,(TEMP_WORK.pDEVMSG)
+	ld	de,(TEMP_WORK+WRKTEMP.pDEVMSG)
 	call	PRINT
 
 	;Print the device name.
-	ld	hl,TEMP_WORK.BUFFER+27*2
+	ld	hl,TEMP_WORK+WRKTEMP.BUFFER+27*2
 	ld	b,20
 	call	.prtword
 
 	; Print the firmware version
-	ld	hl,TEMP_WORK.BUFFER+23*2
+	ld	hl,TEMP_WORK+WRKTEMP.BUFFER+23*2
 	ld	b,4
 	call	.prtword
 
@@ -738,7 +740,7 @@ DETDEV:
 .nodevreason:
 	ld	(ix+DEVINFO.t321D),0	
 	push	de
-	ld	de,(TEMP_WORK.pDEVMSG)
+	ld	de,(TEMP_WORK+WRKTEMP.pDEVMSG)
 	call	PRINT			; Clear previous label message
 	pop	de
 	jp	PRINT
@@ -794,7 +796,7 @@ WAIT_RST:
 ;Input:  DIAGNOSTICS issued successfully.
 ;Output: A=devtype. 0=nodev, 1=CHS, 2=LBA, 3=ATAPI
 ;	 Cy=0 for device ok, 1 for no device or not usable.
-;        If device ok, 50 first bytes of IDENTIFY device copied to TEMP_WORK.
+;        If device ok, 50 first bytes of IDENTIFY device copied to TEMP_WORK+WRKTEMP.
 
 GETDEVTYPE:
 ; Input: none
@@ -873,7 +875,7 @@ GETDEVTYPE:
 	ret	c
 	ld	a,b			; a=devtype
 	ld	hl,IDE_DATA
-	ld	de,TEMP_WORK.BUFFER
+	ld	de,TEMP_WORK+WRKTEMP.BUFFER
 	ld	bc,512			;Read the IDENTIFY packet
 	ldir
 	ei
@@ -881,7 +883,7 @@ GETDEVTYPE:
 	ret	nc			; Yes, return
 
 .chkLBA:
-	ld      a,(TEMP_WORK.BUFFER+49*2+1)
+	ld      a,(TEMP_WORK+WRKTEMP.BUFFER+49*2+1)
 	and	2			; LBA supported?
 	ld	a,1			; devtype=CHS
 	ret	z			; No, return
@@ -3298,9 +3300,9 @@ DIAGS_S:
 ;=======================
 ; Variables
 ;=======================
-	.phase	#C000
-TEMP_WORK	WRKTEMP
-	.dephase
+;	.phase	#C000
+;TEMP_WORK	WRKTEMP
+;	.dephase
 
 
 

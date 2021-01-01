@@ -2576,7 +2576,7 @@ COUNTDRV:
 	ld b,a
 	ld	hl,DRVS2##
 	ld	(BK4_ADD##),hl
-	call	?C4PBK##
+	call	C4PBK##
 	ret
 
 JP_BOOT_SEC:
@@ -2788,7 +2788,7 @@ endif
 	ld	(DVB_TABLE##),hl
 	ld	hl,AUTODRV##
 	ld	(BK4_ADD##),hl
-	call	?C4PBK##
+	call	C4PBK##
 
 	jr	MK_DVB_TBL
 
@@ -2956,7 +2956,7 @@ olddos_9:
 	ld	hl,58A8h		;Start of initialization of DOS1
 	push	hl			; CLEAN+11h (just after RET P) of
 	ld	a,3			; INIT.Z80, not INIT.MAC (this code).
-	jp	CHGBNK##
+	jp	CHGBNK
 ;
 ;
 ;===== start add DOS2.50 (build type)
@@ -3287,7 +3287,7 @@ CHK_DRIVER:
 	ld	bc,CHK_CODE_SIZE
 	ldir
 
-	ld	hl,CHGBNK##
+	ld	hl,CHGBNK
 	ld	de,BUF+CHBANK_CODE-CHK_CODE_START
 	ld	bc,32
 	ldir
@@ -3331,7 +3331,7 @@ chkd_loop:
 
 chkd_ok:
 	xor	a
-	jp	CHGBNK##	;Now we use CHGBNK directly because
+	jp	CHGBNK	;Now we use CHGBNK directly because
 				;we know that the bank has a valid driver
 
 	;Not found, show error message and halt the system

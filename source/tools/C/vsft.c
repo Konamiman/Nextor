@@ -130,6 +130,7 @@ void PrintFixInfo();
 void ReadBootSector();
 void FixVolumeSize();
 void WritebootSector();
+void print(char* s);
 
 
 	/* MAIN */
@@ -137,10 +138,10 @@ void WritebootSector();
 int main(char** argv, int argc)
 {
     ASMRUT[0] = 0xC3;
-	printf(strTitle);
+	print(strTitle);
 
     if(argc == 0) {
-        printf(strUsage);
+        print(strUsage);
         Terminate(null);
     }
 	
@@ -151,7 +152,7 @@ int main(char** argv, int argc)
 	CalculateSectorsToDecreaseForFix();
 	
 	if(sectorsToDecreaseForFix == 0) {
-		printf("\r\nVolume size is correct. No need to fix it.\r\n");
+		print("\r\nVolume size is correct. No need to fix it.\r\n");
 		Terminate(null);
 	} else if(doFix) {
 		DoFix();
@@ -259,7 +260,7 @@ void PrintDriveInfo()
 	printf("Size:  "); PrintSizeInK(totalSectors/2); PrintNewLine();
 	printf("Cluster count: %u\r\n", totalClusters);
 	if(sectorsPerCluster == 1) {
-		printf("Cluster size:  512 bytes\r\n");
+		print("Cluster size:  512 bytes\r\n");
 	} else {
 		printf("Cluster size:  %i KBytes\r\n", sectorsPerCluster / 2);
 	}
@@ -269,7 +270,7 @@ void PrintDriveInfo()
 	} else if(totalClusters > MAX_12BIT_CLUSTER_COUNT) {
 		Terminate("Cluster count does not fit in 12 bits - this is not supposed to be supported by MSX-DOS!");
 	} else {
-		printf("Filesystem:    FAT12 assumed (MSX-DOS does not support anything else)\r\n");
+		print("Filesystem:    FAT12 assumed (MSX-DOS does not support anything else)\r\n");
 	}
 }
 
@@ -318,7 +319,7 @@ void DoFix()
 	ReadBootSector();
 	FixVolumeSize();
 	WritebootSector();
-	printf("Fix applied!\r\n");
+	print("Fix applied!\r\n");
 }
 
 
@@ -328,13 +329,13 @@ void PrintFixInfo()
 		(isFat16 ? MAX_FAT16_CLUSTER_COUNT : MAX_FAT12_CLUSTER_COUNT));
 	printf("This can be fixed by reducing the volume size by %i KBytes.\r\n",
 		sectorsToDecreaseForFix/2);
-	printf("Run the tool again adding the 'fix' parameter to apply the fix.\r\n");
+	print("Run the tool again adding the 'fix' parameter to apply the fix.\r\n");
 }
 
 
 void ReadBootSector()
 {
-	printf("\r\nReading boot sector...\r\n");
+	print("\r\nReading boot sector...\r\n");
 
 	regs.Words.DE = (int)Buffer;
 	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
@@ -380,7 +381,7 @@ void FixVolumeSize()
 
 void WritebootSector()
 {
-	printf("Writing updated boot sector...\r\n");
+	print("Writing updated boot sector...\r\n");
 
 	regs.Words.DE = (int)Buffer;
 	DosCall(_SETDTA, &regs, REGS_MAIN, REGS_MAIN);
@@ -403,7 +404,9 @@ void WritebootSector()
 	}
 }
 
+
 #define COM_FILE
+#include "print_msxdos.c"
 #include "printf.c"
 #include "asmcall.c"
 #include "strcmpi.c"

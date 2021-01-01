@@ -31,7 +31,7 @@ BNKID	equ	40FFh		;Where Bank ID is stored
 ;bank bit 3 -> register bit 4
 ;bank bit 2 -> register bit 3
 
-CHGBNK::
+CHGBNK:
 	push	bc
 	srl	a
 	rl	b

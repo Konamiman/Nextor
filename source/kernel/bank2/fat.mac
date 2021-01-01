@@ -88,7 +88,7 @@ lookup_fat16:	ld	h,a			; is zero.
 		pop	hl
 		ret	nc
 
-        ld (TEMP_FAT##+4),de    ; Save real cluster number for F_GETCLUS
+        ld (TMP_FAT##+4),de    ; Save real cluster number for F_GETCLUS
 return_0ffffh:
         ld	de,0FFFFh
 		ret
@@ -359,7 +359,7 @@ endif
 		rr	l
 find_fat16:	push	af			;Save odd/even flag (carry)
 		push	hl			    ;Save byte number
-        ld  (TEMP_FAT##+2),hl   ;Save also for F_GETCLUS
+        ld  (TMP_FAT##+2),hl   ;Save also for F_GETCLUS
 ;
 ;===== start mod FAT16 (support BUF_1 patch)
 		ld	e,h			;DE := byte/512 = relative
@@ -373,7 +373,7 @@ find_fat16:	push	af			;Save odd/even flag (carry)
 		ld	l,(ix+UD_RES##)
 		ld	h,(ix+UD_RES##+1)	;Add on reserved sectors to get
 		add	hl,de			; sector number required.
-        ld  (TEMP_FAT##),hl   ; Save FAT sector number, needed by F_GETCLUS
+        ld  (TMP_FAT##),hl   ; Save FAT sector number, needed by F_GETCLUS
 		ex	de,hl
 		pcall	BF_FAT_SECTOR		;Get FAT sector into buffer.
 ;

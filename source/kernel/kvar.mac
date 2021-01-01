@@ -31,7 +31,6 @@
 ;
 	const	MIN_BUFS,2	;Minimum number of sector buffers
 	const	DEF_BUFS,5	;Default number of sector buffers
-	const	MAX_UNITS,8	;Number of units supported
 	const	MAX_HAND,63	;Number of file handles per process
 ;
 	const	UD_TMOUT,5+2	;Timeout for media check calls (100ms units)
@@ -813,7 +812,7 @@ endif
 	var	ESEQ_BUF, 6		; > sequences must be immediately
 					;/  below the BIOS output buffer.
 
-    var     TEMP_FAT,6
+    var     TMP_FAT,6
 ;
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain

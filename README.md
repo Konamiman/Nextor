@@ -18,43 +18,45 @@ Note that there is no `master` branch, but branches for each major version of Ne
 
     * [**tools**](source/tools): The new command line tools created for Nextor.
 
-* [**wintools**](/wintools): Windows tools needed for building Nextor. Includes the source for two custom made tools: [`mknexrom`](/wintools/mknexrom.c) (C) and [`SymToEqus`](/wintools/SymToEqus.cs) (C#).
+* [**buildtools**](/buildtools): Tools needed for building Nextor on Windows (deprecated) and Linux (recommended). Includes the source for two custom made tools: [`mknexrom`](/buildtools/sources/mknexrom.c) (C) and [`SymToEqus`](/buildtools/sources/SymToEqus.cs) (C#).
 
 * [**docs**](/docs): Documentation for both users and developers.
 
 ## How to build Nextor
 
-You need:
+The "official" environment for building Nextor is Linux. Legacy support for Windows is still offered but it's deprecated. Read on for the ugly details.
 
-1. A Windows machine (if you don't have one see ["No Windows?"](#no-windows) below)
-2. SDCC ([http://sdcc.sourceforge.net](http://sdcc.sourceforge.net)), targetting the Z80 processor, to build FDISK.
-3. .NET Framework 2.0 or higher (for the `SymToEqus` tool in the `wintools` folder)
-4. The `wintools` folder must be added to the `PATH` environment variable
+### Linux
 
-### To build the Nextor kernel
+To build Nextor on Linux you'll need:
 
-Run the `compile.bat` script located in the `source\kernel` folder. If the FDISK tool has not been compiled already (the `fdisk.dat` and `fdisk2.dat` files do not exist in the `bank5` folder), they will be compiled on the fly.
+* The native MACRO80 tools provided by [the M80dotNet project](https://github.com/Konamiman/M80dotNet). Go to [the releases section](https://github.com/Konamiman/M80dotNet/releases) and download the appropriate variant of the latest version.
+* [SDCC](http://sdcc.sourceforge.net/), for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
+* `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
+* `sjasm` v0.39 to assemble some of the drivers. You have it in the `buildtools/Linux` folder, but you can also build it from [the sources](https://github.com/Konamiman/Sjasm/tree/v0.39) (remember to switch to the `v0.39` branch).
+* `mknexrom` to generate the ROM files with the drivers. You have it in the `buildtools/Linux` folder, but you can also build it from the source in the `buildtools/sources` directory.
 
-The generated kernel base file and the complete ROM files will be generated in the `bin\kernels` folder. One ROM file will be generated for each folder existing in the `source\kernel\drivers` folder.
+Except for those obtained via `apt`, you'll need to place these tools at a suitable location to be able to use them, e.g. `/usr/bin`.
 
-### To build the FDISK tool only
+Once the tools are in place you can use the following scripts to build the various components of Nextor:
 
-If you make a change in the FDISK tool, you can compile it without having to compile the full kernel again. Just run the `compile.bat` script in the `source\kernel\bank5` folder (do NOT run `compfdsk.bat`). The ROM files in `bin\kernels` will be appropriately updated.
+  * `source/kernel/compile.sh`: builds the kernel ROM files and copies them to the `bin/kernels` directory. Can be executed as `compile.sh drivers` to only compile the drivers.
+  * `source/kernel/bank5/compile.sh`: builds only the part of the kernel corresponding to the buildt-in FDISK tool and patches the ROM files in the `bin/kernels` directory with the result.
+    * `source/kernel/bank5/compile_fdisk.sh`: this one is NOT intended to be used directly, it's called by the previous two and it does the actual compilation from the FDISK source files. If `fdisk.dat` already exists and is newer than `fdisk.c` then it will not be compiled (and the same for `fdisk2.dat` and `fdisk2.c`). 
+  * `source/command/msxdos.sh`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
+  * `source/tools/compile.sh`: builds the command line tools written in assembler and copies them to the `bin/tools` directory. To build only one of the tools pass its name as an argument (without extension).
+  * `source/tools/C/compile.sh`: builds the command line tools written in C and copies them to the `bin/tools` directory. To build only one of the tools pass its name as an argument (without extension).
 
-### To build the command line tools
+## Windows
 
-Run the `compile.bat` script in the `source\tools` folder. The tools will be generated in the `bin\tools` folder.
+If you use Windows 10 the recommended approach is to use the Linux tools and scripts with [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10). If you use an older Windows the recommended approach is to upgrade to Windows 10 (or to install Linux in a separate partition or disk, or in a virtual machine).
 
-### To build `NEXTOR.SYS`
+However, if for some reason you are still using a non-WSL capable Windows, support for building Nextor is available as well; but note that it will probably be removed at some point in the future, as it's a maintenance burden (seriously, give Windows 10 and WSL a try, it's really worth it).
 
-Run the `compile.bat` script in the `source\command\msxdos` folder. The file will be generated in the `bin\tools` folder.
+To build Nextor on Windows you need:
 
-### To build `COMMAND2.COM`
+* The tools in the `buildtools/Windows` folder. These must be placed in some folder included in the `PATH` environment variable.
+* [SDCC](http://sdcc.sourceforge.net/), for FDISK and the command line tools written in C.
+* .NET Framework 2.0 or higher, for the `SymToEqus` tool.
 
-Run the `compile.bat` script in the `source\command\command` folder. The file will be generated in the `bin\tools` folder.
-
-At this time there's no specific script (other than the original makefile) for building the original MSX-DOS command line tools.
-
-### No Windows?
-
-If your machine doesn't run Windows you can still build Nextor by using Xesco's [Nextor builder](https://github.com/xesco/NextorBuilder).
+You'll find a number of `.bat` files available at the same locations of the Linux `.sh` scripts (see "Linux" section above) that serve the same purpose.
