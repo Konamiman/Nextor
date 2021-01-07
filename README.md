@@ -30,6 +30,7 @@ The "official" environment for building Nextor is Linux. Legacy support for Wind
 
 To build Nextor on Linux you'll need:
 
+* `make`. On Debian/Ubuntu-ish systems you can just `apt-get install make`.
 * The native MACRO80 tools provided by [the M80dotNet project](https://github.com/Konamiman/M80dotNet). Go to [the releases section](https://github.com/Konamiman/M80dotNet/releases) and download the appropriate variant of the latest version.
 * [SDCC](http://sdcc.sourceforge.net/), for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
 * `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
@@ -38,14 +39,15 @@ To build Nextor on Linux you'll need:
 
 Except for those obtained via `apt`, you'll need to place these tools at a suitable location to be able to use them, e.g. `/usr/bin`.
 
-Once the tools are in place you can use the following scripts to build the various components of Nextor:
+There are five makefiles that will take care of building the different components of Nextor. Once the tools are in place you can just `cd` to the appropriate directory and run `make`:
 
-  * `source/kernel/compile.sh`: builds the kernel ROM files and copies them to the `bin/kernels` directory. Can be executed as `compile.sh drivers` to only compile the drivers.
-  * `source/kernel/bank5/compile.sh`: builds only the part of the kernel corresponding to the buildt-in FDISK tool and patches the ROM files in the `bin/kernels` directory with the result.
-    * `source/kernel/bank5/compile_fdisk.sh`: this one is NOT intended to be used directly, it's called by the previous two and it does the actual compilation from the FDISK source files. If `fdisk.dat` already exists and is newer than `fdisk.c` then it will not be compiled (and the same for `fdisk2.dat` and `fdisk2.c`). 
-  * `source/command/msxdos.sh`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
-  * `source/tools/compile.sh`: builds the command line tools written in assembler and copies them to the `bin/tools` directory. To build only one of the tools pass its name as an argument (without extension).
-  * `source/tools/C/compile.sh`: builds the command line tools written in C and copies them to the `bin/tools` directory. To build only one of the tools pass its name as an argument (without extension).
+* `source/kernel`: builds the kernel ROM files and copies them to the `bin/kernels` directory. There are handy aliases for the different ROM files, so you can run e.g. `make ide`; see the `kernels` rule at the beginning of the file for the full list.
+* `source/command/msxdos`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
+* `source/tools`: builds the command line tools written in assembler and copies them to the `bin/tools` directory.
+* `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
+* `source`: this one just invokes the other four in sequence, so it builds pretty much everything. It supports `make clean` too.
+
+You may want to take a look at [this now closed pull request from Dean Netherton](https://github.com/Konamiman/Nextor/pull/79) that contains a different attempt at writing makefiles for bulding Nextor. It even has some nice extra features like building FDD and HDD images with Nextor, and building the `mknexrom` tool itself.
 
 ## Windows
 
@@ -59,4 +61,4 @@ To build Nextor on Windows you need:
 * [SDCC](http://sdcc.sourceforge.net/), for FDISK and the command line tools written in C.
 * .NET Framework 2.0 or higher, for the `SymToEqus` tool.
 
-You'll find a number of `.bat` files available at the same locations of the Linux `.sh` scripts (see "Linux" section above) that serve the same purpose.
+You'll find a number of `.bat` files available at the same locations of the Linux makefiles except for the one in `source` (see "Linux" section above). These are not "makefile-ish" and always build the whole set of kernels/tools.
