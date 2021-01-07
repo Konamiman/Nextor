@@ -2,6 +2,6 @@
 BANK	equ	3
 ;
 	include	BANK.INC
-	include	B0LABELS.INC
+	include	B0LAB_B3.INC
 ;
 	end

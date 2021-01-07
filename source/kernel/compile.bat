@@ -96,7 +96,7 @@ copy ..\data.rel
 copy ..\chgbnk.rel
 copy ..\bank0\doshead.rel
 copy ..\bank0\40FF.rel
-copy ..\bank0\b0lab_b3.inc b0labels.inc
+copy ..\bank0\b0lab_b3.inc
 for %%A in (DOS1KER,B3) do cpm32 M80 =%%A
 cpm32 l80 /p:4000,CODES,KVAR,DATA,DOSHEAD,40FF,B3,DOS1KER,/p:7700,drv,/p:7fd0,chgbnk,b3/N/X/Y/E
 hex2bin -s 4000 b3.hex
