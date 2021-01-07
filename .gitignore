@@ -25,6 +25,7 @@ dos250ba.dat
 kernel.dat
 nextor2.rom
 info/*.pdf
+source/kernel/*.bytes
 source/kernel/bank*/*.inc
 source/kernel/drivers/*.inc
 source/kernel/drivers/**/*.inc
@@ -37,6 +38,7 @@ source/kernel/bank5/*.asm
 source/command/msxdos/*.inc
 source/command/msxdos/codes.mac
 source/command/msxdos/data.mac
+source/command/msxdos/USEKMSG.MAC
 source/tools/**.inc
 source/tools/**.asm
 source/tools/**.com

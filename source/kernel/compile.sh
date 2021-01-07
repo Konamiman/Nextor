@@ -114,7 +114,7 @@ cd ../bank3
 #cp ../chgbnk.rel .
 #cp ../bank0/doshead.rel .
 #cp ../bank0/40FF.rel .
-cp ../bank0/b0lab_b3.inc b0labels.inc
+cp ../bank0/b0lab_b3.inc .
 for file in DOS1KER B3; do M80 -p ..,../bank0 =$file; done
 L80 -p ..,../bank0 /p:4000,CODES,KVAR,DATA,DOSHEAD,40FF,B3,DOS1KER,/p:7700,drv,/p:7fd0,chgbnk,b3/N/X/Y/E
 hex2bin B3
