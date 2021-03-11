@@ -1017,6 +1017,23 @@ zstr_slow:
 	;LD	E,RELEASE##+(RELEASE##/256)*16
 	ret
 
+@GPART:	; RETURN CORRECT IX, IY VALUES BY WALKING AND MODIFYING STACK
+	EXX
+	POP	HL		; Get return address, and pop off the saved
+	POP	DE		;   values of IX and IY.
+	POP	DE
+	PUSH	HL
+	EXX
+	CALL	KBDOS		; Call KBDOS, which returns stuff in IY & IX.
+	EXX			; Save returned values.
+	POP	HL		; Get the return address again.
+	PUSH	IX		; Push new 'saved' IX and IY values.
+	PUSH	IY
+	PUSH	HL
+	EXX
+	RET
+
+
 FUNC_WITH_IXIY:
 	EXX
 	pop	bc
@@ -1036,7 +1053,6 @@ FUNC_WITH_IXIY:
 	push	bc
 	EXX
 	RET
-
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -1263,7 +1279,6 @@ _KBSDE:	LD	DE,BUFF1	; DE -> buffer containing FIB or string.
 @RALLOC:
 @DSPACE:
 @LOCK:
-@GPART:
 @Z80MODE:
 
 ;
