@@ -935,7 +935,7 @@ STRCPY:	LD	A,(HL)		;Get character from string.
 	ld	bc,64
 	ldir
 	pop	hl
-	ret	
+	ret
 ;
 ;------------------------------------------------------------------------------
 ;
