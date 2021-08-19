@@ -31,7 +31,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-emu ascii8 ascii16 mfrsd flashjacks
+all: base ide ide-emu ascii8 ascii16 mfrsd flashjacks ocm
 
 TOOLS := M80 L80 LIB80 objcopy sdcc mknexrom dd
 
@@ -213,6 +213,18 @@ drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
 
 	sjasm drivers/Flashjacks/flashjacks.asm drivers/Flashjacks/driver.BIN
 	mknexrom nextor_base.dat $@ /d:drivers/Flashjacks/driver.BIN /m:drivers/Flashjacks/chgbnk.dat
+	$(call copy_to_bin,$@)
+
+
+### OCM (1-chip MSX, SX|2, and compatibles)
+
+ocm: drivers/OCM/Nextor-$(VERSION).OCM.ROM
+
+drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
+	nextor_base.dat \
+	drivers/StandaloneASCII8/CHGBNK.BIN
+
+	mknexrom nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/CHGBNK.BIN
 	$(call copy_to_bin,$@)
 
 
