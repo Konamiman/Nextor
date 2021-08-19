@@ -1017,6 +1017,11 @@ zstr_slow:
 	;LD	E,RELEASE##+(RELEASE##/256)*16
 	ret
 
+@GPART:
+	;Needs CALL (can't use JP) due to how FUNC_WITH_IXIY manages stack
+	call	FUNC_WITH_IXIY
+	ret
+
 FUNC_WITH_IXIY:
 	EXX
 	pop	bc
@@ -1263,7 +1268,6 @@ _KBSDE:	LD	DE,BUFF1	; DE -> buffer containing FIB or string.
 @RALLOC:
 @DSPACE:
 @LOCK:
-@GPART:
 @Z80MODE:
 
 ;
