@@ -687,6 +687,12 @@ MAPBIO::
 ;   For other values of D, the EXTBIO hook on the driver bank is called with D'=1.
 ;   This must return D'=1 if old hook must be called, D'=0 otherwise.
 
+		push de	;DE must always be preserved
+		call MAPBDO
+		pop de
+		ret
+
+MAPBDO:
 		exx
 		set	0,d
 		exx
