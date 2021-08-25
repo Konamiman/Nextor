@@ -217,6 +217,7 @@ size	macro	name
     field 1,UD_DRV      ;Drive where the mounted file is
 	field 2,UD_MXS		;Maximum sector number
 	field 2,UD_SCLU		;Start cluster (used to check if file is already mounted)
+	field 3,UD_SSEC		;Start sector relative to the drive where the mounted file is
 
 	size	UD_MSZ		;Total size of unit descriptor including extra fields
 

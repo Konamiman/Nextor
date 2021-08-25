@@ -2308,6 +2308,21 @@ NORDISK:
 	ld	bc,13
 	ldir
 
+	;TEMPORARY CODE! Return the first sector number of the file
+	;after the file name.
+	ld a,(ix+UD_SSEC##)
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SSEC##+1)
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SSEC##+2)
+	ld (de),a
+	inc de
+	xor a
+	ld (de),a
+	;END of temporary code.
+
 	xor	a
 	ret
 
@@ -3456,6 +3471,25 @@ MF_UD_OK:
 	ld	a,(hl)
 	dec	a
 	ld	(ix+UD_DRV##),a
+
+	;First sector in file drive
+
+	ld	hl,UNIT_TAB##+2
+	ld	c,(ix+UD_DRV##)
+	sla c
+	ld	b,0
+	add	hl,bc
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)	;DE=Address of unit descriptor
+	ex de,hl
+	ld	e,(ix+UD_SCLU##)
+	ld	d,(ix+UD_SCLU##+1)
+	xor a
+	pcall CLU_TO_SEC
+	ld (ix+UD_SSEC##),e
+	ld (ix+UD_SSEC##+1),d
+	ld (ix+UD_SSEC##+2),a
 
 	;Other parameters
 
