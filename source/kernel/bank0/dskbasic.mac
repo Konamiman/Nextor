@@ -3547,7 +3547,7 @@ DBABORT_ROUTINE:
 ;
 ;	Analyze errors returned from BDOS call
 ;
-.FRSTER	equ	0B1h	;0BAh		; lowest MSXDOS2 error code supported
+.FRSTER	equ	0B0h	;0BAh		; lowest MSXDOS2 error code supported
 ;
 DERNUM	macro	ERRNAM
     ifidn   <ERRNAM>,<*>
@@ -3562,6 +3562,7 @@ QQQQ	defl	.FRSTER
 ;
 DERR_TAB:
 
+    DERNUM  ERRICL  ; Invalid cluster sequence
 	DERNUM	ERRBFS	; Bad file size
 	DERNUM	ERRFIM	; File is mounted
 
@@ -3720,6 +3721,7 @@ QQQQ	defl	DERFST
 
 	DERMAK	ERRFIM	; File is mounted
 	DERMAK	ERRBFS	; Bad file size
+	DERMAK  ERRICL  ; Invalid cluster sequence
 ;
 DERLST	equ	QQQQ-1		;
 ;
@@ -4118,8 +4120,9 @@ DERMSG:	defb	0
 
 	defb	'File is mounted',         0
 	defb	'Bad file size',           0
+	defb    'Invalid cluster sequence',0
 
-;		'----+----1----+----2----'
+;		    '----+----1----+----2----'
 ;
 MAXMSGLEN	equ	24+2	;2 extra spaces are for terminators
 
