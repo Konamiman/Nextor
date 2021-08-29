@@ -955,6 +955,10 @@ An attempt to open or alter a mounted file, or to perform any other disallowed o
 
 Thrown by the CALL MAPDRV command when attempting to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
+* Invalid cluster sequence (82)
+
+Thrown by the CALL MAPDRV command when attempting to mount a file that is not stored across consecutive sectors in its host filesystem.
+
 
 ### 3.8. Mounting files
 
@@ -964,7 +968,9 @@ To mount a file, use [the MAPDRV tool](#341-mapdrv-the-drive-mapping-tool) with 
 
 This feature has some restrictions:
 
-* To be mountable a disk image file must have a size of at least 512 bytes and at most 32 MBytes.
+* The file must have a size of at least 512 bytes and at most 32 MBytes.
+
+* The file must be stored across consecutive sectors in its host filesystem (since Nextor 2.1.1).
 
 * The file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. 
 

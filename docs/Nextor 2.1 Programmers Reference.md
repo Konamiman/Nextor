@@ -440,7 +440,7 @@ The information returned in the data buffer is as follows:
 +10..+63: Reserved (currently always zero)
 ```
 
-If a file is mounted in the drive, the information returned in the data buffer is insetad as follows:
+If a file is mounted in the drive, the information returned in the data buffer is instead as follows:
 
 ```
 +1: Drive where the mounted file is located (0 = A:, etc)
@@ -611,7 +611,7 @@ When invoked in MSX-DOS 1 mode, the following restrictions apply to this functio
 * The new mapping information may specify a different partition and/or device, but the driver slot must be the same that was assigned to the drive at boot time. This is not an issue if there is only one Nextor kernel in the system.
 These restrictions are imposed by the Nextor architecture.
 
-If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0. A .BFSZ error will be returned if the file is too small or too big.
+If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0, and since Nextor 2.1.1 a file needs to be stored across consecutive sectors in its host filesystem to be mountable. A .BFSZ error will be returned if the file is too small (less than 512 bytes) or too big (more than 32 MBytes). A .ICLUS error will be returned if the file is not stored across consecutive sectors.
 
 
 ### 3.13. Enable or disable the Z80 access mode for a driver (_Z80MODE, 7Dh)
@@ -754,9 +754,9 @@ An attempt to open or alter a mounted file, or to perform any other disallowed o
 
 Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
-* Invalid cluster number (.ICLUS, 0B0h)
+* Invalid cluster number or sequence (.ICLUS, 0B0h)
 
-The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive.
+The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive, or a file was supplied to [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) to be mounted but the file is not stored across consecutive sectors in its host filesystem.
 
 
 ## 5. Extended mapper support routines
