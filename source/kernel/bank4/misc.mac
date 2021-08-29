@@ -493,6 +493,46 @@ FGC_BADCLUS:
 ;
 ;------------------------------------------------------------------------------
 ;
+; Check if a cluster chain is consecutive
+; (so the file is stored across consecutive sectors in the filesystem).
+;
+; Entry:    A  = drive number (0=default)
+;	        DE = first cluster number
+; Returns:  A = error code (.ICLUS if not consecutive chain)
+
+CLUSQ::
+	ld c,a
+CLUSQLOOP:
+	ld hl,TEMP_FCB##
+	push bc
+	push de
+	ld a,c
+	call F_GETCLUS
+	pop de
+	pop bc
+	or a
+	ret nz		;Abort on any error.
+
+	ld ix,TEMP_FCB##
+	bit 3,(ix+11)	;End of chain?
+	ret nz			;Yes: end with no error.
+
+	inc de		;DE = Checked cluster number + 1
+	ld l,(ix+8)
+	ld h,(ix+9)	;HL = Next cluster number in the chain
+	or a
+	sbc hl,de
+	ld a,h
+	or l
+	jr z,CLUSQLOOP	;Next cluster = checked + 1? Then continue...
+
+	ld a,.ICLUS##
+	ret		;...otherwise error.
+
+;
+;
+;------------------------------------------------------------------------------
+;
 	PROC	F_RAMD
 ;
 ;    This is the "create/destroy RAM disk" KBDOS function.  It is  passed  the

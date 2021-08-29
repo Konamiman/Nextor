@@ -2700,6 +2700,9 @@ UNMAP_NEXT2:
 ; All file handles related to a given drive are closed prior to changing
 ; the mapping state of that drive.
 ;
+; Mounting a file is allowed only if the file is stored across consecutive
+; clusters in its host filesystem, otherwise an .ICLUS error is returned.
+;
 ; Entry:      C (A) = Drive letter, 0=A:, etc
 ;             B  = Action to perform
 ;                  0: Unmap the drive
@@ -3354,6 +3357,19 @@ MF_NO_32M:
 	ld	a,.BFSZ##	;<512B
 	jp	c,POPIX_RET
 MF_OK_SIZE:
+
+	;* Check if cluster chain is consecutive
+
+	ld a,(ix+FIB_DRIVE##)
+	ld e,(ix+FIB_CLUSTER##)
+	ld d,(ix+FIB_CLUSTER##+1)
+	push hl
+	push ix
+	call CLUSQ##
+	pop ix
+	pop hl
+	or a
+	jp nz,POPIX_RET
 
 	;* All the validations passed!
 	;  Destroy the previous unit descriptor
