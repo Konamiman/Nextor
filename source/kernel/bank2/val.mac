@@ -2475,13 +2475,23 @@ CUN_RW:
 		dec	hl	;HL = Last sector to access
 		ld	a,(iy+UD_MXS##+1)
 		cp	h
-		jr	c,RET_RNF_POP
+		jp	c,RET_RNF_POP
 		jr	nz,CUN_OKSEC
 		ld	a,(iy+UD_MXS##)
 		cp	l
-		jr	c,RET_RNF_POP
+		jp	c,RET_RNF_POP
 CUN_OKSEC:
 		exx
+
+		;* If it's a write command, check the readonly flag
+
+		pop af
+		push af
+		cp	WR_CMD
+		jr nz,CUN_OKWP
+		bit 0,(iy+UD_MFLAGS##)	;Mounted as read only?
+		jp nz,RET_WP_POP
+CUN_OKWP:
 
 		;* Convert unit descriptor and sector number to those of the mounted file
 
@@ -2577,6 +2587,12 @@ bad_unit_cmd:	ld	a,.INTER##		;Return error if command code
 RET_RNF_POP:
 		pop af
 		ld a,.RNF##
+		or a
+		ret
+
+RET_WP_POP:
+		pop af
+		ld a,.WPROT##
 		or a
 		ret
 ;
