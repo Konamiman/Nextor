@@ -2224,6 +2224,8 @@ GDRVR_NAME_LOOP:
 ;                +2 (2): Flags. Bit 0: mounted in read-only mode.
 ;                +4 (13): Filename, zero-terminated
 ;                          (empty string, if not assigned to a file)
+;                +17 (2): Start cluster
+;                +19 (2): Start sector
 ;
 
 	push	ix
@@ -2279,7 +2281,7 @@ NORDISK:
 	bit	UF_MNT,(ix+UD_FLAGS##)
 	jr	z,NOMNT
 
-	;Assigned to a mounted file
+	;* Assigned to a mounted file
 
 	ld	(iy+0),3
 	ld	a,(ix+UD_DRV##)
@@ -2302,9 +2304,14 @@ NORDISK:
 	ld	bc,13
 	ldir
 
-	;TEMPORARY CODE! Return the first sector number of the file
-	;after the file name.
-	ld a,(ix+UD_SSEC##)
+	ld a,(ix+UD_SCLU##)	;Start cluster
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SCLU##+1)
+	ld (de),a
+	inc de
+
+	ld a,(ix+UD_SSEC##)	;Start sector
 	ld (de),a
 	inc de
 	ld a,(ix+UD_SSEC##+1)
@@ -2312,10 +2319,9 @@ NORDISK:
 	inc de
 	ld a,(ix+UD_SSEC##+2)
 	ld (de),a
-	inc de
-	xor a
-	ld (de),a
-	;END of temporary code.
+	;inc de	;The buffer has been zeroed previously
+	;xor a
+	;ld (de),a
 
 	xor	a
 	ret
@@ -3306,10 +3312,10 @@ MF_CHK_ALRMNT:
 	jr	nz,MF_ALRMNT_NEXT
 
 	ld	a,(iy+19)
-	cp	(ix+UD_SCLUS##)
+	cp	(ix+UD_SCLU##)
 	jr	nz,MF_ALRMNT_NEXT
 	ld	a,(iy+20)
-	cp	(ix+UD_SCLUS##+1)
+	cp	(ix+UD_SCLU##+1)
 	jr	nz,MF_ALRMNT_NEXT
 
 	pop	ix
