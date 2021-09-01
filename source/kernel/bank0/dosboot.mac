@@ -316,8 +316,6 @@ msxdos_bootok:
 		push	af
 		ld	c,_CLOSE##
 		call	BOOT_BDOS		;Close the file handle
-		ld	hl,MFLAGS##
-		res 1,(hl)
 		pop	af
 		jr	nz,msxdos_fail		;Jump if the read was no good
 ;
@@ -333,8 +331,6 @@ endif
 		jp	100h			;Start up MSXDOS.SYS
 ;
 msxdos_fail:
-		ld	hl,MFLAGS##
-		res	1,(hl)
 		ret
 ;
 ;
