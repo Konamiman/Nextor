@@ -36,4 +36,4 @@ jobs:
             sudo install ${NAME} /usr/local/bin
           done
       - name: Make all
-        run: make -C source -j $(nproc)
+        run: make -C source
