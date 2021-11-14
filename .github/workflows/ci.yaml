@@ -26,14 +26,14 @@ jobs:
           curl -Lo m80.zip https://github.com/Konamiman/M80dotNet/releases/download/v${VERSION}/M80dotNet_${VERSION}_SelfContained_linux_x64.zip
           unzip m80.zip
           for NAME in M80 L80 LIB80; do
-            sudo install ${NAME} /usr/local/bin
+            sudo install -v ${NAME} /usr/local/bin
             rm ${NAME}
           done
           rm m80.zip
       - name: Add buildtools
         run: |
           for NAME in buildtools/linux/*; do
-            sudo install ${NAME} /usr/local/bin
+            sudo install -v ${NAME} /usr/local/bin
           done
       - name: Make all
         run: make -C source
