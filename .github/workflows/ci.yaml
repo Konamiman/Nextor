@@ -30,5 +30,10 @@ jobs:
             rm ${NAME}
           done
           rm m80.zip
+      - name: Add buildtools
+        run: |
+          for NAME in buildtools/linux/*; do
+            sudo install ${NAME} /usr/local/bin
+          done
       - name: Make all
-        run: make -C source -j $(nproc) V=1
+        run: make -d -C source -j $(nproc)
