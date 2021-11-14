@@ -2,7 +2,15 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - 'source/**'
+      - 'buildtools/**'
+      - '.github/workflows/**'
   push:
+    paths:
+      - 'source/**'
+      - 'buildtools/**'
+      - '.github/workflows/**'
     branches:
       - 'v**'
     tags:
