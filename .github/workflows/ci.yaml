@@ -18,7 +18,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            sdcc binutils make curl
+            sdcc binutils make curl cpm hex2bin
       - name: Install M80
         env:
           VERSION: 1.1
