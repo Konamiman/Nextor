@@ -23,7 +23,7 @@ jobs:
         env:
           VERSION: 1.1
         run: |
-          curl -o m80.zip https://github.com/Konamiman/M80dotNet/releases/download/v${VERSION}/M80dotNet_${VERSION}_SelfContained_linux_x64.zip
+          curl -Lo m80.zip https://github.com/Konamiman/M80dotNet/releases/download/v${VERSION}/M80dotNet_${VERSION}_SelfContained_linux_x64.zip
           unzip m80.zip
           for NAME in M80 L80 LIB80; do
             sudo install ${NAME} /usr/local/bin
