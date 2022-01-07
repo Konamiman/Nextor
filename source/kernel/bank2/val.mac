@@ -2451,6 +2451,18 @@ CALLUNIT2:
 		;* It is a read or write command
 
 CUN_RW:
+		exx
+		push hl
+		push bc
+		exx
+		call _CUN_RW
+		exx
+		pop bc
+		pop hl
+		exx
+		ret
+_CUN_RW:
+
 		push	af
 
 		;>>> A = Command (RD_CMD or WR_CMD), 
@@ -2475,11 +2487,11 @@ CUN_RW:
 		dec	hl	;HL = Last sector to access
 		ld	a,(iy+UD_MXS##+1)
 		cp	h
-		jp	c,RET_RNF_POP
+		jp	c,RET_EXX_RNF_POP
 		jr	nz,CUN_OKSEC
 		ld	a,(iy+UD_MXS##)
 		cp	l
-		jp	c,RET_RNF_POP
+		jp	c,RET_EXX_RNF_POP
 CUN_OKSEC:
 		exx
 
@@ -2584,6 +2596,8 @@ bad_unit_cmd:	ld	a,.INTER##		;Return error if command code
 		or	a			; is not sensible.
 		ret
 
+RET_EXX_RNF_POP:
+		exx
 RET_RNF_POP:
 		pop af
 		ld a,.RNF##
