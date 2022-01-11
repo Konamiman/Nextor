@@ -5300,6 +5300,7 @@ CNEXTOR_S:
 	db	"_MAPDRV()",13,10
 	db	"_MAPDRVL() *",13,10
 	db	"_USR()",13,10
+	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10
 	db	13,10
 	db	"Commands with * are not available",1
 	db	"in MSX-DOS 1 mode.",13,10

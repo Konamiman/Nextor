@@ -397,6 +397,8 @@ ABORT:
 ;	Table of expanded statements
 ;
 COMMAND:
+	defb	'SYSTEM2',0
+	defw	SYSTEM2
 	defb	'SYSTEM',0
 	defw	SYSTEM
 	defb	'FORMAT',0
@@ -437,6 +439,12 @@ COMMAND:
 ;
 ;	_SYSTEM[("<command_string>")]
 ;
+SYSTEM2:
+	push hl
+	ld hl,MFLAGS##
+	set 7,(hl)	;SYST2
+	pop hl
+
 SYSTEM:
 	ld	de,CMDTMP	; assume end of statement
 	jr	z,SYSTEM_NO_ARG	; good assumption

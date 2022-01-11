@@ -218,6 +218,7 @@ ram_ad	defl	DATABASE
 	const	FASTOUT,0	;bit 0: set for fast STROUT
 	const	FIRSTLD,1	;bit 1: set while booting NEXTOR.SYS for the first time
 	const	ZALLOC,2	;bit 2: reduced alloc info mode becomes zero info mode
+	const   SYST2,7     ;Bit 7: force boot in MSXDOS2.SYS (temporary, reset after read)
 	spare	1		;Available for DOS 2
 ;
 	var2	BLDCHK
