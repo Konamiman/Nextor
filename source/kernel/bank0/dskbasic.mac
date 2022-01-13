@@ -1924,6 +1924,15 @@ GET_HANDLE_0:
 	pop	hl
 	ret
 
+CHECK_DIRBUF:
+	push hl
+	ld hl,($DIRBUF)
+	ld a,h
+	or l
+	pop hl
+	jp z,JSNERR
+	ret
+
 if	1
 	subttl	DSKI$/DSKO$
 ;
@@ -1931,6 +1940,7 @@ if	1
 ;	DSKO$ <drive_number>,<sector_number>
 ;
 $HOOK	DSKI$
+	call CHECK_DIRBUF
 	call	REMHOK		;remove hook return
 	call	CHRGET		;skip over current token
 	SYNCHK	'('
@@ -1947,6 +1957,7 @@ $HOOK	DSKI$
 	jr	DSKO$1		;perform disk input
 ;
 $HOOK	DSKO$
+	call CHECK_DIRBUF
 	call	REMHOK		;remove hook return
 	call	GET_PARAM	;get drive and sector
 	call	CHRGOT		;end of statement?

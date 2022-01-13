@@ -1868,8 +1868,13 @@ SET_DISKBASIC::
 	ld	hl,DBABORT##
 	ld	(BREAKVECT##),hl
 ;
-	ld	bc,($MAXSEC##)	;Allocate sector buffer for DSKI$, DSKO$
+	ld a,(MFLAGS##)
+	and	16	;KILLD
+	ld hl,0
+	jr nz,SET_DIRBUF	;Allocate sector buffer for DSKI$, DSKO$
+	ld	bc,($MAXSEC##)	;unless KILLDSKIO env item is set
 	call	RESERVE_BASIC
+SET_DIRBUF:
 	ld	($DIRBUF##),hl
 if 0
 ;

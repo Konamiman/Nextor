@@ -217,7 +217,10 @@ ram_ad	defl	DATABASE
 	var1	MFLAGS		;Miscellaneous flags
 	const	FASTOUT,0	;bit 0: set for fast STROUT
 	const	FIRSTLD,1	;bit 1: set while booting NEXTOR.SYS for the first time
-	const	ZALLOC,2	;bit 2: reduced alloc info mode becomes zero info mode
+	const	ZALLOC,2	;bit 2: reduced alloc info mode becomes zero info mode (SET ZALLOC ON)
+	const   ERRL,3      ;bit 3: always show error messages in English (SET ERRLANG ON)
+	const   KILLD,4		;bit 4: kill DSKI and DSKO BASIC commands (SET KILLDSKIO ON)
+	const   SYST2,7     ;Bit 7: force boot in MSXDOS2.SYS (temporary, reset after read)
 	spare	1		;Available for DOS 2
 ;
 	var2	BLDCHK
