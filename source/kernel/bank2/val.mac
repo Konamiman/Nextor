@@ -2405,9 +2405,8 @@ CALL_UNIT:
 		jp	nc,bad_unit_cmd		; not a sensible value.
 ;
 		push hl
-		push	iy
 		push hl
-		pop iy
+		ex (sp),iy
 		call CALLUNIT2
 		pop iy
 		pop hl

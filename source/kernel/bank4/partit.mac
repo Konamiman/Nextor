@@ -3412,9 +3412,8 @@ MF_UD_OK:
 
 	;File name
 
-	push hl
 	push ix
-	pop hl
+	ex (sp),hl
 	ld bc,UD_MNAME##
 	add hl,bc
 	ex de,hl	;Now DE points to UD_MNAME
