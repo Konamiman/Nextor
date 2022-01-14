@@ -902,8 +902,7 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		ret c
 		ld de,(FAT_CHAIN##)
 		dec de
-		call ACLU_SET
-		ret
+		jp ACLU_SET
 
 frchlp3:
 		push hl			;Preserve address of unit descriptor
