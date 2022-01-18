@@ -42,6 +42,8 @@
 
 [2.13. File mounting and disk emulation mode](#213-file-mounting-and-disk-emulation-mode)
 
+[2.14. The KILLDSKIO environment variable](#214-the-killdskio-environment-variable)
+
 [3. Using Nextor](#3-using-nextor)
 
 [3.1. Installing Nextor](#31-installing-nextor)
@@ -338,6 +340,12 @@ Since version 2.1 Nextor allows to mount disk image files in two ways:
 * Botting normally and mounting a disk image file in a drive. See [3.8. Mounting files](#38-mounting-files).
 
 * Booting in disk emulation mode, so the system boots in MSX-DOS 1 mode and uses a set disk image files (one at a time) as the boot device. See [3.9. Disk emulation mode](#39-disk-emulation-mode).
+
+### 2.14. The KILLDSKIO environment variable
+
+Since version 2.1.1 Nextor provides a mechanism to disable the BASIC commands `DSKI$` and `DSKO$`, which gives 512 extra bytes of free memory for the BASIC environment. This is achieved by creating an environment variable named `KILLDSKIO` with a value of `ON` (case-insensitive).
+
+Note that when `DSKI$` and `DSKO$` are disabled in this way the `DIRBUF` variable (&HF351), which holds the address of the 512 byte buffer where these commands read and write sectors, will have the same value as `SECBUF` (&HF34D), which is a generic sector buffer used internally by Nextor; and the same goes for `PATHNAM` (&HF33B), a buffer used by BASIC to parse pathnames for commands like `FILES`. This shouldn't be a problem in most cases, but for robustness it's recommended to use this feature only when that extra memory is abolutely necessary.
 
 
 ## 3. Using Nextor
@@ -1103,6 +1111,10 @@ This section contains the change history for the different versions of Nextor. C
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 User Manual](../../../blob/v2.0/docs/Nextor%202.0%20User%20Manual.md#5-change-history)_ document.
 
+
+### 5.1. v2.1.1 beta 2
+
+- Introduced the 
 
 ### 5.1. v2.1.0 beta 2
 
