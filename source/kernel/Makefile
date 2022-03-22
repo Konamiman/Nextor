@@ -4,7 +4,7 @@
 # See the "all" main rule for some handy aliases to generate specific ROMs
 # (e.g. you can run "make base" or "make ide").
 
-VERSION := 2.1.1-beta1
+VERSION := 2.1.1-beta2
 
 export X80_COMMAND_LINE=-t -nb
 export M80_COMMAND_LINE=-8
