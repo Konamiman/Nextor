@@ -2224,6 +2224,8 @@ GDRVR_NAME_LOOP:
 ;                +2 (2): Flags. Bit 0: mounted in read-only mode.
 ;                +4 (13): Filename, zero-terminated
 ;                          (empty string, if not assigned to a file)
+;                +17 (2): Start cluster
+;                +19 (2): Start sector
 ;
 
 	push	ix
@@ -2279,7 +2281,7 @@ NORDISK:
 	bit	UF_MNT,(ix+UD_FLAGS##)
 	jr	z,NOMNT
 
-	;Assigned to a mounted file
+	;* Assigned to a mounted file
 
 	ld	(iy+0),3
 	ld	a,(ix+UD_DRV##)
@@ -2288,16 +2290,10 @@ NORDISK:
 	ld	(iy+2),a
 	ld	(iy+3),0
 
-	ld	c,(ix+UD_FH##)
-	ld	b,0
-	ld	hl,MHANDLES##
-	add	hl,bc
-	add	hl,bc
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a
-	inc	hl	;HL = Pointer to filename
+	push ix
+	pop hl
+	ld bc,UD_MNAME##
+	add hl,bc	;HL = Pointer to filename
 
 	push	iy
 	pop	de
@@ -2307,6 +2303,25 @@ NORDISK:
 	inc	de
 	ld	bc,13
 	ldir
+
+	ld a,(ix+UD_SCLU##)	;Start cluster
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SCLU##+1)
+	ld (de),a
+	inc de
+
+	ld a,(ix+UD_SSEC##)	;Start sector
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SSEC##+1)
+	ld (de),a
+	inc de
+	ld a,(ix+UD_SSEC##+2)
+	ld (de),a
+	;inc de	;The buffer has been zeroed previously
+	;xor a
+	;ld (de),a
 
 	xor	a
 	ret
@@ -2691,6 +2706,9 @@ UNMAP_NEXT2:
 ; All file handles related to a given drive are closed prior to changing
 ; the mapping state of that drive.
 ;
+; Mounting a file is allowed only if the file is stored across consecutive
+; clusters in its host filesystem, otherwise an .ICLUS error is returned.
+;
 ; Entry:      C (A) = Drive letter, 0=A:, etc
 ;             B  = Action to perform
 ;                  0: Unmap the drive
@@ -2831,27 +2849,6 @@ MAP_UNMAP::
 	pcall	INV_UD
 
 	pop	ix
-	ld	a,(ix+UD_FLAGS##)
-	and	UFM_MT
-	jr	z,UNM_NOFILE	;If the drive has a file mounted, close its file handle
-
-	push	hl
-	push	de
-	ld	hl,MHANDLES##
-	ld	e,(ix+UD_FH##)
-	ld	d,0
-	add	hl,de
-	add	hl,de
-	ld	e,(hl)
-	inc	hl
-	ld	d,(hl)
-	dec	hl
-	push	de
-	pop	ix
-	PCALL	CLOSE_FAB
-	pop	de
-	pop	hl
-UNM_NOFILE:
 	pop	ix
 
 	pcall	FR_P2
@@ -3315,10 +3312,10 @@ MF_CHK_ALRMNT:
 	jr	nz,MF_ALRMNT_NEXT
 
 	ld	a,(iy+19)
-	cp	(ix+UD_SCLUS##)
+	cp	(ix+UD_SCLU##)
 	jr	nz,MF_ALRMNT_NEXT
 	ld	a,(iy+20)
-	cp	(ix+UD_SCLUS##+1)
+	cp	(ix+UD_SCLU##+1)
 	jr	nz,MF_ALRMNT_NEXT
 
 	pop	ix
@@ -3367,26 +3364,22 @@ MF_NO_32M:
 	jp	c,POPIX_RET
 MF_OK_SIZE:
 
+	;* Check if cluster chain is consecutive
+
+	ld a,(ix+FIB_DRIVE##)
+	ld e,(ix+FIB_CLUSTER##)
+	ld d,(ix+FIB_CLUSTER##+1)
+	push hl
+	push ix
+	call CLUSQ##
+	pop ix
+	pop hl
+	or a
+	jp nz,POPIX_RET
+
 	;* All the validations passed!
-	;  Now open the file
-
-	ex	(sp),hl
-	ld	a,h	;Read only flag: open as no-write
-	and	1
-	or	100b	;Inheritable
-	ex	(sp),hl
-	push	hl
-	push	ix
-	call	MF_OPEN
-	pop	ix
-	pop	hl
-	or	a
-	jp	nz,POPIX_RET
-
-	;* Destroy the previous unit descriptor
+	;  Destroy the previous unit descriptor
 	;  and allocate a new one
-
-	push	bc	;B=File handle
 
 	push	hl
 	push	ix
@@ -3400,14 +3393,10 @@ MF_OK_SIZE:
 	call	CREATE_UD
 	pop	de	;Now DE = Pointer to FIB
 
-	pop	bc
 	jp	z,MF_UD_OK
 
-	;UD allocation failed: close file
+	;UD allocation failed
 
-	push	af
-	PCALL	F_CLOSE
-	pop	af
 	call	SETNUMDRV
 	jp	POPIX_RET
 MF_UD_OK:
@@ -3415,16 +3404,29 @@ MF_UD_OK:
 	;* Fill the UD parameters appropriately
 
 	pop	hl	;H=flags
-	ld	(ix+UD_FH##),b
 	ld	a,h
 	and	1
 	ld	(ix+UD_MFLAGS##),a
 
 	ex	de,hl	;Now HL = FIB
 
+	;File name
+
+	push ix
+	ex (sp),hl
+	ld bc,UD_MNAME##
+	add hl,bc
+	ex de,hl	;Now DE points to UD_MNAME
+	pop hl
+	push hl
+	inc hl		;Now HL points to filename in FIB
+	ld bc,13
+	ldir
+	pop hl
+
 	;Start cluster
 
-	ld	bc,19
+	ld	bc,FIB_CLU##
 	add	hl,bc	;Now HL points to start cluster in FIB
 	ld	a,(hl)
 	ld	(ix+UD_SCLU##),a
@@ -3457,6 +3459,25 @@ MF_UD_OK:
 	dec	a
 	ld	(ix+UD_DRV##),a
 
+	;First sector in file drive
+
+	ld	hl,UNIT_TAB##+2
+	ld	c,(ix+UD_DRV##)
+	sla c
+	ld	b,0
+	add	hl,bc
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)	;DE=Address of unit descriptor
+	ex de,hl
+	ld	e,(ix+UD_SCLU##)
+	ld	d,(ix+UD_SCLU##+1)
+	xor a
+	pcall CLU_TO_SEC
+	ld (ix+UD_SSEC##),e
+	ld (ix+UD_SSEC##+1),d
+	ld (ix+UD_SSEC##+2),a
+
 	;Other parameters
 
 	ld	a,UFM_MT	;A file is mounted
@@ -3479,82 +3500,6 @@ BFSZ_RET:
 POPIX_RET:
 	pop	ix
 	ret
-
-
-;This routine opens a file to be mounted.
-;It is almost a clone of F_OPEN in handles.mac,
-;but registers the FAB pointer in the MHANDLES vector instead of
-;using the standard HANDLES, and skips the file attribute checking
-;as it has been already done. It also skips redirection
-;state checking.
-
-MF_OPEN:
-		ex	af,af'			;Save access mode byte
-		pcall	LOC_FIB			;Find the directory entry
-		ret	nz			;Give up if error
-;
-		push	hl			;Save unit descriptor address
-
-		ld	hl,MHANDLES##	;Find a free entry in MHANDLES
-		ld	b,4
-MFOP_SRCH:
-		ld	a,(hl)
-		inc	hl
-		or	(hl)
-		jr	z,MFOP_FOUND
-		inc	hl
-		djnz	MFOP_SRCH
-		ld	a,.NHAND##
-		or	a
-		jr	open_ret_1
-MFOP_FOUND:
-		dec	b	;Convert B to the MHANDLES table entry index
-		ld	a,b
-		xor	11b
-		ld	b,a
-		dec	hl
-;
-		push	hl			;Allocate a new FAB and set
-		pcall	NFAB			; up its reference count.
-		jr	nz,open_ret_2		;Error if out of memory.
-;
-		ex	de,hl
-		ex	(sp),hl			;Save directory entry pointer
-		ld	(hl),e			;Store the pointer to the
-		inc	hl			; new FAB in the file
-		ld	(hl),d			; handle table
-;
-		push	bc
-		push	de			;Copy the compatible portion
-		ex	(sp),ix			; of the FIB into the new
-		pop	hl			; FAB as a start for
-		ld	bc,FAB_FIB##		; setting it up.
-		ldir
-		pop	bc			;Get file handle back
-		pop	de			;DE -> directory entry
-;
-		ld	(ix+FAB_SA##),ATM_HID+ATM_SYS ;Set search attributes
-						      ; so that any file, but
-						      ; no sub-directories
-						      ; will be found.
-;
-		xor	a
-		ld	(ix+FAB_PTR##),a	;Set the four byte file
-		ld	(ix+FAB_PTR##+1),a	; pointer to zero in the
-		ld	(ix+FAB_PTR##+2),a	; file access block.
-		ld	(ix+FAB_PTR##+3),a
-;
-		pop	hl
-		ex	af,af'			;Get access mode byte back
-		pcall	OPEN_FAB		;Open the file access block
-		set	4,(ix+FAB_MODE##)
-open_directory:	xor	a
-		ret
-;
-;
-open_ret_2:	pop	hl
-open_ret_1:	pop	hl			;Return with error code
-		ret
 
 
 ;This subroutine creates an empty unit descriptor
@@ -5300,6 +5245,7 @@ CNEXTOR_S:
 	db	"_MAPDRV()",13,10
 	db	"_MAPDRVL() *",13,10
 	db	"_USR()",13,10
+	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10
 	db	13,10
 	db	"Commands with * are not available",1
 	db	"in MSX-DOS 1 mode.",13,10

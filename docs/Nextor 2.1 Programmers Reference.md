@@ -88,9 +88,13 @@
 
 [8. Change history](#8-change-history)
 
-[8.1. v2.1.0 beta 2](#81-v210-beta-2)
+[8.1. v2.1.1 beta 2](#81-v211-beta-2)
 
-[8.2. v2.1.0 beta 1](#82-v210-beta-1)
+[8.2. v2.1.0 RC 1](#82-v210-rc-1)
+
+[8.3. v2.1.0 beta 2](#83-v210-beta-2)
+
+[8.4. v2.1.0 beta 1](#84-v210-beta-1)
 
 
 ## 1. Introduction
@@ -440,7 +444,7 @@ The information returned in the data buffer is as follows:
 +10..+63: Reserved (currently always zero)
 ```
 
-If a file is mounted in the drive, the information returned in the data buffer is insetad as follows:
+If a file is mounted in the drive, the information returned in the data buffer is instead as follows:
 
 ```
 +1: Drive where the mounted file is located (0 = A:, etc)
@@ -448,11 +452,16 @@ If a file is mounted in the drive, the information returned in the data buffer i
     bit 0: mount mode, 0 = read and write, 1 = read-only
 +3: Always 0
 +4: Filename in printable format (up to 12 characters, plus a terminating zero)
++17: Start cluster of the file, 2 bytes (0 if not available)
++19: Start sector of the file, 4 bytes (0 if not available)
 ```
 
 If a drive larger than the maximum drive number supported by the system is specified, an .IDRV error will be returned. Note that if a drive number is specified which is legal in Nextor, but is currently not assigned to any driver, then no error will be returned, but an empty information block will be returned (the drive status byte should be checked).
 
 The "first device sector number" is the absolute device sector number that is treated as the first logical sector for the drive; usually it is either the starting sector of a device partition, or the device absolute sector zero, if the device has no partitions. Note that you can't test this value against zero to check whether the drive is assigned to a block device on a device-based driver or not (use the “drive status” field for this purpose).
+
+The "start cluster" and "start sector" fields for mounted files were introduced in Nextor 2.1.1. Currently, they will always contain meaningful information, but in future versions of Nextor this could not be true (because non-FAT filesystems with no concept of "clusters" get supported, or for any other reason) and in these cases the fields will have a value of zero. These fields will also be returned as zero in versions of Nextor older than 2.1.1, therefore application programs using this function call should always verify that the values of these fields are non-zero before using them.
+
 
 ### 3.10. Get information about a device partition (_GPART, 7Ah)
 
@@ -611,7 +620,7 @@ When invoked in MSX-DOS 1 mode, the following restrictions apply to this functio
 * The new mapping information may specify a different partition and/or device, but the driver slot must be the same that was assigned to the drive at boot time. This is not an issue if there is only one Nextor kernel in the system.
 These restrictions are imposed by the Nextor architecture.
 
-If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0. A .BFSZ error will be returned if the file is too small or too big.
+If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0, and since Nextor 2.1.1 a file needs to be stored across consecutive sectors in its host filesystem to be mountable. A .BFSZ error will be returned if the file is too small (less than 512 bytes) or too big (more than 32 MBytes). A .ICLUS error will be returned if the file is not stored across consecutive sectors.
 
 
 ### 3.13. Enable or disable the Z80 access mode for a driver (_Z80MODE, 7Dh)
@@ -754,9 +763,9 @@ An attempt to open or alter a mounted file, or to perform any other disallowed o
 
 Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
-* Invalid cluster number (.ICLUS, 0B0h)
+* Invalid cluster number or sequence (.ICLUS, 0B0h)
 
-The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive.
+The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive, or a file was supplied to [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) to be mounted but the file is not stored across consecutive sectors in its host filesystem.
 
 
 ## 5. Extended mapper support routines
@@ -1001,11 +1010,21 @@ This section contains the change history for the different versions of Nextor. O
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Programmers Reference](../../../blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#7-change-history)_ document.
 
-### 8.1. v2.1.0 beta 2
+### 8.1. v2.1.1 beta 2
+
+* [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h) returns two new fields, "start cluster" and "start sector", when a file is mounted.
+
+### 8.2. v2.1.0 RC 1
+
+* [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function call introduced.
+* [UNAPI RAAM helper compatible routines](#5-extended-mapper-support-routines) have been added.
+* Extra mapper support routines `ALL_BK` and `FRE_BK` have been removed.
+
+### 8.3. v2.1.0 beta 2
 
 * [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah) now returns the status byte of the partition, and allows to retrieve the device sector number that holds the partition table entry instead of information about the partition.
 
-### 8.2. v2.1.0 beta 1
+### 8.4. v2.1.0 beta 1
 
 * [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h) now returns an extra flag that tells if the driver implements the DRV_CONFIG routine.
 

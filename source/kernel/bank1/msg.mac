@@ -239,7 +239,7 @@ ERR_MSG_TABLE:
 	err	.PUSED, <"Partition is already in use">
 	err	.FMNT,  <"File is mounted">
 	err	.BFSZ,  <"Bad file size">
-	err	.ICLUS, <"Invalid cluster number">
+	err	.ICLUS, <"Invalid cluster number or sequence">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.
@@ -439,7 +439,7 @@ ERR_KMSG_TABLE:
 	err	.PUSED, <"パーティションが使用中です">	;<"Partition is already in use">
 	err	.FMNT,  <"ファイルがマウントされています">     ;<"File is mounted">
 	err	.BFSZ,  <"無効なファイルサイズ">           ;<"Bad file size">
-	err	.ICLUS, <"無効なクラスター番号">		;<"Invalid cluster number">
+	err	.ICLUS, <"無効なクラスター番号またはシーケンス">		;<"Invalid cluster number or sequence">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.

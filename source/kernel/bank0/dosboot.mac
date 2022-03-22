@@ -294,12 +294,19 @@ NOBOOT:
 		jr	z,msxdos_fail
 ;
 retry_dos:
+		ld a,(MFLAGS##)
+		bit 7,a	;SYST2
+		res 7,a
+		ld (MFLAGS##),a
+		jr nz,retry_dos2
+retry_dos_go:
 		ld	de,BOOT_NAME    ;Try to open the "NEXTOR.SYS"
 		xor	a               ;file on the default drive.
 		ld	c,_OPEN##
 		call	BOOT_BDOS
         jr z,msxdos_bootok
 
+retry_dos2:
         ld	de,OLD_BOOT_NAME    ;Fallback to try "MSXDOS.SYS"
 		xor	a
 		ld	c,_OPEN##
@@ -316,8 +323,6 @@ msxdos_bootok:
 		push	af
 		ld	c,_CLOSE##
 		call	BOOT_BDOS		;Close the file handle
-		ld	hl,MFLAGS##
-		res 1,(hl)
 		pop	af
 		jr	nz,msxdos_fail		;Jump if the read was no good
 ;
@@ -333,8 +338,6 @@ endif
 		jp	100h			;Start up MSXDOS.SYS
 ;
 msxdos_fail:
-		ld	hl,MFLAGS##
-		res	1,(hl)
 		ret
 ;
 ;

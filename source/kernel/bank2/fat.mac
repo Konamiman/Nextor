@@ -898,9 +898,11 @@ zero_dsec_loop:	ld	(hl),c			; the data area of buffer
 		dec de          ;DE = new value
 		or a
 		sbc hl,de       ;HL = current value - new value, Cy=1 if new > current
-		call nc,ACLU_SET
 		pop hl          ;Restore address of unit descriptor
-		ret
+		ret c
+		ld de,(FAT_CHAIN##)
+		dec de
+		jp ACLU_SET
 
 frchlp3:
 		push hl			;Preserve address of unit descriptor
