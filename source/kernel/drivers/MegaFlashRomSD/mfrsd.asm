@@ -2206,7 +2206,7 @@ MYSETSCR:
 	cp	b
 	ret	z
 .restore:
-	xor	a		; Don't displat the function keys
+	xor	a			; Don't displat the function keys
 	ld	ix,SDFSCR
 	jp	EXTROM
 
