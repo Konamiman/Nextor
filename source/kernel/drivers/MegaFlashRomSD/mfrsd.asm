@@ -372,7 +372,7 @@ DRV_INIT:
 	
 		ld	hl,WORK_AREA_SIZE
 		;ld	a,NUM_DRIVES
-		ret					;Note that Cy is 0 (no interrupt hooking needed)
+		ret		;Note that Cy is 0 (no interrupt hooking needed)
 
 .scrnset:
 		call	MYSETSCR
