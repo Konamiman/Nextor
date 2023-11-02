@@ -2171,17 +2171,17 @@ PRINT:
 ; Modifies: all
 MYSETSCR:
 	ld	a,(MSXVER)
-	or	a			; MSX1
-	jr	nz,.notMSX1
+	or	a			; MSX1?
+	jr	nz,.notMSX1		; No, skip
 
 .MSX1:
 	ld	a,(SCRMOD)
 	or	a			; SCREEN0 already?
-	ret				; Yes, quit
-	jp	INITXT		; Set SCREEN0
+	ret	 			; Yes, quit
+	jp	INITXT			; set screen0
 
 .notMSX1:
-	ld	c,23h		; Block-2, R#3
+	ld	c,23h			; Block-2, R#3
 	ld 	ix,REDCLK
 	call	EXTROM
 	and	1
@@ -2206,7 +2206,7 @@ MYSETSCR:
 	cp	b
 	ret	z
 .restore:
-	xor	a			; Don't displat the function keys
+	xor	a		; Don't displat the function keys
 	ld	ix,SDFSCR
 	jp	EXTROM
 
