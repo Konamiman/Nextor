@@ -13,13 +13,13 @@ DRIVER_SUBVERSION	equ	3
 
 ;---------------------------------------------------------------------------
 ; MACROS
-;---------------------------------------------------------------------------				
+;---------------------------------------------------------------------------
 
 ADD_HL_A macro
 		add	a, l	; 4
 		ld	l, a	; 4
 		adc	a, h	; 4
-		sub	l	; 4
+		sub	l		; 4
 		ld	h, a	; 4
 	ENDM
 
@@ -27,7 +27,7 @@ ADD_DE_A macro
 		add	a, e	; 4
 		ld	e, a	; 4
 		adc	a, d	; 4
-		sub	e	; 4
+		sub	e		; 4
 		ld	d, a	; 4
 	ENDM
 
@@ -68,10 +68,21 @@ CODE_ADD:	equ	0F2EDh
 
 ; BIOS
 ENASLT:		equ	#24
+INITXT		equ	#6C
 CHGET		equ	#9f
-CHPUT		equ	#A2	;Character output
+CHPUT		equ	#A2		;Character output
 RSLREG:		equ	#138
-EXPTBL:		equ	#FCC1		
+EXTROM		equ	#15F
+
+SDFSCR		equ	#185
+REDCLK		equ	#1F5
+
+MSXVER		equ	#2D
+LINL40		equ	#F3AE	; Width
+LINLEN		equ	#F3B0
+BDRCLR		equ	#F3EB
+SCRMOD		equ	#FCAF
+EXPTBL:		equ	#FCC1
 SLTWRK:		equ	#FD09
 
 ; SD
@@ -80,7 +91,7 @@ MUL_DAT_TKN_STA	equ	#FC
 MUL_DAT_TKN_END	equ	#FD
 
 ;Driver type:
-DRV_TYPE	equ	1	; 0 for drive-based, 1 for device-based
+DRV_TYPE	equ	1		; 0 for drive-based, 1 for device-based
 
 ;Driver version
 VER_MAIN	equ	1
@@ -95,7 +106,7 @@ WRERR		equ	0FEh
 DISK		equ	0FDh
 NRDY		equ	0FCh
 DATA		equ	0FAh
-RNF		equ	0F9h
+RNF			equ	0F9h
 WPROT		equ	0F8h
 UFORM		equ	0F7h
 SEEK		equ	0F3h
@@ -260,13 +271,13 @@ DRV_NAME:
 	jp	DRV_INIT
 	jp	DRV_BASSTAT
 	jp	DRV_BASDEV
-        jp      DRV_EXTBIO
-        jp      DRV_DIRECT0
-        jp      DRV_DIRECT1
-        jp      DRV_DIRECT2
-        jp      DRV_DIRECT3
-        jp      DRV_DIRECT4
-        jp	DRV_CONFIG
+		jp	DRV_EXTBIO
+		jp	DRV_DIRECT0
+		jp	DRV_DIRECT1
+		jp	DRV_DIRECT2
+		jp	DRV_DIRECT3
+		jp	DRV_DIRECT4
+		jp	DRV_CONFIG
 
 	ds	12
 
@@ -274,24 +285,24 @@ DRV_NAME:
 
 	; These routines are mandatory for drive-based drivers
 
-        jp      DRV_DSKIO
-        jp      DRV_DSKCHG
-        jp      DRV_GETDPB
-        jp      DRV_CHOICE
-        jp      DRV_DSKFMT
-        jp      DRV_MTOFF
+		jp	DRV_DSKIO
+		jp	DRV_DSKCHG
+		jp	DRV_GETDPB
+		jp	DRV_CHOICE
+		jp	DRV_DSKFMT
+		jp	DRV_MTOFF
     ENDIF
 
     IF DRV_TYPE = 1
 
 	; These routines are mandatory for device-based drivers
 
-	jp	DEV_RW
-	jp	DEV_INFO
-	jp	DEV_STATUS
-	jp	LUN_INFO
-	jp	DEV_FORMAT
-	jp	DEV_CMD
+		jp	DEV_RW
+		jp	DEV_INFO
+		jp	DEV_STATUS
+		jp	LUN_INFO
+		jp	DEV_FORMAT
+		jp	DEV_CMD
     ENDIF
 
 
@@ -357,11 +368,15 @@ DRV_TIMI:
 ;-----------------------------------------------------------------------------
 DRV_INIT:
 		or	a
-		jr	nz,.secondExe	; Second execution
+		jr	nz,.scrnset
 	
 		ld	hl,WORK_AREA_SIZE
 		;ld	a,NUM_DRIVES
-		ret		;Note that Cy is 0 (no interrupt hooking needed)
+		ret					;Note that Cy is 0 (no interrupt hooking needed)
+
+.scrnset:
+		call	MYSETSCR
+		jr	nz,.secondExe	; Second execution
 
 .secondExe:
 		ld	de,TXT_INFO
@@ -374,7 +389,7 @@ DRV_INIT:
 		ld	de,TXT_ROMDSKOK
 		call	PRINT		; Print "Rom disk found"
 
-		ld	c,1		; Flag ROM disk found
+		ld	c,1				; Flag ROM disk found
 .notFound:		
 		ld	b,NUM_SLOTS
 .loop:	
@@ -395,8 +410,8 @@ DRV_INIT:
 		sub	b
 		ld	c,a
 		push	bc
-		ld	(#5800),a		; Select SD slot
-		call	InitSD			; Init SD card
+		ld	(#5800),a	; Select SD slot
+		call	InitSD	; Init SD card
 		call	SD_OFF
 		pop	bc			; C = SD slot
 		ei
@@ -415,7 +430,7 @@ DRV_INIT:
 
 		ld	b,e		; Card type
 		ld	de,TXT_INIT
-		call	PRINT		; Card init text
+		call	PRINT	; Card init text
 	
 		ld	a,c			; SD slot
 		add	a,'1'
@@ -430,7 +445,7 @@ DRV_INIT:
 		ld	e,(hl)
 		inc	hl
 		ld	d,(hl)
-		call	PRINT		; Shows card type
+		call	PRINT	; Shows card type
 .notCard:
 		pop	bc
 		djnz	.loop
@@ -1322,7 +1337,7 @@ InitSD:
 	ret	c			; Timeout (card removed or damaged?)
 	ret	nz			; Command error
 
-	;call	GETWRK			; Ya deberï¿½a tener en IX el workarea
+	;call	GETWRK			; Ya deber?¿½a tener en IX el workarea
 	
 	res	BIT_SDHC,(ix+STATUS)	; Set SDSC as default
 	
@@ -1461,7 +1476,7 @@ MMC_FOUND:
 
 ;-----------------------------------------------------------------------------
 ; Inicializa la SD y pone el modo SPI.
-; Si no se hace asï¿½ falla en el FS-A1.
+; Si no se hace as?¿½ falla en el FS-A1.
 ; Aparentemente, si se escribe el CRC (#95) desde un registro falla.
 ;-----------------------------------------------------------------------------
 SD_INIT:
@@ -1603,7 +1618,7 @@ SD_CMD:
 	ld	b,0
 SD_CMD2:
 	ld	a,(de)
-	cp	#ff		; Aquï¿½ se podrï¿½a mirar solo el bit 7? 0=ready
+	cp	#ff		; Aqu?¿½ se podr?¿½a mirar solo el bit 7? 0=ready
 	ccf
 	ret	nc
 
@@ -2149,34 +2164,82 @@ PRINT:
 		include	"romdisk.asm"
 
 ;-----------------------------------------------------------------------------
+;
+; Restore screen parameters on MSX>=2 if they're not set yet
+; Input   : none
+; Output  : none
+; Modifies: all
+MYSETSCR:
+	ld	a,(MSXVER)
+	or	a			; MSX1
+	jr	nz,.notMSX1
+
+.MSX1:
+	ld	a,(SCRMOD)
+	or	a			; SCREEN0 already?
+	ret				; Yes, quit
+	jp	INITXT		; Set SCREEN0
+
+.notMSX1:
+	ld	c,23h		; Block-2, R#3
+	ld 	ix,REDCLK
+	call   EXTROM
+	and	1
+	ld	b,a
+	ld	a,(SCRMOD)
+	cp	b
+	jr	nz,.restore
+	inc	c
+	ld 	ix,REDCLK
+	call   EXTROM
+	ld	b,a
+	inc	c
+	ld 	ix,REDCLK
+	call   EXTROM
+	add	a,a
+	add	a,a
+	add	a,a
+	add	a,a
+	or	b
+	ld	b,a
+	ld	a,(LINLEN)
+	cp	b
+	ret	z
+.restore:
+	xor	a			; Don't displat the function keys
+	ld	ix,SDFSCR
+	jp     EXTROM
+
+;-----------------------------------------------------------------------------
 ; Strings
 ;-----------------------------------------------------------------------------
 
 VERSION_STRING macro v_main, v_sub
-db	"Version &v_main&.&v_sub&",13,10
+db	"version &v_main&.&v_sub&",13,10
 endm
 
 TXT_INFO:
-		db	"MegaFlashROM SCC+ SD driver",13,10
+		db	"MegaFlashROM SCC+ SD driver "
 		VERSION_STRING %DRIVER_VERSION,%DRIVER_SUBVERSION
-		db	"(c) Manuel Pazos 2013",13,10
+		db	"(c) 2013 Manuel Pazos",13,10
 TXT_EMPTY:		
 		db	13,10,0
 
 TXT_INIT:
-		db	"SD card slot ",0
+		db	"SD Card slot ",0
 
 TXT_ROMDSKOK:
-		db	"ROM disk found.",13,10,0
+		db	"ROM Disk found.",13,10
+		db	13,10,0
 
 TXT_MMC:
-		db	"MMC",13,10,0
+		db	" MMC",13,10,0
 TXT_SD1x:
-		db	"SDSC 1.x",13,10,0
+		db	" SDSC 1.x",13,10,0
 TXT_SD2x:
-		db	"SDSC 2.x",13,10,0
+		db	" SDSC 2.x",13,10,0
 TXT_SDHC:
-		db	"SDHC",13,10,0
+		db	" SDHC",13,10,0
 	
 IDX_TYPE:
 		dw	TXT_MMC
