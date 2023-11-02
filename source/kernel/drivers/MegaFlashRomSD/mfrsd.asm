@@ -19,7 +19,7 @@ ADD_HL_A macro
 		add	a, l	; 4
 		ld	l, a	; 4
 		adc	a, h	; 4
-		sub	l		; 4
+		sub	l	; 4
 		ld	h, a	; 4
 	ENDM
 
@@ -27,7 +27,7 @@ ADD_DE_A macro
 		add	a, e	; 4
 		ld	e, a	; 4
 		adc	a, d	; 4
-		sub	e		; 4
+		sub	e	; 4
 		ld	d, a	; 4
 	ENDM
 
@@ -70,7 +70,7 @@ CODE_ADD:	equ	0F2EDh
 ENASLT:		equ	#24
 INITXT		equ	#6C
 CHGET		equ	#9f
-CHPUT		equ	#A2		;Character output
+CHPUT		equ	#A2	;Character output
 RSLREG:		equ	#138
 EXTROM		equ	#15F
 
@@ -91,7 +91,7 @@ MUL_DAT_TKN_STA	equ	#FC
 MUL_DAT_TKN_END	equ	#FD
 
 ;Driver type:
-DRV_TYPE	equ	1		; 0 for drive-based, 1 for device-based
+DRV_TYPE	equ	1	; 0 for drive-based, 1 for device-based
 
 ;Driver version
 VER_MAIN	equ	1
@@ -106,7 +106,7 @@ WRERR		equ	0FEh
 DISK		equ	0FDh
 NRDY		equ	0FCh
 DATA		equ	0FAh
-RNF			equ	0F9h
+RNF		equ	0F9h
 WPROT		equ	0F8h
 UFORM		equ	0F7h
 SEEK		equ	0F3h
@@ -389,7 +389,7 @@ DRV_INIT:
 		ld	de,TXT_ROMDSKOK
 		call	PRINT		; Print "Rom disk found"
 
-		ld	c,1				; Flag ROM disk found
+		ld	c,1		; Flag ROM disk found
 .notFound:		
 		ld	b,NUM_SLOTS
 .loop:	
@@ -411,7 +411,7 @@ DRV_INIT:
 		ld	c,a
 		push	bc
 		ld	(#5800),a	; Select SD slot
-		call	InitSD	; Init SD card
+		call	InitSD		; Init SD card
 		call	SD_OFF
 		pop	bc			; C = SD slot
 		ei
@@ -1337,7 +1337,7 @@ InitSD:
 	ret	c			; Timeout (card removed or damaged?)
 	ret	nz			; Command error
 
-	;call	GETWRK			; Ya deber?申a tener en IX el workarea
+	;call	GETWRK			; Ya deber?a tener en IX el workarea
 	
 	res	BIT_SDHC,(ix+STATUS)	; Set SDSC as default
 	
@@ -1476,7 +1476,7 @@ MMC_FOUND:
 
 ;-----------------------------------------------------------------------------
 ; Inicializa la SD y pone el modo SPI.
-; Si no se hace as?申 falla en el FS-A1.
+; Si no se hace as? falla en el FS-A1.
 ; Aparentemente, si se escribe el CRC (#95) desde un registro falla.
 ;-----------------------------------------------------------------------------
 SD_INIT:
@@ -1618,7 +1618,7 @@ SD_CMD:
 	ld	b,0
 SD_CMD2:
 	ld	a,(de)
-	cp	#ff		; Aqu?申 se podr?申a mirar solo el bit 7? 0=ready
+	cp	#ff		; Aqu? se podr?a mirar solo el bit 7? 0=ready
 	ccf
 	ret	nc
 
@@ -2183,7 +2183,7 @@ MYSETSCR:
 .notMSX1:
 	ld	c,23h		; Block-2, R#3
 	ld 	ix,REDCLK
-	call   EXTROM
+	call	EXTROM
 	and	1
 	ld	b,a
 	ld	a,(SCRMOD)
@@ -2191,11 +2191,11 @@ MYSETSCR:
 	jr	nz,.restore
 	inc	c
 	ld 	ix,REDCLK
-	call   EXTROM
+	call	EXTROM
 	ld	b,a
 	inc	c
 	ld 	ix,REDCLK
-	call   EXTROM
+	call	EXTROM
 	add	a,a
 	add	a,a
 	add	a,a
@@ -2208,7 +2208,7 @@ MYSETSCR:
 .restore:
 	xor	a			; Don't displat the function keys
 	ld	ix,SDFSCR
-	jp     EXTROM
+	jp	EXTROM
 
 ;-----------------------------------------------------------------------------
 ; Strings
