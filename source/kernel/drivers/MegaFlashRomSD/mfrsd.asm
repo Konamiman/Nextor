@@ -271,13 +271,13 @@ DRV_NAME:
 	jp	DRV_INIT
 	jp	DRV_BASSTAT
 	jp	DRV_BASDEV
-		jp	DRV_EXTBIO
-		jp	DRV_DIRECT0
-		jp	DRV_DIRECT1
-		jp	DRV_DIRECT2
-		jp	DRV_DIRECT3
-		jp	DRV_DIRECT4
-		jp	DRV_CONFIG
+        jp      DRV_EXTBIO
+        jp      DRV_DIRECT0
+        jp      DRV_DIRECT1
+        jp      DRV_DIRECT2
+        jp      DRV_DIRECT3
+        jp      DRV_DIRECT4
+        jp	DRV_CONFIG
 
 	ds	12
 
@@ -285,24 +285,24 @@ DRV_NAME:
 
 	; These routines are mandatory for drive-based drivers
 
-		jp	DRV_DSKIO
-		jp	DRV_DSKCHG
-		jp	DRV_GETDPB
-		jp	DRV_CHOICE
-		jp	DRV_DSKFMT
-		jp	DRV_MTOFF
+        jp      DRV_DSKIO
+        jp      DRV_DSKCHG
+        jp      DRV_GETDPB
+        jp      DRV_CHOICE
+        jp      DRV_DSKFMT
+        jp      DRV_MTOFF
     ENDIF
 
     IF DRV_TYPE = 1
 
 	; These routines are mandatory for device-based drivers
 
-		jp	DEV_RW
-		jp	DEV_INFO
-		jp	DEV_STATUS
-		jp	LUN_INFO
-		jp	DEV_FORMAT
-		jp	DEV_CMD
+	jp	DEV_RW
+	jp	DEV_INFO
+	jp	DEV_STATUS
+	jp	LUN_INFO
+	jp	DEV_FORMAT
+	jp	DEV_CMD
     ENDIF
 
 
