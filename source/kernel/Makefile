@@ -64,7 +64,8 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+all: base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm \
+	sdmapperv1 sdmapperv2
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -306,6 +307,38 @@ drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 	drivers/StandaloneASCII8/chgbnk.bin
 
 	$(MKNEXROM) nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(call copy_to_bin,$@)
+
+### FBLabs SDMapper (v1 and v2)
+
+sdmapperv1: drivers/SDMapper/Nextor-$(VERSION).SDMapperv1.ROM
+
+sdmapperv2: drivers/SDMapper/Nextor-$(VERSION).SDMapperv2.ROM
+
+drivers/SDMapper/sdmapperv1.bin: \
+	drivers/SDMapper/sdmapperv1.asm
+
+	$(call assemble,drivers/SDMapper/sdmapperv1.asm,--build-type abs --output-file-extension bin)
+
+drivers/SDMapper/sdmapperv2.bin: \
+	drivers/SDMapper/sdmapperv2.asm
+
+	$(call assemble,drivers/SDMapper/sdmapperv2.asm,--build-type abs --output-file-extension bin)
+
+drivers/SDMapper/Nextor-$(VERSION).SDMapperv1.ROM: \
+	nextor_base.dat \
+	drivers/SDMapper/sdmapperv1.bin \
+	drivers/StandaloneASCII16/chgbnk.bin
+
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SDMapper/sdmapperv1.bin /m:drivers/StandaloneASCII16/chgbnk.bin
+	$(call copy_to_bin,$@)
+
+drivers/SDMapper/Nextor-$(VERSION).SDMapperv2.ROM: \
+	nextor_base.dat \
+	drivers/SDMapper/sdmapperv2.bin \
+	drivers/StandaloneASCII16/chgbnk.bin
+
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SDMapper/sdmapperv2.bin /m:drivers/StandaloneASCII16/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 
