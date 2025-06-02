@@ -4488,7 +4488,7 @@ MAPDRV_NOGETCUR:
 	ld	hl,0
 	ld	(MAPDRV_SEC),hl
 	ld	(MAPDRV_SEC+2),hl
-	jr	MAPDRV_GOTPAR
+	jr	MAPDRV_GOT_PAR_SEC
 MAPDRV_NOP0:
 
 	;* If partition number is 2 to 4, convert it to primary or logical
@@ -4549,6 +4549,7 @@ MAPDRV_GOTPAR:
 
 	ld	(MAPDRV_SEC),de
 	ld	(MAPDRV_SEC+2),hl
+MAPDRV_GOT_PAR_SEC:
 
 	;* Perform the mapping
 

@@ -388,6 +388,8 @@ correct_loop:	push	bc
 		add	hl,bc
 		ld	a,(hl)			;A := sector number (bit16-22)
 						; from this buffer
+		sbc hl,bc
+
 ;===== end add FAT16
 		ex	de,hl
 		ld	bc,(RW_PSEC##)		;Compare with sector number
