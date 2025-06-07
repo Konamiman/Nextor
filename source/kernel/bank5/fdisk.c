@@ -1229,7 +1229,7 @@ void TestDeviceAccess()
 	InitializeScreenForTestDeviceAccess(message);
 
 	while(GetKey() == 0) {
-		sprintf(buffer, "%u", sectorNumber);
+		sprintf(buffer, "%lu", sectorNumber);
 		//_ultoa(sectorNumber, buffer, 10);
 		Locate(messageLen, MESSAGE_ROW);
 		print(buffer);
