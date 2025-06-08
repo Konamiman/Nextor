@@ -1230,7 +1230,6 @@ void TestDeviceAccess()
 
 	while(GetKey() == 0) {
 		sprintf(buffer, "%lu", sectorNumber);
-		//_ultoa(sectorNumber, buffer, 10);
 		Locate(messageLen, MESSAGE_ROW);
 		print(buffer);
 		print(" ...\x1BK");
@@ -1245,7 +1244,7 @@ void TestDeviceAccess()
 
 		if((error = regs.Bytes.A) != 0) {
 			strcpy(buffer, errorMessageHeader);
-			sprintf(buffer + strlen(errorMessageHeader), "%u", sectorNumber);
+			sprintf(buffer + strlen(errorMessageHeader), "%lu", sectorNumber);
 			strcpy(buffer + strlen(buffer), ":");
 			PrintDosErrorMessage(error, buffer);
 			PrintStateMessage("Continue reading sectors? (y/n) ");
