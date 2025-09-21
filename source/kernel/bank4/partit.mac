@@ -1656,21 +1656,13 @@ CHECK_FAT_BOOT:
 
 		ld	c,(iy+UPB_NUM_ROOT_DIR_ENTRIES##)
 		ld	b,(iy+UPB_NUM_ROOT_DIR_ENTRIES##+1)	;BC=Num of root dir entries
-		ld	a,c
-		and	11111b
-		ld	hl,0
-		jr	z,NO_ODD_ENTRIES
-		ld	hl,1
-NO_ODD_ENTRIES:
-		srl	b	;Divide by 32
-		rr	c
-		srl	b
-		rr	c
-		srl	b
-		rr	c
-		srl	b
-		rr	c	
-		add	hl,bc	;HL=Num of root dir sectors
+		ld	hl,15
+		add hl,bc
+		ld b,4
+CALC_SECDIR:
+		srl	h	;Divide by 16, round up
+		rr	l
+		djnz CALC_SECDIR	;HL=Num of root dir sectors
 
 		ld	c,(iy+UPB_RESERVED_SECTORS##)
 		ld	b,(iy+UPB_RESERVED_SECTORS##+1)
@@ -1947,11 +1939,13 @@ CALC_1SECDIR:
 	ld	(iy+17),h
 	ex	de,hl
 
-	;1er data sector =(Reserved sectors+Num FATs*Sectors per FAT)+
+	;1st data sector =(Reserved sectors+Num FATs*Sectors per FAT)+
 	;                 (32*Directory entries/512)
 
-	ld	l,(ix+17)	;Calculate directory entries/16
+	ld	l,(ix+17)	;Calculate directory entries/16, round up
 	ld	h,(ix+18)
+	ld	bc,15
+	add	hl,bc
 	ld	b,4
 CALC_1SECDAT:
 	srl	h
@@ -1965,7 +1959,7 @@ CALC_1SECDAT:
 	;Num clusters+1=((Total sectors-1st data sector)/Sectors per cluster)+1
 
 	push	hl
-	pop	bc	;DE=1st data sector
+	pop	bc	;BC=1st data sector
 	ld	l,(ix+19)
 	ld	h,(ix+20)
 	ld	de,0
