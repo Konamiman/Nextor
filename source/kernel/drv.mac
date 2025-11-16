@@ -230,11 +230,11 @@ GETCURKEY:
     ;A = Current key index
     ;We do an initial rotation because we want to start at key 1.
 CHGLOOP:
-    sra c
-    rr e
-    rr d
+	srl h
     rr l
-    rr h
+    rr d
+    rr e
+    rr c
     bit 0,c
     ret nz
 
