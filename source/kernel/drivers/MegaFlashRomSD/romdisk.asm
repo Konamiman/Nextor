@@ -154,6 +154,7 @@ RomDiskRead:
 ;             2: Device name string
 ;             3: Serial number string
 ;         HL = Pointer to a buffer in RAM
+;         D  = Buffer size (added for Nextor 3)
 ;Output:  A = Error code:
 ;             0: Ok
 ;             1: Device not available or invalid device index
@@ -167,13 +168,8 @@ RomDiskRead:
 ;
 ;-----------------------------------------------------------------------------
 RomDiskInfo:
-		call	GETWRK
-		bit	BIT_ROM_DSK,(IX+0)	; Is ROM disk available?
-		jr	nz,.ok
+		ld a,d
 
-		ld	a,1			; Device not available
-		ret
-.ok:		
 		djnz	.INFO2
 		; 1: Manufacturer name string	
 		ld	de,TXT_MANU
@@ -187,26 +183,20 @@ RomDiskInfo:
 		jr	.end
 	
 .INFO3:
-		djnz	.INFO0
+		djnz	.INFO_ERR
 		; 3: Serial number string
 		ld	de,TXT_SERIAL
 		jr	.end
-	
-.INFO0:
-		; 0: Basic information
-		ld	(hl),1	; Number of logical units
-		inc	hl
-		ld	(hl),0	; Flags: always zero in Alpha 2b.
-		xor	a
+
+.INFO_ERR:
+		ld a,2
 		ret
-	
+
 .end:
 		ex	de,hl
-		ld	bc,16+1
-		ldir
-	
-		xor	a
-		ret
+		ld	b,a
+		jp OUTPUT_STRING
+
 
 ;-----------------------------------------------------------------------------
 ;
@@ -283,8 +273,8 @@ RomDiskStatus:
 ; For other types of device, these fields must be zero.
 ;-----------------------------------------------------------------------------
 RomDiskLUN_INFO:
-		dec	b
-		jp	nz,LUN_ERROR
+		;dec	b
+		;jp	nz,LUN_ERROR
 		
 		call	GETWRK
 		bit	BIT_ROM_DSK,(IX+0)	; Is ROM disk available?

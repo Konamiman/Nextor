@@ -480,7 +480,11 @@ Output: A = QUERY_OK or QUERY_NOT_IMPLEMENTED
 
 QUERY_NOT_IMPLEMENTED or returning B=255 means automatic number of drives (based on number of available devices)
 
-Same as old DRV_CONFIG when invoked with A=1, except that DOS1/2 mode is now passed in bit 0 of C instead of in B; and A can return an error code.
+Note: this is the same as the old DRV_CONFIG when invoked with A=1, except that:
+
+- DOS1/2 mode is now passed in bit 0 of C instead of in B
+- B=255 means automatic number of drives
+- The "not available" error code returned in A is "not implemented" instead of 1.
 
 -----
 
@@ -492,17 +496,17 @@ Input:  B = Relative drive number for driver
             5: set if user is requesting reduced drive count (by pressing the 5 key)
             Others: 0
 Output: A = QUERY_OK or QUERY_NOT_IMPLEMENTED
-        B = Device number (0 to leave drive unmapped)
+        B = Device number (0 for automatic configuration)
 
 QUERY_NOT_IMPLEMENTED is equivalent to returning QUERY_OK and B=0.
 
-Same as old DRV_CONFIG when invoked with A=2, except that:
+Note: this is the same as old DRV_CONFIG when invoked with A=2, except that:
 
 - Drive number is now passed in B, not C.
 - DOS1/2 is now passed in C, not B.
 - Reduced drive count request is now passed in C.
 - No LUN code returned anymore.
-- An error code is returned in A.
+- The "not avialble" error code returned in A is "not implemented" instead of 1.
 
 -----
 

@@ -4,10 +4,8 @@
 ; By Manuel Pazos 14/12/2012
 ;
 ; 24/07/2018 - v1.3 Implement DRV_CONFIG routine (Nextor 2.0.5)
+; v1.4 - Adapt to Nextor 3
 ;-----------------------------------------------------------------------------
-
-DRIVER_VERSION		equ	1
-DRIVER_SUBVERSION	equ	3
 
 	.RELAB
 
@@ -69,7 +67,6 @@ CODE_ADD:	equ	0F2EDh
 ; BIOS
 ENASLT:		equ	#24
 CHGET		equ	#9f
-CHPUT		equ	#A2	;Character output
 RSLREG:		equ	#138
 EXPTBL:		equ	#FCC1		
 SLTWRK:		equ	#FD09
@@ -79,17 +76,13 @@ DATA_TOKEN	equ	#FE
 MUL_DAT_TKN_STA	equ	#FC
 MUL_DAT_TKN_END	equ	#FD
 
-;Driver type:
-DRV_TYPE	equ	1	; 0 for drive-based, 1 for device-based
-
 ;Driver version
 VER_MAIN	equ	1
-VER_SEC		equ	3
+VER_SEC		equ	4
 VER_REV		equ	0
 
 
 ; Error codes for DEV_RW
-    IF DRV_TYPE = 1
 NCOMP		equ	0FFh
 WRERR		equ	0FEh
 DISK		equ	0FDh
@@ -102,8 +95,27 @@ SEEK		equ	0F3h
 IFORM		equ	0F0h
 IDEVL		equ	0B5h
 IPARM		equ	08Bh
-    ENDIF
 
+
+; Nextor 3 driver constants
+
+QUERY_OK: equ 0
+QUERY_TRUNCATED_STRING: equ 1
+QUERY_INVALID_DEVICE: equ 2
+QUERY_INIT_ERROR: equ 3
+QUERY_NOT_IMPLEMENTED: equ 0FFh
+
+DRVQ_GET_VERSION: equ 1
+DRVQ_GET_STRING: equ 2
+DRVQ_GET_INIT_PARAMS: equ 3
+DRVQ_INIT: equ 4
+DRVQ_GET_NUM_BOOT_DRIVES: equ 5
+DRVQ_GET_DRIVE_BOOT_CONFIG: equ 6
+DRVQ_GET_MAX_DEVICE: equ 7
+
+DEVQ_GET_STRING: equ 1
+DEVQ_GET_PARAMS: equ 2
+DEVQ_GET_STATUS: equ 3
 
 ;-----------------------------------------------------------------------------
 ; Start
@@ -196,129 +208,291 @@ CUR_BANK	equ	40FFh
 
 
 ;-----------------------------------------------------------------------------
-;
-; Built-in format choice strings
-;
-;-----------------------------------------------------------------------------
-NULL_MSG  equ     781Fh	;Null string (disk can't be formatted)
-SING_DBL  equ     7820h ;"1-Single side / 2-Double side"
+
+	;Driver signature
+
+	db	"NEXTORv3_DRIVER",0
+
+	;Jump table
+
+	jp	DRV_TIMI ;TIMER_INT
+	jp	DRV_BASSTAT ;OEMSTAT
+	jp	DRV_BASDEV ;BASDEV
+	jp	DRV_EXTBIO ;EXTBIO
+	jp	DRV_DIRECT0 ;DIRECT_0
+	jp	DRV_DIRECT1 ;DIRECT_1
+	jp	DRV_DIRECT2 ;DIRECT_2
+	jp	DRV_DIRECT3 ;DIRECT_3
+	jp	DRV_DIRECT4 ;DIRECT_4
+	jp	DRIVER_QUERY
+	jp	DEVICE_QUERY
+	jp	CUSTOM_DRIVER_QUERY
+	jp  CUSTOM_DEVICE_QUERY
+	jp	READ_WRITE
 
 
-;-----------------------------------------------------------------------------
-;
-; Driver signature
-;
-;-----------------------------------------------------------------------------
-	db	"NEXTOR_DRIVER",0
-
-
-;-----------------------------------------------------------------------------
-;
-; Driver flags:
-;    bit 0: 0 for drive-based, 1 for device-based
-;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
-;    bit 2: 1 if the driver provides configuration
-;             (implements the DRV_CONFIG routine)
-;-----------------------------------------------------------------------------
-    IF DRV_TYPE = 0
-	db	0
-    ENDIF
-
-    IF DRV_TYPE = 1
-	db	%00000111
-    ENDIF
-
-
-;-----------------------------------------------------------------------------
-;
-; Reserved byte
-;
-;-----------------------------------------------------------------------------
-	db	0
-
-
-;-----------------------------------------------------------------------------
-;
 ; Driver name
-;
-;-----------------------------------------------------------------------------
+
 DRV_NAME:
-	db	"MegaFlashROM SCC+ SD"
-	ds	32-($-DRV_NAME)," "
+	db	"MegaFlashROM SCC+ SD",0
+
 
 
 ;-----------------------------------------------------------------------------
 ;
-; Jump table for the driver public routines
-;
-;-----------------------------------------------------------------------------	
-	; These routines are mandatory for all drivers
-        ; (but probably you need to implement only DRV_INIT)
-
-	jp	DRV_TIMI
-	jp	DRV_VERSION
-	jp	DRV_INIT
-	jp	DRV_BASSTAT
-	jp	DRV_BASDEV
-        jp      DRV_EXTBIO
-        jp      DRV_DIRECT0
-        jp      DRV_DIRECT1
-        jp      DRV_DIRECT2
-        jp      DRV_DIRECT3
-        jp      DRV_DIRECT4
-        jp	DRV_CONFIG
-
-	ds	12
-
-    IF DRV_TYPE = 0
-
-	; These routines are mandatory for drive-based drivers
-
-        jp      DRV_DSKIO
-        jp      DRV_DSKCHG
-        jp      DRV_GETDPB
-        jp      DRV_CHOICE
-        jp      DRV_DSKFMT
-        jp      DRV_MTOFF
-    ENDIF
-
-    IF DRV_TYPE = 1
-
-	; These routines are mandatory for device-based drivers
-
-	jp	DEV_RW
-	jp	DEV_INFO
-	jp	DEV_STATUS
-	jp	LUN_INFO
-	jp	DEV_FORMAT
-	jp	DEV_CMD
-    ENDIF
+; Compatibility layer for translating Nextor v2 driver routines
+; to the Nextor v3 driver structure
 
 
-;=====
-;=====  END of data that must be at fixed addresses
-;=====
+	;Output a string
+	;Input:  HL = String
+	;        DE = Destination
+	;        B  = Max length including terminator
+	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING
+	;        DE = Pointer to the 0
+	
+OUTPUT_STRING:
+	ld a,b
+	or a
+	ret z
+
+OUTPUT_STRING_LOOP:
+	ld a,(hl)
+	or a
+	ld (de),a
+	ret z
+
+	inc hl
+	inc de
+	djnz OUTPUT_STRING
+
+    dec de
+	xor a
+	ld (de),a
+	ld a,QUERY_TRUNCATED_STRING
+	ret
+
+
+	;--- Driver query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                QUERY_OK: success
+	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DRIVER_QUERY:
+	dec a
+	jr z,DO_DRVQ_GET_VERSION
+	dec a
+	jr z,DO_DRVQ_GET_STRING
+	dec a
+	jr z,DO_DRVQ_GET_INIT_PARAMS
+	dec a
+	jr z,DO_DRVQ_INIT
+	dec a
+	jr z,DO_DRVQ_GET_NUM_BOOT_DRIVES
+	dec a
+	jr z,DO_DRVQ_GET_DRIVE_BOOT_CONFIG
+	dec a
+	jr z,DO_DRVQ_GET_MAX_DEVICE
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_VERSION:
+	call NEXTOR2_DRV_VERSION
+	ld d,c
+	ld c,b
+	ld b,a
+	xor a
+	ret
+
+DO_DRVQ_GET_STRING:
+	ld a,b	;String index
+	ld b,d	;Buffer size
+	ex de,hl
+	dec a
+	ld hl,DRV_NAME
+	jp z,OUTPUT_STRING
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_INIT_PARAMS:
+	push de
+	pop iy
+	xor a
+	call NEXTOR2_DRV_INIT
+	ld b,0
+	rl b
+	xor a
+	ret
+
+DO_DRVQ_INIT:
+	push de
+	pop iy
+	ld a,1
+	call NEXTOR2_DRV_INIT
+	xor a
+	ret
+
+DO_DRVQ_GET_NUM_BOOT_DRIVES:
+	ld a,1
+	ld c,b	;TODO: Reduced count passed in bit 5 of C or not?
+	call NEXTOR2_DRV_CONFIG
+	or a
+	ret z
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_DRIVE_BOOT_CONFIG:
+	ld a,b
+	ld b,c
+	ld c,a
+	ld a,2
+	call NEXTOR2_DRV_CONFIG
+	or a
+	ret z
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_MAX_DEVICE:
+	ld b,3
+	xor a
+	ret
+
+CHPUT: jp (iy)
+
+
+	;--- Device query
+	;    Input:  A = Query index
+	;            C = Device number
+	;            F, B, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                QUERY_OK: success
+	;                QUERY_INVALID_DEVICE: Invalid device number
+	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DEVICE_QUERY:
+	push af
+	ld a,c
+
+	or a
+	jr z,INVALID_DEVICE
+	cp 3+1
+	jr nc,INVALID_DEVICE
+
+	if NUM_SLOTS eq 1
+	cp 2
+	jr z,INVALID_DEVICE
+	endif
+	
+	pop af
+	dec a
+	jr z,DO_DEVQ_GET_STRING
+	dec a
+	jr z,DO_DEVQ_GET_PARAMS
+	dec a
+	jr z,DO_DEVQ_GET_STATUS
+	dec a
+	jr z,DO_DEVQ_GET_AVAILABILITY
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+INVALID_DEVICE:
+	pop af
+	ld a,QUERY_INVALID_DEVICE
+	ret
+
+DO_DEVQ_GET_STRING:
+	ld a,b
+	or a
+	jr z,RETURN_NOT_IMP
+
+	ld a,c	;Device number
+	jp NEXTOR2_DEV_INFO
+
+DO_DEVQ_GET_PARAMS:
+	ld a,h
+	or l
+	ret z	;No buffer: just return no error (device id is ok)
+
+	ld a,c
+	ld b,1
+	push hl
+	call NEXTOR2_LUN_INFO
+	pop ix
+	or a
+	ret z
+
+	;Assume error is "device not available" (we checked the device id first),
+	;then return default parameters but with removable bit set
+	xor a
+	ld (ix),a
+	ld (ix+1),a
+	ld (ix+2),2	;Sector size, high byte
+	ld (ix+3),a
+	ld (ix+4),a
+	ld (ix+5),a
+	ld (ix+6),a
+	ld (ix+7),1	;Removable flag
+	ld (ix+8),a
+	ld (ix+9),a
+	ld (ix+10),a
+	ld (ix+11),a
+	ret
+
+DO_DEVQ_GET_AVAILABILITY:
+	ld b,0
+	jr DO_DEVQ_GET_STATUS_AVAILABILITY
+DO_DEVQ_GET_STATUS:
+	ld b,1
+DO_DEVQ_GET_STATUS_AVAILABILITY:
+	ld a,c
+	call NEXTOR2_DEV_STATUS
+	ld b,a
+	;Assume A=0 means "device not available" and not "invalid device id"
+	;(we checked the device id first)
+	xor a
+	ret
+
+CUSTOM_DRIVER_QUERY:
+CUSTOM_DEVICE_QUERY:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+READ_WRITE:
+	ld c,1
+	call NEXTOR2_DEV_RW
+	ld b,c
+	ret
+
+RETURN_NOT_IMP:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
 
 ;-----------------------------------------------------------------------------
 ;
 ; BASIC expanded statement ("CALL") handler.
-; Works the expected way, except that     IF invoking CALBAS is needed,
+; Works the expected way, except that IF invoking CALBAS is needed,
 ; it must be done via the CALLB0 routine in kernel page 0.
 ;-----------------------------------------------------------------------------
 DRV_BASSTAT:
 	scf
-	;include	"expcall.asm"
 	ret
 	
 ;-----------------------------------------------------------------------------
-; Dejamos libre el area usada por los puertos del MegaSD #4000-#5FFF
+; Leave free space for the MegaSD ports, #4000-#5FFF
 ;-----------------------------------------------------------------------------
 	ds #6000-$
 
 
 ;-----------------------------------------------------------------------------
 ; Timer interrupt routine, it will be called on each timer interrupt
-; (at 50 or 60Hz), but only     IF DRV_INIT returns Cy=1 on its first execution.
+; (at 50 or 60Hz), but only IF DRV_INIT returns Cy=1 on its first execution.
 ;-----------------------------------------------------------------------------
 DRV_TIMI:
 	ret
@@ -348,19 +522,12 @@ DRV_TIMI:
 ;        IF first execution requests more work area than available,
 ;    second execution will not be done and DRV_TIMI will not be hooked
 ;    to the timer interrupt.
-;
-;        IF first execution requests more drives than available,
-;    as many drives as possible will be allocated, and the initialization
-;    procedure will continue the normal way
-;    (for drive-based drivers only. Device-based drivers always
-;     get two allocated drives.)
 ;-----------------------------------------------------------------------------
-DRV_INIT:
+NEXTOR2_DRV_INIT:
 		or	a
 		jr	nz,.secondExe	; Second execution
 	
 		ld	hl,WORK_AREA_SIZE
-		;ld	a,NUM_DRIVES
 		ret		;Note that Cy is 0 (no interrupt hooking needed)
 
 .secondExe:
@@ -448,14 +615,11 @@ DRV_INIT:
 ;         B = Secondary version number
 ;         C = Revision number
 ;-----------------------------------------------------------------------------
-DRV_VERSION:
+NEXTOR2_DRV_VERSION:
 	ld	a,VER_MAIN
 	ld	b,VER_SEC
 	ld	c,VER_REV
 	ret
-
-
-
 
 
 ;-----------------------------------------------------------------------------
@@ -495,6 +659,7 @@ DRV_DIRECT3:
 DRV_DIRECT4:
 	ret
 
+
 ;-----------------------------------------------------------------------------
 ;
 ; Get driver configuration
@@ -524,7 +689,7 @@ DRV_DIRECT4:
 ;     B = Device index
 ;     C = LUN index
 
-DRV_CONFIG:
+NEXTOR2_DRV_CONFIG:
 	dec	a
 	jr	z,.GetNumDrives
 	
@@ -552,6 +717,31 @@ DRV_CONFIG:
 	ret
 	
 .GetRelDrvNum:
+	ld a,c
+	or a
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret z
+	ld	b,c
+	xor a
+	ret
+
+
+	call	RomDiskCheck
+	jr	z,.GetRelDrvNum_WithRomDisk
+
+.GetRelDrvNum_WithoutRomDisk:
+	;If no ROM disk is available:
+	;drive 0 = device 1 (SD 1), drive 1 = device 2 (SD 2)
+
+	ld	b,c
+	inc	b
+	xor a
+	ret
+
+.GetRelDrvNum_WithRomDisk:
+	;If ROM disk is available:
+
+
 
 	ld	b,c
 	inc	b
@@ -567,34 +757,13 @@ DRV_CONFIG:
 	ret
 
 
-;=====
-;=====  BEGIN of DRIVE-BASED specific routines
-;=====
-
-    IF DRV_TYPE = 0
-	include	"drivebased.asm"
-    ENDIF
-
-;=====
-;=====  END of DRIVE-BASED specific routines
-;=====
-
-
-
-;=====
-;=====  BEGIN of DEVICE-BASED specific routines
-;=====
-
-    IF DRV_TYPE = 1
-
 ;-----------------------------------------------------------------------------
 ;
 ; Read or write logical sectors from/to a logical unit
 ;
 ;Input:    Cy=0 to read, 1 to write
-;          A = Device number, 1 to 7
+;          A = Device number
 ;          B = Number of sectors to read or write
-;          C = Logical unit number, 1 to 7
 ;          HL = Source or destination memory address for the transfer
 ;          DE = Address where the 4 byte sector number is stored.
 ;Output:   A = Error code (the same codes of MSX-DOS are used):
@@ -611,18 +780,20 @@ DRV_CONFIG:
 ;              .SEEK: Seek error.
 ;          B = Number of sectors actually read (in case of error only)
 ;-----------------------------------------------------------------------------
-DEV_RW:
+NEXTOR2_DEV_RW:
 	
 	push	af
-	dec	a
+
+	or a
+	jp z,.error
+
+	cp 3
 	jp	z,.romdisk	; ROM disk device
 
-	dec	a
-	cp	NUM_SLOTS	; Device number
+	cp	NUM_SLOTS+1
 	jp	nc,.error
-	
-	dec	c		; LUN
-	jp	nz,.error
+
+	dec	a	; 0 for slot 1, 1 for slot 2
 
 	di
 	call	SD_ON
@@ -725,21 +896,16 @@ DEV_RW:
 ;
 ;Input:   A = Device index, 1 to 7
 ;         B = Information to return:
-;             0: Basic information
 ;             1: Manufacturer name string
 ;             2: Device name string
 ;             3: Serial number string
 ;         HL = Pointer to a buffer in RAM
+;         D  = Buffer size (added in Nextor 3)
 ;Output:  A = Error code:
-;             0: Ok
-;             1: Device not available or invalid device index
-;             2: Information not available, or invalid information index
-;         When basic information is requested,
-;         buffer filled with the following information:
-;
-;+0 (1): Numer of logical units, from 1 to 7. 1     IF the device has no logical
-;        units (which is functionally equivalent to having only one).
-;+1 (1): Device flags, always zero in Alpha 2b.
+;             QUERY_OK: success
+;             QUERY_INVALID_DEVICE: Invalid device number
+;             QUERY_NOT_IMPLEMENTED: query not implemented
+;             QUERY_TRUNCATED_STRING: truncated string
 ;
 ; The strings must be printable ASCII string (ASCII codes 32 to 126),
 ; left justified and padded with spaces. All the strings are optional,
@@ -755,17 +921,45 @@ DEV_RW:
 ; and     IF it is too long, the rightmost characters must be
 ; provided, not the leftmost.
 ;-----------------------------------------------------------------------------
-DEV_INFO:
-		dec	a
+NEXTOR2_DEV_INFO:
+
+		;* Check device number, 
+		;  note that we know already it's valid
+		;  (1,2 or 3 for two slots driver; 1 or 3 for one slot driver)
+
+		cp 3
 		jp	z,RomDiskInfo		; ROM disk
-		
-		dec	a
-		cp	NUM_SLOTS
-		jp	nc,.DEV_INFO_ERROR
-		
+
+		;* Check query index
+
+		ld e,a	;Save device index
+
+		ld a,b
+		or a
+		jp z,.DEV_INFO_NOT_IMP
+		cp 3+1
+		jp nc,.DEV_INFO_NOT_IMP
+
+		;* Check buffer length
+
+		ld a,d
+		or a
+		ret z
+
+		cp 1
+		jr nz,.DEV_INFO_OKBUFFER
+		xor a
+		ld (hl),a	;Buffer length is 1: just put the zero
+		ret
+.DEV_INFO_OKBUFFER:
+
+		;* All input params ok!
+
+		ld a,e	;Device index
+		dec a	;0 for slot 1, 1 for slot 2
+		push de	;Save buffer length in D
+
 		call	GETWRK
-		push	ix
-		pop	de
         	
 		di
 		call	SD_ON
@@ -776,22 +970,34 @@ DEV_INFO:
 		call	GetCID
 		pop	de		; DE = Buffer in RAM, HL = SD registers
 		pop	bc
-		jp	c,.DEV_INFO_ERROR
+		pop iy	;IYh =　buffer length
+		jp	c,.DEV_INFO_BAD_DEVICE_SDOFF
 		
 		djnz	.DEV_INFO2
 		
 		; 1: Manufacturer name string
-        	
+
 		ld	a,(hl)	; ID
-		push	af	
+		push	af
 		ld	b,15 + 2
 		call	SkipBytes
 		call	GetManufacName
-		ld	b,0
-		ldir		; Copy manufacturer name to buffer
-		pop	bc
+		ld	b,iyh
+		call OUTPUT_STRING		; Copy manufacturer name to buffer
+		pop	bc	;B = ID
+		or a
+		jp nz,SD_OFF_EI		;If string was truncated, we're done
 		
 		; Add [id] to the manufacturer name
+		; if the buffer was at least 20 bytes long
+
+		ld a,iyh
+		cp 20
+		jr c,.DEV_END_NOERR
+		ld a," "
+		ld (de),a	;We're overwriting the 0 after the manufacturer name
+		inc de
+
 		ld	a,"["
 		ld	(de),a
 		inc	de
@@ -802,29 +1008,48 @@ DEV_INFO:
 		ld	a,"]"
 		ld	(de),a
 		inc	de
-		jr	.DEV_END
+		jr	.DEV_END_PUTZERO
 	
 	
 .DEV_INFO2:
 		djnz	.DEV_INFO3
 		
 		; 2: Device name string
+
+		ld a,iyh
+		cp 6+1	; Enough space for the entire string (4 bytes + zero byte)?
+		ld c,5  ; C = Length to copy
+		ld a,QUERY_OK  ; A = Error to return
+		jr nc,.DEV_INFO2_OKLEN
+		ld c,iyh
+		dec c	;Copy one byte less to make size for the zero byte
+		ld a,QUERY_TRUNCATED_STRING
+.DEV_INFO2_OKLEN:
+
+		push af
 		ld	a,(hl)		; MID
 		ld	a,(hl)		; OID byte 1
 		ld	a,(hl)		; OID byte 2
-		ld	bc,5
+		ld	b,0
 		ldir
+		xor a
+		ld (de),a
 		
 		ld	b,8 + 2
 		call	SkipBytes
-		jr	.DEV_END
+		pop af
+		jp SD_OFF_EI
 	
 	
 .DEV_INFO3:
-		djnz	.DEV_INFO0
 		
 		; 3: Serial number string
-		;ex	de,hl
+
+		ld a,iyh
+		cp 5	;Enough buffer (4 hex bytes + zero)?
+		ld a,QUERY_NOT_IMPLEMENTED
+		jp c,SD_OFF_EI
+
 		ld	b,9
 		call	SkipBytes
         	
@@ -833,7 +1058,7 @@ DEV_INFO:
         	
 		ld	b,3 + 2
 		call	SkipBytes
-		jr	.DEV_END
+		jr	.DEV_END_PUTZERO
 .num:	
 		ld	a,(hl)
 		ld	l,(hl)
@@ -842,31 +1067,24 @@ DEV_INFO:
 		ld	h,#40
 		ret
 
-.DEV_INFO0:
-		; 0: Basic information
-		ld	b,16 + 2
-		call	SkipBytes
-		ex	de,hl
-		ld	(hl),1	; Number of logical units
-		inc	hl
-		ld	(hl),0	; Flags: always zero in Alpha 2b.
-		jr	.DEV_END2
-		;xor	a
-		;ret
-	
-.DEV_END:
+.DEV_END_PUTZERO:
 		xor	a
 		ld	(de),a
-.DEV_END2:
+.DEV_END_NOERR:
 		call	SD_OFF
 		ei
 		xor	a
 		ret
 
-.DEV_INFO_ERROR:	
-		call	SD_OFF
+.DEV_INFO_NOT_IMP:
+		ld a,QUERY_NOT_IMPLEMENTED
+		ret
+
+.DEV_INFO_BAD_DEVICE_SDOFF:
+		call SD_OFF
 		ei
-		ld	a,1
+.DEV_INFO_BAD_DEVICE:
+		ld a,QUERY_INVALID_DEVICE
 		ret
 
 
@@ -903,7 +1121,6 @@ Num2Hex:
 ; Get manufacturer name
 ; In:	A = ID
 ; Out:	HL = String
-;	BC = String length
 ;-----------------------------------------------------------------------------
 GetManufacName:
 		ld	c,a
@@ -924,9 +1141,9 @@ GetManufacName:
 		pop	bc
 		jr	.loop		
 .found:
-		ld	c,0
+		xor a
+		ld	c,a
 		push	hl
-		ld	a,"$"
 .cont:
 		inc	c
 		inc	hl
@@ -934,38 +1151,39 @@ GetManufacName:
 		jr	nz,.cont
 .end:
 		pop	hl
-		ld	b,0		
+		ld  b,0
 		ret
 				
 Manufacturers:
-		db	#01,"Panasonic$"
-		db	#02,"Toshiba$"
-		db	#03,"SanDisk$"
-		db	#04,"(SMI-S?)"
-		db	#06,"Renesas$"
-		db	#11,"Dane-Elec$"
-		db	#15,"Samsumg$"
-		db	#18,"Infineon$"
-		db	#13,"(KingMax?)$"
-		db	#1a,"(PQI?)$"
-		db	#1b,"(Sony?)$"
-		db	#1c,"(Transcend?)$"
-		db	#1d,"(A-DATA?)$"
-		db	#27,"Verbatim$"
-		db	#37,"(KINGMAX?)$"
-		db	#41,"OKI$"
-		db	#73,"SilverHT$"
-		db	#aa,"openMSX$"
-		db	#00,"Unknown$"
+		db	#01,"Panasonic",0
+		db	#02,"Toshiba",0
+		db	#03,"SanDisk",0
+		db	#04,"(SMI-S?)",0
+		db	#06,"Renesas",0
+		db	#11,"Dane-Elec",0
+		db	#15,"Samsumg",0
+		db	#18,"Infineon",0
+		db	#13,"(KingMax?)",0
+		db	#1a,"(PQI?)",0
+		db	#1b,"(Sony?)",0
+		db	#1c,"(Transcend?)",0
+		db	#1d,"(A-DATA?)",0
+		db	#27,"Verbatim",0
+		db	#37,"(KINGMAX?)",0
+		db	#41,"OKI",0
+		db	#73,"SilverHT",0
+		db	#aa,"openMSX",0
+		db	#00,"Unknown",0
+
+
 ;-----------------------------------------------------------------------------
 ;
 ; Obtain device status
 ;
-;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7
-;             0 to return the status of the device itself.
+;Input:   A = Device index
+;         B = 1 to reset device change status, 0 to not
 ;Output:  A = Status for the specified logical unit,
-;             or for the whole device     IF 0 was specified:
+;             or for the whole device IF 0 was specified:
 ;                0: The device or logical unit is not available, or the
 ;                   device or logical unit number supplied is invalid.
 ;                1: The device or logical unit is available and has not
@@ -983,21 +1201,13 @@ Manufacturers:
 ; Devices not supporting hot-plugging must always return status value 1.
 ; Non removable logical units may return values 0 and 1.
 ;-----------------------------------------------------------------------------
-DEV_STATUS:
-		dec	a
+NEXTOR2_DEV_STATUS:
+		cp 3
 		jp	z,RomDiskStatus		; ROM disk
 
-		dec	a
-		cp	NUM_SLOTS
-		jp	nc,DEV_STAT1
-		ld	c,a
-		
-		ld	a,b
-		cp	2
-		jp	nc,DEV_STAT1
 
 		di
-		ld	a,c
+		dec a ;0 for slot 1, 1 for slot 2
 		call	GETWRK
 		call	SD_ON
 		ld	(#5800),a	; SD slot select
@@ -1010,13 +1220,15 @@ DEV_STATUS:
 		ei
 		
 		jr	c,DEV_STAT0
-		
+
+		bit 0,b
+		jr z,.notChanged
+
 		bit	BIT_SD_CHG,(ix+STATUS); Has been the card initiated?
 		jr	z,.notChanged
-	;ld a,3
-	;ret
 		res	BIT_SD_CHG,(ix+STATUS); Reset changed status
 
+.hasChanged:
 		;ld	a,#f2
 		;call	Color
 		;call	Beep
@@ -1047,8 +1259,10 @@ Color:
 
 Beep:
 		ld	ix,#c0
+		push iy
 		ld	iy,(#fcc1-1)
 		call	#1c
+		pop iy
 		ret
 
 ;-----------------------------------------------------------------------------
@@ -1056,7 +1270,6 @@ Beep:
 ; Obtain logical unit information
 ;
 ;Input:   A  = Device index, 1 to 7
-;         B  = Logical unit number, 1 to 7
 ;         HL = Pointer to buffer in RAM.
 ;Output:  A = 0: Ok, buffer filled with information.
 ;             1: Error, device or logical unit not available,
@@ -1085,19 +1298,12 @@ Beep:
 ; Number of cylinders, heads and sectors apply to hard disks only.
 ; For other types of device, these fields must be zero.
 ;-----------------------------------------------------------------------------
-LUN_INFO:
-	dec	a
+NEXTOR2_LUN_INFO:
+	cp 3
 	jp	z,RomDiskLUN_INFO
 	
-	dec	a
-	cp	NUM_SLOTS
-	jp	nc,LUN_ERROR
+	dec	a	;0 for slot 1, 1 for slot 2
 	ld	c,a
-	
-	ld	a,b
-	cp	1
-	jp	nz,LUN_ERROR
-	
 	push	hl
 	di
 	call	SD_ON
@@ -1152,79 +1358,7 @@ LUN_INFO:
 LUN_ERROR:
 	ld	a,1	; Error
 	ret
-    ENDIF
 
-
-;-----------------------------------------------------------------------------
-;
-; Physical format a device
-;
-;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7
-;         C = Format choice, 0 to return choice string
-;Output:
-;        When C=0 at input:
-;        A = 0: Ok, address of choice string returned
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        HL = Address of format choice string (in bank 0 or 3),
-;             only if A=0 returned.
-;             Zero, if only one choice is available.
-;
-;        When C<>0 at input:
-;        A = 0: Ok, device formatted
-;            Other: error code, same as DEV_RW plus:
-;            .IPARM: Invalid format choice
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        B = Media ID if the device is a floppy disk, zero otherwise
-;            (only if A=0 is returned)
-;
-; Media IDs are:
-; F0h: 3.5" Double Sided, 80 tracks per side, 18 sectors per track (1.44MB)
-; F8h: 3.5" Single sided, 80 tracks per side, 9 sectors per track (360K)
-; F9h: 3.5" Double sided, 80 tracks per side, 9 sectors per track (720K)
-; FAh: 5.25" Single sided, 80 tracks per side, 8 sectors per track (320K)
-; FBh: 3.5" Double sided, 80 tracks per side, 8 sectors per track (640K)
-; FCh: 5.25" Single sided, 40 tracks per side, 9 sectors per track (180K)
-; FDh: 5.25" Double sided, 40 tracks per side, 9 sectors per track (360K)
-; FEh: 5.25" Single sided, 40 tracks per side, 8 sectors per track (160K)
-; FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
-
-DEV_FORMAT:
-	ld	a,IFORM
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Execute direct command on a device
-;
-;Input:    A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7 (if applicable)
-;          HL = Address of input buffer
-;          DE = Address of output buffer, 0 if not necessary
-;Output:   Output buffer appropriately filled (if applicable)
-;          A = Error code:
-;              0: Ok
-;              1: Invalid device number or logical unit number,
-;                 or device not ready
-;              2: Invalid or unknown command
-;              3: Insufficient output buffer space
-;              4-15: Reserved
-;              16-255: Device specific error codes
-;
-; The first two bytes of the input and output buffers must contain the size
-; of the buffer, not incuding the size bytes themselves.
-; For example, if 16 bytes are needed for a buffer, then 18 bytes must
-; be allocated, and the first two bytes of the buffer must be 16, 0.
-
-DEV_CMD:
-	ld	a,2
-	ret
-;=====
-;=====  END of DEVICE-BASED specific routines
-;=====
 
 ;-----------------------------------------------------------------------------
 ; Obtain slot work area (32 bytes) on SLTWRK
@@ -1297,6 +1431,11 @@ SD_ON:
 	ld	a,#40
 	ld	(#6000),a		;Switch bank to SD control area
 	pop	af
+	ret
+
+SD_OFF_EI:
+	call SD_OFF
+	ei
 	ret
 
 SD_OFF:
@@ -2158,7 +2297,7 @@ endm
 
 TXT_INFO:
 		db	"MegaFlashROM SCC+ SD driver",13,10
-		VERSION_STRING %DRIVER_VERSION,%DRIVER_SUBVERSION
+		VERSION_STRING %VER_MAIN,%VER_SEC
 		db	"(c) Manuel Pazos 2013",13,10
 TXT_EMPTY:		
 		db	13,10,0

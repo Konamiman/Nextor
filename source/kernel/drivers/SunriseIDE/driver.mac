@@ -285,31 +285,6 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 DRV_NAME:
 	db	"Sunrise IDE",0
 
-	if 0
-
-;Jump table
-
-	jp	DRV_TIMI
-	jp	NEXTOR2_DRV_VERSION
-	jp	NEXTOR2_DRV_INIT
-	jp	DRV_BASSTAT
-	jp	DRV_BASDEV
-    jp  DRV_EXTBIO
-    jp  DRV_DIRECT0
-    jp  DRV_DIRECT1
-    jp  DRV_DIRECT2
-    jp  DRV_DIRECT3
-    jp  DRV_DIRECT4
-    jp  NEXTOR2_DRV_CONFIG
-
-	ds	12
-
-	jp	NEXTOR2_DEV_RW
-	jp	NEXTOR2_DEV_INFO
-	jp	NEXTOR2_DEV_STATUS
-	jp	NEXTOR2_LUN_INFO
-
-	endif
 
 ;-----------------------------------------------------------------------------
 ;
@@ -1108,9 +1083,6 @@ DRV_DIRECT4:
 ;     C = LUN index
 
 NEXTOR2_DRV_CONFIG:
-    ld a,1
-    ret
-
     dec a
     jr z,DRV_CONFIG_1
     dec a
