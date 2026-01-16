@@ -28,6 +28,10 @@ endif
 
 export LB80_ARGS=--no-show-banner --verbosity 0
 
+ifeq ($(strip $(MKNEXROM)),)
+MKNEXROM=mknexrom
+endif
+
 define SymToEqus
     $(eval REGEX:=([0-9A-F]{4}) ($(3)))
     cat $(1) | grep -Eo "$(REGEX)" | sed -r "s/$(REGEX)/\2 equ \1h\n\tpublic \2\n/g" > $(2)
@@ -62,7 +66,7 @@ endef
 
 all: base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
 
-TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc mknexrom dd
+TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
 .phony: prerequisites
 
@@ -95,7 +99,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM: \
 	drivers/SunriseIDE/sunride.bin \
 	drivers/SunriseIDE/chgbnk.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.bin /m:drivers/SunriseIDE/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.bin /m:drivers/SunriseIDE/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/sunride.bin: \
@@ -113,7 +117,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM: \
 	drivers/SunriseIDE/sunride.masteronly.bin \
 	drivers/SunriseIDE/chgbnk.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.masteronly.bin /m:drivers/SunriseIDE/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.masteronly.bin /m:drivers/SunriseIDE/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/sunride.masteronly.bin: \
@@ -133,7 +137,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.emulators.ROM: \
 	256.bytes
 
 	cat 256.bytes drivers/SunriseIDE/driver.bin > drivers/SunriseIDE/_driver.BIN
-	mknexrom nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/driver.bin: \
@@ -153,7 +157,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.emulators.ROM: \
 	256.bytes
 
 	cat 256.bytes drivers/SunriseIDE/drvmonly.bin > drivers/SunriseIDE/_driver.BIN
-	mknexrom nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/drvmonly.bin: \
@@ -181,7 +185,7 @@ drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
 	256.bytes
 
 	cat 256.bytes drivers/StandaloneASCII8/driver.bin > drivers/StandaloneASCII8/_driver.bin
-	mknexrom nextor_base.dat $@ /d:drivers/StandaloneASCII8/_driver.bin /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII8/_driver.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/StandaloneASCII8/driver.bin: \
@@ -206,7 +210,7 @@ drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM: \
 	256.bytes
 
 	cat 256.bytes drivers/StandaloneASCII8/driver.bin > drivers/StandaloneASCII16/_driver.bin
-	mknexrom nextor_base.dat $@ /d:drivers/StandaloneASCII16/_driver.bin /m:drivers/StandaloneASCII16/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII16/_driver.bin /m:drivers/StandaloneASCII16/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/StandaloneASCII16/chgbnk.bin: \
@@ -224,12 +228,14 @@ mfrsd: \
 	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM \
 
 drivers/MegaFlashRomSD/mfrsd-1slot.bin: \
-	drivers/MegaFlashRomSD/mfrsd.asm
+	drivers/MegaFlashRomSD/mfrsd.asm \
+	drivers/MegaFlashRomSD/romdisk.asm
 
 	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-1slot.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=1)
 
 drivers/MegaFlashRomSD/mfrsd-2slots.bin: \
-	drivers/MegaFlashRomSD/mfrsd.asm
+	drivers/MegaFlashRomSD/mfrsd.asm \
+	drivers/MegaFlashRomSD/romdisk.asm
 
 	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-2slots.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=2)
 
@@ -243,7 +249,7 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM: \
 	drivers/StandaloneASCII8/chgbnk.bin \
 	drivers/MegaFlashRomSD/mfrsd-1slot.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-1slot.bin /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-1slot.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM: \
@@ -261,7 +267,7 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM: \
 	drivers/StandaloneASCII8/chgbnk.bin \
 	drivers/MegaFlashRomSD/mfrsd-2slots.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-2slots.bin /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-2slots.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM: \
@@ -289,7 +295,7 @@ drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
 	drivers/Flashjacks/flashjacks.bin \
 	drivers/SunriseIDE/chgbnk.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/Flashjacks/flashjacks.bin /m:drivers/SunriseIDE/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/Flashjacks/flashjacks.bin /m:drivers/SunriseIDE/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 
@@ -301,7 +307,7 @@ drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/chgbnk.bin
 
-	mknexrom nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 
