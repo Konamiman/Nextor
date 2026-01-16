@@ -106,6 +106,7 @@ typedef struct {
 /* MSX-DOS functions */
 
 #define _TERM0 0
+#define _CONOUT 0x02
 #define _DIRIO 0x06
 #define _BUFIN 0x0A
 #define _SETDTA 0x1A
@@ -154,6 +155,12 @@ typedef struct {
 #define READ_WRITE 0x4137
 #define DRIVER_QUERY 0x412B
 #define DEVICE_QUERY 0x412E
+#define DRVQ_GET_VERSION 1
+#define DRVQ_GET_INFO_STRING 2
+#define DRVQ_GET_INIT_PARAMS 3
+#define DRVQ_INIT_DRIVER 4
+#define DRVQ_GET_BOOT_DRIVES_COUNT 5
+#define DRVQ_GET_DRIVE_BOOT_CONFIG 6
 #define DRVQ_GET_MAX_DEVICE_NUMBER 7
 #define DEVQ_GET_STRING 1
 #define STRING_DEVICE_NAME 2

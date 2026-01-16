@@ -11,7 +11,7 @@ define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
 endef
 
-COMS := emufile.com fsize.com nexboot.com vsft.com
+COMS := emufile.com fsize.com nexboot.com vsft.com drvtest.com
 
 c-tools: $(COMS)
 
@@ -29,7 +29,8 @@ prerequisites:
 .SECONDEXPANSION:
 $(COMS): \
 	$$(patsubst %.com,%.c,$$@) \
-	crt0_msxdos_advanced.rel
+	crt0_msxdos_advanced.rel \
+	asmcall.h
 
 	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 crt0_msxdos_advanced.rel $(patsubst %.com,%.c,$@)
 	$(call hex2bin,$(patsubst %.com,%.ihx,$@),$@)
