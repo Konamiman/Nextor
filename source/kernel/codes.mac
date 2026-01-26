@@ -1,13 +1,18 @@
 	.z80
+
 	name('codes')
 	title	MSX-DOS 2   Copyright (1988)  ASCII Corporation
-	subttl	Public constants declarations
+	subttl	Public constants declarations for function calls and error codes
+
 	.sall
 ;-----------------------------------------------------------------------------
 ;
-const	macro	name,value		;;Macro for declaring public
-name	 equ	 (value)		;; constants.
-	 public	 name
+const: macro name,value		;;Macro for declaring public
+name: equ (value)		;; constants.
+	ifrel
+	public name
+	endif
+
 	endm
 ;
 ;
@@ -124,8 +129,10 @@ name	 equ	 (value)		;; constants.
 	const	_DOSVER,  6Fh	;Get MSX-DOS version number
 	const	_REDIR,   70h	;Get/set redirection flags
 
+    ; Function calls introduced in Nextor
+
 	const	_FOUT,	  71h   ;Get/set fast STROUT mode
-        const	_ZSTROUT, 72h	;Zero-terminated string output
+    const	_ZSTROUT, 72h	;Zero-terminated string output
 
 	const	_RDDRV,   73h	;Absolute drive sector read
 	const	_WRDRV,   74h	;Absolute drive sector write
@@ -227,6 +234,8 @@ name	 equ	 (value)		;; constants.
 	const	.EOL,   0B9h	;End of line (internal error)
 	const	.ISBFN, 0B8h	;Invalid sub-function number
 	const	.IFCB,  0B7h	;Invalid FCB
+
+    ; Error codes introduced in Nextor
 
 	const	.IDRVR, 0B6h	;Invalid device driver
 	const	.IDEVN, 0B5h	;Invalid device number
