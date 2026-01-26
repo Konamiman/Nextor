@@ -261,18 +261,6 @@ null_message:
 	db	"2 - Double side",13,10
 	db	0
 
-
-; Moved here due to space constraints
-
-DO_DIRCALL:
-	pop	ix
-	push	bc
-	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
-	add	ix,bc
-	pop	bc
-	jp	DO_CALBNK
-
-
 ;-----------------------------------------------------------------------------
 ;
 ; Entries for direct calls.
@@ -288,27 +276,13 @@ DIRCALL:
 	call	DO_DIRCALL
 	call	DO_DIRCALL
 
-
-; Process the output of DSKIO so that Cy is set
-; if an error has been returned.
-
-DIO_SET_ERR_FLAG::
-	push af
-	ld a,(KSLOT##)
-	or a
-	jr z,DIO_SET_ERR_FLAG_END
-
-	;Device-based: set Cy if error code is not 0
-	pop af
-	or a
-	ret z
-	scf
-	ret
-
-	;Drive-based driver: result will already have Cy set on error
-DIO_SET_ERR_FLAG_END:
-	pop af
-	ret
+DO_DIRCALL:
+	pop	ix
+	push	bc
+	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
+	add	ix,bc
+	pop	bc
+	jp	DO_CALBNK
 
 
 ;-----------------------------------------------------------------------------
@@ -540,6 +514,7 @@ DIO_WR_OK:
 	xor	a
 	ret
 
+	; Read or write one sector via SECBUF
 
 DIO_DO_CALDRV:
 	ld	hl,($SECBUF##)
@@ -549,7 +524,10 @@ DIO_DO_CALDRV:
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
-	jp DIO_SET_ERR_FLAG
+	or a
+	ret z
+	scf
+	ret
 
 
 ; Jump here when the transfer can be done in a single step
