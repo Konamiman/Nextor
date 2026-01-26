@@ -261,6 +261,18 @@ null_message:
 	db	"2 - Double side",13,10
 	db	0
 
+
+; Moved here due to space constraints
+
+DO_DIRCALL:
+	pop	ix
+	push	bc
+	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
+	add	ix,bc
+	pop	bc
+	jp	DO_CALBNK
+
+
 ;-----------------------------------------------------------------------------
 ;
 ; Entries for direct calls.
@@ -276,13 +288,27 @@ DIRCALL:
 	call	DO_DIRCALL
 	call	DO_DIRCALL
 
-DO_DIRCALL:
-	pop	ix
-	push	bc
-	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
-	add	ix,bc
-	pop	bc
-	jp	DO_CALBNK
+
+; Process the output of DSKIO so that Cy is set
+; if an error has been returned.
+
+DIO_SET_ERR_FLAG::
+	push af
+	ld a,(KSLOT##)
+	or a
+	jr z,DIO_SET_ERR_FLAG_END
+
+	;Device-based: set Cy if error code is not 0
+	pop af
+	or a
+	ret z
+	scf
+	ret
+
+	;Drive-based driver: result will already have Cy set on error
+DIO_SET_ERR_FLAG_END:
+	pop af
+	ret
 
 
 ;-----------------------------------------------------------------------------
@@ -442,15 +468,9 @@ DIO_RD_LOOP:
 	push	bc		;do the remaining transfer
 	push	de		;with a simple call to the driver
 	push	hl
-	
-	ld	hl,($SECBUF##)
-	ld	b,1
+
 	or	a
-	
-	ld	ix,DRIVER.READ_WRITE##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
+	call DIO_DO_CALDRV
 	jr	nc,DIO_RD_OK
 
 	pop	hl	;On disk error, just return
@@ -497,14 +517,8 @@ DIO_WR_LOOP:
 	push	bc
 	push	de
 
-	ld	hl,($SECBUF##)
-	ld	b,1
 	scf
-	
-	ld	ix,DRIVER.READ_WRITE##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
+	call DIO_DO_CALDRV
 	jr	nc,DIO_WR_OK
 
 	pop	de	;On disk error, just return
@@ -524,7 +538,18 @@ DIO_WR_OK:
 	djnz	DIO_WR_LOOP
 
 	xor	a
-	ret	
+	ret
+
+
+DIO_DO_CALDRV:
+	ld	hl,($SECBUF##)
+	ld	b,1
+
+	ld	ix,DRIVER.READ_WRITE##
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	jp DIO_SET_ERR_FLAG
 
 
 ; Jump here when the transfer can be done in a single step
