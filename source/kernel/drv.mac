@@ -442,15 +442,9 @@ DIO_RD_LOOP:
 	push	bc		;do the remaining transfer
 	push	de		;with a simple call to the driver
 	push	hl
-	
-	ld	hl,($SECBUF##)
-	ld	b,1
+
 	or	a
-	
-	ld	ix,DRIVER.READ_WRITE##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
+	call DIO_DO_CALDRV
 	jr	nc,DIO_RD_OK
 
 	pop	hl	;On disk error, just return
@@ -497,14 +491,8 @@ DIO_WR_LOOP:
 	push	bc
 	push	de
 
-	ld	hl,($SECBUF##)
-	ld	b,1
 	scf
-	
-	ld	ix,DRIVER.READ_WRITE##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
+	call DIO_DO_CALDRV
 	jr	nc,DIO_WR_OK
 
 	pop	de	;On disk error, just return
@@ -524,7 +512,22 @@ DIO_WR_OK:
 	djnz	DIO_WR_LOOP
 
 	xor	a
-	ret	
+	ret
+
+	; Read or write one sector via SECBUF
+
+DIO_DO_CALDRV:
+	ld	hl,($SECBUF##)
+	ld	b,1
+
+	ld	ix,DRIVER.READ_WRITE##
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+	or a
+	ret z
+	scf
+	ret
 
 
 ; Jump here when the transfer can be done in a single step
