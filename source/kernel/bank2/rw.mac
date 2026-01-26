@@ -149,7 +149,7 @@ abs_rw_dorw:
 		pcall	INV_UD			; buffers for this drive
 
 		;If the disk has actually a FAT12 or FAT16 filesystem,
-        ;and it's NOT a device-based driver,
+        ;and it's NOT a Nextor driver,
         ;set unit descriptor as having UPB
         ;but needing validation; otherwise (no FAT filesystem),
 		;set unit descriptor as not having UPB.

@@ -1,7 +1,28 @@
-	; Device-based driver for the sunrise IDE interface for Nextor
+	; Driver for the sunrise IDE interface for Nextor
 	;
 	; Version Beta 5 by Piter Punk
 	; Based on version 0.1 by Konamiman
+
+	INCLUDE	../../macros.inc
+	INCLUDE	../../const.inc
+
+QUERY_OK: equ 0
+QUERY_TRUNCATED_STRING: equ 1
+QUERY_INVALID_DEVICE: equ 2
+QUERY_INIT_ERROR: equ 3
+QUERY_NOT_IMPLEMENTED: equ 0FFh
+
+DRVQ_GET_VERSION: equ 1
+DRVQ_GET_STRING: equ 2
+DRVQ_GET_INIT_PARAMS: equ 3
+DRVQ_INIT: equ 4
+DRVQ_GET_NUM_BOOT_DRIVES: equ 5
+DRVQ_GET_DRIVE_BOOT_CONFIG: equ 6
+DRVQ_GET_MAX_DEVICE: equ 7
+
+DEVQ_GET_STRING: equ 1
+DEVQ_GET_PARAMS: equ 2
+DEVQ_GET_STATUS: equ 3
 
 	org 4100h
 
@@ -19,20 +40,6 @@ TESTADD	equ	0F3F5h
 ;
 ; Driver configuration constants
 ;
-
-;Driver type:
-;   0 for drive-based
-;   1 for device-based
-
-DRV_TYPE	equ	1
-
-;Hot-plug devices support (device-based drivers only):
-;   0 for no hot-plug support
-;   1 for hot-plug support
-
-DRV_HOTPLUG	equ	0
-
-DEBUG	equ	0	;Set to 1 for debugging, 0 to normal operation
 
 ;Driver version
 
@@ -113,7 +120,7 @@ M_SRST	equ	(1 SHL SRST)
 ;
 ; Standard BIOS and work area entries
 
-CHPUT	equ	00A2h	;Character output
+;CHPUT	equ	00A2h	;Character output
 CHGET	equ	009Fh
 
 
@@ -165,7 +172,7 @@ CHGET	equ	009Fh
 .UFORM	equ	0F7h
 .SEEK	equ	0F3h
 .IFORM	equ	0F0h
-.IDEVL	equ	0B5h
+.IDEVN	equ	0B5h
 .IPARM	equ	08Bh
 
 ;-----------------------------------------------------------------------------
@@ -253,51 +260,289 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 
 ;-----------------------------------------------------------------------------
 ;
-; Driver signature
-;
-	db	"NEXTOR_DRIVER",0
+	;Driver signature
 
-; Driver flags:
-;    bit 0: 0 for drive-based, 1 for device-based
-;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
-;    bit 2: 1 if the driver provides configuration
-;             (implements the DRV_CONFIG routine)
+	db	"NEXTORv3_DRIVER",0
 
-	db 1+(2*DRV_HOTPLUG)+4
+	;Jump table
 
-;Reserved byte
-	db	0
+	jp	DRV_TIMI ;TIMER_INT
+	jp	DRV_BASSTAT ;OEMSTAT
+	jp	DRV_BASDEV ;BASDEV
+	jp	DRV_EXTBIO ;EXTBIO
+	jp	DRV_DIRECT0 ;DIRECT_0
+	jp	DRV_DIRECT1 ;DIRECT_1
+	jp	DRV_DIRECT2 ;DIRECT_2
+	jp	DRV_DIRECT3 ;DIRECT_3
+	jp	DRV_DIRECT4 ;DIRECT_4
+	jp	DRIVER_QUERY
+	jp	DEVICE_QUERY
+	jp	CUSTOM_DRIVER_QUERY
+	jp  CUSTOM_DEVICE_QUERY
+	jp	READ_WRITE
 
-;Driver name
 
 DRV_NAME:
-	db	"Sunrise IDE"
-	ds	32-($-DRV_NAME)," "
+	db	"Sunrise IDE",0
 
-;Jump table
 
-	jp	DRV_TIMI
-	jp	DRV_VERSION
-	jp	DRV_INIT
-	jp	DRV_BASSTAT
-	jp	DRV_BASDEV
-    jp  DRV_EXTBIO
-    jp  DRV_DIRECT0
-    jp  DRV_DIRECT1
-    jp  DRV_DIRECT2
-    jp  DRV_DIRECT3
-    jp  DRV_DIRECT4
-    jp  DRV_CONFIG
+;-----------------------------------------------------------------------------
+;
+; Compatibility layer for translating Nextor v2 driver routines
+; to the Nextor v3 driver structure
 
-	ds	12
 
-	jp	DEV_RW
-	jp	DEV_INFO
-	jp	DEV_STATUS
-	jp	LUN_INFO
-	jp	DEV_FORMAT
-	jp	DEV_CMD
+	;Output a string
+	;Input:  HL = String
+	;        DE = Destination
+	;        B  = Max length including terminator
+	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING 
+	
+OUTPUT_STRING:
+	ld a,b
+	or a
+	ret z
 
+OUTPUT_STRING_LOOP:
+	ld a,(hl)
+	or a
+	ld (de),a
+	ret z
+
+	inc hl
+	inc de
+	djnz OUTPUT_STRING
+
+    dec de
+	xor a
+	ld (de),a
+	ld a,QUERY_TRUNCATED_STRING
+	ret
+
+
+	;--- Driver query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                QUERY_OK: success
+	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DRIVER_QUERY:
+	dec a
+	jr z,DO_DRVQ_GET_VERSION
+	dec a
+	jr z,DO_DRVQ_GET_STRING
+	dec a
+	jr z,DO_DRVQ_GET_INIT_PARAMS
+	dec a
+	jr z,DO_DRVQ_INIT
+	dec a
+	jr z,DO_DRVQ_GET_NUM_BOOT_DRIVES
+	dec a
+	jr z,DO_DRVQ_GET_DRIVE_BOOT_CONFIG
+	dec a
+	jr z,DO_DRVQ_GET_MAX_DEVICE
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_VERSION:
+	call NEXTOR2_DRV_VERSION
+	ld d,c
+	ld c,b
+	ld b,a
+	xor a
+	ret
+
+DO_DRVQ_GET_STRING:
+	ld a,b	;String index
+	ld b,d	;Buffer size
+	ex de,hl
+	dec a
+	ld hl,DRV_NAME
+	jp z,OUTPUT_STRING
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_INIT_PARAMS:
+	push de
+	pop iy
+	xor a
+	call NEXTOR2_DRV_INIT
+	ld b,0
+	rl b
+	xor a
+	ret
+
+DO_DRVQ_INIT:
+	push de
+	pop iy
+	ld a,1
+	call NEXTOR2_DRV_INIT
+	xor a
+	ret
+
+DO_DRVQ_GET_NUM_BOOT_DRIVES:
+	ld a,1
+	ld c,b	;TODO: Reduced count passed in bit 5 of C or not?
+	call NEXTOR2_DRV_CONFIG
+	or a
+	ret z
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_DRIVE_BOOT_CONFIG:
+	ld a,b
+	ld b,c
+	ld c,a
+	ld a,2
+	call NEXTOR2_DRV_CONFIG
+	or a
+	ret z
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_MAX_DEVICE:
+	ifdef MASTER_ONLY
+	ld b,1
+	else
+	ld b,2
+	endif
+
+	xor a
+	ret
+
+CHPUT: jp (iy)
+
+
+	;--- Device query
+	;    Input:  A = Query index
+	;            C = Device number
+	;            F, B, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                QUERY_OK: success
+	;                QUERY_INVALID_DEVICE: Invalid device number
+	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DEVICE_QUERY:
+	push af
+	ld a,c
+	or a
+	jr z,INVALID_DEVICE
+
+	ifdef MASTER_ONLY
+	dec a
+	jr nz,INVALID_DEVICE
+	else
+	cp 3
+	jr nc,INVALID_DEVICE
+	endif
+
+	pop af
+	dec a
+	jr z,DO_DEVQ_GET_STRING
+	dec a
+	jr z,DO_DEVQ_GET_PARAMS
+	dec a
+	jr z,DO_DEVQ_GET_STATUS
+	dec a
+	jr z,DO_DEVQ_GET_AVAILABILITY
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+INVALID_DEVICE:
+	pop af
+	ld a,QUERY_INVALID_DEVICE
+	ret
+
+DO_DEVQ_GET_STRING:
+	ld a,b
+	or a
+	jr z,RETURN_NOT_IMP
+
+	ld a,d
+	or a
+	ret z	   ;Buffer size=0: do nothing, no errorr
+	dec a
+	jr nz,DO_DEVQ_GET_STRING_2
+	ld (hl),0  ;Buffer size=0: just output terminating 0, no error
+	ret
+DO_DEVQ_GET_STRING_2:
+
+	ld a,c	;Device number
+	push de
+	call NEXTOR2_DEV_INFO
+	pop de
+	or a
+	jr nz,RETURN_NOT_IMP	;Assume no "invalid device" error (we checked device id first)
+
+	;IDE strings are 20 char long, so if buffer was at least 21 bytes long
+	;assume success, otherwise assume string was truncated
+	ld a,d
+	cp 21
+	ld a,0
+	ret nc
+	ld a,QUERY_TRUNCATED_STRING
+	ret
+
+DO_DEVQ_GET_PARAMS:
+	ld a,h
+	or l
+	ret z	;No buffer: just return no error (device id is ok)
+
+	ld a,c
+	ld b,1
+	push hl
+	call NEXTOR2_LUN_INFO
+	pop ix
+	or a
+	ret z
+
+	;Assume error is "device not available" (we checked the device id first),
+	;then return default parameters but with removable bit set
+	xor a
+	ld (ix),a
+	ld (ix+1),a
+	ld (ix+2),2	;Sector size, high byte
+	ld (ix+3),a
+	ld (ix+4),a
+	ld (ix+5),a
+	ld (ix+6),a
+	ld (ix+7),1	;Removable flag
+	ld (ix+8),a
+	ld (ix+9),a
+	ld (ix+10),a
+	ld (ix+11),a
+	ret
+
+DO_DEVQ_GET_STATUS:
+DO_DEVQ_GET_AVAILABILITY:
+	ld a,c
+	ld b,1
+	call NEXTOR2_DEV_STATUS
+	ld b,a
+	;Assume A=0 means "device not available" and not "invalid device id"
+	;(we checked the device id first)
+	xor a
+	ret
+
+CUSTOM_DRIVER_QUERY:
+CUSTOM_DEVICE_QUERY:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+READ_WRITE:
+	ld c,1
+	call NEXTOR2_DEV_RW
+	ld b,c
+	ret
+
+RETURN_NOT_IMP:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
@@ -342,7 +587,7 @@ DRV_TIMI:
 
 TEMP_WORK	equ	0C000h
 
-DRV_INIT:
+NEXTOR2_DRV_INIT:
 	;--- If first execution, just inform that no work area is needed
 	;    (the 8 bytes in SLTWRK are enough)
 
@@ -752,7 +997,7 @@ DEVNAME_LOOP:
 ;         B = Secondary version number
 ;         C = Revision number
 
-DRV_VERSION:
+NEXTOR2_DRV_VERSION:
 	ld	a,VER_MAIN
 	ld	b,VER_SEC
 	ld	c,VER_REV
@@ -834,13 +1079,10 @@ DRV_DIRECT4:
 ;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
 ;     C = Relative drive number at boot time
 ;   Output:
-;     B = Device index
+;     B = Device number
 ;     C = LUN index
 
-DRV_CONFIG:
-    ld a,1
-    ret
-
+NEXTOR2_DRV_CONFIG:
     dec a
     jr z,DRV_CONFIG_1
     dec a
@@ -865,10 +1107,6 @@ DRV_CONFIG_2:
     ret
     
 
-;=====
-;=====  BEGIN of DEVICE-BASED specific routines
-;=====
-
 ;-----------------------------------------------------------------------------
 ;
 ; Read or write logical sectors from/to a logical unit
@@ -881,7 +1119,7 @@ DRV_CONFIG_2:
 ;          DE = Address where the 4 byte sector number is stored
 ;Output:   A = Error code (the same codes of MSX-DOS are used):
 ;              0: Ok
-;              .IDEVL: Invalid device or LUN
+;              .IDEVN: Invalid device or LUN
 ;              .NRDY: Not ready
 ;              .DISK: General unknown disk error
 ;              .DATA: CRC error when reading
@@ -893,7 +1131,7 @@ DRV_CONFIG_2:
 ;              .SEEK: Seek error
 ;          B = Number of sectors actually read/written
 
-DEV_RW:
+NEXTOR2_DEV_RW:
 	push	af
 
 	ld	a,b	;Swap B and C
@@ -1068,7 +1306,7 @@ DEV_RW_NOSEC:
 DEV_RW_NODEV:
 	call	IDE_OFF
 	pop	af
-	ld	a,.IDEVL
+	ld	a,.IDEVN
 	ld	b,0
 	ret
 
@@ -1077,16 +1315,17 @@ DEV_RW_NODEV:
 ;
 ; Device information gathering
 ;
-;Input:   A = Device index, 1 to 7
+;Input:   A = Device number, 1 to 7
 ;         B = Information to return:
 ;             0: Basic information
 ;             1: Manufacturer name string
 ;             2: Device name string
 ;             3: Serial number string
 ;         HL = Pointer to a buffer in RAM
+;         D  = Buffer length (added in Nextor 3)
 ;Output:  A = Error code:
 ;             0: Ok
-;             1: Device not available or invalid device index
+;             1: Device not available or invalid device number
 ;             2: Information not available, or invalid information index
 ;         When basic information is requested,
 ;         buffer filled with the following information:
@@ -1109,13 +1348,15 @@ DEV_RW_NODEV:
 ; and if it is too long, the rightmost characters must be
 ; provided, not the leftmost.
 
-DEV_INFO:
-	or	a	;Check device index
-	jr	z,DEV_INFO_ERR1
+NEXTOR2_DEV_INFO:
+	or	a	;Check device number
+	jp	z,DEV_INFO_ERR1
 	cp	3
-	jr	nc,DEV_INFO_ERR1
+	jp	nc,DEV_INFO_ERR1
 
+	push de
 	call	MY_GWORK
+	pop de
 
 	ld	c,a
 	ld	a,b
@@ -1126,7 +1367,7 @@ DEV_INFO:
 
 	ld	a,(ix)
 	or	a	;Device available?
-	jr	z,DEV_INFO_ERR1
+	jp	z,DEV_INFO_ERR1
 
 	ld	(hl),1	;One single LUN
 	inc	hl
@@ -1137,18 +1378,24 @@ DEV_INFO:
 	;--- Obtain string information
 
 DEV_INFO_STRING:
+	push de		;Save buffer length
+	ld a,d
+
 	push	hl
 	push	bc
 	push	hl
 	pop	de
 	inc	de
 	ld	(hl)," "
-	ld	bc,64-1
+	ld	c,a
+	ld  b,0
+	dec bc
 	ldir
 	pop	bc
 	pop	hl
 
 	call	IDE_ON
+	pop de	;Buffer length
 
 	ld	a,c
 	dec	a
@@ -1168,31 +1415,62 @@ DEV_INFO_STRING2:
 	jr	nz,DEV_STRING_NO1
 
 	ld	b,27
+	push de
 	call	DEV_STING_PREPARE
+	pop de
 	jr	c,DEV_INFO_ERR1
 
-	ld	b,20
+DEV_STRING_DO:
+	ld a,d
+	dec a	;Don't count terminating 0
+	cp 21
+	ld b,a
+	jr c,DEV_STRING_SKIP_SPACES
+	ld b,20
+
+DEV_STRING_SKIP_SPACES:
+	ld	de,(IDE_DATA)
+	ld	a,d
+	cp 33
+	jr nc,DEV_STRING_LOOP_NOSPACE_1
+	dec b
+	jr z,DEVSTR_END
+	ld	a,e
+	cp 33
+	jr nc,DEV_STRING_LOOP_NOSPACE_2
+	dec b
+	jr z,DEVSTR_END
+	jr DEV_STRING_SKIP_SPACES
+
 DEV_STRING_LOOP:
 	ld	de,(IDE_DATA)
 	ld	a,d
-	cp	33
-	jr	nc,DEVSTRLOOP_1
-	cp	126
+DEV_STRING_LOOP_NOSPACE_1:
+	cp	32
+	jr c,DEVSTRLOOP_1_CTRL
+	cp	127
 	jr	c,DEVSTRLOOP_1
+DEVSTRLOOP_1_CTRL:
 	ld	a," "
 DEVSTRLOOP_1:
 	ld	(hl),a
 	inc	hl
+	dec b
+	jr z,DEVSTR_END
 	ld	a,e
-	cp	33
-	jr	nc,DEVSTRLOOP_2
-	cp	126
+DEV_STRING_LOOP_NOSPACE_2:
+	cp	32
+	jr	c,DEVSTRLOOP_2_CTRL
+	cp	127
 	jr	c,DEVSTRLOOP_2
+DEVSTRLOOP_2_CTRL:	
 	ld	a," "
 DEVSTRLOOP_2:
 	ld	(hl),a
 	inc	hl
 	djnz	DEV_STRING_LOOP
+DEVSTR_END:	
+	ld (hl),0	;Terminating 0
 
 	call	IDE_OFF
 	xor	a
@@ -1206,13 +1484,13 @@ DEV_STRING_NO1:
 	jr	nz,DEV_INFO_ERR2	;Unknown string
 
 	ld	b,10
+	push de
 	call	DEV_STING_PREPARE
+	pop de
 	jr	c,DEV_INFO_ERR1
 
-	ld	bc,44
-	add	hl,bc	;Since the string is 20 chars long
 	ld	b,10
-	jr	DEV_STRING_LOOP
+	jr	DEV_STRING_DO
 	
 	;--- Termination with error
 
@@ -1232,23 +1510,29 @@ DEV_INFO_ERR2:
 ;Input: B  = Offset of the string in the device information (words)
 ;       HL = Destination address for the string
 ;       C  = Device flag for the HEAD register
+;       D  = Buffer length
 ;Corrupts AF, DE
 
 DEV_STING_PREPARE:
+	push de
 	call	WAIT_CMD_RDY
 	ld	a,c		;Issue IDENTIFY DEVICE command
 	ld	(IDE_HEAD),a
 	ld	a,0ECh
 	call	DO_IDE
+	pop de
 	ret	c
 
+	ld a,d
 	push	hl		;Fill destination with spaces
 	push	bc
 	push	hl
 	pop	de
 	inc	de
 	ld	(hl)," "
-	ld	bc,64-1
+	ld	c,a
+	ld b,0
+	dec bc
 	ldir
 	pop	bc
 	pop	hl
@@ -1264,7 +1548,7 @@ DEV_STRING_SKIP:
 ;
 ; Obtain device status
 ;
-;Input:   A = Device index, 1 to 7
+;Input:   A = Device number, 1 to 7
 ;         B = Logical unit number, 1 to 7.
 ;             0 to return the status of the device itself.
 ;Output:  A = Status for the specified logical unit,
@@ -1277,7 +1561,7 @@ DEV_STRING_SKIP:
 ;                   since the last status request
 ;                   (for devices, the device has been unplugged and a
 ;                    different device has been plugged which has been
-;                    assigned the same device index; for logical units,
+;                    assigned the same device number; for logical units,
 ;                    the media has been changed).
 ;                3: The device or logical unit is available, but it is not
 ;                   possible to determine whether it has been changed
@@ -1286,7 +1570,7 @@ DEV_STRING_SKIP:
 ; Devices not supporting hot-plugging must always return status value 1.
 ; Non removable logical units may return values 0 and 1.
 
-DEV_STATUS:
+NEXTOR2_DEV_STATUS:
 	set	0,b	;So that CHECK_DEV_LUN admits B=0
 
 	call	CHECK_DEV_LUN
@@ -1314,12 +1598,12 @@ DEV_STATUS:
 ;
 ; Obtain logical unit information
 ;
-;Input:   A  = Device index, 1 to 7.
+;Input:   A  = Device number, 1 to 7.
 ;         B  = Logical unit number, 1 to 7.
 ;         HL = Pointer to buffer in RAM.
 ;Output:  A = 0: Ok, buffer filled with information.
 ;             1: Error, device or logical unit not available,
-;                or device index or logical unit number invalid.
+;                or device number or logical unit number invalid.
 ;         On success, buffer filled with the following information:
 ;
 ;+0 (1): Medium type:
@@ -1341,7 +1625,7 @@ DEV_STATUS:
 ;+10 (1): Number of heads (0, if not a hard disk)
 ;+11 (1): Number of sectors per track (0, if not a hard disk)
 
-LUN_INFO:
+NEXTOR2_LUN_INFO:
 	call	CHECK_DEV_LUN
 	jp	c,LUN_INFO_ERROR
 
@@ -1432,79 +1716,6 @@ LUN_INFO_ERROR:
 	call	IDE_OFF
 	ld	a,1
 	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Physical format a device
-;
-;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7
-;         C = Format choice, 0 to return choice string
-;Output:
-;        When C=0 at input:
-;        A = 0: Ok, address of choice string returned
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        HL = Address of format choice string (in bank 0 or 3),
-;             only if A=0 returned.
-;             Zero, if only one choice is available.
-;
-;        When C<>0 at input:
-;        A = 0: Ok, device formatted
-;            Other: error code, same as DEV_RW plus:
-;            .IPARM: Invalid format choice
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        B = Media ID if the device is a floppy disk, zero otherwise
-;            (only if A=0 is returned)
-;
-; Media IDs are:
-; F0h: 3.5" Double Sided, 80 tracks per side, 18 sectors per track (1.44MB)
-; F8h: 3.5" Single sided, 80 tracks per side, 9 sectors per track (360K)
-; F9h: 3.5" Double sided, 80 tracks per side, 9 sectors per track (720K)
-; FAh: 5.25" Single sided, 80 tracks per side, 8 sectors per track (320K)
-; FBh: 3.5" Double sided, 80 tracks per side, 8 sectors per track (640K)
-; FCh: 5.25" Single sided, 40 tracks per side, 9 sectors per track (180K)
-; FDh: 5.25" Double sided, 40 tracks per side, 9 sectors per track (360K)
-; FEh: 5.25" Single sided, 40 tracks per side, 8 sectors per track (160K)
-; FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
-
-DEV_FORMAT:
-	ld	a,.IFORM
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Execute direct command on a device
-;
-;Input:    A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7 (if applicable)
-;          HL = Address of input buffer
-;          DE = Address of output buffer, 0 if not necessary
-;Output:   Output buffer appropriately filled (if applicable)
-;          A = Error code:
-;              0: Ok
-;              1: Invalid device number or logical unit number,
-;                 or device not ready
-;              2: Invalid or unknown command
-;              3: Insufficient output buffer space
-;              4-15: Reserved
-;              16-255: Device specific error codes
-;
-; The first two bytes of the input and output buffers must contain the size
-; of the buffer, not incuding the size bytes themselves.
-; For example, if 16 bytes are needed for a buffer, then 18 bytes must
-; be allocated, and the first two bytes of the buffer must be 16, 0.
-
-DEV_CMD:
-	ld	a,2
-	ret
-
-;=====
-;=====  END of DEVICE-BASED specific routines
-;=====
 
 
 ;=======================
@@ -1639,14 +1850,14 @@ MY_GWORK:
 
 ;-----------------------------------------------------------------------------
 ;
-; Check the device index and LUN
-; Input:  A = device index, B = lun
+; Check the device number and LUN
+; Input:  A = device number, B = lun
 ; Output: Cy=0 if OK, 1 if device or LUN invalid
 ;         IX = Work area for the device
 ; Modifies F, C
 
 CHECK_DEV_LUN:
-	or	a	;Check device index
+	or	a	;Check device number
 	scf
 	ret	z
 	cp	3
@@ -1681,7 +1892,7 @@ CHECK_DEV_LUN:
 ;=======================
 
 INFO_S:
-	db	"Sunrise IDE driver v"
+	db	13,10,"Sunrise IDE driver v"
 	db	VER_MAIN+"0",".",VER_SEC+"0",".",VER_REV+"0",13,10
 
 ifdef MASTER_ONLY
@@ -1714,7 +1925,7 @@ CRLF_S:
 
 ;-----------------------------------------------------------------------------
 ;
-; Padding up to the required driver size
+; Padding up to the required iver size
 
 DRV_END:
 

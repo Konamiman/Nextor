@@ -4,12 +4,17 @@
 #include "types.h"
 
 #define MAX_INSTALLED_DRIVERS 8
-#define MAX_DEVICES_PER_DRIVER 7
 #define MAX_LUNS_PER_DEVICE 7
-#define DRIVER_NAME_LENGTH 32
+#define DRIVER_NAME_LENGTH_80 51
+#define DRIVER_NAME_LENGTH_40 36
 #define MAX_INFO_LENGTH 64
 
 #define FILEATTR_DIRECTORY (1<<4)
+
+#define DEV_TYPE_BLOCK 0
+#define DEV_FLAG_REMOVABLE 1
+#define DEV_FLAG_READ_ONLY (1 << 1)
+#define DEV_FLAG_FLOPPY (1 << 2)
 
 
 /* MSX-DOS/Nextor data structures */
@@ -27,8 +32,9 @@ typedef struct {
 } fileInfoBlock;
 
 
-#define DRIVER_IS_DOS250 (1 << 7)
-#define DRIVER_IS_DEVICE_BASED 1
+#define DRIVER_IS_NEXTOR (1 << 7)
+#define GDRVR_EXTENDED_DRIVER_NAME_FLAG 0x80
+#define CDRVR_NEXTOR_3_FLAG 0x10
 
 typedef struct {
     byte slot;
@@ -39,14 +45,27 @@ typedef struct {
     byte versionMain;
     byte versionSec;
     byte versionRev;
-    char driverName[DRIVER_NAME_LENGTH];
-    byte reserved[64 - DRIVER_NAME_LENGTH - 8];
+    char driverName[64-8];
 } driverInfo;
 
+typedef struct {
+	byte mediumType;
+	uint sectorSize;
+	ulong sectorCount;
+	byte flags;
+	uint cylinders;
+	byte heads;
+	byte sectorsPerTrack;
+	bool suitableForPartitioning;
+} deviceParams;
 
 typedef struct {
-	byte lunCount;
 	char deviceName[MAX_INFO_LENGTH];
+    byte deviceNumber;
+    bool isValid;
+    bool isOnline;
+    bool canCreatePartitions;
+	deviceParams params;
 } deviceInfo;
 
 #define DRIVE_STATUS_ASSIGNED_TO_DEVICE 1
@@ -68,17 +87,6 @@ typedef struct {
 #define FLOPPY_DISK_LUN (1 << 2)
 
 typedef struct {
-	byte mediumType;
-	uint sectorSize;
-	ulong sectorCount;
-	byte flags;
-	uint cylinders;
-	byte heads;
-	byte sectorsPerTrack;
-	bool suitableForPartitioning;
-} lunInfo;
-
-typedef struct {
     uint fatSectorNumber;
     uint entryOffsetInFatSector;
     ulong dataSectorNumber;
@@ -98,6 +106,7 @@ typedef struct {
 /* MSX-DOS functions */
 
 #define _TERM0 0
+#define _CONOUT 0x02
 #define _DIRIO 0x06
 #define _BUFIN 0x0A
 #define _SETDTA 0x1A
@@ -136,10 +145,34 @@ typedef struct {
 
 #define CALLB0 0x403F
 #define CALBNK 0x4042
+
+//Nextor 2
 #define DEV_RW 0x4160
 #define DEV_INFO 0x4163
 #define LUN_INFO 0x4169
 
+// Nextor 3
+#define READ_WRITE 0x4137
+#define DRIVER_QUERY 0x412B
+#define DEVICE_QUERY 0x412E
+#define DRVQ_GET_VERSION 1
+#define DRVQ_GET_INFO_STRING 2
+#define DRVQ_GET_INIT_PARAMS 3
+#define DRVQ_INIT_DRIVER 4
+#define DRVQ_GET_BOOT_DRIVES_COUNT 5
+#define DRVQ_GET_DRIVE_BOOT_CONFIG 6
+#define DRVQ_GET_MAX_DEVICE_NUMBER 7
+#define DEVQ_GET_STRING 1
+#define STRING_DEVICE_NAME 2
+#define DEVQ_GET_PARAMS 2
+#define DEVQ_GET_STATUS 3
+#define DEVQ_GET_AVAILABILITY 4
+#define ERR_QUERY_OK 0
+#define ERR_QUERY_TRUNCATED_STRING 1
+#define ERR_QUERY_INVALID_DEVICE 2
+#define ERR_QUERY_NOT_IMPLEMENTED 0xFF
+
+#define DEFAULT_MAX_DEVICE_NUMBER 4
 
 #define BK4_ADD 0xF1D0
 

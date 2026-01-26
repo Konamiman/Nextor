@@ -691,6 +691,37 @@ FMAKE:	CALLDOS	16h	;;Create file (FCB)
 	ALIGN	46BAh
 RDABS:	CALLDOS	2Fh	;Absolute sector read
 ;
+
+PRINT_INIT_KERNEL_AT_ASLOT:
+	ld de,STR_INIT_NEXTOR_KERNEL_AT_SLOT
+	call MSG_DE
+	call GSLOT1
+	call PRSLOT
+	ld de,STR_COLON
+	call MSG_DE
+
+	ld b,1
+	ld d,37
+	ld hl,BUF
+	ld a,DRIVER.DRVQ_GET_STRING##
+	call CALL_DRIVER_QUERY
+	ld de,BUF
+	or a
+	jr z,PRINT_DRIVER_NAME
+	cp DRIVER.QUERY_TRUNCATED_STRING##
+	ld de,STR_UNNAMED_DRIVER
+	jr nz,PRINT_DRIVER_NAME
+	ld de,BUF
+	call MSG_DE
+	ld de,STR_3_DOTS
+PRINT_DRIVER_NAME::
+	call MSG_DE
+	call PRT_CRLF
+	ld a,(LINL40)
+	cp 80
+	ret z
+	jp PRT_CRLF
+
 	ALIGN	4720h
 WRABS:	CALLDOS	30h	;Absolute sector write
 ;
@@ -735,6 +766,26 @@ PRT_CRLF:
 	call	$OUT
 	pop	af
 	ret
+
+PRSLOT:
+;	push	bc
+	push	af
+	and	11b
+	add	a,"0"
+	call	CHPUT		;Print main slot number
+
+	pop	af
+	bit	7,a
+	ret	z
+	rrca
+	rrca
+	and	11b
+	add	a,"0"
+	push	af
+	ld	a,"-"
+	call	CHPUT
+	pop	af
+	jp	CHPUT		;Print sub-slot number
 
 	ALIGN	4775h
 RDSEQ:	CALLDOS	14h	;;Read sequential (FCB)
@@ -817,6 +868,7 @@ if 0 ;; If 0, will boot on MSX1 machine (with calendar clock problem).
 	ret	z		;yes
 ;
 endif
+
 	call	CHK_DRIVER	;Does not return if driver not present
 
 	call	GET_DISKID_HL	;(This part removed to allow SHIFT+4)
@@ -983,6 +1035,15 @@ OVERRIDE:
 ;
 ;	I am the real master or am overriding the old one.
 ;
+	ld a,(MSXVER) ;TODO: Check VRRAM size instead
+	or a
+	ld a,40
+	jr z,OVERRIDE_GOTLINLEN
+	ld a,80
+OVERRIDE_GOTLINLEN::
+	ld (LINL40),a
+	call INITXT
+
 	ld	a,99h		;16*DOSVER##+SEC_DOS_VERSION_HIGH##
 	ld	(DOS_VER##),a	;set new DOS version
 	ld	a,16*MAIN_NEXTOR_VERSION##+SEC_NEXTOR_VERSION_HIGH##
@@ -992,6 +1053,8 @@ OVERRIDE:
 	;We do this by using the "one time boot keys" mechanism to pretend that
 	;the user used it to disable Nextor via a simulated "N" key press.
 
+	;TODO: This also disables other Nextor v3 kernels, do something about that.
+if 0
 	ld de,SCANKEYS_RAM_BASE
 	ld hl,RAMKEYSIG
 	ld bc,RAMKEYSIG_END-RAMKEYSIG
@@ -1003,6 +1066,7 @@ OVERRIDE:
 	ld a,(BOOTKEYS##+2)
 	or 80h	;Simulate "N" key
 	ld (SCANKEYS_RAM_BASE+17+2),a
+endif	
 ;
 ;	Set up hook for clean up procedure
 ;
@@ -1034,6 +1098,8 @@ SLAVE:
 	or	a
 	ret	nz	;Return if four Nextor kernels initialized already
 
+	call PRINT_INIT_KERNEL_AT_ASLOT
+
 	call	VALTBL		;get number of drives declared so far
 	ret	z		;no room is left
 	ld	b,a
@@ -1044,14 +1110,11 @@ SLAVE:
 ;	There's enough room for additional cartridges and drives
 ;
 	;Temporary work area used:
-	;PROCNM+4: Interrupt flag returned by DV_INIT in bit 0
-	;          bit 1 is set temporarily if DRV_INIT returns B=255
-	;PROCNM+5: Number of required drives, returned by DV_INIT
-	;PROCNM+6: Number of drives actually assigned
+	;PROCNM+4: Interrupt flag returned by DRVQ_INIT in B:0
+	;PROCNM+5: Number of required drives, returned by DRVQ_GET_INIT_PARAMS
 	;PROCNM+7: 1 to boot in DOS 1 mode
-	;PROCNM+8: 1 if device-based driver
+	;PROCNM+8: replacement for DISKID when MSX-DOS kernels are disabled
 	;IN_EMU_MODE: 1 if in disk emulation mode (set by AUTODRV in partit.mac)
-    ;PROCNM+10: <>0 if the driver provides configuration
 
 	;Calculate how many work area space can be allocated, it will be:
 	;(SP) - MAX(C200h, BOTTOM+512)
@@ -1069,46 +1132,43 @@ BOTTOM_OK:
 	sbc	hl,de	;HL = -DE
 	add	hl,sp
 
-    xor a
+    ld a,DRIVER.DRVQ_GET_INIT_PARAMS##
 	call	CALL_DV_INIT
-    push af
-    pop bc
-	ld	e,c
-	res	1,e
+	or a
+	jr z,GET_DRIVER_INIT_PARAMS_OK
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	ld b,0
+	ld hl,0
+	jr z,GET_DRIVER_INIT_PARAMS_OK
 
-	push	hl
-	ld	hl,RDBANK##
-	ld	(BK4_ADD##),hl
-	ld	hl,DV_TYPE##
-	call	CALDRV##
-
-    ld h,a
-	and	1	;Device-based driver?
-	ld	(PROCNM+8),a
-    ld a,h
-	push af
-	and 100b
-	ld	(PROCNM+10),a
-    ld b,a
-	pop af
-	pop	hl
-	jr	z,NO_DEVBASED
+	ld de,STR_DRV_INIT_FAILED
+	call MSG_DE
+	jp NO_DRIVE
+GET_DRIVER_INIT_PARAMS_OK:
 	
-	ld	b,255
-
-OKDEVBASED:
+	ld a,b
+	ld	(PROCNM+4),a
 
 NO_DEVBASED:
-	ld	c,e
-	ld	(PROCNM+4),bc
+	ld a,h
+	or l
+	jr z,DRIVER_NOT_REQUESTING_MEMORY
+
+	push hl
 	call	ALLOC##		;Try to allocate work area for my driver
-	jp	c,NO_DRIVE	;failed, I cannot be the slave
+	pop hl
+	jp	c,NO_MEM_FOR_DRIVER	;failed, I cannot be the slave
 ;
+	push hl
 	ex	de,hl		;move base of work area to [DE]
 	call	GET_SLTWRK_ENTRY
 	ld	(hl),e		;set base of work area in SLTWRK
 	inc	hl
 	ld	(hl),d
+	pop hl
+
+DRIVER_NOT_REQUESTING_MEMORY:
+	push hl
 	ld	hl,(MAXSEC)	;get maximum sector size declared so far
 	ld	de,512		;get maximum sector size supported by
 				; this cartridge
@@ -1116,23 +1176,31 @@ NO_DEVBASED:
 	jr	nc,BIGENOUGH	;big enough to hold my sector
 	ld	(MAXSEC),de	;mine is bigger, overwrite it
 BIGENOUGH:
+	pop hl
 
-	;If 255 drives requested, call DRV_INIT with A=1 and then COUNTDRV
+	;Call driver initialization routine and then COUNTDRV
 	;to actually get the number of drives to allocate.
 	;(We can't call COUNTDRV before finishing the initialization of the driver)
 
-	ld	a,(PROCNM+5)
-	inc	a
-	jr	nz,NO255DRIVES
-	ld	hl,PROCNM+4
-	ld	b,255
-	set	1,(hl)
-    ld a,1
+    ld a,DRIVER.DRVQ_INIT##
     call CALL_DV_INIT   ;Initialize environment and hardware
-	call COUNTDRV
+
+	or a
+	jr z,DRIVER_INIT_OK
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr z,DRIVER_INIT_OK
+	ld de,STR_DRV_INIT_FAILED
+	call MSG_DE
+	jp NO_DRIVE
+DRIVER_INIT_OK:
+	ld de,STR_DRV_INIT_OK
+	call MSG_DE
+
+	ld	hl,GET_BOOT_DRIVES_COUNT##
+	ld	(BK4_ADD##),hl
+	call	C4PBK##
 	ld	(PROCNM+5),a
 
-NO255DRIVES:
 	call	VALTBL		;get empty entry again
 	ld	hl,DRVTBL
 	ld	d,0		;[DE] = offset into DRVTBL
@@ -1145,10 +1213,7 @@ NO255DRIVES:
 	jr	z,DO_INIT_ENV
 	ld	h,a
 
-	;ld	a,(TARGET##)
-	;or	a
-	ld	a,c		;total drives declared so far
-	;call	DRIVES##	;get my own drives in [L]
+	ld	a,c		;total drives declared so far (from VALTBL)
 	add	a,h		;add my own
 	cp	MAXDRV+1	;enough room for additional drives?
 	jr	c,EMPDR1	;yes
@@ -1160,14 +1225,6 @@ EMPDR1:
 	call	SET_DPBS
 
 DO_INIT_ENV:
-	ld	a,(PROCNM+4)
-	and	2
-	jr	nz,INITENV_DONE
-    ld	a,(PROCNM+6)	;only if we haven't done that yet
-	ld	b,a
-    ld a,1
-    call CALL_DV_INIT   ;Initialize environment and hardware
-INITENV_DONE:
 
 	;Set entry in KERNEX table
 
@@ -1186,14 +1243,11 @@ FINDKERNEX:
 	jr	z,NOSETINT
 	set	6,b
 NOSETINT:
-    ld a,(PROCNM+10)
-	or a
-	jr	z,NOSETCONF
-	set 5,b
+	set 5,b	;TODO: No longer needed
 NOSETCONF:
 	ld	(hl),b
 
-	ld	a,(PROCNM+6)
+	ld	a,(PROCNM+5)
 	or	a
 	jr	z,NO_DRIVE
 
@@ -1201,6 +1255,11 @@ NOSETCONF:
 	inc	(hl)
 	ret
 ;
+
+NO_MEM_FOR_DRIVER:
+	ld de,STR_NO_MEM_FOR_DRIVER
+	call MSG_DE
+
 NO_DRIVE:
 	call	GET_DISKID_HL	;Am I the first cartridge?
 	inc	(hl)
@@ -2318,34 +2377,9 @@ GSLT_SLTTBL:
 
 	PRINTL	INIT,%($-$$INIT)
 
+STR_NO_MEM_FOR_DRIVER:
+	db 13,10,"*** Can't allocate memory for driver!",13,10,10,0
 
-    ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
-
-DO_KEYS_INIT:
-    call CHECK_IS_RUSSIAN
-    ld (I_AM_RUSSIAN##),a
-
-    call SCANKEYS_RAM
-    jr z,DO_KEYS_INIT2
-    call SCANKEYS
-    
-    ld a,(KEYS_INV_0)
-    and 00111110b
-    xor b
-    ld b,a
-
-    ld a,(KEYS_INV_1)
-    and 00110000b
-    xor h
-    ld h,a
-  
-DO_KEYS_INIT2:
-    ld a,b
-    ld (BOOTKEYS##),a
-    ld (BOOTKEYS##+1),de
-    ld (BOOTKEYS##+3),hl
-
-    ret
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2361,7 +2395,6 @@ SFIRST:	CALLDOS	11h	;;Search for first (FCB)
 ;
 
 SET_DPBS:
-	ld	(PROCNM+6),a
 	ld	(de),a		;set number of drives in DRVTBL
 	inc	de
 	call	GSLOT1##	;get slot address in [A]
@@ -2402,6 +2435,9 @@ SETDEFDPB:
 	jr	nz,SETDEFDPB	;yes
 	ret
 
+STR_UNNAMED_DRIVER:
+	db "(Unnamed driver)",0
+
 	ALIGN	5006h
 SNEXT:	CALLDOS	12h	;;Search for next (FCB)
 ;
@@ -2423,16 +2459,6 @@ STRCOMP:
 	ALIGN	501Eh
 FSIZE:	CALLDOS	23h	;;Get file size (FCB)
 ;
-
-    ;--- Get in A the number of drives assigned to this driver at boot time.
-
-COUNTDRV:
-	ld a,(PROCNM+10)
-	ld b,a
-	ld	hl,DRVS2##
-	ld	(BK4_ADD##),hl
-	call	C4PBK##
-	ret
 
 JP_BOOT_SEC:
     call SBDAVEC##
@@ -2608,7 +2634,7 @@ NOCHCPU:
 	call	DEFILE##		; and rebuild BASIC's FCB structure
 	ld	sp,(STKTOP)		;
 ;
-	;Begin of creation of DVB_TABLE
+	;Begin of creation of KERNEX_DOS1
 
 	xor	a
 	ld	(DOS_VER##),a	;Needed for AUTODRV
@@ -2624,14 +2650,14 @@ NOCHCPU:
 	or	a
 	jr	nz,MK_EMU_TBL
 
-	;Build the table of drives attached to device-based drivers.
+	;Build the table of drives attached to Nextor drivers.
 	;We call AUTODRV on segment 4 to build the table in a
 	;fixed location (BUF_1), then we allocate space for the
 	;table in page 3 and copy the table here, prepended by
 	;a byte that tells how many entries are in the table.
 
-	ld	hl,0F980h	;(BUF_1##)
-	ld	(DVB_TABLE##),hl
+	ld	hl,BOOT_TMP##
+	ld	(KERNEX_DOS1##),hl
 	ld	hl,AUTODRV##
 	ld	(BK4_ADD##),hl
 	call	C4PBK##
@@ -2656,21 +2682,21 @@ OK_EMU_WK:
 	push	hl
 	ex	de,hl
 	ld	hl,EMU_TMP##
-	ld	bc,16
+	ld	bc,EMU_DESC_SIZE##
 	call	MEMCPY
 
 	pop	hl
 	set	7,(hl)	;Disk emulation mode flag
 
-	ld	(DVB_TABLE##),hl
+	ld	(KERNEX_DOS1##),hl
 
 	jr	END_DVB_TBL
 
 MK_DVB_TBL:
-	ld	hl,0F980h	;(BUF_1##)
+	ld	hl,BOOT_TMP##
 	ld	a,(hl)
 	or	a
-	jr	z,AUTODRV_OK2	;No drives for device-based drivers?
+	jr	z,AUTODRV_OK2	;No drives for Nextor drivers?
 
 	ld	b,a	;B = Number of entries in the table
 	add	a,a
@@ -2684,25 +2710,25 @@ MK_DVB_TBL:
 	pop	bc
 	jr	z,AUTODRV_OK
 	ld	hl,0
-	ld	(DVB_TABLE##),hl
+	ld	(KERNEX_DOS1##),hl
 	jr	AUTODRV_OK2
 AUTODRV_OK:
 
-	ld	(DVB_TABLE##),hl
+	ld	(KERNEX_DOS1##),hl
 	ex	de,hl
-	ld	hl,0F980h	;(BUF_1##)
+	ld	hl,BOOT_TMP##
 	ldir
 
 AUTODRV_OK2:
 
-	;End of creation of DVB_TABLE
+	;End of creation of KERNEX_DOS1
 
 END_DVB_TBL:
-	ld	hl,(KERNEX##)		;Preserve KERNEX and DVB_TABLE since
+	ld	hl,(KERNEX##)		;Preserve KERNEX and KERNEX_DOS1 since
 	push	hl                      ;the next ldir will erase it
 	ld	hl,(KERNEX##+2)
 	push	hl
-	ld	hl,(DVB_TABLE##)
+	ld	hl,(KERNEX_DOS1##)
 	push	hl
 
 	xor	a			;
@@ -2716,7 +2742,7 @@ END_DVB_TBL:
 	ldir
 
 	pop	hl
-	ld	(DVB_TABLE##),hl
+	ld	(KERNEX_DOS1##),hl
 	pop	hl
 	ld	(KERNEX##+2),hl
 	pop	hl
@@ -2831,6 +2857,15 @@ endif
 endif
 	subttl	MSX-DOS1 compatible ROM entries (part 3)
 
+
+STR_INIT_NEXTOR_KERNEL_AT_SLOT:
+	db 13,"Initializing Nextor kernel at slot ",0
+STR_COLON:
+	db ": ",0
+STR_3_DOTS:
+	db "...",0
+
+
 	ALIGN	535Dh
 BUFOUT:	exx
 	push	bc		;Get error code in B' if it ever servives.
@@ -2855,6 +2890,7 @@ OUT_MSG:
 	inc	de
 	jr	out_msg
 ;
+
 
 	ALIGN	53A7h
 CONOUT:	CALLDOS	02h	;Console output
@@ -2984,6 +3020,40 @@ GDATE:	CALLDOS	2Ah	;Get date
 	ALIGN	5552h
 SDATE:	CALLDOS	2Bh	;Set date
 ;
+
+    ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
+
+DO_KEYS_INIT:
+    call CHECK_IS_RUSSIAN
+    ld (I_AM_RUSSIAN##),a
+
+    call SCANKEYS_RAM
+    jr z,DO_KEYS_INIT2
+    call SCANKEYS
+    
+    ld a,(KEYS_INV_0)
+    and 00111110b
+    xor b
+    ld b,a
+
+    ld a,(KEYS_INV_1)
+    and 00110000b
+    xor h
+    ld h,a
+  
+DO_KEYS_INIT2:
+    ld a,b
+    ld (BOOTKEYS##),a
+    ld (BOOTKEYS##+1),de
+    ld (BOOTKEYS##+3),hl
+
+    ret
+
+STR_DRV_INIT_FAILED:
+	db 13,10,"*** Driver initialization failed!",13,10,10,0
+STR_DRV_INIT_OK:
+	db 13,10,"Driver initialization OK",13,10,10,0
+
 	ALIGN	55DBh
 GTIME:	CALLDOS	2Ch	;Get time
 ;
@@ -3209,7 +3279,7 @@ chkd_pstring:
 	db	"System halted.",0
 
 DRV_STRING:
-	db	"NEXTOR_DRIVER",0
+	db	"NEXTORv3_DRIVER",0
 CHBANK_CODE:	;The code for CHGBNK will be copied here
 
 	.dephase
@@ -3472,18 +3542,24 @@ DO_LDIR:
 	ldir
 	ret
 
-    ;Call DRV_INIT in my slot.
-    ;Input: A, B = Input for the routine.
+    ;Call DRVQ_GET_INIT_PARAMS or DRVQ_INIT in my slot.
+    ;Input: A, B, HL = Input for the routine (A = DRVQ_GET_INIT_PARAMS or DRVQ_INIT).
 
-CALL_DV_INIT:
+CALL_DV_INIT::
     push af
     push bc
+	ld de,CHPUT
     ld a,(BOOTKEYS##)
     and 00100000b
     pop bc
     ld c,a
     pop af
-    ld	ix,DV_INIT##	;Initialize environment and hardware
+
+CALL_DRIVER_QUERY:
+    ld	ix,DRIVER.DRIVER_QUERY##	;Initialize environment and hardware
+
+	;Input: IX = Routine address, other params: input for routine
+CALL_DRIVER:
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##

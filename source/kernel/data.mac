@@ -269,7 +269,7 @@ ram_ad	defl	DATABASE
 	var1	P2_64K		; /  by anyone (including the system).
 	var1	P3_64K		;/
 
-    const   DVB_TABLE,P0_64K  ;Pointer to table of device-based drives for DOS1
+    const   KERNEX_DOS1,P0_64K  ;Pointer to table of Nextor drives for DOS1
     const   KSLOT,P2_64K  ;Slot of disk controller being called (used in DOS 1 mode)
 ;
 	var1	NXT_VER		;Nextor version numbr
@@ -526,7 +526,7 @@ ram_ad	defl	4100h
 	var3	F_RALLOC
 	var3	F_DSPACE
 
-	var3    DRVS2
+	var3    GET_BOOT_DRIVES_COUNT
 	var3    AUTO_ASPART
     var3    F_GETCLUS
 
@@ -568,23 +568,49 @@ ram_ad	defl	4100h
 	var3    DV_CONFIG
 	spare	12
 	
-	;Routines for drive-based and device-based drivers
-
-	var0	DV_DSKIO
-	var3	DEV_RW
-	var0	DV_CHGDSK
-	var3	DEV_INFO
-	var0	DV_GETDPB
-	var3	DEV_STATUS
-	var0	DV_CHOICE
-	var3	LUN_INFO
-	var0	DV_FORMAT
-	var3	DEV_FORMAT
-	var0	DV_MTOFF
-	var3	DEV_CMD
-
 ;-----------------------------------------------------------------------------
 ;
+	module DRIVER
+
+	ram_ad	defl	4100h
+
+	var SIGNATURE,16
+	var3	TIMER_INT
+	var3	OEMSTAT
+	var3	BASDEV
+	var3	EXTBIO
+	var3	DIRECT_0
+	var3	DIRECT_1
+	var3	DIRECT_2
+	var3	DIRECT_3
+	var3	DIRECT_4
+	var3	DRIVER_QUERY
+	var3	DEVICE_QUERY
+	var3	CUSTOM_DRIVER_QUERY
+	var3	CUSTOM_DEVICE_QUERY
+	var3	READ_WRITE
+
+	const QUERY_OK,0
+	const QUERY_TRUNCATED_STRING,1
+	const QUERY_INVALID_DEVICE,2
+	const QUERY_NOT_IMPLEMENTED,255
+
+	const DRVQ_GET_VERSION,1
+	const DRVQ_GET_STRING,2
+	const DRVQ_GET_INIT_PARAMS,3
+	const DRVQ_INIT,4
+	const DRVQ_GET_NUM_BOOT_DRIVES,5
+	const DRVQ_GET_DRIVE_BOOT_CONFIG,6
+	const DRVQ_GET_MAX_DEVICE,7
+
+	const DRVQ_STR_DRIVER_NAME,1
+
+	const DEVQ_GET_STRING,1
+	const DEVQ_GET_PARAMS,2
+	const DEVQ_GET_STATUS,3
+	const DEVQ_GET_AVAILABILITY,4
+
+	endmod
 
 	finish	<DATA>
 	end

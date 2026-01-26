@@ -1,8 +1,5 @@
 	.z80
 
-DEV_INFO	equ	4163h
-LUN_INFO	equ	4169h
-
 DEVINFO_STRLEN	equ	64
 
 	jp	START
@@ -10,7 +7,7 @@ DEVINFO_STRLEN	equ	64
         ;        -------------------------------------------------------------------------------
 	db	13
 USAGE_S:
-	db	"DEVINFO - displays information about the devices handled by a disk driver",13,10
+	db	"DEVINFO v1.1- displays information about the devices handled by a disk driver",13,10
 	db	13,10
 	db	"Usage: DEVINFO <slot>[-<subslot>][:<segment>]|0",13,10
 	db	13,10
@@ -20,7 +17,7 @@ USAGE_S:
 	db	0
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	;--- Get slot, subslot, segment
 
@@ -62,8 +59,8 @@ NO_PRIMARY:
 	jp	nz,5
 
 	ld	a,(BUF_INFO+4)
-	and	10000001b
-	cp	10000001b
+	and	10000000b
+	cp	10000000b
 	ld	b,.IDRVR##
 	ld	c,_TERM##
 	jp	nz,5
@@ -71,40 +68,44 @@ NO_PRIMARY:
 	;--- Loop for all devices
 
 	ld	iy,BUF_REG
-	ld	(iy+1),1
+	ld  (iy+1),DRIVER.DEVQ_GET_STRING##
+	ld	(iy+2),1	;Device number
+	ld  (iy+5),255	;Buffer size
 	ld	hl,BUF_INFO
 	ld	(iy+6),l
 	ld	(iy+7),h
 
+
 DEV_LOOP:
 
-	;* Get and display basic information
-
-	ld	(iy+3),0
-	call	CALL_DEVINFO
-	push	ix
-	pop	af
-	or	a
-	jp	nz,DEV_LOOP_NEXT2
-
-	ld	a,(iy+1)
-	add	a,"0"
-	ld	(DEVINDEX_MSG),a
-	ld	a,(BUF_INFO)
-	ld	(LUNS),a
-	add	a,"0"
-	ld	(LUNS_MSG),a
-	ld	de,DEV_MSG
-	ld	c,_ZSTROUT##
-	call	5
+	ld	iy,BUF_REG
 
 	;* Get and display manufacturer name
 
 GET_INFO_1:
-	inc	(iy+3)
-	call	CALL_DEVINFO
+	ld	(iy+3),1
+	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
+	cp DRIVER.QUERY_INVALID_DEVICE##
+	jp z,DEV_LOOP_NEXT2
+
+	push af
+	ld a,(iy+2)
+	ld ix,BUF_INFO
+	call BYTE2ASC##
+	ld (ix),0
+	ld	de,DEV_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld de,BUF_INFO
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+	pop af
+
 	or	a
 	jr	nz,GET_INFO_2
 
@@ -122,7 +123,7 @@ GET_INFO_1:
 
 GET_INFO_2:
 	inc	(iy+3)
-	call	CALL_DEVINFO
+	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
 	or	a
@@ -140,33 +141,23 @@ GET_INFO_2:
 	
 	;* Get and display serial number
 
-GET_INFO_3:
+GET_INFO_3::
 	inc	(iy+3)
-	call	CALL_DEVINFO
+	ld	hl,BUF_INFO
+	ld	(iy+6),l
+	ld	(iy+7),h
+	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
 	or	a
 	jr	nz,GET_INFO_4
 
-	ld	hl,BUF_INFO-1
-	ld	b,DEVINFO_STRLEN
-SKIPSP:
-	inc	hl	;This time string is left-padded
-	ld	a,(hl)
-	cp	" "
-	jr	nz,OKSKIPSP
-	djnz	SKIPSP
-	jr	GET_INFO_4
-OKSKIPSP:
 
-	push	hl
 	ld	de,SERIAL_MSG
 	ld	c,_ZSTROUT##
 	call	5
-	pop	de
 
-	xor	a
-	ld	(BUF_INFO+DEVINFO_STRLEN),a
+	ld de,BUF_INFO
 	ld	c,_ZSTROUT##
 	call	5
 	ld	de,CRLF
@@ -174,48 +165,86 @@ OKSKIPSP:
 	call	5
 GET_INFO_4:
 
-	;--- Display information about LUNs
+	;--- Get and display device parameters
 
-	ld	a,(iy+1)
+	ld	a,(iy+2)
 	ld	iy,BUF_REG2
-	ld	(iy+1),a
-	ld	(iy+3),1
+	ld	(iy+2),a
+	ld	(iy+1),DRIVER.DEVQ_GET_PARAMS##
 	ld	hl,BUF_INFO
 	ld	(iy+6),l
 	ld	(iy+7),h
 
-LUN_INFO_LOOP:
-	call	CALL_LUNINFO	
+	ld	de,DRIVER.DEVICE_QUERY##
+	ld	hl,BUF_REG2
+	call	CALL_DRIVER	
 	push	ix
 	pop	af
 	or	a
-	jp	nz,LUN_INFO_NEXT2
+	jr z,GOT_DEV_INFO
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr z,DEFAULT_DEV_INFO
+	jp	DEV_LOOP_NEXT
 
-	;* LUN number
+DEFAULT_DEV_INFO:
+	ld hl,BUF_INFO
+	push hl
+	pop de
+	ld (hl),0
+	ld bc,12-1
+	ldir
 
-	ld	a,(iy+3)
-	add	a,"0"
-	ld	(LUNINDEX_MSG),a
-	ld	de,LUN_MSG
-	ld	c,_ZSTROUT##
-	call	5
+GOT_DEV_INFO::
+
+	;* Check if device is available
+
+	ld	iy,BUF_REG
+	ld	a,(iy+2)
+	ld	iy,BUF_REG2
+	ld	(iy+2),a
+	ld	(iy+1),DRIVER.DEVQ_GET_AVAILABILITY##
+	ld	hl,BUF_REG2
+	ld	de,DRIVER.DEVICE_QUERY##
+	call	CALL_DRIVER	
+	push	ix
+	pop	af
+	or	a
+	jr z,GOT_DEVICE_AVAILABILITY
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	ld b,1
+	jr z,GOT_DEVICE_AVAILABILITY
+	jp	DEV_LOOP_NEXT
+
+GOT_DEVICE_AVAILABILITY:
+	ld a,b
+	ld (BUF_DEV_IS_ONLINE),a
 
 	;* Device type
 
 	ld	a,(BUF_INFO)
 	ld	de,BLOCK_MSG
 	or	a
-	jr	z,OK_LUNTYPE
+	jr	z,OK_DEV_TYPE
 	ld	de,CDROM_MSG
 	dec	a
-	jr	z,OK_LUNTYPE
+	jr	z,OK_DEV_TYPE
 	ld	de,UNKNOWN_MSG
-OK_LUNTYPE:
+OK_DEV_TYPE:
 	ld	c,_ZSTROUT##
 	call	5
 
-	;* Device capacity, if block device with 512K sectors
+	;* Device capacity, if device is online and it's a block device with 512 byte sectors
 
+	ld a,(BUF_DEV_IS_ONLINE)
+	or a
+	jr nz,DEVICE_IS_ONLINE
+
+	ld de,OFFLINE_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	jp NO_CAPACITY
+
+DEVICE_IS_ONLINE:
 	ld	a,(BUF_INFO)
 	or	a
 	jp	nz,NO_CAPACITY
@@ -324,20 +353,11 @@ NO_READONLY:
 	call	5
 NO_FLOPPY:
 
-	;* Go for next LUN
+	;* Separating blank line
 
-LUN_INFO_NEXT:
 	ld	de,CRLF
 	ld	c,_ZSTROUT##
 	call	5
-LUN_INFO_NEXT2:
-	ld	a,(iy+3)
-	inc	a
-	ld	(iy+3),a
-	cp	8
-	jp	c,LUN_INFO_LOOP
-
-	ld	iy,BUF_REG
 
 	;--- Go for next device
 
@@ -346,10 +366,11 @@ DEV_LOOP_NEXT:
 	ld	c,_ZSTROUT##
 	call	5
 DEV_LOOP_NEXT2:
-	ld	a,(iy+1)
+	ld	iy,BUF_REG
+	ld	a,(iy+2)
 	inc	a
-	ld	(iy+1),a
-	cp	8
+	ld	(iy+2),a
+	cp	255
 	jp	c,DEV_LOOP
 
 	ld	b,0
@@ -357,22 +378,24 @@ DEV_LOOP_NEXT2:
 	jp	5
 
 
-CALL_LUNINFO:
-	ld	de,LUN_INFO
-	ld	hl,BUF_REG2
-	jr	CALL_DRIVER
-
-CALL_DEVINFO:
-	ld	de,DEV_INFO
+CALL_DEV_QUERY:
+	ld	de,DRIVER.DEVICE_QUERY##
+	ld b,255
 	ld	hl,BUF_REG
 
 CALL_DRIVER:
 	ld	a,(SEGMENT)
 	ld	b,a
 	ld	a,(SLOT)
+	or 00010000b	;Nextor 3 awareness flag
 	ld	c,_CDRVR##
 	call	5
-	ret	z
+	jr nz,CALL_DRIVER_ERROR
+	cp DRIVER.QUERY_TRUNCATED_STRING##
+	ret nz
+	xor a
+	ret
+CALL_DRIVER_ERROR:
 	ld	b,a
 	ld	c,_TERM##
 	jp	5
@@ -420,7 +443,7 @@ Num4:
 
 
 DEV_MSG:
-	db	"Device index "
+	db	"Device number ",0
 DEVINDEX_MSG:
 	db	"0:",13,10
 	db	"  Number of logical units: "
@@ -435,18 +458,12 @@ MANUF_MSG:
 	db	"  Device manufacturer: ",0
 SERIAL_MSG:
 	db	"  Device serial number: ",0
-
-LUN_MSG:
-	db	"    LUN "
-LUNINDEX_MSG:
-	db	"0: ",0
-
 BLOCK_MSG:
-	db	"Block device",0
+	db	"  Block device",0
 CDROM_MSG:
-	db	"CD-ROM",0
+	db	"  CD-ROM",0
 UNKNOWN_MSG:
-	db	"Unknown type",0
+	db	"  Unknown type",0
 REMOVABLE_MSG:
 	db	", removable",0
 FIXED_MSG:
@@ -459,6 +476,8 @@ CAPAUNIT:
 	db	"K"
 CAPACITY_MSG:
 	db	", 00000KB",0
+OFFLINE_MSG:
+	db  ", offline",0
 
 DEVINDEX:
 	db	1
@@ -466,8 +485,9 @@ SLOT:	db	-1
 SEGMENT:	db	255
 LUNS:	db	0
 
-BUF:
-BUF_REG:
+BUF: equ 2000h
+BUF_DEV_IS_ONLINE: equ BUF
+BUF_REG: equ BUF_DEV_IS_ONLINE+1
 BUF_REG2	equ	BUF_REG+8
 BUF_INFO	equ	BUF_REG2+8
 

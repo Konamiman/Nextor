@@ -4,13 +4,13 @@
 
         ;        -------------------------------------------------------------------------------
 	db	13
-	db	"DRIVERS - displays information about the disk drivers present in the system",13,10
+	db	"DRIVERS v1.1- displays information about the disk drivers present in the system",13,10
 	db	13,10
 	db	"Usage: DRIVERS",13,10
 	db	1Ah
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	ld	a,1
 	ld	(INDEX),a
@@ -99,21 +99,6 @@ OK_NAME:
 	call	5
 
 
-	;* Print driver type
-
-	bit	7,(ix+4)
-	jr	z,IS_LEGACY_2
-
-	ld	de,DEVBASED_MSG
-	bit	0,(ix+4)
-	jr	nz,PRINT_TYPE
-	ld	de,DRVBASED_MSG
-PRINT_TYPE:
-	ld	c,_ZSTROUT##
-	call	5
-IS_LEGACY_2:
-
-
 	;* Print number of assigned drives
 
 	ld	a,(ix+2)
@@ -168,12 +153,8 @@ OK_PRINT_DRIVES:
 	jp	MAIN_LOOP
 
 
-DEVBASED_MSG:
-	db	"Type: device-based",13,10,0
-DRVBASED_MSG:
-	db	"Type: drive-based",13,10,0
 LEGACY_MSG:
-	db	"Legacy driver",0
+	db	"Legacy MSX-DOS driver",0
 ONSLOT_S:
 	db	" on slot ",0
 NODRIVES_MSG:

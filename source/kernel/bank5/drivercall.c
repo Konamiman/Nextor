@@ -14,7 +14,7 @@ void DriverCall(byte slot, uint routineAddress)
 
 	memcpy(registerData, &regs, 8);
 
-	regs.Bytes.A = slot;
+	regs.Bytes.A = slot | CDRVR_NEXTOR_3_FLAG;
 	regs.Bytes.B = 0xFF;
 	regs.UWords.DE = routineAddress;
 	regs.Words.HL = (int)registerData;

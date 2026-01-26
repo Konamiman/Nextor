@@ -13,7 +13,7 @@ ifeq ($(strip $(LK80)),)
 LK80=LK80
 endif
 
-export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin
+export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin --code-before-data
 
 define copy_to_bin
 	cp $(1) ../../bin/tools/$(2)

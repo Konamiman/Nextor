@@ -637,7 +637,7 @@ MAPBDO:
 		exx
 		set	0,d
 		exx
-		ld	ix,DV_EXTBIO##
+		ld	ix,DRIVER.EXTBIO##
 		ex	af,af'
 		ld	a,DV_BANK##
 		call	DH_CABNK##
@@ -774,7 +774,7 @@ EXB_SLOT_BACKUP:
 
    	ld	h,40h
 	call	ENASLT
-	ld	hl,DV_EXTBIO##
+	ld	hl,DRIVER.EXTBIO##
 	ld (BK4_ADD##),hl
 	exx
 	ld	de,0100h    ;Pass D'=1 by default

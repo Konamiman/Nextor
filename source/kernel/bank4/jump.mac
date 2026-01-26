@@ -80,7 +80,7 @@ jentry	macro	name
 	jentry  F_RALLOC
 	jentry	F_DSPACE
 
-    jentry  DRVS2
+    jentry  GET_BOOT_DRIVES_COUNT
 	jentry  AUTO_ASPART
     jentry  F_GETCLUS
 

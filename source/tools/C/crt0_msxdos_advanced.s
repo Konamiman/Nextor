@@ -118,6 +118,7 @@ cont:   ld      hl,#0x100
         ld      e,c      ;Pass info as parameters to "main"
 
         ;--- Step 3: Call the "main" function
+
 	push de
 	ld de,#_HEAP_start
 	ld (_heap_top),de
@@ -129,7 +130,7 @@ cont:   ld      hl,#0x100
         ;    Termination code for DOS 2 was returned on L.
                 
         ld      c,#0x62   ;DOS 2 function for program termination (_TERM)
-        ld      b,l
+        ld      b,a
         call    5      ;On DOS 2 this terminates; on DOS 1 this returns...
         ld      c,#0x0
         jp      5      ;...and then this one terminates

@@ -403,7 +403,7 @@ FUNTAB:	DEFW	@TERM0		;Terminate program with no error.
 	DEFW	@GDLI		; Get drive letter information
 	DEFW	@GPART		; Get information of disk partition
 	DEFW	@CDRVR		; Call a routine in a disk driver
-	DEFW	@MAPDRV		; Map a drive letter to a drive or device/LUN/partition
+	DEFW	@MAPDRV		; Map a drive letter to a drive or device/partition
 
 	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
     DEFW    @GETCLUS    ; Get information about a cluster in a FAT drive

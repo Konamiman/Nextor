@@ -23,27 +23,14 @@
 #include "../../tools/C/partit.h"
 #include "fdisk.h"
 
-//#define FAKE_DEVICE_INFO
-//#define FAKE_DRIVER_INFO
-//#define FAKE_PARTITION_COUNT 256
-
-/*
-If FAKE_DEVICE_SIZE is defined,
-simulated device size is provided by user:
-_FDISK(sizeInK)
-_FDISK(sizeInK, sizeInM)
-_FDISK(sizeInK, sizeInM, sizeInG)
-All the provided values are added up to get the simulated value.
-Maximum value for each parameter is 32767.
-*/
-
-//#define FAKE_DEVICE_SIZE
-//#define TEST_FAT_PARAMETERS
-
 #define MESSAGE_ROW 9
 #define PARTITIONS_PER_PAGE 15
 
 #define CMD_FDISK 1
+
+#define DEVICES_PER_PAGE 4
+#define MAX_DEVICE_PAGES 16
+#define MAX_DEVICES_PER_DRIVER (DEVICES_PER_PAGE * MAX_DEVICE_PAGES)
 
 typedef struct {
     byte screenMode;
@@ -55,15 +42,13 @@ char buffer[1000];
 driverInfo drivers[MAX_INSTALLED_DRIVERS];
 driverInfo* selectedDriver;
 char selectedDriverName[50];
-lunInfo luns[MAX_LUNS_PER_DEVICE];
-lunInfo* selectedLun;
+deviceInfo* selectedDevice;
+deviceParams* selectedDeviceParams;
 deviceInfo devices[MAX_DEVICES_PER_DRIVER];
 deviceInfo* currentDevice;
 byte selectedDeviceIndex;
-byte selectedLunIndex;
 byte installedDriversCount;
 bool availableDevicesCount;
-byte availableLunsCount;
 Z80_registers regs;
 byte ASMRUT[4];
 byte OUT_FLAGS;
@@ -80,10 +65,16 @@ bool canDoDirectFormat;
 ulong autoPartitionSizeInK;
 ulong dividend, divisor;
 bool dos1;
-#ifdef FAKE_DEVICE_SIZE
-ulong fakeDeviceSizeInK;
-#endif
-
+byte currentDevicesPage;
+byte devicesPageCount;
+byte sectorBuffer[512];
+byte sectorBufferBackup[512];
+byte ASMRUT[4];
+byte OUT_FLAGS;
+Z80_registers regs;
+ulong nextDeviceSector;
+ulong mainExtendedPartitionSectorCount;
+ulong mainExtendedPartitionFirstSector;
 
 #define HideCursor() print("\x1Bx5")
 #define DisplayCursor() print("\x1By5")
@@ -96,7 +87,6 @@ ulong fakeDeviceSizeInK;
 #define NewLine() print("\x0A\x0D");
 
 
-void DoFdisk();
 void GoDriverSelectionScreen();
 void ShowDriverSelectionScreen();
 void ComposeSlotString(byte slot, char* destination);
@@ -104,13 +94,10 @@ void GoDeviceSelectionScreen(byte driverIndex);
 void ShowDeviceSelectionScreen();
 void GetDevicesInformation();
 void EnsureMaximumStringLength(char* string, int maxLength);
-void GoLunSelectionScreen(byte deviceIndex);
-void InitializePartitioningVariables(byte lunIndex);
-void ShowLunSelectionScreen();
+void ReplaceLastCharsWithDots(char* string, int length);
+void InitializePartitioningVariables(byte deviceIndex);
 void PrintSize(ulong sizeInK);
 byte GetRemainingBy1024String(ulong value, char* destination);
-void GetLunsInformation();
-void PrintDeviceInfoWithIndex();
 void GoPartitioningMainMenuScreen();
 bool GetYesOrNo();
 byte GetDiskPartitionsInfo();
@@ -122,18 +109,13 @@ void RecalculateAutoPartitionSize(bool setToAllSpaceAvailable);
 void AddPartition();
 void AddAutoPartition();
 void UndoAddPartition();
-void TestDeviceAccess();
-void InitializeScreenForTestDeviceAccess(char* message);
 void PrintDosErrorMessage(byte code, char* header);
 bool FormatWithoutPartitions();
-byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK);
 #ifdef TEST_FAT_PARAMETERS
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 #endif
 bool WritePartitionTable();
 void PreparePartitioningProcess();
-byte CreatePartition(int index);
-byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector);
 bool ConfirmDataDestroy(char* action);
 void ClearInformationArea();
 void GetDriversInformation();
@@ -151,59 +133,30 @@ void PrintCentered(char* string);
 void PrintStateMessage(char* string);
 void chput(char ch);
 void print(char* string);
-int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer);
+
+#define Clear(address, len) memset(address, 0, len)
+#define ReadSectorFromDevice(firstDeviceSector) DeviceSectorRW(firstDeviceSector, 0)
+#define WriteSectorToDevice(firstDeviceSector) DeviceSectorRW(firstDeviceSector, 1)
+
+byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK);
+void CreateFatBootSector(dosFilesystemParameters* parameters);
+ulong GetNewSerialNumber();
+void ClearSectorBuffer();
+void SectorBootCode();
+void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
+int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
+int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
+byte DeviceSectorRW(ulong firstDeviceSector, byte write);
+int CreatePartition(int index);
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector);
+
 
 void main(int bc, int hl)
 {
     ASMRUT[0] = 0xC3;   //Code for JP
 	dos1 = (*((byte*)0xF313) == 0);
 
-#ifdef FAKE_DEVICE_SIZE
-	fakeDeviceSizeInK = 0;
-	if(*((char*)hl) == '(') {
-		hl++;
-		regs.Words.HL = hl;
-		regs.Words.IX = FRMEVL;
-		SwitchSystemBankThenCall(CALBAS, REGS_MAIN);
-		fakeDeviceSizeInK = *(int*)(DAC+2);
-		hl = regs.Words.HL;
-		if(*((char*)hl++) == ',') {
-			regs.Words.HL = hl;
-			regs.Words.IX = FRMEVL;
-			SwitchSystemBankThenCall(CALBAS, REGS_MAIN);
-			fakeDeviceSizeInK += (ulong)(*(int*)(DAC+2)) * (ulong)1024;
-			hl = regs.Words.HL;
-			if(*((char*)hl++) == ',') {
-				regs.Words.HL = hl;
-				regs.Words.IX = FRMEVL;
-				SwitchSystemBankThenCall(CALBAS, REGS_MAIN);
-				fakeDeviceSizeInK += (ulong)(*(int*)(DAC+2)) * (ulong)1024 * (ulong)1024;
-				hl = regs.Words.HL;
-			}
-		}
-	}
-#endif
-#ifdef TEST_FAT_PARAMETERS
-	CalculateFatFileSystemParameters(fakeDeviceSizeInK, (dosFilesystemParameters*)buffer);
-	printf("Total sectors: "); _ultoa(((dosFilesystemParameters*)buffer)->totalSectors, buffer+80, 10); printf("%s\r\n", buffer+80);
-	printf("Data sectors:  "); _ultoa(((dosFilesystemParameters*)buffer)->dataSectors, buffer+80, 10); printf("%s\r\n", buffer+80);
-	printf("Cluster count: %u\r\n", ((dosFilesystemParameters*)buffer)->clusterCount);
-	printf("Sectors per FAT:     %u\r\n", ((dosFilesystemParameters*)buffer)->sectorsPerFat);
-	printf("Sectors per cluster: %u\r\n", ((dosFilesystemParameters*)buffer)->sectorsPerCluster);
-	printf("Sectors per root dir: %u\r\n", ((dosFilesystemParameters*)buffer)->sectorsPerRootDirectory);
-	printf(((dosFilesystemParameters*)buffer)->isFat16 ? "FAT16\r\n" : "FAT12\r\n");
-#else
-    DoFdisk();
-#endif
-}
-
-
-void DoFdisk()
-{
 	installedDriversCount = 0;
-	selectedDeviceIndex = 0;
-	selectedLunIndex = 0;
-	availableLunsCount = 0;
 
     SaveOriginalScreenConfiguration();
     ComposeWorkScreenConfiguration();
@@ -246,7 +199,7 @@ void ShowDriverSelectionScreen()
 {
     byte i;
     char slot[4];
-    char rev[3];
+    char rev[5];
     driverInfo* currentDriver;
     byte slotByte;
     byte revByte;
@@ -277,9 +230,7 @@ void ShowDriverSelectionScreen()
 	    if(revByte == 0) {
 	        rev[0] = '\0';
 	    } else {
-	        rev[0] = '.';
-	        rev[1] = revByte + '0';
-	        rev[2] = '\0';
+			sprintf(rev, ".%i", revByte);
 	    }
 	    
 	    driverName = currentDriver->driverName;
@@ -327,18 +278,24 @@ void GoDeviceSelectionScreen(byte driverIndex)
 	char slot[4];
 	int i;
 	byte key;
+	byte driverNameLength;
+	byte deviceInfoIndex;
 
 	selectedDriver = &drivers[driverIndex - 1];
 	ComposeSlotString(selectedDriver->slot, slot);
 	strcpy(selectedDriverName, selectedDriver->driverName);
-	if(!is80ColumnsDisplay) {
-		EnsureMaximumStringLength(selectedDriverName, MAX_LINLEN_MSX1 - 12);
-	}
-	sprintf(selectedDriverName + strlen(selectedDriverName),
-		" on slot %s\r\n",
+	driverNameLength = strlen(selectedDriverName);
+	sprintf(selectedDriverName + driverNameLength,
+		"%son slot %s\r\n",
+		is80ColumnsDisplay || (driverNameLength < DRIVER_NAME_LENGTH_40 - 12) ? " " : "\r\n",
 		slot);
 
-	availableDevicesCount = 0;
+	GetDevicesInformation();
+	currentDevicesPage = 0;
+	devicesPageCount = availableDevicesCount / DEVICES_PER_PAGE;
+	if((availableDevicesCount % DEVICES_PER_PAGE) != 0) {
+		devicesPageCount++;
+	}
 
     while(true) {
         ShowDeviceSelectionScreen();
@@ -348,12 +305,29 @@ void GoDeviceSelectionScreen(byte driverIndex)
         
         while(true) {
             key = WaitKey();
-            if(key == ESC) {
+			if(key == CURSOR_RIGHT) {
+				if(currentDevicesPage < devicesPageCount - 1) {
+					currentDevicesPage++;
+					break;
+				}
+			}
+			else if(key == CURSOR_LEFT) {
+				if(currentDevicesPage != 0) {
+					currentDevicesPage--;
+					break;
+				}
+			}
+            else if(key == ESC) {
                 return;
             } else {
                 key -= '0';
-                if(key >= 1 && key <= MAX_DEVICES_PER_DRIVER && devices[key - 1].lunCount != 0) {
-                    GoLunSelectionScreen(key);
+				if(key < 1 || key > DEVICES_PER_PAGE) {
+					continue;
+				}
+				deviceInfoIndex = (currentDevicesPage * DEVICES_PER_PAGE) + (key - 1);
+                if(deviceInfoIndex < availableDevicesCount && devices[deviceInfoIndex].canCreatePartitions) {
+					InitializePartitioningVariables(deviceInfoIndex);
+                    GoPartitioningMainMenuScreen();
                     break;
                 }
             }
@@ -364,8 +338,8 @@ void GoDeviceSelectionScreen(byte driverIndex)
 
 void ShowDeviceSelectionScreen()
 {
-	deviceInfo* currentDevice;
 	byte i;
+	byte baseDeviceIndex = currentDevicesPage * DEVICES_PER_PAGE;
 
 	ClearInformationArea();
 	Locate(0,3);
@@ -373,10 +347,6 @@ void ShowDeviceSelectionScreen()
 	CursorDown();
 	CursorDown();
 
-	if(availableDevicesCount == 0) {
-        GetDevicesInformation();
-    }
-    
     if(availableDevicesCount == 0) {
     	Locate(0, 9);
     	PrintCentered("There are no suitable devices");
@@ -387,85 +357,189 @@ void ShowDeviceSelectionScreen()
     	return;
 	}
 
-	currentDevice = &devices[0];
-	for(i = 0; i < MAX_DEVICES_PER_DRIVER; i++) {
-		if(currentDevice->lunCount > 0) {
-			printf("\x1BK%i. %s\r\n\r\n",
-				i + 1,
-				currentDevice->deviceName);
+	for(i = 0; i < DEVICES_PER_PAGE; i++) {
+		currentDevice = &devices[baseDeviceIndex + i];
+		if(baseDeviceIndex + i >= availableDevicesCount) {
+			break;
+		}
+		currentDevice->canCreatePartitions = false;
+		printf("\x1BK%i. %s\r\n",
+			i + 1,
+			currentDevice->deviceName);
+		if(!currentDevice->isValid) {
+			printf("(error getting device info)");
+		}
+		else if(!currentDevice->isOnline) {
+			printf("(device is offline)");
+		}
+		else if(currentDevice->params.mediumType != DEV_TYPE_BLOCK) {
+			printf("(not a block device)");
+		}
+		else if((currentDevice->params.flags & DEV_FLAG_FLOPPY) != 0) {
+			printf("(floppy disk device)");
+		}
+		else if((currentDevice->params.flags & DEV_FLAG_READ_ONLY) != 0) {
+			printf("(read-only device)");
+		}
+		else if(currentDevice->params.sectorSize != 512) {
+			printf("(unsupported sector size)");
+		}
+		else if(currentDevice->params.sectorCount == 0) {
+			printf("(unknown device size)");
+		}
+		else {
+			printf("Size: ");
+			PrintSize(currentDevice->params.sectorCount / 2);
+			currentDevice->canCreatePartitions = true;
+		}
+		printf(currentDevice->canCreatePartitions || is80ColumnsDisplay ? " (Device number: %i)" : " (Dev: %i)", currentDevice->deviceNumber);
+
+		if(!currentDevice->canCreatePartitions) {
+			//Erase the number displayed before the device name
+			//to give a visual clue that it can't be selected.
+			//The sequence is:
+			//\r - carriage return (go to beginning of line)
+			//\x1E - cursor up (point to the number)
+			//two spaces (remove number and dot)
+			//\x1F - cursor down (back to the error message line)
+			printf("\r\x1E  \x1F");
 		}
 
-		currentDevice++;
-	}
-
-	if(availableDevicesCount < 7) {
+		NewLine();
 		NewLine();
 	}
-	print("ESC. Go back to driver selection screen");
+
+	if(availableDevicesCount < MAX_DEVICES_PER_DRIVER) {
+		NewLine();
+	}
 
     PrintStateMessage("Select the device");
+	Locate(0, screenLinesCount - 5);
+	print("ESC. Go back to driver selection screen\r\n");
+
+	if(devicesPageCount > 1) {
+		if(currentDevicesPage == 0) {
+			print("RIGHT. Next page");
+		}
+		else if(currentDevicesPage == devicesPageCount - 1) {
+			print("LEFT. Previous page");
+		}
+		else {
+			print("LEFT/RIGHT. Previous/Next page");
+		}
+		Locate(is80ColumnsDisplay ? 80-13 : 40-13, screenLinesCount - 1);
+		printf("Page %i / %i", currentDevicesPage + 1, devicesPageCount);
+	}
 }
 
 
 void GetDevicesInformation()
 {
     byte error = 0;
-    byte deviceIndex = 1;
+    byte deviceIndex;
+	byte deviceNumber;
     deviceInfo* currentDevice = &devices[0];
 	char* currentDeviceName;
+	byte maxDeviceNumber;
+	byte maxDeviceNameLength = (is80ColumnsDisplay ? DRIVER_NAME_LENGTH_80 : DRIVER_NAME_LENGTH_40) + 1;
 
-#ifdef FAKE_DEVICE_INFO
-	availableDevicesCount = 7;
-	devices[0].lunCount = 1;
-	strcpy(devices[0].deviceName, "Un dispositivo.");
-	devices[2].lunCount = 1;
-	strcpy(devices[2].deviceName, "Otro dispositivo con nombre mas larguillo, de 64 caracteres tal.");
-	EnsureMaximumStringLength(devices[2].deviceName, MAX_LINLEN_MSX1 - 4);
-	devices[1].lunCount = 1;
-	devices[3].lunCount = 2;
-	devices[4].lunCount = 3;
-	devices[5].lunCount = 4;
-	devices[6].lunCount = 5;
+	regs.Bytes.A = DRVQ_GET_MAX_DEVICE_NUMBER;
+	DriverCall(selectedDriver->slot, DRIVER_QUERY);
+	maxDeviceNumber = regs.Bytes.A == 0 ? regs.Bytes.B : DEFAULT_MAX_DEVICE_NUMBER;
 
-	*devices[1].deviceName = '\0';
-	*devices[3].deviceName = '\0';
-	*devices[4].deviceName = '\0';
-	*devices[5].deviceName = '\0';
-	*devices[6].deviceName = '\0';
-
-	return;
-#else
     availableDevicesCount = 0;
+	deviceIndex = 0;
+	deviceNumber = 1;
 
-	while(deviceIndex <= MAX_DEVICES_PER_DRIVER) {
+	while(deviceIndex < MAX_DEVICES_PER_DRIVER && deviceNumber <= maxDeviceNumber) {
+		currentDevice->deviceNumber = deviceNumber;
 		currentDeviceName = currentDevice->deviceName;
-		regs.Bytes.A = deviceIndex;
-		regs.Bytes.B = 0;
-		regs.Words.HL = (int)currentDevice;
-		DriverCall(selectedDriver->slot, DEV_INFO);
-		if(regs.Bytes.A == 0) {
-			availableDevicesCount++;
-			regs.Bytes.A = deviceIndex;
-			regs.Bytes.B = 2;
-			regs.Words.HL = (int)currentDeviceName;
-			DriverCall(selectedDriver->slot, DEV_INFO);
-			//memcpy(currentDeviceName, "Device name with 40 characters lorem ips", 40); //!!!
-			if(regs.Bytes.A == 0) {
-				TerminateRightPaddedStringWithZero(currentDeviceName, MAX_INFO_LENGTH);
-			} else {
-				sprintf(currentDeviceName, "(Unnamed device, ID=%i)", deviceIndex);
+
+		regs.Bytes.A = DEVQ_GET_STRING;
+		regs.Bytes.B = STRING_DEVICE_NAME;
+		regs.Bytes.C = deviceNumber;
+		regs.Bytes.D = maxDeviceNameLength;
+		regs.Words.HL = (int)currentDeviceName;
+		DriverCall(selectedDriver->slot, DEVICE_QUERY);
+
+		deviceNumber++;
+
+		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+			sprintf(currentDeviceName, "(Unnamed device)");
+		}
+		else if(regs.Bytes.A == ERR_QUERY_TRUNCATED_STRING) {
+			ReplaceLastCharsWithDots(currentDeviceName, 0);
+		}
+		else if(regs.Bytes.A != 0) {
+			continue;
+		}
+
+		currentDevice->isValid = true;
+		availableDevicesCount++;
+
+		deviceIndex++;
+		currentDevice = &devices[deviceIndex];
+	}
+
+	if(availableDevicesCount == 0) {
+		return;
+	}
+
+	deviceIndex = 0;
+
+	while(deviceIndex < availableDevicesCount) {
+		currentDevice = &devices[deviceIndex];
+		currentDevice->isOnline = true;
+
+		regs.Bytes.A = DEVQ_GET_AVAILABILITY;
+		regs.Bytes.C = currentDevice->deviceNumber;
+		DriverCall(selectedDriver->slot, DEVICE_QUERY);
+
+		deviceIndex++;
+
+		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+			continue;
+		}
+
+		if(regs.Bytes.A != 0) {
+			//Should never happen if the driver is consistent
+			//(for a given device number it either returns "Invalid device" error for
+			//all the queries invoked through the DEVICE_QUERY routine,
+			//or for none of them)
+			currentDevice->isValid = false;
+		}
+		else if(regs.Bytes.B == 0) {
+			currentDevice->isOnline = false;
+		}
+	}
+
+	deviceIndex = 0;
+
+	while(deviceIndex < availableDevicesCount) {
+		currentDevice = &devices[deviceIndex];
+		if(currentDevice->isValid && currentDevice->isOnline) {
+			regs.Bytes.A = DEVQ_GET_PARAMS;
+			regs.Bytes.C = currentDevice->deviceNumber;
+			regs.Words.HL = (int)currentDevice->params;
+			DriverCall(selectedDriver->slot, DEVICE_QUERY);
+
+			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+				currentDevice->params.mediumType = DEV_TYPE_BLOCK;
+				currentDevice->params.sectorSize = 512;
+				currentDevice->params.sectorCount = 0;
+				currentDevice->params.flags = 0;
 			}
-			if(!is80ColumnsDisplay) {
-				EnsureMaximumStringLength(currentDeviceName, MAX_LINLEN_MSX1 - 4);
+			else if(regs.Bytes.A != 0) {
+				//Should never happen if the driver is consistent
+				//(for a given device number it either returns "Invalid device" error for
+				//all the queries invoked through the DEVICE_QUERY routine,
+				//or for none of them)
+				currentDevice->isValid = false;
 			}
-		} else {
-			currentDevice->lunCount = 0;
 		}
 
 		deviceIndex++;
-		currentDevice++;
 	}
-#endif
 }
 
 
@@ -473,106 +547,31 @@ void EnsureMaximumStringLength(char* string, int maxLength)
 {
 	int len = strlen(string);
 	if(len > maxLength) {
-		string += maxLength - 3;
-		*string++ = '.';
-		*string++ = '.';
-		*string++ = '.';
-		*string = '\0';
+		ReplaceLastCharsWithDots(string, maxLength);
 	}
 }
 
 
-void GoLunSelectionScreen(byte deviceIndex)
-{
-	int i;
-	byte key;
-
-	currentDevice = &devices[deviceIndex - 1];
-	selectedDeviceIndex = deviceIndex;
-
-	availableLunsCount = 0;
-
-    while(true) {
-        ShowLunSelectionScreen();
-        if(availableLunsCount == 0) {
-            return;
-        }
-        
-        while(true) {
-            key = WaitKey();
-            if(key == ESC) {
-                return;
-            } else {
-                key -= '0';
-                if(key >= 1 && key <= MAX_LUNS_PER_DEVICE && luns[key - 1].suitableForPartitioning) {
-					InitializePartitioningVariables(key);
-                    GoPartitioningMainMenuScreen();
-                    break;
-                }
-            }
-        }
-    }
+void ReplaceLastCharsWithDots(char* string, int length) {
+	if(length == 0) length = strlen(string);
+	string += length - 3;
+	*string++ = '.';
+	*string++ = '.';
+	*string++ = '.';
+	*string = '\0';
 }
 
 
-void InitializePartitioningVariables(byte lunIndex)
+void InitializePartitioningVariables(byte deviceIndex)
 {
-	selectedLunIndex = lunIndex - 1;
-	selectedLun = &luns[selectedLunIndex];
+	selectedDevice = &devices[deviceIndex];
+	selectedDeviceParams = &selectedDevice->params;
 	partitionsCount = 0;
 	partitionsExistInDisk = true;
-	canCreatePartitions = (selectedLun->sectorCount >= (MIN_DEVICE_SIZE_FOR_PARTITIONS_IN_K * 2));
-	canDoDirectFormat = (selectedLun->sectorCount <= MAX_DEVICE_SIZE_FOR_DIRECT_FORMAT_IN_K * 2);
-	unpartitionnedSpaceInSectors = selectedLun->sectorCount;
+	canCreatePartitions = (selectedDeviceParams->sectorCount >= (MIN_DEVICE_SIZE_FOR_PARTITIONS_IN_K * 2));
+	canDoDirectFormat = (selectedDeviceParams->sectorCount <= MAX_DEVICE_SIZE_FOR_DIRECT_FORMAT_IN_K * 2);
+	unpartitionnedSpaceInSectors = selectedDeviceParams->sectorCount;
 	RecalculateAutoPartitionSize(true);
-}
-
-
-void ShowLunSelectionScreen()
-{
-	byte i;
-	lunInfo* currentLun;
-
-	ClearInformationArea();
-    Locate(0,3);
-	print(selectedDriverName);
-	print(currentDevice->deviceName);
-	PrintDeviceInfoWithIndex();
-	NewLine();
-	NewLine();
-	NewLine();
-
-	if(availableLunsCount == 0) {
-        GetLunsInformation();
-    }
-    
-    if(availableLunsCount == 0) {
-    	Locate(0, 9);
-    	PrintCentered("There are no suitable logical units");
-    	CursorDown();
-    	PrintCentered("available in the device");
-    	PrintStateMessage("Press any key to go back...");
-    	WaitKey();
-    	return;
-	}
-
-	currentLun = &luns[0];
-	for(i = 0; i < MAX_LUNS_PER_DEVICE; i++) {
-		if(currentLun->suitableForPartitioning) {
-			printf("\x1BK%i. Size: ", i + 1);
-			PrintSize(currentLun->sectorCount / 2);
-			NewLine();
-		}
-
-		i++;
-		currentLun++;
-	}
-
-	NewLine();
-	NewLine();
-	print("ESC. Go back to device selection screen");
-
-    PrintStateMessage("Select the logical unit");
 }
 
 
@@ -629,59 +628,13 @@ byte GetRemainingBy1024String(ulong value, char* destination)
 }
 
 
-void GetLunsInformation()
-{
-    byte error = 0;
-    byte lunIndex = 1;
-    lunInfo* currentLun = &luns[0];
-	char* currentDeviceName;
-
-	while(lunIndex <= MAX_LUNS_PER_DEVICE) {
-		regs.Bytes.A = selectedDeviceIndex;
-		regs.Bytes.B = lunIndex;
-		regs.Words.HL = (int)currentLun;
-		DriverCall(selectedDriver->slot, LUN_INFO);
-#ifdef FAKE_DEVICE_SIZE
-		if(fakeDeviceSizeInK != 0) {
-			currentLun->sectorCount = fakeDeviceSizeInK * 2;
-		}
-#endif
-		currentLun->suitableForPartitioning =
-			(regs.Bytes.A == 0) &&
-			(currentLun->mediumType == BLOCK_DEVICE) &&
-			(currentLun->sectorSize == 512) &&
-			(currentLun->sectorCount >= MIN_DEVICE_SIZE_IN_K * 2) &&
-			((currentLun->flags & (READ_ONLY_LUN | FLOPPY_DISK_LUN)) == 0);
-		if(currentLun->suitableForPartitioning) {
-			availableLunsCount++;
-		}
-
-		if(currentLun->sectorsPerTrack == 0 || currentLun->sectorsPerTrack > EXTRA_PARTITION_SECTORS) {
-			currentLun->sectorsPerTrack = EXTRA_PARTITION_SECTORS;
-		}
-
-		lunIndex++;
-		currentLun++;
-	}
-}
-
-
-void PrintDeviceInfoWithIndex()
-{
-	printf(is80ColumnsDisplay ? " (Id = %i)" : " (%i)", selectedDeviceIndex);
-}
-
-
 void PrintTargetInfo()
 {
 	Locate(0,3);
 	print(selectedDriverName);
-	print(currentDevice->deviceName);
-	PrintDeviceInfoWithIndex();
-	NewLine();
-	printf("Logical unit %i, size: ", selectedLunIndex + 1);
-	PrintSize(selectedLun->sectorCount / 2);
-	NewLine();
+	printf("%s\r\nSize: ", selectedDevice->deviceName);
+	PrintSize(selectedDeviceParams->sectorCount / 2);
+	printf(" (Device number: %i)\r\n", selectedDevice->deviceNumber);
 }
 
 
@@ -757,7 +710,6 @@ void GoPartitioningMainMenuScreen()
 		if(!partitionsExistInDisk && partitionsCount > 0) {
 			print("W. Write partitions to disk\r\n\r\n");
 		}
-		print("T. Test device access\r\n");
 
 		PrintStateMessage("Select an option or press ESC to return");
 
@@ -784,8 +736,6 @@ void GoPartitioningMainMenuScreen()
 			AddAutoPartition();
 		} else if(key == 'u' && !partitionsExistInDisk && partitionsCount > 0) {
 			UndoAddPartition();
-		}else if(key == 't') {
-			TestDeviceAccess();
 		} else if(key == 'f' && canDoDirectFormat) {
 			if(FormatWithoutPartitions()) {
 				mustRetrievePartitionInfo = true;
@@ -818,24 +768,12 @@ byte GetDiskPartitionsInfo()
 	byte error;
 	partitionInfo* currentPartition = &partitions[0];
 
-#ifdef FAKE_PARTITION_COUNT
-	partitionsCount = FAKE_PARTITION_COUNT;
-	for(i = 1; i <= FAKE_PARTITION_COUNT; i++) {
-		currentPartition->primaryIndex = 1;
-		currentPartition->extendedIndex = i;
-		currentPartition->partitionType = i & 0xFF;
-		currentPartition->sizeInK = (ulong)i * (ulong)1024 * (ulong)1024;
-		currentPartition++;
-	}
-	return 0;
-#else
 	partitionsCount = 0;
 
 	do {
 		regs.Bytes.A = selectedDriver->slot;
 		regs.Bytes.B = 0xFF;
-		regs.Bytes.D = selectedDeviceIndex;
-		regs.Bytes.E = selectedLunIndex + 1;
+		regs.Bytes.D = selectedDevice->deviceNumber;
 		regs.Bytes.H = primaryIndex;
 		regs.Bytes.L = extendedIndex;
 		DosCallFromRom(_GPART, REGS_ALL);
@@ -864,7 +802,6 @@ byte GetDiskPartitionsInfo()
 	} while(primaryIndex <= 4 && partitionsCount < MAX_PARTITIONS_TO_HANDLE);
 
 	return 0;
-#endif
 }
 
 
@@ -966,6 +903,7 @@ void ShowPartitions()
 	}
 }
 
+
 void TogglePartitionActive(byte partitionIndex)
 {
     byte status, primaryIndex, extendedIndex;
@@ -992,8 +930,7 @@ void TogglePartitionActive(byte partitionIndex)
 
     regs.Bytes.A = selectedDriver->slot;
 	regs.Bytes.B = 0xFF;
-	regs.Bytes.D = selectedDeviceIndex;
-	regs.Bytes.E = selectedLunIndex + 1;
+	regs.Bytes.D = selectedDevice->deviceNumber;
 	regs.Bytes.H = partition->primaryIndex | 0x80;
 	regs.Bytes.L = partition->extendedIndex;
 	DosCallFromRom(_GPART, REGS_ALL);
@@ -1019,6 +956,7 @@ void TogglePartitionActive(byte partitionIndex)
 
     return;
 }
+
 
 void PrintOnePartitionInfo(partitionInfo* info)
 {
@@ -1051,7 +989,7 @@ void DeleteAllPartitions()
 
 	partitionsCount = 0;
 	partitionsExistInDisk = false;
-	unpartitionnedSpaceInSectors = selectedLun->sectorCount;
+	unpartitionnedSpaceInSectors = selectedDeviceParams->sectorCount;
 	RecalculateAutoPartitionSize(true);
 }
 
@@ -1218,61 +1156,6 @@ void UndoAddPartition()
 }
 
 
-void TestDeviceAccess()
-{
-	ulong sectorNumber = 0;
-	char* message = "Now reading device sector ";
-	byte messageLen = strlen(message);
-	byte error;
-	char* errorMessageHeader = "Error when reading sector ";
-
-	InitializeScreenForTestDeviceAccess(message);
-
-	while(GetKey() == 0) {
-		sprintf(buffer, "%u", sectorNumber);
-		//_ultoa(sectorNumber, buffer, 10);
-		Locate(messageLen, MESSAGE_ROW);
-		print(buffer);
-		print(" ...\x1BK");
-
-		regs.Flags.C = 0;
-		regs.Bytes.A = selectedDeviceIndex;
-		regs.Bytes.B = 1;
-		regs.Bytes.C = selectedLunIndex + 1;
-		regs.Words.HL = (int)buffer;
-		regs.Words.DE = (int)&sectorNumber;
-		DriverCall(selectedDriver->slot, DEV_RW);
-
-		if((error = regs.Bytes.A) != 0) {
-			strcpy(buffer, errorMessageHeader);
-			sprintf(buffer + strlen(errorMessageHeader), "%u", sectorNumber);
-			strcpy(buffer + strlen(buffer), ":");
-			PrintDosErrorMessage(error, buffer);
-			PrintStateMessage("Continue reading sectors? (y/n) ");
-			if(!GetYesOrNo()) {
-				return;
-			}
-			InitializeScreenForTestDeviceAccess(message);
-		}
-
-		sectorNumber++;
-		if(sectorNumber >= selectedLun->sectorCount) {
-			sectorNumber = 0;
-		}
-	}
-}
-
-
-void InitializeScreenForTestDeviceAccess(char* message)
-{
-	ClearInformationArea();
-	PrintTargetInfo();
-	Locate(0, MESSAGE_ROW);
-	print(message);
-	PrintStateMessage("Press any key to stop...");
-}
-
-
 void PrintDosErrorMessage(byte code, char* header)
 {
 	Locate(0, MESSAGE_ROW);
@@ -1301,6 +1184,7 @@ void PrintDone()
 	PrintCentered("please reset the computer.");
 }
 
+
 bool FormatWithoutPartitions()
 {
 	dosFilesystemParameters parameters;
@@ -1317,11 +1201,11 @@ bool FormatWithoutPartitions()
 	PrintStateMessage("Please wait...");
 
 #ifdef TEST_FAT_PARAMETERS
-	CalculateFatFileSystemParameters(selectedLun->sectorCount / 2, &parameters);
+	CalculateFatFileSystemParameters(selectedDeviceParams->sectorCount / 2, &parameters);
 	WaitKey();
 	return 0;
 #else
-	error = CreateFatFileSystem(0, selectedLun->sectorCount / 2);
+	error = CreateFatFileSystem(0, selectedDeviceParams->sectorCount / 2);
 	if(error == 0) {
 		Locate(0, MESSAGE_ROW + 2);
 		PrintDone();
@@ -1333,31 +1217,6 @@ bool FormatWithoutPartitions()
 	return (error == 0);
 #endif
 }
-
-
-byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK)
-{
-	byte* remoteCallParams = buffer;
-
-	remoteCallParams[0] = selectedDriver->slot;
-	remoteCallParams[1] = selectedDeviceIndex;
-	remoteCallParams[2] = selectedLunIndex + 1;
-	*((ulong*)&remoteCallParams[3]) = 0;
-	*((ulong*)&remoteCallParams[7]) = selectedLun->sectorCount / 2;
-	
-	return (byte)CallFunctionInExtraBank(f_CreateFatFileSystem, remoteCallParams);
-}
-
-
-#ifdef TEST_FAT_PARAMETERS
-void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters)
-{
-	byte remoteCallParams[6];
-	*((ulong*)&remoteCallParams[0]) = fileSystemSizeInK;
-	*((int*)&remoteCallParams[4]) = (int)parameters;
-	CallFunctionInExtraBank(f_CalculateFatFileSystemParameters, remoteCallParams);
-}
-#endif
 
 
 bool WritePartitionTable()
@@ -1408,37 +1267,17 @@ bool WritePartitionTable()
 
 void PreparePartitioningProcess()
 {
-	byte* remoteCallParams = buffer;
+	int i;
 
-	remoteCallParams[0] = selectedDriver->slot;
-	remoteCallParams[1] = selectedDeviceIndex;
-	remoteCallParams[2] = selectedLunIndex + 1;
-	*((uint*)&remoteCallParams[3]) = partitionsCount;
-	*((partitionInfo**)&remoteCallParams[5]) = &partitions[0];
-	*((uint*)&remoteCallParams[7]) = luns[selectedLunIndex].sectorsPerTrack;
+	nextDeviceSector = 0;
+	mainExtendedPartitionSectorCount = 0;
+	mainExtendedPartitionFirstSector = 0;
 
-	CallFunctionInExtraBank(f_PreparePartitioningProcess, remoteCallParams);
+	for(i = 1; i < partitionsCount; i++) {
+		mainExtendedPartitionSectorCount += ((&partitions[i])->sizeInK * 2) + 1;	//+1 for the MBR
+	}
 }
 
-
-byte CreatePartition(int index)
-{
-	byte* remoteCallParams = buffer;
-
-	*((uint*)&remoteCallParams[0]) = index;
-	
-	return (byte)CallFunctionInExtraBank(f_CreatePartition, remoteCallParams);
-}
-
-byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector)
-{
-    byte* remoteCallParams = buffer;
-
-	remoteCallParams[0] = partitionTableEntryIndex;
-    *((ulong*)&remoteCallParams[1]) = partitionTablesector;
-	
-	return (byte)CallFunctionInExtraBank(f_ToggleStatusBit, remoteCallParams);
-}
 
 bool ConfirmDataDestroy(char* action)
 {
@@ -1482,38 +1321,18 @@ void GetDriversInformation()
 
     installedDriversCount = 0;
     
-#ifdef FAKE_DRIVER_INFO
-    strcpy(currentDriver->driverName, "Un drivercillo de nada ");
-    currentDriver->slot = 1;
-    currentDriver->flags = 0xFF;
-    currentDriver->versionMain = 2;
-    currentDriver->versionSec = 34;
-    currentDriver->versionRev = 5;
-    
-    currentDriver++;
-    strcpy(currentDriver->driverName, "Otro driver, este de 32 caracter");
-    currentDriver->slot = 0x8E;
-    currentDriver->flags = 0xFF;
-    currentDriver->versionMain = 2;
-    currentDriver->versionSec = 34;
-    currentDriver->versionRev = 0;
-    
-    installedDriversCount = 2;
-    return;
-#else
-    
+   
     while(error == 0 && driverIndex <= MAX_INSTALLED_DRIVERS) {
-        regs.Bytes.A = driverIndex;
+        regs.Bytes.A = driverIndex | GDRVR_EXTENDED_DRIVER_NAME_FLAG;
         regs.Words.HL = (int)currentDriver;
         DosCallFromRom(_GDRVR, REGS_AF);
-        if((error = regs.Bytes.A) == 0 && (currentDriver->flags & (DRIVER_IS_DOS250 | DRIVER_IS_DEVICE_BASED) == (DRIVER_IS_DOS250 | DRIVER_IS_DEVICE_BASED))) {
+        if((error = regs.Bytes.A) == 0 && (currentDriver->flags & DRIVER_IS_NEXTOR == DRIVER_IS_NEXTOR)) {
             installedDriversCount++;
-            TerminateRightPaddedStringWithZero(currentDriver->driverName, DRIVER_NAME_LENGTH);
+			EnsureMaximumStringLength(currentDriver->driverName, is80ColumnsDisplay ? DRIVER_NAME_LENGTH_80 : DRIVER_NAME_LENGTH_40);
 			currentDriver++;
         }
         driverIndex++;
     }
-#endif
 }
 
 
@@ -1671,15 +1490,430 @@ PREND:
 }
 
 
-// function number is defined in fdisk.h
-int CallFunctionInExtraBank(int functionNumber, void* parametersBuffer)
+byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK)
 {
-	regs.Bytes.A = (*((byte*)0x40ff)) + 1;	//Extra functions bank = our bank + 1
-	regs.Words.BC = functionNumber;
-	regs.Words.HL = (int)parametersBuffer;
-	regs.Words.IX = (int)0x4100;	//Address of "main" for extra functions program
-	AsmCall(CALBNK, &regs, REGS_ALL, REGS_MAIN);
-	return regs.Words.HL;
+	dosFilesystemParameters parameters;
+	byte error;
+	ulong sectorNumber;
+	uint zeroSectorsToWrite;
+	uint i;
+
+	CalculateFatFileSystemParameters(fileSystemSizeInK, &parameters);
+	
+	//* Boot sector
+
+	CreateFatBootSector(&parameters);
+
+	if((error = WriteSectorToDevice(firstDeviceSector)) != 0) {
+		return error;
+	}
+
+	//* FAT (except 1st sector) and root directory sectors
+
+	ClearSectorBuffer();
+	zeroSectorsToWrite = (parameters.sectorsPerFat * FAT_COPIES) + (parameters.sectorsPerRootDirectory) - 1;
+	sectorNumber = firstDeviceSector + 2;
+	for(i = 0; i < zeroSectorsToWrite; i++) {
+		if((error = WriteSectorToDevice(sectorNumber)) != 0) {
+			return error;
+		}
+		sectorNumber++;
+	}
+
+	//* First sector of each FAT
+
+	sectorBuffer[0] = 0xF0;
+	sectorBuffer[1] = 0xFF;
+	sectorBuffer[2] = 0xFF;
+	if(parameters.isFat16) {
+		sectorBuffer[3] = 0xFF;
+	}
+	if((error = WriteSectorToDevice(firstDeviceSector + 1)) != 0) {
+		return error;
+	}
+	if((error = WriteSectorToDevice(firstDeviceSector + 1 + parameters.sectorsPerFat)) != 0) {
+		return error;
+	}
+
+	//* Done
+
+	return 0;
+}
+
+
+void CreateFatBootSector(dosFilesystemParameters* parameters)
+{
+	fatBootSector* sector = (fatBootSector*)sectorBuffer;
+
+	ClearSectorBuffer();
+
+	sector->jumpInstruction[0] = 0xEB;
+	sector->jumpInstruction[1] = 0xFE;
+	sector->jumpInstruction[2] = 0x90;
+	strcpy(sector->oemNameString, "NEXTOR20");
+	sector->sectorSize = 512;
+	sector->sectorsPerCluster = parameters->sectorsPerCluster;
+	sector->reservedSectors = 1;
+	sector->numberOfFats = FAT_COPIES;
+	sector->rootDirectoryEntries = parameters->sectorsPerRootDirectory * DIR_ENTRIES_PER_SECTOR;
+	if((parameters->totalSectors & 0xFFFF0000) == 0) {
+		sector->smallSectorCount = parameters->totalSectors;
+	}
+	sector->mediaId = 0xF0;
+	sector->sectorsPerFat = parameters->sectorsPerFat;
+	strcpy(sector->params.standard.volumeLabelString, "NEXTOR 2.0 "); //it is same for DOS 2.20 format
+	sector->params.standard.serialNumber = GetNewSerialNumber(); //it is same for DOS 2.20 format
+	sector->mbrSignature = 0xAA55;
+
+	if(parameters->isFat16) {
+		sector->params.standard.bigSectorCount = parameters->totalSectors;
+		sector->params.standard.extendedBlockSignature = 0x29;
+		strcpy(sector->params.standard.fatTypeString, "FAT16   ");
+	} else {
+		sector->params.DOS220.z80JumpInstruction[0] = 0x18;
+		sector->params.DOS220.z80JumpInstruction[1] = 0x1E;
+		strcpy(sector->params.DOS220.volIdString, "VOL_ID");
+		strcpy(sector->params.DOS220.fatTypeString, "FAT12   ");
+		memcpy(&(sector->params.DOS220.z80BootCode), SectorBootCode, (uint)0xC090 - (uint)0xC03E);
+	}
+}
+
+
+ulong GetNewSerialNumber() __naked
+{
+	__asm
+
+		ld a,r
+		xor	b
+		ld e,a
+		or #128
+		ld b,a
+gnsn_1:
+		nop
+		djnz gnsn_1
+
+		ld	a,r
+		xor	e
+		ld d,a
+		or #64
+		ld b,a
+gnsn_2:
+		nop
+		nop
+		djnz gnsn_2
+
+		ld	a,r
+		xor	d
+		ld l,a
+		or #32
+		ld b,a
+gnsn_3:
+		nop
+		nop
+		nop
+		djnz gnsn_3
+
+		ld	a,r
+		xor l
+		ld	h,a
+
+		ret
+
+	__endasm;
+}
+
+
+void ClearSectorBuffer() __naked
+{
+	__asm
+
+		ld hl,#_sectorBuffer
+		ld de,#_sectorBuffer
+		inc de
+		ld bc,#512-1
+		ld (hl),#0
+		ldir
+		ret
+
+	__endasm;
+}
+
+
+void SectorBootCode() __naked
+{
+	__asm
+
+		ret nc
+		ld (#0xc07b),de
+		ld de,#0xc078
+		ld (hl),e
+		inc hl
+		ld (hl),d
+		ld de,#0xc080
+		ld c,#0x0f
+		call #0xf37d
+		inc a
+		jp z,#0x4022
+		ld de,#0x100
+		ld c,#0x1a
+		call #0xf37d
+		ld hl,#1
+		ld (#0xc08e),hl
+		ld hl,#0x3f00
+		ld de,#0xc080
+		ld c,#0x27
+		push de
+		call #0xf37d
+		pop de
+		ld c,#0x10
+		call #0xf37d
+		jp 0x0100
+		ld l,b
+		ret nz
+		call #0
+		jp 0x4022
+		nop
+		.ascii "MSXDOS  SYS"
+		nop
+		nop
+		nop
+		nop
+
+	__endasm;
+}
+
+
+void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters)
+{
+	if(fileSystemSizeInK > MAX_FAT12_PARTITION_SIZE_IN_K) {
+		CalculateFatFileSystemParametersFat16(fileSystemSizeInK, parameters);
+	} else {
+		CalculateFatFileSystemParametersFat12(fileSystemSizeInK, parameters);
+	}
+}
+
+
+int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters)
+{
+	//Note: Partitions <=16M are defined to have at most 3 sectors per FAT,
+	//so that they can boot DOS 1. This limits the cluster count to 1021.
+
+	uint sectorsPerCluster;
+	uint sectorsPerFat;
+	uint clusterCount;
+	ulong dataSectorsCount;
+	uint difference;
+	uint sectorsPerClusterPower;
+	uint maxClusterCount = MAX_FAT12_CLUSTER_COUNT;
+	uint maxSectorsPerFat = 12;
+
+	if(fileSystemSizeInK <= (2 * (ulong)1024)) {
+		sectorsPerClusterPower = 0;
+		sectorsPerCluster = 1;
+	} else if(fileSystemSizeInK <= (4 * (ulong)1024)) {
+		sectorsPerClusterPower = 1;
+		sectorsPerCluster = 2;
+	} else if(fileSystemSizeInK <= (8 * (ulong)1024)) {
+		sectorsPerClusterPower = 2;
+		sectorsPerCluster = 4;
+	} else if(fileSystemSizeInK <= (16 * (ulong)1024)) {
+		sectorsPerClusterPower = 3;
+		sectorsPerCluster = 8;
+	} else {
+		sectorsPerClusterPower = 4;
+		sectorsPerCluster = 16;
+	}
+
+    if(fileSystemSizeInK <= (16 * (ulong)1024)) {
+        maxClusterCount = 1021;
+		maxSectorsPerFat = 3;
+        sectorsPerCluster *= 4;
+        sectorsPerClusterPower += 2;
+    }
+
+	dataSectorsCount = (fileSystemSizeInK * 2) - (FAT12_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR) - 1;
+
+	clusterCount = dataSectorsCount >> sectorsPerClusterPower;
+	sectorsPerFat = ((uint)clusterCount + 2) * 3;
+
+	if((sectorsPerFat & 0x3FF) == 0) {
+		sectorsPerFat >>= 10;
+	} else {
+		sectorsPerFat >>= 10;
+		sectorsPerFat++;
+	}
+	
+	clusterCount = (dataSectorsCount - FAT_COPIES * sectorsPerFat) >> sectorsPerClusterPower;
+	dataSectorsCount = (uint)clusterCount * (uint)sectorsPerCluster;
+
+	if(clusterCount > maxClusterCount) {
+		difference = clusterCount - maxClusterCount;
+		clusterCount = maxClusterCount;
+		sectorsPerFat = maxSectorsPerFat;
+		dataSectorsCount -= difference * sectorsPerCluster;
+	}
+
+	parameters->totalSectors = dataSectorsCount + 1 + (sectorsPerFat * FAT_COPIES) + (FAT12_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR);
+	parameters->dataSectors = dataSectorsCount;
+	parameters->clusterCount = clusterCount;
+	parameters->sectorsPerFat = sectorsPerFat;
+	parameters->sectorsPerCluster = sectorsPerCluster;
+	parameters->sectorsPerRootDirectory = (FAT12_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR);
+	parameters->isFat16 = false;
+
+	return 0;
+}
+
+
+int CalculateFatFileSystemParametersFat16(ulong fileSystemSizeInK, dosFilesystemParameters* parameters)
+{
+	byte sectorsPerCluster;
+	uint sectorsPerFat;
+	ulong clusterCount;
+	ulong dataSectorsCount;
+	uint sectorsPerClusterPower;
+	ulong fileSystemSizeInM = fileSystemSizeInK >> 10;
+	ulong difference;
+
+	if(fileSystemSizeInM <= (ulong)128) {
+		sectorsPerClusterPower = 2;
+		sectorsPerCluster = 4;
+	} else if(fileSystemSizeInM <= (ulong)256) {
+		sectorsPerClusterPower = 3;
+		sectorsPerCluster = 8;
+	} else if(fileSystemSizeInM <= (ulong)512) {
+		sectorsPerClusterPower = 4;
+		sectorsPerCluster = 16;
+	} else if(fileSystemSizeInM <= (ulong)1024) {
+		sectorsPerClusterPower = 5;
+		sectorsPerCluster = 32;
+	} else if(fileSystemSizeInM <= (ulong)2048) {
+		sectorsPerClusterPower = 6;
+		sectorsPerCluster = 64;
+	} else {
+		sectorsPerClusterPower = 7;
+		sectorsPerCluster = 128;
+	}
+
+	dataSectorsCount = (fileSystemSizeInK * 2) - (FAT16_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR) - 1;
+	clusterCount = dataSectorsCount >> sectorsPerClusterPower;
+	sectorsPerFat = (clusterCount + 2) >> 8;
+
+	if(((clusterCount + 2) & 0x3FF) != 0) {
+		sectorsPerFat++;
+	}
+
+	clusterCount = (dataSectorsCount - FAT_COPIES * sectorsPerFat);
+	clusterCount >>= sectorsPerClusterPower;
+    dataSectorsCount = clusterCount << sectorsPerClusterPower;
+
+	if(clusterCount > MAX_FAT16_CLUSTER_COUNT) {
+		difference = clusterCount - MAX_FAT16_CLUSTER_COUNT;
+		clusterCount = MAX_FAT16_CLUSTER_COUNT;
+		sectorsPerFat = 256;
+		dataSectorsCount -= difference << sectorsPerClusterPower;
+	}
+
+	parameters->totalSectors = dataSectorsCount + 1 + (sectorsPerFat * FAT_COPIES) + (FAT16_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR);
+	parameters->dataSectors = dataSectorsCount;
+	parameters->clusterCount = clusterCount;
+	parameters->sectorsPerFat = sectorsPerFat;
+	parameters->sectorsPerCluster = sectorsPerCluster;
+	parameters->sectorsPerRootDirectory = (FAT16_ROOT_DIR_ENTRIES / DIR_ENTRIES_PER_SECTOR);
+	parameters->isFat16 = true;
+
+	return 0;
+}
+
+
+byte DeviceSectorRW(ulong firstDeviceSector, byte write)
+{
+	regs.Flags.C = write;
+	regs.Bytes.A = selectedDevice->deviceNumber;
+	regs.Bytes.B = 1;
+	regs.Words.HL = (int)sectorBuffer;
+	regs.Words.DE = (int)&firstDeviceSector;
+
+	DriverCall(selectedDriver->slot, READ_WRITE);
+	return regs.Bytes.A;
+}
+
+
+int CreatePartition(int index)
+{
+	byte error;
+	masterBootRecord* mbr = (masterBootRecord*)sectorBuffer;
+	partitionInfo* partition = &partitions[index];
+	ulong mbrSector;
+	uint paddingSectors;
+	ulong firstFileSystemSector;
+	ulong extendedPartitionFirstAbsoluteSector;
+	partitionTableEntry* tableEntry;
+	ulong x;
+
+    mbrSector = nextDeviceSector;
+	tableEntry = &(mbr->primaryPartitions[0]);
+	ClearSectorBuffer();
+	tableEntry->firstAbsoluteSector = 1;
+
+    tableEntry->status = partition->status;
+	tableEntry->partitionType = partition->partitionType;
+	tableEntry->sectorCount = partition->sizeInK * 2;
+
+	firstFileSystemSector = mbrSector + tableEntry->firstAbsoluteSector;
+
+	nextDeviceSector += tableEntry->firstAbsoluteSector + tableEntry->sectorCount;
+
+	if(index != (partitionsCount - 1)) {
+		tableEntry++;
+		tableEntry->partitionType = PARTYPE_EXTENDED;
+		tableEntry->firstAbsoluteSector = nextDeviceSector;
+		if(index == 0) {
+			mainExtendedPartitionFirstSector = nextDeviceSector;
+			tableEntry->sectorCount = mainExtendedPartitionSectorCount;
+		} else {
+			tableEntry->firstAbsoluteSector -= mainExtendedPartitionFirstSector;
+			tableEntry->sectorCount = (((partitionInfo*)(partition + 1))->sizeInK * 2);
+		}
+	}
+
+    if(index == 0) {
+        mbr->jumpInstruction[0] = 0xEB;
+    	mbr->jumpInstruction[1] = 0xFE;
+    	mbr->jumpInstruction[2] = 0x90;
+    	strcpy(mbr->oemNameString, "NEXTO30");
+    }
+
+	mbr->mbrSignature = 0xAA55;
+
+	x = tableEntry->firstAbsoluteSector;	//Without this, firstAbsoluteSector is written to disk as 0. WTF???
+	tableEntry->firstAbsoluteSector = x;
+
+	memcpy(sectorBufferBackup, sectorBuffer, 512);
+
+	if((error = WriteSectorToDevice(mbrSector)) != 0) {
+		return error;
+	}
+
+	return CreateFatFileSystem(firstFileSystemSector, partition->sizeInK);
+}
+
+
+int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector)
+{
+    int error;
+    masterBootRecord* mbr = (masterBootRecord*)sectorBuffer;
+    partitionTableEntry* entry;
+
+    error = ReadSectorFromDevice(partitonTablesector);
+    if(error != 0)
+        return error;
+
+    entry =&mbr->primaryPartitions[partitionTableEntryIndex];
+
+    entry->status ^= 0x80;
+
+    return WriteSectorToDevice(partitonTablesector);
 }
 
 

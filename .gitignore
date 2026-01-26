@@ -17,6 +17,7 @@ bin/**
 *.ihx
 *.IHX
 *.lk
+*.lnk
 *.LK
 *.orig
 *.rej

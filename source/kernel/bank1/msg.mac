@@ -235,7 +235,7 @@ ERR_MSG_TABLE:
 	err	.IFCB,	<"Invalid File Control Block">
 
 	err	.IDRVR, <"Invalid disk driver">
-	err	.IDEVL, <"Invalid device or logical unit">
+	err	.IDEVN, <"Invalid device number">
 	err	.IPART, <"Invalid partition number">
 	err	.PUSED, <"Partition is already in use">
 	err	.FMNT,  <"File is mounted">
@@ -403,7 +403,7 @@ ERR_KMSG_TABLE:
 
 	;TODO: Check these translations
 	err	.IDRVR, <"無効なディスクドライバです">	;<"Invalid disk driver">
-	err	.IDEVL,  <"無効なデバイスまたは論理ユニットです">	;<"Invalid device or logical unit">
+	err	.IDEVN,  <"無効なデバイスです">	;<"Invalid device number">
 	err	.IPART, <"無効なパーティション番号">	;<"Invalid partition number">
 	err	.PUSED, <"パーティションが使用中です">	;<"Partition is already in use">
 	err	.FMNT,  <"ファイルがマウントされています">     ;<"File is mounted">

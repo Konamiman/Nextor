@@ -15,7 +15,7 @@
 	db	1Ah
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	ld	de,BUF
 	ld	a,1

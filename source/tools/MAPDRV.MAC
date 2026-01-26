@@ -1,9 +1,5 @@
 	.z80
 	;include	MACROS.INC
-ld_a_iyl	macro
-	db	0FDh
-	ld	a,l
-	endm
 
 FIB	equ	3000h
 
@@ -11,15 +7,15 @@ FIB	equ	3000h
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV - map a drive to a driver, device, LUN and partition,",13,10
+	db	"MAPDRV v1.1 - map a drive to a driver, device, LUN and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>]|0]]",13,10
 	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
-	db	"Maps the drive to the specified partition of the specified device and LUN",13,10
+	db	"Maps the drive to the specified partition of the specified device",13,10
 	db	"of the driver in the specified slot (must be a device-based driver).",13,10
 	db	13,10
 	db	"/L locks the drive immediately after doing the mapping.",13,10
@@ -29,8 +25,7 @@ FIB	equ	3000h
 	db	"Partition numbers 2 to 4 refer to extended partitions 2-1 to 2-4 if partition",13,10
 	db	"2 of the device is extended, otherwise they refer to primary partitions.",13,10
         db	13,10
-	db	"<device> and <LUN> must be a number from 1 to 7 each one. If <device> is",13,10
-	db	"specifided but <LUN> is omitted, value 1 is assumed for <LUN>.",13,10
+	db	"<device> must be a number from 1 to 255.",13,10
 	db	13,10
 	db	"<slot> and <subslot> must be a number from 0 to 3. If 0 is specified instead,",13,10
 	db	"the primary disk controller slot is assumed.",13,10
@@ -57,14 +52,14 @@ USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
 	db  "         or mount a file on a drive",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>[-<LUN>] [<slot>[-<subslot>]|0]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>]|0]]",13,10
 	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	ld	de,BUF
 	ld	a,1
@@ -117,7 +112,7 @@ NO_LOCK:
 	;* Partition number, or "d", "u", or file name
 
 	ld	de,BUF
-	ld_a_iyl
+	ld a,iyl
 	inc	iy
 	call	EXTPAR##
 	ld	b,.NOPAR##
@@ -149,41 +144,23 @@ NO_LOCK:
 IS_PART:
 	ld	(PARTITION),a
 
-	;* Device, LUN
+	;* Device
 
 	ld	de,BUF
-	ld_a_iyl
+	ld a,iyl
 	inc	iy
 	call	EXTPAR##
 	jp	c,DO_MAP
 
-	ld	a,(BUF)
-	cp	"1"
-	jp	c,IPARM_TERM
-	cp	"8"
-	jp	nc,IPARM_TERM
-	sub	"0"
+	ld hl,BUF
+	call EXT8##
+	jp c,IPARM_TERM
 	ld	(DEVICE),a
 
-	ld	a,(BUF+1)
-	or	a
-	jr	z,OK_DEVLUN
-	cp	"-"
-	jp	nz,IPARM_TERM
-
-	ld	a,(BUF+2)
-	cp	"1"
-	jp	c,IPARM_TERM
-	cp	"8"
-	jp	nc,IPARM_TERM
-	sub	"0"
-	ld	(LUN),a
-OK_DEVLUN:
-	
 	;* Slot, subslot, segment
 
 	ld	de,BUF
-	ld_a_iyl
+	ld a,iyl
 	inc	iy
 	call	EXTPAR##
 	jp	c,DO_MAP
@@ -242,8 +219,6 @@ DO_MAP:
 	jr	nz,OK_DEVICE
 	ld	a,(BUF_LETTER+4)
 	ld	(DEVICE),a
-	ld	a,(BUF_LETTER+5)
-	ld	(LUN),a
 OK_DEVICE:
 
 	xor	a
@@ -286,7 +261,6 @@ OK_GETCURMAP:
 	ld	a,(ix+3)	;Slot
 	ld	b,(ix+4)	;Segment
 	ld	d,(ix+5)	;Device
-	ld	e,(ix+6)	;LUN
 	ld	h,2			;Primary partition
 	ld	l,0			;Extended partition
 	ld	c,_GPART##
@@ -327,7 +301,6 @@ OK_ADJUST_PARTITION::
 	ld	a,(ix+3)	;Slot
 	ld	b,(ix+4)	;Segment
 	ld	d,(ix+5)	;Device
-	ld	e,(ix+6)	;LUN
 	ld	h,(ix+1)	;Primary partition
 	ld	l,(ix+2)	;Extended partition
 	ld	c,_GPART##
@@ -464,7 +437,6 @@ CHK21_ERR:
 BADKER21_MSG:
 	db	"*** File mounting requires Nextor 2.1 or later",13,10,"$"
 
-
 PARTITION:	db	0
 DO_LOCK:	db	0
 DRIVE:	db	0
@@ -473,11 +445,10 @@ EXTENDED:	db	0
 SLOT:	db	-1
 SEGMENT:	db	255
 DEVICE:	db	0
-LUN:	db	1
 FILE_FLAGS:	db	0
 
-BUF:
-BUF_DRIVER:
-BUF_LETTER:
+BUF: equ 2000h
+BUF_DRIVER: equ BUF
+BUF_LETTER: equ BUF
 
 	end

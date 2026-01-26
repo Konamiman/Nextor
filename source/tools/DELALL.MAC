@@ -17,7 +17,7 @@ USAGE_S:
 	db	0
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	;--- Get drive letter
 

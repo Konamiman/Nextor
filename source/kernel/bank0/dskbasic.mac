@@ -328,7 +328,7 @@ STATEMENT:
 	ei			;make sure interrupts are enabled
 ;
 	ld	a,DV_BANK##		;Call statement handler in disk driver first
-	ld	ix,DV_OEMST##
+	ld	ix,DRIVER.OEMSTAT##
 	call	CALBNK##
 	ret	nc
 
@@ -701,8 +701,27 @@ NUMINT:
 ;
 FDISK::
 
-	;ret	nz
 	push	hl
+
+	ld hl,(TXTTAB)
+	ld a,(hl)
+	inc hl
+	ld h,(hl)
+	or h
+	jr z,DO_FDISK_OK
+
+	ld hl,FDISK_PROGRAM_EXISTS_WARNING
+	call PRINT_HL
+	pop hl
+	ei
+	ret
+
+FDISK_PROGRAM_EXISTS_WARNING:
+	db "There's a BASIC program in memory!",13,10
+	db "Save it if you want to keep it,",13,10
+	db "delete it with NEW, then try again.",0
+
+DO_FDISK_OK:
 	ld	a,5
 	ld	ix,04100h
 	call	CALBNK##
@@ -3441,7 +3460,7 @@ DERR_TAB:
 
 	DERNUM	ERRPUS	; Partition already in use
 	DERNUM	ERRIPA	; Invalid partition
-	DERNUM	ERRIDL	; Invalid device or LUN
+	DERNUM	ERRIDV	; Invalid device
 	DERNUM	ERRIDR	; Invalid driver
 
 	DERNUM	*		; ??? (B7h)
@@ -3588,7 +3607,7 @@ QQQQ	defl	DERFST
 	DERMAK	DERRAE		;RAM disk already exists
 
 	DERMAK	ERRIDR	; Invalid driver
-	DERMAK	ERRIDL	; Invalid device or LUN
+	DERMAK	ERRIDV	; Invalid device number
 	DERMAK	ERRIPA	; Invalid partition
 	DERMAK	ERRPUS	; Partition already in use
 
@@ -3976,7 +3995,7 @@ DERMSG:	defb	0
 	defb	'RAM disk already exists', 0
 
 	defb	'Invalid device driver',   0
-	defb	'Invalid device or LUN',   0
+	defb	'Invalid device number',   0
 	defb	'Invalid partition number',0
 	defb	'Partition already in use',0
 

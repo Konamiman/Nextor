@@ -4599,7 +4599,7 @@ A410A::	dec	c
 ;BASIC extended statement handler
 
 DRIVER_STAT:
-	ld	ix,DV_OEMST##
+	ld	ix,DRIVER.OEMSTAT##
 	ld	a,DV_BANK##
 	call	CALBNK##	;Call first the driver handler...
 	ld	a,(H.GETP+0)
@@ -8833,6 +8833,7 @@ MOREFS:
 
 	db	0
 
+
 ; CALL FDISK handler.
 
 NEWSTT	equ	04601h
@@ -8840,22 +8841,13 @@ CALBAS	equ	0159h		;call a BASIC routine in ROM
 
 DO_FDISK:
 	push	hl
-	ld	a,5
-	ld	ix,04100h
+
+	xor a
+	ld ix,FDISK##
 	call	CALBNK##
+
 	pop	hl
-
-	ld	hl,NEWTXT
-	ld	de,09000h
-	ld	bc,3
-	ldir
-	ld	hl,09000h
-	ld	ix,NEWSTT
-	call	CALBAS
-	ei
 	ret
-
-NEWTXT:	db	3ah, 94h, 0	; ":NEW"
 
 
 ; Extra CALL handlers.
@@ -9020,7 +9012,7 @@ HERRP_NEW:
 NEW_ERRS:
 	defb	0
 	defb	'Invalid device driver', 0
-	defb	'Invalid device or LUN', 0
+	defb	'Invalid device number', 0
 	defb	'Invalid partition number', 0
 	defb	'Partition already in use', 0
 	defb	'Illegal in emulation', 0
@@ -9059,7 +9051,7 @@ TRRAMAD:
 	cp	3		;Turbo-R?
 	jr	nz,TRRAMEND
 	push	hl
-	ld	hl,(DVB_TABLE##)
+	ld	hl,(KERNEX_DOS1##)
 	bit	7,(hl)		;In disk emulation mode?
 	pop	hl
 	jr	z,TRRAMEND

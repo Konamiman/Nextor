@@ -4,14 +4,14 @@
 
         ;        -------------------------------------------------------------------------------
 	db	13
-	db	"DRVINFO - displays information about the driver and drive/device/LUN",13,10
+	db	"DRVINFO v1.1 - displays information about the driver and drive/device/LUN",13,10
 	db	"for all drive letters",13,10
 	db	13,10
 	db	"Usage: DRVINFO",13,10
 	db	1Ah
 
 START:
-	call	CHK250##
+	call	CHK_NEXTOR##
 
 	xor	a
 	ld	(DRVINDEX),a
@@ -180,7 +180,7 @@ OK_NAME:
 	call	5
 
 
-	;* Print relative unit number or device+LUN
+	;* Print relative unit number or device
 
 	ld	ix,BUF_LETTER
 	ld	a,(BUF_DRIVER+4)
@@ -188,12 +188,18 @@ OK_NAME:
 	jr	z,SHOW_REL
 	
 	ld	a,(ix+4)
-	add	a,"0"
-	ld	(DEVICE),a
-	ld	a,(ix+5)
-	add	a,"0"
-	ld	(LUN),a
+	push ix
+	ld ix,BUF_DEVNUM
+	call  BYTE2ASC##
+	ld (ix),0
+	pop ix
 	ld	de,DEVLUN_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld de,BUF_DEVNUM
+	ld	c,_ZSTROUT##
+	call	5
+	ld de,TWOCRLF
 	ld	c,_ZSTROUT##
 	call	5
 	jr	OK_DEVLUN
@@ -223,17 +229,13 @@ NEXT_DRIVE:
 RAMDISK_MSG:
 	db	"RAM disk",13,10,10,0
 DEVLUN_MSG:
-	db	"Device "
-DEVICE:
-	db	"0, LUN "
-LUN:
-	db	"0",13,10,10,0
+	db	"Device ",0
 RELUNIT_MSG:
 	db	"Relative unit "
 RELUNIT:
 	db	"0",13,10,10,0
 LEGACY_MSG:
-	db	"Legacy driver",0
+	db	"Legacy MSX-DOS driver",0
 DRIVEIS_MSG:
 	db	"Drive "
 DRIVE_MSG:
@@ -252,9 +254,10 @@ TWOCRLF:
 	db	13,10
 CRLF:
 	db	13,10,0
-		
-DRVINDEX:	db	0
-BUF_DRIVER:	ds	64
-BUF_LETTER:
+
+DRVINDEX:	equ 2000h
+BUF_DRIVER:	equ DRVINDEX+1
+BUF_DEVNUM: equ BUF_DRIVER+64
+BUF_LETTER: equ BUF_DEVNUM+4
 
 	end

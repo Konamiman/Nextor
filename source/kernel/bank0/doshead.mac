@@ -113,7 +113,7 @@ CALDRV:
 ;
 ; BASIC expansion device management
 
-BASDEV:		ld	ix,DV_BASDEV##
+BASDEV:		ld	ix,DRIVER.BASDEV##
 		ex	af,af'
 		ld	a,DV_BANK##
 		jr	CALBNK
@@ -190,7 +190,7 @@ CALLB0:		ex	af,af'
 
 DV_TIRQ::	ex	af,af'
 		ld	a,DV_BANK##
-		ld	ix,DV_TIMI##
+		ld	ix,DRIVER.TIMER_INT##
 
 CALBNK:		exx
 		ld	e,a

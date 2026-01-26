@@ -11,7 +11,7 @@
    Supported format specifiers:
 
    %d or %i: signed int
-   %ud or %ui: unsigned int
+   %u: unsigned int
    %x: hexadecimal int
    %c: character
    %s: string
@@ -20,7 +20,7 @@
    Also if SUPPORT_LONG is defined:
 
    %l: signed long
-   %ul: unsigned long
+   %lu: unsigned long
    %lx: hexadecimal long
 */
 
@@ -160,7 +160,12 @@ static int format_string(const char* buf, const char *fmt, va_list ap)
     else if(theChar == 'x') {
       base = 16;
     }
-    else if(theChar != 'd' && theChar != 'i') {
+#ifdef SUPPORT_LONG
+    else if(isLong) {
+      fmtPnt--;
+    } else
+#endif    
+    if(theChar != 'd' && theChar != 'i') {
       do_char_inc(theChar);
       continue;
     }

@@ -146,9 +146,9 @@ size	macro	name
 	ifield	0		;Start at offset zero
 ;
 	field	1,UD_SLOT	;Slot address of appropriate disk driver
-	field	0,UD_OFFSET	;Offset to entry table of disk driver (for drive-based drivers)
-	field	1,UD_DEVICE_INDEX   ;Device index (for device-based drivers)
-	field	2,UD_DPB_ADDRESS    ;Address of MSX DPB in system RAM
+	field	0,UD_OFFSET	;Offset to entry table of disk driver (for MSX-DOS drivers)
+	field	1,UD_DEVICE_NUMBER   ;Device number (for Nextor drivers)
+	field	2,UD_DPB_ADDRESS     ;Address of MSX DPB in system RAM
 	field	1,UD_FLAGS	;Various flags for the unit:
 				;        bit 0: disk is FAT12
 				;        bit 1: disk is FAT16
@@ -158,16 +158,15 @@ size	macro	name
 				;	     bit 5: unit needs to be accessed in Z80 mode
 				;        bit 6: unit is mounted to a file
 	field	1,UD_DFLAGS	;More flags for the unit:
-				;        bit 0: unit is associated to a device in a device-based driver
+				;        bit 0: unit is associated to a device in a Nextor driver
 				;               (if zero, all other bits are meaningless)
-                ;        bit 1: the device supports hot-plug (ignored)
+                ;        bit 1: unused (was "the device supports hot-plug" in Nextor 2)
                 ;        bit 2: the drive is removable
 				;        bit 3: partition assignment is pending for this drive
 				;        bit 4: value at UD_FIRST_DEVICE_SECTOR is valid
 				;               (so that BUILD_UPB will not auto-assign partition)
 				;        bit 5: value at UD_CHKSUM is valid
 ;
-	field	1,UD_LUN_INDEX		;LUN index (for device-based drivers)
 	field	1,UD_RAM_SEGMENT	;Segment number for RAM based drivers, FFh for ROM based drivers
 ;
 	field	1,UD_PHYSICAL_UNIT	;Physical unit number.
@@ -198,13 +197,13 @@ size	macro	name
 	field	64,UD_CURRENT_DIR_PATH	;Current directory path
 	field	2,UD_REDUCED_CLUSTER_COUNT	;Reduced total number of clusters
 
-	field	4,UD_FIRST_DEVICE_SECTOR	;First device sector (only for block devices on device-based drivers)
+	field	4,UD_FIRST_DEVICE_SECTOR	;First device sector (only for block devices on Nextor drivers)
 
 	field	2,UD_CHKSUM
     
 	field	1,UD_RELATIVE_UNIT_NUMBER   ;Relative unit number for unit handler
-                                        ;(for device-based drivers this is only used if the driver
-                                        ; provides configuration, in order to get the default mapping
+                                        ;(for Nextor drivers this is only used when calling
+                                        ; DRVQ_GET_DRIVE_BOOT_CONFIG, in order to get the default mapping
                                         ; for the drive)
 	field   2,UD_ALLOCATION_CLUSTER	;Next cluster to check for allocation -1
 
@@ -226,7 +225,7 @@ size	macro	name
 
 ;*****************************************************************************
 
-; Entry in the device-based drives table (pointed by DVB_TABLE) in MSX-DOS 1 mode
+; Entry in the Nextor drives table (pointed by KERNEX_DOS1) in MSX-DOS 1 mode
 ;
 ; The table consists of one byte with the number of entries, followed by
 ; the entries themselves.
@@ -238,34 +237,34 @@ size	macro	name
 	field	1,UD1_SLOT            ;Slot address of appropriate disk driver
 	field	1,UD1_RELATIVE_DRIVE  ;Relative unit number
                                   ;bit 7 is set if partition has changed
-	field   1,UD1_DEVICE_INDEX    ;Device index
-	field   1,UD1_LUN_INDEX       ;LUN index
+	field   1,UD1_DEVICE_NUMBER   ;Device number
+	;field   1                    ;LUN number was here in Nextor 2
 	field   4,UD1_FIRST_ABSOLUTE_SECTOR  ;First absolute sector number
 
     size	UD1_SIZE              ;Total size of unit descriptor
 
 ;-----------------------------------------------------------------------------
 ;
-; Work area for the disk emulation mode (pointed by DVB_TABLE)
+; Work area for the disk emulation mode (pointed by KERNEX_DOS1)
 ;
 ; Bit 7 of DSK_CURRENT_FILE_INDEX is kept set to indicate that we are in disk emulation mode
-; (if reset, it's the count of entries for the device-based drives table 
+; (if reset, it's the count of entries for the Nextor drives table 
 ;  in normal DOS 1 mode, see UD1_*)
 ;
 ; Bit 6 of DSK_CURRENT_FILE_INDEX is set if we have a Russian keyboard
 ;
-; Bit 7 of EMU_DEV_AND_LUN is set after the current image file is changed
+; Bit 7 of EMU_FILE_DEVICE_NUMBER is set after the current image file is changed
 ; and reset again when disk change is checked.
 ;
-; WARNING: DSK_CURRENT_FILE_DEVICE_INDEX, DSK_CURRENT_FILE_LUN_INDEX and DSK_CURRENT_FILE_FIRST_SECTOR must have the same offset
+; WARNING: DSK_CURRENT_FILE_DEVICE_NUMBER and DSK_CURRENT_FILE_FIRST_SECTOR must have the same offset
 ; as the DI_* equivalents; this is required by DIO_ENTRY in drv.mac.
 
 	ifield	0		;Start at offset zero
 
 	field	1,DSK_CURRENT_FILE_INDEX         ;Index of current disk image file
-	field   1,EMU_DEV_AND_LUN                ;Device + 16 * LUN of emulation data mode
-	field   1,DSK_CURRENT_FILE_DEVICE_INDEX  ;Device index of current disk image file
-    field   1,DSK_CURRENT_FILE_LUN_INDEX     ;LUN index of current disk image file
+	field   1,EMU_FILE_DEVICE_NUMBER         ;Device of emulation data mode
+	field   1,DSK_CURRENT_FILE_DEVICE_NUMBER ;Device number of current disk image file
+    ;field  1                                ;LUN number of current disk image file was here in Nextor 2
 	field   4,DSK_CURRENT_FILE_FIRST_SECTOR	 ;First sector of current disk image file
     field   2,DSK_CURRENT_FILE_SECTORS_COUNT ;Size of current disk image file in sectors
     field   1,DSK_EMULATED_FILES_COUNT       ;Number of emulated disk images

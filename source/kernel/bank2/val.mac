@@ -812,7 +812,7 @@ IS_FIXED_OR_LOCKED:
 
         ld a,(ix+UD_DFLAGS##)
         and UFM_DB+UFM_RM
-        cp UFM_DB     ;Device-based + not removable?
+        cp UFM_DB     ;Nextor + not removable?
         scf
         jr z,CHKLCK2
 
@@ -989,7 +989,7 @@ MCHK0:
 		pop	hl
 		bit	UF_DBD,a
 		jr	nz,MCHECK2
-		ld	a,1	;Return C & NZ (not sure, assume changed) if not a device-based driver
+		ld	a,1	;Return C & NZ (not sure, assume changed) if not a Nextor driver
 		or	a
 		scf
 		ret
@@ -1216,8 +1216,8 @@ cp_volid_loop:	ld	a,(de)
 ;------------------------------------------------------------------------------
 ;
 ; When a media change is detected, and if the drive is mapped to a 
-; device-based driver, unmap all the other drives that were attached
-; to the same controller, device and LUN (this is done by UNMAPALL routine
+; Nextor driver, unmap all the other drives that were attached
+; to the same controller and device (this is done by UNMAPALL routine
 ; in the kernel ROM page 4). Then reset the UF_FOK flag and jump to
 ; BUILD_UPB in order to search for the first partition of the new media.
 ;
@@ -1242,8 +1242,7 @@ DO_MEDIA_CHANGE:
 
 	ld	b,(ix+UD_SLOT##)
 	ld	c,(ix+UD_RAM_SEGMENT##)
-	ld	d,(ix+UD_DEVICE_INDEX##)
-	ld	e,(ix+UD_LUN_INDEX##)
+	ld	d,(ix+UD_DEVICE_NUMBER##)
 	ld	ix,UNMAPALL##
 	call CALL4_PRESERVE_ALT
 
@@ -1313,8 +1312,8 @@ bupc:
 
 		bit	UF_FOK,(ix+UD_DFLAGS##)
 		jr	nz,build_upb_okfsec
-		ld	(ix+UD_FIRST_DEVICE_SECTOR##),0	;Start by reading the MBR
-		ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),0	;(for device-based drivers only)
+		ld	(ix+UD_FIRST_DEVICE_SECTOR##),0	    ;Start by reading the MBR
+		ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),0   ;(for Nextor drivers only)
 		ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),0
 		ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),0
 build_upb_okfsec:
@@ -1338,7 +1337,7 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 
 		push	hl
 ;
-		;If device-based driver, and UD_FIRST_DEVICE_SECTOR not valid,
+		;If Nextor driver, and UD_FIRST_DEVICE_SECTOR not valid,
 		;find the first available FAT12 or FAT16 partition
 
 		ex	(sp),ix
@@ -1350,8 +1349,7 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 
 build_upb_do_findpart:
         ex	(sp),ix
-        ld b,(ix+UD_DEVICE_INDEX##)
-        ld c,(ix+UD_LUN_INDEX##)
+        ld b,(ix+UD_DEVICE_NUMBER##)
         ex	(sp),ix
 
         pop hl
@@ -1516,7 +1514,7 @@ upb_not_found:	pop	hl			;If anything was wrong with
 		or	h			; the UPB then return with
 		ret				; Z-flag clear.
 
-		;Code to make a DPB if the driver is device-based
+		;Code to make a DPB if it's a Nextor driver
 		;(the information in the boot sector is used)
 
 MKDPB_DEVBASED:
@@ -2361,7 +2359,7 @@ number_of_cmds	equ	($-unit_cmd_table)/2
 ;
 ;	---------------------------------
 ;
-;Equivalent of the above table for device-based drivers
+;Equivalent of the above table for Nextor drivers
 unit_devcmd_table:
 		dw	rd_devcmd_routine
 		dw	wr_devcmd_routine
@@ -2521,7 +2519,7 @@ num_fmt_errs	equ	$-fmt_err_table
 ;
 ;-----------------------------------------------------------------------------
 ;
-; Version for device-based drivers of the above routines
+; Version for Nextor drivers of the above routines
 ; Input: A  = Unit number (ignored)
 ;        IX = Unit descriptor
 ;        HL',DE',B' = Assorted parameters for the unit handler
@@ -2533,7 +2531,7 @@ rd_devcmd_routine:
 wr_devcmd_routine:
 	scf
 rdwr_devcmd:
-	ld	hl,DEV_RW##	;HL'=routine address
+	ld	hl,DRIVER.READ_WRITE##	;HL'=routine address
 	exx
 	ld	a,c		;A=required page 2 segment number
 
@@ -2557,10 +2555,9 @@ rdwr_devcmd:
 	ex	af,af'
 	pop	af		;Cy'=read/write flag
 	ld	c,a
-	ld	a,(ix+UD_DEVICE_INDEX##)	;A'=Device index
+	ld	a,(ix+UD_DEVICE_NUMBER##)	;A'=Device number
 	ex	af,af'
 	ld	a,c		;A=Required segment
-	ld	c,(ix+UD_LUN_INDEX##)	;C=LUN index
 
 	ld	de,TMP_SEC##
 	push	bc
@@ -2585,17 +2582,23 @@ mc_devcmd_routine:
 	ret
 
 mc_devcmd_remv:
-	ld	hl,DEV_STATUS##	;HL'=routine address
+	ld	hl,DRIVER.DEVICE_QUERY##	;HL'=routine address
 	ld	a,c		;A=required page 2 segment number
 	exx
 
-	ex	af,af'
-	ld	a,(ix+UD_DEVICE_INDEX##)	;A'=Device index
-	ex	af,af'
-	ld	b,(ix+UD_LUN_INDEX##)	;B=LUN index
+	ld	c,(ix+UD_DEVICE_NUMBER##)	;A'=Device number
+	ex af,af'
+	ld a,DRIVER.DEVQ_GET_STATUS##
+	ex af,af'
 	call	CALL_DRV
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr z,mc_devcmd_notchanged	;Treat "not implemented" as "unchanged"
 	or	a
-	jr	z,mc_devcmd_err
+	jr	nz,mc_devcmd_idev	;Treat any other error as "invalid device number"
+
+	ld a,b
+	or a
+	jr z,mc_devcmd_err
 
 	dec	a
 	ld	b,1
@@ -2609,17 +2612,26 @@ mc_devcmd_remv:
 	ld	b,0	;3 (or other)=unknown (translate to 0)
 	ret
 
+mc_devcmd_notchanged:
+	ld b,1
+	xor a
+	ret
+
 mc_devcmd_err:
 	ld	a,.NRDY##
 	ret
 	
+mc_devcmd_idev:
+	ld  a,.IDEV##
+	ret
+
 	;It is not necessary to generate a DPB, since
 	;when a media change is detected, BUILD_UPB is checked,
 	;which does the DPB generation.
 ;
 ;	---------------------------------
 ;
-;This routine is actually never called for device-based drivers.
+;This routine is actually never called for Nextor drivers.
 ;
 dp_devcmd_routine:
 	ret
@@ -2655,8 +2667,8 @@ CALL_DRV:
 ; Entry:    AF',BC,DE,HL = Parameters for disk driver
 ;		      IX = Address of unit descriptor
 ;		       A = Page-2 segment required
-;		      HL'= 4000h + driver entry table offset (drive-based driver)
-;                          Address of the driver routine (device-based driver)
+;		      HL'= 4000h + driver entry table offset (MSX-DOS driver)
+;                          Address of the driver routine (Nextor driver)
 ; Returns:   AF,BC,DE,HL = Results from disk driver
 ; Corrupts:  all registers
 ;
@@ -2670,15 +2682,15 @@ CALLDRV2:
 CALLDRV3:
 
 		exx				;Work out the address of the
-		bit	UF_DBD,(IX+UD_DFLAGS##) ; routine to call (UD_OFFSET
+		bit	UF_DBD,(IX+UD_DFLAGS##)
 		jr	nz,CALDRV_DEVBASED	; routine to call (UD_OFFSET
 		ld	e,(ix+UD_OFFSET##)	; defines start of table) and
-		ld	d,0			; store it in page-3. Do not
+		ld	d,0				; store it in page-3. Do not
 		add	hl,de			; modify address if calling
-		jr	CALDRV_NEXT		; a device-based driver.
+		jr	CALDRV_NEXT		; a Nextor driver.
 CALDRV_DEVBASED:
 		ld	(BK4_ADD##),hl	;Call via CALDRV is needed 
-		ld	hl,CALDRV##	;for device-based drivers.
+		ld	hl,CALDRV##		;for Nextor drivers.
 CALDRV_NEXT:
 
 		ld	b,(ix+UD_SLOT##)	;Get disk driver slot number

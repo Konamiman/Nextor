@@ -57,8 +57,8 @@ typedef struct {
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v1.21\r\n"
-    "By Konamiman, 7/2020\r\n"
+    "Disk image emulation tool for Nextor v1.3\r\n"
+    "By Konamiman, 5/2023\r\n"
     "\r\n";
     
 const char* strUsage=
@@ -131,6 +131,7 @@ byte fileHandle;
 int setupPartitionDeviceIndex;
 int setupPartitionLunIndex;
 bool setupAsPersistent;
+bool isNextor3;
 
 /* Some handy code defines */
 
@@ -792,7 +793,7 @@ byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sect
 	regs.Words.HL = (int)buffer;
 	regs.Words.DE = (int)&sectorNumber;
 
-	DriverCall(driverSlot, DEV_RW);
+	DriverCall(driverSlot, isNextor3 ? READ_WRITE : DEV_RW);
 	return regs.Bytes.A;
 }
 
@@ -803,7 +804,10 @@ void DriverCall(byte slot, uint routineAddress)
 
 	memcpy(registerData, &regs, 8);
 
-	regs.Bytes.A = slot;
+	regs.Bytes.A = slot & 0x8F;
+    if(isNextor3) {
+        regs.Bytes.A |= 0x10;
+    }
 	regs.Bytes.B = 0xFF;
 	regs.UWords.DE = routineAddress;
 	regs.Words.HL = (int)registerData;
@@ -858,6 +862,8 @@ void CheckDosVersion()
     if(regs.Bytes.B < 2 || regs.Bytes.IXh != 1) {
         Terminate("This program is for Nextor only.");
     }
+
+    isNextor3 = (regs.Bytes.IXl > 2);
 }
 
 void* malloc(int size)

@@ -1,5 +1,5 @@
 /* MKNEXROM - Make a Nextor kernel ROM
-   By Konamiman, 3/2019
+   By Konamiman, 4/2023
 
    Usage:
    mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>] [/e:<extrafile>] [/8:<8K bank select address>] [/k:<boot keys inverter>]
@@ -98,6 +98,9 @@
    v1.06 (3/2019):
    Added the <boot keys inverter> parameter.
    Existing full ROM files can now be updated, <newfile> is optional for these.
+
+   v1.1 (4/2023):
+   Adjust signature for Nextor v3.
 */
 
 
@@ -112,7 +115,7 @@
 #define MAPPER_CODE_SIZE 48				//Size of the bank change code
 #define EXTRA_CODE_SIZE 1024			//Size of the extra code for banks 0 and 3
 #define EXTRA_ADDRESS 0x3BD0			//Address of the extra code
-#define DRIVER_MIN_SIZE 0x172			//Minimum size of the disk driver
+#define DRIVER_MIN_SIZE (256+16+13*3)	//Minimum size of the disk driver
 #define PAGE0_SIZE 256					//Size of the common page 0 code
 #define DOS2_EXTRA_BANK 0				//Bank for the extra code in DOS 2 mode
 #define DOS1_EXTRA_BANK 3				//Bank for the extra code in DOS 2 mode
@@ -166,7 +169,7 @@ int main(int argc, char* argv[])
 	char* extraCode[EXTRA_CODE_SIZE];
 	char* dataBuffer[1024];
 
-	char* driverSignature="NEXTOR_DRIVER";
+	char* driverSignature="NEXTORv3_DRIVER";
 	signatureLength=strlen(driverSignature);
 	mapperCode = mapperCodeBuffer;
 	
@@ -526,8 +529,8 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.06 - Make a Nextor kernel ROM\r\n"
-		   "By Konamiman, 3/2019\r\n"
+	printf("MKNEXROM v1.1 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 4/2023\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
 		   "mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>]\r\n"

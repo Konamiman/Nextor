@@ -54,7 +54,7 @@ ORIGIN	equ	7700h
 
 ;This routine is invoked in disk emulation mode prior to any disk access.
 ;If checks if a valid file change key is being pressed, and if so,
-;reloads the emulation data file and updates the information in DVB_TABLE.
+;reloads the emulation data file and updates the information in KERNEX_DOS1.
 ;If no suitable key is being pressed, or if change is performed ok, returns Z.
 ;If there is an error reading the emulation data file, returns NZ and A=Error code.
 
@@ -73,7 +73,7 @@ CHGFILE:
 	ret
 
 CHGF2:
-	ld	ix,(DVB_TABLE##)
+	ld	ix,(KERNEX_DOS1##)
 
     call GETCURKEY
     or a
@@ -113,16 +113,7 @@ CHGF3:
 
 	push	bc
 
-	ld	a,(ix+EMU_DEV_AND_LUN##) ;data file dev index + 16 * LUN index
-	ld	d,a
-	rrca
-	rrca
-	rrca
-	rrca
-	and	111b
-	ld	b,a	;LUN
-	ld	a,d
-	and	111b	;Device
+	ld	a,(ix+EMU_FILE_DEVICE_NUMBER##) ;data file dev index
 
 	ld	l,(ix+EMU_FILE_FIRST_SECTOR##)
 	ld	h,(ix+EMU_FILE_FIRST_SECTOR##+1)
@@ -132,9 +123,8 @@ CHGF3:
 	ld	(TMP_SEC##+2),hl
 
 	ld	iy,(0F348h-1)	;Master controller slot
-	ld	hl,DEV_RW##
+	ld	hl,DRIVER.READ_WRITE##
 	ld	(BK4_ADD##),hl
-	ld	c,b
 	ld	b,1
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
@@ -157,7 +147,7 @@ CHGF3:
 	ld	a,c
     or b
 	ld	(ix+DSK_CURRENT_FILE_INDEX##),a
-	set	7,(ix+EMU_DEV_AND_LUN##) ;File changed flag
+	set	7,(ix+EMU_FILE_DEVICE_NUMBER##) ;File changed flag
 	
 	dec	a
 	add	a,a		;Each entry is 8 bytes
@@ -172,26 +162,20 @@ CHGF3:
 	push	ix
 	pop	de
 	inc	de
-	inc	de  ;DE must point to DSK_CURRENT_FILE_DEVICE_INDEX in work area
-	ld	bc,8
+	inc	de  ;DE must point to DSK_CURRENT_FILE_DEVICE_NUMBER in work area
+	ld	bc,7
+	ldi	;Copy device number, skip unused field (was LUN number in Nextor 2), then copy rest of data
+	inc hl
 	ldir
 
-    ld a,(ix+DSK_CURRENT_FILE_DEVICE_INDEX##) ;set DSK_CURRENT_FILE_DEVICE_INDEX and DSK_CURRENT_FILE_LUN_INDEX as same of data file if 0
+    ld a,(ix+DSK_CURRENT_FILE_DEVICE_NUMBER##) ;set DSK_CURRENT_FILE_DEVICE_NUMBER same of data file if 0
     or a
     jr nz,CHGF4
-    ld a,(ix+EMU_DEV_AND_LUN##)
-    ld b,a
-    and 00000111b
-    ld (ix+DSK_CURRENT_FILE_DEVICE_INDEX##),a
-    ld a,b
-    rrca
-    rrca
-    rrca
-    rrca
-    and 00000111b
-    ld (ix+DSK_CURRENT_FILE_LUN_INDEX##),a
+    ld a,(ix+EMU_FILE_DEVICE_NUMBER##)
+	and 01111111b
+    ld (ix+DSK_CURRENT_FILE_DEVICE_NUMBER##),a
 
-CHGF4:
+CHGF4::
 	xor	a
 	ret
 
@@ -295,7 +279,7 @@ DIRCALL:
 DO_DIRCALL:
 	pop	ix
 	push	bc
-	ld	bc,DV_D0##-DIRCALL-3
+	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
 	add	ix,bc
 	pop	bc
 	jp	DO_CALBNK
@@ -310,10 +294,10 @@ DO_DIRCALL:
 
 DIO_ENTRY::
 	push	af
-	call	IS_DVB
-	jp	nc,DIO_ENTRY_DO
+	call	GET_KERNEX_DOS1_PNT
+	jp	nc,DRV_ERROR_12
 
-	ld	a,(iy+UD1_DEVICE_INDEX##)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
 	or	a
 	jp	z,DISKERR
 
@@ -348,7 +332,7 @@ DIOCHGFOK:
 
 	push	hl
 	push	de
-	ld	ix,(DVB_TABLE##)
+	ld	ix,(KERNEX_DOS1##)
 	ld	e,(ix+DSK_CURRENT_FILE_SECTORS_COUNT##)
 	ld	d,(ix+DSK_CURRENT_FILE_SECTORS_COUNT##+1) ;DE = dsk size in sectors
 
@@ -392,7 +376,7 @@ WVDP:
 
 DIOEN2:
 	push	af
-    ld iy,(DVB_TABLE)
+    ld iy,(KERNEX_DOS1)
 DIOEN3:
 
     ; In this point one of these is true:
@@ -401,15 +385,12 @@ DIOEN3:
     ;   of the work area for emulation mode.
     ;
     ; - We are in normal DOS 1 mode, and IY points to the entry
-    ;   for the drive in DVB_TABLE.
+    ;   for the drive in KERNEX_DOS1.
     ;
     ; The following code is common to both cases, that's why
-    ; device index, LUN index and first sector number must be stored
-    ; at the same offset in both the DVB_TABLE entries (UD1_*)
+    ; device number, and first sector number must be stored
+    ; at the same offset in both the KERNEX_DOS1 entries (UD1_*)
     ; and the disk emulation work area (DSK_*).
-
-	ld	a,1
-	ld	(KSLOT##),a	;KSLOT=1 -> device-based
 
 	push	hl
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
@@ -427,24 +408,8 @@ DIOEN3:
 	pop	hl		;Restore transfer address
 	ld	de,TMP_SEC##
 	
-	ld	c,(iy+UD1_LUN_INDEX##) ;Set LUN index
 	pop	af                   ;From here Cy must be kept untouched
-	ld	a,(iy+UD1_DEVICE_INDEX##) ;Set device index
-	jr	DIO_ENTRY_DO_2
-
-		
-;From here, the processing is almost the same for device-based drivers
-;and for drive-based drivers, since the relevant parameters are almost the same
-;(B for the sector count, HL for the transfer address, A and C are not touched).
-;The only thing to take in account, is that for drive-based, DE contains
-;the sector number; and for device-based, DE is a pointer to a 32 bit sector number.
-;We use KSLOT to handle this difference.
-
-DIO_ENTRY_DO:
-	xor	a
-	ld	(KSLOT##),a	;KSLOT=0 -> drive-based
-	pop	af
-DIO_ENTRY_DO_2:
+	ld	a,(iy+UD1_DEVICE_NUMBER##) ;Set device number
 
 	; If the transfer starts and ends in page 0,
 	; ir of it starts in page 2 or 3,
@@ -482,7 +447,7 @@ DIO_RD_LOOP:
 	ld	b,1
 	or	a
 	
-	ld	ix,DV_DSKIO##	;Or DEV_RW (they are at the same address)
+	ld	ix,DRIVER.READ_WRITE##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
@@ -536,7 +501,7 @@ DIO_WR_LOOP:
 	ld	b,1
 	scf
 	
-	ld	ix,DV_DSKIO##
+	ld	ix,DRIVER.READ_WRITE##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
@@ -567,31 +532,15 @@ DIO_WR_OK:
 
 DIO_NOP1:
 	pop	af
-	ld	ix,DV_DSKIO##
+	ld	ix,DRIVER.READ_WRITE##
 	call	DO_CALBNK
 	jp	CONV_ERR
 
 
-;This subroutine increases the sector number by one.
+;This subroutine increases the 4 byte sector number pointed by DE by one.
 ;Corrupts AF, IX.
 
 DIO_INC_DE:
-	ld	a,(KSLOT##)
-	or	a
-	jr	nz,DIO_INC_DE_DVB
-
-	;Drive-based: simply increment DE.
-	;Note that C can't hold sector number,
-	;since this will be called in DOS 1 mode only,
-	;and DOS 1 does not support FAT16,
-	;so sector numbers are always 16 bit.
-
-	inc	de
-	ret
-
-	;Device-based: increment the 32 bit number pointed by DE
-
-DIO_INC_DE_DVB:
 	push	hl
 	push	de
 	pop	ix
@@ -612,6 +561,12 @@ DIO_INC_DE_DVB_END:
 	pop	hl
 	ret
 
+DRV_ERROR_12:
+	pop af
+	ld a,12	;"Other error"
+	scf
+	ret
+
 ;-----------------------------------------------------------------------------
 ;
 	; General disk routines entry
@@ -619,12 +574,11 @@ DIO_INC_DE_DVB_END:
 	;--- Check disk change status
 
 CHG_ENTRY::
-	call	IS_DVB
-	ld	ix,DV_CHGDSK##
-	jp	nc,DO_CALBNK
+	call	GET_KERNEX_DOS1_PNT
+	jp	nc,DRV_ERROR_12
 
 	ld	d,a
-	ld	a,(iy+UD1_DEVICE_INDEX##)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
 	or	a
 	jp	z,DISKERR
 
@@ -641,9 +595,9 @@ CHG_ENTRY::
 	ret	nz
 
 	xor	a
-	ld	ix,(DVB_TABLE##)
-	bit	7,(ix+EMU_DEV_AND_LUN##)
-	res	7,(ix+EMU_DEV_AND_LUN##)
+	ld	ix,(KERNEX_DOS1##)
+	bit	7,(ix+EMU_FILE_DEVICE_NUMBER##)
+	res	7,(ix+EMU_FILE_DEVICE_NUMBER##)
 	ld	b,1
 	ret	z
 	ld	a,d
@@ -653,7 +607,6 @@ CHG_ENTRY::
 
 CHGEN_NOEMU:
 
-	;Drive-based mapping:
 	;Return "changed" if partition has changed, "unchanged" otherwise
 
 	ld	a,(iy+UD1_RELATIVE_DRIVE##)
@@ -667,12 +620,11 @@ CHGEN_NOEMU:
 	ld	b,1	;"Unchanged" if partition has not changed
 	ret
 
-	;--- Obtain DPB, input: IY=Entry in DVB_TABLE, HL=Address for DPB
+	;--- Obtain DPB, input: IY=Entry in KERNEX_DOS1, HL=Address for DPB
 
 DPB_ENTRY::
-	call	IS_DVB
-	ld	ix,DV_GETDPB##
-	jp	nc,DO_CALBNK
+	call	GET_KERNEX_DOS1_PNT
+	jp	nc,DRV_ERROR_12
 
 	call	IS_EMU
 	jr	nc,DO_MKDPB
@@ -704,13 +656,12 @@ DPBEN2:
 	ld	(TMP_SEC##+2),a
 	ld	a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3)
 	ld	(TMP_SEC##+3),a
-	ld	a,(iy+UD1_DEVICE_INDEX##)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
 	ld	b,1
-	ld	c,(iy+UD1_LUN_INDEX##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
-	ld	ix,DEV_RW##
+	ld	ix,DRIVER.READ_WRITE##
 	call	DO_CALBNK
 	pop	de
 	inc	de
@@ -728,31 +679,31 @@ DPBEN2:
 	;--- Format choice
 
 CHO_ENTRY::
-	call	IS_DVB
-	ld	ix,DV_CHOICE##
-	jp	nc,DO_CALBNK
-	
-	ld	hl,781fh	;Formatting is no supported yet for device-based drivers
+	;call	GET_KERNEX_DOS1_PNT
+	;jp	nc,CHO_ENTRY_CANTFORMAT
+
+CHO_ENTRY_CANTFORMAT:
+	ld	hl,781fh	;Formatting is no supported yet for Nextor drivers
 	ret
 
 	;--- Format device
 
 FMT_ENTRY::
-	call	IS_DVB
-	ld	ix,DV_CHOICE##
-	jp	nc,DO_CALBNK
-	
-	ld	a,16		;Formatting is no supported yet for device-based drivers
+	;call	GET_KERNEX_DOS1_PNT
+	;jp	nc,FMT_ENTRY_CANTFORMAT
+
+FMT_ENTRY_CANTFORMAT:
+	ld	a,16		;Formatting is no supported yet for Nextor drivers
 	scf
 	ret
 
 	;--- Motor off
 
 MOF_ENTRY::
-	call	IS_DVB
-	ld	ix,DV_MTOFF##
-	jp	nc,DO_CALBNK
+	;call	GET_KERNEX_DOS1_PNT
+	;jp	nc,MOF_ENTRY_NOOP
 
+MOF_ENTRY_NOOP:
 	ret
 
 DO_CALBNK:
@@ -762,7 +713,7 @@ DO_CALBNK:
 
 
 	;--- Jump here when an operation is requested
-	;    on an existing, but empty, entry in DVB_TABLE
+	;    on an existing, but empty, entry in KERNEX_DOS1
 
 DISKERR:
 	ld	a,12
@@ -778,18 +729,18 @@ DIO_RNF:
 
 ;-----------------------------------------------------------------------------
 ;
-; Check if the relative drive pointer by A refers to a device-based driver
+; Check if the relative drive pointed by A refers to a Nextor driver
 ; and we are in DOS 1 mode. If so, returns Cy=1 and IY=pointer to the
-; table entry in DVB_TABLE. Otherwise returns Cy=0.
+; table entry in KERNEX_DOS1. Otherwise (DOS 2 mode, or no Nextor driver) returns Cy=0.
 ; Corrupts IY, F.
 
-IS_DVB:
+GET_KERNEX_DOS1_PNT:
 	push	af
 	ld	a,(DOS_VER##)
 	or	a
 	jr	nz,IS_NOT_DVB
 
-	ld	iy,(DVB_TABLE##)
+	ld	iy,(KERNEX_DOS1##)
 	ld a,iyh
 	or iyl
 	jr	z,IS_NOT_DVB
@@ -811,7 +762,7 @@ IS_DVB_NOEMU:
 	push	af
 	push	bc
 	ld	c,a	;C = Drive number
-	ld	b,(iy)	;B = num of entries in DVB_TABLE
+	ld	b,(iy)	;B = num of entries in KERNEX_DOS1
 	inc	iy
 
 IS_DVB_LOOP:
@@ -852,13 +803,19 @@ IS_NOT_DVB:
 ;--------------
 ;
 ; Check if we are in disk emulation mode
-; Assumes IS_DVB has returned Cy=1 (that is, in DOS 1 mode and DVB_TABLE exists)
+; Assumes GET_KERNEX_DOS1_PNT has returned Cy=1 (that is, in DOS 1 mode and KERNEX_DOS1 exists)
 ; Returns Cy=1 if in emulation mode, Cy=0 if not
 ; Corruputs: F
 
 IS_EMU:
+	push af
+	ld	a,(DOS_VER##)
+	or	a
+	jr nz,IS_NO_EMU
+	pop af
+
 	push	iy
-	ld	iy,(DVB_TABLE##)
+	ld	iy,(KERNEX_DOS1##)
 	bit	7,(iy)
 	pop	iy
 	scf
@@ -866,9 +823,14 @@ IS_EMU:
 	ccf
 	ret
 
+IS_NO_EMU:
+	pop af
+	or a
+	ret
+
 ;-----------------------------------------------------------------------------
 ;
-; Check if the entry of DVB_TABLE pointed by IY has a partition assigned.
+; Check if the entry of KERNEX_DOS1 pointed by IY has a partition assigned.
 ; Return A=0, Z if partition assigned; A<>0, NZ if NO partition assigned.
 
 HAS_PARTITION:
@@ -888,7 +850,7 @@ RET_NZ:
 ;-----------------------------------------------------------------------------
 ;
 ; Assign the first available FAT12 primary partition to
-; the device whose entry of DVB_TABLE pointed by IY.
+; the device whose entry of KERNEX_DOS1 pointed by IY.
 ; Returns disk error code in A, with Z appropriately set.
 ; Corrupts: AF, IX.
 
@@ -908,8 +870,7 @@ ASSIGN_PARTITION:
 	pop hl
 	push hl
 
-	ld b,(iy+UD1_DEVICE_INDEX##)
-	ld c,(iy+UD1_LUN_INDEX##)
+	ld b,(iy+UD1_DEVICE_NUMBER##)
 	ld a,4
     ld d,0
 	ld	ix,AUTO_ASPART##
@@ -928,7 +889,7 @@ ASSIGN_PARTITION:
 
 ;-----------------------------------------------------------------------------
 ;
-; Read the MBR of the device whose entry in DVB_TABLE
+; Read the MBR of the device whose entry in KERNEX_DOS1
 ; is pointed by IY. Returns the disk error in A.
 ; Corrupts AF, BC, DE, HL, IX, IY.
 
@@ -936,20 +897,19 @@ READ_BOOT:
 	ld	de,0
 	ld	(TMP_SEC##),de
 	ld	(TMP_SEC##+2),de
-	ld	a,(iy+UD1_DEVICE_INDEX##)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
 	ld	b,1
-	ld	c,(iy+UD1_LUN_INDEX##)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
-	ld	ix,DEV_RW##
+	ld	ix,DRIVER.READ_WRITE##
 	jp	DO_CALBNK
 
 
 ;-----------------------------------------------------------------------------
 ;
-; Convert the disk error returned by a device-based routine,
-; into its drive-based equivalent
+; Convert the disk error returned by a Nextor routine,
+; into its old MSX-DOS equivalent
 
 POP_CONV_ERR:
 	inc	sp
@@ -958,10 +918,6 @@ POP_CONV_ERR:
 CONV_ERR:
 	or	a
 	ret	z
-	;jr	c,CONVE2
-	;xor	a
-	;ret
-CONVE2:
 
 	push	bc
 	ld	b,0

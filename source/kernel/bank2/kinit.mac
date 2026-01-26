@@ -152,7 +152,7 @@ init_drv_loop:	ld	a,(hl)			;A := number of drives
 		pcall	F_ASSIGN		; each unit to itself.
 
 
-;	+++++  INITIALIZE UNIT DESCRIPTORS FOR DEVICE-BASED DRIVERS  +++++
+;	+++++  INITIALIZE UNIT DESCRIPTORS FOR NEXTOR DRIVERS  +++++
 
 		push	iy
 		ex	af,af'
@@ -798,7 +798,7 @@ kbdos_table:
 	dw	F_GDLI##		;Get information about drive letter
 	dw	F_GPART##		;Get information about disk partition
 	dw	F_CDRVR##       	;Execute a routine in a disk driver
-	dw	F_MAPDRV##		;Map a drive letter to a drive or device/LUN/partition
+	dw	F_MAPDRV##		;Map a drive letter to a drive or device/partition
 
 	dw	F_Z80MODE##		;Enable or disable the Z80 access mode for a driver
     dw  F_GETCLUS##     ;Get information about a cluster in a FAT drive
