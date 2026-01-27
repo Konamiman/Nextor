@@ -68,7 +68,7 @@ CODE_ADD:	equ	0F2EDh
 ENASLT:		equ	#24
 CHGET		equ	#9f
 RSLREG:		equ	#138
-EXPTBL:		equ	#FCC1		
+EXPTBL:		equ	#FCC1
 SLTWRK:		equ	#FD09
 
 ; SD
@@ -1467,7 +1467,7 @@ InitSD:
 	ret	c			; Timeout (card removed or damaged?)
 	ret	nz			; Command error
 
-	;call	GETWRK			; Ya deber�a tener en IX el workarea
+	;call	GETWRK			; Ya debería tener en IX el workarea
 	
 	res	BIT_SDHC,(ix+STATUS)	; Set SDSC as default
 	
@@ -1606,7 +1606,7 @@ MMC_FOUND:
 
 ;-----------------------------------------------------------------------------
 ; Inicializa la SD y pone el modo SPI.
-; Si no se hace as� falla en el FS-A1.
+; Si no se hace así falla en el FS-A1.
 ; Aparentemente, si se escribe el CRC (#95) desde un registro falla.
 ;-----------------------------------------------------------------------------
 SD_INIT:
@@ -1748,7 +1748,7 @@ SD_CMD:
 	ld	b,0
 SD_CMD2:
 	ld	a,(de)
-	cp	#ff		; Aqu� se podr�a mirar solo el bit 7? 0=ready
+	cp	#ff		; Aquí se podría mirar solo el bit 7? 0=ready
 	ccf
 	ret	nc
 
@@ -2293,6 +2293,7 @@ PRINT:
 ;-----------------------------------------------------------------------------
 		include	"romdisk.asm"
 
+
 ;-----------------------------------------------------------------------------
 ; Strings
 ;-----------------------------------------------------------------------------
@@ -2304,24 +2305,25 @@ endm
 TXT_INFO:
 		db	"MegaFlashROM SCC+ SD driver",13,10
 		VERSION_STRING %VER_MAIN,%VER_SEC
-		db	"(c) Manuel Pazos 2013",13,10
+		db	"(c) 2013 Manuel Pazos",13,10
 TXT_EMPTY:		
 		db	13,10,0
 
 TXT_INIT:
-		db	"SD card slot ",0
+		db	"SD Card slot ",0
 
 TXT_ROMDSKOK:
-		db	"ROM disk found.",13,10,0
+		db	"ROM Disk found.",13,10
+		db	13,10,0
 
 TXT_MMC:
-		db	"MMC",13,10,0
+		db	" MMC",13,10,0
 TXT_SD1x:
-		db	"SDSC 1.x",13,10,0
+		db	" SDSC 1.x",13,10,0
 TXT_SD2x:
-		db	"SDSC 2.x",13,10,0
+		db	" SDSC 2.x",13,10,0
 TXT_SDHC:
-		db	"SDHC",13,10,0
+		db	" SDHC",13,10,0
 	
 IDX_TYPE:
 		dw	TXT_MMC
