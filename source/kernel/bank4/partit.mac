@@ -4111,7 +4111,7 @@ IDRVR_RET:
 
 DOSV1_2:
 	xor	a
-	ld	b,a
+	ld	bc,_DOSVER##  ;Make B=0 and preserve C, some programs actually check it
 	ret
 
 
