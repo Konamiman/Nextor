@@ -66,19 +66,8 @@ CODE_ADD:	equ	0F2EDh
 
 ; BIOS
 ENASLT:		equ	#24
-INITXT		equ	#6C
 CHGET		equ	#9f
 RSLREG:		equ	#138
-EXTROM		equ	#15F
-
-SDFSCR		equ	#185
-REDCLK		equ	#1F5
-
-MSXVER		equ	#2D
-LINL40		equ	#F3AE
-LINLEN		equ	#F3B0
-BDRCLR		equ	#F3EB
-SCRMOD		equ	#FCAF
 EXPTBL:		equ	#FCC1
 SLTWRK:		equ	#FD09
 
@@ -536,14 +525,10 @@ DRV_TIMI:
 ;-----------------------------------------------------------------------------
 NEXTOR2_DRV_INIT:
 		or	a
-		jr	nz,.scrnSet
+		jr	nz,.secondExe	; Second execution
 	
 		ld	hl,WORK_AREA_SIZE
 		ret		;Note that Cy is 0 (no interrupt hooking needed)
-
-.scrnSet:
-		call	USRSCRSET
-		jr	nz,.secondExe	; Second execution
 
 .secondExe:
 		ld	de,TXT_INFO
@@ -2308,49 +2293,6 @@ PRINT:
 ;-----------------------------------------------------------------------------
 		include	"romdisk.asm"
 
-;-----------------------------------------------------------------------------
-; Restore screen parameters on MSX>=2 if they're not set yet
-;-----------------------------------------------------------------------------
-USRSCRSET:
-	ld	a,(MSXVER)
-	or	a
-	jr	nz,.notMSX1
-
-.MSX1:
-	ld	a,(SCRMOD)
-	or	a
-	ret
-	jp	INITXT
-
-.notMSX1:
-	ld	c,23h
-	ld 	ix,REDCLK
-	call	EXTROM
-	and	1
-	ld	b,a
-	ld	a,(SCRMOD)
-	cp	b
-	jr	nz,.restore
-	inc	c
-	ld 	ix,REDCLK
-	call	EXTROM
-	ld	b,a
-	inc	c
-	ld 	ix,REDCLK
-	call	EXTROM
-	add	a,a
-	add	a,a
-	add	a,a
-	add	a,a
-	or	b
-	ld	b,a
-	ld	a,(LINLEN)
-	cp	b
-	ret	z
-.restore:
-	xor	a
-	ld	ix,SDFSCR
-	jp	EXTROM
 
 ;-----------------------------------------------------------------------------
 ; Strings
