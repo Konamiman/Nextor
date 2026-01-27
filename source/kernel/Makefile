@@ -64,7 +64,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -128,7 +128,7 @@ drivers/SunriseIDE/sunride.masteronly.bin: \
 
 ### Sunrise IDE, ROM for blueMSX
 
-ide-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
+ide-blue: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
 	nextor_base.dat \
