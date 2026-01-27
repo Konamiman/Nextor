@@ -501,10 +501,13 @@ The partition type code returns information about the filesystem that the partit
 0: None (the partition with the specified number does not exist)
 1: FAT12
 4: FAT16, smaller than 32MB (obsolete)
-5: Extended (see below)
+5: Extended (CHS) (see below)
 6: FAT16 (CHS)
 14: FAT16 (LBA)
+15: Extended (LBA)
 ```
+
+**Note:** Prior to version 2.1.2, Nextor would only recognize a partition as extended if it had the partition type code 5 (extended CHS), and FDISK would use this code when creating extended partitions. Starting with Nextor 2.1.2, FDISK will use partition type code 15 (extended LBA) when creating extended partitions, and both 5 and 15 will be recognized as valid extended partition type codes when scanning existing partitions with `_GPART`. In the description below, "Extended" means "Either extended CHS or extended LBA".
 
 There are many more partition type codes defined, but they refer to filesystems that can't be handled by Nextor so they are not listed here.
 

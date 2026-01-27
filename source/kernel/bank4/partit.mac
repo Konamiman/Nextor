@@ -23,7 +23,8 @@ POFF_PSTART	equ	8	;Offset of partition start in p. table entry
 POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
 PT_FAT12	equ	1	;Partition type code for FAT12
 PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
-PT_EXT		equ	5	;Partition type code for extended partition
+PT_EXT		equ	5	;Partition type code for extended partition (CHS)
+PT_EXT_LBA  equ 15  ;Partition type code for extended partition (LBA)
 PT_FAT16	equ	6	;Partition type code for FAT16
 PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
 
@@ -197,7 +198,7 @@ DO_EXTPAR:
 	;--- If extended partition requested, first check that partition is actually extended
 
 	ld	a,(ix+POFF_TYPE)
-	cp	PT_EXT
+	call IS_EXT_PART
 	jp	nz,UNEX_PART
 
 	ld	a,(ix+POFF_PSTART)	;Save the start sector number of the outer extended partition
@@ -277,7 +278,7 @@ EXTP_NEXT:
 	pop	bc
 
 	ld	a,(ix+POFF_TYPE)
-	cp	PT_EXT
+	call IS_EXT_PART
 	jr	nz,TPIY_UNEX_PART
 
 	jr	EXTP_LOOP
@@ -1218,7 +1219,7 @@ AA_PX_DOEMU:
 
 AA_PX_NOEMU:
     ld	a,b	;Partition type
-    cp  PT_EXT
+    call IS_EXT_PART
     jr  nz,AA_PX_NOEX
     ld a,(ix+AAD_CURR_PART_INDEX)
     or 80h
@@ -4426,8 +4427,8 @@ MAPDRV_NOP0:
 	ld	c,_GPART##
 	call	BASIC_DOS
 	ld	a,b
-	cp	5	;Extended partition?
-	
+	call IS_EXT_PART	;Extended partition?
+
 	pop	bc
 	ld	a,b
 	ld	b,0
@@ -4459,7 +4460,7 @@ MAPDRV_GOTPAR:
 	ld	a,b
 	or	a
 	jp	z,BASIC_ERR
-	cp	5
+	call IS_EXT_PART
 	jp	z,BASIC_ERR	;"Invalid partition" error if non existing or extended partition
 	ld	e,c
 
@@ -6177,6 +6178,17 @@ CHECK_DEVQ_GET_PARAMS_ERROR:
 	ld (ix+7),0
 	pop ix
 	xor a
+	ret
+
+
+; Check if the partition type passed in A
+; corresponds to a recognized extended partition type,
+; return Z if so or NZ otherwise
+
+IS_EXT_PART:
+	cp PT_EXT
+	ret z
+	cp PT_EXT_LBA
 	ret
 
 	finish <PARTIT>

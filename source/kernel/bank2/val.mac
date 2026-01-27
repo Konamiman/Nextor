@@ -8,20 +8,8 @@
 	INCLUDE	../const.inc
 	RAMMOD
 
-MBR_PSTART	equ	01BEh	;Start of partition table in MBR
-MBR_PSIZE	equ	16	;Size of partition table entry
-POFF_TYPE	equ	4	;Offset of partition type in p. table entry
-POFF_PSTART	equ	8	;Offset of partition start in p. table entry
-POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
-PT_FAT12	equ	1	;Partition type code for FAT12
-PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
-PT_EXT		equ	5	;Partition type code for extended partition
-PT_FAT16	equ	6	;Partition type code for FAT16
-PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
-MBR_SIG		equ	512-2	;MBR signature offset in MBR (55h, AAh)
 MAXCLUS_FAT12	equ	4084
 MAXCLUS_12BITS	equ	4095
-
 ;
 ;-----------------------------------------------------------------------------
 ;
