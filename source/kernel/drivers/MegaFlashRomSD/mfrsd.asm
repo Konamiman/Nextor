@@ -837,7 +837,7 @@ NEXTOR2_DEV_RW:
 
 	;ld	hl,(#f9f0)
 	;inc	hl
-	;ld	(#f9f0),hl	; Cuenta lecturas
+	;ld	(#f9f0),hl	; Count reads
 		
 	call	SD_OFF
 	ei
@@ -848,6 +848,9 @@ NEXTOR2_DEV_RW:
 	ret
 	
 .ok:	
+	;A successful device access must reset the "device changed" flag
+	res	BIT_SD_CHG,(ix+STATUS)
+
 	xor	a		; Ok
 	ret
 
