@@ -2,13 +2,13 @@
    By Konamiman 11/2023
 
    Compilation command line:
-   
+
    sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
         --no-std-crt0 crt0_msxdos_advanced.rel
         eptcft.c
    hex2bin -e com eptcft.ihx
 */
-	
+
 	/* Includes */
 
 #include <stdio.h>
@@ -30,13 +30,13 @@
 	/* Strings */
 
 const char* strTitle=
-    "Extended Partition Type Code Fix Tool v1.0\r\n"
-    "By Konamiman, 11/2023\r\n"
+    "Extended Partition Type Code Fix Tool v1.1\r\n"
+    "By Konamiman, 2/2026\r\n"
     "\r\n";
-    
+
 const char* strUsage=
     "Usage: eptcft <drive>: [fix|unfix] \r\n"
-	"       eptcft <device>[-<LUN>] <slot> [fix|unfix] \r\n"
+	"       eptcft <device> <slot> [fix|unfix] \r\n"
     "\r\n"
 	"This tool checks the partition type code used by extended partitions\r\n"
 	"existing on a given device controlled by a Nextor driver.\r\n"
@@ -51,7 +51,7 @@ const char* strUsage=
 	"in the device, adding \"unfix\" will do the opposite (might be needed for\r\n"
 	"old partition handling tools that assume code 5 for extended partitions).\r\n"
 	"Run without neither \"fix\" nor \"fix\" to see partition information.\r\n";
-    
+
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
 
@@ -69,7 +69,6 @@ driverInfo* driverInfoBuffer = (driverInfo*)0x8200;
 char* stringBuffer = (char*)0x8000;
 int driveNumber;		//-1=No drive specified, 0=A:, etc
 byte deviceNumber;
-byte lunNumber;
 byte slotNumber;
 bool doFix;
 bool doUnfix;
@@ -109,7 +108,7 @@ int main(char** argv, int argc)
         print(strUsage);
         Terminate(null);
     }
-	
+
 	CheckDosVersion();
 	ExtractParameters(argv, argc);
 	ProcessParameters();
@@ -120,13 +119,13 @@ int main(char** argv, int argc)
 
 
 	/* Functions */
-	
+
 void Terminate(const char* errorMessage)
 {
     if(errorMessage != NULL) {
         printf("\r\x1BK*** %s\r\n", errorMessage);
     }
-    
+
     regs.Bytes.B = (errorMessage == NULL ? 0 : 1);
     DosCall(_TERM, &regs, REGS_MAIN, REGS_NONE);
 }
@@ -146,9 +145,9 @@ void CheckDosVersion()
 	regs.UWords.DE = 0xABCD;
 	regs.Words.IX = 0;
     DosCall(_DOSVER, &regs, REGS_ALL, REGS_ALL);
-	
-    if(regs.Bytes.B < 2 || regs.Bytes.IXh != 1) {
-        Terminate("This program is for Nextor only.");
+
+    if(regs.Bytes.B < 2 || regs.Bytes.IXh != 1 || regs.Bytes.IXl < 3) {
+        Terminate("This program is for Nextor 3 only.");
     }
 }
 
@@ -172,17 +171,6 @@ void ExtractParameters(char** argv, int argc)
 			Terminate(strInvParam);
 		}
 		deviceNumber -= '0';
-
-		if(argv[0][1] == '-') {
-			lunNumber = argv[0][2];
-			if(lunNumber < '0' || lunNumber > '7') {
-				Terminate(strInvParam);
-			}
-			lunNumber -= '0'; - '0';
-		}
-		else {
-			lunNumber = 1;
-		}
 
 		slotNumber = argv[1][0];
 		if(slotNumber < '0' || slotNumber > '3') {
@@ -244,7 +232,6 @@ void ProcessParameters() {
 
 		slotNumber = dliBuffer->driverSlotNumber;
 		deviceNumber = dliBuffer->deviceIndex;
-		lunNumber = dliBuffer->logicalUnitNumber;
 
 		if(deviceNumber == 0) {
 			Terminate("The specified drive is mapped to a MSX-DOS controller");
@@ -276,22 +263,23 @@ void ProcessParameters() {
 		printf("%i\r\n", slotNumber);
 	}
 
-	regs.Bytes.A = slotNumber;
+	regs.Bytes.A = slotNumber | 0x10;
 	regs.Bytes.B = 0xFF;
-	regs.Words.DE = DEV_INFO;
+	regs.Words.DE = DEVICE_QUERY;
 	regs.Words.HL = (int)&regs2;
-	regs2.Bytes.A = deviceNumber;
+	regs2.Bytes.A = DEVQ_GET_STRING;
+	regs2.Bytes.C = deviceNumber;
 	regs2.Bytes.B = 2;	//Device name string
+	regs2.Bytes.D = 255; //Buffer size
 	regs2.Words.HL = (int)stringBuffer;
+
 	DoDosCall(_CDRVR);
-	if(regs2.Bytes.IXh == 0) {
-		for(int i=31; i>0; i--) {
-			if(stringBuffer[i] != ' ') {
-				stringBuffer[i+1] = '\0';
-				break;
-			}
-		}
+
+	if(regs.Bytes.IXh == ERR_QUERY_OK) {
 		printf("Device %i, %s\r\n", deviceNumber, stringBuffer);
+	}
+	else if(regs.Bytes.IXh == ERR_QUERY_TRUNCATED_STRING) {
+		printf("Device %i, %s...\r\n", deviceNumber, stringBuffer);
 	}
 	else {
 		printf("Device %i\r\n", deviceNumber);
@@ -327,7 +315,6 @@ void ScanAndFixPartitions()
 		regs.Bytes.A = slotNumber;
 		regs.Bytes.B = 0xFF;
 		regs.Bytes.D = deviceNumber;
-		regs.Bytes.E = lunNumber;
 		regs.Bytes.H = 0x82;  //Main partition 2 plus the "get partition entry sector number" flag
 		regs.Bytes.L = extendedPartition;
 		DoDosCall(_GPART);
@@ -374,7 +361,7 @@ void ScanAndFixPartitions()
 		}
 		else {
 			print("No partitions with partition code \"extended CHS\" found, nothing to fix.\r\n");
-		}	
+		}
 	}
 	else if(doUnfix) {
 		if(lbaPartitionsCount > 0) {
@@ -396,12 +383,11 @@ void ScanAndFixPartitions()
 }
 
 void ReadOrWriteSector(bool write) {
-	regs.Bytes.A = slotNumber;
+	regs.Bytes.A = slotNumber | 0x10;
 	regs.Bytes.B = 0xFF;
-	regs.Words.DE = DEV_RW;
+	regs.Words.DE = READ_WRITE;
 	regs.Words.HL = (int)&regs2;
 	regs2.Bytes.A = deviceNumber;
-	regs2.Bytes.C = lunNumber;
 	regs2.Flags.C = write ? 1 : 0;
 	regs2.Bytes.B = 1;  //Read/write 1 sector
 	regs2.Words.HL = (int)mbrBuffer;
