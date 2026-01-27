@@ -24,7 +24,7 @@
    %lx: hexadecimal long
 */
 
-//#define SUPPORT_LONG
+#define SUPPORT_LONG
 
 #include <stdarg.h>
 #include "system.h"
@@ -160,12 +160,7 @@ static int format_string(const char* buf, const char *fmt, va_list ap)
     else if(theChar == 'x') {
       base = 16;
     }
-#ifdef SUPPORT_LONG
-    else if(isLong) {
-      fmtPnt--;
-    } else
-#endif    
-    if(theChar != 'd' && theChar != 'i') {
+    else if(theChar != 'd' && theChar != 'i') {
       do_char_inc(theChar);
       continue;
     }
