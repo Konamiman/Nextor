@@ -3,6 +3,10 @@
 
 FIB	equ	3000h
 
+	;Extended partition type codes
+PT_EXT: equ 5
+PT_EXT_LBA: equ 15
+
 	jp	START
 
       ; -------------------------------------------------------------------------------
@@ -271,7 +275,9 @@ OK_GETCURMAP:
 	jp	nz,5
 
 	ld	a,h
-	cp	5	;Is extended?
+	cp	PT_EXT	;Is extended?
+	jr	z,IS_EXT_PART
+	cp	PT_EXT_LBA
 	jr	z,IS_EXT_PART
 
 IS_PRIM_PART:
