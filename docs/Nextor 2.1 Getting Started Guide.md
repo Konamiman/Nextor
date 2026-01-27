@@ -41,7 +41,7 @@ This section explains the steps needed to setup blueMSX in order to follow this 
 
 a. Download the following files from [the lastest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest):
 
-* Nextor kernel with Sunrise IDE driver. Please choose the file with _.SunriseIDE.emulators.ROM_ extension (the _.SunriseIDE.ROM_ version works but only recgonizes the slave IDE device in emulators).
+* Nextor kernel with Sunrise IDE driver. Please choose the file with _.SunriseIDE.blueMSX.ROM_ extension (the _.SunriseIDE.ROM_ version works but only recognizes the slave IDE device in blueMSX), if you are using another emulator or a physical Sunrise IDE (or compatible) controller hardware you can use the file with _.SunriseIDE.ROM_ extension instead.
 
 * Nextor tools disk image (_tools.dsk.zip_).
 
