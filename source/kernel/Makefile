@@ -126,11 +126,11 @@ drivers/SunriseIDE/sunride.masteronly.bin: \
 	$(call assemble_as,drivers/SunriseIDE/sunride.asm,$$/sunride.masteronly.bin,--build-type abs --output-file-extension bin --define-symbols MASTER_ONLY,BAD_POPS)
 
 
-### Sunrise IDE, ROM for emulators
+### Sunrise IDE, ROM for blueMSX
 
-ide-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.emulators.ROM
+ide-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.emulators.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/driver.bin \
 	drivers/SunriseIDE/chgbnk.bin \
@@ -146,11 +146,11 @@ drivers/SunriseIDE/driver.bin: \
 	$(call assemble,drivers/SunriseIDE/driver.mac,--build-type abs --output-file-extension bin)
 
 
-### Sunrise IDE, ROM for emulators, master device only
+### Sunrise IDE, ROM for blueMSX, master device only
 
-ide-masteronly-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.emulators.ROM
+ide-masteronly-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.emulators.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/drvmonly.bin \
 	drivers/SunriseIDE/chgbnk.bin \
