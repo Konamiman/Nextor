@@ -1208,6 +1208,7 @@ NEXTOR2_DEV_STATUS:
 		cp 3
 		jp	z,RomDiskStatus		; ROM disk
 
+		push bc
 
 		di
 		dec a ;0 for slot 1, 1 for slot 2
@@ -1222,6 +1223,8 @@ NEXTOR2_DEV_STATUS:
 		call	SD_OFF
 		ei
 		
+		pop bc
+
 		jr	c,DEV_STAT0
 
 		bit 0,b
