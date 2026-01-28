@@ -160,7 +160,12 @@ static int format_string(const char* buf, const char *fmt, va_list ap)
     else if(theChar == 'x') {
       base = 16;
     }
-    else if(theChar != 'd' && theChar != 'i') {
+#ifdef SUPPORT_LONG
+    else if(isLong) {
+      fmtPnt--;
+    } else
+#endif    
+    if(theChar != 'd' && theChar != 'i') {
       do_char_inc(theChar);
       continue;
     }
