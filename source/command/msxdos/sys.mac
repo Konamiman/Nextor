@@ -1336,19 +1336,28 @@ KBDOS:
 ;	LD	E,RELEASE##+(RELEASE##/256)*16
 ;	RET
 
+@GETCLUS:
+	ld b,16
+	jr _RUN_AND_COPY
+
 @GDRVR:
 @GDLI:
-@GETCLUS:
+	ld b,64
+
+_RUN_AND_COPY:
 	push	hl
+	push bc
 	LD	HL,BUFF3
 	call	GO_BDOS##
+	pop bc
 	pop	hl
 	or	a
 	ret	nz
 	push	hl
 	ex	de,hl
+	ld c,b
+	ld b,0
 	ld	hl,BUFF3
-	ld	bc,64
 	ldir
 	pop	hl
 	ret
