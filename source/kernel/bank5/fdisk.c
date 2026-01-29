@@ -55,6 +55,7 @@ byte OUT_FLAGS;
 ScreenConfiguration originalScreenConfig;
 ScreenConfiguration currentScreenConfig;
 bool is80ColumnsDisplay;
+char* spaceOrNewLine;
 byte screenLinesCount;
 partitionInfo partitions[MAX_PARTITIONS_TO_HANDLE];
 int partitionsCount;
@@ -69,9 +70,6 @@ byte currentDevicesPage;
 byte devicesPageCount;
 byte sectorBuffer[512];
 byte sectorBufferBackup[512];
-byte ASMRUT[4];
-byte OUT_FLAGS;
-Z80_registers regs;
 ulong nextDeviceSector;
 ulong mainExtendedPartitionSectorCount;
 ulong mainExtendedPartitionFirstSector;
@@ -131,6 +129,8 @@ void Locate(byte x, byte y);
 void LocateX(byte x);
 void PrintCentered(char* string);
 void PrintStateMessage(char* string);
+void RequestPressKey(char* suffix);
+void RequestPressKeyToReturn();
 void chput(char ch);
 void print(char* string);
 
@@ -213,10 +213,8 @@ void ShowDriverSelectionScreen()
     
     if(installedDriversCount == 0) {
     	Locate(0, 7);
-    	PrintCentered("There are no device-based drivers");
-    	CursorDown();
-    	PrintCentered("available in the system");
-    	PrintStateMessage("Press any key to exit...");
+    	PrintCentered("No drivers found");
+    	RequestPressKey(" to exit");
     	WaitKey();
     	return;
 	}
@@ -261,15 +259,12 @@ void ShowDriverSelectionScreen()
 
 void ComposeSlotString(byte slot, char* destination)
 {
-	if((slot & 0x80) == 0) {
-	    destination[0] = slot + '0';
-	    destination[1] = '\0';
-	} else {
-	    destination[0] = (slot & 3) + '0';
-	    destination[1] = '-';
-	    destination[2] = ((slot >> 2) & 3) + '0';
-	    destination[3] = '\0';
+	*destination++ = (slot & 3) + '0';
+	if(slot & 0x80) {
+		*destination++ = '-';
+		*destination++ = ((slot >> 2) & 3) + '0';
 	}
+	*destination = '\0';
 }
 
 
@@ -352,7 +347,7 @@ void ShowDeviceSelectionScreen()
     	PrintCentered("There are no suitable devices");
     	CursorDown();
     	PrintCentered("attached to the driver");
-    	PrintStateMessage("Press any key to go back...");
+    	RequestPressKey(" to go back");
     	WaitKey();
     	return;
 	}
@@ -367,28 +362,28 @@ void ShowDeviceSelectionScreen()
 			i + 1,
 			currentDevice->deviceName);
 		if(!currentDevice->isValid) {
-			printf("(error getting device info)");
+			print("(error getting device info)");
 		}
 		else if(!currentDevice->isOnline) {
-			printf("(device is offline)");
+			print("(device is offline)");
 		}
 		else if(currentDevice->params.mediumType != DEV_TYPE_BLOCK) {
-			printf("(not a block device)");
+			print("(not a block device)");
 		}
 		else if((currentDevice->params.flags & DEV_FLAG_FLOPPY) != 0) {
-			printf("(floppy disk device)");
+			print("(floppy disk device)");
 		}
 		else if((currentDevice->params.flags & DEV_FLAG_READ_ONLY) != 0) {
-			printf("(read-only device)");
+			print("(read-only device)");
 		}
 		else if(currentDevice->params.sectorSize != 512) {
-			printf("(unsupported sector size)");
+			print("(unsupported sector size)");
 		}
 		else if(currentDevice->params.sectorCount == 0) {
-			printf("(unknown device size)");
+			print("(unknown device size)");
 		}
 		else {
-			printf("Size: ");
+			print("Size: ");
 			PrintSize(currentDevice->params.sectorCount / 2);
 			currentDevice->canCreatePartitions = true;
 		}
@@ -402,15 +397,14 @@ void ShowDeviceSelectionScreen()
 			//\x1E - cursor up (point to the number)
 			//two spaces (remove number and dot)
 			//\x1F - cursor down (back to the error message line)
-			printf("\r\x1E  \x1F");
+			print("\r\x1E  \x1F");
 		}
 
-		NewLine();
-		NewLine();
+		print("\r\n\r\n");
 	}
 
 	if(availableDevicesCount < MAX_DEVICES_PER_DRIVER) {
-		NewLine();
+		print("\r\n");
 	}
 
     PrintStateMessage("Select the device");
@@ -465,7 +459,7 @@ void GetDevicesInformation()
 		deviceNumber++;
 
 		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
-			sprintf(currentDeviceName, "(Unnamed device)");
+			strcpy(currentDeviceName, "(Unnamed device)");
 		}
 		else if(regs.Bytes.A == ERR_QUERY_TRUNCATED_STRING) {
 			ReplaceLastCharsWithDots(currentDeviceName, 0);
@@ -677,7 +671,7 @@ void GoPartitioningMainMenuScreen()
 		NewLine();
 
 		printf("Changes are not committed%suntil W is pressed.\r\n"
-		   "\r\n", is80ColumnsDisplay ? " " : "\r\n");
+		   "\r\n", spaceOrNewLine);
 
 		if(partitionsCount > 0) {
 			printf("S. Show partitions (%i %s)\r\n"
@@ -950,7 +944,7 @@ void TogglePartitionActive(byte partitionIndex)
         ClearInformationArea();
         Locate(0,7);
         PrintCentered(buffer);
-        PrintStateMessage("Press any key...");
+        RequestPressKey("");
         WaitKey();
     }
 
@@ -1054,7 +1048,7 @@ void AddPartition()
 
 		if(dos1) {
 			printf("WARNING: only partitions of 16M or less%scan be used in DOS 1 mode\r\n\r\n",
-				is80ColumnsDisplay ? " " : "\r\n");
+				spaceOrNewLine);
 		}
 
 		if(lessThan1MAvailable) {
@@ -1063,8 +1057,8 @@ void AddPartition()
 			printf("Enter partition size in MB (1-%i)\r\nor",
 				maxPartitionSizeInM);
 		}
-		printf(" partition size in KB followed by%s\"K\" (%i-%i): ", 
-			is80ColumnsDisplay ? " " : "\r\n",
+		printf(" partition size in KB followed by%s\"K\" (%i-%i): ",
+			spaceOrNewLine,
 			MIN_PARTITION_SIZE_IN_K,
 			maxPartitionSizeInK);
 
@@ -1171,7 +1165,7 @@ void PrintDosErrorMessage(byte code, char* header)
 		PrintCentered(buffer);
 	}
 
-	PrintStateMessage("Press any key to return...");
+	RequestPressKeyToReturn();
 }
 
 
@@ -1209,7 +1203,7 @@ bool FormatWithoutPartitions()
 	if(error == 0) {
 		Locate(0, MESSAGE_ROW + 2);
 		PrintDone();
-		PrintStateMessage("Press any key to return...");
+		RequestPressKeyToReturn();
 	} else {
 		PrintDosErrorMessage(error, "Error when formatting device:");
 	}
@@ -1259,7 +1253,7 @@ bool WritePartitionTable()
 	
 	Locate(0, MESSAGE_ROW + 2);
 	PrintDone();
-	PrintStateMessage("Press any key to return...");
+	RequestPressKeyToReturn();
 	WaitKey();
 	return true;
 }
@@ -1281,8 +1275,6 @@ void PreparePartitioningProcess()
 
 bool ConfirmDataDestroy(char* action)
 {
-	char* spaceOrNewLine = is80ColumnsDisplay ? " " : "\r\n";
-
 	PrintStateMessage("");
 	ClearInformationArea();
 	PrintTargetInfo();
@@ -1378,6 +1370,7 @@ void ComposeWorkScreenConfiguration()
 	currentScreenConfig.screenWidth = (*(byte*)LINLEN <= MAX_LINLEN_MSX1 ? MAX_LINLEN_MSX1 : MAX_LINLEN_MSX2);
 	currentScreenConfig.functionKeysVisible = false;
 	is80ColumnsDisplay = (currentScreenConfig.screenWidth == MAX_LINLEN_MSX2);
+	spaceOrNewLine = is80ColumnsDisplay ? " " : "\r\n";
 	screenLinesCount = *(byte*)CRTCNT;
 }
 
@@ -1458,6 +1451,19 @@ void PrintStateMessage(char* string)
 	Locate(0, screenLinesCount-1);
 	DeleteToEndOfLine();
 	print(string);
+}
+
+
+void RequestPressKey(char* suffix)
+{
+	sprintf(buffer, "Press any key%s...", suffix);
+	PrintStateMessage(buffer);
+}
+
+
+void RequestPressKeyToReturn()
+{
+	RequestPressKey(" to return");
 }
 
 

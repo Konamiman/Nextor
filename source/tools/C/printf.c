@@ -24,8 +24,6 @@
    %lx: hexadecimal long
 */
 
-#define SUPPORT_LONG
-
 #include <stdarg.h>
 #include "system.h"
 
