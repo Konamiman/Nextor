@@ -378,6 +378,7 @@ correct_loop:	push	bc
 		add	hl,bc
 		ld	a,(hl)			;A := sector number (bit16-22)
 						; from this buffer
+		sbc	hl,bc
 		ex	de,hl
 		ld	bc,(RW_PSEC##)		;Compare with sector number
 		sbc	hl,bc			; of transfer just done.
