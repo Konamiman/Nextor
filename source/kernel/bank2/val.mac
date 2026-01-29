@@ -2765,7 +2765,7 @@ zap_all_loop:	ld	a,b			;Get logical unit number
 		jr	z,no_zap_unit		;Skip if zero (no unit)
 ;
 		push hl				;Only zap if the unit is not controlled
-		ld de,UD_DFLAGS      ;by a Nextor driver
+		ld hl,UD_DFLAGS      ;by a Nextor driver
 		add hl,de
 		bit UF_DBD,(hl)
 		pop hl
