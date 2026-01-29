@@ -2764,6 +2764,13 @@ zap_all_loop:	ld	a,b			;Get logical unit number
 		or	e
 		jr	z,no_zap_unit		;Skip if zero (no unit)
 ;
+		push hl				;Only zap if the unit is not controlled
+		ld de,UD_FLAGS      ;by a device-based driver
+		add hl,de
+		bit UF_DBD,(hl)
+		pop hl
+		jr nz,no_zap_unit
+
 		ld	hl,UD_TIME##
 		add	hl,de			;HL -> UD_TIME byte
 		ld	a,(hl)			;If UD_TIME is non-zero then
