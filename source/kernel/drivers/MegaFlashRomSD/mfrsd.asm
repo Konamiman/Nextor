@@ -109,9 +109,7 @@ DRVQ_GET_VERSION: equ 1
 DRVQ_GET_STRING: equ 2
 DRVQ_GET_INIT_PARAMS: equ 3
 DRVQ_INIT: equ 4
-DRVQ_GET_NUM_BOOT_DRIVES: equ 5
-DRVQ_GET_DRIVE_BOOT_CONFIG: equ 6
-DRVQ_GET_MAX_DEVICE: equ 7
+DRVQ_GET_MAX_DEVICE: equ 5
 
 DEVQ_GET_STRING: equ 1
 DEVQ_GET_PARAMS: equ 2
@@ -292,10 +290,6 @@ DRIVER_QUERY:
 	dec a
 	jr z,DO_DRVQ_INIT
 	dec a
-	jr z,DO_DRVQ_GET_NUM_BOOT_DRIVES
-	dec a
-	jr z,DO_DRVQ_GET_DRIVE_BOOT_CONFIG
-	dec a
 	jr z,DO_DRVQ_GET_MAX_DEVICE
 	ld a,QUERY_NOT_IMPLEMENTED
 	ret
@@ -334,26 +328,6 @@ DO_DRVQ_INIT:
 	ld a,1
 	call NEXTOR2_DRV_INIT
 	xor a
-	ret
-
-DO_DRVQ_GET_NUM_BOOT_DRIVES:
-	ld a,1
-	ld c,b	;TODO: Reduced count passed in bit 5 of C or not?
-	call NEXTOR2_DRV_CONFIG
-	or a
-	ret z
-	ld a,QUERY_NOT_IMPLEMENTED
-	ret
-
-DO_DRVQ_GET_DRIVE_BOOT_CONFIG:
-	ld a,b
-	ld b,c
-	ld c,a
-	ld a,2
-	call NEXTOR2_DRV_CONFIG
-	or a
-	ret z
-	ld a,QUERY_NOT_IMPLEMENTED
 	ret
 
 DO_DRVQ_GET_MAX_DEVICE:
@@ -657,103 +631,6 @@ DRV_DIRECT1:
 DRV_DIRECT2:
 DRV_DIRECT3:
 DRV_DIRECT4:
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Get driver configuration
-;
-; Input:
-;   A = Configuration index
-;   BC, DE, HL = Depends on the configuration
-;
-; Output:
-;   A = 0: Ok
-;       1: Configuration not available for the supplied index
-;   BC, DE, HL = Depends on the configuration
-;
-; * Get number of drives at boot time (for device-based drivers only):
-;   Input:
-;     A = 1
-;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
-;   Output:
-;     B = number of drives
-;
-; * Get default configuration for drive
-;   Input:
-;     A = 2
-;     B = 0 for DOS 2 mode, 1 for DOS 1 mode
-;     C = Relative drive number at boot time
-;   Output:
-;     B = Device index
-;     C = LUN index
-
-NEXTOR2_DRV_CONFIG:
-	dec	a
-	jr	z,.GetNumDrives
-	
-	dec	a
-	jr	z,.GetRelDrvNum
-
-.error:	
-	ld	a,1			; Unknown configuration index
-	ret
-	
-.GetNumDrives:
-	bit 5,c         ;Single drive per driver requested?
-    ld b,1
-    ld a,0
-    ret nz
-	
-	call	RomDiskCheck
-	ld	b,NUM_SLOTS+1			; Three drives: ROM disk, SD 1 and SD 2
-	jr	z,.GetNumDrives2
-
-	dec	b			; ROM Disk not available
-	
-.GetNumDrives2:
-	xor	a
-	ret
-	
-.GetRelDrvNum:
-	ld a,c
-	or a
-	ld a,QUERY_NOT_IMPLEMENTED
-	ret z
-	ld	b,c
-	xor a
-	ret
-
-
-	call	RomDiskCheck
-	jr	z,.GetRelDrvNum_WithRomDisk
-
-.GetRelDrvNum_WithoutRomDisk:
-	;If no ROM disk is available:
-	;drive 0 = device 1 (SD 1), drive 1 = device 2 (SD 2)
-
-	ld	b,c
-	inc	b
-	xor a
-	ret
-
-.GetRelDrvNum_WithRomDisk:
-	;If ROM disk is available:
-
-
-
-	ld	b,c
-	inc	b
-	call	RomDiskCheck
-	
-	jr	z,.ok
-
-	inc	b
-
-.ok:
-	ld	c,1
-	xor	a
 	ret
 
 

@@ -386,13 +386,11 @@ DEV_READ:
 ; - Drivers embedded in a Nextor kernel, and which have no drive
 ;   letters allocated at boot time, are registered in KERNEX only.
 ;
-; The later may happen in three cases:
+; The later may happen if
 ;
 ; 1) No drive letters are free when the driver initialization routine
 ;    is called (all drives have been allocated to other drivers already).
-; 2) The driver requests 0 drives to be allocated via DRVQ_GET_NUM_BOOT_DRIVES.
-; 3) The driver doesn't implement DRVQ_GET_NUM_BOOT_DRIVES, but no suitable
-;    devices/paritions are found for automapping at boot time.
+; 2) No suitable devices/paritions are found for automapping at boot time.
 ;
 ; Note that driver slots are not necessarily returned in increasing
 ; slot number.
@@ -595,49 +593,15 @@ AUTODRV_DRVLOOP:
 	ld	a,c
     ld  (ix+UD1_RELATIVE_DRIVE##),a    
 	push	af
-	xor a
 	push	bc
 	push	iy
 	push	ix
 
-    ld a,iyh	;ld a,(iy+4)
-	and 00000100b	;Driver provides config?
-	jr z,AUTODRV_DRVL2
-	push ix
-	push iy
-	ld b,c
-	ld c,1
-    ld a,c
-	call ASK_DRIVE_CONFIG
-	pop iy
-	pop ix
-	or a
-	jr z,AUTODRV_DRVL3
-	dec a
-	jr z,AUTODRV_DRVL2	;Driver does not provide config for that drive
-    dec a
-    jp nz,AUTOD_EMU ;We entered disk emulation mode
-
-AUTODRV_DRVL1:
-	pop ix
-	push ix
-	ld a,-1
-	ld (ix+UD1_FIRST_ABSOLUTE_SECTOR##),a
-	ld (ix+UD1_FIRST_ABSOLUTE_SECTOR##+1),a
-	ld (ix+UD1_FIRST_ABSOLUTE_SECTOR##+2),a
-	ld (ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
-
-	inc a
-	jr AUTODRV_DRVL3
-
-AUTODRV_DRVL2:
 	push ix
 	pop hl
 
 	ld	d,1
 	call	AUTO_ASSIGN
-AUTODRV_DRVL3:    
-
 	cp	2			;Did we enter disk emulation mode?
 	jp	z,AUTOD_EMU	;Yes: discard everything else and return
 
@@ -729,22 +693,6 @@ AUTOD_UDFND:
 AUTOD_OKNEX:
 	push	bc
 	push	hl
-
-	;--- Try to get config from the driver itself
-
-	ld c,0
-	ld b,(ix+UD_RELATIVE_UNIT_NUMBER##)
-    ld a,1
-	call ASK_DRIVE_CONFIG
-	cp 1
-	jr z,AUTOD_UDFND3 ;Driver did not provide config
-	pop hl
-	or a
-	jr z,AUTOD_OK
-	set UF_PAP,(ix+UD_DFLAGS##) ;Partition will be assigned on first access
-	jr	AUTOD_OK
-
-AUTOD_UDFND3:
 
 	;--- Call the auto-assign routine
 
@@ -2940,21 +2888,6 @@ MAP_DEF_DRVB:
 	;* Nextor driver: perform a drive auto-assign
 
 MAP_DEF_DEVB:
-	ld c,0
-	ld b,(ix+UD_RELATIVE_UNIT_NUMBER##)
-    xor a
-	push hl
-	call ASK_DRIVE_CONFIG
-	pop hl
-	cp 1
-	jr z,MAP_DEF_DEVB_NOCFG ;Driver did not provide config
-	or a
-	ld a,0
-	jp z,SETNUMDRV
-	set UF_PAP,(ix+UD_DFLAGS##) ;Partition will be assigned on first access
-	jp	SETNUMDRV
-
-MAP_DEF_DEVB_NOCFG:
 	push	hl
 	push	ix
 	pop	hl
@@ -3496,7 +3429,8 @@ POPIX_RET:
 	ret
 
 
-;This subroutine creates an empty unit descriptor
+;This subroutine creates an empty unit descriptor.
+;
 ;Entry:  C = Drive letter (0 = A:, etc)
 ;        HL = Address of unit descriptor pointer in UNIT_TAB
 ;        Cy = 1 to allocate extra space for mounted file info
@@ -3559,6 +3493,7 @@ CRUD2:
 
 	xor	a
 	ret
+
 
 	;>>> DOS 1 version of MAPDRV
 
@@ -3640,40 +3575,15 @@ MAPDOS1_NOUNMAP:
 	jp	nz,MAPDOS1_NODEF
 
 MAPDOS1_DEF:
-	push hl
-	push ix
-	ld b,(ix+UD1_RELATIVE_DRIVE##)
-	res	7,b	;Ignore "media changed" flag
-	ld	c,1
-    xor a
-	call ASK_DRIVE_CONFIG
-	pop ix
-	pop hl
-	or a
-	jr z,MAPDOS1_DEF_OK
-	dec	a	;Driver did not provide info?
-	jr z,MAPDOS1_DEF_NOCFG
-
-	ld a,0FFh
-	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##),a
-	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1),a
-	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2),a
-	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
-	jr  MAPDOS1_DEF_OK
-
-MAPDOS1_DEF_NOCFG:	;No config provided by driver, use AUTO_ASSIGN
 	ld	(ix+UD1_DEVICE_NUMBER##),0	;At the moment leave the drive unmapped
 	push hl
 	push ix
 	pop hl
 	push hl
     ld d,0
-	call AUTO_ASSIGN
+	call AUTO_ASSIGN ;Note that on error we just leave the drive unassigned
 	pop ix
 	pop hl
-	jr MAPDOS1_DEF_OK	;Note that on error we just leave the drive unassigned
-
-MAPDOS1_DEF_OK:
 	ld (hl),0FFh	;Mark FAT buffer as invalid again
 
 	jp	MAPDOS1_END_OK
@@ -5754,24 +5664,6 @@ GET_DVB_NEXT:
     and 00100000b
     ld c,a
 
-	;We first try asking the driver how many drives it would like
-    ;(we pass C=00100000b if "5" key is pressed)
-
-    push bc
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld  a,DRIVER.DRVQ_GET_NUM_BOOT_DRIVES##
-	ex	af,af'
-	ld	a,DV_BANK##
-	call	CALBNK##
-	or a
-	jr nz,COUNT_DEVICES	;Interpret any error as "not implemented"
-	ld a,b
-	cp 255
-	jr z,COUNT_DEVICES
-    pop bc
-	ret
-
-    ;The driver does not provide number of drives at boot time:
 	;Invoke DEVQ_GET_PARAMS on all possible devices of the driver,
 	;and return in A the number of devices found.
     ;Input: (in stack) C=00100000b if "5" key is pressed, C=0 otherwise
@@ -5781,6 +5673,7 @@ COUNT_DEVICES:
 	;First try to invoke DRVQ_GET_MAX_DEVICE to know 
 	;how many devices we should query
 
+	push bc
 	ld	ix,DRIVER.DRIVER_QUERY##
 	ld  a,DRIVER.DRVQ_GET_MAX_DEVICE##
 	ex	af,af'
@@ -5844,13 +5737,16 @@ COUNTDEVS_DEV_NOT_FOUND:
 ;-----------------------------------------------------------------------------
 ;
 ;    This routine is invoked right before the drive assignment process in DOS 1 mode.
-;    It scans all the available kernels and for those wthat are Nextor kernels
-;    asks how many drives should be assigned at boot.
-;    Then it updates the drives count for that kernel in DRVTBL accordingly.
+;    If reduced allocation mode is requested, it scans all the available kernels and
+;    for those that are Nextor kernels it changes the number of drives assigned to 1
+;    in DRVTBL.
 
 DRVS1:
-	;TODO: test
-	ld	hl,DRVTBL##+1
+	ld a,(BOOTKEYS##)   ;5 key pressed?
+    and 00100000b
+	ret z
+
+	ld	hl,DRVTBL##+1 ;Point to 2nd byte (slot number) in first entry of DRVTBL
 	ld	b,4	;B=Entries in DRVTBL
 
 DRVS1LOOP:
@@ -5858,29 +5754,12 @@ DRVS1LOOP:
 	push bc
 	push hl
 
-	push de
 	call IS_NEXTOR_KER
-	pop de
 	jr c,DRVS1NEXT	;Skip if not a Nextor kernel
 
-	ld a,e
-	ld iyh,e
-    ld a,(BOOTKEYS##)   ;5 key pressed?
-    and 00100000b
-    ld c,a
-	set 0,c
-	ld hl,DRIVER.DRIVER_QUERY##
-	ld	(BK4_ADD##),hl
-	ld a,DRIVER.DRVQ_GET_NUM_BOOT_DRIVES
-	ld	ix,CALDRV##
-	call	CALSLT
-	or a
-	jr nz,DRVS1NX3  ;Skip but check "5" key if that config is not available
-
-DRVS1CHG:
 	pop hl
-	dec hl
-	ld (hl),b
+	dec hl ;Point to 1st byte (drive count) in DRVTBL entry
+	ld (hl),1
 	inc hl
 	jr DRVS1NX2
 
@@ -5892,13 +5771,6 @@ DRVS1NX2:
 	inc hl
 	djnz DRVS1LOOP
 	ret
-
-DRVS1NX3:
-    ld a,(BOOTKEYS##)   ;5 key pressed?
-    and 00100000b
-    ld b,1
-    jr nz,DRVS1CHG
-    jr DRVS1NEXT
 
 
 ;-----------------------------------------------------------------------------
@@ -6060,89 +5932,6 @@ CMIU1_NEXT:
 	djnz	CMIU1_LOOP
 	xor a
 	ret
-
-
-;----------------
-;
-; Invoke DRV_CONFIG in a driver to get the default device for a drive,
-; and if the driver provides the info, invokes AUTO_ASPART.
-;
-; Input:  IX = Addess of unit descriptor (in DOS 2 mode) or entry in Nextor drives table (in DOS 1 mode)
-;              Must have UD_SLOT set
-;         B  = Relative unit for the drive
-;         C  = 0 for DOS 2 mode, 1 for DOS 1 mode
-;         A  = 1 to enter disk emulation mode
-; Output: A = 0 ok
-;             1 driver did not provide info for that drive
-;             2 driver provided info, but can't assign partition to drive
-;             3 if disk emulation mode has been entered
-;         If A=0 or 2, sets UD_DEVICE_NUMBER and UD_RAM_SEGMENT in the unit descriptor
-;         If A=0, sets UF_FOK in UD_DFLAGS in the unit descriptor
-;         If A=3, returns B, C, HLDE from AUTO_ASPART
-; Modifies: AF, BC, DE, HL, IY
-
-ASK_DRIVE_CONFIG:
-	;TODO: test
-    ld d,a
-    push de
-	push bc ;BC=DOS mode and relative unit
-	ld a,(ix+UD_SLOT##)
-	ld iyh,a
-	ld a,DRIVER.DRVQ_GET_DRIVE_BOOT_CONFIG##
-	ld hl,DRIVER.DRIVER_QUERY##
-	ld	(BK4_ADD##),hl
-	push ix
-	ld	ix,CALDRV##
-	call	CALSLT
-	pop ix
-	pop hl	;H=relative unit, L=DOS mode
-    pop de  ;D=A at input
-	or a
-	ld a,1
-	ret nz
-	ld a,b
-	or a
-	ld a,1
-	ret nz
-
-	ld a,l
-	or a
-	jr nz,ASKDRVCFG_DOS1
-	ld (ix+UD_RELATIVE_UNIT_NUMBER##),h
-	ld (ix+UD_DEVICE_NUMBER##),b
-	ld (ix+UD_RAM_SEGMENT##),0FFh
-	ld (ix+UD_TIME##),0
-	set UF_DBD,(ix+UD_DFLAGS##)
-	jr ASKDRVCFG_NEXT
-ASKDRVCFG_DOS1:
-	ld (ix+UD1_RELATIVE_DRIVE##),h
-	ld (ix+UD1_DEVICE_NUMBER##),b
-ASKDRVCFG_NEXT:
-
-	push hl ;H=DOS mode
-	push ix
-	pop hl
-	push hl
-	call AUTO_ASPART
-	pop ix
-    cp 2
-    jr z,ASKDRVCFG_GOEMU
-	pop bc ;B=DOS mode
-
-	dec a
-	ld a,2
-	ret z
-	ld a,b
-	dec a
-	ret z
-	set	UF_FOK,(ix+UD_DFLAGS##)
-	xor a
-	ret
-
-ASKDRVCFG_GOEMU:
-    pop af    
-    ld a,3
-    ret
 
 
 ;----------------------------

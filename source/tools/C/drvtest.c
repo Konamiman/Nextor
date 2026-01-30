@@ -70,13 +70,11 @@ bool CallDriver(int routineAddress);
 void PrintStringFromDriver(char* title, char* address);
 void DoDriverQueries();
 void GetDriverName(byte nameIndex);
-void DoGetDriveBootConfigQuery(bool dos1Mode, bool reducedDriveCount);
 void PrintChar(char theChar);
 void PrintCharCore(char theChar);
 void DoGetDriverInitParamsQuery(bool reducedDriveCount);
 void MaybePrintStringBuffer();
 void DoDriverInitQuery(bool reducedDriveCount);
-void DoGetNumberOfBootDrivesQuery(bool dos1Mode, bool reducedDriveCount);
 void DoDeviceQueries();
 char* YesOrNo(bool condition);
 
@@ -353,30 +351,6 @@ void DoDriverQueries()
         print("\r\nDriver query: init driver (reduced drive count)\r\n");
         DoDriverInitQuery(true);
     }
-
-    print("\r\nDriver query: get boot drives count\r\n");
-    DoGetNumberOfBootDrivesQuery(false, false);
-
-    print("\r\nDriver query: get boot drives count (DOS 1 mode)\r\n");
-    DoGetNumberOfBootDrivesQuery(true, false);
-
-    print("\r\nDriver query: get boot drives count (reduced drive count)\r\n");
-    DoGetNumberOfBootDrivesQuery(false, true);
-
-    print("\r\nDriver query: get boot drives count (DOS 1 mode, reduced drive count)\r\n");
-    DoGetNumberOfBootDrivesQuery(true, true);
-
-    printf("\r\nDriver query: get boot config for drive %d\r\n", relativeDriveNumber);
-    DoGetDriveBootConfigQuery(false, false);
-
-    printf("\r\nDriver query: get boot config for drive %d (DOS 1 mode)\r\n", relativeDriveNumber);
-    DoGetDriveBootConfigQuery(true, false);
-
-    printf("\r\nDriver query: get boot config for drive %d (reduced drive count)\r\n", relativeDriveNumber);
-    DoGetDriveBootConfigQuery(false, true);
-
-    printf("\r\nDriver query: get boot config for drive %d (DOS 1 mode, reduced drive count)\r\n", relativeDriveNumber);
-    DoGetDriveBootConfigQuery(true, true);
 }
 
 
@@ -420,32 +394,6 @@ void DoDriverInitQuery(bool reducedDriveCount)
 
     if(success && bufferIndex == 0) {
         print("  Ok!\r\n");
-    }
-}
-
-
-void DoGetNumberOfBootDrivesQuery(bool dos1Mode, bool reducedDriveCount)
-{
-    regs.Bytes.C = (dos1Mode ? 1 : 0) | (reducedDriveCount ? 0x20 : 0);
-    success = DriverQuery(DRVQ_GET_BOOT_DRIVES_COUNT);
-    if(success) {
-        printf("  Drives count: %d\r\n", regs.Bytes.B);
-    }
-}
-
-
-void DoGetDriveBootConfigQuery(bool dos1Mode, bool reducedDriveCount)
-{
-    regs.Bytes.B = relativeDriveNumber;
-    regs.Bytes.C = (dos1Mode ? 1 : 0) | (reducedDriveCount ? 0x20 : 0);
-    success = DriverQuery(DRVQ_GET_DRIVE_BOOT_CONFIG);
-    if(success) {
-        if(regs.Bytes.B == 0) {
-            print("  Device number: 0 (automatic)\r\n");
-        }
-        else {
-            printf("  Device number: %d\r\n", regs.Bytes.B);
-        }
     }
 }
 
