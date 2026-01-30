@@ -593,7 +593,6 @@ AUTODRV_DRVLOOP:
 	ld	a,c
     ld  (ix+UD1_RELATIVE_DRIVE##),a    
 	push	af
-	xor a
 	push	bc
 	push	iy
 	push	ix
@@ -2889,9 +2888,6 @@ MAP_DEF_DRVB:
 	;* Nextor driver: perform a drive auto-assign
 
 MAP_DEF_DEVB:
-	ld c,0
-	ld b,(ix+UD_RELATIVE_UNIT_NUMBER##)
-
 	push	hl
 	push	ix
 	pop	hl
@@ -3585,12 +3581,9 @@ MAPDOS1_DEF:
 	pop hl
 	push hl
     ld d,0
-	call AUTO_ASSIGN
+	call AUTO_ASSIGN ;Note that on error we just leave the drive unassigned
 	pop ix
 	pop hl
-	jr MAPDOS1_DEF_OK	;Note that on error we just leave the drive unassigned
-
-MAPDOS1_DEF_OK:
 	ld (hl),0FFh	;Mark FAT buffer as invalid again
 
 	jp	MAPDOS1_END_OK
