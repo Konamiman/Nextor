@@ -202,9 +202,7 @@ size	macro	name
 	field	2,UD_CHKSUM
     
 	field	1,UD_RELATIVE_UNIT_NUMBER   ;Relative unit number for unit handler
-                                        ;(for Nextor drivers this is only used when calling
-                                        ; DRVQ_GET_DRIVE_BOOT_CONFIG, in order to get the default mapping
-                                        ; for the drive)
+                                        ;(non-Nextor drivers only)
 	field   2,UD_ALLOCATION_CLUSTER	;Next cluster to check for allocation -1
 
 ;

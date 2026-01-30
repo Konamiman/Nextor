@@ -20,9 +20,7 @@ DRVQ_GET_VERSION: equ 1
 DRVQ_GET_STRING: equ 2
 DRVQ_GET_INIT_PARAMS: equ 3
 DRVQ_INIT: equ 4
-DRVQ_GET_NUM_BOOT_DRIVES: equ 5
-DRVQ_GET_DRIVE_BOOT_CONFIG: equ 6
-DRVQ_GET_MAX_DEVICE: equ 7
+DRVQ_GET_MAX_DEVICE: equ 5
 
 DEVQ_GET_STRING: equ 1
 DEVQ_GET_PARAMS: equ 2
@@ -209,10 +207,6 @@ DRIVER_QUERY:
 	dec a
 	jp z,DO_DRVQ_INIT
 	dec a
-	jp z,DO_DRVQ_GET_NUM_BOOT_DRIVES
-	dec a
-	jp z,DO_DRVQ_GET_DRIVE_BOOT_CONFIG
-	dec a
 	jp z,DO_DRVQ_GET_MAX_DEVICE
 	ld a,QUERY_NOT_IMPLEMENTED
 	ret
@@ -342,53 +336,7 @@ INIT_MSG: db "Dummy standalone driver for Nextor\r\n"
           db "by Konamiman\r\n",0
 
 
-;Driver query 5: Get number of drives to allocate at boot time
-;
-; Input:  C = Flags:
-;             0: 0 for DOS 2 mode, 1 for DOS 1 mode
-;             5: set if user is requesting reduced drive count (by pressing the 5 key)
-;             Others: 0
-; Output: A = QUERY_OK or QUERY_NOT_IMPLEMENTED
-;         B = Number of drives
-;
-; QUERY_NOT_IMPLEMENTED or returning B=255 means automatic number of drives (based on number of available devices)
-;	
-; Note: this is the same as Nextor 2 DRV_CONFIG when invoked with A=1, except that:
-; - DOS1/2 mode is now passed in bit 0 of C instead of in B
-; - B=255 means automatic number of drives
-; - The "not available" error code returned in A is "not implemented" instead of 1.
-
-DO_DRVQ_GET_NUM_BOOT_DRIVES:
-	ld a,QUERY_NOT_IMPLEMENTED
-	ret
-
-
-; Driver query 6: Get drive configuration at boot time
-;
-; Input:  B = Relative drive number for driver
-;         C = Flags:
-;             0: 0 for DOS 2 mode, 1 for DOS 1 mode
-;             5: set if user is requesting reduced drive count (by pressing the 5 key)
-;             Others: 0
-; Output: A = QUERY_OK or QUERY_NOT_IMPLEMENTED
-;         B = Device number (0 for automatic configuration)
-;
-; QUERY_NOT_IMPLEMENTED is equivalent to returning QUERY_OK and B=0.
-;
-; Note: this is the same as Nextor 2 DRV_CONFIG when invoked with A=2, except that:
-;
-; - Drive number is now passed in B, not C.
-; - DOS1/2 is now passed in C, not B.
-; - Reduced drive count request is now passed in C.
-; - No LUN code returned anymore.
-; - The "not avialble" error code returned in A is "not implemented" instead of 1.
-
-DO_DRVQ_GET_DRIVE_BOOT_CONFIG:
-	ld a,QUERY_NOT_IMPLEMENTED
-	ret
-
-
-; Driver query 7: Get maximum supported device number
+; Driver query 5: Get maximum supported device number
 ;
 ; Input:  -
 ; Output: A = QUERY_OK or QUERY_NOT_IMPLEMENTED
