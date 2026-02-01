@@ -437,12 +437,15 @@ DO_DEVQ_GET_STRING:
 	or a
 	jr z,RETURN_NOT_IMP
 
+	cp 4
+	jr z,DO_DEVQ_GET_DEV_NAME
+
 	ld a,d
 	or a
-	ret z	   ;Buffer size=0: do nothing, no errorr
+	ret z	   ;Buffer size=0: do nothing, no error
 	dec a
 	jr nz,DO_DEVQ_GET_STRING_2
-	ld (hl),0  ;Buffer size=0: just output terminating 0, no error
+	ld (hl),0  ;Buffer size=1: just output terminating 0, no error
 	ret
 DO_DEVQ_GET_STRING_2:
 
@@ -461,6 +464,27 @@ DO_DEVQ_GET_STRING_2:
 	ret nc
 	ld a,QUERY_TRUNCATED_STRING
 	ret
+
+DO_DEVQ_GET_DEV_NAME:
+	ex de,hl
+
+	ifdef MASTER_ONLY
+
+	ld hl,MASTER_DEV_S
+	ld b,d
+	jp OUTPUT_STRING
+
+	else
+
+	ld a,c
+	dec a
+	ld hl,MASTER_DEV_S
+	ld b,d
+	jp z,OUTPUT_STRING
+	ld hl,SLAVE_DEV_S
+	jp OUTPUT_STRING
+
+	endif
 
 DO_DEVQ_GET_PARAMS:
 	ld a,h
@@ -1831,11 +1855,15 @@ NODEVS_S:
 	db	"Not found",13,10,0
 MASTER_S:
 	db	"Master device: ",0
+MASTER_DEV_S:
+	db	"IDE master device",0
 
 ifndef MASTER_ONLY
 
 SLAVE_S:
 	db	"Slave device:  ",0
+SLAVE_DEV_S:
+	db	"IDE slave device",0
 
 endif
 
@@ -1845,7 +1873,7 @@ CRLF_S:
 
 ;-----------------------------------------------------------------------------
 ;
-; Padding up to the required iver size
+; Padding up to the required driver size
 
 DRV_END:
 

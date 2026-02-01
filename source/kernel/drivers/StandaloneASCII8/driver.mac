@@ -377,8 +377,9 @@ DEVICE_QUERY:
 ;
 ; Input:  B  = String index:
 ;              1: Manufacturer name
-;              2: Device name
+;              2: Medium name
 ;              3: Serial number
+;              4: Device name
 ;         D  = Buffer size
 ;         HL = Buffer address
 ; Output: A = QUERY_OK: ok, full string provided

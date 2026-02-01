@@ -450,21 +450,31 @@ void GetDevicesInformation()
 		currentDeviceName = currentDevice->deviceName;
 
 		regs.Bytes.A = DEVQ_GET_STRING;
-		regs.Bytes.B = STRING_DEVICE_NAME;
+		regs.Bytes.B = STRING_MEDIUM_NAME;
 		regs.Bytes.C = deviceNumber;
 		regs.Bytes.D = maxDeviceNameLength;
 		regs.Words.HL = (int)currentDeviceName;
 		DriverCall(selectedDriver->slot, DEVICE_QUERY);
 
+		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+			regs.Bytes.A = DEVQ_GET_STRING;
+			regs.Bytes.B = STRING_DEVICE_NAME;
+			regs.Bytes.C = deviceNumber;
+			regs.Bytes.D = maxDeviceNameLength;
+			regs.Words.HL = (int)currentDeviceName;
+			DriverCall(selectedDriver->slot, DEVICE_QUERY);
+			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+				strcpy(currentDeviceName, "(Unnamed device)");
+			}
+		}
+
 		deviceNumber++;
 
-		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
-			strcpy(currentDeviceName, "(Unnamed device)");
-		}
-		else if(regs.Bytes.A == ERR_QUERY_TRUNCATED_STRING) {
+		if(regs.Bytes.A == ERR_QUERY_TRUNCATED_STRING) {
 			ReplaceLastCharsWithDots(currentDeviceName, 0);
 		}
-		else if(regs.Bytes.A != 0) {
+		else if(regs.Bytes.A != 0 && regs.Bytes.A != ERR_QUERY_NOT_IMPLEMENTED) {
+			//sprintf(currentDeviceName, "! %i !", regs.Bytes.A);
 			continue;
 		}
 

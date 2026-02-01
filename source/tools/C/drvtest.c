@@ -460,11 +460,14 @@ void DoDeviceQueries()
     print("Device query: get manufacturer name\r\n");
     GetDeviceInfo(1);
 
-    print("\r\nDevice query: get device name\r\n");
+    print("\r\nDevice query: get medium name\r\n");
     GetDeviceInfo(2);
 
     print("\r\nDevice query: get serial number\r\n");
     GetDeviceInfo(3);
+
+    print("\r\nDevice query: get device name\r\n");
+    GetDeviceInfo(4);
 
     print("\r\nDevice query: get device parameters\r\n");
     regs.Words.HL = (int)deviceInfoBuffer;

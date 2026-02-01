@@ -188,6 +188,12 @@ RomDiskInfo:
 		ld	de,TXT_SERIAL
 		jr	.end
 
+.INFO4:
+		djnz	.INFO_ERR
+		; 4: Device name string, too
+		ld	de,TXT_DEV
+		jr	.end
+
 .INFO_ERR:
 		ld a,2
 		ret
