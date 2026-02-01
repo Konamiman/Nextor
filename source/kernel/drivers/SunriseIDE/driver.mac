@@ -470,16 +470,16 @@ DO_DEVQ_GET_DEV_NAME:
 
 	ifdef MASTER_ONLY
 
+	ld b,h
 	ld hl,MASTER_DEV_S
-	ld b,d
 	jp OUTPUT_STRING
 
 	else
 
 	ld a,c
 	dec a
+	ld b,h
 	ld hl,MASTER_DEV_S
-	ld b,d
 	jp z,OUTPUT_STRING
 	ld hl,SLAVE_DEV_S
 	jp OUTPUT_STRING
