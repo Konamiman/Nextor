@@ -385,8 +385,33 @@ DO_DEVQ_GET_STRING:
 	or a
 	jr z,RETURN_NOT_IMP
 
-	ld a,c	;Device number
-	jp NEXTOR2_DEV_INFO
+	cp 4 ;Get device name
+	ld a,c ;Device number
+	jp nz,NEXTOR2_DEV_INFO
+
+DO_DEVQ_GET_DEV_NAME:
+	ld b,d
+	ex de,hl
+
+	ld hl,TXT_DEV
+	cp 3 ;ROM disk
+	jp z,OUTPUT_STRING
+
+	if NUM_SLOTS eq 1
+
+	ld hl,SDSLOT_1_S
+	jp OUTPUT_STRING
+
+	else
+
+	ld a,c
+	dec a
+	ld hl,SDSLOT_1_S
+	jp z,OUTPUT_STRING
+	ld hl,SDSLOT_2_S
+	jp OUTPUT_STRING
+
+	endif
 
 DO_DEVQ_GET_PARAMS:
 	ld a,h
@@ -2201,6 +2226,16 @@ TXT_SD2x:
 		db	" SDSC 2.x",13,10,0
 TXT_SDHC:
 		db	" SDHC",13,10,0
+
+SDSLOT_1_S:
+		db	"SD card slot 1",0
+
+		if NUM_SLOTS NE 1
+
+SDSLOT_2_S:
+		db	"SD card slot 2",0
+
+		endif	
 	
 IDX_TYPE:
 		dw	TXT_MMC
