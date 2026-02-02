@@ -853,7 +853,7 @@ AUTO_ASSIGN:
 
 	bit AAFLAG_IS_AUTOASPART,d
 	jr nz,DO_AUTO_COMMON
-fofo::
+
 	push hl
 	push bc
 	push de
@@ -1083,7 +1083,14 @@ AA_PX_1ST:
     cp  .IPART
     jp z,AA_PLOOP_END
     or a
-    jp	nz,AA_LLOOP_NEXT	;Not ready or partition not available
+    jr z,AA_PX_POK
+
+    ;F_GPART failed (device not ready):
+    ;Check if device is removable, if so, assign it anyway
+	;(if later the device becomes online a partition will be assigned on first access)
+    bit 7,(ix+AAD_CURR_PART_DEVNUM)
+    jp z,AA_LLOOP_NEXT	;Not removable: try next device
+    jp AA_ASSIGN_OFFLINE_REMOVABLE	;Removable: assign in offline mode
 AA_PX_POK:
 
     ;--- If we are scanning the first partition and bit 0 of status byte is set, try to enter disk emulation mode
@@ -1343,6 +1350,8 @@ AA_DO_ASSIGN:
 	jr z,AA_DO_ASSDOS1
 
 	set	UF_FOK,(iy+UD_DFLAGS##)	;Tell that the partition information is valid
+
+AA_DO_ASSIGN_NO_FOK:
 	ld	b,(iy+UD_SLOT##)
 	ld	c,(iy+UD_PHYSICAL_UNIT##)
 	push	bc
@@ -1415,6 +1424,37 @@ AA_DO_ASSDOS1:
 
 	xor	a
 	ret
+
+
+	;--- Assign a removable device to the drive without partition info.
+	;    The partition will be assigned on first access (by BUILD_UPB).
+	;    This is used when a removable device is offline at boot time.
+	;    Reuses AA_DO_ASSIGN but skips setting UF_FOK for DOS 2 mode.
+
+AA_ASSIGN_OFFLINE_REMOVABLE:
+	ld a,(ix+AAD_CURR_PART_DEVNUM)
+	ld (ix+AAD_CAND_PART_DEVNUM),a
+
+	;Set partition sector to -1
+	;In DOS 1 mode this means "no partition assigned".
+	;Otherwise it doesn't matter since UF_FOK won't be set.
+	ld a,0FFh
+	ld (ix+AAD_CAND_PART_SECTOR),a
+	ld (ix+AAD_CAND_PART_SECTOR+1),a
+	ld (ix+AAD_CAND_PART_SECTOR+2),a
+	ld (ix+AAD_CAND_PART_SECTOR+3),a
+
+	ld l,(ix+AAD_UNIT_DESCRIPTOR)
+	ld h,(ix+AAD_UNIT_DESCRIPTOR+1)
+	push hl
+	pop iy
+
+	;Jump to AA_DO_ASSIGN but skip setting UF_FOK for DOS 2 mode
+	;(UF_FOK not set means BUILD_UPB will auto-assign partition on first access)
+	ld a,(DOS_VER##)
+	or a
+	jp z,AA_DO_ASSDOS1
+	jp AA_DO_ASSIGN_NO_FOK
 
 
     ;Try to enter emulation mode from data in RAM
@@ -5702,34 +5742,94 @@ COUNTDEVS_MAX_DEV_OK:
     ld a,1  ;Only 1 device if "5" key is pressed
     ret
 
-	;Loop through DEVQ_GET_PARAMS for all device numbers, 
-	;return A=Number of devices found (devices for which no error was returned)
+	;Loop through DEVQ_GET_PARAMS for all device numbers,
+	;return A=Number of devices found.
+	;For offline devices, only count them if they are removable.
 	;Input: B = Max device number, D=0
 
 COUNT_DEVICES_LOOP:
+	;Allocate 12-byte buffer on stack for DEVQ_GET_PARAMS response
+	ld hl,-12
+	add hl,sp
+	ld sp,hl
+	push hl			;Save buffer address
+
+COUNTDEVS_LOOP_ITER:
 	push bc
 	push de
-	ld c,b
+
+	;Stack layout:
+	;  SP+0,1: DE (D=count)
+	;  SP+2,3: BC (B=device number)
+	;  SP+4,5: buffer address
+	;  SP+6..17: 12-byte buffer
+
+	ld c,b			;C = device number
+	ld iy,0
+	add iy,sp
+	ld l,(iy+4)
+	ld h,(iy+5)		;HL = buffer address
 	ld ix,DRIVER.DEVICE_QUERY##
 	ld a,DRIVER.DEVQ_GET_PARAMS##
-	ld hl,0
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
 
-	pop de
-	pop bc
 	or a
-	jr z,COUNTDEVS_DEV_FOUND
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##	;We count "Not implemented" error as "device exists, no info available"
-	jr nz,COUNTDEVS_DEV_NOT_FOUND
+	jr z,COUNTDEVS_PARAMS_OK
+	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr z,COUNTDEVS_DEV_FOUND	;Not implemented = count it
+	jr COUNTDEVS_DEV_NOT_FOUND	;Error = don't count
 
-COUNTDEVS_DEV_FOUND:
-	inc d
+COUNTDEVS_PARAMS_OK:
+	;Extract removable flag from buffer+7 bit 0
+	ld iy,0
+	add iy,sp
+	ld l,(iy+4)
+	ld h,(iy+5)		;HL = buffer address
+	ld bc,7
+	add hl,bc
+	ld a,(hl)
+	and 1
+	ld e,a			;E = removable flag
+
+	;Get device number from stack
+	ld c,(iy+3)		;C = device number
+
+	push de			;Save E=removable
+	ld ix,DRIVER.DEVICE_QUERY##
+	ld a,DRIVER.DEVQ_GET_AVAILABILITY##
+	ex	af,af'
+	ld	a,DV_BANK##
+	call	CALBNK##
+
+	pop de			;E = removable flag
+
+	;Count if: error, or online (B!=0), or removable (E!=0)
+	or a
+	jr nz,COUNTDEVS_DEV_FOUND	;Error = assume online
+	ld a,b
+	or e			;Online (B!=0) or removable (E!=0)?
+	jr nz,COUNTDEVS_DEV_FOUND
+	;Offline and not removable: don't count
 
 COUNTDEVS_DEV_NOT_FOUND:
-	djnz COUNT_DEVICES_LOOP
+	pop de
+	pop bc
+	djnz COUNTDEVS_LOOP_ITER
+	jr COUNTDEVS_EXIT
 
+COUNTDEVS_DEV_FOUND:
+	pop de
+	pop bc
+	inc d
+	djnz COUNTDEVS_LOOP_ITER
+
+COUNTDEVS_EXIT:
+	pop hl			;Discard saved buffer address
+	ld hl,12
+	add hl,sp
+	ld sp,hl		;Deallocate 12-byte buffer
 	ld a,d
 	ret
 
