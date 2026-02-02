@@ -27,9 +27,9 @@
 #define REGS_BUFFER ((int*)0x8100)
 #define STRING_BUFFER_ADDRESS 0x8200
 #define STRING_BUFFER ((byte*)STRING_BUFFER_ADDRESS)
-#define DEV_PARAMS ((deviceInfo*)STRING_BUFFER_ADDRESS);
+#define DEV_PARAMS ((deviceInfo*)STRING_BUFFER_ADDRESS)
+#define deviceInfoBuffer ((deviceParams*)STRING_BUFFER_ADDRESS)
 
-__at STRING_BUFFER_ADDRESS deviceParams* deviceInfoBuffer;
 
 /* Some handy code defines */
 
@@ -488,7 +488,7 @@ void DoDeviceQueries()
                 printf("Unknown (%u)\r\n", deviceInfoBuffer->mediumType);
         }
         printf("  Sector size:  %u (0x%x)\r\n", deviceInfoBuffer->sectorSize, deviceInfoBuffer->sectorSize);
-        printf("  Sector count: %lu (0x%lx)\r\n", deviceInfoBuffer->sectorCount, deviceInfoBuffer->sectorSize);
+        printf("  Sector count: %lu (0x%lx)\r\n", deviceInfoBuffer->sectorCount, deviceInfoBuffer->sectorCount);
 
         flags = deviceInfoBuffer->flags;
         print("  Flags:\r\n");
