@@ -242,34 +242,6 @@ DRV_NAME:
 ; to the Nextor v3 driver structure
 
 
-	;Output a string
-	;Input:  HL = String
-	;        DE = Destination
-	;        B  = Max length including terminator
-	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING
-	;        DE = Pointer to the 0
-	
-OUTPUT_STRING:
-	ld a,b
-	or a
-	ret z
-
-OUTPUT_STRING_LOOP:
-	ld a,(hl)
-	or a
-	ld (de),a
-	ret z
-
-	inc hl
-	inc de
-	djnz OUTPUT_STRING
-
-    dec de
-	xor a
-	ld (de),a
-	ld a,QUERY_TRUNCATED_STRING
-	ret
-
 
 	;--- Driver query
 	;    Input:  A = Query index
@@ -989,7 +961,7 @@ NEXTOR2_DEV_INFO:
 		call SD_OFF
 		ei
 .DEV_INFO_BAD_DEVICE:
-		ld a,QUERY_INVALID_DEVICE
+		ld a,QUERY_NOT_IMPLEMENTED
 		ret
 
 
@@ -1247,7 +1219,7 @@ NEXTOR2_LUN_INFO:
 	ld	(hl),d
 	inc	hl
 
-	ld	(hl),1	; +7: Flags
+	ld	(hl),1	; +7: Flags (removable device)
 	inc	hl
 	
 	ld	(hl),0	; +8 Cylinders
@@ -2189,6 +2161,35 @@ PRINT:
 	inc	de
 	jr	PRINT
 
+;-----------------------------------------------------------------------------
+	;Output a string
+	;Input:  HL = String
+	;        DE = Destination
+	;        B  = Max length including terminator
+	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING
+	;        DE = Pointer to the 0
+;-----------------------------------------------------------------------------
+
+OUTPUT_STRING:
+	ld a,b
+	or a
+	ret z
+
+OUTPUT_STRING_LOOP:
+	ld a,(hl)
+	or a
+	ld (de),a
+	ret z
+
+	inc hl
+	inc de
+	djnz OUTPUT_STRING
+
+    dec de
+	xor a
+	ld (de),a
+	ld a,QUERY_TRUNCATED_STRING
+	ret
 
 ;-----------------------------------------------------------------------------
 ; Includes
