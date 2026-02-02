@@ -1650,7 +1650,7 @@ LUN_INFO_SSIZE:
 	;Set other parameters
 
 	ld	(ix),0	;Block device
-	ld	(ix+7),0	;Non removable device nor LUN
+	ld	(ix+7),1	;Removable device
 
 	call	IDE_OFF
 	xor	a
