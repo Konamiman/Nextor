@@ -790,7 +790,7 @@ DIO_OK:
 
 DIO_NEXT:
 	push	bc
-	ld	bc,8
+	ld	bc,UD1_SIZE##
 	add	iy,bc
 	pop	bc
 	djnz	IS_DVB_LOOP

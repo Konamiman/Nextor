@@ -608,7 +608,7 @@ AUTODRV_DRVLOOP:
 	ld	hl,(KERNEX_DOS1##)
 	inc	(hl)		;Increment size of table
 	pop	ix
-	ld de,8
+	ld de,UD1_SIZE##
 	add ix,de		;Point to next entry in table
 	pop	iy
 	pop	bc
@@ -949,7 +949,7 @@ AA_CHKDUP_DOS1:
 	inc	iy
 
 AA_CHKDUP_LOOP1:
-	ld	a,(iy+UD_SLOT##)
+	ld	a,(iy+UD1_SLOT##)
 	cp	(ix+AAD_DRIVER_SLOT)
 	jr	nz,AA_CHKDUP_NEXT1
 
@@ -963,7 +963,7 @@ AA_CHKDUP_LOOP1:
 
 AA_CHKDUP_NEXT1:
 	ld	a,b
-	ld	bc,8
+	ld	bc,UD1_SIZE##
 	add	iy,bc
 	ld	b,a
 	djnz	AA_CHKDUP_LOOP1
@@ -3634,62 +3634,55 @@ MAPDOS1_NODEF:
 
 	;* First check that the same drive and partition is not mapped to another drive
 
-	ld	a,(ix+2)
+	ld	a,(ix+UD1_DEVICE_NUMBER##)
 	push	af
-	ld	(ix+2),0	;At the moment leave the drive unmapped
+	ld	(ix+UD1_DEVICE_NUMBER##),0	;At the moment leave the drive unmapped
 	push	ix
 
 	ld	ix,(KERNEX_DOS1)
 	inc	ix
 	ld	b,(ix-1)
 MAPDOS1_CHECK_LOOP:
-	ld	a,(ix)	;Check slot number
+	ld	a,(ix+UD1_SLOT##)	;Check slot number
 	cp	(iy)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+2)	;Check device number
+	ld	a,(ix+UD1_DEVICE_NUMBER##)	;Check device number
 	cp	(iy+2)
 	jr	nz,MAPDOS1_CHK_NEXT
 
-	ld	a,(ix+3)	;Check starting sector
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)	;Check starting sector
 	cp	(iy+3)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+4)
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 	cp	(iy+4)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+5)
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2)
 	cp	(iy+5)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+6)
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3)
 	cp	(iy+6)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+7)
-	cp	(iy+7)
 	jr	nz,MAPDOS1_CHK_NEXT
 
 	pop	ix
 	pop	af
-	ld	(ix+2),a	;Leave old partition mapped
+	ld	(ix+UD1_DEVICE_NUMBER##),a	;Leave old partition mapped
 	ld	a,.PUSED##
 	ret
 
 MAPDOS1_CHK_NEXT:
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
+	push	bc
+	ld	bc,UD1_SIZE##
+	add	ix,bc
+	pop	bc
 	djnz	MAPDOS1_CHECK_LOOP
 
 	pop	ix
 	pop	af
-	ld	(ix+2),a	;Leave old partition mapped
+	ld	(ix+UD1_DEVICE_NUMBER##),a	;Leave old partition mapped
 
 	;* Now check that the specified driver and device are valid
 
-	ld	a,(ix)	;Error if slot in parameters block is not the same already assigned
+	ld	a,(ix+UD1_SLOT##)	;Error if slot in parameters block is not the same already assigned
 	cp	(iy)
 	ld	a,.IDRVR##
 	ret	nz
@@ -3726,15 +3719,15 @@ MAPDOS1_CHK_NEXT:
 
 	pop	ix
 	ld	a,(iy+2)
-	ld	(ix+2),a	;Device number
+	ld	(ix+UD1_DEVICE_NUMBER##),a	;Device number
 	ld	a,(iy+4)
-	ld	(ix+3),a	;First sector
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##),a	;First sector
 	ld	a,(iy+5)
-	ld	(ix+4),a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1),a
 	ld	a,(iy+6)
-	ld	(ix+5),a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2),a
 	ld	a,(iy+7)
-	ld	(ix+6),a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
 
 MAPDOS1_END_OK:
 	set	7,(ix+UD1_RELATIVE_DRIVE##)	;Set partition changed flag
@@ -5666,12 +5659,12 @@ GET_DVB_POINTER:
 	inc	ix
 	ld	b,(ix-1)
 GET_DVB_LOOP:
-	ld	a,(ix)	;Driver slot
+	ld	a,(ix+UD1_SLOT##)	;Driver slot
 	and 10001111b
 	cp	e
 	jr	nz,GET_DVB_NEXT
 
-	ld	a,(ix+1)	;Relative unit for driver
+	ld	a,(ix+UD1_RELATIVE_DRIVE##)	;Relative unit for driver
 	and	01111111b	;Clear "partition changed" flag
 	cp	c
 	jr	nz,GET_DVB_NEXT
@@ -5680,13 +5673,10 @@ GET_DVB_LOOP:
 	ret
 
 GET_DVB_NEXT:
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	ix
+	push	bc
+	ld	bc,UD1_SIZE##
+	add	ix,bc
+	pop	bc
 	djnz	GET_DVB_LOOP
 
 	scf
@@ -5992,11 +5982,11 @@ CMIU_DOS1:
 	inc	iy
 
 CMIU1_LOOP:
-	ld	a,(iy)
+	ld	a,(iy+UD1_SLOT##)
 	cp	h
 	jr	nz,CMIU1_NEXT
 
-	ld	a,(iy+2)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
 	or	a			;If device number is 0, it is an unused table entry
 	jr	z,CMIU1_NEXT
 	cp	d
@@ -6004,16 +5994,16 @@ CMIU1_LOOP:
 
 	exx
 
-	ld  a,(iy+4)
+	ld  a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
 	cp e
 	jr nz,CMIU1_NEXXT
-	ld  a,(iy+5)
+	ld  a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 	cp d
 	jr nz,CMIU1_NEXXT
-	ld  a,(iy+6)
+	ld  a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+2)
 	cp l
 	jr nz,CMIU1_NEXXT
-	ld  a,(iy+7)
+	ld  a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3)
 	cp h
 	jr nz,CMIU1_NEXXT
 
@@ -6026,7 +6016,7 @@ CMIU1_NEXXT:
 	exx
 CMIU1_NEXT:
 	ld	a,b
-	ld	bc,8
+	ld	bc,UD1_SIZE##
 	add	iy,bc
 	ld	b,a
 	djnz	CMIU1_LOOP
