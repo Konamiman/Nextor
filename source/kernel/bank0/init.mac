@@ -2698,10 +2698,11 @@ MK_DVB_TBL:
 	ld	b,a	;B = Number of entries in the table
 	add	a,a
 	add	a,a
-	add	a,a
+	add	a,a ;A = B*8
+	sub b ;Now A = B*7
 	ld	l,a
 	ld	h,0
-	inc	hl	;HL = Size of table = (entries * 8) + 1
+	inc	hl	;HL = Size of table = (entries * UD1_SIZE) + 1
 	push	hl
 	call	ALLOC##
 	pop	bc

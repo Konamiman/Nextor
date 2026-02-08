@@ -727,6 +727,14 @@ DO_FDISK_OK:
 	call	CALBNK##
 	pop	hl
 
+	;In DOS 1 mode FDISK is called via CALBNK from bank 3's DO_FDISK.
+	;So here we just return and the calling code will take care of
+	;executing the NEW statement. This way bank 3 will remain active.
+
+	ld	a,(MAIN_BANK##)
+	or	a
+	ret	nz
+
 	ld	hl,NEWTXT
 	ld	de,09000h
 	ld	bc,3
