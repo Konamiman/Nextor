@@ -1010,12 +1010,6 @@ VER_CHK:
 	or	a
 	jr	z,MAST_OK
 
-	ld b,a	;If previous master is Nextor v2, disable myself.
-	and 0F0h
-	cp 20h
-	ret z
-	ld a,b
-
 	cp	16*MAIN_NEXTOR_VERSION##+SEC_NEXTOR_VERSION_HIGH##	;If old master is same or newer than I
 	jr	nc,SLAVE	; become its slave.
 ;
@@ -1243,7 +1237,7 @@ FINDKERNEX:
 	jr	z,NOSETINT
 	set	6,b
 NOSETINT:
-	set 5,b	;TODO: No longer needed
+	set	4,b	;Nextor v3 identifier (Nextor 2 leaves this as 0)
 NOSETCONF:
 	ld	(hl),b
 
@@ -1332,6 +1326,9 @@ CLEAN1:
 	xor a
 	ld (SCANKEYS_RAM_BASE),a
 NO_CLEAN_SCANKEYS_RAM:
+
+	; Clean up Nextor 2 kernel entries from DRVTBL and KERNEX
+	call	CLEAN_V2_KERNELS
 
 	call	GET_DISKID_HL
 	ld	a,(hl)
@@ -3566,6 +3563,230 @@ CALL_DRIVER:
     ret
 
 FOURZEROS:	db	0,0,0,0
+
+;-----------------------------------------------------------------------------
+;
+; Remove Nextor 2 kernels from DRVTBL, HOOKSAV and KERNEX tables.
+; Nextor 3 kernels are identified by bit 4 set in their KERNEX entry.
+; Uses: AF, BC, DE, HL, IX, IY
+
+CLEAN_V2_KERNELS::
+
+	; --- Combined clean+compact of DRVTBL (4 entries, 2 bytes each)
+	;     and HOOKSAV (4 entries, 3 bytes each) in a single pass.
+	;     Also counts removed v2 entries to adjust DISKID.
+
+	ld	hl,DRVTBL		; DRVTBL source
+	ld	de,DRVTBL		; DRVTBL dest
+	ld	ix,HOOKSAV		; HOOKSAV source
+	ld	iy,HOOKSAV		; HOOKSAV dest
+	ld	b,4			; Loop counter
+	ld	c,0			; Count of removed v2 entries
+
+CLEAN_COMPACT_LOOP:
+	ld	a,(hl)			; Drive count (first byte of DRVTBL entry)
+	or	a
+	jr	z,CLEAN_COMPACT_SKIP_EMPTY	; Empty entry, skip both tables
+
+	inc	hl
+	ld	a,(hl)			; Slot address (second byte)
+	dec	hl			; HL back to start of entry
+	and	10001111b		; Mask to get slot + expansion bit
+	push	hl			; Save DRVTBL pointer (GET_KERNEX_ENTRY clobbers HL)
+	call	GET_KERNEX_ENTRY	; Get KERNEX entry for this slot
+	pop	hl			; Restore DRVTBL pointer
+	jr	nz,CLEAN_COMPACT_COPY	; NZ = not in KERNEX, keep it (legacy)
+
+	; It's in KERNEX, check bit 4 for Nextor v3
+	bit	4,a
+	jr	nz,CLEAN_COMPACT_COPY	; Bit 4 set = Nextor v3, keep it
+
+	; Nextor v2 kernel: skip (don't copy), count removal
+	inc	c
+	jr	CLEAN_COMPACT_SKIP_ENTRY
+
+CLEAN_COMPACT_COPY:
+	; Copy DRVTBL entry (2 bytes: HL → DE)
+	ld	a,(hl)
+	ld	(de),a
+	inc	hl
+	inc	de
+	ld	a,(hl)
+	ld	(de),a
+	inc	hl
+	inc	de
+
+	; Copy HOOKSAV entry (3 bytes: IX → IY)
+	ld	a,(ix+0)
+	ld	(iy+0),a
+	ld	a,(ix+1)
+	ld	(iy+1),a
+	ld	a,(ix+2)
+	ld	(iy+2),a
+
+	; Advance HOOKSAV source and dest
+	inc	ix
+	inc	ix
+	inc	ix
+	inc	iy
+	inc	iy
+	inc	iy
+	djnz	CLEAN_COMPACT_LOOP
+	jr	CLEAN_COMPACT_FILL
+
+CLEAN_COMPACT_SKIP_ENTRY:
+	; Advance DRVTBL source only (dest stays)
+	inc	hl
+	inc	hl
+	; Advance HOOKSAV source only (dest stays)
+	inc	ix
+	inc	ix
+	inc	ix
+	djnz	CLEAN_COMPACT_LOOP
+	jr	CLEAN_COMPACT_FILL
+
+CLEAN_COMPACT_SKIP_EMPTY:
+	; Empty DRVTBL entry: advance source pointers only
+	inc	hl
+	inc	hl
+	inc	ix
+	inc	ix
+	inc	ix
+	djnz	CLEAN_COMPACT_LOOP
+
+CLEAN_COMPACT_FILL:
+	; Fill remaining DRVTBL slots with zeros
+	push	ix			; Save IX (will need for HOOKSAV bounds check)
+	push	hl
+	ld	hl,DRVTBL+8		; End of DRVTBL
+	or	a			; Clear carry
+	sbc	hl,de			; HL = remaining bytes in DRVTBL
+	ld	a,l
+	pop	hl
+	or	a
+	jr	z,CLEAN_COMPACT_FILL_HOOKSAV
+	ld	b,a
+	xor	a
+CLEAN_COMPACT_FILL_DRVTBL:
+	ld	(de),a
+	inc	de
+	djnz	CLEAN_COMPACT_FILL_DRVTBL
+
+CLEAN_COMPACT_FILL_HOOKSAV:
+	; Fill remaining HOOKSAV slots with zeros
+	pop	ix			; Restore IX (not needed, but keep stack clean)
+	push	iy
+	pop	hl			; HL = HOOKSAV dest (current position)
+	ex	de,hl			; DE = HOOKSAV dest
+	ld	hl,HOOKSAV+12		; End of HOOKSAV
+	or	a			; Clear carry
+	sbc	hl,de			; HL = remaining bytes in HOOKSAV
+	ld	a,l
+	or	a
+	jr	z,CLEAN_COMPACT_DISKID
+	ld	b,a
+	xor	a
+CLEAN_COMPACT_FILL_HOOKSAV_LOOP:
+	ld	(de),a
+	inc	de
+	djnz	CLEAN_COMPACT_FILL_HOOKSAV_LOOP
+
+CLEAN_COMPACT_DISKID:
+	; Adjust DISKID: subtract count of removed v2 entries
+	ld	a,c
+	or	a
+	jr	z,CLEAN_KERNEX
+
+	push	bc
+	call	GET_DISKID_HL
+	ld	a,(hl)
+	sub	c
+	ld	(hl),a
+	pop	bc
+
+	; --- Clean KERNEX table
+
+CLEAN_KERNEX:
+	ld	hl,KERNEX##
+	ld	b,4 ; Size of the table
+CLEAN_KERNEX_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,CLEAN_KERNEX_NEXT	; Skip empty entries
+
+	bit	4,a
+	jr	nz,CLEAN_KERNEX_NEXT	; Bit 4 set = Nextor v3, keep it
+
+	ld	(hl),0 	; Not Nextor v3, clear the entry
+
+CLEAN_KERNEX_NEXT:
+	inc	hl
+	djnz	CLEAN_KERNEX_LOOP
+
+	; --- Compact KERNEX (remove gaps)
+
+	ld	hl,KERNEX##
+	ld	de,KERNEX##
+	ld	b,4
+	ld	c,0			; C = count of entries copied
+COMPACT_KERNEX_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,COMPACT_KERNEX_SKIP
+	ld	(de),a			; Copy non-zero entry (bit 4 = v3 flag is preserved)
+	inc	de
+	inc	c
+COMPACT_KERNEX_SKIP:
+	inc	hl
+	djnz	COMPACT_KERNEX_LOOP
+
+	; Fill remaining slots with zero
+	ld	a,4
+	sub	c			; A = remaining entries
+	ret	z
+	ld	b,a
+	xor	a
+COMPACT_KERNEX_FILL:
+	ld	(de),a
+	inc	de
+	djnz	COMPACT_KERNEX_FILL
+	ret
+
+;-----------------------------------------------------------------------------
+;
+; Find KERNEX entry for a given slot address
+; Entry: A = slot address (masked with 0x8F)
+; Exit: Z flag set if found, A = KERNEX entry value
+;       NZ if not found
+; Uses: AF, HL
+;
+GET_KERNEX_ENTRY:
+	push	bc
+	push	de
+	ld	c,a			; Save slot to find
+	ld	hl,KERNEX##
+	ld	b,4
+GET_KERNEX_LOOP:
+	ld	a,(hl)
+	ld	d,a			; Save full KERNEX entry in D
+	and	10001111b		; Mask to get slot
+	cp	c
+	jr	z,GET_KERNEX_FOUND
+	inc	hl
+	djnz	GET_KERNEX_LOOP
+	; Not found
+	pop	de
+	pop	bc
+	or	1			; Clear Z flag
+	ret
+GET_KERNEX_FOUND:
+	ld	a,d			; Restore full KERNEX entry
+	pop	de
+	pop	bc
+	cp	a			; Set Z flag, A = KERNEX entry
+	ret
+
+;-----------------------------------------------------------------------------
 
 	end
 
