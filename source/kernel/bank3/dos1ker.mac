@@ -8847,7 +8847,22 @@ DO_FDISK:
 	call	CALBNK##
 
 	pop	hl
-	ret
+
+	;Execute NEW and return to BASIC.
+	;FDISK:: in bank 0 returns normally in DOS 1 mode
+	;(instead of doing jp CALBAS) so that CALBNK properly
+	;restores bank 3 first.
+
+	ld	hl,NEWTXT_DOS1
+	ld	de,09000h
+	ld	bc,3
+	ldir
+	ld	hl,09000h
+	ld	ix,NEWSTT
+	jp	CALBAS
+
+NEWTXT_DOS1:
+	db	3ah, 94h, 0	; ":NEW"
 
 
 ; Extra CALL handlers.
