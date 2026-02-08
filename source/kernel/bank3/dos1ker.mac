@@ -8741,7 +8741,7 @@ A7397:
 
 	defb	31,28,31,30,31,30,31,31,30,31,30,31
 
-BOOTKEYS equ 0F992h    ;Defined in kvar.mac
+BOOTKEYS equ 0F9B9h    ;Defined in kvar.mac
 
 TO_BASIC_REQUIRED:
 	LD	A,0FFH
