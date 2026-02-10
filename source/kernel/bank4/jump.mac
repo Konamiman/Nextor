@@ -87,6 +87,9 @@ jentry	macro	name
 	jentry  F_RAMD
 	jentry  ZAP_RAMD
 
+	jentry  BOOT_MENU
+	jentry  PRINT_KERNEL_MSG
+
 	finish <JUMP>
 
 	end

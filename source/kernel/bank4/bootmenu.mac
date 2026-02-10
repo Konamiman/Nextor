@@ -1,0 +1,1385 @@
+	.z80
+	name('bootmenu')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Boot Menu
+;-----------------------------------------------------------------------------
+;
+	INCLUDE ../macros.inc
+	INCLUDE ../const.inc
+;
+;-----------------------------------------------------------------------------
+;  Local equates
+;-----------------------------------------------------------------------------
+
+CALLB0:		equ	403Fh
+CALDRV_ADDR:	equ	4048h
+BSC_ADDR:	equ	47DCh
+NXT3_SIG_ADDR:	equ	407Bh
+
+BUF:		equ	0F55Eh
+KBUF:		equ	0F41Fh
+
+RDSLT:		equ	000Ch
+CALSLT:		equ	001Ch
+SNSMAT:		equ	0141h
+KILBUF:		equ	0156h
+POSIT:		equ	00C6h
+
+EXPTBL:		equ	0FCC1h
+H_CHPH:		equ	0FDA4h
+MSXVER:		equ	002Dh
+CSRY:		equ	0F3DCh
+CSRX:		equ	0F3DDh
+CSRSW:		equ	0F3CAh
+PUTPNT:		equ	0F3F8h
+GETPNT:		equ	0F3FAh
+KEYBUF_ADDR:	equ	0FBF0h
+KEYBUF_END:	equ	0FC18h		;FBF0h + 40
+
+SCANKEYS_RAM_BASE: equ 0A100h
+
+;--- Data layout in KBUF ---
+
+MENU_DATA:	equ	KBUF
+KERNEL_COUNT:	equ	MENU_DATA		;1 byte
+LOCAL_KEYS:	equ	MENU_DATA+1		;5 bytes (working copy of BOOTKEYS)
+ORIG_KEYS:	equ	MENU_DATA+6		;5 bytes (original BOOTKEYS for ESC)
+EXIT_MODE:	equ	MENU_DATA+11		;1 byte: 0=ESC, 1=ENTER, 2=N
+KERNEL_ENTRIES:	equ	MENU_DATA+12		;5 entries
+
+KERNEL_ENTRY_SIZE: equ 59
+KE_SLOT:		equ	0	;1 byte: slot address
+KE_KEY:		equ	1	;1 byte: toggle key ASCII char
+KE_KEYOFF:	equ	2	;1 byte: BOOTKEYS byte offset
+KE_KEYMASK:	equ	3	;1 byte: BOOTKEYS bit mask
+KE_FLAGS:	equ	4	;1 byte: bit 0 = enabled, bit 1 = has version, bit 7 = bad driver
+KE_NAME:		equ	5	;51 bytes: driver name, zero-terminated
+KE_VER_MAJOR:	equ	56	;1 byte: major version (0-255)
+KE_VER_MINOR:	equ	57	;1 byte: minor version (0-255)
+KE_VER_REV:	equ	58	;1 byte: revision (0-255)
+
+KE_FLAG_ENABLED:	equ	0
+KE_FLAG_HAS_VER:	equ	1
+KE_FLAG_BAD:	equ	7
+
+MAX_KERNELS:	equ	5
+
+EXIT_ESC:	equ	0
+EXIT_ENTER:	equ	1
+EXIT_N:		equ	2
+
+;--- Screen layout ---
+; Line 0: title (centered)
+; Line 1: ruler
+; Line 2: blank
+; Lines 3..3+N-1: kernel entries
+; Line 3+N: "N. Disable all and boot"
+; Line 3+N+1: blank
+; Lines 3+N+2...: numeric key entries
+; After keys: blank
+; Then: ruler
+; Then: footer
+
+MENU_FIRST_KERNEL_LINE: equ 3
+SNSMAT_ROW_N:	equ	4	;Keyboard matrix row for N key
+SNSMAT_BIT_N:	equ	3	;Bit position for N key in row 4
+
+
+;=============================================================================
+;  BOOT_MENU - Main entry point
+;  Called from bank 0 via CALL4 (BK4_ADD mechanism)
+;=============================================================================
+
+	PROC	BOOT_MENU
+
+	;--- Save original BOOTKEYS and make working copy ---
+
+	ld hl,BOOTKEYS##
+	ld de,LOCAL_KEYS
+	ld bc,5
+	ldir			;LOCAL_KEYS = BOOTKEYS
+
+	ld hl,BOOTKEYS##
+	ld de,ORIG_KEYS
+	ld bc,5
+	ldir			;ORIG_KEYS = BOOTKEYS (for ESC)
+
+	;Clear N bit in both LOCAL_KEYS and ORIG_KEYS
+	ld a,(LOCAL_KEYS+2)
+	and 01111111b
+	ld (LOCAL_KEYS+2),a
+	ld (ORIG_KEYS+2),a
+
+	;--- Scan slots for Nextor 3 kernels ---
+
+	call SCAN_SLOTS
+
+	;--- Set all detected kernels as enabled by default ---
+	;(Clear their per-slot disable bits in LOCAL_KEYS)
+
+	ld a,(KERNEL_COUNT)
+	or a
+	jr z,BM_DISPLAY		;No kernels found (shouldn't happen)
+
+	ld b,a
+	ld ix,KERNEL_ENTRIES
+BM_ENABLE_LOOP:
+	bit KE_FLAG_BAD,(ix+KE_FLAGS)
+	jr nz,BM_ENABLE_BAD
+
+	;Enable this kernel: clear its disable bit in LOCAL_KEYS
+	set KE_FLAG_ENABLED,(ix+KE_FLAGS)
+	ld e,(ix+KE_KEYOFF)
+	ld d,0
+	ld hl,LOCAL_KEYS
+	add hl,de
+	ld a,(ix+KE_KEYMASK)
+	cpl
+	and (hl)
+	ld (hl),a		;Clear the disable bit
+	jr BM_ENABLE_NEXT
+
+BM_ENABLE_BAD:
+	;Bad driver: ensure disabled bit is SET in LOCAL_KEYS
+	res KE_FLAG_ENABLED,(ix+KE_FLAGS)
+	ld e,(ix+KE_KEYOFF)
+	ld d,0
+	ld hl,LOCAL_KEYS
+	add hl,de
+	ld a,(ix+KE_KEYMASK)
+	or (hl)
+	ld (hl),a		;Set the disable bit
+BM_ENABLE_NEXT:
+	push bc
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	djnz BM_ENABLE_LOOP
+
+BM_DISPLAY:
+	;--- Display the menu ---
+
+	call DISPLAY_MENU
+
+	;--- Hide cursor (must be AFTER display, CLS may reset CSRSW) ---
+	xor a
+	ld (CSRSW),a
+
+	;--- Handle user input ---
+
+	call MENU_INPUT_LOOP
+
+	;--- Process exit ---
+
+	ld a,(EXIT_MODE)
+	or a
+	jr z,BM_EXIT_ESC	;ESC: write original keys, don't update BOOTKEYS
+
+	;ENTER or N: write LOCAL_KEYS to RAM and BOOTKEYS
+	ld hl,LOCAL_KEYS
+	call WRITE_RAM_KEYS
+
+	ld hl,LOCAL_KEYS
+	ld de,BOOTKEYS##
+	ld bc,5
+	ldir
+
+	;Check if all kernels are disabled
+	ld a,(EXIT_MODE)
+	cp EXIT_N
+	jr z,BM_SET_ALL_DISABLED	;N always disables all
+
+	;For ENTER: check each kernel entry
+	ld a,(KERNEL_COUNT)
+	or a
+	jr z,BM_SET_ALL_DISABLED	;No kernels = all disabled
+	ld b,a
+	ld ix,KERNEL_ENTRIES
+BM_CKAD_LOOP:
+	bit KE_FLAG_ENABLED,(ix+KE_FLAGS)
+	jr nz,BM_SET_NOT_ALL_DISABLED
+	push bc
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	djnz BM_CKAD_LOOP
+BM_SET_ALL_DISABLED:
+	ld a,1
+	jr BM_CKAD_DONE
+BM_SET_NOT_ALL_DISABLED:
+	xor a
+BM_CKAD_DONE:
+	ld (ALL_KERNELS_DISABLED##),a
+	jr BM_DONE
+
+BM_EXIT_ESC:
+	;ESC: write ORIG_KEYS to RAM (has N cleared), don't touch BOOTKEYS
+	ld hl,ORIG_KEYS
+	call WRITE_RAM_KEYS
+	xor a
+	ld (ALL_KERNELS_DISABLED##),a
+
+BM_DONE:
+	;Show cursor again
+	ld a,0FFh
+	ld (CSRSW),a
+	;Clear screen before returning to normal boot
+	ld a,FF		;CLS
+	printchar
+	ret
+
+
+;=============================================================================
+;  SCAN_SLOTS - Find all Nextor 3 kernels in the system
+;=============================================================================
+
+SCAN_SLOTS:
+	xor a
+	ld (KERNEL_COUNT),a
+
+	;Iterate primary slots 0-3
+	ld c,0			;C = primary slot number
+
+SS_PRIMARY_LOOP:
+	;Check if this primary slot is expanded
+	ld a,c
+	ld hl,EXPTBL
+	ld e,a
+	ld d,0
+	add hl,de
+	bit 7,(hl)
+	jr nz,SS_EXPANDED
+
+	;Not expanded: check subslot 0 only
+	ld a,c			;Slot address = primary, no expansion flag
+	call CHECK_AND_ADD_SLOT
+	jr SS_PRIMARY_NEXT
+
+SS_EXPANDED:
+	;Expanded: check subslots 0-3
+	ld b,0			;B = subslot number
+SS_SUBSLOT_LOOP:
+	ld a,b
+	rlca
+	rlca			;A = subslot << 2
+	or c			;A = primary | (subslot << 2)
+	or 80h			;Set expansion flag
+	call CHECK_AND_ADD_SLOT
+	ld a,(KERNEL_COUNT)
+	cp MAX_KERNELS
+	ret z			;Stop if we have 5 kernels
+	inc b
+	ld a,b
+	cp 4
+	jr c,SS_SUBSLOT_LOOP
+
+SS_PRIMARY_NEXT:
+	ld a,(KERNEL_COUNT)
+	cp MAX_KERNELS
+	ret z
+	inc c
+	ld a,c
+	cp 4
+	jr c,SS_PRIMARY_LOOP
+	ret
+
+
+;=============================================================================
+;  CHECK_AND_ADD_SLOT - Check one slot and add to list if Nextor 3
+;  Input: A = slot address
+;=============================================================================
+
+CHECK_AND_ADD_SLOT:
+	push bc
+	ld b,a			;B = slot address to check
+
+	;--- Check for "AB" ROM signature at 4000h ---
+	;Note: RDSLT clobbers AF,BC,DE,HL so we must preserve B (slot addr)
+
+	ld a,b
+	ld hl,4000h
+	push bc
+	call RDSLT
+	pop bc
+	cp 'A'
+	jp nz,CAS_NOT_FOUND
+
+	ld a,b
+	ld hl,4001h
+	push bc
+	call RDSLT
+	pop bc
+	cp 'B'
+	jp nz,CAS_NOT_FOUND
+
+	;--- Check for "NXT3" signature at 407Bh ---
+
+	ld a,b
+	ld hl,NXT3_SIG_ADDR
+	push bc
+	call RDSLT
+	pop bc
+	cp 'N'
+	jp nz,CAS_NOT_FOUND
+
+	ld a,b
+	ld hl,NXT3_SIG_ADDR+1
+	push bc
+	call RDSLT
+	pop bc
+	cp 'X'
+	jp nz,CAS_NOT_FOUND
+
+	ld a,b
+	ld hl,NXT3_SIG_ADDR+2
+	push bc
+	call RDSLT
+	pop bc
+	cp 'T'
+	jp nz,CAS_NOT_FOUND
+
+	ld a,b
+	ld hl,NXT3_SIG_ADDR+3
+	push bc
+	call RDSLT
+	pop bc
+	cp '3'
+	jp nz,CAS_NOT_FOUND
+
+	;--- This is a Nextor 3 kernel. Add it to the list. ---
+
+	push bc			;Save B = slot address (GET_ENTRY_PTR uses B)
+	ld a,(KERNEL_COUNT)
+	call GET_ENTRY_PTR	;IX = pointer to kernel entry
+	pop bc			;Restore B = slot address
+
+	;Store slot address
+	ld (ix+KE_SLOT),b
+
+	;Look up toggle key info from tables
+	ld a,b
+	and 0Fh			;Index into SLOT_KEY_* tables
+	ld e,a
+	ld d,0
+
+	ld hl,SLOT_KEY_CHARS
+	add hl,de
+	ld a,(hl)
+	ld (ix+KE_KEY),a
+
+	ld hl,SLOT_KEY_OFFSET
+	add hl,de
+	ld a,(hl)
+	ld (ix+KE_KEYOFF),a
+
+	ld hl,SLOT_KEY_MASK
+	add hl,de
+	ld a,(hl)
+	ld (ix+KE_KEYMASK),a
+
+	;Initialize flags (cleared, will be set by BOOT_MENU)
+	ld (ix+KE_FLAGS),0
+
+	;--- Initialize target slot's mapper by calling BSC ---
+	;This ensures CHGBNK at 7FD0h is accessible for CALDRV.
+	;Critical for ASCII 8 mappers where the upper 8KB page
+	;(6000h-7FFFh) may not be showing the correct ROM page
+	;at power-on. BSC is in the lower 8KB, always accessible.
+
+	push ix			;Save kernel entry pointer
+	xor a			;A = 0 (select bank 0)
+	push bc			;Save B = slot address
+	push bc
+	pop iy			;IYh = slot address for CALSLT
+	ld ix,BSC_ADDR
+	call CALSLT
+	ei
+	pop bc			;Restore B = slot address
+	pop ix			;Restore kernel entry pointer
+
+	;--- Query driver name ---
+
+	push ix
+	push bc
+	pop iy			;IYh = slot address for CALSLT
+	push iy
+
+	;Set up BK4_ADD for CALDRV to call DRIVER_QUERY
+	ld hl,DRIVER.DRIVER_QUERY##
+	ld (BK4_ADD##),hl
+
+	;Calculate max name length based on screen width
+	ld a,(LINL40)
+	cp 80
+	jr z,CAS_80COL
+	;40-col: 40 - 5(prefix) - 7(suffix " in X-Y") - 3("...") = 25
+	ld d,25
+	jr CAS_GOT_NAMELEN
+CAS_80COL:
+	;80-col: 80 - 5(prefix) - 13(max " v255.255.255") - 12(suffix " in slot X-Y") - 3("...") = 47
+	ld d,47
+CAS_GOT_NAMELEN:
+
+	;HL = pointer to name field in entry
+	push ix
+	pop hl
+	ld bc,KE_NAME
+	add hl,bc
+
+	;Call DRVQ_GET_STRING via CALSLT + CALDRV
+	ld a,DRIVER.DRVQ_GET_STRING##
+	ld b,DRIVER.DRVQ_STR_DRIVER_NAME##
+	ld ix,CALDRV_ADDR
+	pop iy			;IYh = slot address
+	call CALSLT
+	ei
+
+	pop ix			;IX = kernel entry pointer
+
+	;Check result
+	or a
+	jr z,CAS_NAME_OK	;QUERY_OK
+	cp DRIVER.QUERY_TRUNCATED_STRING##
+	jr z,CAS_NAME_TRUNC
+
+	;Bad driver or query not supported
+	set KE_FLAG_BAD,(ix+KE_FLAGS)
+	push ix
+	pop hl
+	ld bc,KE_NAME
+	add hl,bc
+	ex de,hl		;DE = entry name field (dest)
+	ld hl,STR_BAD_DRIVER	;HL = source
+	call COPY_STRING
+	jr CAS_ADD_DONE
+
+CAS_NAME_TRUNC:
+	;Append "..." to the name
+	push ix
+	pop hl
+	ld bc,KE_NAME
+	add hl,bc
+	call FIND_STRING_END	;HL = past end of string (at the 0 terminator)
+	ld (hl),'.'
+	inc hl
+	ld (hl),'.'
+	inc hl
+	ld (hl),'.'
+	inc hl
+	ld (hl),0
+
+CAS_NAME_OK:
+	;--- Query driver version ---
+	;BK4_ADD still points to DRIVER_QUERY from the name query
+
+	push ix			;Save entry pointer
+
+	ld a,(ix+KE_SLOT)
+	ld b,a
+	push bc
+	pop iy			;IYh = slot address for CALSLT
+
+	ld a,DRIVER.DRVQ_GET_VERSION##
+	ld ix,CALDRV_ADDR
+	call CALSLT
+	ei
+
+	pop ix			;Restore entry pointer
+
+	or a
+	jr nz,CAS_ADD_DONE	;Version query failed or not implemented
+
+	ld (ix+KE_VER_MAJOR),b
+	ld (ix+KE_VER_MINOR),c
+	ld (ix+KE_VER_REV),d
+	set KE_FLAG_HAS_VER,(ix+KE_FLAGS)
+
+CAS_ADD_DONE:
+	;Increment kernel count
+	ld hl,KERNEL_COUNT
+	inc (hl)
+
+CAS_NOT_FOUND:
+	pop bc
+	ret
+
+
+;=============================================================================
+;  DISPLAY_MENU - Draw the full boot menu screen
+;=============================================================================
+
+DISPLAY_MENU:
+	ld a,FF			;CLS
+	printchar
+
+	;--- Title: "Nextor X.Y.Z boot menu" ---
+
+	call PRINT_CENTERED_TITLE
+
+	;--- Ruler ---
+	call DISPLAY_RULER
+
+	;--- Blank line ---
+	call PRINT_CRLF
+
+	;--- Kernel entries ---
+
+	ld a,(KERNEL_COUNT)
+	or a
+	jr z,DM_AFTER_KERNELS
+
+	ld b,a
+	ld ix,KERNEL_ENTRIES
+	ld c,0			;C = entry index
+DM_KERNEL_LOOP:
+	push bc
+	call DISPLAY_KERNEL_LINE
+	call PRINT_CRLF
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	inc c
+	djnz DM_KERNEL_LOOP
+
+DM_AFTER_KERNELS:
+	;--- "  N. Disable all and boot" ---
+	ld hl,STR_DISABLE_ALL
+	call PRINT_STRING
+	call PRINT_CRLF
+
+	;--- Blank line ---
+	call PRINT_CRLF
+
+	;--- Numeric key entries ---
+
+	ld b,0			;B = key index (0-7)
+DM_KEY_LOOP:
+	;Skip keys 2 and 4 on non-Turbo-R
+	ld a,b
+	cp 2
+	jr z,DM_KEY_CHECK_TURBO
+	cp 4
+	jr nz,DM_KEY_SHOW
+DM_KEY_CHECK_TURBO:
+	ld a,(MSXVER)
+	cp 3			;Turbo-R = 3
+	jr c,DM_KEY_SKIP
+DM_KEY_SHOW:
+	push bc
+	ld a,b
+	call DISPLAY_KEY_LINE
+	call PRINT_CRLF
+	pop bc
+DM_KEY_SKIP:
+	inc b
+	ld a,b
+	cp 8
+	jr c,DM_KEY_LOOP
+
+	;--- Blank line ---
+	call PRINT_CRLF
+
+	;--- Ruler ---
+	call DISPLAY_RULER
+
+	;--- Footer ---
+	ld hl,STR_FOOTER
+	call PRINT_STRING
+	ret
+
+
+;=============================================================================
+;  DISPLAY_RULER - Print a line of hyphens
+;=============================================================================
+
+DISPLAY_RULER:
+	ld a,(LINL40)
+	ld b,a
+	;Korean MSX check: if H_CHPH is hooked, use width-1
+	ld a,(H_CHPH)
+	cp 0C9h			;RET instruction = not hooked
+	jr z,DR_LOOP
+	dec b			;Korean MSX: one less hyphen
+DR_LOOP:
+	ld a,'-'
+	printchar
+	djnz DR_LOOP
+	;On Korean MSX we printed fewer chars so cursor hasn't wrapped;
+	;add CRLF to move to the next line.
+	;On normal MSX the full-width ruler auto-wraps, and the CRLF
+	;is harmless (screen scrolls if at bottom, but we're near top).
+	ld a,(H_CHPH)
+	cp 0C9h
+	ret z			;Normal MSX: cursor already wrapped
+	jp PRINT_CRLF		;Korean MSX: end the line
+
+
+;=============================================================================
+;  DISPLAY_KERNEL_LINE - Display one kernel entry
+;  Input: IX = kernel entry pointer
+;=============================================================================
+
+DISPLAY_KERNEL_LINE:
+	;Print "* " or "  "
+	bit KE_FLAG_ENABLED,(ix+KE_FLAGS)
+	jr z,DKL_NOT_ENABLED
+	ld a,'*'
+	jr DKL_GOT_MARK
+DKL_NOT_ENABLED:
+	ld a,' '
+DKL_GOT_MARK:
+	printchar
+	ld a,' '
+	printchar
+
+	;Print toggle key + ". "
+	ld a,(ix+KE_KEY)
+	printchar
+	ld a,'.'
+	printchar
+	ld a,' '
+	printchar
+
+	;Print driver name
+	push ix
+	pop hl
+	ld bc,KE_NAME
+	add hl,bc
+	call PRINT_STRING
+
+	;Print version in 80-col mode if available
+	ld a,(LINL40)
+	cp 80
+	jr nz,DKL_NO_VERSION
+	bit KE_FLAG_HAS_VER,(ix+KE_FLAGS)
+	jr z,DKL_NO_VERSION
+	ld a,' '
+	printchar
+	ld a,'v'
+	printchar
+	ld a,(ix+KE_VER_MAJOR)
+	call PRINT_DECIMAL
+	ld a,'.'
+	printchar
+	ld a,(ix+KE_VER_MINOR)
+	call PRINT_DECIMAL
+	ld a,'.'
+	printchar
+	ld a,(ix+KE_VER_REV)
+	call PRINT_DECIMAL
+DKL_NO_VERSION:
+
+	;Print slot suffix
+	ld a,(LINL40)
+	cp 80
+	jr z,DKL_80COL
+	ld hl,STR_IN_SHORT	;" in "
+	jr DKL_GOT_SUFFIX
+DKL_80COL:
+	ld hl,STR_IN_SLOT	;" in slot "
+DKL_GOT_SUFFIX:
+	call PRINT_STRING
+
+	;Print slot number
+	ld a,(ix+KE_SLOT)
+	call PRINT_SLOT
+	ret
+
+
+;=============================================================================
+;  MENU_INPUT_LOOP - Handle keyboard input for the menu
+;=============================================================================
+
+MENU_INPUT_LOOP:
+	;--- Wait for N key to be released ---
+MIL_WAIT_N:
+	ld a,SNSMAT_ROW_N
+	call SNSMAT
+	bit SNSMAT_BIT_N,a
+	jr z,MIL_WAIT_N		;0 = pressed, wait
+
+	;--- Flush keyboard buffer ---
+	call KILBUF
+
+	;--- Main input loop ---
+MIL_LOOP:
+	call GET_KEY		;Wait for key without showing cursor
+
+	;Check ESC
+	cp ESC
+	jr z,MIL_ESC
+
+	;Check ENTER
+	cp CR
+	jr z,MIL_ENTER
+
+	;Check N/n
+	cp 'N'
+	jr z,MIL_N
+	cp 'n'
+	jr z,MIL_N
+
+	;Check digits 0-7
+	cp '0'
+	jr c,MIL_CHECK_LETTER
+	cp '8'
+	jr nc,MIL_CHECK_LETTER
+
+	;Digit key pressed
+	sub '0'			;A = key index 0-7
+
+	;Skip keys 2,4 on non-Turbo-R
+	cp 2
+	jr z,MIL_CHECK_TURBO_KEY
+	cp 4
+	jr nz,MIL_DO_TOGGLE_KEY
+MIL_CHECK_TURBO_KEY:
+	push af
+	ld a,(MSXVER)
+	cp 3
+	jr nc,MIL_TURBO_OK
+	pop af
+	jr MIL_LOOP		;Ignore on non-Turbo-R
+MIL_TURBO_OK:
+	pop af
+
+MIL_DO_TOGGLE_KEY:
+	call TOGGLE_NUM_KEY
+	jr MIL_LOOP
+
+MIL_CHECK_LETTER:
+	;Convert lowercase to uppercase
+	cp 'a'
+	jr c,MIL_CHECK_UPPER
+	cp 'z'+1
+	jr nc,MIL_LOOP
+	sub 'a'-'A'
+MIL_CHECK_UPPER:
+	cp 'A'
+	jr c,MIL_LOOP
+	cp 'Z'+1
+	jr nc,MIL_LOOP
+
+	;Search kernel entries for matching toggle key
+	call FIND_KERNEL_BY_KEY	;Returns IX = entry, Z = found
+	jr nz,MIL_LOOP		;Not found
+
+	;Check if bad driver (can't toggle)
+	bit KE_FLAG_BAD,(ix+KE_FLAGS)
+	jr nz,MIL_LOOP
+
+	;Toggle this kernel
+	call TOGGLE_KERNEL
+	jr MIL_LOOP
+
+MIL_ESC:
+	ld a,EXIT_ESC
+	ld (EXIT_MODE),a
+	ret
+
+MIL_ENTER:
+	ld a,EXIT_ENTER
+	ld (EXIT_MODE),a
+	ret
+
+MIL_N:
+	;Disable all kernels: set all per-slot disable bits
+	ld a,(KERNEL_COUNT)
+	or a
+	jr z,MIL_N_DONE
+	ld b,a
+	ld ix,KERNEL_ENTRIES
+MIL_N_LOOP:
+	res KE_FLAG_ENABLED,(ix+KE_FLAGS)
+	ld e,(ix+KE_KEYOFF)
+	ld d,0
+	ld hl,LOCAL_KEYS
+	add hl,de
+	ld a,(ix+KE_KEYMASK)
+	or (hl)
+	ld (hl),a		;Set the disable bit
+	push bc
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	djnz MIL_N_LOOP
+
+MIL_N_DONE:
+	ld a,EXIT_N
+	ld (EXIT_MODE),a
+	ret
+
+
+;=============================================================================
+;  TOGGLE_KERNEL - Toggle a kernel's enabled/disabled state
+;  Input: IX = kernel entry pointer
+;         Need to find the entry index to compute display line
+;=============================================================================
+
+TOGGLE_KERNEL:
+	;Toggle the enabled flag
+	ld a,(ix+KE_FLAGS)
+	xor 1 shl KE_FLAG_ENABLED
+	ld (ix+KE_FLAGS),a
+
+	;Toggle the bit in LOCAL_KEYS
+	ld e,(ix+KE_KEYOFF)
+	ld d,0
+	ld hl,LOCAL_KEYS
+	add hl,de
+	ld a,(ix+KE_KEYMASK)
+	xor (hl)
+	ld (hl),a
+
+	;Find this entry's index to compute line number
+	push ix
+	pop de			;DE = this entry address
+	ld hl,KERNEL_ENTRIES	;HL = first entry
+	ld a,0			;A = index
+TK_FIND_INDEX:
+	push hl
+	or a
+	sbc hl,de
+	pop hl
+	jr z,TK_GOT_INDEX
+	ld bc,KERNEL_ENTRY_SIZE
+	add hl,bc
+	inc a
+	cp MAX_KERNELS
+	jr c,TK_FIND_INDEX
+	ret			;Should not happen
+
+TK_GOT_INDEX:
+	;Line number = MENU_FIRST_KERNEL_LINE + index
+	add a,MENU_FIRST_KERNEL_LINE+1	;+1 for POSIT 1-based
+	ld l,a
+	ld h,1			;Column 1
+	call POSIT
+
+	call DISPLAY_KERNEL_LINE
+	call CLEAR_TO_EOL
+	ret
+
+
+;=============================================================================
+;  TOGGLE_NUM_KEY - Toggle a numeric key option
+;  Input: A = key index (0-7)
+;=============================================================================
+
+TOGGLE_NUM_KEY:
+	push af			;Save key index
+
+	;Toggle bit in LOCAL_KEYS
+	ld e,a
+	ld d,0
+	ld hl,KEY_BIT_TABLE
+	add hl,de
+	add hl,de		;HL = &KEY_BIT_TABLE[index*2]
+	ld c,(hl)		;C = BOOTKEYS byte offset
+	inc hl
+	ld b,(hl)		;B = bit mask
+
+	ld hl,LOCAL_KEYS
+	ld e,c
+	ld d,0
+	add hl,de
+	ld a,b
+	xor (hl)
+	ld (hl),a
+
+	;Compute display line number
+	;First, count how many kernel entries + 2 (blank + "N. Disable all")
+	;Then count how many keys 0..index-1 were displayed (skip 2,4 on non-Turbo-R)
+	pop af
+	push af
+
+	ld c,a			;C = target key index
+	ld b,0			;B = key iterator
+	ld d,0			;D = count of displayed keys before target
+
+TNK_COUNT:
+	ld a,b
+	cp c
+	jr z,TNK_COUNTED
+
+	;Was this key displayed?
+	cp 2
+	jr z,TNK_CHECK_TR
+	cp 4
+	jr nz,TNK_WAS_SHOWN
+TNK_CHECK_TR:
+	ld a,(MSXVER)
+	cp 3
+	jr c,TNK_NEXT_COUNT	;Not shown on non-Turbo-R
+TNK_WAS_SHOWN:
+	inc d			;Count this displayed key
+TNK_NEXT_COUNT:
+	inc b
+	jr TNK_COUNT
+
+TNK_COUNTED:
+	;D = number of displayed keys before this one
+	ld a,(KERNEL_COUNT)
+	add a,MENU_FIRST_KERNEL_LINE
+	add a,2			;+1 for "N. Disable all", +1 for blank line
+	add a,d			;Add displayed keys before this one
+	inc a			;+1 for POSIT 1-based
+
+	ld l,a
+	ld h,1			;Column 1
+	call POSIT
+
+	pop af			;Recover key index
+	call DISPLAY_KEY_LINE
+	call CLEAR_TO_EOL
+	ret
+
+
+;=============================================================================
+;  FIND_KERNEL_BY_KEY - Search kernel entries for a matching toggle key
+;  Input: A = uppercase key character
+;  Output: IX = entry pointer, Z = found, NZ = not found
+;=============================================================================
+
+FIND_KERNEL_BY_KEY:
+	ld c,a			;C = key to find
+	ld a,(KERNEL_COUNT)
+	or a
+	jr nz,FKK_HAS_ENTRIES
+	inc a			;A=1, NZ: no entries, "not found"
+	ret
+
+FKK_HAS_ENTRIES:
+	ld b,a
+	ld ix,KERNEL_ENTRIES
+FKK_LOOP:
+	ld a,(ix+KE_KEY)
+	cp c
+	ret z			;Found
+	push bc
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	djnz FKK_LOOP
+	or 1			;Set NZ
+	ret
+
+
+;=============================================================================
+;  WRITE_RAM_KEYS - Write boot keys to RAM at A100h
+;  Input: HL = pointer to 5-byte key data to write
+;=============================================================================
+
+WRITE_RAM_KEYS:
+	push hl			;Save key data pointer
+
+	;Copy signature
+	ld hl,RAMKEYSIG
+	ld de,SCANKEYS_RAM_BASE
+	ld bc,RAMKEYSIG_END-RAMKEYSIG
+	ldir
+
+	;Copy key data (5 bytes)
+	pop hl			;Recover key data pointer
+	ld de,SCANKEYS_RAM_BASE+17
+	ld bc,5
+	ldir
+	ret
+
+RAMKEYSIG:	db "NEXTOR_BOOT_KEYS",0
+RAMKEYSIG_END:
+
+
+;=============================================================================
+;  DISPLAY_KEY_LINE - Display one numeric key option line
+;  Input: A = key index (0-7)
+;=============================================================================
+
+DISPLAY_KEY_LINE:
+	push af
+
+	;Look up bit info
+	ld e,a
+	ld d,0
+	ld hl,KEY_BIT_TABLE
+	add hl,de
+	add hl,de		;HL = KEY_BIT_TABLE + index*2
+	ld c,(hl)		;C = BOOTKEYS byte offset
+	inc hl
+	ld b,(hl)		;B = bit mask
+
+	;Read the bit from LOCAL_KEYS
+	ld hl,LOCAL_KEYS
+	ld e,c
+	ld d,0
+	add hl,de
+	ld a,(hl)
+	and b
+
+	;Print "* " or "  "
+	jr z,DKLI_NOT_SET
+	ld a,'*'
+	jr DKLI_GOT_MARK
+DKLI_NOT_SET:
+	ld a,' '
+DKLI_GOT_MARK:
+	printchar
+	ld a,' '
+	printchar
+
+	;Print key number + ". "
+	pop af
+	push af
+	add a,'0'
+	printchar
+	ld a,'.'
+	printchar
+	ld a,' '
+	printchar
+
+	;Print description string from lookup table
+	pop af
+	ld e,a
+	ld d,0
+	ld hl,KEY_STR_TABLE
+	add hl,de
+	add hl,de		;HL = &KEY_STR_TABLE[index*2]
+	ld a,(hl)
+	inc hl
+	ld h,(hl)
+	ld l,a			;HL = pointer to string
+	call PRINT_STRING
+	ret
+
+
+;=============================================================================
+;  Helper routines
+;=============================================================================
+
+;--- GET_KEY: Wait for key without displaying cursor ---
+;  Reads directly from the keyboard buffer, bypassing CHGET which
+;  forcibly enables the cursor during key wait.
+;  Output: A = key character
+
+GET_KEY:
+	halt			;Wait for VDP interrupt (keyboard gets scanned)
+	ld hl,(PUTPNT)
+	ld de,(GETPNT)
+	or a			;Clear carry for sbc
+	sbc hl,de
+	jr z,GET_KEY		;Buffer empty, keep waiting
+
+	;Key available - read from buffer
+	ex de,hl		;HL = GETPNT value
+	ld a,(hl)		;A = key character
+
+	;Advance GETPNT
+	inc hl
+	push af
+	ld a,h
+	cp high KEYBUF_END
+	jr nz,GK_NO_WRAP
+	ld a,l
+	cp low KEYBUF_END
+	jr nz,GK_NO_WRAP
+	ld hl,KEYBUF_ADDR	;Wrap to buffer start
+GK_NO_WRAP:
+	ld (GETPNT),hl
+	pop af
+	ret
+
+
+;--- GET_ENTRY_PTR: Get pointer to kernel entry by index ---
+;  Input: A = entry index (0-4)
+;  Output: IX = pointer to that entry
+
+GET_ENTRY_PTR:
+	ld ix,KERNEL_ENTRIES
+	or a
+	ret z
+	ld b,a
+GEP_LOOP:
+	push bc
+	ld bc,KERNEL_ENTRY_SIZE
+	add ix,bc
+	pop bc
+	djnz GEP_LOOP
+	ret
+
+
+;--- PRINT_STRING: Print zero-terminated string ---
+;  Input: HL = string pointer
+
+PRINT_STRING:
+	ld a,(hl)
+	or a
+	ret z
+	printchar
+	inc hl
+	jr PRINT_STRING
+
+
+;--- PRINT_CRLF: Print CR+LF ---
+
+PRINT_CRLF:
+	ld a,CR
+	printchar
+	ld a,LF
+	printchar
+	ret
+
+
+;--- PRINT_DECIMAL: Print byte as 1-3 decimal digits, no leading zeros ---
+;  Input: A = value (0-255)
+
+PRINT_DECIMAL:
+	ld b,0			;B = leading digit printed flag
+
+	;Hundreds digit
+	ld c,'0'-1
+PDEC_100:
+	inc c
+	sub 100
+	jr nc,PDEC_100
+	add a,100		;Restore after overshoot
+	push af
+	ld a,c
+	cp '0'
+	jr z,PDEC_SKIP_100
+	printchar
+	ld b,1
+PDEC_SKIP_100:
+	pop af
+
+	;Tens digit
+	ld c,'0'-1
+PDEC_10:
+	inc c
+	sub 10
+	jr nc,PDEC_10
+	add a,10		;Restore after overshoot
+	push af
+	ld a,c
+	cp '0'
+	jr nz,PDEC_PRINT_10
+	ld a,b
+	or a
+	jr z,PDEC_SKIP_10
+	ld a,'0'
+PDEC_PRINT_10:
+	printchar
+PDEC_SKIP_10:
+	pop af
+
+	;Ones digit (always printed)
+	add a,'0'
+	printchar
+	ret
+
+
+;--- PRINT_SLOT: Print slot number like "1" or "1-3" ---
+;  Input: A = slot address (MSX format)
+
+PRINT_SLOT:
+	push af
+	and 11b
+	add a,'0'
+	printchar
+	pop af
+	bit 7,a
+	ret z			;Not expanded
+	push af
+	ld a,'-'
+	printchar
+	pop af
+	rrca
+	rrca
+	and 11b
+	add a,'0'
+	printchar
+	ret
+
+
+;--- PRINT_CENTERED_TITLE: Print "Nextor X.Y.Z boot menu" centered ---
+
+PRINT_CENTERED_TITLE:
+	;Build the title string in BUF
+	ld hl,STR_NEXTOR
+	ld de,BUF
+	call COPY_STRING	;Copy "Nextor "
+
+	;Append major version digit
+	ld a,MAIN_NEXTOR_VERSION##
+	add a,'0'
+	ld (de),a
+	inc de
+	ld a,'.'
+	ld (de),a
+	inc de
+
+	;Append minor version high digit
+	ld a,SEC_NEXTOR_VERSION_HIGH##
+	add a,'0'
+	ld (de),a
+	inc de
+	ld a,'.'
+	ld (de),a
+	inc de
+
+	;Append minor version low digit
+	ld a,SEC_NEXTOR_VERSION_LOW##
+	add a,'0'
+	ld (de),a
+	inc de
+
+	;Append " boot menu"
+	push de
+	ld hl,STR_BOOT_MENU_SUFFIX
+	pop de
+	call COPY_STRING
+
+	;Calculate centering
+	;String length = DE - BUF
+	ld hl,BUF
+	push hl
+	ex de,hl
+	ld de,BUF
+	or a
+	sbc hl,de		;HL = string length
+	ld a,l			;A = string length (assumes < 256)
+	ld b,a
+
+	ld a,(LINL40)		;Screen width
+	sub b			;Remaining space
+	srl a			;Divide by 2 for centering
+	ld c,a			;C = number of leading spaces
+
+	;Print leading spaces
+	or a
+	jr z,PCT_NO_SPACES
+PCT_SPACE:
+	ld a,' '
+	printchar
+	dec c
+	jr nz,PCT_SPACE
+PCT_NO_SPACES:
+
+	;Print the title string
+	pop hl
+	call PRINT_STRING
+	call PRINT_CRLF
+	ret
+
+
+;--- COPY_STRING: Copy zero-terminated string ---
+;  Input: HL = source, DE = destination
+;  Output: DE = past the copied string (at the position of the 0 terminator)
+
+COPY_STRING:
+	ld a,(hl)
+	ld (de),a
+	or a
+	ret z
+	inc hl
+	inc de
+	jr COPY_STRING
+
+
+;--- FIND_STRING_END: Find end of zero-terminated string ---
+;  Input: HL = string pointer
+;  Output: HL = pointer to the 0 terminator
+
+FIND_STRING_END:
+	ld a,(hl)
+	or a
+	ret z
+	inc hl
+	jr FIND_STRING_END
+
+
+;--- CLEAR_TO_EOL: Print ESC+"K" sequence to clear to end of line ---
+
+CLEAR_TO_EOL:
+	ld a,ESC
+	printchar
+	ld a,'K'
+	printchar
+	ret
+
+
+;=============================================================================
+;  Data tables
+;=============================================================================
+
+;--- Slot-to-key mapping tables ---
+;  Indexed by (slot_address AND 0Fh)
+;  Index = primary_slot + subslot*4
+
+SLOT_KEY_CHARS:
+	db 'U','Q','A','Z'	;x-0 (primary slots 0,1,2,3)
+	db 'I','W','S','X'	;x-1
+	db 'O','E','D','C'	;x-2
+	db 'P','R','F','V'	;x-3
+
+SLOT_KEY_OFFSET:
+	db 3,3,1,4		;x-0
+	db 2,4,3,4		;x-1
+	db 3,1,1,1		;x-2
+	db 3,3,1,3		;x-3
+
+SLOT_KEY_MASK:
+	db 40h,04h,04h,08h	;x-0
+	db 04h,01h,10h,02h	;x-1
+	db 01h,40h,20h,10h	;x-2
+	db 02h,08h,80h,80h	;x-3
+
+
+;--- Numeric key bit mapping ---
+;  2 bytes per key: (BOOTKEYS byte offset, bit mask)
+
+KEY_BIT_TABLE:
+	db 0, 01h		;key 0: byte 0, bit 0
+	db 0, 02h		;key 1: byte 0, bit 1
+	db 0, 04h		;key 2: byte 0, bit 2
+	db 0, 08h		;key 3: byte 0, bit 3
+	db 0, 10h		;key 4: byte 0, bit 4
+	db 0, 20h		;key 5: byte 0, bit 5
+	db 4, 20h		;key 6 (CTRL): byte 4, bit 5
+	db 4, 10h		;key 7 (SHIFT): byte 4, bit 4
+
+
+;--- Numeric key description string pointers ---
+
+KEY_STR_TABLE:
+	dw STR_KEY_0
+	dw STR_KEY_1
+	dw STR_KEY_2
+	dw STR_KEY_3
+	dw STR_KEY_4
+	dw STR_KEY_5
+	dw STR_KEY_6
+	dw STR_KEY_7
+;               |--------|---------|---------|---------|
+STR_KEY_0:	db "Disable permanent disk emulation",0
+STR_KEY_1:	db "Boot in MSX-DOS 1 mode",0
+STR_KEY_2:	db "Boot in MSX-DOS 1+R800 ROM mode",0
+STR_KEY_3:	db "Boot in MSX BASIC",0
+STR_KEY_4:	db "Boot in R800 ROM mode",0
+STR_KEY_5:	db "Reduced drive allocation mode",0
+STR_KEY_6:	db "Disable FDD ghost drives (CTRL)",0
+STR_KEY_7:	db "Disable MSX-DOS kernels (SHIFT)",0
+
+
+;--- Menu strings ---
+
+STR_NEXTOR:		db "Nextor ",0
+STR_BOOT_MENU_SUFFIX:	db " boot menu",0
+STR_IN_SLOT:		db " in slot ",0
+STR_IN_SHORT:		db " in ",0
+STR_DISABLE_ALL:	db "  N. Disable all and boot",0
+STR_FOOTER:		db " ESC = Cancel, ENTER = Apply and boot",0
+STR_BAD_DRIVER:		db "(BAD DRIVER)",0
+
+
+	finish	<BOOTMENU>
+	end

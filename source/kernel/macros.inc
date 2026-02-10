@@ -274,6 +274,10 @@ djpnz macro address
 	jp nz,address
   endm
 
+printchar macro
+	rst 18h
+  endm
+
 ;------------------------------------------------------------------------------
 ;
 	.list

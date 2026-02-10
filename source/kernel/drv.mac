@@ -981,9 +981,9 @@ DEFDPB:
 	DW	7
 ;
 
-	ALIGN 7BC0h
+	ALIGN 7E80h
 
-; Hooks to jump to KABR (kernel disk error abort routine) and KDERR 
+; Hooks to jump to KABR (kernel disk error abort routine) and KDERR
 ; (kernel disk error handler routine) on disk error.
 ;
 ; When MSX-BASIC starts the KAB_VECT and KDSK_VECT vectors need to be set to 
@@ -1021,8 +1021,8 @@ KDERJ:
     nop
     jp KDERR##
 
-    ALIGN 7BD0h
-    ;Here goes the 1K free area at the end of banks 0 and 3
+    ALIGN 7E90h
+    ;Here goes the free area at the end of banks 0 and 3
 
 	finish	<DRV>
 ;
