@@ -1434,6 +1434,11 @@ FILAUX:	ld	(hl),0C9h
 	ld	($ERR_MSG##),hl	; error message routine.
 	ld	hl,PROMPT	;Record address of
 	ld	($PROMPT##),hl	; disk change prompt routine.
+	ld	hl,KABJ_HOOKS_TEMPLATE##	;Copy KABJ/KDERJ hook code
+	ld	de,KABJ_CODE##			; to page 3 RAM so the hooks
+	ld	bc,14				; are ready before any BDOS
+	ldir					; call can happen.
+;
 	ld	hl,BDOS_GO##
 	ld	($BDOS##),hl
 	ld	hl,DOS1_GO##

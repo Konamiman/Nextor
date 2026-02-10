@@ -353,7 +353,7 @@ B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskba
 B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
-B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel ramdrv.rel time.rel seg.rel misc.rel dskab.rel bootmenu.rel)
+B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
 B6RELS = $(addprefix bank6/,b6.rel)
 
@@ -528,7 +528,6 @@ bank4/B4.BIN bank4/B4.SYM: \
 	$(call print_linking,"bank 4")
 	@$(LK80) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel bootmsg.rel \
-			--code 7E80h dskab.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
