@@ -224,10 +224,6 @@ _GO_BIOS:
 ;For unexpanded slots, the key for subslot 0 applies (U, Q, A, Z)
 
 DISABLE_KEY:
-	ld a,(BOOTKEYS##+2)
-	and 80h
-	ret nz	;"N" key pressed?
-
 	call	GSLOT1##
 	and	00001111b
 	add	a,a
@@ -692,35 +688,32 @@ FMAKE:	CALLDOS	16h	;;Create file (FCB)
 RDABS:	CALLDOS	2Fh	;Absolute sector read
 ;
 
-PRINT_INIT_KERNEL_AT_ASLOT:
-	ld de,STR_INIT_NEXTOR_KERNEL_AT_SLOT
-	call MSG_DE
-	call GSLOT1
-	call PRSLOT
-	ld de,STR_COLON
-	call MSG_DE
+; Call PRINT_KERNEL_MSG in bank 4 via C4PBK.
+; Input: C = type (0=initializing, 1=skipping, 2=init OK, 3=init failed)
+;        B = slot number (for types 0, 1)
+CALL_PRINT_KERNEL_MSG:
+	ld hl,PRINT_KERNEL_MSG##
+	ld (BK4_ADD##),hl
+	jp C4PBK##
 
-	ld b,1
-	ld d,37
-	ld hl,BUF
-	ld a,DRIVER.DRVQ_GET_STRING##
-	call CALL_DRIVER_QUERY
-	ld de,BUF
+STR_NO_MEM_FOR_DRIVER:
+	db 13,10,"*** Can't allocate memory for driver!",13,10,10,0
+
+; Set up text mode, beep, and print version + "Press N" message.
+; Used at AFTER_BOOT_MENU for the first kernel.
+INIT_SCREEN_AND_VERSION:
+	ld a,(MSXVER)
 	or a
-	jr z,PRINT_DRIVER_NAME
-	cp DRIVER.QUERY_TRUNCATED_STRING##
-	ld de,STR_UNNAMED_DRIVER
-	jr nz,PRINT_DRIVER_NAME
-	ld de,BUF
-	call MSG_DE
-	ld de,STR_3_DOTS
-PRINT_DRIVER_NAME::
-	call MSG_DE
-	call PRT_CRLF
-	ld a,(LINL40)
-	cp 80
-	ret z
-	jp PRT_CRLF
+	ld a,40
+	jr z,ISAV_GOTLINLEN
+	ld a,80
+ISAV_GOTLINLEN:
+	ld (LINL40),a
+	call INITXT
+	ld a,BELL
+	printchar
+	ld c,4
+	jp CALL_PRINT_KERNEL_MSG
 
 	ALIGN	4720h
 WRABS:	CALLDOS	30h	;Absolute sector write
@@ -846,8 +839,10 @@ INIT:
 	ld	hl,INIT2
 	push	hl
 	xor	a
-	
+
 	;Bank switching code must go here
+
+	ALIGN 47DCh ;BSC assumed to be at this address by BOOT_MENU
 
 BSC::
 	ld	(6000h),a
@@ -859,8 +854,69 @@ INIT2:
 
     call DO_KEYS_INIT
 
+	;--- Boot menu check ---
+	;
+	;Show the boot menu if:
+	; - Boot keys came from the keyboard (not from RAM / NEXBOOT)
+	; - The N key is being pressed
+	;
+	;This must run BEFORE DISABLE_KEY so that if the user disables
+	;this kernel in the menu, init returns before INIHOOK wipes
+	;the disk hooks set up by MSX-DOS compatible kernels.
+
+	call SCANKEYS_RAM_AVAILABLE
+	jr nz,BM_NOT_FROM_RAM		;Keys came from keyboard
+	xor a
+	ld (ALL_KERNELS_DISABLED##),a
+	jr AFTER_BOOT_MENU
+
+BM_NOT_FROM_RAM:
+
+	ld a,(BOOTKEYS##+2)
+	and 80h
+	jr nz,SHOW_BOOT_MENU		;N key pressed, show menu
+
+	;No menu: clear the all-disabled flag
+	xor a
+	ld (ALL_KERNELS_DISABLED##),a
+	jr AFTER_BOOT_MENU
+
+SHOW_BOOT_MENU:
+
+	;Set up text mode for the menu display
+	ld a,(MSXVER)
+	or a
+	ld a,40
+	jr z,BM_GOTLINLEN
+	ld a,80
+BM_GOTLINLEN:
+	ld (LINL40),a
+	call INITXT
+
+	;Run boot menu (bank 4)
+	ld hl,BOOT_MENU##
+	ld (BK4_ADD##),hl
+	call C4PBK##
+
+AFTER_BOOT_MENU:
+	ld	a,(ALL_KERNELS_DISABLED##)
+	or	a
+	jr	nz,ABM_SKIP_SCREEN
+	ld	a,(DISKID)
+	or	a
+	call	z,INIT_SCREEN_AND_VERSION
+ABM_SKIP_SCREEN:
 	call	DISABLE_KEY
-	ret	nz
+	jr	z,KERNEL_NOT_SKIPPED
+	ld	a,(ALL_KERNELS_DISABLED##)
+	or	a
+	ret	nz		;All disabled: return silently
+	call	GSLT1
+	ld	b,a
+	ld	c,1		;Type 1: "Skipping Nextor kernel at slot X"
+	call	CALL_PRINT_KERNEL_MSG
+	ret
+KERNEL_NOT_SKIPPED:
 ;
 if 0 ;; If 0, will boot on MSX1 machine (with calendar clock problem).
 	ld	a,(VERSION)
@@ -889,9 +945,6 @@ endif
 ;	I am the first disk cartridge.
 ;
 	call	INITVARS
-
-    ld a,CLS
-    call CHPUT
 ;
 ;	I can be the master.  Check if disk system can start up.
 ;
@@ -994,9 +1047,7 @@ INIHOOK:
     xor 2
 	ld	(TARGET##),a
 ;
-	ld	a,BELL		;tell user scanning is over
-	OUTCHR
-	jr	OVERRIDE
+	jr	OVERRIDE_PAST_MSG	;Skip INITXT+message (already done at AFTER_BOOT_MENU)
 ;
 VER_CHK:
 ;
@@ -1038,29 +1089,17 @@ OVERRIDE_GOTLINLEN::
 	ld (LINL40),a
 	call INITXT
 
+	ld a,BELL
+	OUTCHR
+
+	ld	c,4		;Type 4: version + "Press N to show the boot menu"
+	call	CALL_PRINT_KERNEL_MSG
+
+OVERRIDE_PAST_MSG:
 	ld	a,99h		;16*DOSVER##+SEC_DOS_VERSION_HIGH##
 	ld	(DOS_VER##),a	;set new DOS version
 	ld	a,16*MAIN_NEXTOR_VERSION##+SEC_NEXTOR_VERSION_HIGH##
 	ld	(NXT_VER##),a
-	
-	;Kill any Nextor v2 kernel trying to initialize after myself.
-	;We do this by using the "one time boot keys" mechanism to pretend that
-	;the user used it to disable Nextor via a simulated "N" key press.
-
-	;TODO: This also disables other Nextor v3 kernels, do something about that.
-if 0
-	ld de,SCANKEYS_RAM_BASE
-	ld hl,RAMKEYSIG
-	ld bc,RAMKEYSIG_END-RAMKEYSIG
-	ldir
-	ld hl,(BOOTKEYS##)
-	ld (SCANKEYS_RAM_BASE+17),hl
-	ld hl,(BOOTKEYS##+3)
-	ld (SCANKEYS_RAM_BASE+17+3),hl
-	ld a,(BOOTKEYS##+2)
-	or 80h	;Simulate "N" key
-	ld (SCANKEYS_RAM_BASE+17+2),a
-endif	
 ;
 ;	Set up hook for clean up procedure
 ;
@@ -1092,7 +1131,10 @@ SLAVE:
 	or	a
 	ret	nz	;Return if four Nextor kernels initialized already
 
-	call PRINT_INIT_KERNEL_AT_ASLOT
+	call	GSLT1
+	ld	b,a
+	ld	c,0		;Type 0: "Initializing Nextor kernel at slot X: <name>"
+	call	CALL_PRINT_KERNEL_MSG
 
 	call	VALTBL		;get number of drives declared so far
 	ret	z		;no room is left
@@ -1135,8 +1177,8 @@ BOTTOM_OK:
 	ld hl,0
 	jr z,GET_DRIVER_INIT_PARAMS_OK
 
-	ld de,STR_DRV_INIT_FAILED
-	call MSG_DE
+	ld c,3		;Type 3: "*** Driver initialization failed!"
+	call CALL_PRINT_KERNEL_MSG
 	jp NO_DRIVE
 GET_DRIVER_INIT_PARAMS_OK:
 	
@@ -1183,12 +1225,12 @@ BIGENOUGH:
 	jr z,DRIVER_INIT_OK
 	cp DRIVER.QUERY_NOT_IMPLEMENTED##
 	jr z,DRIVER_INIT_OK
-	ld de,STR_DRV_INIT_FAILED
-	call MSG_DE
+	ld c,3		;Type 3: "*** Driver initialization failed!"
+	call CALL_PRINT_KERNEL_MSG
 	jp NO_DRIVE
 DRIVER_INIT_OK:
-	ld de,STR_DRV_INIT_OK
-	call MSG_DE
+	ld c,2		;Type 2: "Driver initialization OK"
+	call CALL_PRINT_KERNEL_MSG
 
 	ld	hl,GET_BOOT_DRIVES_COUNT##
 	ld	(BK4_ADD##),hl
@@ -1322,7 +1364,7 @@ CLEAN1:
 	ld hl,SCANKEYS_RAM_BASE
 	ld de,RAMKEYSIG
 	call STRCOMP
-	jr nz,NO_CLEAN_SCANKEYS_RAM	
+	jr nz,NO_CLEAN_SCANKEYS_RAM
 	xor a
 	ld (SCANKEYS_RAM_BASE),a
 NO_CLEAN_SCANKEYS_RAM:
@@ -1397,6 +1439,11 @@ FILAUX:	ld	(hl),0C9h
 	ld	($ERR_MSG##),hl	; error message routine.
 	ld	hl,PROMPT	;Record address of
 	ld	($PROMPT##),hl	; disk change prompt routine.
+	ld	hl,KABJ_HOOKS_TEMPLATE##	;Copy KABJ/KDERJ hook code
+	ld	de,KABJ_CODE##			; to page 3 RAM so the hooks
+	ld	bc,14				; are ready before any BDOS
+	ldir					; call can happen.
+;
 	ld	hl,BDOS_GO##
 	ld	($BDOS##),hl
 	ld	hl,DOS1_GO##
@@ -2374,9 +2421,6 @@ GSLT_SLTTBL:
 
 	PRINTL	INIT,%($-$$INIT)
 
-STR_NO_MEM_FOR_DRIVER:
-	db 13,10,"*** Can't allocate memory for driver!",13,10,10,0
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2431,9 +2475,6 @@ SETDEFDPB:
 	dec	a		;more drives assigned?
 	jr	nz,SETDEFDPB	;yes
 	ret
-
-STR_UNNAMED_DRIVER:
-	db "(Unnamed driver)",0
 
 	ALIGN	5006h
 SNEXT:	CALLDOS	12h	;;Search for next (FCB)
@@ -2856,14 +2897,6 @@ endif
 	subttl	MSX-DOS1 compatible ROM entries (part 3)
 
 
-STR_INIT_NEXTOR_KERNEL_AT_SLOT:
-	db 13,"Initializing Nextor kernel at slot ",0
-STR_COLON:
-	db ": ",0
-STR_3_DOTS:
-	db "...",0
-
-
 	ALIGN	535Dh
 BUFOUT:	exx
 	push	bc		;Get error code in B' if it ever servives.
@@ -3019,7 +3052,7 @@ GDATE:	CALLDOS	2Ah	;Get date
 SDATE:	CALLDOS	2Bh	;Set date
 ;
 
-    ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet
+    ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet.
 
 DO_KEYS_INIT:
     call CHECK_IS_RUSSIAN
@@ -3028,7 +3061,7 @@ DO_KEYS_INIT:
     call SCANKEYS_RAM
     jr z,DO_KEYS_INIT2
     call SCANKEYS
-    
+
     ld a,(KEYS_INV_0)
     and 00111110b
     xor b
@@ -3038,7 +3071,7 @@ DO_KEYS_INIT:
     and 00110000b
     xor h
     ld h,a
-  
+
 DO_KEYS_INIT2:
     ld a,b
     ld (BOOTKEYS##),a
@@ -3046,11 +3079,6 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+3),hl
 
     ret
-
-STR_DRV_INIT_FAILED:
-	db 13,10,"*** Driver initialization failed!",13,10,10,0
-STR_DRV_INIT_OK:
-	db 13,10,"Driver initialization OK",13,10,10,0
 
 	ALIGN	55DBh
 GTIME:	CALLDOS	2Ch	;Get time

@@ -95,7 +95,7 @@ GWORK	equ	4045h
 	;***  DRIVER CODE  ***
 	;*********************
 
-	;org 4100h
+	org 4100h
 
 DRIVER_START:
 
@@ -222,8 +222,8 @@ DRIVER_QUERY:
 ; in B.C.D instead of A.B.C, and an error code is returned in A.
 
 DO_DRVQ_GET_VERSION:
-	ld bc,0102h
-	ld d,3
+	ld bc,0100h
+	ld d,0
 	xor a
 	ret
 
@@ -332,7 +332,7 @@ JPIX: jp (ix)
 STR_DRIVER_NAME: db "Dummy standalone driver for Nextor",0 ; es bueno para la oreja, te lo pones asin y te crece la oreja",0
 STR_DRIVER_AUTHOR: db "Konamiman",0
 
-INIT_MSG: db "Dummy standalone driver for Nextor\r\n"
+INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
           db "by Konamiman\r\n",0
 
 

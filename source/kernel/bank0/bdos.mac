@@ -34,6 +34,20 @@ DB_INIT::
 		ret
 ;
 ;
+;    Template for the KABJ/KDERJ hooks that get copied to page 3 RAM
+; (KABJ_CODE and KDERJ_CODE) during initialization. These hooks switch
+; to bank 0 via CHGBNK before jumping to KABR/KDERR, so they work
+; regardless of which bank is currently paged in.
+;
+KABJ_HOOKS_TEMPLATE::
+		xor	a
+		call	7FD0h		;CHGBNK - switch to bank 0
+		jp	KABR
+		xor	a
+		call	7FD0h		;CHGBNK - switch to bank 0
+		jp	KDERR
+;
+;
 ;-----------------------------------------------------------------------------
 ;
 KAB_ROUTINE:
@@ -46,8 +60,9 @@ KABR::
 ; the  first  BDOS  call,  switches  back to the user's stack and jumps to the
 ; user's defined "BREAKVECT" routine.
 ;
-; The hook at KAB_VECT is set to an intermediate hook KABJ instead of pointing
-; directly here, see KABJ at the end of drv.mac for an explanation of why.
+; The hook at KAB_VECT is set to an intermediate hook in page 3 RAM (KABJ_CODE)
+; that switches to bank 0 via CHGBNK before jumping here.
+; See KABJ_HOOKS_TEMPLATE above.
 ;
 ;
 		exx				;Save error code in B'
@@ -72,8 +87,9 @@ KDERR::
 ; routine  returns then the KBDOS paging is re-enabled and control returned to
 ; the KBDOS.
 ;
-; The hook at KDSK_VECT is set to an intermediate hook KDERJ instead of pointing
-; directly here, see KDERJ at the end of drv.mac for an explanation of why.
+; The hook at KDSK_VECT is set to an intermediate hook in page 3 RAM (KDERJ_CODE)
+; that switches to bank 0 via CHGBNK before jumping here.
+; See KABJ_HOOKS_TEMPLATE above.
 ;
 ; Entry:    A' = Old error code (passed to DISKVECT in C)
 ;	    A  = New error code (passed to DISKVECT in A')
@@ -186,14 +202,9 @@ DOS1_GO::
 ; Insure error vectors are directed to us.  Just for bad mannered applications
 ; that call 0005h at one time and F37Dh at another time.  ...HF...
 ;
-; Note: KABJ and KDERJ need to be defined at the same address as defined at drv.mac
-
-KABJ    equ 7BC0h
-KDERJ   equ KABJ+7
-
-		ld	hl,KABJ		;		;Setup the disk vector and
+		ld	hl,KABJ_CODE##	;		;Setup the disk vector and
 		ld	(KAB_VECT##),hl		; abort vector routines for
-		ld	hl,KDERJ	;		; MSX-DOS 1.0 compatability.
+		ld	hl,KDERJ_CODE##	;	; MSX-DOS 1.0 compatability.
 		ld	(KDSK_VECT##),hl	;
 		LD	HL,(BDOS_STACK##)
 		OR	A			;If the current stack pointer

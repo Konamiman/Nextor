@@ -124,6 +124,8 @@ BASDEV:		ld	ix,DRIVER.BASDEV##
 ;
 		jp	BIOS_IN##	;Version 1 compatible $IN entry
 
+NXT3_SIGNATURE::
+		db "NXT3",0		;407Bh - Signature for Nextor 3.0+ ROMs
 		defs	ROMST+80h-$,0FFh
 ;
 RAMENT::				; RAM DISK DRIVER ENTRY POINTS

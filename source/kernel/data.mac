@@ -533,6 +533,9 @@ ram_ad	defl	4100h
 	var3    F_RAMD
 	var3    ZAP_RAMD
 
+	var3    BOOT_MENU
+	var3    PRINT_KERNEL_MSG
+
 ;-----------------------------------------------------------------------------
 ;
 ;	Routines on ROM page 0 and on disk drivers

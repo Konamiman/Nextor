@@ -291,6 +291,9 @@ size	macro	name
     ;it must be manually updated there if it changes.
     field  5,BOOTKEYS              ;To store the state of boot keys
     field  1,I_AM_RUSSIAN
+    field  1,ALL_KERNELS_DISABLED
+    field  7,KABJ_CODE              ;RAM hook: xor a + call CHGBNK + jp KABR
+    field  7,KDERJ_CODE             ;RAM hook: xor a + call CHGBNK + jp KDERR
 ;
 ;-----------------------------------------------------------------------------
 ;

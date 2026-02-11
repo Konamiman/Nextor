@@ -51,7 +51,7 @@ BUF	equ	0F55Eh		;line input buffer (used as scratch)
 CHPUT:
 	cp	10
 	jp	nz,18h
-	rst	18h
+	printchar
 	push	hl
 	ld	hl,CKCNTC
 	ld	(BK4_ADD##),hl
