@@ -865,7 +865,12 @@ INIT2:
 	;the disk hooks set up by MSX-DOS compatible kernels.
 
 	call SCANKEYS_RAM_AVAILABLE
-	jr z,AFTER_BOOT_MENU		;Keys came from RAM, flag preserved
+	jr nz,BM_NOT_FROM_RAM		;Keys came from keyboard
+	xor a
+	ld (ALL_KERNELS_DISABLED##),a
+	jr AFTER_BOOT_MENU
+
+BM_NOT_FROM_RAM:
 
 	ld a,(BOOTKEYS##+2)
 	and 80h

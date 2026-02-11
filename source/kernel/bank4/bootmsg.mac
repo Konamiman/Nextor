@@ -59,6 +59,7 @@ PKM_SKIPPING:
 	ld de,STR_SKIPPING_NEXTOR
 	call PKM_PRINT_STR
 	call PKM_PRINT_SLOT
+	call PKM_PRINT_CRLF
 	jr PKM_CRLF
 
 PKM_INITIALIZING:
@@ -73,10 +74,7 @@ PKM_INITIALIZING:
 	pop bc
 	push bc
 	call PKM_PRINT_SLOT
-	ld a,13
-	printchar
-	ld a,10
-	printchar
+	call PKM_PRINT_CRLF
 	ld b,4
 PKM_INIT_SPC:
 	ld a,' '
@@ -132,13 +130,11 @@ PKM_PRINT_NAME:
 	call PKM_PRINT_STR
 
 PKM_CRLF:
-	ld a,13
-	printchar
-	ld a,10
-	printchar
+	call PKM_PRINT_CRLF
 	ld a,(LINL40)
 	cp 80
 	ret z
+PKM_PRINT_CRLF:
 	ld a,13
 	printchar
 	ld a,10

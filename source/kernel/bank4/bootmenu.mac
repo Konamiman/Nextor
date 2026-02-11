@@ -1233,9 +1233,7 @@ PRINT_CENTERED_TITLE:
 	inc de
 
 	;Append " boot menu"
-	push de
 	ld hl,STR_BOOT_MENU_SUFFIX
-	pop de
 	call COPY_STRING
 
 	;Calculate centering

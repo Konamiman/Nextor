@@ -95,8 +95,7 @@ GWORK	equ	4045h
 	;***  DRIVER CODE  ***
 	;*********************
 
-	org 4000h
-	ds 256
+	org 4100h
 
 DRIVER_START:
 

@@ -185,7 +185,7 @@ drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
 	256.bytes
 
 	cat 256.bytes drivers/StandaloneASCII8/driver.bin > drivers/StandaloneASCII8/_driver.bin
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII8/driver.bin /m:drivers/StandaloneASCII8/chgbnk.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII8/_driver.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
 drivers/StandaloneASCII8/driver.bin: \

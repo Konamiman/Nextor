@@ -2,13 +2,13 @@
 
 ## The problem
 
-There are several keys that a Nextor user can press while bootin in order to modify the boot behavior: slot keys to prevent specific Nextor kernels from booting (a key per slot number); and numeric keys for behavior like e.g. booting in DOS 1 mode or directly to BASIC.
+There are several keys that a Nextor user can press while booting in order to modify the boot behavior: slot keys to prevent specific Nextor kernels from booting (a key per slot number); and numeric keys for behavior like e.g. booting in DOS 1 mode or directly to BASIC.
 
 This is confusing as the user needs to remember several keys and do some "gymnastics" if he wants to press several keys at once. So this is a proposal for a more user-friendly equivalent mechanism.
 
 ## The Nextor boot menu
 
-The idea is that rigth when a Nextor 3 kernel boot sequence starts, and as soon as it detects that it is the first kernel in the system (or it's taking over a Nextor 2 or a MSX-DOS kernel) and if the user is pressing the N key, it displays a boot menu similar to this:
+The idea is that right when a Nextor 3 kernel boot sequence starts, and as soon as it detects that it is the first kernel in the system (or it's taking over a Nextor 2 or a MSX-DOS kernel) and if the user is pressing the N key, it displays a boot menu similar to this:
 
 ```
        Nextor 3.0.0 boot menu
