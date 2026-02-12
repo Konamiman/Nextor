@@ -121,6 +121,16 @@ CHPUT:
 	ld	a,.IDRVR##
 	ret	nz
 
+	;--- F_GPART_INNER: entry point that skips the F_GDRVR check.
+	;    Used by COUNT_DEVICE_PARTITIONS during boot when DRVTBL is not yet populated.
+	;    Input: C = Driver slot
+	;           B = Driver segment (FFh for ROM),
+	;           D = Device number
+	;           H = Primary partition (1-4)
+	;           L = Extended partition (0=primary)
+	;    Output: Same as F_GPART
+F_GPART_INNER:
+
 	;--- Check device and primary partition number
 
 	ld	a,d
@@ -914,7 +924,7 @@ AUTO_NOEMU:
 	ld (ix+AAD_CAND_PART_DEVNUM),a
 	ld (ix+AAD_CURR_PART_DEVNUM),a
 
-	jp AA_CHKDUP_OK 
+	jp AA_GET_DEVINFO
 
 AUTO_COMMON3:
 	xor a
@@ -929,84 +939,15 @@ AA_DLOOP:
 	xor	a
 	ld	(ix+AAD_CURR_PART_DEVNUM),a
 
-	;--- Check if the same slot+device has been assigned
-	;    to other drive already
+	;--- Note: earlier there was a device-level duplicate check here, 
+	;    but that's no longer needed: the drive-per-partition feature allows multiple
+	;    drives for the same device, and CHECK_MAP_IN_USE handles partition-level deduplication.
 
 	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
 
-	ld	a,(DOS_VER##)	;Skip in DOS 1
-	or	a
-	jr	nz,AA_CHKDUP_DOS2
-
-	;--- DOS 1 version: check entry in KERNEX_DOS1 against
-	;    other entries in the table
-
-AA_CHKDUP_DOS1:
-	ld	iy,(KERNEX_DOS1##)
-	ld	b,(iy)
-	or	b
-	jr	z,AA_CHKDUP_OK
-	inc	iy
-
-AA_CHKDUP_LOOP1:
-	ld	a,(iy+UD1_SLOT##)
-	cp	(ix+AAD_DRIVER_SLOT)
-	jr	nz,AA_CHKDUP_NEXT1
-
-	ld	a,(iy+UD1_DEVICE_NUMBER##)
-	or	a			;If device number is 0, it is an unused table entry
-	jr	z,AA_CHKDUP_NEXT1
-	cp	d
-	jr	nz,AA_CHKDUP_NEXT1
-
-	jp	AA_LLOOP_NEXT
-
-AA_CHKDUP_NEXT1:
-	ld	a,b
-	ld	bc,UD1_SIZE##
-	add	iy,bc
-	ld	b,a
-	djnz	AA_CHKDUP_LOOP1
-	jr	AA_CHKDUP_OK
-
-	;--- DOS 2 version: check current unit descriptor
-	;    against the other existing unit descriptors
-
-AA_CHKDUP_DOS2:
-	ld	hl,UNIT_TAB##+2
-	ld	b,MAX_UNITS
-
-AA_CHKDUP_LOOP:
-	push	bc
-	ld	c,(hl)
-	inc	hl
-	ld	b,(hl)
-	inc	hl
-	ld	a,b
-	or	c
-	push	bc
-	pop	iy	;IY=address of unit desc being checked
-	pop	bc
-	jr	z,AA_CHKDUP_NEXT	;Unit descriptor in use?
-
-	ld	a,(iy+UD_SLOT##)
-	cp	(ix+AAD_DRIVER_SLOT)
-	jr	nz,AA_CHKDUP_NEXT
-
-	ld	a,(iy+UD_DEVICE_NUMBER##)
-	or	a			;If device number is 0, it is an incomplete
-	jr	z,AA_CHKDUP_NEXT	;unit descriptor (as created by INIT_UNITS)
-	cp	d
-	jr	nz,AA_CHKDUP_NEXT
-
-	jp	AA_LLOOP_NEXT
-
-AA_CHKDUP_NEXT:
-	djnz	AA_CHKDUP_LOOP
-AA_CHKDUP_OK:
-
 	;--- Obtain device information
 
+AA_GET_DEVINFO:
 	ld	a,(ix+AAD_DRIVER_SLOT)
 	ld iyh,a
 	ld	hl,DRIVER.DEVICE_QUERY##
@@ -1090,6 +1031,26 @@ AA_PX_1ST:
 	;(if later the device becomes online a partition will be assigned on first access)
     bit 7,(ix+AAD_CURR_PART_DEVNUM)
     jp z,AA_LLOOP_NEXT	;Not removable: try next device
+
+    ;Check if this offline removable device is already assigned to another drive
+    push ix
+    push iy
+    ld h,(ix+AAD_DRIVER_SLOT)
+    ld l,0FFh
+    ld e,(ix+AAD_UNIT_DESCRIPTOR)
+    ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
+    push de
+    ld d,(ix+AAD_LOOP_DEVICE_NUMBER)
+    exx
+    ld de,0FFFFh
+    ld hl,0FFFFh
+    exx
+    pop ix
+    call CHECK_MAP_IN_USE
+    pop iy
+    pop ix
+    jp nz,AA_LLOOP_NEXT	;Already assigned: skip to next device
+
     jp AA_ASSIGN_OFFLINE_REMOVABLE	;Removable: assign in offline mode
 AA_PX_POK:
 
@@ -5768,7 +5729,7 @@ COUNTDEVS_LOOP_ITER:
 	or a
 	jr z,COUNTDEVS_PARAMS_OK
 	cp DRIVER.QUERY_NOT_IMPLEMENTED##
-	jr z,COUNTDEVS_DEV_FOUND	;Not implemented = count it
+	jr z,COUNTDEVS_ONLINE	;Not implemented = try to count partitions anyway
 	jr COUNTDEVS_DEV_NOT_FOUND	;Error = don't count
 
 COUNTDEVS_PARAMS_OK:
@@ -5795,17 +5756,35 @@ COUNTDEVS_PARAMS_OK:
 
 	pop de			;E = removable flag
 
-	;Count if: error, or online (B!=0), or removable (E!=0)
+	;Check online/offline status
 	or a
-	jr nz,COUNTDEVS_DEV_FOUND	;Error = assume online
+	jr nz,COUNTDEVS_ONLINE		;Availability error = assume online
 	ld a,b
-	or e			;Online (B!=0) or removable (E!=0)?
-	jr nz,COUNTDEVS_DEV_FOUND
+	or a
+	jr nz,COUNTDEVS_ONLINE		;B != 0 = device is online
+	;Device is offline
+	ld a,e
+	or a
+	jr nz,COUNTDEVS_DEV_FOUND	;Offline + removable = count 1
 	;Offline and not removable: don't count
 
 COUNTDEVS_DEV_NOT_FOUND:
 	pop de
 	pop bc
+	djnz COUNTDEVS_LOOP_ITER
+	jr COUNTDEVS_EXIT
+
+COUNTDEVS_ONLINE:
+	;Device is online - count active partitions
+	ld iy,0
+	add iy,sp
+	ld a,(iy+3)		;B from saved BC = device number
+	call COUNT_DEVICE_PARTITIONS
+	;A = number of active suitable partitions (min 1)
+	pop de
+	pop bc
+	add a,d
+	ld d,a
 	djnz COUNTDEVS_LOOP_ITER
 	jr COUNTDEVS_EXIT
 
@@ -6055,6 +6034,221 @@ CHECK_DEVQ_GET_PARAMS_ERROR:
 	pop ix
 	xor a
 	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Count the number of active partitions of suitable type on a device.
+; Uses F_GPART_INNER (bypasses F_GDRVR check, which fails during boot
+; because DRVTBL is not yet populated).
+; Input: A = device number
+; Output: A = number of active suitable partitions (minimum 1)
+; Modifies: AF, BC, DE, HL, IX, IY
+
+COUNT_DEVICE_PARTITIONS::
+	ld (BUF),a		;BUF+0 = device number
+	xor a
+	ld (BUF+1),a		;BUF+1 = active partition count
+
+	;--- $SECBUF is not initialized yet during boot (set at init.mac line 1479,
+	;    after GET_BOOT_DRIVES_COUNT at line 1237). Set it to a temporary
+	;    buffer in page 2 TPA RAM which is free during boot.
+
+	ld hl,8100h
+	ld ($SECBUF##),hl
+
+	;--- Get current page 1 slot and store for F_GPART_INNER calls
+
+	call GET_P1_SLOT
+	ld (BUF+6),a		;BUF+6 = driver slot
+
+	;--- Check primary partition 1
+
+	call CDP_GPART_PRI1
+	or a
+	jp nz,CDP_DONE		;Error reading partition table = done
+	ld a,b
+	or a
+	jp z,CDP_DONE		;Empty = no partitions at all
+	call IS_SUITABLE_PART_TYPE
+	jr nz,CDP_P1_NOT_ACTIVE
+	ld a,c
+	and 80h
+	jr z,CDP_P1_NOT_ACTIVE
+	ld hl,BUF+1
+	inc (hl)
+CDP_P1_NOT_ACTIVE:
+
+	;--- Check primary partition 2: determines if we have extended partitions
+
+	call CDP_GPART_PRI2
+	or a
+	jr nz,CDP_DONE		;Error = done
+	ld a,b
+	or a
+	jr z,CDP_DONE		;Empty = only partition 1 existed
+	call IS_EXT_PART
+	jr z,CDP_SCAN_EXTENDED
+
+	;=== No extended: check partition 2 itself, then 3 and 4 ===
+
+	call IS_SUITABLE_PART_TYPE
+	jr nz,CDP_P2_NOT_ACTIVE
+	ld a,c
+	and 80h
+	jr z,CDP_P2_NOT_ACTIVE
+	ld hl,BUF+1
+	inc (hl)
+CDP_P2_NOT_ACTIVE:
+
+	ld e,3			;E = primary partition number
+CDP_PRI_LOOP:
+	ld a,(BUF+6)
+	ld c,a
+	ld b,0FFh
+	ld a,(BUF)
+	ld d,a
+	ld h,e
+	ld l,0
+	push de
+	call F_GPART_INNER
+	pop de
+	or a
+	jr nz,CDP_PRI_NEXT
+	ld a,b
+	or a
+	jr z,CDP_PRI_NEXT
+	call IS_SUITABLE_PART_TYPE
+	jr nz,CDP_PRI_NEXT
+	ld a,c
+	and 80h
+	jr z,CDP_PRI_NEXT
+	ld hl,BUF+1
+	inc (hl)
+CDP_PRI_NEXT:
+	inc e
+	ld a,e
+	cp 5
+	jr c,CDP_PRI_LOOP
+	jr CDP_DONE
+
+	;=== Extended: scan logical partitions in the chain ===
+
+CDP_SCAN_EXTENDED:
+	ld e,1			;E = extended partition index
+CDP_EXT_LOOP:
+	ld a,(BUF+6)
+	ld c,a
+	ld b,0FFh
+	ld a,(BUF)
+	ld d,a
+	ld h,2
+	ld l,e
+	push de
+	call F_GPART_INNER
+	pop de
+	cp .IPART##
+	jr z,CDP_DONE		;No more partitions
+	or a
+	jr nz,CDP_DONE		;Read error = stop
+	ld a,b
+	or a
+	jr z,CDP_DONE		;Empty = end of chain
+	call IS_SUITABLE_PART_TYPE
+	jr nz,CDP_EXT_NEXT	;Not suitable, but continue chain
+	ld a,c
+	and 80h
+	jr z,CDP_EXT_NEXT	;Not active, but continue chain
+	ld hl,BUF+1
+	inc (hl)
+CDP_EXT_NEXT:
+	inc e
+	ld a,e
+	cp 10 ;Scan up to 10 partitions
+	jr c,CDP_EXT_LOOP
+
+CDP_DONE:
+	ld a,(BUF+1)
+	or a
+	jr nz,CDP_RET
+	ld a,1			;Minimum 1
+CDP_RET:
+	ret
+
+	;--- Helper: call F_GPART_INNER for primary partition 1
+
+CDP_GPART_PRI1:
+	ld a,(BUF+6)
+	ld c,a
+	ld b,0FFh
+	ld a,(BUF)
+	ld d,a
+	ld h,1
+	ld l,0
+	jp F_GPART_INNER
+
+	;--- Helper: call F_GPART_INNER for primary partition 2
+
+CDP_GPART_PRI2:
+	ld a,(BUF+6)
+	ld c,a
+	ld b,0FFh
+	ld a,(BUF)
+	ld d,a
+	ld h,2
+	ld l,0
+	jp F_GPART_INNER
+
+
+;-----------------------------------------------------------------------------
+;
+; Get slot address for page 1 (equivalent to GSLT1 in bank 0).
+; Output: A = slot address for page 1
+; Modifies: AF, BC, HL
+
+GET_P1_SLOT:
+	in a,(0A8h)		;PPI.AR - primary slot register
+	rrca
+	rrca			;Shift page 1 bits to bits 0-1
+	and 00000011b
+	ld c,a			;C = primary slot
+	ld b,0
+	ld hl,EXPTBL##
+	add hl,bc
+	bit 7,(hl)
+	ld a,c
+	ret z			;Not expanded: return primary slot
+
+	inc hl
+	inc hl
+	inc hl
+	inc hl			;Point to SLTTBL entry
+	ld a,(hl)		;Secondary slot register value
+	and 00001100b		;Isolate page 1 bits (bits 2-3)
+	or 10000000b		;Set expanded flag
+	or c			;Combine with primary slot
+	ret
+
+
+; Check if the partition type passed in A
+; corresponds to a suitable partition type for boot assignment
+; (FAT12 or FAT16 variants),
+; return Z if so or NZ otherwise
+
+IS_SUITABLE_PART_TYPE:
+	cp PT_FAT12
+	ret z
+	;--- FAT16 types: reject if "1" or "2" key pressed (DOS 1 forced)
+	cp PT_FAT16_S
+	jr z,ISP_CHECK_DOS1
+	cp PT_FAT16
+	jr z,ISP_CHECK_DOS1
+	cp PT_FAT16_L
+	ret nz			;Not a recognized type
+ISP_CHECK_DOS1:
+	ld a,(BOOTKEYS##)
+	and 00000110b		;"1" key = bit 1, "2" key = bit 2
+	ret			;Z = no DOS 1 key pressed (accept FAT16), NZ = reject
 
 
 ; Check if the partition type passed in A

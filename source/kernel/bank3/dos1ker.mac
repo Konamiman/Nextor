@@ -4705,9 +4705,22 @@ A592C:	ld	e,(hl)
 	ld	d,0			; number of sectors per FAT
 	call	A4916			; * FAT size
 	inc	bc			; and a FAT buffer flag
+
+	; Pre-check: after this allocation, HIMEM must stay above C500h
+	; to leave room for post-loop DiskBASIC allocations
+	; (7 FCBs * 37 + BLOAD 25 = 284 bytes, checked against C200h by A5EB8)
+	ld	hl,(HIMEM)
+	and	a
+	sbc	hl,bc			; HL = HIMEM - buffer_size
+	jr	c,NO_FAT_MEM		; would underflow
+	ld	a,h
+	cp	0C5h			; would HIMEM drop below C500h?
+	jr	c,NO_FAT_MEM		; yes, stop allocating
+
 	ld	l,c
 	ld	h,b			; size of the FAT buffer
-	call	ALLFBUF	;A5EC8			; allocate memory (adjust BASIC areapointers, halt when error)
+	call	ALLFBUF			; allocate memory for FAT buffer
+	jr	c,NO_FAT_MEM		; allocation failed (shouldn't happen after pre-check)
 	ld	(YF349),hl		; base system bottom sofar
 	ld	(hl),0FFH		; flag invalid FAT buffer
 	inc	hl
@@ -4716,6 +4729,17 @@ A592C:	ld	e,(hl)
 	pop	bc
 	pop	hl
 	djnz	A592C			; next drive
+	jr	FAT_ALLOC_END
+
+NO_FAT_MEM:
+	pop	bc			; Restore B=remaining, C=next drive number
+	pop	hl			; Discard $DPBLIST pointer
+	dec	c			; C = number of drives successfully allocated
+	jp	z,A5ECC			; 0 drives = truly out of memory, halt
+	ld	a,c
+	ld	(YF347),a		; Update actual drive count
+
+FAT_ALLOC_END:
 	ld	hl,XF327
 	ld	(hl),03EH
 	inc	hl
@@ -9038,8 +9062,11 @@ NEW_ERRS:
 	;        HL = Amount of memory to allocate
 	;Output: HL = Pointer to allocated memory
 	;        Cy = 1 if not enough memory
-
-	;This routine is necessary to prevent Nextor from allocating
+	;
+	;In non-emulation mode, returns Cy on failure instead of halting,
+	;so the caller can reduce the drive count adaptively.
+	;
+	;In emulation mode, this routine prevents Nextor from allocating
 	;memory for FAT buffers for drives other than the first one
 	;(each buffer is 1.5K, it's a lot and not doing this causes
 	;many games to not work)
@@ -9047,7 +9074,7 @@ NEW_ERRS:
 ALLFBUF:
 	ld	a,(IN_EMU_MODE##)
 	or	a
-	jp	z,A5EC8		;Jump to actual allocation if not in emulation mode...
+	jp	z,A5EE8		;Try allocation, return Cy on failure (handled by caller)
 
 	ld	a,(ix)
 	or	a
