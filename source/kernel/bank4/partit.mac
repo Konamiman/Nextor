@@ -988,16 +988,25 @@ AA_OK_PARAMS:
 	bit 3,a
 	jp  nz,AA_LLOOP_NEXT	;Device should not be used for automapping
 AA_NO_SKIP_AUTOMAP:	
-	and	1
-	rrca
-	ld	d,a	;Save removable device flag for later
+	ld	d,a	;Save flags byte
+	and	4	;Isolate bit 2 (floppy flag)
+	add	a,a
+	add	a,a
+	add	a,a
+	add	a,a	;Bit 2 -> bit 6
+	ld	e,a
+	ld	a,d
+	and	1	;Isolate bit 0 (removable flag)
+	rrca		;Bit 0 -> bit 7
+	or	e
+	ld	d,a	;D bit 7 = removable, bit 6 = floppy
 
 	;* Mark the device as candidate for autoassign,
 	;  unless this was done before
 
 	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
-	or	d	;Include removable flag
-	ld (ix+AAD_CURR_PART_DEVNUM),a	;Device number, bit 7 is removable flag
+	or	d	;Include removable and floppy flags
+	ld (ix+AAD_CURR_PART_DEVNUM),a	;Device number, bit 7 is removable, bit 6 is floppy
 AA_OK_CANDIDATE:
 
 	;--- Device parameters OK. Now scan partitions.
@@ -1347,11 +1356,11 @@ AA_DO_ASSIGN_NO_FOK:
 	ld	(iy+UD_CURRENT_DIR_FIRST_CLUSTER##+1),0FFh	;set current dir -ve => root
 	ld	(iy+UD_CURRENT_DIR_FIRST_CLUSTER##),0FFh
 
-	ld	a,(ix+AAD_CAND_PART_DEVNUM)	;Retrieve removable unit flag
+	ld	a,(ix+AAD_CAND_PART_DEVNUM)	;Retrieve removable and floppy flags
 	rlca
 	rlca
 	rlca
-	and	4
+	and	UFM_RM+UFM_FD	;Keep bit 2 (removable, was bit 7) and bit 1 (floppy, was bit 6)
 	or	UFM_DB		;Set "device based driver"
 	or	(iy+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
 	ld	(iy+UD_DFLAGS##),a
@@ -1382,6 +1391,12 @@ AA_DO_ASSDOS1:
     ld  h,(ix+AAD_CAND_PART_SECTOR+3)
 	ld	(iy+UD1_FIRST_ABSOLUTE_SECTOR##+2),l
 	ld	(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3),h
+
+	;Set floppy flag (bit 6) in UD1_RELATIVE_DRIVE if device is floppy
+	ld	a,(ix+AAD_CAND_PART_DEVNUM)
+	and	01000000b	;Floppy flag is in bit 6
+	or	(iy+UD1_RELATIVE_DRIVE##)
+	ld	(iy+UD1_RELATIVE_DRIVE##),a
 
 	xor	a
 	ret
@@ -5626,7 +5641,7 @@ GET_DVB_LOOP:
 	jr	nz,GET_DVB_NEXT
 
 	ld	a,(ix+UD1_RELATIVE_DRIVE##)	;Relative unit for driver
-	and	01111111b	;Clear "partition changed" flag
+	and	00011111b	;Clear "partition changed" and floppy flags
 	cp	c
 	jr	nz,GET_DVB_NEXT
 

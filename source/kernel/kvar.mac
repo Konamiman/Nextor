@@ -160,7 +160,7 @@ size	macro	name
 	field	1,UD_DFLAGS	;More flags for the unit:
 				;        bit 0: unit is associated to a device in a Nextor driver
 				;               (if zero, all other bits are meaningless)
-                ;        bit 1: unused (was "the device supports hot-plug" in Nextor 2)
+                ;        bit 1: the device is a floppy disk drive
                 ;        bit 2: the drive is removable
 				;        bit 3: partition assignment is pending for this drive
 				;        bit 4: value at UD_FIRST_DEVICE_SECTOR is valid
@@ -233,7 +233,8 @@ size	macro	name
 	ifield	0		;Start at offset zero
 ;
 	field	1,UD1_SLOT            ;Slot address of appropriate disk driver
-	field	1,UD1_RELATIVE_DRIVE  ;Relative unit number
+	field	1,UD1_RELATIVE_DRIVE  ;Relative unit number (bits 0-4)
+                                  ;bit 6 is set if device is a floppy disk drive
                                   ;bit 7 is set if partition has changed
 	field   1,UD1_DEVICE_NUMBER   ;Device number
 	;field   1                    ;LUN number was here in Nextor 2

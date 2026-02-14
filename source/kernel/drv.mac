@@ -778,7 +778,7 @@ IS_DVB_LOOP:
 	jr	nz,DIO_NEXT
 
 	ld	a,(iy+UD1_RELATIVE_DRIVE##)
-	and	01111111b	;Ignore partition changed flag
+	and	00011111b	;Ignore partition changed and floppy flags
 	cp	c
 	jr	nz,DIO_NEXT
 
