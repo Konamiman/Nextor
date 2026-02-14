@@ -2550,6 +2550,13 @@ rdwr_devcmd:
 	ex	af,af'
 	ld	a,c		;A=Required segment
 
+	;Set C = media descriptor byte for floppy devices, 0 otherwise
+	ld	c,0
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	jr	z,rdwr_devcmd_nofdd
+	ld	c,(ix+UD_MEDIA_DESC_BYTE##)
+rdwr_devcmd_nofdd:
+
 	ld	de,TMP_SEC##
 	push	bc
 	call	CALL_DRV

@@ -522,6 +522,8 @@ CUSTOM_DEVICE_QUERY:
     ;    Input:    Cy=0 to read, 1 to write
     ;              A = Device number, 1 to 255
     ;              B = Number of sectors to read or write
+    ;              C = Media descriptor byte from the DPB if the device
+    ;                  is a floppy disk drive, zero otherwise
     ;              HL = Source or destination memory address for the transfer
     ;              DE = Address where the 4 byte sector number is stored.
     ;    Output:   A = Error code (the same codes of MSX-DOS are used):
