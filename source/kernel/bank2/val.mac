@@ -1326,11 +1326,14 @@ try_build_upb:	ld	de,0			;Try to read the boot sector
 		push	hl
 ;
 		;If Nextor driver, and UD_FIRST_DEVICE_SECTOR not valid,
-		;find the first available FAT12 or FAT16 partition
+		;find the first available FAT12 or FAT16 partition.
+		;For floppy devices, skip partition scanning entirely.
 
 		ex	(sp),ix
 		ld	a,(ix+UD_DFLAGS##)
 		ex	(sp),ix
+		bit	UF_FDD,a
+		jp	nz,build_upb_dof2	;Floppy: no partition scanning
 		and	UFM_DB+UFM_FO
 		cp	UFM_DB
 		jp	nz,build_upb_dof2

@@ -1007,6 +1007,41 @@ AA_NO_SKIP_AUTOMAP:
 	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
 	or	d	;Include removable and floppy flags
 	ld (ix+AAD_CURR_PART_DEVNUM),a	;Device number, bit 7 is removable, bit 6 is floppy
+
+	;--- If this is a floppy device, skip partition scanning
+	;    and assign it directly with first absolute sector = 0
+
+	bit	6,d
+	jr	z,AA_OK_CANDIDATE
+
+	;Check if this floppy device is already assigned to another drive
+	push	ix
+	push	iy
+	ld	h,(ix+AAD_DRIVER_SLOT)
+	ld	l,0FFh
+	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
+	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
+	push	de
+	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
+	exx
+	ld	de,0
+	ld	hl,0
+	exx
+	pop	ix
+	call	CHECK_MAP_IN_USE
+	pop	iy
+	pop	ix
+	jp	nz,AA_LLOOP_NEXT	;Already assigned: skip to next device
+
+	ld	a,(ix+AAD_CURR_PART_DEVNUM)
+	ld	(ix+AAD_CAND_PART_DEVNUM),a
+	xor	a
+	ld	(ix+AAD_CAND_PART_SECTOR),a	;First sector = 0 (no partition table)
+	ld	(ix+AAD_CAND_PART_SECTOR+1),a
+	ld	(ix+AAD_CAND_PART_SECTOR+2),a
+	ld	(ix+AAD_CAND_PART_SECTOR+3),a
+	jp	AA_DO_ASSIGN
+
 AA_OK_CANDIDATE:
 
 	;--- Device parameters OK. Now scan partitions.
