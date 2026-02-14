@@ -1196,7 +1196,7 @@ NO_DEVBASED:
 	jp	c,NO_MEM_FOR_DRIVER	;failed, I cannot be the slave
 ;
 	push hl
-	ex	de,hl		;move base of work area to [DE]
+	ld	de,(HIMEM##)	;ALLOC reduced HIMEM; base of allocated area = new HIMEM
 	call	GET_SLTWRK_ENTRY
 	ld	(hl),e		;set base of work area in SLTWRK
 	inc	hl
