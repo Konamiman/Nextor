@@ -64,7 +64,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -309,6 +309,31 @@ drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 
 	$(MKNEXROM) nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
+
+
+### Turbo-R FDD
+
+dsk-tr: drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM
+
+drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM: \
+	nextor_base.dat \
+	drivers/TurboRFDD/driver.bin \
+	drivers/TurboRFDD/chgbnk.bin \
+	256.bytes
+
+	cat 256.bytes drivers/TurboRFDD/driver.bin > drivers/TurboRFDD/_driver.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/TurboRFDD/_driver.bin /m:drivers/TurboRFDD/chgbnk.bin
+	$(call copy_to_bin,$@)
+
+drivers/TurboRFDD/driver.bin: \
+	drivers/TurboRFDD/driver.mac
+
+	$(call assemble,drivers/TurboRFDD/driver.mac,--build-type abs --output-file-extension bin)
+
+drivers/TurboRFDD/chgbnk.bin: \
+	drivers/TurboRFDD/chgbnk.mac
+
+	$(call assemble,drivers/TurboRFDD/chgbnk.mac,--build-type abs --output-file-extension bin)
 
 
 ### Common rules
