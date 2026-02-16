@@ -460,91 +460,18 @@ ram_ad	defl	DATABASE
 ;
 ;-----------------------------------------------------------------------------
 ;
-;       Jump table for bank 4 public routines
+;       Jump tables for bank 4 and bank 6 public routines.
+;       Entry lists are in jtable.inc files (shared with jump.mac).
+
+jentry	macro	name
+	var3	name
+	endm
 
 ram_ad	defl	4100h
-
-	var3	F_GENV
-	var3	F_SENV
-	var3	F_FENV
-	var3	GET_ENV
-
-	var3	F_FOPEN
-	var3	F_FCLOSE
-	var3	F_SFIRST
-	var3	F_SNEXT
-	var3	F_RDSEQ
-	var3	F_WRSEQ
-	var3	F_FMAKE
-	var3	F_FDEL
-	var3	F_FREN
-	var3	F_RDRND
-	var3	F_WRRND
-	var3	F_WRZER
-	var3	F_FSIZE
-	var3	F_SETRND
-	var3	F_RDBLK
-	var3	F_WRBLK
-
-	var3	F_GPART
-	var3	GDRIVER
-	var3	AUTODRV
-	var3	MKDPB
-
-	var3	F_GDRVR
-	var3	F_GDLI
-	var3	F_CDRVR
-	var3	F_MAPDRV
-	var3	F_Z80MODE
-	
-	var3	UNMAPALL
-
-	var3	DOSV1
-    var3	CMAPDRV
-	var3	CLOCKDRV
-	var3	CUSR
-	var3	CCURDRV
-	var3	CNEXTOR
-	var3	CCHDRV
-	var3	CDRVINFO
-	var3	CDRIVERS
-
-	var3	F_GDATE
-	var3	F_SDATE
-	var3	F_GTIME
-	var3	F_STIME
-
-	var3	CLK_INIT
-	var3	GT_DATE_TIME
-
-	var3	ALLSEG
-	var3	FRESEG
-	var3	FREUSEG
-
-	var3	F_LOCK
-   	var3	F_FOUT
-	var3	F_RALLOC
-	var3	F_DSPACE
-
-	var3    GET_BOOT_DRIVES_COUNT
-	var3    AUTO_ASPART
-    var3    F_GETCLUS
-
-	var3    F_RAMD
-	var3    ZAP_RAMD
-
-	var3    BOOT_MENU
-	var3    PRINT_KERNEL_MSG
-
-;-----------------------------------------------------------------------------
-;
-;       Jump table for bank 6 public routines
+	INCLUDE	bank4/jtable.inc
 
 ram_ad	defl	4100h
-
-	var3    SETUP_GHOST_DOS2
-	var3    SETUP_GHOST_DOS1
-	var3    GHOST_PROMPT_DOS2
+	INCLUDE	bank6/jtable.inc
 
 ;-----------------------------------------------------------------------------
 ;

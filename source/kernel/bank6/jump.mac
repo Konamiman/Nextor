@@ -15,9 +15,7 @@ jentry	macro	name
 	jp	?&name&##
 	endm
 
-	jentry	SETUP_GHOST_DOS2
-	jentry	SETUP_GHOST_DOS1
-	jentry	GHOST_PROMPT_DOS2
+	INCLUDE jtable.inc
 
 	finish <JUMP>
 

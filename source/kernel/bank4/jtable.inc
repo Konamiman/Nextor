@@ -1,0 +1,76 @@
+; Jump table entries for bank 4 public routines.
+; Included by both bank4/jump.mac and data.mac.
+; The jentry macro must be defined before including this file.
+
+	jentry	F_GENV
+	jentry	F_SENV
+	jentry	F_FENV
+	jentry	GET_ENV
+
+	jentry	F_FOPEN
+	jentry	F_FCLOSE
+	jentry	F_SFIRST
+	jentry	F_SNEXT
+	jentry	F_RDSEQ
+	jentry	F_WRSEQ
+	jentry	F_FMAKE
+	jentry	F_FDEL
+	jentry	F_FREN
+	jentry	F_RDRND
+	jentry	F_WRRND
+	jentry	F_WRZER
+	jentry	F_FSIZE
+	jentry	F_SETRND
+	jentry	F_RDBLK
+	jentry	F_WRBLK
+
+	jentry	F_GPART
+	jentry	GDRIVER
+	jentry	AUTODRV
+	jentry	MKDPB
+
+	jentry	F_GDRVR
+	jentry	F_GDLI
+	jentry	F_CDRVR
+	jentry	F_MAPDRV
+	jentry	F_Z80MODE
+
+	jentry	UNMAPALL
+
+	jentry	DOSV1
+
+	jentry	CMAPDRV
+	jentry	CLOCKDRV
+	jentry	CUSR
+	jentry	CCURDRV
+	jentry	CNEXTOR
+	jentry	CCHDRV
+	jentry	CDRVINFO
+	jentry	CDRIVERS
+
+	jentry	F_GDATE
+	jentry	F_SDATE
+	jentry	F_GTIME
+	jentry	F_STIME
+
+	jentry	CLK_INIT
+	jentry	GT_DATE_TIME
+
+	jentry	ALLSEG
+	jentry	FRESEG
+	jentry	FREUSEG
+
+	jentry	F_LOCK
+	jentry	F_FOUT
+	jentry	F_RALLOC
+	jentry	F_DSPACE
+
+	jentry	GET_BOOT_DRIVES_COUNT
+	jentry	AUTO_ASPART
+	jentry	F_GETCLUS
+
+	jentry	F_RAMD
+	jentry	ZAP_RAMD
+
+	jentry	BOOT_MENU
+	jentry	PRINT_KERNEL_MSG
