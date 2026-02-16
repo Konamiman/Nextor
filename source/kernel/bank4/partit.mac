@@ -732,7 +732,7 @@ AUTOD_FAIL:
 	dec	hl
 	ld	(hl),0
 
-	;--- Auto-assign finished, go fot he next drive
+	;--- Auto-assign finished, go for the next drive
 
 AUTOD_OK:
 	inc	hl
@@ -2631,8 +2631,9 @@ UNMAP_OK1:
 	pop	ix
 	
 	ld	a,(ix+UD_DFLAGS##)
-	and	UFM_DB
-	jr	z,UNMAP_NEXT2
+	and	UFM_DB+UFM_GH+UFM_GL
+	cp	UFM_DB
+	jr	nz,UNMAP_NEXT2	;Not Nextor driver, or ghost pair member
 
 	exx
 	ld	a,(ix+UD_SLOT##)

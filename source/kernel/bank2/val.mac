@@ -2522,6 +2522,57 @@ rd_devcmd_routine:
 wr_devcmd_routine:
 	scf
 rdwr_devcmd:
+
+	;--- Ghost drive disk swap check ---
+	;
+	push	af		;Save carry (read/write flag)
+	ld	a,(GHO_PAIR##)
+	ld	c,a		;C = full GHO_PAIR byte
+	and	00011111b	;Extract real drive number
+	jr	z,_no_ghost	;No ghost pair
+
+	ld	b,a		;B = real drive (1-based)
+	ld	a,(ix+UD_PHYSICAL_UNIT##)
+	cp	b
+	jr	z,_access_real	;Accessing real drive
+	inc	b		;B = ghost drive (real+1)
+	cp	b
+	jr	nz,_no_ghost	;Not part of ghost pair
+
+	;Accessing ghost drive: prompt if real was last (bit 5 = 0)
+	bit	5,c
+	jr	nz,_no_ghost	;Ghost was already last → no prompt
+	set	5,c		;Mark ghost as last accessed
+	jr	_do_ghost_prompt
+
+_access_real:
+	;Accessing real drive: prompt if ghost was last (bit 5 = 1)
+	bit	5,c
+	jr	z,_no_ghost	;Real was already last → no prompt
+	res	5,c		;Mark real as last accessed
+
+_do_ghost_prompt:
+	ld	a,c
+	ld	(GHO_PAIR##),a	;Update last-accessed flag
+	ld	a,(ix+UD_PHYSICAL_UNIT##)
+	dec	a		;Convert to 0-based
+	ld	(TARGET##),a	;Set drive for PROMPT
+	push	bc
+	push	de
+	push	hl
+	push	ix
+
+	ld	ix,GHOST_PROMPT_DOS2##+8000h ;Bit 15 = call bank 6
+	call	CALL4_PRESERVE_ALT
+	pop	ix
+	pop	hl
+	pop	de
+	pop	bc
+_no_ghost:
+	pop	af		;Restore carry (read/write flag)
+
+	;--- End ghost drive check ---
+
 	ld	hl,DRIVER.READ_WRITE##	;HL'=routine address
 	exx
 	ld	a,c		;A=required page 2 segment number
@@ -2946,7 +2997,8 @@ COMP16:
 	sub	e
 	ret
 
-    ;Call a routine in bank 4 of master slot, preserving alternate registers.
+    ;Call a routine in bank 4 (or 6 if bit 15 of IX is set) of master slot,
+    ;preserving alternate registers.
     ;Input: IX=Routine to call
 CALL4_PRESERVE_ALT:
     exx

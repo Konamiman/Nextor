@@ -1,0 +1,500 @@
+	.z80
+	name('ghost')
+	title	Ghost drive setup routines
+;******************************************************************************
+;
+	INCLUDE ../macros.inc
+	INCLUDE	../const.inc
+;
+
+BUF	equ	0F55Eh
+CALBNK_ADDR	equ	4042h	;doshead CALBNK routine (same address in all banks)
+DPBSIZE	equ	21
+
+
+;-----------------------------------------------------------------------------
+;
+;    SETUP_GHOST_DOS2
+;
+;    Post-process UNIT_TAB after AUTODRV_DOS2 to set up a ghost drive
+;    for a single floppy disk drive.
+;
+;    Scans UNIT_TAB for an FDD drive. If exactly one is found,c4pbk sets up
+;    a ghost drive in the next UNIT_TAB slot. If the slot has a
+;    pre-allocated UD (same slot, not device-based), uses it. If the
+;    slot is null (UD was freed by AUTODRV), allocates a new UD.
+;
+;    Modifies: AF, BC, DE, HL, IX, IY
+
+	public	?SETUP_GHOST_DOS2
+
+?SETUP_GHOST_DOS2:
+	;Check CTRL key first (cheapest check)
+	ld	a,(BOOTKEYS##+4)
+	bit	5,a
+	ret	nz		;CTRL pressed: no ghost
+
+	;First pass: count FDD drives. If != 1, no ghost.
+	ld	hl,UNIT_TAB##+2	;Skip entry 0 (unused)
+	ld	b,MAX_UNITS
+	ld	c,0		;C = FDD count
+	ld	de,0		;DE will store pointer to FDD unit entry in UNIT_TAB
+
+SGD2_COUNT:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	dec	hl
+	jr	z,SGD2_CNT_NX	;Null pointer: skip
+
+	push	hl
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a		;HL = unit descriptor address
+	push	hl
+	pop	ix
+
+	bit	UF_DBD,(ix+UD_DFLAGS##)
+	jr	z,SGD2_CNT_POP	;Not device-based: skip
+
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	jr	z,SGD2_CNT_POP	;Not FDD: skip
+
+	inc	c		;Count FDD drive
+	pop	de		;DE = UNIT_TAB pointer to this FDD entry
+	push	de
+
+SGD2_CNT_POP:
+	pop	hl
+SGD2_CNT_NX:
+	inc	hl
+	inc	hl
+	djnz	SGD2_COUNT
+
+	;C = FDD count, DE = UNIT_TAB pointer to the FDD entry (if any)
+	ld	a,c
+	cp	1
+	ret	nz		;Not exactly 1 FDD: no ghost
+
+	;--- Found exactly 1 FDD drive. Check ghost UD candidate.
+	;DE points to the UNIT_TAB entry for the FDD drive.
+
+	ex	de,hl		;HL = UNIT_TAB pointer to FDD entry
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = FDD unit descriptor address
+	inc	hl
+	;HL now points to next UNIT_TAB entry
+
+	push	de
+	pop	ix		;IX = FDD unit descriptor
+
+	;Check that we haven't reached the max drive count
+	ld	a,(ix+UD_PHYSICAL_UNIT##)
+	cp	MAX_UNITS
+	ret	z		;Already at drive H:, no room for ghost
+
+	;Check if next UNIT_TAB entry is non-null
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	dec	hl
+	jr	z,SGD2_ALLOC	;Null: need to allocate a new UD
+
+	;--- Non-null: check if it's a pre-allocated ghost candidate
+	push	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = next unit descriptor address
+	push	de
+	pop	iy		;IY = ghost unit descriptor candidate
+
+	;Verify same driver slot (must belong to same driver)
+	ld	a,(ix+UD_SLOT##)
+	cp	(iy+UD_SLOT##)
+	jr	nz,SGD2_NONNULL_FAIL
+
+	;Verify ghost UD is not already device-based (still unassigned)
+	bit	UF_DBD,(iy+UD_DFLAGS##)
+	jr	z,SGD2_NONNULL_OK
+
+SGD2_NONNULL_FAIL:
+	pop	hl		;Not a valid ghost candidate
+	ret
+
+SGD2_NONNULL_OK:
+	pop	hl		;Discard UNIT_TAB pointer (UD already in place)
+	jr	SGD2_SETUP_GHOST
+
+	;--- Null entry: allocate a new UD for the ghost drive
+SGD2_ALLOC:
+	push	hl		;Save UNIT_TAB pointer for ghost entry
+	push	ix		;Save FDD unit descriptor
+
+	ld	hl,UD_SIZE##
+	pcall	ALL_P2		;Allocate UD_SIZE bytes of page 2 RAM
+	pop	ix		;Restore IX = FDD unit descriptor
+	jr	nz,SGD2_ALLOC_FAIL
+
+	;HL = address of new UD (zeroed by ALL_P2)
+	;Copy entire FDD UD to new ghost UD
+	push	hl		;Save new UD address
+	ex	de,hl		;DE = new UD (destination)
+	push	ix
+	pop	hl		;HL = FDD UD (source)
+	ld	bc,UD_SIZE##
+	ldir
+
+	pop	iy		;IY = new ghost UD
+
+	;Set UD_PHYSICAL_UNIT = FDD's + 1
+	ld	a,(ix+UD_PHYSICAL_UNIT##)
+	inc	a
+	ld	(iy+UD_PHYSICAL_UNIT##),a
+
+	;Set DPB address for the ghost drive number
+	dec	a		;A = 0-based drive number
+	add	a,a		;A = byte offset into $DPBLIST
+	ld	e,a
+	ld	d,0
+	ld	hl,$DPBLIST##
+	add	hl,de
+	ld	a,(hl)
+	ld	(iy+UD_DPB_ADDRESS##),a
+	inc	hl
+	ld	a,(hl)
+	ld	(iy+UD_DPB_ADDRESS##+1),a
+
+	;Reset current directory to root
+	ld	a,0FFh
+	ld	(iy+UD_CURRENT_DIR_FIRST_CLUSTER##),a
+	ld	(iy+UD_CURRENT_DIR_FIRST_CLUSTER##+1),a
+
+	;Store new UD pointer in UNIT_TAB
+	pop	hl		;HL = UNIT_TAB pointer for ghost entry
+	push	iy
+	pop	de		;DE = new UD address
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+
+	;Increment NUMDRV since SETNUMDRV ran before this UD existed
+	ld	hl,$NUMDRV##
+	inc	(hl)
+
+	jr	SGD2_SETUP_GHOST
+
+SGD2_ALLOC_FAIL:
+	pop	hl		;Discard UNIT_TAB pointer
+	ret
+
+	;--- Common ghost setup (IX = FDD UD, IY = ghost UD)
+SGD2_SETUP_GHOST:
+	ld	a,(ix+UD_DEVICE_NUMBER##)
+	ld	(iy+UD_DEVICE_NUMBER##),a
+	ld	a,UFM_DB+UFM_FD+UFM_RM+UFM_FO+UFM_GH
+	ld	(iy+UD_DFLAGS##),a
+
+	;Set "last accessed" flag on the real drive
+	set	UF_GLA,(ix+UD_DFLAGS##)
+
+	;Store ghost pair info (bit 5 = 0 → real drive last accessed)
+	ld	a,(ix+UD_PHYSICAL_UNIT##)
+	ld	(GHO_PAIR##),a
+
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+;    SETUP_GHOST_DOS1
+;
+;    Post-process KERNEX_DOS1 table (at BOOT_TMP) after AUTODRV_DOS1
+;    to insert a ghost drive entry for a single floppy disk drive.
+;
+;    The table is at (KERNEX_DOS1) = BOOT_TMP.
+;    Format: 1-byte count, then count * UD1_SIZE entries.
+;    Each entry: UD1_SLOT (1), UD1_RELATIVE_DRIVE (1), + UD1_SIZE-2 more bytes.
+;    UD1_RELATIVE_DRIVE bit 6 = FDD flag.
+;
+;    If exactly one FDD entry is found and CTRL is not pressed,
+;    inserts a ghost entry right after it.
+;
+;    Modifies: AF, BC, DE, HL, IX, IY
+
+	public	?SETUP_GHOST_DOS1
+
+?SETUP_GHOST_DOS1:
+	;Check CTRL key first (cheapest check)
+	ld	a,(BOOTKEYS##+4)
+	bit	5,a
+	ret	nz		;CTRL pressed: no ghost
+
+	ld	hl,(KERNEX_DOS1##)	;HL = table start (BOOT_TMP)
+	ld	a,(hl)
+	or	a
+	ret	z		;No entries: nothing to do
+
+	;First pass: count FDD entries and record pointer + index.
+	;Use BUF to store FDD entry pointer and index.
+	ld	b,a		;B = entry count
+	ld	c,0		;C = FDD count
+	ld	d,0		;D = 1-based index counter
+	push	hl		;Save table start
+	inc	hl		;HL = first entry
+
+SGD1_COUNT:
+	inc	d		;D = 1-based index of current entry
+	push	hl
+	inc	hl		;Point to UD1_RELATIVE_DRIVE
+	bit	6,(hl)		;FDD flag?
+	jr	z,SGD1_CNT_NX
+
+	inc	c		;Count FDD
+	;Save FDD entry pointer and index in BUF
+	pop	hl		;HL = FDD entry pointer
+	push	hl
+	ld	(BUF),hl	;Save pointer
+	ld	a,d
+	ld	(BUF+2),a	;Save 1-based index
+
+SGD1_CNT_NX:
+	pop	hl
+	push	de		;Save D (index counter)
+	ld	de,UD1_SIZE##
+	add	hl,de
+	pop	de		;Restore D
+	djnz	SGD1_COUNT
+
+	;C = FDD count
+	pop	hl		;HL = table start (count byte)
+	ld	a,c
+	cp	1
+	ret	nz		;Not exactly 1 FDD: no ghost
+
+	;Check that we haven't reached the max drive count
+	ld	a,(hl)		;A = current entry count
+	cp	MAX_UNITS
+	ret	z		;Already at 8 drives, no room for ghost
+
+	;--- Found exactly 1 FDD. Insert ghost entry after it.
+	;(BUF) = pointer to the FDD entry
+	;(BUF+2) = 1-based index of the FDD entry
+
+	push	hl		;Save table start
+
+	;Calculate end of table data
+	ld	a,(hl)		;A = current entry count
+	ld	b,a
+	inc	hl		;HL = first entry
+SGD1_SKIP:
+	ld	de,UD1_SIZE##
+	add	hl,de
+	djnz	SGD1_SKIP	;HL = byte past last entry = end of data
+
+	;Shift entries after FDD entry forward by UD1_SIZE to make room.
+	;Source: FDD_entry + UD1_SIZE (the entry after FDD)
+	;Dest:   FDD_entry + 2*UD1_SIZE
+	;Count:  end_of_data - source
+	;Use LDDR (copy from end backwards to avoid overlap)
+
+	push	hl		;Save end of data
+	ld	ix,(BUF)	;IX = FDD entry
+
+	push	ix
+	pop	de
+	ld	hl,UD1_SIZE##
+	add	hl,de		;HL = source start (entry after FDD)
+
+	pop	de		;DE = end of data
+	push	de		;Keep it for later
+
+	;BC = bytes to shift = end_of_data - source_start
+	ld	a,e
+	sub	l
+	ld	c,a
+	ld	a,d
+	sbc	a,h
+	ld	b,a		;BC = bytes to move
+
+	ld	a,b
+	or	c
+	jr	z,SGD1_NO_SHIFT	;Nothing to shift (FDD was last entry)
+
+	;LDDR: copy BC bytes from source_end to dest_end
+	pop	hl		;HL = end of data
+	push	hl
+	dec	hl		;HL = last source byte
+	push	hl
+	ld	de,UD1_SIZE##
+	add	hl,de		;HL = last destination byte
+	ex	de,hl		;DE = last dest byte
+	pop	hl		;HL = last source byte
+	lddr
+
+SGD1_NO_SHIFT:
+	pop	hl		;Discard end of data
+
+	;--- Create ghost entry: copy FDD entry to position IX + UD1_SIZE
+	push	ix
+	pop	hl		;HL = FDD entry (source)
+	ld	de,UD1_SIZE##
+	add	hl,de
+	ex	de,hl		;DE = ghost entry destination
+	push	de		;Save ghost entry address
+	push	ix
+	pop	hl		;HL = source
+	ld	bc,UD1_SIZE##
+	ldir			;Copy FDD entry to ghost position
+
+	;Modify ghost entry: increment relative drive, set FDD flag
+	pop	iy		;IY = ghost entry
+	ld	a,(ix+UD1_RELATIVE_DRIVE##)
+	and	00011111b	;Mask to relative drive number
+	inc	a		;Next relative drive
+	or	01000000b	;Set bit 6 (FDD flag)
+	ld	(iy+UD1_RELATIVE_DRIVE##),a
+
+	;Set ghost state in UD1_FIRST_ABSOLUTE_SECTOR byte 0:
+	;  Master = 81h (01=master, bit 7=last accessed)
+	;  Ghost  = 02h (10=ghost, bit 7=not last accessed)
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##),81h
+	ld	(iy+UD1_FIRST_ABSOLUTE_SECTOR##),02h
+
+	;Set GHO_PAIR: bits 0-4 = real drive number (1-based)
+	ld	a,(BUF+2)	;A = 1-based index of real FDD drive
+	ld	(GHO_PAIR##),a	;bit 5 = 0 → real was last accessed
+
+	;--- Allocate a separate DPB for the ghost drive.
+	;A = 1-based master index = 0-based ghost index.
+	;Call ALLOC in bank 0 via CALBNK to allocate DPBSIZE bytes.
+
+	push	af		;Save ghost 0-based drive number
+
+	;Get master's DPB pointer from $DPBLIST
+	dec	a		;0-based master drive
+	add	a,a		;byte offset into $DPBLIST
+	ld	e,a
+	ld	d,0
+	ld	hl,$DPBLIST##
+	add	hl,de		;HL = &$DPBLIST[master]
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = master DPB pointer
+	push	de		;Save master DPB pointer
+
+	;Allocate DPBSIZE bytes from page 3
+	ld	hl,DPBSIZE
+	ld	ix,ALLOC##
+	ex	af,af'
+	xor	a		;Bank 0
+	call	CALBNK_ADDR
+
+	pop	de		;DE = master DPB pointer
+	;Z flag here reflects ALLOC result (pop de doesn't affect flags).
+	;Must test BEFORE pop af, which would overwrite flags.
+	jr	nz,SGD1_DPB_FAIL ;Allocation failed: skip
+
+	;HL = new DPB. Copy master DPB content to it.
+	pop	af		;A = ghost 0-based drive number
+	push	af		;Save ghost drive number
+	push	hl		;Save new DPB address
+	ex	de,hl		;HL = master DPB (source), DE = new DPB (dest)
+	ld	bc,DPBSIZE
+	ldir
+
+	;Update $DPBLIST[ghost] = new DPB
+	pop	de		;DE = new DPB address
+	pop	af		;A = ghost 0-based drive number
+	add	a,a		;byte offset
+	ld	l,a
+	ld	h,0
+	ld	bc,$DPBLIST##
+	add	hl,bc		;HL = &$DPBLIST[ghost]
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	jr	SGD1_DPB_DONE
+
+SGD1_DPB_FAIL:
+	pop	af		;Discard ghost drive number
+
+SGD1_DPB_DONE:
+
+	;Increment table count
+	pop	hl		;HL = table start (count byte)
+	inc	(hl)
+
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+;    GHOST_PROMPT_DOS2
+;
+;    Display "Insert disk for drive X:" prompt and wait for keypress.
+;    Called via CALBNK from bank 2 (val.mac rdwr_devcmd) during BDOS calls,
+;    when page 0 = kernel RAM.  Uses P0_CALL (page 3 vector) for BIOS I/O
+;    since CALROM's direct CALSLT at 001Ch doesn't work with kernel RAM
+;    in page 0.
+;
+;    Input:  TARGET## = 0-based drive number
+;    Modifies: AF, BC, DE, HL, IX
+
+CHPUT	equ	00A2h
+CHGET	equ	009Ah
+KILBUF	equ	0156h
+
+	public	?GHOST_PROMPT_DOS2
+
+?GHOST_PROMPT_DOS2:
+	ld	hl,gp_msg
+gp_print:
+	ld	a,(hl)
+	or	a
+	jr	z,gp_getkey
+	inc	hl
+	cp	1		;Drive letter placeholder?
+	jr	nz,gp_out
+	ld	a,(TARGET##)
+	add	a,'A'
+gp_out:
+	push	hl
+	ld	ix,CHPUT
+	call	P0_CALL##
+	ei
+	pop	hl
+	jr	gp_print
+
+gp_getkey:
+	ld	ix,KILBUF	;Flush keyboard buffer
+	call	P0_CALL##
+	ei
+gp_keywait:
+	ld	ix,CHGET	;Wait for keypress
+	call	P0_CALL##
+	ei
+	cp	3
+	jr	z,gp_keywait	;Ignore Ctrl-C
+
+	ld	a,13		;Final CR/LF
+	ld	ix,CHPUT
+	call	P0_CALL##
+	ei
+	ld	a,10
+	ld	ix,CHPUT
+	call	P0_CALL##
+	ei
+	ret
+
+gp_msg:
+	db	13,10,"Insert disk for drive "
+	db	1		;Placeholder: replaced by drive letter
+	db	":",13,10
+	db	"and strike a key when ready",0
+
+
+;-----------------------------------------------------------------------------
+
+	end

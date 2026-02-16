@@ -3,5 +3,7 @@
 BANK	equ	6
 ;
 	include	../bank.inc
+	include	../bank2/b2labels.inc
+	include	../bank0/b0lab_b6.inc
 ;
 	end

@@ -477,7 +477,29 @@ INIT_CLR:
 
 INIT_DONE:
 	call	MOTOR_OFF
-	pop	de		;Discard saved CHPUT
+	ld	a,(ix+WK_NDRV)
+	add	a,'0'
+	ld	b,a		;B = ASCII digit
+	pop	de		;DE = CHPUT
+
+	push	bc		;Save digit
+	ld	hl,STR_NDRV_1
+	call	PRINT_WITH_DE	;Print "Found "
+	pop	bc
+
+	;Output digit character via CHPUT trampoline
+	push	de
+	ld	de,0C300h	;JP opcode + 00
+	push	de
+	ld	ix,1
+	add	ix,sp		;IX -> JP <CHPUT> on stack
+	ld	a,b
+	call	JP_IX		;Print digit
+	pop	de
+	pop	de
+
+	ld	hl,STR_NDRV_2
+	call	PRINT_WITH_DE	;Print " drive(s)"
 	xor	a		;QUERY_OK
 	ret
 
@@ -1739,6 +1761,9 @@ STR_DEV_NAME:	db	"Floppy disk drive",0
 
 INIT_MSG:	db	"\r\nMSX Turbo-R FDD driver\r\n"
 		db	"by Konamiman\r\n",0
+
+STR_NDRV_1:	db	"\r\nFound ",0
+STR_NDRV_2:	db	" drive(s)\r\n",0
 
 STR_ERR_FDC:	db	"FDC not responding\r\n",0
 STR_ERR_NODRIVE: db	"No drives found\r\n",0

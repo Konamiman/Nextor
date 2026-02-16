@@ -245,6 +245,8 @@ UF_FDD	equ	1	;Set => device is a floppy disk drive
 UF_RMV	equ	2	;Set => drive assigned to a removable device
 UF_PAP	equ	3	;Set => drive is pending partition assignment
 UF_FOK	equ	4	;Set => value at UD_FSEC is valid
+UF_GHO	equ	5	;Set => drive is a ghost drive
+UF_GLA	equ	6	;Set => drive was last accessed in ghost pair
 ;
 ;
 ;         MASKS FOR "UD_DFLAGS" BITS
@@ -254,6 +256,8 @@ UFM_FD	EQU	(1 SHL UF_FDD)
 UFM_RM	equ	(1 SHL UF_RMV)
 UFM_PP	equ	(1 SHL UF_PAP)
 UFM_FO	equ	(1 SHL UF_FOK)
+UFM_GH	equ	(1 SHL UF_GHO)
+UFM_GL	equ	(1 SHL UF_GLA)
 
 NUMKEYS	equ	0FCBBh
 

@@ -2237,7 +2237,7 @@ call_drv:
 	jp	(ix)		;Was me, just call my slot.
 
 ;
-	;public	PROMPT
+	public	PROMPT
 PROMPT:
 	ld	a,(TARGET##)	;get 0 based target drive number
 	add	a,"A"		;make a drive name
@@ -2700,6 +2700,37 @@ NOCHCPU:
 	ld	(BK4_ADD##),hl
 	call	C4PBK##
 
+	ld	ix,SETUP_GHOST_DOS1##
+	ex	af,af'
+	ld	a,6
+	call	CALBNK##
+
+	;If ghost drive was created, update DRVTBL and $NUMDRV.
+	;SETUP_GHOST_DOS1 only updates KERNEX_DOS1; in DOS 1,
+	;the visible drive count comes from DRVTBL/$NUMDRV.
+	ld	a,(GHO_PAIR##)
+	or	a
+	jr	z,MK_DVB_TBL
+
+	ld	b,a		;B = 1-based drive number of real FDD
+	ld	hl,$NUMDRV##
+	inc	(hl)
+
+	;Find FDD driver's DRVTBL entry and increment its count.
+	;Sum DRVTBL counts until we find the entry containing drive B.
+	ld	hl,DRVTBL
+FIND_GHO_DRV:
+	ld	a,b
+	sub	(hl)
+	jr	c,FOUND_GHO_DRV
+	jr	z,FOUND_GHO_DRV
+	ld	b,a
+	inc	hl
+	inc	hl
+	jr	FIND_GHO_DRV
+FOUND_GHO_DRV:
+	inc	(hl)
+
 	jr	MK_DVB_TBL
 
 MK_EMU_TBL:
@@ -2764,7 +2795,7 @@ AUTODRV_OK2:
 
 END_DVB_TBL:
 	ld	hl,(KERNEX##)		;Preserve KERNEX and KERNEX_DOS1 since
-	push	hl                      ;the next ldir will erase it
+	push	hl                      ;the next ldir will erase them
 	ld	hl,(KERNEX##+2)
 	push	hl
 	ld	hl,(KERNEX_DOS1##)

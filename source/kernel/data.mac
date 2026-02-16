@@ -56,10 +56,10 @@ ram_ad	defl	DATABASE
 
 ; These are available in MSX-DOS 1 mode too thanks to the modification
 ; of the STROUT routine, see dos1ker.mac
-    
-    spare   1
+
+    spare 1             ;F1CF: overwritten by DOS 1 init (LDIR to F1C9-F236)
     ;NOTE! BK4_ADD is manually defined in bank5/dos.h, and must be updated if it changes
-    var2 BK4_ADD,F1D0   ;Address of routine to be called in bank 4
+    var2 BK4_ADD,F1D0   ;Address of routine to be called via C4PBK
     var TMP_SEC,4       ;Used for temporary storage of a 32 bit sector number
 ;
 ;	------------------------
@@ -254,7 +254,7 @@ ram_ad	defl	DATABASE
 ;
 ;	------------------------
 ;
-	spare	4
+	spare	4		;F309-F30C used by DOS 1 kernel (YF309, YF30B, YF30C)
 ;
 	var1	RAWFLG, F30D	;Read-after write flag - must not move
 	var1	COUNTRY,F30E	;Accessed by COMMAND.COM - can't move
@@ -535,6 +535,16 @@ ram_ad	defl	4100h
 
 	var3    BOOT_MENU
 	var3    PRINT_KERNEL_MSG
+
+;-----------------------------------------------------------------------------
+;
+;       Jump table for bank 6 public routines
+
+ram_ad	defl	4100h
+
+	var3    SETUP_GHOST_DOS2
+	var3    SETUP_GHOST_DOS1
+	var3    GHOST_PROMPT_DOS2
 
 ;-----------------------------------------------------------------------------
 ;

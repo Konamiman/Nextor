@@ -144,25 +144,23 @@ RAMENT::				; RAM DISK DRIVER ENTRY POINTS
 ;
 ;-----------------------------------------------------------------------------
 ;
-; Call routine in bank 4, routine address is placed in BK4_ADD
+; Call routine in bank 4 (or 6 if bit 15 of BK4_ADD is set).
+; Routine address is placed in BK4_ADD (bit 15 is cleared before use).
+; IY is set to RAM_BASE for the called routine.
+; All registers except IX and alternate are passed to the routine.
 
-C4PBK::	ld	a,(BNK_ID##)
-		jr	CALL4_COMMON
-
-CALL4:	xor	a
-
-CALL4_COMMON:	push	af
-		ld	a,4
-		call	CHGBNK	;Select desired bank
-		ld	ix,(BK4_ADD##)
-		ex	af,af'		;Restore AF
-		ld	iy,RAM_BASE##	;Required for function calls
-		call	JPIX		;Go do the function
+C4PBK::	ld	iy,RAM_BASE##
 		ex	af,af'
-		pop	af
-		call	CHGBNK	;Re-select bank #0 (CALL4)
-		ex	af,af'		;or previous bank (C4PBK)
-		ret
+		push	hl
+		ld	hl,BK4_ADD##+1	;Point to high byte of address
+		ld	a,(hl)
+		res	7,(hl)		;Clear bank flag in address
+		pop	hl
+		rlca			;Old bit 7 into carry
+		sbc	a,a		;00h (bank 4) or FFh (bank 6)
+		and	2		;00h or 02h
+		or	4		;04h or 06h = bank number
+		jr	CALLB0_CMN
 
 ;-----------------------------------------------------------------------------
 ;
@@ -176,7 +174,7 @@ CALLB0:		ex	af,af'
 		exx
 		pop hl
 		exx
-		ld	ix,(BK4_ADD##)
+CALLB0_CMN:	ld	ix,(BK4_ADD##)
 		jr	CALBNK
 
 ;-----------------------------------------------------------------------------

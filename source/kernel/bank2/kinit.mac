@@ -159,6 +159,16 @@ init_drv_loop:	ld	a,(hl)			;A := number of drives
 		ld	a,4
 		ld	ix,AUTODRV##
 		call	CALBNK##
+
+	;--- Ghost drive setup for DOS 2.
+	;    Called here (inside DOSINIT) so page 0 = kernel RAM
+	;    and pcall works from bank 6.
+
+		ex	af,af'
+		ld	a,6
+		ld	ix,SETUP_GHOST_DOS2##
+		call	CALBNK##
+
 		pop	iy
 
 ;
