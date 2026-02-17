@@ -73,4 +73,3 @@
 	jentry	ZAP_RAMD
 
 	jentry	BOOT_MENU
-	jentry	PRINT_KERNEL_MSG

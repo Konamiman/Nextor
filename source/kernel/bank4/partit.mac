@@ -2188,6 +2188,8 @@ GDRV_END:
 ;                        2: Unused
 ;                        3: Assigned to a file
 ;                        4: Assigned to RAM disk
+;                        5: Assigned to a ghost drive
+;             When assigned to a block device (+0 = 1):
 ;                +1 (1): Driver slot number
 ;                +2 (1): Driver segment number (FFh if ROM driver)
 ;                +3 (1): Relative drive of the driver (FFh if Nextor driver)
@@ -2196,6 +2198,8 @@ GDRV_END:
 ;                +6 (4): First sector number
 ;                        (0 if not a Nextor driver)
 ;                        (-1 if partition assignment is pending)
+;             When assigned to a ghost drive (+0 = 5):
+;                +1 (1): Main drive this one is ghosting (0 = A:, etc)
 ;             When assigned to a file (+0 = 3):
 ;                +1 (1): Drive where the file is located (0 = A:, etc)
 ;                +2 (2): Flags. Bit 0: mounted in read-only mode.
@@ -2220,6 +2224,21 @@ F_GDLI_GO:
 
 	call	CLEAR_BUF64
 
+	;Check if this drive is the ghost drive.
+	;GHO_PAIR bits 0-4 = real drive 1-based = ghost drive 0-based.
+	ld	a,(GHO_PAIR##)
+	and	00011111b
+	jr	z,GDLI_NOTGHOST	;No ghost pair
+	cp	c
+	jr	nz,GDLI_NOTGHOST
+	ld	(hl),5		;HL = buffer (from CLEAR_BUF64)
+	inc	hl
+	dec	a		;A was == C; master 0-based = ghost - 1
+	ld	(hl),a
+	xor	a
+	ret
+
+GDLI_NOTGHOST:
 	push	hl
 	pop	iy
 
@@ -2802,6 +2821,16 @@ ISMNT_NEXT:
 	add	hl,de	;HL = Address of unit descriptor pointer in UNIT_TAB
 	pop	de	;DE = Mapping information
 
+	;--- Ghost pair cleanup: if the drive being changed is part of
+	;    a ghost pair, clean up the pair first.
+	push	hl
+	push	de
+	push	bc
+	call	GHOST_CLEANUP_DOS2
+	pop	bc
+	pop	de
+	pop	hl
+
 	ld	a,b
 	or	a
 	jr	z,MAP_UNMAP
@@ -2947,8 +2976,19 @@ MAP_DEF_DEVB:
 	call	AUTO_ASSIGN
 	pop	hl
 	or	a
-	jp	z,SETNUMDRV
+	jr	nz,MAP_DEF_DEVB_FAIL
 
+	;Success: check for ghost creation
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	push	de
+	pop	ix		;IX = UD
+	call	MAYBE_CREATE_GHOST_DOS2
+	xor	a
+	jp	SETNUMDRV
+
+MAP_DEF_DEVB_FAIL:
 	ld	e,(hl)		;No suitable device found for auto-assign:
 	inc	hl		;destroy unit descriptor and return error
 	ld	d,(hl)
@@ -3166,12 +3206,18 @@ MAP_DRV_UNCH:
 
 	ld	iy,($SECBUF##)
 	ld	a,(iy+7)
-	and	1		;Set removable flag...
+	ld	d,a		;Save device flags
+	and	1		;Bit 0 = removable
 	rlca
-	rlca
-	or	UFM_DB+UFM_FO	;...and also Nextor drive and UD_FIRST_DEVICE_SECTOR OK flags
+	rlca			;-> bit 2 = UF_RM
+	or	UFM_DB+UFM_FO	;Nextor drive + first sector OK
+	bit	2,d		;FDD flag?
+	jr	z,MAP_SPEC_NOFDD
+	or	UFM_FD		;Set floppy disk flag
+MAP_SPEC_NOFDD:
 	ld	(ix+UD_DFLAGS##),a
 
+	call	MAYBE_CREATE_GHOST_DOS2
 	xor	a
 	jp	SETNUMDRV
 
@@ -3547,14 +3593,315 @@ CRUD2:
 	ret
 
 
+;--- Ghost pair cleanup for DOS 2 mode.
+;    If the drive being remapped is part of a ghost pair,
+;    dissolve the pair.
+;    Input: C = drive being changed (0-based)
+;    Modifies: AF, BC, DE, HL, IX
+
+GHOST_CLEANUP_DOS2:
+	ld	a,(GHO_PAIR##)
+	and	00011111b
+	ret	z		;No ghost pair
+
+	;A = ghost 0-based (= real 1-based)
+	cp	c
+	jr	z,GCD2_IS_GHOST	;Changing the ghost drive
+
+	dec	a		;A = real 0-based
+	cp	c
+	ret	nz		;Not part of pair, nothing to do
+
+	;--- Changing master: unmap ghost
+	ld	a,(GHO_PAIR##)
+	and	00011111b	;A = ghost 0-based
+	add	a,a
+	ld	e,a
+	ld	d,0
+	ld	hl,UNIT_TAB##+2
+	add	hl,de		;HL = &UNIT_TAB[ghost]
+	call	MAP_UNMAP	;Unmap ghost (returns via SETNUMDRV)
+	xor	a
+	ld	(GHO_PAIR##),a	;Clear ghost pair
+	ret
+
+GCD2_IS_GHOST:
+	;--- Changing ghost: clear master's "last accessed" flag
+	dec	a		;A = real 0-based
+	add	a,a
+	ld	e,a
+	ld	d,0
+	ld	hl,UNIT_TAB##+2
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = master UD address
+	ld	a,d
+	or	e
+	jr	z,GCD2_CLR_PAIR	;Master UD gone (shouldn't happen)
+	push	de
+	pop	ix
+	res	UF_GLA,(ix+UD_DFLAGS##)
+
+GCD2_CLR_PAIR:
+	xor	a
+	ld	(GHO_PAIR##),a
+	ret
+
+
+;--- Ghost pair cleanup for DOS 1 mode.
+;    Input: C = drive being changed (0-based)
+;    Modifies: AF, BC, DE, HL
+
+GHOST_CLEANUP_DOS1:
+	ld	a,(GHO_PAIR##)
+	and	00011111b
+	ret	z		;No ghost pair
+
+	;A = ghost 0-based (= real 1-based)
+	cp	c
+	jr	z,GCD1_IS_GHOST
+
+	dec	a		;A = real 0-based
+	cp	c
+	ret	nz		;Not part of pair
+
+	;--- Changing master: flag that ghost device must be unmapped
+	scf			;CF=1 = unmap ghost
+	jr	GCD1_COMMON
+
+GCD1_IS_GHOST:
+	or	a		;CF=0 = don't unmap ghost
+
+GCD1_COMMON:
+	;--- Clear ghost state from both entries
+	push	af		;Save CF (unmap ghost flag)
+
+	ld	a,(GHO_PAIR##)
+	and	00011111b	;A = real 1-based
+	call	GET_KERNEX_ENTRY_HL  ;HL = master entry start
+
+	;Clear master's ghost state (FAS byte 0: bits 0-1, 7)
+	push	hl
+	ld	de,UD1_FIRST_ABSOLUTE_SECTOR##
+	add	hl,de
+	ld	a,(hl)
+	and	01111100b
+	ld	(hl),a
+	pop	hl
+
+	;Advance to ghost entry
+	ld	de,UD1_SIZE##
+	add	hl,de		;HL = ghost entry start
+
+	;If changing master, unmap ghost device too
+	pop	af		;Restore CF
+	jr	nc,GCD1_CLR_GHOST
+
+	push	hl
+	ld	de,UD1_DEVICE_NUMBER##
+	add	hl,de
+	ld	(hl),0		;Clear ghost's device number
+	pop	hl
+
+GCD1_CLR_GHOST:
+	;Clear ghost's ghost state (FAS byte 0: bits 0-1, 7)
+	ld	de,UD1_FIRST_ABSOLUTE_SECTOR##
+	add	hl,de
+	ld	a,(hl)
+	and	01111100b
+	ld	(hl),a
+
+	xor	a
+	ld	(GHO_PAIR##),a
+	ret
+
+
+;--- Maybe create a ghost drive for a newly mapped FDD (DOS 2 mode).
+;    Input: IX = master UD (UD_DFLAGS must be set)
+;    Modifies: AF, BC, DE, HL, IY
+
+MAYBE_CREATE_GHOST_DOS2:
+	;Check FDD flag
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	ret	z			;Not FDD
+
+	;Check no existing ghost pair
+	ld	a,(GHO_PAIR##)
+	and	00011111b
+	ret	nz			;Already have a ghost pair
+
+	;Get drive number (1-based) and check not last
+	ld	a,(ix+UD_PHYSICAL_UNIT##)	;1-based
+	cp	8
+	ret	nc			;Can't ghost H: or higher
+
+	;A = master 1-based = next drive 0-based
+	;Check next drive is unmapped
+	ld	c,a
+	sla	c
+	ld	b,0
+	ld	hl,UNIT_TAB##+2
+	add	hl,bc			;HL = &UNIT_TAB[next_drive]
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	ret	nz			;Next drive is mapped
+	dec	hl
+
+	;Check DPB exists for next drive
+	ld	a,(ix+UD_PHYSICAL_UNIT##)	;master 1-based = next 0-based
+	push	hl
+	sla	a
+	ld	e,a
+	ld	d,0
+	ld	hl,$DPBLIST##
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	pop	hl
+	ret	z			;No DPB for next drive
+
+	;=== Create ghost UD ===
+	;HL = &UNIT_TAB[next_drive], IX = master UD
+	push	ix			;Save master UD
+	ld	a,(ix+UD_PHYSICAL_UNIT##)	;master 1-based = ghost 0-based
+	ld	c,a
+	or	a			;CF=0 for non-mountable
+	call	CREATE_UD		;IX = new ghost UD
+	pop	iy			;IY = master UD
+	ret	nz			;Allocation failed
+
+	;Copy fields from master (IY) to ghost (IX)
+	ld	a,(iy+UD_SLOT##)
+	ld	(ix+UD_SLOT##),a
+	ld	a,(iy+UD_RAM_SEGMENT##)
+	ld	(ix+UD_RAM_SEGMENT##),a
+	ld	a,(iy+UD_DEVICE_NUMBER##)
+	ld	(ix+UD_DEVICE_NUMBER##),a
+	;UD_FIRST_DEVICE_SECTOR = 0 (already from CREATE_UD)
+
+	;Set DFLAGS: copy from master + ghost flag
+	ld	a,(iy+UD_DFLAGS##)
+	or	UFM_GH
+	ld	(ix+UD_DFLAGS##),a
+
+	;Set UF_GLA on master (last accessed)
+	set	UF_GLA,(iy+UD_DFLAGS##)
+
+	;Store GHO_PAIR: master 1-based, bit 5=0 (last=master)
+	ld	a,(iy+UD_PHYSICAL_UNIT##)
+	ld	(GHO_PAIR##),a
+	ret
+
+
+;--- Maybe create a ghost drive for a newly mapped FDD (DOS 1 mode).
+;    Called after a drive is mapped to a device.
+;    The FDD flag (bit 6 of UD1_RELATIVE_DRIVE) must already be set.
+;    Reads saved drive number from BUF.
+;    Input: IX = KERNEX_DOS1 entry for the mapped drive
+;    Modifies: AF, BC, DE, HL
+
+MAYBE_CREATE_GHOST_DOS1:
+	;Check FDD flag
+	bit	6,(ix+UD1_RELATIVE_DRIVE##)
+	ret	z			;Not FDD
+
+	;Check no existing ghost pair
+	ld	a,(GHO_PAIR##)
+	and	00011111b
+	ret	nz			;Already have a ghost pair
+
+	;Get drive number (0-based) from saved location
+	ld	a,(BUF)
+	cp	7
+	ret	nc			;Can't ghost H: (drive 7) or higher
+
+	;Check next KERNEX entry exists and is unmapped
+	ld	hl,(KERNEX_DOS1##)
+	ld	c,(hl)			;C = entry count
+	inc	a			;A = drive 1-based
+	cp	c
+	ret	nc			;No next entry in table
+
+	;Find next entry (drive+1) and check it's unmapped
+	push	ix
+	ld	bc,UD1_SIZE##
+	add	ix,bc			;IX = next KERNEX entry
+	ld	a,(ix+UD1_DEVICE_NUMBER##)
+	or	a
+	jr	nz,MCG1_POP_RET		;Next drive is mapped
+
+	;=== Create ghost in next entry ===
+	pop	iy			;IY = master KERNEX entry
+
+	;Set ghost device number (same as master)
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
+	ld	(ix+UD1_DEVICE_NUMBER##),a
+
+	;Set ghost FAS: byte 0 = 02h (ghost state), bytes 1-3 = 0
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##),02h
+	xor	a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1),a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2),a
+	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
+
+	;Set master ghost state (01=master, bit 7=last accessed)
+	ld	(iy+UD1_FIRST_ABSOLUTE_SECTOR##),81h
+
+	;Set FDD + partition changed flags on ghost
+	set	6,(ix+UD1_RELATIVE_DRIVE##)
+	set	7,(ix+UD1_RELATIVE_DRIVE##)
+
+	;Store GHO_PAIR: master 1-based, bit 5=0 (last=master)
+	ld	a,(BUF)
+	inc	a			;1-based
+	ld	(GHO_PAIR##),a
+	ret
+
+MCG1_POP_RET:
+	pop	ix
+	ret
+
+
+;--- Get a KERNEX_DOS1 entry by 1-based index.
+;    Input: A = 1-based entry index
+;    Output: HL = pointer to entry
+;    Modifies: AF, DE, HL
+
+GET_KERNEX_ENTRY_HL:
+	ld	hl,(KERNEX_DOS1##)
+	inc	hl		;Skip count byte
+	dec	a		;Convert to 0-based
+	ret	z		;First entry
+GKE_SKIP:
+	ld	de,UD1_SIZE##
+	add	hl,de
+	dec	a
+	jr	nz,GKE_SKIP
+	ret
+
+
 	;>>> DOS 1 version of MAPDRV
 
 MAPDRV_DOS1:
-	
+
 	ld	a,b	;File mounting is not supported in DOS 1 mode
 	cp	3
 	ld	a,.IDRV##
 	ret	z
+
+	;Save drive number for ghost creation later
+	ld	a,c
+	ld	(BUF),a
+
+	;Ghost pair cleanup (DOS 1)
+	push	hl
+	push	bc
+	call	GHOST_CLEANUP_DOS1
+	pop	bc
+	pop	hl
 
 	;--- Check that the drive is assigned to a Nextor driver
 
@@ -3638,6 +3985,9 @@ MAPDOS1_DEF:
 	pop hl
 	ld (hl),0FFh	;Mark FAT buffer as invalid again
 
+	;AUTO_ASSIGN sets bit 6 of UD1_RELATIVE_DRIVE for FDD devices.
+	;Check if ghost creation is needed.
+	call	MAYBE_CREATE_GHOST_DOS1
 	jp	MAPDOS1_END_OK
 MAPDOS1_NODEF:
 
@@ -3740,6 +4090,13 @@ MAPDOS1_CHK_NEXT:
 	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2),a
 	ld	a,(iy+7)
 	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
+
+	;Check if device is FDD (DEVQ_GET_PARAMS result still in SECBUF)
+	ld	iy,($SECBUF##)
+	bit	2,(iy+7)		;FDD flag in DEVQ result
+	jr	z,MAPDOS1_END_OK
+	set	6,(ix+UD1_RELATIVE_DRIVE##)	;Set FDD flag
+	call	MAYBE_CREATE_GHOST_DOS1
 
 MAPDOS1_END_OK:
 	set	7,(ix+UD1_RELATIVE_DRIVE##)	;Set partition changed flag
@@ -5181,6 +5538,23 @@ DRVI_LOOP:
 	jp	NEXT_DRIVE
 DRVI_NORD:
 
+	;* If ghost drive, print appropriate info
+
+	ld	a,(BUF_LETTER)
+	cp	5
+	jr	nz,DRVI_NOGHOST
+	ld	hl,GHOST_MSG
+	call	PRINT
+	ld	a,(BUF_LETTER+1)
+	add	a,"A"
+	call	CHPUT
+	ld	a,":"
+	call	CHPUT
+	ld	hl,TWOCRLF
+	call	PRINT
+	jp	NEXT_DRIVE
+DRVI_NOGHOST:
+
 	;* If mounted file, print appropriate info
 
 	ld	a,(BUF_LETTER)
@@ -5311,6 +5685,8 @@ NEXT_DRIVE:
 
 RAMDISK_MSG:
 	db	"RAM disk",13,10,10,0
+GHOST_MSG:
+	db	"Ghost drive of ",0
 DEV_MSG:
 	db	"Device ",0
 TWOCRLF:

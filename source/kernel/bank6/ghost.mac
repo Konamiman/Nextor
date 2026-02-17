@@ -183,6 +183,23 @@ SGD2_ALLOC:
 	ld	hl,$NUMDRV##
 	inc	(hl)
 
+	;Update DRVTBL: find FDD driver's entry and increment its count.
+	;Walk entries (2 bytes: count, slot) summing counts until
+	;the sum covers the FDD's 1-based drive number.
+	ld	b,(ix+UD_PHYSICAL_UNIT##)
+	ld	hl,DRVTBL##
+SGD2_FIND_DRV:
+	ld	a,b
+	sub	(hl)
+	jr	c,SGD2_FOUND_DRV
+	jr	z,SGD2_FOUND_DRV
+	ld	b,a
+	inc	hl
+	inc	hl
+	jr	SGD2_FIND_DRV
+SGD2_FOUND_DRV:
+	inc	(hl)
+
 	jr	SGD2_SETUP_GHOST
 
 SGD2_ALLOC_FAIL:

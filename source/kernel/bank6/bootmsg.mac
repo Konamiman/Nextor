@@ -1,0 +1,206 @@
+	.z80
+	name('bootmsg')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Boot Messages
+;-----------------------------------------------------------------------------
+;
+	INCLUDE ../macros.inc
+	INCLUDE ../const.inc
+	INCLUDE ../condasm.inc
+;
+;-----------------------------------------------------------------------------
+;  Local equates
+;-----------------------------------------------------------------------------
+
+CALDRV_ADDR:	equ	4048h
+CALSLT:		equ	001Ch
+
+BUF:		equ	0F55Eh
+LINL40:		equ	0F3AEh
+
+;-----------------------------------------------------------------------------
+;
+; PRINT_KERNEL_MSG - Print kernel initialization status message
+; Called from bank 0 via C4PBK (with bank 6 flag).
+;
+; Input: C = type:
+;   0 = "Initializing Nextor kernel at [slot ]X: <name>"
+;       (40-col: no "slot", name on 2nd line; 80-col: all on one line)
+;   1 = "Skipping Nextor kernel at slot X"
+;   2 = "Driver initialization OK"
+;   3 = "Driver initialization failed!"
+;   4 = "Nextor kernel version X.Y.Z, Press N to show the boot menu"
+; B = slot number (used for types 0 and 1)
+
+	public	?PRINT_KERNEL_MSG
+
+?PRINT_KERNEL_MSG:
+
+	ld a,c
+	or a
+	jr z,PKM_INITIALIZING
+	dec a
+	jr z,PKM_SKIPPING
+	dec a
+	jr z,PKM_INIT_OK
+	dec a
+	jr z,PKM_INIT_FAILED
+	; Type 4: version + press N to show boot menu
+	ld de,STR_NEXTOR_VERSION
+	jp PKM_PRINT_STR
+
+PKM_INIT_FAILED:
+	ld de,STR_DRV_INIT_FAILED
+	jp PKM_PRINT_STR
+
+PKM_INIT_OK:
+	ld de,STR_DRV_INIT_OK
+	jp PKM_PRINT_STR
+
+PKM_SKIPPING:
+	ld de,STR_SKIPPING_NEXTOR
+	call PKM_PRINT_STR
+	call PKM_PRINT_SLOT
+	call PKM_PRINT_CRLF
+	jr PKM_CRLF
+
+PKM_INITIALIZING:
+	push bc
+	ld de,STR_INITIALIZING_NEXTOR
+	call PKM_PRINT_STR
+	ld a,(LINL40)
+	cp 80
+	jr z,PKM_INIT_80
+
+	;40-col: no "slot" word, name on next line indented 4 spaces
+	pop bc
+	push bc
+	call PKM_PRINT_SLOT
+	call PKM_PRINT_CRLF
+	ld b,4
+PKM_INIT_SPC:
+	ld a,' '
+	printchar
+	djnz PKM_INIT_SPC
+	ld d,33			;Max name length for 40-col
+	jr PKM_INIT_QUERY
+
+PKM_INIT_80:
+	;80-col: "slot " prefix, name on same line after ": "
+	ld de,STR_SLOT_SPACE
+	call PKM_PRINT_STR
+	pop bc
+	push bc
+	call PKM_PRINT_SLOT
+	ld a,':'
+	printchar
+	ld a,' '
+	printchar
+	ld d,32			;Max name length for 80-col
+
+PKM_INIT_QUERY:
+	;Query driver name via CALSLT + CALDRV
+	pop bc
+	ld hl,DRIVER.DRIVER_QUERY##
+	ld (BK4_ADD##),hl
+	push bc
+	pop iy			;IYh = slot for CALSLT
+
+	ld a,DRIVER.DRVQ_GET_STRING##
+	ld b,DRIVER.DRVQ_STR_DRIVER_NAME##
+	;D already set (33 or 32)
+	ld hl,BUF
+	ld ix,CALDRV_ADDR
+	call CALSLT
+	ei
+
+	;Check result
+	ld de,BUF
+	or a
+	jr z,PKM_PRINT_NAME
+	cp DRIVER.QUERY_TRUNCATED_STRING##
+	jr z,PKM_TRUNCATED
+	ld de,STR_UNNAMED_DRIVER
+	jr PKM_PRINT_NAME
+
+PKM_TRUNCATED:
+	ld de,BUF
+	call PKM_PRINT_STR
+	ld de,STR_3_DOTS
+
+PKM_PRINT_NAME:
+	call PKM_PRINT_STR
+
+PKM_CRLF:
+	call PKM_PRINT_CRLF
+	ld a,(LINL40)
+	cp 80
+	ret z
+PKM_PRINT_CRLF:
+	ld a,13
+	printchar
+	ld a,10
+	printchar
+	ret
+
+;--- Print null-terminated string at DE
+
+PKM_PRINT_STR:
+	ld a,(de)
+	or a
+	ret z
+	printchar
+	inc de
+	jr PKM_PRINT_STR
+
+;--- Print slot number from B
+;    Format: X or X-Y for expanded slots
+
+PKM_PRINT_SLOT:
+	ld a,b
+	push af
+	and 3
+	add a,'0'
+	printchar
+	pop af
+	bit 7,a
+	ret z
+	push af
+	ld a,'-'
+	printchar
+	pop af
+	rrca
+	rrca
+	and 3
+	add a,'0'
+	printchar
+	ret
+
+;--- String data
+
+STR_INITIALIZING_NEXTOR:
+	db 13,"=== Initializing Nextor kernel at ",0
+STR_SLOT_SPACE:
+	db "slot ",0
+STR_SKIPPING_NEXTOR:
+	db 13,"-=- Skipping Nextor kernel at slot ",0
+STR_DRV_INIT_OK:
+	db 13,10,"--- Driver initialization OK",13,10,10,0
+STR_DRV_INIT_FAILED:
+	db 13,10,"*** Driver initialization failed!",13,10,10,0
+STR_UNNAMED_DRIVER:
+	db "(Unnamed driver)",0
+STR_3_DOTS:
+	db "...",0
+STR_NEXTOR_VERSION:
+	db "Nextor kernel version "
+	db MAIN_NEXTOR_VERSION##+"0", ".", SEC_NEXTOR_VERSION_HIGH##+"0"
+	db ".", SEC_NEXTOR_VERSION_LOW##+"0"
+	INCLUDE ../bank0/betainfo.mac
+	db 13,10
+	db "github.com/konamiman/Nextor",13,10
+	db 10
+STR_PRESS_N:
+	db "Press N to show the boot menu",13,10,10,0
+
+	end
