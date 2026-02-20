@@ -683,15 +683,24 @@ div_10_loop:	inc	c			; an error number to the
 ; number  to  be  formatted  and  a pointer to a buffer in the TPA space. This
 ; buffer must not cross a segment boundary.
 ;
-; Entry:      A = Choice number (00h => get choice string
-;                                -ve => new boot sector)
+; Entry:      A = Choice number:
+;                  00h = get choice string pointer (MSX-DOS drivers only)
+;                  80h = get choice string into buffer
+;                  01h..09h = do format with given choice
+;                  FBh..FFh = new boot sector / quick format
 ;             B = Logical drive number
-;            HL = Pointer to start of buffer area (unused if A=0)
-;            DE = Size of buffer area (unused if A=0)
+;            HL = Pointer to working buffer area (if A=01h..09h)
+;            DE = Size of working buffer area (if A=01h..09h)
+;            HL = Pointer for the choice string (if A=80h)
+;            D  = Size of buffer for choice string (if A=80h)
 ; Returns:    A = Error code
 ;             B = Slot address of choice string (if A=0 on entry)
 ;            HL = Pointer to choice string (if A=0 on entry)
-;
+; Notes:
+; - Choice 00h works for drives assigned by MSX-DOS drives only
+;   (obsolete, 80h should be used instead)
+; - All other choices work for drives assigned by MSX-DOS drives
+;   and for drives assigned to Nextor devices that are floppy disks
 
 		ex	af,af'			;Save choice number in A'
 		push	hl
@@ -708,7 +717,7 @@ div_10_loop:	inc	c			; an error number to the
 ;
 		ex	af,af'			;If choice <> 00h then
 		or	a			; jump to actually do the
-		jr	nz,do_format		; format operation.
+		jr	nz,fmt_not_zero		; format operation.
 ;
 		pcall	DSK_CHOICE		;Get prompt string from
 		push	hl			; driver.
@@ -717,6 +726,13 @@ div_10_loop:	inc	c			; an error number to the
 		ex	de,hl			;HL := address of string
 		or	a
 		ret
+;
+fmt_not_zero:
+		cp	80h			;80h => get choice string
+		jr	nz,do_format		; into buffer at IX.
+;
+		pcall	DSK_CHOICE_BUF		;HL=unit desc, IX=buffer,
+		ret				; DE=buffer size
 ;
 ;
 do_format:	ex	af,af'

@@ -53,6 +53,169 @@ MAXCLUS_12BITS	equ	4095
 ;
 ;-----------------------------------------------------------------------------
 ;
+	PROC	DSK_CHOICE_BUF
+;
+; This routine gets the format choice string and copies it into a buffer
+; in RAM. Works for both MSX-DOS and Nextor device-based FDD drivers.
+;
+; Input:  HL = Address of unit descriptor
+;	      IX = Address of buffer
+;	      DE = Size of buffer
+; Output: A  = Error code
+; Corrupts: AF,BC,DE,HL,IX
+;
+		push	ix			;Save buffer pointer
+		push	de			;Save buffer size
+		push	hl
+		pop	iy			;IY = unit descriptor
+;
+		bit	UF_DBD,(iy+UD_DFLAGS##)
+		jr	nz,dcb_nextor
+
+;--- MSX-DOS driver: get ROM string pointer via DSK_CHOICE,
+;    then copy from ROM to buffer using RDSLT.
+
+		call	DSK_CHOICE		;A=err, DE=ROM string addr
+		pop	bc			;BC = buffer size
+		pop	ix			;IX = buffer pointer
+		or	a
+		ret	nz			;Error from DSK_CHOICE
+;
+		ld	a,d			;Check for null pointer
+		or	e
+		jr	z,dcb_empty		; (no choices)
+;
+		ex	de,hl			;HL = ROM string addr
+		ld	a,(iy+UD_SLOT##)	;A = slot address
+dcb_rom_loop:
+		push	af			;Save slot address
+		push	bc			;Save buffer count
+		call	RDSLT##			;Read byte from (HL) in slot A
+		ld	(ix),a			;Store in buffer
+		or	a			;Null terminator?
+		pop	bc
+		jr	z,dcb_rom_done		;Yes, done
+		pop	af			;Restore slot address
+		inc	hl
+		inc	ix
+		dec	bc
+		ld	d,a			;Save slot in D
+		ld	a,b
+		or	c
+		ld	a,d			;Restore slot
+		jr	nz,dcb_rom_loop		;Continue if buffer not full
+		push	ix
+		pop	hl			;HL = null terminator position
+		jr	dcb_add_dots		;Append "..." to truncated string
+dcb_rom_done:
+		pop	af			;Discard saved slot
+dcb_ok:
+		xor	a
+		ret
+;
+dcb_empty:
+		ld	(ix),0			;Empty string
+		xor	a
+		ret
+;
+dcb_nxt_truncated:
+		push	ix
+		pop	hl			;HL = buffer start
+dcb_scan_null:	ld	a,(hl)
+		or	a
+		jr	z,dcb_add_dots
+		inc	hl
+		jr	dcb_scan_null
+
+dcb_add_dots:
+		;HL = null terminator position; append "...\r\n" after the string
+		ld	(hl),'.'
+		inc	hl
+		ld	(hl),'.'
+		inc	hl
+		ld	(hl),'.'
+		inc	hl
+		ld	(hl),13
+		inc	hl
+		ld	(hl),10
+		inc	hl
+		ld	(hl),0
+		xor	a
+		ret
+
+        ;--- Nextor driver: call DEVQ_GET_FORMAT_CHOICES,
+        ;    then copy built-in string based on B result.
+
+dcb_nextor:
+		bit	UF_FDD,(iy+UD_DFLAGS##)
+		jr	nz,dcb_nxt_fdd
+		pop	de			;Discard saved buf size
+		pop	ix			;Discard saved buf ptr
+		ld	a,.IFORM##
+		or	a
+		ret
+
+dcb_nxt_fdd:
+
+        ; Set up CALL_DRV: IX=unit desc, A=segment,
+        ; HL'=routine addr, A'=query, C=device, HL=buffer, D=bufsize
+
+		push	iy
+		pop	ix			;IX = unit descriptor
+		pop	de			;DE = buf size
+		pop	hl			;HL = buf ptr (was IX)
+		push	hl			;Save buf ptr for after CALL_DRV
+;
+		ld	d,e			;D = buffer size (low byte)
+		push	de			;Save buf size (E) for bank 6 call
+		ld	c,(ix+UD_DEVICE_NUMBER##)
+		ex	af,af'
+		ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
+		ex	af,af'			;A' = query number
+		exx
+		ld	hl,DRIVER.DEVICE_QUERY##
+		exx				;HL' = routine addr
+		ld	a,(P2_TPA##)		;A = page-2 segment
+		call	CALL_DRV
+;
+		pop	de			;E = buffer size
+		pop	ix			;IX = buffer pointer
+		cp	DRIVER.QUERY_TRUNCATED_STRING##
+		jr	z,dcb_nxt_truncated	;Append "..." to truncated string
+		cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+		jr	z,dcb_nxt_default
+		or	a
+		ret	nz			;Error from driver
+
+        ; B = format type:
+        ;  0   = no choices available
+        ;  1   = built-in SS/DS choices
+        ;  2   = built-in SS/DS/HD choices
+        ;  255 = driver already wrote string to buffer
+
+		ld	a,b
+		or	a
+		jr	z,dcb_empty
+		cp	255
+		jr	z,dcb_ok		;Driver already wrote buffer
+		jr	dcb_nxt_build		;B=1 or 2: build in bank 6
+;
+dcb_nxt_default:
+		ld	b,1			;Default: SS/DS choices
+dcb_nxt_build:
+
+        ; Call BUILD_FMT_CHOICES in bank 6 via C4PBK.
+        ; Writes choice string directly to SECBUF.
+        ; Input: B=format type
+		ld	hl,BUILD_FMT_CHOICES##
+		set	7,h			;Bit 15 = call bank 6
+		ld	(BK4_ADD##),hl
+		call	C4PBK##
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
 	PROC	DSK_FORMAT
 ;
 ;    This routine calls the "format" routine of the disk  driver  defined  by
@@ -98,6 +261,20 @@ MAXCLUS_12BITS	equ	4095
 ; Corrupts:  AF,BC,DE,IX,AF'
 ;
 ;
+
+    ; Reject all format operations for non-FDD Nextor drives.
+    ; Choices 1-9 are rejected by fmt_devcmd_routine,
+    ; choices FBh-FFh are rejected here.
+
+		push	hl
+		pop	iy
+		bit	UF_DBD,(iy+UD_DFLAGS##)
+		jr	z,fmt_ok_gate
+		bit	UF_FDD,(iy+UD_DFLAGS##)
+		jr	nz,fmt_ok_gate
+		ld	a,.IFORM##
+		ret
+fmt_ok_gate:
 		cp	0FEh
 		jr	nc,new_boot_sec
 		cp	0FBh
@@ -110,6 +287,11 @@ MAXCLUS_12BITS	equ	4095
 		ld	a,FMT_CMD
 		call	CALL_UNIT		;Do the format command
 		ret	nz			; and give up if error.
+
+		bit	UF_DBD,(iy+UD_DFLAGS##)
+		jp	nz,nxt_fdd_boot_sec	;Nextor FDD: driver already
+						; wrote valid BPB, just add
+						; DOS 2 extras.
 
 		inc	a			;At the moment
 ;
@@ -198,6 +380,18 @@ put_boot_sec:	ld	ix,UPB_BUF##
 		ld	a,WR_CMD		; been generated.
 		call	CALL_UNIT
 		ret
+;
+
+	;--- Nextor FDD: driver wrote valid boot sector, just add DOS 2 extras.
+
+nxt_fdd_boot_sec:
+		ld	ix,UPB_BUF##
+		ld	de,0			;Read sector 0 (boot sector)
+		ld	bc,(DATA_SEG##)
+		ld	b,1
+		call	READ_UNIT
+		ret	nz
+		jr	got_boot_sec
 ;
 ;
 not_dos1_disk:	ld	a,.NDOS##		;Error if was no valid
@@ -2675,30 +2869,51 @@ mc_devcmd_idev:
 	ret
 
 	;It is not necessary to generate a DPB, since
-	;when a media change is detected, BUILD_UPB is checked,
+	;when a media change is detected, BUILD_UPB is called,
 	;which does the DPB generation.
 ;
 ;	---------------------------------
 ;
-;This routine is actually never called for Nextor drivers.
-;
 dp_devcmd_routine:
+	xor	a
 	ret
 ;
 ;	---------------------------------
 ;
 ch_devcmd_routine:
-	ld	a,.IFORM##
+	ld	a,.IFORM##	;Nextor drives have no ROM choice string;
+	or	a		; use _FORMAT subfunction 80h instead.
 	ret
-	;TODO: Handle formatting
 ;
 ;	---------------------------------
 ;
-
 fmt_devcmd_routine:
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	jr	nz,fmt_devcmd_fdd
 	ld	a,.IFORM##
+	or	a
 	ret
-	;TODO: Handle formatting
+;
+fmt_devcmd_fdd:
+	ld	hl,DRIVER.DEVICE_QUERY##
+	ex	af,af'			;A = P2_TPA (page-2 segment)
+	exx				;Switch to main set:
+					; B=choice, DE=bufsize, HL=buffer
+	ld	c,(ix+UD_DEVICE_NUMBER##)
+	ex	af,af'
+	ld	a,DRIVER.DEVQ_DO_FORMAT##
+	ex	af,af'			;A' = query number
+	call	CALL_DRV
+;
+	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr	z,fmt_devcmd_ni
+	or	a
+	ret
+;
+fmt_devcmd_ni:
+	ld	a,.IFORM##
+	or	a
+	ret
 
 ;-----------------------------------------------------------------------------
 ;

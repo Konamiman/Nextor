@@ -248,13 +248,22 @@ FDC_SLOT:	equ	8Bh		;Slot 3-2 (primary 3, secondary 2, expanded)
 WK_NDRV:	equ	0		;Number of physical drives detected
 WK_MT0:	equ	1		;Motor timeout counter drive 0
 WK_MT1:	equ	2		;Motor timeout counter drive 1
+FMT_SECNUM:	equ	3		;2 bytes: sector number for format init
 WK_FLAGS:	equ	5		;bit 0 = write operation
 WK_CMD:	equ	10		;FDC command buffer (9 bytes, +10..+18)
 WK_RES:	equ	19		;FDC result buffer (7 bytes, +19..+25)
 WK_XFER:	equ	26		;Start of RAM transfer routine code
 
 WK_XFER_SIZE:	equ 52		;Space reserved for RAM transfer routine
-WK_SIZE:	equ	WK_XFER+WK_XFER_SIZE
+
+;--- Format state (after XFER code area)
+
+FMT_SIDES:	equ	WK_XFER+WK_XFER_SIZE	;Number of sides (1 or 2)
+FMT_DRIVE:	equ	FMT_SIDES+1		;0-based drive number
+FMT_TRACK:	equ	FMT_DRIVE+1		;Current track number
+FMT_SIDE:	equ	FMT_TRACK+1		;Current side (0 or 1)
+
+WK_SIZE:	equ	FMT_SIDE+1
 
 MOTOR_TIMEOUT:	equ 60		;~1 second at 60Hz VDP interrupt
 
@@ -572,6 +581,10 @@ DEVICE_QUERY:
 	jp	z,DO_DEVQ_GET_STATUS
 	dec	a
 	jp	z,DO_DEVQ_GET_AVAILABILITY
+	dec	a
+	jp	z,DO_DEVQ_GET_FORMAT_CHOICES
+	dec	a
+	jp	z,DO_DEVQ_DO_FORMAT
 	ld	a,QUERY_NOT_IMPLEMENTED
 	ret
 
@@ -703,6 +716,454 @@ DO_DEVQ_GET_AVAILABILITY:
 	ret	nz
 	ld	b,1
 	xor	a
+	ret
+
+
+;--- Get format choices
+
+DO_DEVQ_GET_FORMAT_CHOICES:
+	call	CHECK_DEVICE
+	ret	nz
+
+	ld	b,1		;Single side and double side, double density
+	xor	a
+	ret
+
+
+;--- Do format
+
+DO_DEVQ_DO_FORMAT:
+	call	CHECK_DEVICE
+	ret	nz
+
+	;B = choice: 1=single side, 2=double side
+	;C = device number (1-based)
+	;HL = buffer address (usable as scratch)
+
+	push	ix
+	push	hl		;Save buffer address
+	call	MY_GWORK
+
+	ld	a,b
+	cp	1
+	jr	z,DOFMT_SS
+	cp	2
+	jr	z,DOFMT_DS
+	pop	hl
+	pop	ix
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+DOFMT_SS:
+	ld	a,1		;1 side
+	jr	DOFMT_GO
+DOFMT_DS:
+	ld	a,2		;2 sides
+DOFMT_GO:
+	ld	(ix+FMT_SIDES),a
+	ld	a,c
+	dec	a		;0-based drive number
+	ld	(ix+FMT_DRIVE),a
+	ld	(ix+WK_CMD+1),a	;Set unit in FDC command byte
+
+	;Turn on motor
+	or	a
+	ld	a,14h		;DOR: motor on, drive 0
+	jr	z,DOFMT_DOR
+	ld	a,25h		;DOR: motor on, drive 1
+DOFMT_DOR:
+	call	WRITE_DOR
+
+	;Wait for drive ready
+	ld	a,20h
+	call	WRITE_TDR	;READY input from drive
+	call	FDC_WAIT_READY
+	push	af		;Save ST3 + carry
+	ld	a,30h
+	call	WRITE_TDR	;Force READY high
+	pop	af
+	jr	c,DOFMT_NRDY
+
+	;Check write protect (ST3 bit 6)
+	bit	6,a
+	jr	nz,DOFMT_WP
+
+	;Format each track (80 tracks)
+	pop	hl		;HL = scratch buffer
+	ld	a,0		;Start at track 0
+DOFMT_TRK:
+	push	af		;Save track number
+	ld	(ix+FMT_TRACK),a
+	ld	a,(ix+FMT_SIDES)
+	ld	b,a		;B = number of sides
+	ld	a,0		;Start at side 0
+DOFMT_SIDE:
+	push	bc
+	push	af		;Save side number
+	push	hl		;Save buffer
+	ld	(ix+FMT_SIDE),a
+	call	FORMAT_TRACK
+	ld	d,a		;Save error code
+	pop	hl
+	pop	af
+	pop	bc
+	ld	a,d		;Restore error code
+	or	a
+	jr	nz,DOFMT_ERR
+	inc	a		;Next side
+	djnz	DOFMT_SIDE
+
+	pop	af		;Restore track number
+	inc	a
+	cp	80		;80 tracks per side
+	jr	c,DOFMT_TRK
+
+	;Initialize boot sector, FAT, and root directory
+	call	DOFMT_INIT
+	push	af
+	call	DOFMT_TIMER
+	pop	af
+	pop	ix
+	ret			;A = error from DOFMT_INIT (0=success)
+
+DOFMT_ERR:
+	ld	b,a		;Save error code in B
+	pop	af		;Discard saved track number
+	ld	a,b		;Restore error code
+	push	af		;Save error code on stack
+	call	DOFMT_TIMER
+	pop	af		;Restore error code
+	pop	ix
+	ret			;A = error code
+
+DOFMT_NRDY:
+	pop	hl		;Discard saved buffer
+	call	DOFMT_TIMER
+	pop	ix
+	ld	a,_NRDY
+	ret
+
+DOFMT_WP:
+	pop	hl		;Discard saved buffer
+	call	DOFMT_TIMER
+	pop	ix
+	ld	a,_WPROT
+	ret
+
+;--- Initialize boot sector, FAT, and root directory after format.
+;    Input: IX = work area, HL = 512-byte scratch buffer
+;           FMT_DRIVE = 0-based drive, FMT_SIDES = 1 or 2
+;    Output: A = error code (0=success), Carry set on error
+
+DOFMT_INIT:
+
+	;--- Determine media descriptor and sectors/FAT
+
+	ld	a,(ix+FMT_SIDES)
+	cp	2
+	ld	c,0F9h		;DS/DD: media ID
+	jr	z,DI_MEDOK
+	ld	c,0F8h		;SS/DD: media ID
+DI_MEDOK:
+	ld	(ix+FMT_SIDE),c	;Reuse FMT_SIDE to store media ID
+
+	;--- Clear buffer and build boot sector
+
+	call	DI_CLEAR_BUF
+	push	hl
+	ex	de,hl		;DE = buffer
+	ld	hl,BOOT_DATA
+	ld	bc,BOOT_PARMS_OFF
+	ldir			;Copy header up to disk parameters
+	;Copy 720K parameters by default
+	ld	hl,BOOT_PARMS_720K
+	ld	a,(ix+FMT_SIDES)
+	cp	2
+	jr	z,DI_PARMS
+	ld	hl,BOOT_PARMS_360K
+DI_PARMS:
+	ld	bc,BOOT_PARMS_LEN
+	ldir			;Copy disk parameters
+	;Copy rest of boot sector (code + messages)
+	ld	hl,BOOT_DATA+BOOT_PARMS_OFF
+	ld	bc,BOOT_TAIL_LEN
+	ldir
+	pop	hl		;HL = buffer
+
+	;--- Write boot sector (sector 0)
+
+	call	DI_WRITE_SECTORS_0
+	ret	c
+
+	;--- Build first FAT sector: media ID, FFh, FFh, rest zeros
+
+	call	DI_CLEAR_BUF
+	ld	a,(ix+FMT_SIDE)	;Media ID
+	ld	(hl),a
+	inc	hl
+	ld	(hl),0FFh
+	inc	hl
+	ld	(hl),0FFh
+	dec	hl
+	dec	hl		;HL = buffer start
+
+	;--- Determine sectors/FAT
+
+	ld	a,(ix+FMT_SIDES)
+	cp	2
+	ld	b,3		;DS: 3 sectors/FAT
+	jr	z,DI_FATCNT
+	ld	b,2		;SS: 2 sectors/FAT
+DI_FATCNT:
+	ld	(ix+FMT_TRACK),b	;Reuse FMT_TRACK to store sects/FAT
+
+	;--- Write first FAT sector (sector 1).
+
+	;FMT_SECNUM is already 1 from boot sector write.
+	ld	b,1
+	call	DI_WRITE_SECTORS
+	ret	c
+
+	;--- Clear buffer, write remaining sectors of first FAT (zeros)
+
+	call	DI_CLEAR_BUF
+	ld	a,(ix+FMT_TRACK)	;sectors/FAT
+	dec	a			;Already wrote 1
+	jr	z,DI_FAT2		;Only 1 sector/FAT? Skip
+	ld	b,a
+	call	DI_WRITE_SECTORS
+	ret	c
+
+DI_FAT2:
+	;--- Write second FAT copy: first sector has media ID + FF FF
+
+	ld	a,(ix+FMT_SIDE)	;Media ID
+	ld	(hl),a
+	inc	hl
+	ld	(hl),0FFh
+	inc	hl
+	ld	(hl),0FFh
+	dec	hl
+	dec	hl
+	ld	b,1
+	call	DI_WRITE_SECTORS
+	ret	c
+
+	;--- Clear buffer, write remaining sectors of second FAT (zeros)
+
+	call	DI_CLEAR_BUF
+	ld	a,(ix+FMT_TRACK)	;sectors/FAT
+	dec	a
+	jr	z,DI_ROOTDIR
+	ld	b,a
+	call	DI_WRITE_SECTORS
+	ret	c
+
+DI_ROOTDIR:
+	;--- Buffer is already zeroed. Write 7 root directory sectors.
+
+	ld	b,7
+	jp	DI_WRITE_SECTORS
+
+;--- Helper: write 1 sector at sector 0, buffer at HL
+
+DI_WRITE_SECTORS_0:
+	ld	(ix+FMT_SECNUM),0
+	ld	(ix+FMT_SECNUM+1),0
+	ld	b,1
+	jr	DI_WRITE_SECTORS
+
+;--- Helper: write B sectors from FMT_SECNUM, buffer at HL.
+;    Writes 1 sector at a time (buffer is reused, not advanced).
+;    Input: IX = work area, HL = buffer, B = sector count
+;           FMT_SIDE = media descriptor, FMT_DRIVE = 0-based drive
+;    Output: A = error, Carry set on error
+
+DI_WRITE_SECTORS:
+	push	hl
+	push	bc
+	;DE = address of FMT_SECNUM in work area (IX+FMT_SECNUM)
+	push	ix
+	pop	de
+	inc	de		;+1
+	inc	de		;+2
+	inc	de		;+3 = FMT_SECNUM
+	ld	b,1		;Write 1 sector
+	ld	c,(ix+FMT_SIDE)	;C = media descriptor (stored earlier)
+	ld	a,(ix+FMT_DRIVE)
+	inc	a		;1-based device number
+	scf			;Write operation
+	call	READ_WRITE
+	pop	bc
+	pop	hl
+	ret	c
+	;Advance sector number
+	inc	(ix+FMT_SECNUM)
+	jr	nz,DI_WS_NOV
+	inc	(ix+FMT_SECNUM+1)
+DI_WS_NOV:
+	djnz	DI_WRITE_SECTORS
+	xor	a		;Success (carry clear)
+	ret
+
+;--- Helper: clear 512-byte buffer at HL (preserves HL)
+
+DI_CLEAR_BUF:
+	push	hl
+	push	bc
+	ld	d,h
+	ld	e,l
+	inc	de
+	ld	(hl),0
+	ld	bc,511
+	ldir
+	pop	bc
+	pop	hl
+	ret
+
+;--- Boot sector template data
+
+BOOT_DATA:
+	db	0EBh,0FEh,090h
+	db	"NEXTOR  "
+	db	000h,002h
+	;Disk parameters are inserted separately
+	;Rest of boot sector (code + messages) after parameters
+	db	000h,002h,000h,000h,000h,0D0h,0EDh
+	db	053h,059h,0C0h,032h,0C4h,0C0h,036h,056h
+	db	023h,036h,0C0h,031h,01Fh,0F5h,011h,09Fh
+	db	0C0h,00Eh,00Fh,0CDh,07Dh,0F3h,03Ch,0CAh
+	db	063h,0C0h,011h,000h,001h,00Eh,01Ah,0CDh
+	db	07Dh,0F3h,021h,001h,000h,022h,0ADh,0C0h
+	db	021h,000h,03Fh,011h,09Fh,0C0h,00Eh,027h
+	db	0CDh,07Dh,0F3h,0C3h,000h,001h,058h,0C0h
+	db	0CDh,000h,000h,079h,0E6h,0FEh,0FEh,002h
+	db	0C2h,06Ah,0C0h,03Ah,0C4h,0C0h,0A7h,0CAh
+	db	022h,040h,011h,079h,0C0h,00Eh,009h,0CDh
+	db	07Dh,0F3h,00Eh,007h,0CDh,07Dh,0F3h,018h
+	db	0B2h
+	db	"Boot error",13,10
+	db	"Press any key for retry",13,10,"$",0
+	db	"MSXDOS  SYS"
+
+BOOT_PARMS_OFF	equ	13	;Offset of disk parameters in boot sector
+BOOT_PARMS_LEN	equ	12	;Length of disk parameters
+BOOT_TAIL_LEN	equ	$-BOOT_DATA-BOOT_PARMS_OFF
+
+BOOT_PARMS_360K:
+	db	002h,001h,000h,002h,070h,000h,0D0h,002h
+	db	0F8h,002h,000h,009h
+
+BOOT_PARMS_720K:
+	db	002h,001h,000h,002h,070h,000h,0A0h,005h
+	db	0F9h,003h,000h,009h
+
+DOFMT_TIMER:
+	ld	a,(ix+FMT_DRIVE)
+	or	a
+	jr	nz,DOFMT_TM1
+	ld	(ix+WK_MT0),MOTOR_TIMEOUT
+	ret
+DOFMT_TM1:
+	ld	(ix+WK_MT1),MOTOR_TIMEOUT
+	ret
+
+
+;--- Format one track
+;    Input: IX = work area (WK_CMD+1 = unit byte with HD and US set)
+;           ix+FMT_TRACK = track, ix+FMT_SIDE = side
+;           HL = scratch buffer (at least 36 bytes, in page 2/3)
+;    Output: A = error code (0=success)
+
+FORMAT_TRACK:
+	push	hl		;Save buffer pointer
+
+	;Set head select in unit byte
+	ld	a,(ix+FMT_SIDE)
+	or	a
+	jr	z,FT_HD0
+	set	2,(ix+WK_CMD+1)
+	jr	FT_HDOK
+FT_HD0:
+	res	2,(ix+WK_CMD+1)
+FT_HDOK:
+
+	;Seek to the track
+	push	hl
+	push	de
+	ld	c,(ix+FMT_TRACK)
+	call	FDC_SEEK
+	pop	de
+	pop	hl
+	jr	c,FT_ERR_SEEK
+
+	;Build format ID data in buffer: 9 sectors * 4 bytes (C,H,R,N)
+	pop	hl		;HL = scratch buffer
+	push	hl		;Save it again for later
+	ld	b,9		;9 sectors per track
+	ld	c,1		;First sector number
+FT_BUILD:
+	ld	a,(ix+FMT_TRACK)
+	ld	(hl),a		;C = cylinder
+	inc	hl
+	ld	a,(ix+FMT_SIDE)
+	ld	(hl),a		;H = head
+	inc	hl
+	ld	a,c
+	ld	(hl),a		;R = sector number
+	inc	hl
+	ld	(hl),2		;N = size code (2=512 bytes)
+	inc	hl
+	inc	c
+	djnz	FT_BUILD
+
+	;Build FDC FORMAT TRACK command in WK_CMD
+	ld	(ix+WK_CMD),4Dh	;FORMAT TRACK (MFM)
+	;WK_CMD+1 already has HD|US
+	ld	(ix+WK_CMD+2),2	;N = 2 (512 bytes/sector)
+	ld	(ix+WK_CMD+3),9	;SC = 9 sectors per track
+	ld	(ix+WK_CMD+4),50h	;GPL = format gap length
+	ld	(ix+WK_CMD+5),0E5h	;D = fill byte
+
+	;Send command to FDC (6 bytes)
+	ld	b,6
+	call	FDC_WRITE_CMD
+	jr	c,FT_ERR_CMD
+
+	;Send 36 bytes of ID data via fast RAM transfer routine.
+	;CALL_XFER switches page 1 to FDC slot for direct register
+	;access, meeting FDC timing requirements. The XFER loop exits
+	;when EXM clears (format complete), then sends TC pulse.
+	pop	hl		;HL = buffer with ID data
+	push	hl
+	set	0,(ix+WK_FLAGS)	;Write mode (CPU->FDC)
+	call	CALL_XFER
+
+	;Read result bytes
+	call	FDC_READ_RESULT
+
+	;Check ST0 for errors
+	ld	a,(ix+WK_RES)	;ST0
+	and	0C0h
+	jr	nz,FT_ERR_FDC
+
+	pop	hl		;Restore buffer pointer
+	xor	a		;Success
+	ret
+
+FT_ERR_SEEK:
+	pop	hl
+	ld	a,_SEEK
+	ret
+
+FT_ERR_CMD:
+	pop	hl
+	ld	a,_DISK
+	ret
+
+FT_ERR_FDC:
+	pop	hl
+	call	ERROR_FROM_ST	;A = error code from ST1/ST2
 	ret
 
 
