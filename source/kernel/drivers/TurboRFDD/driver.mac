@@ -585,7 +585,19 @@ DEVICE_QUERY:
 	jp	z,DO_DEVQ_GET_FORMAT_CHOICES
 	dec	a
 	jp	z,DO_DEVQ_DO_FORMAT
+	dec	a
+	jp	z,DO_DEVQ_STOP_MOTOR
 	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;--- Stop motor
+
+DO_DEVQ_STOP_MOTOR:
+	call	CHECK_DEVICE
+	ret	nz
+	call	MOTOR_OFF
+	xor	a
 	ret
 
 

@@ -549,6 +549,7 @@ ram_ad	defl	4100h
 	const DEVQ_GET_AVAILABILITY,4
 	const DEVQ_GET_FORMAT_CHOICES,5
 	const DEVQ_DO_FORMAT,6
+	const DEVQ_STOP_MOTOR,7
 
 	endmod
 
