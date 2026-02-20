@@ -541,7 +541,7 @@ DO_DEVQ_DO_FORMAT:
 ; Device query 7: Stop the floppy disk drive motor
 ;
 ; Input:  -
-; Output: QUERY_OK: ok, disk has been formatted
+; Output: QUERY_OK: ok, motor has been stopped
 ;         QUERY_INVALID_DEVICE: device does not exist
 ;         QUERY_NOT_IMPLEMENTED: the device is not a floppy disk
 ;                                or stopping the drive motor is not supported

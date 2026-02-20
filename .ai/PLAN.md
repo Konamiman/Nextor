@@ -34,7 +34,7 @@ The "Get device parameters" device query currently returns:
 ;         bits 4-7: must be zero.
 ```
 
-so this part is already covered by the flag in bit 3.
+so this part is already covered by the flag in bit 2.
 
 Whenever a device is mapped to a drive Nextor should include a flag indicating that the device is a floppy disk drive.
 
@@ -147,7 +147,7 @@ Again, for Nextor drives, it should work (show the drives as choices) only for t
 
 ### New CALL QFORMAT command
 
-A new "quick format" command could be provided to easily wipe any content from a floppy disk by just rewritting the boot sector, FAT and root directory as if the disk had been freshly formatted (again, only for MSX-DOS drives and Nextor drives that are floppy disks). The disk must have a boot sector with proper disk parameters so that Nextor knows how to initialize the disk (same as when the disk is initialized after physical formatting).
+A new "quick format" command could be provided to easily wipe any content from a floppy disk by just rewriting the boot sector, FAT and root directory as if the disk had been freshly formatted (again, only for MSX-DOS drives and Nextor drives that are floppy disks). The disk must have a boot sector with proper disk parameters so that Nextor knows how to initialize the disk (same as when the disk is initialized after physical formatting).
 
 ## Single side vs double sided
 
@@ -177,7 +177,7 @@ We need a similar mechanism for Nextor now that it support floppy disks.
 
 The first question is: when to provide a ghost drive for a drive that identifies as a floppy disk at boot time?
 
-Idea: when Nextor detects that one of the scanned devices for a given driver is a floppy disk drive, query information for all othe other devices in the same driver. If none of them is a floppy disk drive, then assign a ghost drive for the device being originally queried (the drive having the following letter). Additionally, when a ghost drive has been assigned for a driver, don't assign any more for any other driver.
+Idea: when Nextor detects that one of the scanned devices for a given driver is a floppy disk drive, query information for all the other devices in the same driver. If none of them is a floppy disk drive, then assign a ghost drive for the device being originally queried (the drive having the following letter). Additionally, when a ghost drive has been assigned for a driver, don't assign any more for any other driver.
 
 This more or less mimics the original behavior of MSX computers: when only one disk drive was present, a ghost drive was assigned; when two drives were present, no ghost drive was assigned.
 
@@ -195,7 +195,7 @@ In MSX-DOS 2 mode this should be easy, we just add new flags to `UD_DFLAGS` and/
 
 So on drive access, Nextor itself would take care of checking if the accessed drive is one of a normal/ghost pair, if the drive being accessed is not the same as the one accessed the last time, showing the message, and updating the "last drive of the pair accessed" status information.
 
-### Customizng the message
+### Customizing the message
 
 MSX-DOS 2 offers a "Define disk error handling routine" to customize how disk errors are handled, see "3.80   DEFINE DISK ERROR HANDLER ROUTINE (64H)" in docs/DOS2-FCS.TXT. It would be good to have a similar mechanism to customize the message shown when a disk change is needed. A new dedicated function call could be defined for that, or the existing _DEFER routine could be reused with a dedicated new error code, but I'm not sure if this could break existing applications that make use of this routine already.
 
