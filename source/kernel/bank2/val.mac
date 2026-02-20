@@ -128,7 +128,10 @@ dcb_scan_null:	ld	a,(hl)
 		jr	dcb_scan_null
 
 dcb_add_dots:
-		;HL = null terminator position; append "...\r\n" after the string
+		;HL = end of written data (may be one past buffer end).
+		;Back up 6 positions and overwrite with "...\r\n\0".
+		ld	bc,-6
+		add	hl,bc
 		ld	(hl),'.'
 		inc	hl
 		ld	(hl),'.'
@@ -205,13 +208,30 @@ dcb_nxt_default:
 dcb_nxt_build:
 
         ; Call BUILD_FMT_CHOICES in bank 6 via C4PBK.
-        ; Writes choice string directly to SECBUF.
-        ; Input: B=format type
+        ; Writes choice string to SECBUF, then copy to caller's buffer.
+        ; Input: B=format type, IX=buffer pointer, E=buffer size
+		push	ix			;Save buffer pointer
+		push	de			;Save buffer size (E)
 		ld	hl,BUILD_FMT_CHOICES##
 		set	7,h			;Bit 15 = call bank 6
 		ld	(BK4_ADD##),hl
 		call	C4PBK##
-		ret
+;
+		pop	de			;E = buffer size
+		pop	ix			;IX = buffer pointer
+		ld	hl,($SECBUF##)
+		ld	b,e			;B = max bytes to copy
+dcb_nxt_copy:
+		ld	a,(hl)
+		ld	(ix),a
+		or	a
+		jp	z,dcb_ok		;Null terminator copied
+		inc	hl
+		inc	ix
+		djnz	dcb_nxt_copy
+		push	ix
+		pop	hl			;HL = one past buffer end
+		jr	dcb_add_dots
 ;
 ;
 ;-----------------------------------------------------------------------------
