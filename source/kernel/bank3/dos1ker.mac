@@ -5941,7 +5941,7 @@ FMT_ASK_DRIVE:
 	ld	d,"A"		;D = current letter
 	ld	e,0		;E = drives listed so far
 FMT_LIST_LOOP:
-	rr	c
+	srl	c
 	jr	nc,FMT_LIST_SKIP
 	ld	a,e
 	or	a
