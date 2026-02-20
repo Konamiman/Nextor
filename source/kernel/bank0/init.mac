@@ -57,6 +57,7 @@ endif
 CNSDFG	equ	0F3DEh		;Console display flag
 CURLIN	equ	0F41Ch		;Current line number
 BUF	equ	0F55Eh		;Line input buffer (used as scratch)
+GHO_DRVTBL_PTR	equ	0FD8Eh	;PROCNM+5: DRVTBL pointer saved by ghost setup
 STKTOP	equ	0F674h		;Pointer to bottom of stack
 TXTTAB	equ	0F676h		;Beginning of BASIC text
 VARTAB	equ	0F6C2h
@@ -2694,6 +2695,14 @@ NOCHCPU:
 	;table in page 3 and copy the table here, prepended by
 	;a byte that tells how many entries are in the table.
 
+	;If DOSINIT ran and created a ghost drive, undo the
+	;DRVTBL/$NUMDRV increment that SETUP_GHOST_DOS2 did,
+	;so AUTODRV_DOS1 sees the original drive counts.
+	ex	af,af'
+	ld	a,6
+	ld	ix,UNDO_GHOST_DRVTBL##
+	call	CALBNK##
+
 	ld	hl,BOOT_TMP##
 	ld	(KERNEX_DOS1##),hl
 	ld	hl,AUTODRV##
@@ -2708,27 +2717,18 @@ NOCHCPU:
 	;If ghost drive was created, update DRVTBL and $NUMDRV.
 	;SETUP_GHOST_DOS1 only updates KERNEX_DOS1; in DOS 1,
 	;the visible drive count comes from DRVTBL/$NUMDRV.
+	;(UNDO_GHOST_DRVTBL cleared GHO_PAIR when DOSINIT ran,
+	;so this only triggers if SETUP_GHOST_DOS1 re-set it.)
+
 	ld	a,(GHO_PAIR##)
 	or	a
 	jr	z,MK_DVB_TBL
 
-	ld	b,a		;B = 1-based drive number of real FDD
 	ld	hl,$NUMDRV##
 	inc	(hl)
 
-	;Find FDD driver's DRVTBL entry and increment its count.
-	;Sum DRVTBL counts until we find the entry containing drive B.
-	ld	hl,DRVTBL
-FIND_GHO_DRV:
-	ld	a,b
-	sub	(hl)
-	jr	c,FOUND_GHO_DRV
-	jr	z,FOUND_GHO_DRV
-	ld	b,a
-	inc	hl
-	inc	hl
-	jr	FIND_GHO_DRV
-FOUND_GHO_DRV:
+	;Increment FDD driver's DRVTBL entry using saved pointer.
+	ld	hl,(GHO_DRVTBL_PTR)
 	inc	(hl)
 
 	jr	MK_DVB_TBL
