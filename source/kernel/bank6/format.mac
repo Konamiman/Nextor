@@ -148,7 +148,6 @@ fformat_nxt_choice:
 	ld	c,(hl)		;C = device number (1-based)
 	pop	de		;DE = buffer size
 	pop	hl		;HL = buffer address
-	ld	d,e		;D = buffer size (low byte)
 
 	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
 	call	CALL_DEVICE_QUERY
@@ -216,20 +215,22 @@ fformat_dos_choice:
 
 	pop	de		;DE = buffer size
 	pop	ix		;IX = buffer address
-	ld	b,e		;B = buffer size counter
 fformat_dos_copy:
 	ld	a,(BUF+100)	;Slot for RDSLT
 	push	ix
-	push	bc
+	push	de
 	call	000Ch		;RDSLT: A = byte at (HL) in slot
-	pop	bc
+	pop	de
 	pop	ix
 	inc	hl
 	or	a
 	jr	z,fformat_dos_done
 	ld	(ix),a
 	inc	ix
-	djnz	fformat_dos_copy
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,fformat_dos_copy
 	;Buffer full: null-terminate at last position
 	ld	(ix-1),0
 	xor	a
@@ -330,7 +331,7 @@ fformat_dos_do_format:
 ;    Input:  (BUF+100) = driver slot ID
 ;            C  = device/unit number within driver
 ;            HL = buffer address for MSX-DOS ROM string copy
-;            D  = buffer size (for MSX-DOS path)
+;            DE = buffer size (for MSX-DOS path)
 ;    Output: A  = chosen option (1-9), or 0 if no choices available
 ;            Cy set if cancelled (CTRL-C)
 ;    Corrupts: all
@@ -338,8 +339,10 @@ fformat_dos_do_format:
 	public	?FMT_PRINT_AND_CHOOSE
 
 ?FMT_PRINT_AND_CHOOSE::
+	ld	a,e
+	ld	(BUF+101),a
 	ld	a,d
-	ld	(BUF+101),a	;Save buffer size
+	ld	(BUF+102),a	;Save 16-bit buffer size
 
 	;--- Check KERNEX to determine if driver is Nextor
 
@@ -400,7 +403,7 @@ fpc_nextor:
 	;--- Nextor driver: query driver for format choices via DEVICE_QUERY
 
 	ld	hl,($SECBUF##)	;HL = buffer for driver
-	ld	d,200		;D = buffer size
+	ld	de,512		;DE = buffer size
 	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
 	call	CALL_DEVICE_QUERY
 
@@ -454,7 +457,7 @@ fpc_msxdos:
 
 	ld	a,h
 	or	l
-	pop	de		;DE = buffer destination
+	pop	ix		;IX = buffer destination
 	jr	nz,fpc_has_str
 	xor	a		;Null pointer: no choices
 	ret
@@ -462,34 +465,36 @@ fpc_has_str:
 
 	;--- Copy ROM string to buffer via RDSLT
 
-	push	de		;Save buffer start for later
+	push	ix		;Save buffer start for later
 	ld	a,(BUF+101)
-	ld	b,a		;B = buffer size counter
+	ld	e,a
+	ld	a,(BUF+102)
+	ld	d,a		;DE = 16-bit buffer size
 fpc_copy:
 	ld	a,(BUF+100)	;Slot for RDSLT
+	push	ix
 	push	de
-	push	bc
 	call	000Ch		;RDSLT: A = byte at (HL) in slot
-	pop	bc
 	pop	de
+	pop	ix
 	inc	hl		;Advance ROM source
 	or	a
 	jr	z,fpc_copy_done
-	ld	(de),a		;Store in buffer
-	inc	de
-	djnz	fpc_copy
+	ld	(ix),a		;Store in buffer
+	inc	ix
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,fpc_copy
 
 	;--- Buffer full: truncated
 
-	dec	de
-	xor	a
-	ld	(de),a		;Null-terminate
+	ld	(ix-1),0	;Null-terminate at last position
 	pop	hl		;Buffer start
 	jr	fpc_truncated
 
 fpc_copy_done:
-	xor	a
-	ld	(de),a		;Null-terminate
+	ld	(ix),0		;Null-terminate
 	pop	hl		;Buffer start
 	ld	a,(hl)
 	or	a
@@ -601,7 +606,7 @@ fpc_dots:
 
 ;--- Call DEVICE_QUERY in the correct driver slot via inter-slot call.
 ;    Input:  A = query number (e.g. DEVQ_GET_FORMAT_CHOICES)
-;            C, D, HL = parameters for DEVICE_QUERY
+;            C, DE, HL = parameters for DEVICE_QUERY
 ;            BUF+100 = driver slot
 ;    Output: AF, B = results from DEVICE_QUERY
 ;    Corrupts: all registers
@@ -617,6 +622,176 @@ CALL_DEVICE_QUERY:
 	pop	af		;A = query number
 	pop	hl		;HL = buffer address
 	jp	001Ch		;CALSLT: inter-slot call to CALDRV → bank switch → DEVICE_QUERY
+
+;-----------------------------------------------------------------------------
+;
+;    DSK_CHOICE_BUF
+;
+;    Get format choice string into a buffer in RAM.
+;    Works for both MSX-DOS and Nextor device-based FDD drivers.
+;    Called from bank 2 (misc.mac F_FMT) via CALSLT -> C4PBK -> CALBNK.
+;
+;    Input:  HL = Address of unit descriptor
+;            BC = Address of buffer
+;            DE = Size of buffer
+;    Output: A  = Error code (0=OK)
+;    Corrupts: AF,BC,DE,HL,IX,IY
+
+	public	?DSK_CHOICE_BUF
+
+?DSK_CHOICE_BUF:
+	push	bc		;Save buffer address
+	push	de		;Save buffer size
+	push	hl
+	pop	iy		;IY = unit descriptor
+
+	ld	a,(iy+UD_DFLAGS##)
+	bit	UF_DBD,a
+	jr	nz,dcb_nextor
+
+	;--- MSX-DOS driver: call CHOICE (4019h) via CALSLT,
+	;    then copy ROM string to buffer using RDSLT.
+
+	ld	a,(iy+UD_SLOT##)
+	ld	(BUF+100),a	;Save slot for RDSLT
+	ld	c,(iy+UD_RELATIVE_UNIT_NUMBER##) ;Save relative drive number
+	ld	iyh,a		;IYh = driver slot for CALSLT
+	ld	a,c		;A = relative drive number for CHOICE
+	ld	ix,4019h	;CHOICE entry point
+	call	001Ch		;CALSLT -> HL = ROM choice string addr
+
+	ld	a,h		;Check for null pointer
+	or	l
+	pop	de		;DE = buffer size
+	pop	ix		;IX = buffer address
+	jr	z,dcb_empty
+
+dcb_rom_loop:
+	ld	a,(BUF+100)	;Slot for RDSLT
+	push	ix
+	push	de
+	call	000Ch		;RDSLT: A = byte at (HL) in slot
+	pop	de
+	pop	ix
+	inc	hl
+	or	a		;Null terminator?
+	jr	z,dcb_rom_done
+	ld	(ix),a
+	inc	ix
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,dcb_rom_loop
+	;Buffer full: null-terminate and return truncation error
+	ld	(ix-1),0
+	ld	a,.ELONG##
+	or	a
+	ret
+
+dcb_rom_done:
+	ld	(ix),0		;Null-terminate
+dcb_ok:
+	xor	a
+	ret
+
+dcb_empty:
+	ld	(ix),0
+	xor	a
+	ret
+
+dcb_nextor:
+	bit	UF_FDD,a
+	jr	nz,dcb_nxt_fdd
+	pop	de		;Discard saved buf size
+	pop	bc		;Discard saved buf addr
+	ld	a,.IFORM##
+	or	a
+	ret
+
+dcb_nxt_fdd:
+	;Save driver slot in BUF+100 for CALL_DEVICE_QUERY
+	ld	a,(iy+UD_SLOT##)
+	ld	(BUF+100),a
+	ld	c,(iy+UD_DEVICE_NUMBER##)
+
+	pop	de		;DE = buffer size
+	pop	hl		;HL = buffer address
+	push	hl		;Save buffer address
+	push	de		;Save buffer size
+
+	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
+	call	CALL_DEVICE_QUERY
+
+	;Handle result
+	cp	DRIVER.QUERY_TRUNCATED_STRING##
+	jr	z,dcb_nxt_trunc
+	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	jr	z,dcb_nxt_default
+	or	a
+	jr	nz,dcb_nxt_err
+
+	;B = format type: 0=none, 1=SS/DS, 2=SS/DS/HD, 255=driver wrote buffer
+	ld	a,b
+	or	a
+	jr	z,dcb_nxt_empty
+	cp	255
+	jr	z,dcb_nxt_written
+	jr	dcb_nxt_build
+
+dcb_nxt_trunc:
+	;Driver wrote truncated string to buffer
+	pop	de
+	pop	bc
+	ld	a,.ELONG##
+	or	a
+	ret
+
+dcb_nxt_default:
+	ld	b,1		;Default: SS/DS choices
+dcb_nxt_build:
+	;Build standard choices in SECBUF, then copy to buffer
+	call	?BUILD_FMT_CHOICES
+
+	pop	de		;DE = buffer size
+	pop	ix		;IX = buffer address
+	ld	hl,($SECBUF##)
+	push	de
+	pop	bc		;BC = 16-bit counter
+dcb_nxt_copy:
+	ld	a,(hl)
+	ld	(ix),a
+	or	a
+	jp	z,dcb_ok
+	inc	hl
+	inc	ix
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,dcb_nxt_copy
+	;Buffer full: null-terminate and return truncation error
+	ld	(ix-1),0
+	ld	a,.ELONG##
+	or	a
+	ret
+
+dcb_nxt_empty:
+	pop	de
+	pop	ix
+	ld	(ix),0
+	xor	a
+	ret
+
+dcb_nxt_written:
+	pop	de		;Discard saved values
+	pop	bc
+	xor	a
+	ret
+
+dcb_nxt_err:
+	pop	de		;Discard saved values
+	pop	bc
+	or	a		;Ensure NZ (A has error code)
+	ret
 
 ;-----------------------------------------------------------------------------
 

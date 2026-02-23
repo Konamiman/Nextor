@@ -6001,7 +6001,7 @@ A6101:	call	A609A			; mark FAT buffer as invalid
 	set	7,h		;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF)
-	ld	d,200		;Buffer size
+	ld	de,512		;Buffer size
 	call	C4PBK##		;A = choice (1-9 or 0), Cy = cancelled
 	jp	c,FMT_ABORT_D1	;Cancelled
 	or	a

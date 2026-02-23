@@ -10,3 +10,4 @@
 	jentry	F_FORMAT
 	jentry	UNDO_GHOST_DRVTBL
 	jentry	FMT_PRINT_AND_CHOOSE
+	jentry	DSK_CHOICE_BUF

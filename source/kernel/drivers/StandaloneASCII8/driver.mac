@@ -498,7 +498,7 @@ DO_DEVQ_GET_AVAILABILITY:
 
 ; Device query 5: Get format choices for a floppy disk device
 ;
-; Input:  D  = Buffer size (used if B=255 is returned)
+; Input:  DE = Buffer size (used if B=255 is returned)
 ;         HL = Buffer address (used if B=255 is returned)
 ; Output: A = QUERY_OK: ok, format information provided
 ;             QUERY_INVALID_DEVICE: device does not exist

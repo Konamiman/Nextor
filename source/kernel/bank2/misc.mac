@@ -692,7 +692,7 @@ div_10_loop:	inc	c			; an error number to the
 ;            HL = Pointer to working buffer area (if A=01h..09h)
 ;            DE = Size of working buffer area (if A=01h..09h)
 ;            HL = Pointer for the choice string (if A=80h)
-;            D  = Size of buffer for choice string (if A=80h)
+;            DE = Size of buffer for choice string (if A=80h)
 ; Returns:    A = Error code
 ;             B = Slot address of choice string (if A=0 on entry)
 ;            HL = Pointer to choice string (if A=0 on entry)
@@ -731,8 +731,22 @@ fmt_not_zero:
 		cp	80h			;80h => get choice string
 		jr	nz,do_format		; into buffer at IX.
 ;
-		pcall	DSK_CHOICE_BUF		;HL=unit desc, IX=buffer,
-		ret				; DE=buffer size
+	;--- Call DSK_CHOICE_BUF in bank 6 via CALSLT -> C4PBK.
+	;    Can't use pcall here: page 1 has kernel data RAM (not ROM),
+	;    so C4PBK at 403Fh is unreachable from bank 2 code.
+	;    Go through CALSLT to switch page 1 to master ROM slot.
+
+		push	ix
+		pop	bc			;BC = buffer pointer (IX consumed by CALSLT)
+		push	hl			;Save unit descriptor
+		ld	hl,DSK_CHOICE_BUF##
+		set	7,h			;Bit 15 = call bank 6 (not bank 4)
+		ld	(BK4_ADD##),hl
+		pop	hl			;HL = unit descriptor
+		ld	ix,C4PBK##
+		ld	iy,(MASTER_SLOT##-1)	;IYh = master Nextor ROM slot
+		call	001Ch			;CALSLT -> C4PBK -> bank 6 DSK_CHOICE_BUF
+		ret
 ;
 ;
 do_format:	ex	af,af'
