@@ -3389,8 +3389,10 @@ FMT_CHK_DRIVE:
 	call	BDOS##
 	pop	bc		;Restore B (drive) and C (_FORMAT)
 	pop	hl		;Restore drive list accumulator
-	jr	nz,FMT_NO_DRIVE	;Any error means drive does not exist
-				; or does not support format.
+	jr	z,FMT_HAS_DRIVE	;Success: drive supports formatting
+	cp	.ELONG##	;Truncated choice string is still OK
+	jr	nz,FMT_NO_DRIVE	; (drive supports format, string was just too long)
+FMT_HAS_DRIVE:
 	inc	hl		;Add to the selection list.
 FMT_NO_DRIVE:
 	djnz	FMT_CHK_DRIVE
@@ -3469,15 +3471,19 @@ FMT_GETDRIVE:
 ;
 	ld	a,80h		;Subfunction: get choice string to buffer
 	ld	hl,($SECBUF##)
-	ld	de,200		;Buffer size
+	ld	de,512		;Buffer size (max allowed)
 	call	BDOS##
 	jr	z,fformat_choice_ok
 	cp	.ELONG##
 	jr	nz,FMTABO3	;Real error: drive can't format
+	ld	b,1		;B=1: truncated
+	jr	fformat_print_choice
 fformat_choice_ok:
+	ld	b,0		;B=0: not truncated
 ;
 ;   Print the choice string from SECBUF and ask for a choice.
 ;
+fformat_print_choice:
 	ld	hl,($SECBUF##)
 	ld	a,(hl)
 	or	a
@@ -3489,6 +3495,14 @@ FMT_PRINT_CHOICE:
 	ld	a,(hl)
 	or	a
 	jr	nz,FMT_PRINT_CHOICE
+;
+	dec	b		;Was truncated?
+	jr	nz,fformat_not_truncated
+	ld	a,'.'		;Print "..."
+	call	$OUT
+	call	$OUT
+	call	$OUT
+fformat_not_truncated:
 ;
 	ld	a,"?"
 	call	$OUT

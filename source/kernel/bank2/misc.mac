@@ -692,7 +692,7 @@ div_10_loop:	inc	c			; an error number to the
 ;            HL = Pointer to working buffer area (if A=01h..09h)
 ;            DE = Size of working buffer area (if A=01h..09h)
 ;            HL = Pointer for the choice string (if A=80h)
-;            DE = Size of buffer for choice string (if A=80h)
+;            DE = Size of buffer for choice string (if A=80h, max 512)
 ; Returns:    A = Error code
 ;             B = Slot address of choice string (if A=0 on entry)
 ;            HL = Pointer to choice string (if A=0 on entry)
