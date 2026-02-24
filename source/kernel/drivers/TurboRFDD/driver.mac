@@ -1041,7 +1041,7 @@ BOOT_DATA:
 	db	000h,002h
 	;Disk parameters are inserted separately
 	;Rest of boot sector (code + messages) after parameters
-	db	000h,002h,000h,000h,000h,0D0h,0EDh
+	db	000h,000h,000h,0D0h,0EDh
 	db	053h,059h,0C0h,032h,0C4h,0C0h,036h,056h
 	db	023h,036h,0C0h,031h,01Fh,0F5h,011h,09Fh
 	db	0C0h,00Eh,00Fh,0CDh,07Dh,0F3h,03Ch,0CAh
@@ -1059,16 +1059,18 @@ BOOT_DATA:
 	db	"MSXDOS  SYS"
 
 BOOT_PARMS_OFF	equ	13	;Offset of disk parameters in boot sector
-BOOT_PARMS_LEN	equ	12	;Length of disk parameters
 BOOT_TAIL_LEN	equ	$-BOOT_DATA-BOOT_PARMS_OFF
 
 BOOT_PARMS_360K:
 	db	002h,001h,000h,002h,070h,000h,0D0h,002h
-	db	0F8h,002h,000h,009h
+	db	0F8h,002h,000h,009h,000h,001h
 
 BOOT_PARMS_720K:
 	db	002h,001h,000h,002h,070h,000h,0A0h,005h
-	db	0F9h,003h,000h,009h
+	db	0F9h,003h,000h,009h,000h,002h
+BOOT_PARMS_END:
+
+BOOT_PARMS_LEN	equ	BOOT_PARMS_END-BOOT_PARMS_720K	;Length of disk parameters
 
 DOFMT_TIMER:
 	ld	a,(ix+FMT_DRIVE)
@@ -1604,16 +1606,35 @@ FRR_DN:
 ;    Output: Cy=0 OK, Cy=1 error
 
 FDC_WAIT_SEEK:
+	ld	hl,07D0h	;Timeout counter
 FWS_BSY:
 	call	READ_MSR
 	and	10h
-	jr	nz,FWS_BSY	;Wait while FDC busy
+	jr	z,FWS_CHK_INIT	;Not busy: proceed to sense phase
+	dec	hl
+	ld	a,h
+	or	l
+	jr	nz,FWS_BSY
+	scf			;Timeout
+	ret
 
+FWS_CHK_INIT:
+	ld	hl,07D0h	;Timeout counter
 FWS_CHK:
 	call	FDC_SENSE_INT
+	jr	c,FWS_TOUT	;FDC_SENSE_INT timed out
 	ld	a,(ix+WK_RES)	;ST0
 	bit	5,a		;Seek complete?
-	jr	z,FWS_CHK
+	jr	nz,FWS_DONE
+	dec	hl
+	ld	a,h
+	or	l
+	jr	nz,FWS_CHK
+FWS_TOUT:
+	scf			;Timeout
+	ret
+
+FWS_DONE:
 	and	0C0h		;Check for errors
 	ret	z		;Normal termination (Cy=0)
 	scf
@@ -1621,13 +1642,17 @@ FWS_CHK:
 
 
 ;--- Sense Interrupt Status
+;    Output: Cy=0 OK, Cy=1 timeout (FDC_WRITE_CMD failed)
 
 FDC_SENSE_INT:
 	push	bc
 	ld	(ix+WK_CMD),08h
 	ld	b,1
 	call	FDC_WRITE_CMD
+	jr	c,FSI_END	;Timeout: skip read, return with Cy
 	call	FDC_READ_RESULT
+	or	a		;Clear carry (success)
+FSI_END:
 	pop	bc
 	ret
 
@@ -1651,7 +1676,9 @@ FDS_DL1:
 	ld	(ix+WK_CMD+2),c	;Track
 	ld	b,3
 	call	FDC_WRITE_CMD
+	jr	c,FDS_END
 	call	FDC_WAIT_SEEK
+FDS_END:
 
 	;Post-seek settle delay
 	push	af
@@ -1674,6 +1701,7 @@ FDC_RECALIBRATE:
 	ld	(ix+WK_CMD),07h
 	ld	b,2
 	call	FDC_WRITE_CMD
+	ret	c
 	jp	FDC_WAIT_SEEK
 
 
