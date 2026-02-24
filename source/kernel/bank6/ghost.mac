@@ -270,11 +270,13 @@ SGD2_ALLOC:
 	;HL = address of new UD (zeroed by ALL_P2)
 	;Copy entire FDD UD to new ghost UD
 	push	hl		;Save new UD address
+	push	bc		;Save C = ghost physical unit
 	ex	de,hl		;DE = new UD (destination)
 	push	ix
 	pop	hl		;HL = FDD UD (source)
 	ld	bc,UD_SIZE##
 	ldir
+	pop	bc		;Restore C = ghost physical unit
 
 	pop	iy		;IY = new ghost UD
 
