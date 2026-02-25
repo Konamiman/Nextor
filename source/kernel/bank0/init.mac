@@ -305,7 +305,7 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; with possible future extensions.
 
 KEYS_INV_0: db 00h
-KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
+KEYS_INV_1: db 10h; 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
 
 ;
 ;=======================================================================
@@ -2699,10 +2699,15 @@ NOCHCPU:
 	;If DOSINIT ran and created a ghost drive, undo the
 	;DRVTBL/$NUMDRV increment that SETUP_GHOST_DOS2 did,
 	;so AUTODRV_DOS1 sees the original drive counts.
+	;GHO_PAIR is page 2 (kernel data), need segment switch.
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
 	ex	af,af'
 	ld	a,6
 	ld	ix,UNDO_GHOST_DRVTBL##
 	call	CALBNK##
+	ld	a,(P2_64K##)
+	call	PUT_P2##
 
 	ld	hl,BOOT_TMP##
 	ld	(KERNEX_DOS1##),hl
@@ -2710,27 +2715,12 @@ NOCHCPU:
 	ld	(BK4_ADD##),hl
 	call	C4PBK##
 
+	;SETUP_GHOST_DOS1 updates KERNEX_DOS1 and also
+	;increments DRVTBL/$NUMDRV directly if ghost created.
 	ld	ix,SETUP_GHOST_DOS1##
 	ex	af,af'
 	ld	a,6
 	call	CALBNK##
-
-	;If ghost drive was created, update DRVTBL and $NUMDRV.
-	;SETUP_GHOST_DOS1 only updates KERNEX_DOS1; in DOS 1,
-	;the visible drive count comes from DRVTBL/$NUMDRV.
-	;(UNDO_GHOST_DRVTBL cleared GHO_PAIR when DOSINIT ran,
-	;so this only triggers if SETUP_GHOST_DOS1 re-set it.)
-
-	ld	a,(GHO_PAIR##)
-	or	a
-	jr	z,MK_DVB_TBL
-
-	ld	hl,$NUMDRV##
-	inc	(hl)
-
-	;Increment FDD driver's DRVTBL entry using saved pointer.
-	ld	hl,(GHO_DRVTBL_PTR)
-	inc	(hl)
 
 	jr	MK_DVB_TBL
 

@@ -2376,11 +2376,13 @@ GDRV_MSXDOS_DRIVE:
 
 GDLI_DOS1:
 
+	push	bc	;Save C = 0-based drive index (needed for ghost)
+
 	;--- First calculate the slot and relative unit number
 
 	call	SLOT_OF_DRIVE
 	or	a
-	ret	z
+	jr	z,GDLI_D1_POP_RETOK
 
 	;--- Fill the table with some information
 
@@ -2393,23 +2395,26 @@ GDLI_DOS1:
 
 	ld	e,a
 	call	IS_NEXTOR_KER
-	ld	a,0
-	ret	c
+	jr	c,GDLI_D1_POP_RETOK
 
 	;--- Check if it is a Nextor drive
 
 	call	GET_DVB_POINTER
-	ld	a,0
-	ret	c
+	jr	c,GDLI_D1_POP_RETOK
 
-	ld	a,(ix+2)
+	ld	a,(ix+UD1_DEVICE_NUMBER##)
 	or	a
-	jr	nz,GDLI_ISDVB_OK
-	
-	xor		a
-	ret
+	jr	z,GDLI_D1_POP_RETOK
 
-GDLI_ISDVB_OK:
+	;--- Check if this is a ghost drive
+
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)
+	and	3
+	cp	2
+	jr	z,GDLI_D1_GHOST
+
+	;--- Normal Nextor drive
+
 	ld	(iy+3),0FFh	;Relative unit is FF for Nextor units
 
 	inc	iy
@@ -2424,12 +2429,23 @@ GDLI_ISDVB_OK:
 	pop	hl	;Unit descriptor, pointing at device number
 
 	ldi	;Copy device number, increase HL and DE
-	ld a,1
-	ld (de),a	;set fake LUN index
-	inc de
+	ld	a,1
+	ld	(de),a	;set fake LUN index
+	inc	de
 	ld	bc,4
 	ldir	;Copy starting sector
 
+GDLI_D1_POP_RETOK:
+	pop	bc
+	xor	a
+	ret
+
+GDLI_D1_GHOST:
+	pop	bc	;C = original 0-based drive index
+	ld	(iy),5	;Ghost drive state
+	ld	a,c
+	dec	a	;Master drive = ghost drive - 1
+	ld	(iy+1),a
 	xor	a
 	ret
 
@@ -3654,34 +3670,47 @@ GCD2_CLR_PAIR:
 ;    Modifies: AF, BC, DE, HL
 
 GHOST_CLEANUP_DOS1:
-	ld	a,(GHO_PAIR##)
-	and	00011111b
-	ret	z		;No ghost pair
+	;Get KERNEX_DOS1 entry for drive C (0-based)
+	ld	a,c
+	inc	a		;1-based
+	call	GET_KERNEX_ENTRY_HL
 
-	;A = ghost 0-based (= real 1-based)
-	cp	c
-	jr	z,GCD1_IS_GHOST
+	;Check FAS byte 0 ghost state bits
+	push	hl
+	ld	de,UD1_FIRST_ABSOLUTE_SECTOR##
+	add	hl,de
+	ld	a,(hl)
+	pop	hl		;HL = entry for changed drive
+	and	00000011b
+	ret	z		;Not part of a ghost pair
 
-	dec	a		;A = real 0-based
-	cp	c
-	ret	nz		;Not part of pair
+	cp	01h
+	jr	z,GCD1_IS_MASTER
 
-	;--- Changing master: flag that ghost device must be unmapped
-	scf			;CF=1 = unmap ghost
+	;--- Changing ghost: HL = ghost entry
+	;Master is previous entry, don't need to unmap ghost
+	ld	de,UD1_SIZE##
+	or	a
+	sbc	hl,de		;HL = master entry
+	push	hl		;Save master entry
+	add	hl,de		;HL = ghost entry (restore)
+	or	a		;CF=0 = don't unmap ghost
 	jr	GCD1_COMMON
 
-GCD1_IS_GHOST:
-	or	a		;CF=0 = don't unmap ghost
+GCD1_IS_MASTER:
+
+	;--- Changing master: HL = master entry
+	
+	push	hl		;Save master entry
+	ld	de,UD1_SIZE##
+	add	hl,de		;HL = ghost entry
+	scf			;CF=1 = unmap ghost
 
 GCD1_COMMON:
-	;--- Clear ghost state from both entries
-	push	af		;Save CF (unmap ghost flag)
+	;Stack: master entry. HL = ghost entry. CF = unmap flag.
+	push	af		;Save CF
 
-	ld	a,(GHO_PAIR##)
-	and	00011111b	;A = real 1-based
-	call	GET_KERNEX_ENTRY_HL  ;HL = master entry start
-
-	;Clear master's ghost state (FAS byte 0: bits 0-1, 7)
+	;Clear ghost's ghost state (FAS byte 0: bits 0-1, 7)
 	push	hl
 	ld	de,UD1_FIRST_ABSOLUTE_SECTOR##
 	add	hl,de
@@ -3690,13 +3719,9 @@ GCD1_COMMON:
 	ld	(hl),a
 	pop	hl
 
-	;Advance to ghost entry
-	ld	de,UD1_SIZE##
-	add	hl,de		;HL = ghost entry start
-
 	;If changing master, unmap ghost device too
 	pop	af		;Restore CF
-	jr	nc,GCD1_CLR_GHOST
+	jr	nc,GCD1_CLR_MASTER
 
 	push	hl
 	ld	de,UD1_DEVICE_NUMBER##
@@ -3704,16 +3729,14 @@ GCD1_COMMON:
 	ld	(hl),0		;Clear ghost's device number
 	pop	hl
 
-GCD1_CLR_GHOST:
-	;Clear ghost's ghost state (FAS byte 0: bits 0-1, 7)
+GCD1_CLR_MASTER:
+	;Clear master's ghost state (FAS byte 0: bits 0-1, 7)
+	pop	hl		;HL = master entry
 	ld	de,UD1_FIRST_ABSOLUTE_SECTOR##
 	add	hl,de
 	ld	a,(hl)
 	and	01111100b
 	ld	(hl),a
-
-	xor	a
-	ld	(GHO_PAIR##),a
 	ret
 
 
@@ -3808,24 +3831,43 @@ MAYBE_CREATE_GHOST_DOS1:
 	bit	6,(ix+UD1_RELATIVE_DRIVE##)
 	ret	z			;Not FDD
 
-	;Check no existing ghost pair
-	ld	a,(GHO_PAIR##)
-	and	00011111b
-	ret	nz			;Already have a ghost pair
+	;Check no existing ghost pair by scanning KERNEX_DOS1
+	ld	hl,(KERNEX_DOS1##)
+	ld	b,(hl)			;B = entry count
+	inc	hl			;HL = first entry
+MCG1_SCAN:
+	push	hl
+	inc	hl			;UD1_RELATIVE_DRIVE
+	bit	6,(hl)			;FDD flag? (Z preserved through inc/ld/pop)
+	inc	hl			;UD1_DEVICE_NUMBER
+	inc	hl			;UD1_FIRST_ABSOLUTE_SECTOR
+	ld	a,(hl)
+	pop	hl
+	jr	z,MCG1_SCAN_ADV		;Not FDD: ghost bits are meaningless
+	and	00000011b
+	ret	nz			;Found existing ghost pair
+MCG1_SCAN_ADV:
+	ld	de,UD1_SIZE##
+	add	hl,de
+	djnz	MCG1_SCAN
 
 	;Get drive number (0-based) from saved location
 	ld	a,(BUF)
 	cp	7
 	ret	nc			;Can't ghost H: (drive 7) or higher
 
-	;Check next KERNEX entry exists and is unmapped
-	ld	hl,(KERNEX_DOS1##)
-	ld	c,(hl)			;C = entry count
-	inc	a			;A = drive 1-based
-	cp	c
-	ret	nc			;No next entry in table
+	;Check that current entry (IX) is not the last in the table.
+	;HL is already past the last entry (from MCG1_SCAN above).
+	;If HL - IX > UD1_SIZE, there is at least one more entry.
+	push	ix
+	pop	de			;DE = current entry
+	or	a
+	sbc	hl,de			;HL = bytes from IX to table end
+	ld	a,l
+	cp	UD1_SIZE##+1
+	ret	c			;Distance <= UD1_SIZE: no next entry
 
-	;Find next entry (drive+1) and check it's unmapped
+	;Check next entry is unmapped
 	push	ix
 	ld	bc,UD1_SIZE##
 	add	ix,bc			;IX = next KERNEX entry
@@ -3854,10 +3896,6 @@ MAYBE_CREATE_GHOST_DOS1:
 	set	6,(ix+UD1_RELATIVE_DRIVE##)
 	set	7,(ix+UD1_RELATIVE_DRIVE##)
 
-	;Store GHO_PAIR: master 1-based, bit 5=0 (last=master)
-	ld	a,(BUF)
-	inc	a			;1-based
-	ld	(GHO_PAIR##),a
 	ret
 
 MCG1_POP_RET:

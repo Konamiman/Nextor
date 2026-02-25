@@ -562,12 +562,8 @@ SGD1_NO_SHIFT:
 	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##),81h
 	ld	(iy+UD1_FIRST_ABSOLUTE_SECTOR##),02h
 
-	;Set GHO_PAIR: bits 0-4 = real drive number (1-based)
-	ld	a,(BUF+2)	;A = 1-based index of real FDD drive
-	ld	(GHO_PAIR##),a	;bit 5 = 0 → real was last accessed
-
-	;Save GHO_DRVTBL_PTR: find DRVTBL entry matching FDD's slot.
-	;IX still points to the FDD's KERNEX_DOS1 entry.
+	;Increment DRVTBL and $NUMDRV for the ghost drive.
+	;Find the DRVTBL entry matching the FDD's slot.
 	ld	a,(ix+UD1_SLOT##)
 	ld	hl,DRVTBL##
 SGD1_FIND_DRV:
@@ -579,7 +575,9 @@ SGD1_FIND_DRV:
 	inc	hl		;Next entry
 	jr	SGD1_FIND_DRV
 SGD1_FOUND_DRV:
-	ld	(GHO_DRVTBL_PTR),hl
+	inc	(hl)		;Increment drive count in DRVTBL
+	ld	hl,$NUMDRV##
+	inc	(hl)		;Increment total drive count
 	ld	a,(BUF+2)	;Restore A = 1-based FDD drive index
 
 	;--- Allocate a separate DPB for the ghost drive.
@@ -728,15 +726,16 @@ gp_msg:
 	public	?UNDO_GHOST_DRVTBL
 
 ?UNDO_GHOST_DRVTBL:
-	;Check if DOSINIT ran by testing if drive A: has a UD
+	;Check if DOSINIT ran by testing if drive A: has a UD.
+	;Caller must switch page 2 to kernel data segment.
 	ld	hl,UNIT_TAB##+2
 	ld	a,(hl)
 	inc	hl
 	or	(hl)
 	ret	z		;DOSINIT didn't run
 
-	;DOSINIT ran: clear GHO_PAIR so redo only triggers
-	;if SETUP_GHOST_DOS1 actually creates a ghost.
+	;DOSINIT ran: clear GHO_PAIR so DOS 2 ghost check
+	;starts fresh if we end up in DOS 2 mode later.
 	ld	hl,GHO_PAIR##
 	ld	a,(hl)
 	ld	(hl),0		;Clear GHO_PAIR

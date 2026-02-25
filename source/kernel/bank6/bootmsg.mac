@@ -198,7 +198,7 @@ STR_NEXTOR_VERSION:
 	db ".", SEC_NEXTOR_VERSION_LOW##+"0"
 	INCLUDE ../bank0/betainfo.mac
 	db 13,10
-	db "github.com/konamiman/Nextor",13,10
+	db "https://github.com/konamiman/Nextor",13,10
 	db 10
 STR_PRESS_N:
 	db "Press N to show the boot menu",13,10,10,0
