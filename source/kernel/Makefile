@@ -526,15 +526,6 @@ bank4/partit.rel: \
 
 	$(call assemble,bank4/partit.mac)
 
-bank4/bootmsg.rel: \
-	macros.inc \
-	const.inc \
-	condasm.inc \
-	bank4/bootmsg.mac \
-	bank0/betainfo.mac
-
-	$(call assemble,bank4/bootmsg.mac)
-
 bank4/ramdrvh.rel: \
 	macros.inc \
 	const.inc \
