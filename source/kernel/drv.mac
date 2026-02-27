@@ -301,6 +301,25 @@ DIO_ENTRY::
 	or	a
 	jp	z,DISKERR
 
+	;--- Ghost drive disk swap check ---
+	;
+	;For FDD entries (bit 6 of UD1_RELATIVE_DRIVE set),
+	;UD1_FIRST_ABSOLUTE_SECTOR byte 0 encodes ghost state:
+	;  bits 0-1: 00=no ghost, 01=master, 10=ghost
+	;  bit 7: 1=this was last accessed
+
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	z,_no_ghost_1		;Not a floppy
+	ld	a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
+	and	03h
+	jr	z,_no_ghost_1		;No ghost pair
+	bit	7,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
+	jr	nz,_no_ghost_1		;This drive was last accessed
+	call	GHOST_PROMPT
+
+_no_ghost_1:
+	;--- End ghost drive check ---
+
 	call	IS_EMU
 	jp	c,DIOEN_ISEMU
 
@@ -393,14 +412,22 @@ DIOEN3:
     ; and the disk emulation work area (DSK_*).
 
 	push	hl
+	ld	hl,0			;Default: base sector 0 (for FDD)
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	nz,_dio_base_done
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
 	ld	h,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+1)
+_dio_base_done:
 	add	hl,de
 	ld	ix,TMP_SEC##
 	ld	(ix),l	;Calculate absolute sector number
 	ld	(ix+1),h
+	ld	hl,0			;Default: high word 0 (for FDD)
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	nz,_dio_base_hw
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+2)
 	ld	h,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3)
+_dio_base_hw:
 	ld	de,0
 	adc	hl,de
 	ld	(ix+2),l
@@ -651,7 +678,11 @@ DO_MKDPB:
 
 DPBEN2:
 	push	hl
+	xor	a			;Default: sector 0 (for FDD)
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	nz,_dpb_b0_done
 	ld	a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
+_dpb_b0_done:
 	ld	(TMP_SEC##),a
 	ld	a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 	ld	(TMP_SEC##+1),a
@@ -778,7 +809,7 @@ IS_DVB_LOOP:
 	jr	nz,DIO_NEXT
 
 	ld	a,(iy+UD1_RELATIVE_DRIVE##)
-	and	01111111b	;Ignore partition changed flag
+	and	00011111b	;Ignore partition changed and floppy flags
 	cp	c
 	jr	nz,DIO_NEXT
 
@@ -983,6 +1014,61 @@ DEFDPB:
 
     ALIGN 7BD0h
     ;Here goes the 1K free area at the end of banks 0 and 3
+
+
+;-----------------------------------------------------------------------------
+;
+; GHOST_PROMPT
+;
+; Called when this drive is in a ghost pair but was NOT last accessed.
+; Updates the "last accessed" bits on both entries (current and partner),
+; then calls PROMPT.  TARGET is already set by dos1ker A6086.
+;
+; Input:  IY = current KERNEX_DOS1 entry
+; Preserves: BC, DE, HL, IY.  Trashes AF, IX.
+
+GHOST_PROMPT:
+	push	bc
+	push	de
+	push	hl
+
+	;Mark this drive as last accessed
+	set	7,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
+
+	;Find partner: master (bit 0=1) → next entry,
+	;              ghost  (bit 1=1) → prev entry.
+	ld	bc,UD1_SIZE##
+	push	iy
+	pop	hl		;HL = current entry start
+	bit	0,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
+	jr	nz,_gp_next
+	;Ghost: partner is previous entry
+	or	a
+	sbc	hl,bc
+	jr	_gp_found
+_gp_next:
+	;Master: partner is next entry
+	add	hl,bc
+_gp_found:
+	;HL = partner entry start; offset to UD1_FIRST_ABSOLUTE_SECTOR
+	inc	hl
+	inc	hl
+	inc	hl		;HL -> partner's UD1_FIRST_ABSOLUTE_SECTOR[0]
+	res	7,(hl)		;Mark partner as not last accessed
+
+	;Call PROMPT in bank 0
+	push	iy
+	ld	ix,PROMPT##
+	ex	af,af'
+	xor	a		;Bank 0
+	call	CALBNK##
+	pop	iy
+
+	pop	hl
+	pop	de
+	pop	bc
+	ret
+
 
 	finish	<DRV>
 ;

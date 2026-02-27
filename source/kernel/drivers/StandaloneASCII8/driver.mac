@@ -26,6 +26,9 @@ DEVQ_GET_STRING: equ 1
 DEVQ_GET_PARAMS: equ 2
 DEVQ_GET_STATUS: equ 3
 DEVQ_GET_AVAILABILITY: equ 4
+DEVQ_GET_FORMAT_CHOICES: equ 5
+DEVQ_DO_FORMAT: equ 6
+DEVQ_STOP_MOTOR: equ 7
 
 	;---- MSX-DOS error codes for read/write operations ----
 
@@ -369,6 +372,12 @@ DEVICE_QUERY:
 	jr z,DO_DEVQ_GET_STATUS
 	dec a
 	jr z,DO_DEVQ_GET_AVAILABILITY
+	dec a
+	jr z,DO_DEVQ_GET_FORMAT_CHOICES
+	dec a
+	jr z,DO_DEVQ_DO_FORMAT
+	dec a
+	jr z,DO_DEVQ_STOP_MOTOR
 	ld a,QUERY_NOT_IMPLEMENTED
 	ret
 
@@ -468,8 +477,6 @@ DO_DEVQ_GET_STATUS:
 
 ; Device query 4: Get device availability
 ;
-; 4: Get device availability
-;
 ; Input: -
 ; Output: A = QUERY_OK: ok, device information provided
 ;             QUERY_INVALID_DEVICE: device does not exist
@@ -486,6 +493,61 @@ DO_DEVQ_GET_STATUS:
 
 DO_DEVQ_GET_AVAILABILITY:
 	ld a,QUERY_INVALID_DEVICE
+	ret
+
+
+; Device query 5: Get format choices for a floppy disk device
+;
+; Input:  DE = Buffer size (used if B=255 is returned)
+;         HL = Buffer address (used if B=255 is returned)
+; Output: A = QUERY_OK: ok, format information provided
+;             QUERY_INVALID_DEVICE: device does not exist
+;             QUERY_NOT_IMPLEMENTED: not a floppy disk, 
+;                                    or formatting not supported
+;             QUERY_TRUNCATED_STRING: string was truncated due to buffer size too short
+;         B = Choices:
+;             0: Only one format choice available
+;             1: Single side / double side, double density
+;             2: Single side / double side DD / double side HD
+;             255: Driver has written a custom null-terminated choice
+;                  string to the buffer at HL
+;
+
+DO_DEVQ_GET_FORMAT_CHOICES:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+; Device query 6: Format a floppy disk device
+;
+; Input:  B  = Choice number (1-9, as chosen by user from choice string)
+; Output: A = QUERY_OK: ok, disk has been formatted
+;             QUERY_INVALID_DEVICE: device does not exist
+;             QUERY_NOT_IMPLEMENTED: the device is not a floppy disk,
+;                                    formatting is not supported,
+;                                    or the choice number is invalid.
+;
+; The driver should format the floppy disk according to the selected choice.
+; Choice numbers correspond to the format choices returned by query 5.
+;
+; Disk parameters (MSX-DOS 1 compatible boot sector, FAT, root directory)
+; must be initialized by this routine upon succesful formatting.
+
+DO_DEVQ_DO_FORMAT:
+	ld a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+; Device query 7: Stop the floppy disk drive motor
+;
+; Input:  -
+; Output: QUERY_OK: ok, motor has been stopped
+;         QUERY_INVALID_DEVICE: device does not exist
+;         QUERY_NOT_IMPLEMENTED: the device is not a floppy disk
+;                                or stopping the drive motor is not supported
+
+DO_DEVQ_STOP_MOTOR:
+	ld a,QUERY_NOT_IMPLEMENTED
 	ret
 
 
@@ -522,6 +584,8 @@ CUSTOM_DEVICE_QUERY:
     ;    Input:    Cy=0 to read, 1 to write
     ;              A = Device number, 1 to 255
     ;              B = Number of sectors to read or write
+    ;              C = Media descriptor byte from the DPB if the device
+    ;                  is a floppy disk drive, zero otherwise
     ;              HL = Source or destination memory address for the transfer
     ;              DE = Address where the 4 byte sector number is stored.
     ;    Output:   A = Error code (the same codes of MSX-DOS are used):
@@ -536,6 +600,7 @@ CUSTOM_DEVICE_QUERY:
     ;                  .WRERR: Write error
     ;                  .NCOMP: Incompatible disk.
     ;                  .SEEK: Seek error.
+	;               B = Sectors successfully transferred
 
 READ_WRITE:
 	ld a,.IDEVN

@@ -160,12 +160,13 @@ size	macro	name
 	field	1,UD_DFLAGS	;More flags for the unit:
 				;        bit 0: unit is associated to a device in a Nextor driver
 				;               (if zero, all other bits are meaningless)
-                ;        bit 1: unused (was "the device supports hot-plug" in Nextor 2)
+                ;        bit 1: the device is a floppy disk drive
                 ;        bit 2: the drive is removable
 				;        bit 3: partition assignment is pending for this drive
 				;        bit 4: value at UD_FIRST_DEVICE_SECTOR is valid
 				;               (so that BUILD_UPB will not auto-assign partition)
-				;        bit 5: value at UD_CHKSUM is valid
+				;        bit 5: drive is a ghost drive
+				;        bit 6: drive was last accessed in ghost pair
 ;
 	field	1,UD_RAM_SEGMENT	;Segment number for RAM based drivers, FFh for ROM based drivers
 ;
@@ -233,11 +234,15 @@ size	macro	name
 	ifield	0		;Start at offset zero
 ;
 	field	1,UD1_SLOT            ;Slot address of appropriate disk driver
-	field	1,UD1_RELATIVE_DRIVE  ;Relative unit number
-                                  ;bit 7 is set if partition has changed
+	field	1,UD1_RELATIVE_DRIVE  ;Relative unit number (bits 0-4)
+                                  ;bit 6: set if FDD (floppy disk drive)
+                                  ;bit 7: set if partition has changed
 	field   1,UD1_DEVICE_NUMBER   ;Device number
 	;field   1                    ;LUN number was here in Nextor 2
 	field   4,UD1_FIRST_ABSOLUTE_SECTOR  ;First absolute sector number
+                                  ;For FDD (bit 6 set), byte 0 is repurposed:
+                                  ;  bits 0-1: 00=no ghost, 01=master, 10=ghost
+                                  ;  bit 7: set if this was last accessed
 
     size	UD1_SIZE              ;Total size of unit descriptor
 
@@ -779,6 +784,9 @@ iy_flag defl	FALSE			; Suppress +/- 128 byte checking
 
     var     TMP_FAT,6
 ;
+	var     GHO_PAIR,1		;Ghost pair info:
+	                        ;bits 0-4 = real drive (0=none, 1=A:, etc)
+	                        ;bit 5 = last accessed (0=real, 1=ghost)
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain
 	var2	VAR_BOT			;End of RAM chain marker

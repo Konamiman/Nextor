@@ -10,9 +10,12 @@
 ; Inputs:
 ;       HL = memory size to allocate
 ; Outputs:
-;       if successful, carry flag reset, HL points to the beginning
-;                      of allocated area
+;       if successful, carry flag reset, (HIMEM) is the beginning
+;                      of the allocated area
 ;       otherwise, carry flag set, allocation not done.
+;
+; Note: HL and DE are corrupted by CLRFCB (FCB rebuild).
+;       To get the base of the allocated area, read (HIMEM) after return.
 ;
 BOOTAD	equ	0C000h		;Where boot sector is executed
 ;

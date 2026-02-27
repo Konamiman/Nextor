@@ -57,6 +57,7 @@ endif
 CNSDFG	equ	0F3DEh		;Console display flag
 CURLIN	equ	0F41Ch		;Current line number
 BUF	equ	0F55Eh		;Line input buffer (used as scratch)
+GHO_DRVTBL_PTR	equ	0FD8Eh	;PROCNM+5: DRVTBL pointer saved by ghost setup
 STKTOP	equ	0F674h		;Pointer to bottom of stack
 TXTTAB	equ	0F676h		;Beginning of BASIC text
 VARTAB	equ	0F6C2h
@@ -688,11 +689,12 @@ FMAKE:	CALLDOS	16h	;;Create file (FCB)
 RDABS:	CALLDOS	2Fh	;Absolute sector read
 ;
 
-; Call PRINT_KERNEL_MSG in bank 4 via C4PBK.
+; Call PRINT_KERNEL_MSG in bank 6 via C4PBK.
 ; Input: C = type (0=initializing, 1=skipping, 2=init OK, 3=init failed)
 ;        B = slot number (for types 0, 1)
 CALL_PRINT_KERNEL_MSG:
 	ld hl,PRINT_KERNEL_MSG##
+	set 7,h		;Bit 15 = call bank 6
 	ld (BK4_ADD##),hl
 	jp C4PBK##
 
@@ -1196,7 +1198,7 @@ NO_DEVBASED:
 	jp	c,NO_MEM_FOR_DRIVER	;failed, I cannot be the slave
 ;
 	push hl
-	ex	de,hl		;move base of work area to [DE]
+	ld	de,(HIMEM##)	;ALLOC reduced HIMEM; base of allocated area = new HIMEM
 	call	GET_SLTWRK_ENTRY
 	ld	(hl),e		;set base of work area in SLTWRK
 	inc	hl
@@ -2237,7 +2239,7 @@ call_drv:
 	jp	(ix)		;Was me, just call my slot.
 
 ;
-	;public	PROMPT
+	public	PROMPT
 PROMPT:
 	ld	a,(TARGET##)	;get 0 based target drive number
 	add	a,"A"		;make a drive name
@@ -2694,11 +2696,31 @@ NOCHCPU:
 	;table in page 3 and copy the table here, prepended by
 	;a byte that tells how many entries are in the table.
 
+	;If DOSINIT ran and created a ghost drive, undo the
+	;DRVTBL/$NUMDRV increment that SETUP_GHOST_DOS2 did,
+	;so AUTODRV_DOS1 sees the original drive counts.
+	;GHO_PAIR is page 2 (kernel data), need segment switch.
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+	ex	af,af'
+	ld	a,6
+	ld	ix,UNDO_GHOST_DRVTBL##
+	call	CALBNK##
+	ld	a,(P2_64K##)
+	call	PUT_P2##
+
 	ld	hl,BOOT_TMP##
 	ld	(KERNEX_DOS1##),hl
 	ld	hl,AUTODRV##
 	ld	(BK4_ADD##),hl
 	call	C4PBK##
+
+	;SETUP_GHOST_DOS1 updates KERNEX_DOS1 and also
+	;increments DRVTBL/$NUMDRV directly if ghost created.
+	ld	ix,SETUP_GHOST_DOS1##
+	ex	af,af'
+	ld	a,6
+	call	CALBNK##
 
 	jr	MK_DVB_TBL
 
@@ -2764,7 +2786,7 @@ AUTODRV_OK2:
 
 END_DVB_TBL:
 	ld	hl,(KERNEX##)		;Preserve KERNEX and KERNEX_DOS1 since
-	push	hl                      ;the next ldir will erase it
+	push	hl                      ;the next ldir will erase them
 	ld	hl,(KERNEX##+2)
 	push	hl
 	ld	hl,(KERNEX_DOS1##)
@@ -3349,14 +3371,18 @@ GOT_AVAILABLE:
 	ld	bc,8*256+_FORMAT##
 FMT_CHK_DRIVE:
 	add	hl,hl
-	push	hl
-	push	bc
-	xor	a		;See if format is supported by
-	call	BDOS##		; drive [B].
-	pop	bc
-	pop	hl
-	jr	nz,FMT_NO_DRIVE	;Any error means drive does not exist
-				; or does not support format.
+	push	hl		;Save drive list accumulator
+	push	bc		;Save B (drive) and C (_FORMAT)
+	ld	a,80h		;See if format is supported by
+	ld	hl,($SECBUF##)	; drive [B].
+	ld	de,255
+	call	BDOS##
+	pop	bc		;Restore B (drive) and C (_FORMAT)
+	pop	hl		;Restore drive list accumulator
+	jr	z,FMT_HAS_DRIVE	;Success: drive supports formatting
+	cp	.ELONG##	;Truncated choice string is still OK
+	jr	nz,FMT_NO_DRIVE	; (drive supports format, string was just too long)
+FMT_HAS_DRIVE:
 	inc	hl		;Add to the selection list.
 FMT_NO_DRIVE:
 	djnz	FMT_CHK_DRIVE
@@ -3428,50 +3454,69 @@ FMT_GETDRIVE:
 ;
 	ld	c,_FORMAT##
 	push	bc		;Save drive number and _FORMAT
-	xor	a		;Return choice string
-	call	BDOS##		; B = slot
-				; HL = pointer to choice
-	ld	a,l		;Is there any choice?
-	or	h
-	jr	z,NO_CHOICE	;No choice
 ;
-	ld	a,b		;set target slot address
-CHOILP:
-	push	af
-	call	RDSLT		;get choice string
-	or	a		;end of string?
-	jr	z,CHOIED	;yes
+;   Get the format choice string into BUF via BDOS.
+;   _FORMAT subfunction 80h handles MSX-DOS and Nextor drivers
+;   internally (with proper page 2 segment switching).
+;
+	ld	a,80h		;Subfunction: get choice string to buffer
+	ld	hl,($SECBUF##)
+	ld	de,512		;Buffer size (max allowed)
+	call	BDOS##
+	jr	z,fformat_choice_ok
+	cp	.ELONG##
+	jr	nz,FMTABO3	;Real error: drive can't format
+	ld	b,1		;B=1: truncated
+	jr	fformat_print_choice
+fformat_choice_ok:
+	ld	b,0		;B=0: not truncated
+;
+;   Print the choice string from SECBUF and ask for a choice.
+;
+fformat_print_choice:
+	ld	hl,($SECBUF##)
+	ld	a,(hl)
+	or	a
+	jr	z,FMT_NO_CHOICES	;Empty string: no choices
+;
+FMT_PRINT_CHOICE:
 	call	$OUT
-	pop	af
 	inc	hl
-	jr	CHOILP
+	ld	a,(hl)
+	or	a
+	jr	nz,FMT_PRINT_CHOICE
 ;
-CHOIED:
-	pop	af		;discard stack
+	dec	b		;Was truncated?
+	jr	nz,fformat_not_truncated
+	ld	a,'.'		;Print "..."
+	call	$OUT
+	call	$OUT
+	call	$OUT
+fformat_not_truncated:
+;
 	ld	a,"?"
 	call	$OUT
 	ld	a," "
 	call	$OUT
 ;
-CHOICE_ASKAGAIN:
+FMT_CHOICE_ASK:
 	call	GET_CHAR
-	jr	z,FMTABO3	;abort
+	jr	z,FMTABO3	;Abort
 ;
 	sub	"1"
 	cp	9
-	jr	nc,CHOICE_ASKAGAIN
+	jr	nc,FMT_CHOICE_ASK
 ;
-	add	A,"1"
-	call	$OUT		;echo choice
+	add	a,"1"
+	call	$OUT		;Echo choice
 	call	PRT_CRLF
-	sub	"1"
+	sub	"0"		;Convert to 1-9
+	jr	FMT_HAVE_CHOICE
 ;
-NO_CHOICE:
-;
-;   Here with choice number in [A] (one less, i.e. 0~8)
-;
-	inc	a		;Make choice number 1 based
-	push	af		; and save it.
+FMT_NO_CHOICES:
+	ld	a,1		;No choices: default = 1
+FMT_HAVE_CHOICE:
+	push	af		;Save choice (1-9)
 	ld	a,__STRIKE##
 	call	PRT_ROM_MSG	;"Strike a key when ready "
 ;

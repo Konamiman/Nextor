@@ -64,7 +64,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -311,6 +311,31 @@ drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 	$(call copy_to_bin,$@)
 
 
+### Turbo-R FDD
+
+dsk-tr: drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM
+
+drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM: \
+	nextor_base.dat \
+	drivers/TurboRFDD/driver.bin \
+	drivers/TurboRFDD/chgbnk.bin \
+	256.bytes
+
+	cat 256.bytes drivers/TurboRFDD/driver.bin > drivers/TurboRFDD/_driver.bin
+	$(MKNEXROM) nextor_base.dat $@ /d:drivers/TurboRFDD/_driver.bin /m:drivers/TurboRFDD/chgbnk.bin
+	$(call copy_to_bin,$@)
+
+drivers/TurboRFDD/driver.bin: \
+	drivers/TurboRFDD/driver.mac
+
+	$(call assemble,drivers/TurboRFDD/driver.mac,--build-type abs --output-file-extension bin)
+
+drivers/TurboRFDD/chgbnk.bin: \
+	drivers/TurboRFDD/chgbnk.mac
+
+	$(call assemble,drivers/TurboRFDD/chgbnk.mac,--build-type abs --output-file-extension bin)
+
+
 ### Common rules
 
 256.bytes:
@@ -355,7 +380,7 @@ B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.re
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
-B6RELS = $(addprefix bank6/,b6.rel)
+B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel)
 
 lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,\
 	$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,\
@@ -371,7 +396,13 @@ $(COMRELS) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS
 	$(call assemble,$(patsubst %.rel,%.mac,$@))
 
 
+data.rel: bank4/jtable.inc bank6/jtable.inc
+bank4/jump.rel: bank4/jtable.inc
+bank6/jump.rel: bank6/jtable.inc
+
 ###  Bank 0
+
+bank6/b6.rel: bank2/b2labels.inc bank0/b0lab_b6.inc
 
 bank0/B0.BIN bank0/B0.SYM: \
 	$(COMRELS) \
@@ -388,12 +419,17 @@ bank0/B0.BIN bank0/B0.SYM: \
 bank0/b0labels.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT)
 
 bank0/b0lab_b3.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b3.inc,INIT|TIMINT|MAPBIO|GWRK|FDISK|R_[^[:space:]]+)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b3.inc,INIT|TIMINT|MAPBIO|GWRK|FDISK|PROMPT|R_[^[:space:]]+)
+
+bank0/b0lab_b6.inc: \
+	bank0/B0.SYM
+
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b6.inc,ALLOC)
 
 
 ###  Bank 1
@@ -490,15 +526,6 @@ bank4/partit.rel: \
 
 	$(call assemble,bank4/partit.mac)
 
-bank4/bootmsg.rel: \
-	macros.inc \
-	const.inc \
-	condasm.inc \
-	bank4/bootmsg.mac \
-	bank0/betainfo.mac
-
-	$(call assemble,bank4/bootmsg.mac)
-
 bank4/ramdrvh.rel: \
 	macros.inc \
 	const.inc \
@@ -519,7 +546,6 @@ bank4/B4.BIN bank4/B4.SYM: \
 	$(COMRELS) \
 	$(B4RELS) \
 	bank4/partit.rel \
-	bank4/bootmsg.rel \
 	bank4/b4.rel \
 	bank4/ramdrv.rel \
 	bank0/b0labels.inc \
@@ -527,7 +553,7 @@ bank4/B4.BIN bank4/B4.SYM: \
 
 	$(call print_linking,"bank 4")
 	@$(LK80) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel bootmsg.rel \
+			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -543,14 +569,15 @@ bank5/B5.BIN: \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b5.rel \
 			--code 7fd0h ../chgbnk.rel
 
-bank6/B6.BIN: \
+bank6/B6.BIN bank6/B6.SYM: \
 	$(COMRELS) \
 	$(B6RELS) \
-	bank0/40ff.rel
+	chgbnk.rel \
+	bank0/b0lab_b6.inc
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel \
+			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \

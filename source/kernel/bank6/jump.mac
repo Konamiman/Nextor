@@ -1,7 +1,7 @@
 	.z80
 	name('jump')
 	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
-	subttl	Jump table for MSX-DOS 2.0 ROM bank 4 public routines
+	subttl	Jump table for MSX-DOS 2.0 ROM bank 6 public routines
 ;-----------------------------------------------------------------------------
 
 	INCLUDE ../macros.inc
@@ -10,8 +10,6 @@
 
 ; Jump table to routines called from outside this bank.
 ; Must be at address 4100h and match the definition in data.mac.
-;
-; See KBDOS in kinit.mac, and ?CALL4 in doshead.mac.
 
 jentry	macro	name
 	jp	?&name&##

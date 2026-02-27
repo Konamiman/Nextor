@@ -5796,8 +5796,93 @@ A609A:	ld	hl,YF355
 	ld	(hl),0FFH
 	ret
 
+;	Get bitmask of formattable drives
+;	Scans DRVTBL. For MSX-DOS drivers (KERNEX[i]=0), all drives are FDDs.
+;	For Nextor drivers (KERNEX[i]!=0), checks KERNEX_DOS1 FDD flag.
+;	If KERNEX_DOS1 is not available, returns mask for all drives (YF347).
+;	Outputs		A = bitmask (bit 0=drive A, bit 1=drive B, etc.)
+;	Modifies	AF, BC, DE, HL, IX, IY
+
+GET_FMT_MASK:
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	jr	z,gfm_all	;No KERNEX_DOS1 table
+
+	push	hl
+	pop	iy
+	inc	iy		;IY = first KERNEX_DOS1 entry (skip count)
+
+	ld	ix,KERNEX##	;Nextor driver flags (4 bytes, one per DRVTBL entry)
+	ld	hl,YFB21	;DRVTBL
+	ld	c,0		;Result bitmask
+	ld	d,1		;Current bit position
+	ld	b,4		;4 DRVTBL entries
+
+gfm_entry:
+	ld	a,(hl)		;num_drives for this entry
+	or	a
+	jr	z,gfm_next_entry
+
+	ld	e,b		;Save outer loop counter
+	ld	a,(ix+0)	;Nextor driver?
+	or	a
+	jr	nz,gfm_nextor
+
+	;MSX-DOS driver: all drives are FDDs
+	ld	a,(hl)
+	ld	b,a
+gfm_msx_loop:
+	ld	a,c
+	or	d
+	ld	c,a
+	sla	d
+	djnz	gfm_msx_loop
+	ld	b,e
+	jr	gfm_next_entry
+
+gfm_nextor:
+	;Nextor driver: check KERNEX_DOS1 entries for FDD flag
+	ld	a,(hl)
+	ld	b,a
+gfm_nxt_loop:
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	z,gfm_nxt_skip
+	ld	a,c
+	or	d
+	ld	c,a
+gfm_nxt_skip:
+	push	de
+	ld	de,UD1_SIZE##
+	add	iy,de
+	pop	de
+	sla	d
+	djnz	gfm_nxt_loop
+	ld	b,e
+
+gfm_next_entry:
+	inc	hl
+	inc	hl
+	inc	ix
+	djnz	gfm_entry
+
+	ld	a,c
+	ret
+
+gfm_all:
+	;No KERNEX_DOS1: all drives support formatting
+	ld	a,(YF347)
+	ld	b,a
+	xor	a
+gfm_all_loop:
+	scf
+	rla
+	djnz	gfm_all_loop
+	ret
+
+
 ;	Subroutine	FORMAT BIOS call (H.FORM)
-;	Inputs		
+;	Inputs
 ;	Outputs		________________________
 
 A60B0:	and	a			; use free BASIC memory as formatbuffer
@@ -5811,76 +5896,139 @@ A60B1:	ld	(YF339),sp		; save stackpointer for abort
 	call	nc,A62D6		; get formatbuffer in free BASIC memory
 	push	hl
 	push	bc
-	ld	a,(YF347)
-	dec	a			; only 1 diskdrive ?
-	jr	z,A6101			; yep, skip drivename input and use driveid 0
-A60C0:	call	A5F86
+
+	;--- Get bitmask of formattable drives
+
+	call	GET_FMT_MASK
+	or	a
+	jr	nz,FMT_HAS_DRIVES
+	pop	bc
+	pop	hl
+	ret			;No formattable drives
+
+FMT_HAS_DRIVES:
+	ld	(BUF+99),a	;Save mask
+
+	;--- Check if only 1 formattable drive
+
+	ld	c,a
+	dec	a
+	and	c
+	jr	nz,FMT_ASK_DRIVE
+
+	;--- Only 1 formattable drive: find which one
+
+	xor	a
+FMT_FIND_SINGLE:
+	rr	c
+	jr	c,A6101		;Found it: A = 0-based drive index
+	inc	a
+	jr	FMT_FIND_SINGLE
+
+FMT_ASK_DRIVE:
+	call	A5F86
 	defb	"Drive name? (",0
 	nop
 	nop
 	nop
-	nop				; room for expansion ??
-	nop				; extra 5 bytes
-	ld	a,(YF347)
-	ld	b,a			; number of diskdrives
-	ld	a,"A"			; starts with "A" drive
-	jr	A60E5
+	nop			; room for expansion
+	nop
 
-A60DE:	push	af
+	;--- List formattable drives
+
+	ld	a,(BUF+99)
+	ld	c,a		;C = mask
+	ld	d,"A"		;D = current letter
+	ld	e,0		;E = drives listed so far
+FMT_LIST_LOOP:
+	srl	c
+	jr	nc,FMT_LIST_SKIP
+	ld	a,e
+	or	a
+	jr	z,FMT_LIST_NOCOMMA
+	push	de
 	ld	a,","
-	call	A408F			; output to screen
-	pop	af
-A60E5:	call	A408F			; output to screen
-	inc	a
-	djnz	A60DE			; next drive
+	call	A408F		; output comma
+	pop	de
+FMT_LIST_NOCOMMA:
+	push	de
+	ld	a,d
+	call	A408F		; output drive letter
+	pop	de
+	inc	e
+FMT_LIST_SKIP:
+	inc	d
+	ld	a,c
+	or	a
+	jr	nz,FMT_LIST_LOOP
+
 	call	A5F86
 	defb	") ",0
-	call	A6195			; get fresh consoleinput (CTRL-C aborts)
-	call	A62C6			; print input and CR/LF
-	and	0DFH			; upcase
-	sub	"A"
-	ld	hl,YF347
-	cp	(hl)			; driveletter valid ?
-	jr	nc,A60C0		; nope, ask again
-A6101:	call	A609A			; mark FAT buffer as invalid
-	call	A6086			; get diskdriverparameters
-	push	iy
-	push	af
-	push	iy
-	ld	ix,T4019
-	call	CALSLT			; call CHOICE diskdriver
-	ld	a,l
-	or	h			; choice string ?
-	jr	z,A613E			; nope, skip choice input and use choice 0 (default format)
-	pop	af
-A6118:	push	af
-	call	RDSLT
-	and	a
-	jr	z,A6126
-	call	A408F			; output to screen
-	inc	hl
-	pop	af
-	jr	A6118			; print choice string
 
-A6126:	pop	af
-	call	A5F86
-	defb	"? ",0
-A612D:	call	A6195			; get fresh consoleinput (CTRL-C aborts)
-	sub	"1"
-	cp	009H			; input "1"-"9" ?
-	jr	nc,A612D		; nope, ask again
-	add	a,"1"
-A6138:	call	A62C6			; print input and CR/LF
-	sub	"0"			; choice 1-9
+	;--- Get user input
+
+FMT_INPUT:
+	call	A6195		; get fresh consoleinput (CTRL-C aborts)
+	call	A62C6		; print input and CR/LF
+	and	0DFH		; upcase
+	sub	"A"
+	cp	8
+	jr	nc,FMT_ASK_DRIVE ;Invalid range
+
+	;--- Check if drive is in formattable mask
+
+	ld	c,a		;Save drive index
+	ld	b,a
+	inc	b
+	ld	a,(BUF+99)
+FMT_CHK_BIT:
+	rrca
+	djnz	FMT_CHK_BIT
+	jr	nc,FMT_ASK_DRIVE ;Drive not formattable
+
+	ld	a,c		;Restore drive index
+A6101:	call	A609A			; mark FAT buffer as invalid
+	call	A6086		; get diskdriverparameters
+	push	iy
 	push	af
-A613E:	call	A6174			; prompt and get fresh consoleinput (CTRL-C aborts)
-	pop	af
-	pop	de
-	pop	iy
-	pop	bc
+
+	;--- Get format choice via common bank 6 routine
+
+	ld	c,a		;C = device number
+	ld	a,iyh
+	ld	(BUF+100),a	;Save slot for bank 6 routine
+	ld	hl,FMT_PRINT_AND_CHOOSE##
+	set	7,h		;Bit 15 = call bank 6
+	ld	(BK4_ADD##),hl
+	ld	hl,($SECBUF)
+	ld	de,512		;Buffer size
+	call	C4PBK##		;A = choice (1-9 or 0), Cy = cancelled
+	jp	c,FMT_ABORT_D1	;Cancelled
+	or	a
+	jr	nz,fmt_choice_d1
+	ld	a,1		;Default: choice 1
+fmt_choice_d1:
+	push	af		;Save choice
+	call	A6174		;Strike a key when ready (CTRL-C aborts internally)
+
+	;--- Route format operation through F_FORMAT (bank 6).
+	;    F_FORMAT handles both Nextor and MSX-DOS drivers.
+
+	pop	af		;A = choice
+	pop	de		;Discard D = relative drive
+	pop	iy		;Discard IYh = slot
+	pop	de		;DE = buffer size
+	pop	hl		;HL = buffer address
+	ld	c,a		;C = choice (subfunction 1-9)
+	ld	a,(YF33F)	;A = 0-based drive index
+	inc	a
+	ld	b,a		;B = 1-based drive number
+	push	hl
+	ld	hl,F_FORMAT##
+	set	7,h		;Bit 15 = call bank 6
+	ld	(BK4_ADD##),hl
 	pop	hl
-	ld	ix,T401C
-	call	CALSLT			; call DSKFMT diskdriver
+	call	C4PBK##		;Returns carry on error, A = DSKFMT error code
 	ld	hl,T61E0
 	jr	nc,A615D		; no error, print "format complete" and quit
 	ld	hl,T6248
@@ -5913,6 +6061,7 @@ A6174:	call	A5F86
 A6195:	call	A6166			; get fresh keyboardinput
 	cp	003H
 	ret	nz
+FMT_ABORT_D1:
 	ld	sp,(YF339)
 	call	A5F86
 	defb	13,10,"Aborted",0
@@ -8854,6 +9003,9 @@ MOREFS:
 
 	db	_MAPDRV##
 	dw	F_MAPDRV##
+
+	db	_FORMAT##
+	dw	F_FORMAT##+8000h	;Bit 15 = call bank 6
 
 	db	0
 

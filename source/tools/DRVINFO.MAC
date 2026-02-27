@@ -51,6 +51,28 @@ MAIN_LOOP:
 	jp	NEXT_DRIVE
 NORDISK:
 
+	;* If ghost drive, print appropriate info
+
+	ld	a,(BUF_LETTER)
+	cp	5
+	jr	nz,NOGHOST
+	ld	de,GHOST_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	a,(BUF_LETTER+1)
+	add	a,"A"
+	ld	e,a
+	ld	c,_CONOUT##
+	call	5
+	ld	e,":"
+	ld	c,_CONOUT##
+	call	5
+	ld	de,TWOCRLF
+	ld	c,_ZSTROUT##
+	call	5
+	jp	NEXT_DRIVE
+NOGHOST:
+
 	;* If mounted file, print appropriate info
 
 	ld	a,(BUF_LETTER)
@@ -228,6 +250,8 @@ NEXT_DRIVE:
 
 RAMDISK_MSG:
 	db	"RAM disk",13,10,10,0
+GHOST_MSG:
+	db	"Ghost drive of ",0
 DEVLUN_MSG:
 	db	"Device ",0
 RELUNIT_MSG:

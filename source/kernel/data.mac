@@ -56,10 +56,10 @@ ram_ad	defl	DATABASE
 
 ; These are available in MSX-DOS 1 mode too thanks to the modification
 ; of the STROUT routine, see dos1ker.mac
-    
-    spare   1
+
+    spare 1             ;F1CF: overwritten by DOS 1 init (LDIR to F1C9-F236)
     ;NOTE! BK4_ADD is manually defined in bank5/dos.h, and must be updated if it changes
-    var2 BK4_ADD,F1D0   ;Address of routine to be called in bank 4
+    var2 BK4_ADD,F1D0   ;Address of routine to be called via C4PBK
     var TMP_SEC,4       ;Used for temporary storage of a 32 bit sector number
 ;
 ;	------------------------
@@ -254,7 +254,7 @@ ram_ad	defl	DATABASE
 ;
 ;	------------------------
 ;
-	spare	4
+	spare	4		;F309-F30C used by DOS 1 kernel (YF309, YF30B, YF30C)
 ;
 	var1	RAWFLG, F30D	;Read-after write flag - must not move
 	var1	COUNTRY,F30E	;Accessed by COMMAND.COM - can't move
@@ -460,81 +460,18 @@ ram_ad	defl	DATABASE
 ;
 ;-----------------------------------------------------------------------------
 ;
-;       Jump table for bank 4 public routines
+;       Jump tables for bank 4 and bank 6 public routines.
+;       Entry lists are in jtable.inc files (shared with jump.mac).
+
+jentry	macro	name
+	var3	name
+	endm
 
 ram_ad	defl	4100h
+	INCLUDE	bank4/jtable.inc
 
-	var3	F_GENV
-	var3	F_SENV
-	var3	F_FENV
-	var3	GET_ENV
-
-	var3	F_FOPEN
-	var3	F_FCLOSE
-	var3	F_SFIRST
-	var3	F_SNEXT
-	var3	F_RDSEQ
-	var3	F_WRSEQ
-	var3	F_FMAKE
-	var3	F_FDEL
-	var3	F_FREN
-	var3	F_RDRND
-	var3	F_WRRND
-	var3	F_WRZER
-	var3	F_FSIZE
-	var3	F_SETRND
-	var3	F_RDBLK
-	var3	F_WRBLK
-
-	var3	F_GPART
-	var3	GDRIVER
-	var3	AUTODRV
-	var3	MKDPB
-
-	var3	F_GDRVR
-	var3	F_GDLI
-	var3	F_CDRVR
-	var3	F_MAPDRV
-	var3	F_Z80MODE
-	
-	var3	UNMAPALL
-
-	var3	DOSV1
-    var3	CMAPDRV
-	var3	CLOCKDRV
-	var3	CUSR
-	var3	CCURDRV
-	var3	CNEXTOR
-	var3	CCHDRV
-	var3	CDRVINFO
-	var3	CDRIVERS
-
-	var3	F_GDATE
-	var3	F_SDATE
-	var3	F_GTIME
-	var3	F_STIME
-
-	var3	CLK_INIT
-	var3	GT_DATE_TIME
-
-	var3	ALLSEG
-	var3	FRESEG
-	var3	FREUSEG
-
-	var3	F_LOCK
-   	var3	F_FOUT
-	var3	F_RALLOC
-	var3	F_DSPACE
-
-	var3    GET_BOOT_DRIVES_COUNT
-	var3    AUTO_ASPART
-    var3    F_GETCLUS
-
-	var3    F_RAMD
-	var3    ZAP_RAMD
-
-	var3    BOOT_MENU
-	var3    PRINT_KERNEL_MSG
+ram_ad	defl	4100h
+	INCLUDE	bank6/jtable.inc
 
 ;-----------------------------------------------------------------------------
 ;
@@ -610,6 +547,9 @@ ram_ad	defl	4100h
 	const DEVQ_GET_PARAMS,2
 	const DEVQ_GET_STATUS,3
 	const DEVQ_GET_AVAILABILITY,4
+	const DEVQ_GET_FORMAT_CHOICES,5
+	const DEVQ_DO_FORMAT,6
+	const DEVQ_STOP_MOTOR,7
 
 	endmod
 

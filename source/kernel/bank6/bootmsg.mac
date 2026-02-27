@@ -21,7 +21,7 @@ LINL40:		equ	0F3AEh
 ;-----------------------------------------------------------------------------
 ;
 ; PRINT_KERNEL_MSG - Print kernel initialization status message
-; Called from bank 0 via C4PBK.
+; Called from bank 0 via C4PBK (with bank 6 flag).
 ;
 ; Input: C = type:
 ;   0 = "Initializing Nextor kernel at [slot ]X: <name>"
@@ -32,7 +32,9 @@ LINL40:		equ	0F3AEh
 ;   4 = "Nextor kernel version X.Y.Z, Press N to show the boot menu"
 ; B = slot number (used for types 0 and 1)
 
-	PROC PRINT_KERNEL_MSG
+	public	?PRINT_KERNEL_MSG
+
+?PRINT_KERNEL_MSG:
 
 	ld a,c
 	or a
@@ -196,10 +198,9 @@ STR_NEXTOR_VERSION:
 	db ".", SEC_NEXTOR_VERSION_LOW##+"0"
 	INCLUDE ../bank0/betainfo.mac
 	db 13,10
-	db "github.com/konamiman/Nextor",13,10
+	db "https://github.com/konamiman/Nextor",13,10
 	db 10
 STR_PRESS_N:
 	db "Press N to show the boot menu",13,10,10,0
 
-	finish <BOOTMSG>
 	end
