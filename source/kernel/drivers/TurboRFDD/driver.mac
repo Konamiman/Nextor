@@ -1009,7 +1009,8 @@ DI_WRITE_SECTORS:
 	call	READ_WRITE
 	pop	bc
 	pop	hl
-	ret	c
+	or	a
+	ret	nz
 	;Advance sector number
 	inc	(ix+FMT_SECNUM)
 	jr	nz,DI_WS_NOV
@@ -1736,6 +1737,7 @@ FWR_LP:
 
 	ld	b,2
 	call	FDC_WRITE_CMD
+	jr	c,FWR_LP	;Command failed, retry
 	call	FDC_READ_RESULT
 	ld	a,(ix+WK_RES)	;ST3
 	bit	5,a		;Ready?

@@ -26,7 +26,7 @@ The "Get device parameters" device query currently returns:
 ```
 ; +7 (1): Flags:
 ;         bit 0: 1 if the device is removable.
-;         bit 1: 1 if the device is read only. A device that can dinamically
+;         bit 1: 1 if the device is read only. A device that can dynamically
 ;                  be write protected or write enabled is not considered
 ;                  to be read-only.
 ;         bit 2: 1 if the device is a floppy disk drive.
@@ -47,7 +47,7 @@ When a device is identified as a floppy disk drive:
 
 - Nextor will always assign absolute sector 0 of the device to the drive at mapping time.
 - FDISK will list the device but will not allow to operate on it, same as it happens now with e.g. offline devices.
-- This implies that a boot time the device will get exactly one drive assigned (but later w'll discuss about ghost drives).
+- This implies that a boot time the device will get exactly one drive assigned (but later we'll discuss about ghost drives).
 - F_GPART will always return the same result as for a regular block device that doesn't have any partition defined.
 
 ## Formatting support
@@ -115,7 +115,7 @@ Input:  B  = Device number
         C  = Formatting choice
 Output: A = Ok, or
             QUERY_INVALID_DEVICE, or
-            QUERY_NOT_IMPLEMENTED if device is not a floppy disk drive, formatting is not supported, or an unknwon choice is passed, or
+            QUERY_NOT_IMPLEMENTED if device is not a floppy disk drive, formatting is not supported, or an unknown choice is passed, or
             any read-write error code (see source/kernel/drivers/StandaloneASCII8/driver.mac)
 ```
 

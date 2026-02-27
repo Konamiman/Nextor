@@ -305,7 +305,7 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; with possible future extensions.
 
 KEYS_INV_0: db 00h
-KEYS_INV_1: db 10h; 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
+KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
 
 ;
 ;=======================================================================
