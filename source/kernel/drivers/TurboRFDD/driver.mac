@@ -250,6 +250,7 @@ WK_MT0:	equ	1		;Motor timeout counter drive 0
 WK_MT1:	equ	2		;Motor timeout counter drive 1
 FMT_SECNUM:	equ	3		;2 bytes: sector number for format init
 WK_FLAGS:	equ	5		;bit 0 = write operation
+WK_SCNT:	equ	6		;Sectors successfully transferred
 WK_CMD:	equ	10		;FDC command buffer (9 bytes, +10..+18)
 WK_RES:	equ	19		;FDC result buffer (7 bytes, +19..+25)
 WK_XFER:	equ	26		;Start of RAM transfer routine code
@@ -1192,6 +1193,7 @@ FT_ERR_FDC:
     ;              HL = Source or destination memory address
     ;              DE = Address where the 4 byte sector number is stored
     ;    Output:   A = Error code (0 = OK)
+	;              B = Sectors successfully transferred
 
 READ_WRITE:
 	;--- Save carry (read/write) and device number
@@ -1330,6 +1332,10 @@ RW_DOR0:
 	ld	d,a		;D = media info + DOR
 	pop	af		;A = cylinder
 
+	;--- Initialize transferred sector count
+
+	ld	(ix+WK_SCNT),0
+
 	;--- Turn on motor
 
 	push	af		;Save cylinder
@@ -1357,7 +1363,7 @@ RW_DOR0:
 	pop	de
 	pop	bc
 	pop	hl
-	jr	c,RW_ERR_NRDY
+	jp	c,RW_ERR_NRDY
 
 	;--- Check write protect (ST3 bit 6)
 
@@ -1447,6 +1453,8 @@ RW_SECTOK:
 	pop	bc
 	pop	hl
 
+	inc	(ix+WK_SCNT)	;Count successful sector
+
 	;Advance buffer by 512
 	inc	h
 	inc	h
@@ -1472,6 +1480,7 @@ RW_TIMER:
 RW_TM1:
 	ld	(ix+WK_MT1),MOTOR_TIMEOUT
 RW_TMOK:
+	ld	b,(ix+WK_SCNT)	;B = sectors successfully transferred
 	pop	af
 	ret
 
@@ -1664,6 +1673,8 @@ FSI_END:
 
 FDC_SEEK:
 	push	bc
+	push	de
+	push	hl
 
 	;Pre-seek delay
 	ld	b,77h
@@ -1690,6 +1701,8 @@ FDS_DL2:
 	jr	nz,FDS_DL2
 	pop	af
 
+	pop	hl
+	pop	de
 	pop	bc
 	ret
 

@@ -600,6 +600,7 @@ CUSTOM_DEVICE_QUERY:
     ;                  .WRERR: Write error
     ;                  .NCOMP: Incompatible disk.
     ;                  .SEEK: Seek error.
+	;               B = Sectors successfully transferred
 
 READ_WRITE:
 	ld a,.IDEVN
