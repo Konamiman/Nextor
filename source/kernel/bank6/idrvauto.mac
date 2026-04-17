@@ -1,0 +1,1044 @@
+	.z80
+	name('idrvauto')
+	title	IDRIVER/UDRIVER bank 6 implementation
+;******************************************************************************
+;
+	INCLUDE ../macros.inc
+	INCLUDE ../const.inc
+;
+
+BUF	equ	0F55Eh
+PROCNM	equ	0FD89h
+CALLB0	equ	403Fh
+CALBNK_ADDR	equ	4042h
+
+; BASIC ROM equates
+CALBAS	equ	0159h
+GETBYT	equ	521Ch
+CHRGTR	equ	4666h
+FRMEVL	equ	4C64h
+FRESTR	equ	67D0h
+FRMQNT	equ	542Fh
+NLONLY	equ	0F87Ch
+FLBMEM	equ	0FCAEh
+VALTYP	equ	0F663h
+DAC	equ	0F7F6h
+
+
+;=============================================================================
+;
+;    BASIC utility routines (bank 6 versions)
+;
+;=============================================================================
+
+
+; Call a routine in the BASIC interpreter
+; Input: IX = routine address
+
+BASIC_ROUT6:
+	ld	iy,CALBAS
+	ld	(BK4_ADD##),iy
+	call	CALLB0
+	ei
+	ret
+
+
+; Extract character from BASIC text, force Syntax error if not the expected
+
+SYNCHR6:
+	dec	hl
+	push	af
+	ld	ix,CHRGTR
+	call	BASIC_ROUT6
+	inc	hl
+	pop	bc
+	cp	b
+	ret	z
+	ld	e,2	;"Syntax error"
+
+
+; Force BASIC error, code passed in E
+
+BASIC_ERR6:
+	ld	a,(DOS_VER##)
+	or	a
+	jr	nz,BASIC_ERR6_2
+
+	ld	bc,00000H
+	xor	a
+	ld	(NLONLY),a		; not loading basic program, close i/o channels when requested
+	ld	(FLBMEM),a		; ascii mode
+	push	de
+	ld	ix,6B24h
+	call	BASIC_ROUT6		; close i/o channel
+	pop	de
+
+BASIC_ERR6_2:
+	ld	ix,406fh
+	jr	BASIC_ROUT6
+
+
+; Call a DOS function from a BASIC CALL command
+
+BASIC_DOS6:
+	push	af
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,BASIC_DOS6_1
+
+	ld	ix,BDOSE##
+	ex	af,af
+	pop	af
+	ex	af,af
+	xor	a
+	jp	CALBNK_ADDR
+
+BASIC_DOS6_1:
+	pop	af
+	ld	ix,0F37Dh
+	ld	(BK4_ADD##),ix
+	call	CALLB0
+	or	a
+	ret	z
+
+	ld	ix,GETERR##
+	push	af
+	ex	af,af
+	pop	af
+	ex	af,af
+	xor	a
+	call	CALBNK_ADDR
+
+	jr	BASIC_ERR6
+
+
+; Call a DOS function from a BASIC CALL command, do not handle errors
+
+BASIC_DOS6_NE:
+	ld	ix,0F37Dh
+	ld	(BK4_ADD##),ix
+	jp	CALLB0
+
+
+; Try to extract ',' or ')' from BASIC text,
+; return Cy=1 if ')' extracted
+
+NEXT_CALL_PAR6:
+	dec	hl
+	ld	ix,CHRGTR
+	call	BASIC_ROUT6
+	inc	hl
+	cp	","
+	ret	z
+	cp	")"
+	scf
+	ret	z
+
+	ld	e,2	;"Syntax error"
+	jr	BASIC_ERR6
+
+
+; Try to extract '(' from text. If end of instruction,
+; show zero-terminated help pointed by DE.
+
+GET_PARENT_OR_HELP6:
+	dec	hl
+	push	de
+	ld	ix,CHRGTR
+	call	BASIC_ROUT6
+	pop	de
+	jr	z,DO_CALL_HELP6
+	inc	hl
+	cp	"("
+	ret	z
+	ld	e,2	;"Syntax error"
+	jp	BASIC_ERR6
+
+DO_CALL_HELP6:
+	pop	af	;To prevent the rest of the CALL from being executed
+	ex	de,hl
+	call	PRINT_CALL_HELP##
+	ex	de,hl
+	ret
+
+
+;=============================================================================
+;
+;    CUDRIVER — CALL UDRIVER
+;
+;=============================================================================
+
+;-----------------------------------------------------------------------------
+;
+	PROC	CUDRIVER
+;
+; CALL UDRIVER(<slot>,<segment>[,<flags>])
+; Unload (shut down and free) a RAM-loaded driver.
+; Flags bit 1: silent mode (suppress shutdown/success messages)
+;
+
+	public	?CUDRIVER
+
+UDRV_SLOT	equ	PROCNM
+UDRV_SEG	equ	PROCNM+1
+UDRV_FLAGS	equ	PROCNM+2
+
+	ld	de,UDRIVER_HELP
+	call	GET_PARENT_OR_HELP6
+
+	;* Parse slot number (main+4*subslot format)
+
+	ld	ix,GETBYT
+	call	BASIC_ROUT6
+	ld	e,a
+	and	11b
+	ld	c,a
+	ld	b,0
+	ld	ix,EXPTBL##
+	add	ix,bc
+	ld	a,(ix)
+	and	10000000b
+	or	e
+	ld	(UDRV_SLOT),a
+
+	call	NEXT_CALL_PAR6
+	jr	nc,UDRV_PAR2
+	ld	e,2		;"Syntax error" (missing segment)
+	jp	BASIC_ERR6
+
+UDRV_PAR2:
+	;* Parse segment number
+
+	ld	ix,GETBYT
+	call	BASIC_ROUT6
+	ld	(UDRV_SEG),a
+
+	;* Parse optional flags
+
+	xor	a
+	ld	(UDRV_FLAGS),a	;Default flags = 0
+
+	call	NEXT_CALL_PAR6
+	jr	c,UDRV_GOPARSED	;')' → no flags
+
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6	;DE = flags value
+	ld	a,e
+	ld	(UDRV_FLAGS),a
+
+	ld	a,')'
+	call	SYNCHR6
+
+UDRV_GOPARSED:
+	push	hl		;Save BASIC text pointer
+
+	;* Call F_DRVRO (bank 4) to shut down the driver
+
+	ld	de,0018h	;Print character routine (RST 18h)
+	ld	a,(UDRV_FLAGS)
+	bit	1,a
+	jr	z,UDRV_NOTSILENT
+	ld	e,0		;DE=0 → silent (F_DRVRO uses BUF+5 RET stub)
+UDRV_NOTSILENT:
+	ld	a,(UDRV_SEG)
+	ld	b,a
+	ld	a,(UDRV_SLOT)	;A=slot, B=segment
+	ld	h,2		;Operation: shut down
+	ex	af,af'		;AF' = A (slot) for F_DRVRO
+	ld	a,4
+	ld	ix,F_DRVRO##
+	call	CALBNK_ADDR
+
+	or	a
+	jr	z,UDRV_OK
+
+	;Error: convert DOS error to BASIC error
+	call	DRVRO_BERR6
+
+UDRV_OK:
+	;* Free the segment
+
+	ld	a,(UDRV_SLOT)
+	ld	b,a
+	ld	a,(UDRV_SEG)	;A=segment, B=slot
+	call	FRE_SEG##
+
+	;* Print success message
+
+	ld	hl,UDRV_OK_MSG
+	call	PRINT_CALL_HELP##
+
+	pop	hl		;Restore BASIC text pointer
+	ret
+
+UDRIVER_HELP:
+	defb	"UDRIVER(<slot>,<seg>[,<flags>])",13,10
+	defb	13,10
+	defb	"<flags>: 2 for silent mode",13,10
+	defb	0
+
+
+;=============================================================================
+;
+;    CIDRIVER — CALL IDRIVER
+;
+;=============================================================================
+
+;-----------------------------------------------------------------------------
+;
+	PROC	CIDRIVER
+;
+; CALL IDRIVER(<filename>[,<flags>[,<data>...]])
+; CALL IDRIVER(<filename>,<flags>,<addr>,<len>)  (flags bit 2 set)
+; Load and initialize a RAM driver from a file.
+; Optional init data is written to the first 256 bytes of the segment
+; (byte 0 = length, bytes 1+ = data).
+; Flags (default 0): bit 0 = auto-map, bit 1 = silent, bit 2 = pointer mode
+;
+; On file I/O error, BASIC_DOS6 aborts to BASIC error handler
+; (allocated segment leaks; acceptable).
+;
+
+	public	?CIDRIVER
+
+IDRV_SLOT	equ	PROCNM
+IDRV_SEG	equ	PROCNM+1
+IDRV_HANDLE	equ	PROCNM+2
+IDRV_OFFSET	equ	PROCNM+3	;2 bytes
+IDRV_INITLEN	equ	PROCNM+5	;1 byte: length of init data
+IDRV_INITDAT	equ	PROCNM+6	;2 bytes: address of init data in $SECBUF
+IDRV_FLAGS	equ	PROCNM+8	;1 byte: flags
+
+	ld	de,IDRIVER_HELP
+	call	GET_PARENT_OR_HELP6
+
+	;* Parse filename string
+
+	push	hl
+	ld	ix,FRMEVL
+	call	BASIC_ROUT6
+	ld	a,(VALTYP)
+	cp	3		;String type?
+	jr	z,IDRV_STR
+	pop	hl
+	ld	e,2		;"Syntax error"
+	jp	BASIC_ERR6
+
+IDRV_STR:
+	;Copy string from descriptor to $SECBUF, null-terminate
+	pop	de		;Discard old HL
+	push	hl		;Save updated HL from FRMEVL
+
+	ld	ix,FRESTR
+	call	BASIC_ROUT6	;Free temp string; HL = descriptor ptr
+	ld	a,(hl)		;String length
+	or	a
+	jr	nz,IDRV_STROK
+	pop	hl		;Discard saved HL
+	ld	e,56		;ERRBFN, "Bad file name"
+	jp	BASIC_ERR6
+IDRV_STROK:
+	ld	c,a
+	ld	b,0
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a		;HL = string data address
+	ld	de,($SECBUF##)
+	ldir
+	xor	a
+	ld	(de),a		;Null-terminate
+	inc	de
+	ld	(IDRV_INITDAT),de ;Init data area starts after filename
+	ld	(IDRV_INITLEN),a  ;No init data yet (A=0)
+	ld	(IDRV_FLAGS),a	  ;Default flags = 0
+
+	pop	hl		;Restore updated BASIC text pointer
+
+	;* Check for flags/init data or closing paren
+
+	call	NEXT_CALL_PAR6
+	jp	c,IDRV_PARSED	;')' → no flags, no init data
+
+	;* Parse flags parameter
+
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6	;DE = flags value
+	ld	a,e
+	ld	(IDRV_FLAGS),a
+
+	call	NEXT_CALL_PAR6
+	jp	c,IDRV_PARSED	;')' → flags only, no init data
+
+	;* Check flags bit 2 for pointer mode vs inline mode
+
+	ld	a,(IDRV_FLAGS)
+	bit	2,a
+	jr	nz,IDRV_MEMPTR
+
+	;* Inline value mode
+	;  HL is one past comma, FRMQNT will dec+CHRGTR to read value
+
+IDRV_INL_LOOP:
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6	;DE = value
+
+	;Calculate write position
+	push	hl
+	ld	hl,(IDRV_INITDAT)
+	ld	a,(IDRV_INITLEN)
+	push	af		;Save current length for update
+	ld	c,a
+	ld	b,0
+	add	hl,bc		;HL = write position
+
+	;Check if single or double byte
+	ld	a,d
+	or	a
+	jr	z,IDRV_INL_1B	;D==0 → single byte
+	inc	a
+	jr	z,IDRV_INL_1B	;D==FFh → single byte
+
+	;Double byte: store E then D (little-endian)
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	pop	af
+	add	a,2
+	jr	IDRV_INL_STO
+
+IDRV_INL_1B:
+	ld	(hl),e
+	pop	af
+	inc	a
+
+IDRV_INL_STO:
+	ld	(IDRV_INITLEN),a
+	pop	hl
+	call	NEXT_CALL_PAR6
+	jr	nc,IDRV_INL_LOOP ;Comma → more values
+	jr	IDRV_PARSED	  ;')' → done
+
+	;* Memory pointer mode (flags bit 2 set)
+
+IDRV_MEMPTR:
+	;Parse source address
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6	;DE = source address
+	push	de		;Save source address
+
+	call	NEXT_CALL_PAR6
+	jr	nc,IDRV_MP_LEN
+	;')' found but we need a length → syntax error
+	ld	e,2		;"Syntax error"
+	jp	BASIC_ERR6
+
+IDRV_MP_LEN:
+	;Parse length
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6	;DE = length
+
+	ld	a,")"
+	call	SYNCHR6
+
+	;Cap length at 254
+	ld	a,d
+	or	a
+	jr	nz,IDRV_MP_CAP	;> 255, cap
+	ld	a,e
+	cp	255
+	jr	c,IDRV_MP_LOK
+IDRV_MP_CAP:
+	ld	a,254
+IDRV_MP_LOK:
+	ld	(IDRV_INITLEN),a
+	pop	de		;DE = source address
+	ld	(IDRV_INITDAT),de ;Point directly to source memory
+
+IDRV_PARSED:
+	push	hl		;Save BASIC text pointer for return
+
+	;* Allocate segment (system segment from primary mapper)
+
+	ld	a,1		;System segment
+	ld	b,00110000b		;Try mappers other than primary first
+	call	ALL_SEG##
+	jr	nc,IDRV_ALLOK
+	ld	e,70		;"Not enough memory"
+	jp	BASIC_ERR6
+
+IDRV_ALLOK:
+	ld	(IDRV_SEG),a	;A = segment number
+	ld	a,b
+	ld	(IDRV_SLOT),a	;B = slot of mapper
+
+	;* Copy init data to page 3 temp buffer (BUF+16) while
+	;  source memory is still accessible (page 2 = BASIC RAM)
+
+	ld	a,(IDRV_INITLEN)
+	or	a
+	jr	z,IDRV_NOCP
+	ld	c,a
+	ld	b,0
+	ld	hl,(IDRV_INITDAT)
+	ld	de,BUF+16	;Page 3 temp buffer
+	ldir
+IDRV_NOCP:
+
+	;* Zero first 256 bytes of the segment (8000h-80FFh)
+	;  then copy init data from page 3 temp
+
+	call	GET_P2##
+	push	af		;Save current page 2 segment
+	ld	a,(IDRV_SEG)
+	call	PUT_P2##
+
+	ld	hl,8000h
+	ld	de,8001h
+	ld	bc,255
+	xor	a
+	ld	(hl),a
+	ldir
+
+	ld	a,(IDRV_INITLEN)
+	or	a
+	jr	z,IDRV_NOINI
+	ld	(8000h),a	;Length at byte 0
+	ld	c,a
+	ld	b,0
+	ld	hl,BUF+16	;Source: page 3 temp
+	ld	de,8001h	;Dest: driver segment byte 1+
+	ldir
+IDRV_NOINI:
+
+	pop	af		;Restore page 2
+	call	PUT_P2##
+
+	;* Open file
+	;  BASIC_DOS6 never returns on error (aborts to BASIC error handler)
+
+	xor	a		;A=0: open for reading
+	ld	de,($SECBUF##)
+	ld	c,_OPEN##
+	call	BASIC_DOS6
+	ld	a,b
+	ld	(IDRV_HANDLE),a
+
+	;* Initialize read offset
+
+	ld	hl,0
+	ld	(IDRV_OFFSET),hl
+
+	;* Read loop: read file in 512-byte chunks into the segment
+
+IDRV_RDLOOP:
+	ld	a,(IDRV_HANDLE)
+	ld	b,a
+	ld	de,($SECBUF##)
+	ld	hl,200h		;512 bytes
+	ld	c,_READ##
+	call	BASIC_DOS6	;BASIC_DOS6 never returns on error
+
+	push	hl		;Save bytes-read count
+
+	;Map segment to page 2
+	call	GET_P2##
+	push	af		;Save current page 2 segment
+	ld	a,(IDRV_SEG)
+	call	PUT_P2##
+
+	;Copy from $SECBUF to 8100h+offset
+	pop	af		;A = saved page 2 segment
+	ex	af,af'		;Stash in AF'
+	pop	bc		;BC = bytes-read count
+	push	bc		;Re-save for offset update
+	ld	hl,($SECBUF##)	;Source
+	ld	de,(IDRV_OFFSET)
+	ld	a,d
+	add	a,81h		;8100h base + high byte of offset
+	ld	d,a		;DE = 8100h + offset = destination
+	ldir
+
+	;Restore page 2
+	ex	af,af'		;Recover saved page 2 segment
+	call	PUT_P2##
+
+	;Update offset and check for end
+	pop	hl		;Bytes-read count
+	ld	a,h
+	cp	2
+	jr	c,IDRV_RDDONE	;Bytes < 512: EOF reached, stop
+
+	ld	de,(IDRV_OFFSET)
+	add	hl,de
+	ld	(IDRV_OFFSET),hl
+
+	;Check if segment nearly full
+	ld	a,h
+	cp	3Fh
+	jr	nc,IDRV_RDDONE	;Offset >= 3F00h, stop reading
+	jr	IDRV_RDLOOP
+
+IDRV_RDDONE:
+	;* Close file
+
+	ld	a,(IDRV_HANDLE)
+	ld	b,a
+	ld	c,_CLOSE##
+	call	BASIC_DOS6
+
+	;* Initialize driver via F_DRVRO (bank 4)
+
+	ld	de,0018h	;Print character routine (RST 18h)
+	ld	a,(IDRV_FLAGS)
+	bit	1,a
+	jr	z,IDRV_NOSIL
+	ld	e,0		;DE=0 → silent (F_DRVRO uses BUF+5 RET stub)
+IDRV_NOSIL:
+	ld	a,(IDRV_SEG)
+	ld	b,a
+	ld	a,(IDRV_SLOT)	;A=slot, B=segment
+	ld	h,1		;Operation: initialize
+	ex	af,af'		;AF' = A (slot) for F_DRVRO
+	ld	a,4
+	ld	ix,F_DRVRO##
+	call	CALBNK_ADDR
+
+	or	a
+	jr	z,IDRV_INITOK
+
+	;Initialization failed: free segment and report error
+	push	af
+	call	IDRV_FREE
+	pop	af
+	call	DRVRO_BERR6	;Never returns
+
+IDRV_INITOK:
+	;* Print success message
+
+	ld	hl,IDRV_OK_MSG
+	call	PRINT_CALL_HELP##
+	ld	a,(IDRV_SEG)
+	ld	b,a
+	ld	a,(IDRV_SLOT)
+	call	PRSLOT6
+	ld	hl,CRLF_MSG
+	call	PRINT_CALL_HELP##
+
+	;* Auto-map if requested (bit 0 of flags)
+
+	ld	a,(IDRV_FLAGS)
+	rrca			;Bit 0 → carry
+	jr	nc,IDRV_NOAUTO
+	call	?IDRV_AUTOMAP
+IDRV_NOAUTO:
+
+	pop	hl		;Restore BASIC text pointer
+	ret
+
+;--- Helper: free the allocated segment
+IDRV_FREE:
+	ld	a,(IDRV_SLOT)
+	ld	b,a
+	ld	a,(IDRV_SEG)	;A=segment, B=slot
+	jp	FRE_SEG##
+
+
+;--- Convert F_DRVRO error code (in A) to BASIC error.
+;    Never returns (jumps to BASIC_ERR6).
+DRVRO_BERR6:
+	push	af
+	ex	af,af'
+	pop	af
+	ex	af,af'
+	xor	a
+	ld	ix,GETERR##
+	call	CALBNK_ADDR
+	jp	BASIC_ERR6
+
+
+IDRIVER_HELP:
+	;    ----------------------------------------
+	defb	"IDRIVER(<file>[,<flags>[,<data>",2
+	defb	"  [,<data>...]]])",13,10
+	defb	"IDRIVER(<file>,<flags>,<pointer>",2
+	defb	"  ,<length>)",13,10
+	defb	13,10
+	defb	"<data>: initialization bytes/words",13,10
+	defb	"<pointer>, <length>: init data area",13,10
+	defb	"<flags>: the sum of zero or more of:",13,10
+	defb	"  1: Map drive after install",13,10
+	defb	"  2: Silent mode",13,10
+	defb	"  4: Use <pointer>,<length> syntax",13,10
+	defb	0
+
+
+;=============================================================================
+;
+;    Existing bank 6 routines
+;
+;=============================================================================
+
+
+;-----------------------------------------------------------------------------
+;
+;    IDRV_PRINT_OK
+;
+;    Print CIDRIVER success message: "Driver loaded in <slot:seg>\r\n"
+;
+;    Called from bank 4 via CALBNK (kept for backward compatibility).
+;
+
+	public	?IDRV_PRINT_OK
+
+?IDRV_PRINT_OK:
+	ld	hl,IDRV_OK_MSG
+	call	PRINT_CALL_HELP##
+	ld	a,(IDRV_SEG)
+	ld	b,a
+	ld	a,(IDRV_SLOT)
+	call	PRSLOT6
+	ld	hl,CRLF_MSG
+	jp	PRINT_CALL_HELP##
+
+IDRV_OK_MSG:
+	defb	"Driver loaded in ",0
+
+
+;--- Print slot number with optional sub-slot and segment.
+;    Input: A = slot, B = segment (FFh = ROM, skip segment)
+;    Uses RST 18h. Shared with IDRV_PRINT_OK.
+
+PRSLOT6:
+	push	bc
+	push	af
+	and	11b
+	add	a,"0"
+	rst	18h
+	pop	af
+	bit	7,a
+	jr	z,PRS6_SEG
+	rrca
+	rrca
+	and	11b
+	add	a,"0"
+	push	af
+	ld	a,"-"
+	rst	18h
+	pop	af
+	rst	18h
+PRS6_SEG:
+	pop	bc
+	ld	a,b
+	cp	0FFh
+	ret	z
+	push	af
+	ld	a,(0F3AEh)
+	cp	41
+	jr	c,PRS6_S40
+	ld	hl,PRS6_SEG_S
+	call	PRINT_CALL_HELP##
+	jr	PRS6_SNUM
+PRS6_S40:
+	ld	a,"'"
+	rst	18h
+PRS6_SNUM:
+	pop	af
+	;Fall through to PRDEC6
+
+PRDEC6:
+	ld	b,0
+	ld	c,100
+	call	PRD6_DIG
+	ld	c,10
+	call	PRD6_DIG
+	add	a,"0"
+	rst	18h
+	ret
+PRD6_DIG:
+	ld	d,0
+PRD6_D1:
+	sub	c
+	jr	c,PRD6_D2
+	inc	d
+	jr	PRD6_D1
+PRD6_D2:
+	add	a,c
+	ld	e,a
+	ld	a,d
+	or	a
+	jr	nz,PRD6_D3
+	or	b
+	jr	z,PRD6_D4
+PRD6_D3:
+	add	a,"0"
+	rst	18h
+	ld	b,1
+PRD6_D4:
+	ld	a,e
+	ret
+
+PRS6_SEG_S:
+	defb	", segment ",0
+
+
+;-----------------------------------------------------------------------------
+;
+;    UDRV_PRINT_OK
+;
+;    Print CUDRIVER success message: "Driver unloaded\r\n"
+;
+;    Called from bank 4 via CALBNK (kept for backward compatibility).
+;
+
+	public	?UDRV_PRINT_OK
+
+?UDRV_PRINT_OK:
+	ld	hl,UDRV_OK_MSG
+	jp	PRINT_CALL_HELP##
+
+UDRV_OK_MSG:
+	defb	"Driver unloaded",13,10,0
+
+
+;-----------------------------------------------------------------------------
+;
+;    IDRV_AUTOMAP
+;
+;    Auto-map a free drive to the first suitable device of a newly
+;    loaded RAM driver.
+;
+;    Reads IDRV_SLOT, IDRV_SEG from PROCNM.
+;    Uses BUF and $SECBUF as scratch.
+;
+
+	public	?IDRV_AUTOMAP
+
+?IDRV_AUTOMAP:
+
+	;--- Step 1: Get max device number
+
+	ld	a,(IDRV_SLOT)
+	db	0FDh,67h	;ld IYh,A
+	ld	a,(IDRV_SEG)
+	db	0FDh,6Fh	;ld IYl,A
+	ld	ix,DRIVER.DRIVER_QUERY##
+	ld	a,DRIVER.DRVQ_GET_MAX_DEVICE##
+	call	CALL_MAP##
+	or	a
+	jr	z,IAM_GOTMAX
+	ld	b,4		;Default max device number
+IAM_GOTMAX:
+	ld	a,b
+	or	a
+	jp	z,IAM_NODEV	;Max device = 0, no devices
+
+	ld	(BUF+10),a	;Save max device number
+
+	;--- Step 2: Find first suitable block device (512-byte sectors)
+
+	ld	c,1		;C = current device number
+IAM_DEVLOOP:
+	push	bc
+
+	ld	a,(IDRV_SLOT)
+	db	0FDh,67h	;ld IYh,A
+	ld	a,(IDRV_SEG)
+	db	0FDh,6Fh	;ld IYl,A
+	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	a,DRIVER.DEVQ_GET_PARAMS##
+	ld	hl,($SECBUF##)
+	call	CALL_MAP##
+
+	pop	bc
+	or	a
+	jr	nz,IAM_DEVNEXT	;Query failed, try next
+
+	;Check: byte 0 = 0 (block device)
+	ld	hl,($SECBUF##)
+	ld	a,(hl)
+	or	a
+	jr	nz,IAM_DEVNEXT
+
+	;Check: bytes 1,2 = sector size, must be 0,2 (512)
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jr	nz,IAM_DEVNEXT
+	inc	hl
+	ld	a,(hl)
+	cp	2
+	jr	z,IAM_DEVFOUND
+
+IAM_DEVNEXT:
+	inc	c
+	ld	a,(BUF+10)
+	cp	c
+	jr	nc,IAM_DEVLOOP
+
+	;No suitable device found
+	jp	IAM_NODEV
+
+IAM_DEVFOUND:
+	ld	a,c
+	ld	(BUF+11),a	;Save device number
+
+	;--- Step 3: Find first unmapped drive in UNIT_TAB
+	;    UNIT_TAB is in page 2 kernel RAM; map DATA_SEG first.
+
+	call	GET_P2##
+	push	af		;Save current page 2 segment
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+
+	ld	hl,UNIT_TAB##+2	;Skip entry 0 (unused)
+	ld	b,MAX_UNITS
+	ld	c,0		;C = drive index (0=A:)
+IAM_UTLOOP:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	jr	z,IAM_UTFOUND
+	inc	c
+	djnz	IAM_UTLOOP
+
+	;No free drive; restore page 2
+	pop	af
+	call	PUT_P2##
+	jp	IAM_NOFREE
+
+IAM_UTFOUND:
+	;Restore page 2; C = free drive index
+	pop	af
+	call	PUT_P2##
+
+	;--- Step 4: Call _MAPDRV (BDOS 7Ch) to map the drive
+	;    Set up 8-byte parameter block at BUF
+
+	ld	a,(IDRV_SLOT)
+	ld	(BUF),a		;+0 = slot
+	ld	a,(IDRV_SEG)
+	ld	(BUF+1),a	;+1 = segment
+	ld	a,(BUF+11)
+	ld	(BUF+2),a	;+2 = device number
+	xor	a
+	ld	(BUF+3),a	;+3 = 0 (was LUN)
+	ld	(BUF+4),a	;+4..+7 = sector 0
+	ld	(BUF+5),a
+	ld	(BUF+6),a
+	ld	(BUF+7),a
+
+	push	bc		;Save C = drive
+	ld	a,c		;A = drive (for C register of _MAPDRV)
+	ld	b,2		;B = action: map to device
+	ld	hl,BUF		;HL = parameter block
+	ld	c,_MAPDRV##
+	ld	ix,0F37Dh
+	ld	(BK4_ADD##),ix
+	call	CALLB0
+	pop	bc		;Restore C = drive
+
+	or	a
+	jr	nz,IAM_DONE	;Map failed, silently ignore
+
+	;--- Step 5: Print result
+
+	push	bc		;Save drive for device name query
+
+	ld	hl,IAM_DRV_MSG
+	call	PRINT_CALL_HELP##		;"Drive "
+	ld	a,c
+	add	a,"A"
+	rst	18h		;Print drive letter
+	ld	hl,IAM_MAP_MSG
+	call	PRINT_CALL_HELP##		;": mapped to device "
+	ld	a,(BUF+11)
+	add	a,"0"
+	rst	18h		;Print device number (assumes 1-9)
+
+	;--- Step 6: Get device name (optional)
+
+	pop	bc
+	ld	a,(BUF+11)
+	ld	c,a		;C = device number for DEVQ_GET_STRING
+
+	ld	a,(IDRV_SLOT)
+	db	0FDh,67h	;ld IYh,A
+	ld	a,(IDRV_SEG)
+	db	0FDh,6Fh	;ld IYl,A
+	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	a,DRIVER.DEVQ_GET_STRING##
+	ld	b,4		;B = string type 4 (device name)
+	ld	d,32		;D = max length
+	ld	hl,($SECBUF##)
+	call	CALL_MAP##
+
+	cp	2		;A=0 (OK) or 1 (truncated) → success
+	jr	nc,IAM_NONAME	;A>=2 → query failed, skip name
+	push	af		;Save truncation flag
+	ld	hl,($SECBUF##)
+	ld	a,(hl)
+	or	a
+	jr	z,IAM_NONAME2	;Empty name, skip
+
+	ld	a," "
+	rst	18h
+	ld	a,"("
+	rst	18h
+	ld	hl,($SECBUF##)
+	call	PRINT_CALL_HELP##		;Print device name
+	pop	af
+	or	a
+	jr	z,IAM_NOTRUNC
+	ld	hl,IAM_DOTS_MSG
+	call	PRINT_CALL_HELP##		;"..."
+IAM_NOTRUNC:
+	ld	a,")"
+	rst	18h
+	jr	IAM_NONAME
+
+IAM_NONAME2:
+	pop	af		;Balance stack from push af
+
+IAM_NONAME:
+	ld	hl,CRLF_MSG
+	call	PRINT_CALL_HELP##
+
+IAM_DONE:
+	ret
+
+IAM_NOFREE:
+	ld	hl,IAM_NOFREE_MSG
+	jp	PRINT_CALL_HELP##
+
+IAM_NODEV:
+	ld	hl,IAM_NODEV_MSG
+	jp	PRINT_CALL_HELP##
+
+IAM_NODEV_MSG:
+	defb	"No suitable devices",13,10,0
+
+IAM_NOFREE_MSG:
+	defb	"No free drives",13,10,0
+
+IAM_DRV_MSG:
+	defb	"Drive ",0
+
+IAM_MAP_MSG:
+	defb	": mapped to device ",0
+
+IAM_DOTS_MSG:
+	defb	"...",0
+
+CRLF_MSG:
+	defb	13,10,0
+
+
+; PRINT_CALL_HELP is in print_call_help.mac (linked into this bank)
+
+
+;-----------------------------------------------------------------------------
+
+	end

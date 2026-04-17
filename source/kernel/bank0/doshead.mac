@@ -20,7 +20,7 @@ PPI.AR		equ	0A8h		;PPI Port A data read
 ROMST::		defb	"AB"		;Indicates valid ROM
 		defw	DOINIT		;Banked ROM initialization entry point
 		defw	STATEMENT##	;BASIC statement handler entry point
-		defw	BASDEV		;Extension device is handled by driver
+		defw	BASDEV_CHK## ;Extension device entry point
 		defw	0		;No BASIC program text
 		defw	0		;Reserved
 		defw	0		;Reserved
@@ -65,15 +65,16 @@ $DOSVER::	defw	_$DOSVER##	;DOS version string.
 		jp	CALBNK		;4042h
 		jp	GWRK##		;4045h
 		jp	CALDRV		;4048h
+		jp  CALLB0_IX_IY ;404Bh
 ;
 ;
 ; --------  UP TO HERE ARE REFERENCED FROM OUTSIDE OF ROM  --------
 ;
 
 ; Call extended BIOS processing code
-; Extended BIOS code in driver will be called with D'=1.
-; It must return with D'=1 if old extended BIOS hook is
-; to be called, with D'=0 otherwise.
+; Extended BIOS code in driver must return with 
+; IYl=1 if old extended BIOS hook is to be called,
+; with IYl=0 otherwise.
 
 @EXTBIO::	ld	ix,MAPBIO##
 		ex	af,af'
@@ -81,7 +82,8 @@ $DOSVER::	defw	_$DOSVER##	;DOS version string.
 		call	CALBNK
 		exx
 		ex	af,af'
-		bit	0,d
+		ld	a,iyl
+		or	a
 		jr	z,EXTB_RET
 		exx
 		ex	af,af'
@@ -111,12 +113,6 @@ CALDRV:
 ;
 ;-----------------------------------------------------------------------------
 ;
-; BASIC expansion device management
-
-BASDEV:		ld	ix,DRIVER.BASDEV##
-		ex	af,af'
-		ld	a,DV_BANK##
-		jr	CALBNK
 
 		defs	ROMST+78h-$,0FFh
 ;
@@ -127,16 +123,23 @@ BASDEV:		ld	ix,DRIVER.BASDEV##
 NXT3_SIGNATURE::
 		db "NXT3",0		;407Bh - Signature for Nextor 3.0+ ROMs
 		defs	ROMST+80h-$,0FFh
+
+;-----------------------------------------------------------------------------
 ;
-RAMENT::				; RAM DISK DRIVER ENTRY POINTS
+; Switch bank 0 or 3 in page 1, then call routine whose address is at (BK4_ADD),
+; then restore original bank.
+; All main registers (AF, BC, DE, HL) are passed to the routine called,
+; IX is passed in (TMP_IX##) and IY is passed in (TMP_IY##).
+; All drivers can use this, ROM drivers can use CALLB0 instead.
+
+CALLB0_IX_IY:
+		ld	ix,(TMP_IX##)
+		ld	iy,(TMP_IY##)
+		jr CALLB0
+
+;-----------------------------------------------------------------------------
 ;
-		jp	R_DSKIO##	;Sector read/write
-		jp	R_DSKCHG##	;Disk change detection
-		jp	R_GETDPB##	;Get disk parameter block
-		jp	R_CHOICE##	;Get format choice string
-		jp	R_DSKFMT##	;Format a disk
-;
-;
+
 		defs	ROMST+8Fh-$,0FFh
 
 		jp	BIOS_OUT##	;Version 1 compatible $OUT entry
@@ -166,7 +169,8 @@ C4PBK::	ld	iy,RAM_BASE##
 ;
 ; Switch bank 0 or 3 in page 1, then call routine whose address is at (BK4_ADD),
 ; then restore original bank.
-; All registers are passed to the routine called except alternate (D' is passed).
+; All registers are passed to the routine called except alternate.
+; ROM drivers can use this, RAM drivers should use CALLB0_IX_IY instead.
 
 CALLB0:		ex	af,af'
 		ld	a,(MAIN_BANK##)

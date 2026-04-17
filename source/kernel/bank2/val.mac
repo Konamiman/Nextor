@@ -2784,13 +2784,30 @@ CALLDRV3:
 
 		exx				;Work out the address of the
 		bit	UF_DBD,(IX+UD_DFLAGS##)
-		jr	nz,CALDRV_DEVBASED	; routine to call (UD_OFFSET
-		ld	e,(ix+UD_OFFSET##)	; defines start of table) and
-		ld	d,0				; store it in page-3. Do not
-		add	hl,de			; modify address if calling
-		jr	CALDRV_NEXT		; a Nextor driver.
+		jr	nz,CALDRV_DEVBASED	; routine to call.
+		bit	UF_RDD,(ix+UD_DFLAGS##)
+		jr	nz,CALDRV_RAMDISK
+		ld	de,10h			;Regular MSX-DOS 1 driver:
+		add	hl,de			; table starts at 4010h
+		jr	CALDRV_NEXT
+;
+CALDRV_RAMDISK:
+;    HL = 4000h + cmd_offset (0,3,6,9,12)
+;    Point to jump table entry in bank 0 and dispatch via CALLB0
+;
+		ld	de,RAMDISK_TABLE-4000h
+		add	hl,de			;HL = RAMDISK_TABLE + cmd_offset
+		ld	(BK4_ADD##),hl		;Store jump table entry address
+		ld	hl,CALLB0_ADDR		;CALLB0 at 403Fh
+		jr	CALDRV_NEXT
+;
 CALDRV_DEVBASED:
-		ld	(BK4_ADD##),hl	;Call via CALDRV is needed 
+		ld	c,a			;Save page-2 segment
+		ld	a,(ix+UD_RAM_SEGMENT##)
+		cp	0FFh
+		ld	a,c			;Restore page-2 segment
+		jr	nz,CALDRV_RAM		;  (flags unaffected)
+		ld	(BK4_ADD##),hl	;Call via CALDRV is needed
 		ld	hl,CALDRV##		;for Nextor drivers.
 CALDRV_NEXT:
 
@@ -2851,6 +2868,53 @@ CLDRV_RET_NOZ80:
 		call	PUT_P2##		; back into page-2
 		ex	af,af'			;Return with results from
 		ret				; driver.
+;
+;
+CALDRV_RAM:
+;
+;    RAM driver path: use CALL_MAP instead of GO_DRV inter-slot call.
+;    At this point we are in the alternate register set (after EXX).
+;
+; State:  HL  = Driver routine address (was HL')
+;         IX  = Unit descriptor pointer
+;          A  = Page-2 segment required
+;         AF' = Driver parameter (AF')
+;     alt BC/DE/HL = Driver parameters (BC/DE/HL)
+;
+		push	hl			;Save routine address
+		ld	h,(ix+UD_SLOT##)	;H = driver slot
+		ld	l,(ix+UD_RAM_SEGMENT##)	;L = driver segment
+		push	hl
+		pop	iy			;IY = slot:segment for CALL_MAP
+;
+		call	PUT_P2##		;Set page-2 segment for disk
+						; buffers (only modifies A)
+		pop	ix			;IX = routine address
+;
+		exx				;Restore driver params: BC/DE/HL
+		ex	af,af'			;Restore driver AF'
+;
+		call	CALL_MAP##
+;
+		ei
+		ex	af,af'
+		ld	a,(DATA_SEG##)		;Restore kernel data segment
+		call	PUT_P2##		; in page-2
+		ex	af,af'			;Return with results from
+		ret				; driver.
+;
+;
+CALLB0_ADDR	equ	403Fh
+;
+; Jump table for RAM disk driver routines in bank 0.
+; 3 bytes per entry (jp), at offsets 0, 3, 6, 9, 12.
+;
+RAMDISK_TABLE:
+		jp	R_DSKIO##
+		jp	R_DSKCHG##
+		jp	R_GETDPB##
+		jp	R_CHOICE##
+		jp	R_DSKFMT##
 ;
 ;
 ;=============================================================================

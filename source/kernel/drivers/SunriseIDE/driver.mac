@@ -1002,34 +1002,10 @@ NEXTOR2_DRV_VERSION:
 	ret
 
 
-;-----------------------------------------------------------------------------
-;
-; BASIC expanded statement ("CALL") handler.
-; Works the expected way, except that CALBAS in kernel page 0
-; must be called instead of CALBAS in MSX BIOS.
-
 DRV_BASSTAT:
-	scf
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; BASIC expanded device handler.
-; Works the expected way, except that CALBAS in kernel page 0
-; must be called instead of CALBAS in MSX BIOS.
-
 DRV_BASDEV:
 	scf
 	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Extended BIOS hook.
-; Works the expected way, except that it must return
-; D'=1 if the old hook must be called, D'=0 otherwise.
-; It is entered with D'=1.
 
 DRV_EXTBIO:
 	ret

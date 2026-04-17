@@ -625,8 +625,8 @@ MAPBIO::
 ;	E = 1   Return Mapper record
 ;	E = 2   Return Vector address
 ;
-;   For other values of D, the EXTBIO hook on the driver bank is called with D'=1.
-;   This must return D'=1 if old hook must be called, D'=0 otherwise.
+;   For other values of D, the EXTBIO hook on the driver bank is called with IYl=1.
+;   This must return IYl=1 if old hook must be called, IYl=0 otherwise.
 
 		push de	;DE must always be preserved
 		call MAPBDO
@@ -634,72 +634,104 @@ MAPBIO::
 		ret
 
 MAPBDO:
+		ld	iy,1	;IY=1: continue calling hooks
+
+		;Check if master driver has EXTBIO flag in its KERNEX entry
+
 		exx
-		set	0,d
+		ex af,af'
+
+		ld	hl,KERNEX##
+		ld	a,(MASTER_SLOT##)
+		ld	c,a
+		ld	b,4
+MAPBDO_CHK:
+		ld	a,(hl)
+		and	10001111b
+		cp	c
+		jr	z,MAPBDO_FOUND
+		inc	hl
+		djnz	MAPBDO_CHK
+		jr	MAPBDO_SKIP	;Not found, skip
+MAPBDO_FOUND:
+		bit	5,(hl)
+		jr	z,MAPBDO_SKIP	;No EXTBIO flag
+
 		exx
+
 		ld	ix,DRIVER.EXTBIO##
-		ex	af,af'
+		;ex	af,af'
 		ld	a,DV_BANK##
 		call	DH_CABNK##
-		exx
-		bit	0,d
-		exx
+		ex	af,af'		;Save driver's AF
+		ld	a,iyl
+		or	a
 		jr	nz,MAPBIO2
+		ex	af,af'		;Restore driver's AF
 		ret
+MAPBDO_SKIP:
+		exx
 MAPBIO2:
-
+		ex	af,af'		;Restore driver's AF
+MAPBDO_SK2:
 		call	EXB_NEX
-		exx
 		ex	af,af'
-		bit	0,d
-		exx
+		ld	a,iyl
+		or	a
 		jr	nz,MAPBIO22
 		ex	af,af'
 		ret
 MAPBIO22:
 		ex	af,af'
+;
+;   Call EXTBIO of RAM-loaded drivers
+;
+		ex af,af'
+		ld	a,(DOS_VER##) ;Skip in DOS 1 mode
+		or	a
+		jr z,MAPBIO3
+		ex af,af'
 
-		push	af	;Dont call system handler if running DOS 1
-		ld	a,(DOS_VER##)
+		call	EXB_RAM_DRV
+		ex	af,af'		;Save driver's AF
+		ld	a,iyl
 		or	a
 		jr	nz,MAPBIO3
-		pop	af
+;
+MAPB22_STOP:
+		ex	af,af'		;Restore driver's AF
 		ret
 
 MAPBIO3:
-		pop	af
+		ex af,af'
 
 		;Need to push EXACTLY these registers and in this order,
 		;since CHK_DEV changes the pushed values
-		exx
-		set	0,d
-		exx
+		ld	iy,1
 		push	de
 		push	af
 		call	CHK_DEV
-        exx
-        ex af,af'
-        bit 0,d
-        jr z,MAPB_DONT_CALL_OLD
+		ex af,af'
+		ld	a,iyl
+		or	a
+		jr	z,MAPB_DONT_CALL_OLD
 
-        ex af,af'   ;D'=0 at return: must call old hook with original registers
-        exx    
+		ex af,af'	;IYl=0 at return: must call old hook with original registers
 		pop	af
 		pop	de
 		ret
 
 MAPB_DONT_CALL_OLD:
-        pop af      ;D'=1 at return: don't call old hook, keep returned registers
-        pop af
-        ex af,af'
-        exx
-        ret
+		pop	af	;IYl=1 at return: don't call old hook, keep returned registers
+		pop	af
+		ex af,af'
+		ret
 ;
 
 EXB_NEX:
 ;
 ;   Call the EXTBIO routine of Nextor kernels other than the master one
-;   Out: D'=1 if system hook must be called, 0 otherwise
+;   Out: IYl=1 if system hook must be called, 0 otherwise
 ;
 	exx
 	ex	af,af'
@@ -728,19 +760,26 @@ EXB_NEX:
 
 	;--- From here is copied to RAM
 EXB_RAM:
+	ex af,af'
+	ld a,1
+	ld (EXTBIO_SAVE##),a		;IY=1: system hook must be called
+	ex af,af'
+
 	ld	ix,KERNEX##
 	ld	iy,0400h
 EXB_LOOP:
 	exx
 	ex	af,af'
 	ld	a,(ix)
-	or a	;Zero if empty entry
+	or	a		;Zero if empty entry
 	jr	z,EXB_DJNZ
-    and 10001111b    
+	and	10001111b
 	ld	c,a
 	ld	a,(MASTER_SLOT##)
 	cp	c
-	jr	z,EXB_DJNZ	;Skip master kernel as we have processed it already
+	jr	z,EXB_DJNZ	;Skip master (already called)
+	bit	5,(ix)
+	jr	z,EXB_DJNZ	;Skip if EXTBIO flag not set
 
 	push	ix
 	push	iy
@@ -750,6 +789,11 @@ EXB_LOOP:
 	push	bc
 	push	de
 	push	hl
+
+	;This weird thing is to allow JR EXB_LOOP from code beyond EXB_LOOP+127 bytes
+	jr $+4
+EXB_LOOP_PROXY:
+	jr EXB_LOOP
 
 	ld	a,(ix)
 	ld	d,a
@@ -776,9 +820,7 @@ EXB_SLOT_BACKUP:
 	call	ENASLT
 	ld	hl,DRIVER.EXTBIO##
 	ld (BK4_ADD##),hl
-	exx
-	ld	de,0100h    ;Pass D'=1 by default
-	exx
+	ld	iy,1		;IY=1: continue calling hooks
 	pop	hl
 	pop	de
 	pop	bc
@@ -795,10 +837,13 @@ EXB_SLOT_RESTORE:
 	push	bc
 	push	de
 	push	hl
+	push iy
 
 	ld	h,40h
 	call	ENASLT
+	ld (EXTBIO_SAVE##),iy
 
+	pop iy
 	pop	hl
 	pop	de
 	pop	bc
@@ -811,7 +856,8 @@ EXB_SKIP_RESTORE:
 	pop	ix
 	exx
 	ex	af,af'
-	bit	0,d
+	ld	a,(EXTBIO_SAVE##)
+	or	a
 	jr	z,EXB_RAM_FIN
 
 EXB_DJNZ:
@@ -824,10 +870,10 @@ EXB_DJNZ:
 	inc	ix
 	ex	af,af'
 	exx
-	jr	EXB_LOOP
+	jr	EXB_LOOP_PROXY
 
 EXB_RAM_FIN:
-    set 0,d     ;System hook must be called
+	ld	iy,(EXTBIO_SAVE##)	;IY=1: system hook must be called
 	ex	af,af'
 	exx
 	push	af
@@ -952,9 +998,7 @@ EXTWRT:		push	bc
 		ret
 
 RESET_EXX_D:
-    exx
-    res 0,d
-    exx
+    ld	iy,0
     ret
 
 
@@ -972,6 +1016,126 @@ IS_SUPER_TURBO:
 	pop	hl
 	ret
 
+;
+;-----------------------------------------------------------------------------
+;
+KBUF	equ	0F41Fh			;Buffer space in main MSX work area
+;
+;   Call the EXTBIO routine of each registered RAM-loaded driver.
+;   Uses KBUF as scratch space for saving/restoring EXTBIO params.
+;
+; Input:  AF/BC/DE/HL = EXTBIO parameters
+; Output: AF/BC/DE/HL = results (possibly modified by driver)
+;         D' bit 0 = 0 if a driver consumed the request, 1 otherwise
+;
+EXB_RAM_DRV:
+	push	af
+	ld	a,(MFLAGS##)		;Any RAM drivers installed?
+	and	RDRVM##			;Any RAM drivers installed?
+	jr	nz,ERAMX_READY
+	pop	af
+	ret				;No RAM drivers, return with regs unchanged
+ERAMX_READY:
+	pop	af
+;
+	ld	(KBUF+2),bc
+	ld	(KBUF+4),de
+	ld	(KBUF+6),hl
+	push	af
+	pop	hl
+	ld	(KBUF),hl		;Save AF (H=A, L=F)
+;
+	call	GET_P2##		;Save current page 2 segment
+	push	af
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##		;Map kernel data segment to page 2
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	jr	z,ERAMX_REST		;No RAM drivers
+;
+ERAMX_CL:
+	push	hl			;Save cluster base
+	ld	b,4
+ERAMX_ENT:
+	ld	a,(hl)
+	or	a
+	jr	z,ERAMX_NXT		;Empty entry
+	bit	5,a
+	jr	z,ERAMX_NXT		;Skip if EXTBIO flag not set
+;
+	push	hl
+	push	bc
+	and	10001111b		;Mask to slot number
+	ld	d,a
+	inc	hl
+	ld	e,(hl)			;E = segment
+	push	de
+	pop	iy			;IY = slot:segment for CALL_MAP
+	ld	ix,DRIVER.EXTBIO##
+;
+	;Restore EXTBIO params for the driver call
+	ld	hl,(KBUF)
+	push	hl
+	pop	af
+	ld	bc,(KBUF+2)
+	ld	de,(KBUF+4)
+	ld	hl,(KBUF+6)
+	call	CALL_MAP##
+;
+	;Save driver's results to KBUF for next iteration/return
+	ld	(KBUF+2),bc
+	ld	(KBUF+4),de
+	ld	(KBUF+6),hl
+	push	af
+	pop	hl
+	ld	(KBUF),hl
+	;Check IYl (A is free since results already saved)
+	ld	a,iyl
+	bit	0,a
+	pop	bc
+	pop	hl
+	jr	z,ERAMX_FOUND		;IYl bit 0 = 0: driver consumed it
+;
+ERAMX_NXT:
+	inc	hl
+	inc	hl
+	djnz	ERAMX_ENT
+;
+	pop	af			;Discard saved cluster base
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a			;HL = next cluster
+	or	h
+	jr	nz,ERAMX_CL
+;
+ERAMX_REST:
+	;No driver handled it, restore page 2 and original params
+	pop	af
+	call	PUT_P2##		;Restore original page 2 segment
+	ld	hl,(KBUF)
+	push	hl
+	pop	af
+	ld	bc,(KBUF+2)
+	ld	de,(KBUF+4)
+	ld	hl,(KBUF+6)
+	ret
+;
+ERAMX_FOUND:
+	pop	af			;Discard saved cluster base
+	pop	af
+	call	PUT_P2##		;Restore original page 2 segment
+	ld	iy,0			;IY=0 (request consumed)
+	;Restore driver's results from KBUF
+	ld	hl,(KBUF)
+	push	hl
+	pop	af
+	ld	bc,(KBUF+2)
+	ld	de,(KBUF+4)
+	ld	hl,(KBUF+6)
+	ret
+;
 ;
 ;-----------------------------------------------------------------------------
 ;

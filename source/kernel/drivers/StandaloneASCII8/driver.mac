@@ -21,6 +21,7 @@ DRVQ_GET_STRING: equ 2
 DRVQ_GET_INIT_PARAMS: equ 3
 DRVQ_INIT: equ 4
 DRVQ_GET_MAX_DEVICE: equ 5
+DRVQ_INIT_RAM: equ 6
 
 DEVQ_GET_STRING: equ 1
 DEVQ_GET_PARAMS: equ 2
@@ -211,6 +212,8 @@ DRIVER_QUERY:
 	jp z,DO_DRVQ_INIT
 	dec a
 	jp z,DO_DRVQ_GET_MAX_DEVICE
+	;dec a
+	;jp z,DO_DRVQ_INIT_RAM
 	ld a,QUERY_NOT_IMPLEMENTED
 	ret
 
@@ -269,10 +272,11 @@ DO_DRVQ_GET_STRING:
 ;              5: set if user is requesting reduced drive count (by pressing the 5 key)
 ;              Others: 0
 ;         DE = Address of a routine for printing a character	 
-; Output: A = QUERY_OK, QUERY_INIT_ERROR or QUERY_NOT_IMPLEMENTED
+; Output: A  = QUERY_OK, QUERY_INIT_ERROR or QUERY_NOT_IMPLEMENTED
 ;         B  = Flags
 ;              0: TIMER_INT should be hooked
-;              1-7: Must be zero
+;              1: EXTBIO should be hooked
+;              2-7: Must be zero
 ;         HL = Space required in page 3
 ;
 ; If QUERY_NOT_IMPLEMENTED is returned, B=0 and HL=0 is assumed.
@@ -297,7 +301,7 @@ DO_DRVQ_GET_INIT_PARAMS:
 ;              5: set if user is requesting reduced drive count (by pressing the 5 key)
 ;              Others: 0
 ;         DE = Address of a routine for printing a character
-; Output: A = QUERY_OK, QUERY_INIT_ERROR or QUERY_NOT_IMPLEMENTED
+; Output: A  = QUERY_OK, QUERY_INIT_ERROR or QUERY_NOT_IMPLEMENTED
 ;
 ; QUERY_NOT_IMPLEMENTED is interpreted as equivalent to QUERY_OK.
 ; QUERY_INIT_ERROR will cause the driver to be ignored (not counted as an existing Nextor kernel).
@@ -350,6 +354,21 @@ INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
 DO_DRVQ_GET_MAX_DEVICE:
 	ld a,QUERY_NOT_IMPLEMENTED
 	ret
+
+
+;Driver query 6: Initialize RAM driver
+;
+;Input:  DE = Address of a routine for printing a character
+;Output: A  = QUERY_OK, QUERY_INIT_ERROR or QUERY_NOT_IMPLEMENTED
+;        B  = Flags
+;             0: TIMER_INT should be hooked
+;             1: EXTBIO should be hooked
+;             2-7: Must be zero
+;
+; If QUERY_NOT_IMPLEMENTED is returned, B=0 is assumed.
+;
+; Not implemented as this is a ROM driver,
+; this query will never be invoked by the kernel.
 
 
 	;--- Device query

@@ -305,7 +305,8 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; with possible future extensions.
 
 KEYS_INV_0: db 00h
-KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
+;KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
+KEYS_INV_1: db 20h+10h;  ;Invert CTRL and SHIFT by default
 
 ;
 ;=======================================================================
@@ -895,10 +896,8 @@ BM_GOTLINLEN:
 	ld (LINL40),a
 	call INITXT
 
-	;Run boot menu (bank 4)
-	ld hl,BOOT_MENU##
-	ld (BK4_ADD##),hl
-	call C4PBK##
+	;Run boot menu
+	call BOOT_MENU##
 
 AFTER_BOOT_MENU:
 	ld	a,(ALL_KERNELS_DISABLED##)
@@ -1277,10 +1276,14 @@ FINDKERNEX:
 	jr	nz,FINDKERNEX
 
 	ld	a,(PROCNM+4)
-	and	1
+	bit	0,a
 	jr	z,NOSETINT
 	set	6,b
 NOSETINT:
+	bit	1,a
+	jr	z,NOSETEXTBIO
+	set	5,b
+NOSETEXTBIO:
 	set	4,b	;Nextor v3 identifier (Nextor 2 leaves this as 0)
 NOSETCONF:
 	ld	(hl),b
@@ -1535,14 +1538,14 @@ NO_DPB:
 	ld	a,b
 	call	DOSINIT##	;Initialize disk-system
 	jp	c,PANIC_INIT		;Something was wrong
-	jr	OKDOSINIT
+	jr	PAST_DOSINIT
 NODOSINIT:
 	ld	a,b
 	ld	(RAMAD3##),a
 	ld	(RAMAD2##),a
 	ld	(RAMAD1##),a
 	ld	(RAMAD0##),a
-OKDOSINIT:
+PAST_DOSINIT:
 
 ;
 	;These buffers should be permanent.  [HF]
@@ -2153,7 +2156,7 @@ TIMINT::
 DOS2INT:
 	call	TIME_IRQ##	;Call the master interrupt routine.
 	call	TIMI_DOS2_DRV	;Call interrupt routines of drivers attached to DOS 2 kernels.
-	call	TIMI_NEXTOR_DRV	;Call interrupt routine for Nextor drivers.
+	call	TIMI_NXT_AND_RAM ;Call interrupt routines for Nextor and RAM drivers.
 	pop	af		;Restore VDP status.
 	jp	TIMI_SAVE##	;Jump to the previous interrupt routine.
 
@@ -3859,6 +3862,18 @@ GET_KERNEX_FOUND:
 	pop	bc
 	cp	a			; Set Z flag, A = KERNEX entry
 	ret
+
+;-----------------------------------------------------------------------------
+
+TIMI_NXT_AND_RAM::
+	call	TIMI_NEXTOR_DRV
+	ld	a,(MFLAGS##)
+	and	RDRVM##			;Any RAM drivers installed?
+	ret	z			;No: skip CTIMI_RAM
+	ex	af,af'
+	ld	a,4
+	ld	ix,CTIMI_RAM##
+	jp	CALBNK##
 
 ;-----------------------------------------------------------------------------
 

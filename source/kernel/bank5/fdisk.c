@@ -87,7 +87,7 @@ ulong mainExtendedPartitionFirstSector;
 
 void GoDriverSelectionScreen();
 void ShowDriverSelectionScreen();
-void ComposeSlotString(byte slot, char* destination);
+void ComposeSlotString(byte slot, byte segment, char* destination);
 void GoDeviceSelectionScreen(byte driverIndex);
 void ShowDeviceSelectionScreen();
 void GetDevicesInformation();
@@ -198,7 +198,7 @@ void GoDriverSelectionScreen()
 void ShowDriverSelectionScreen()
 {
     byte i;
-    char slot[4];
+    char slot[20];
     char rev[5];
     driverInfo* currentDriver;
     byte slotByte;
@@ -206,11 +206,11 @@ void ShowDriverSelectionScreen()
     char* driverName;
 
     ClearInformationArea();
-    
+
     if(installedDriversCount == 0) {
         GetDriversInformation();
     }
-    
+
     if(installedDriversCount == 0) {
     	Locate(0, 7);
     	PrintCentered("No drivers found");
@@ -222,7 +222,7 @@ void ShowDriverSelectionScreen()
 	currentDriver = &drivers[0];
 	Locate(0,3);
 	for(i = 0; i < installedDriversCount; i++) {
-    	ComposeSlotString(currentDriver->slot, slot);
+    	ComposeSlotString(currentDriver->slot, currentDriver->segment, slot);
 	    
 	    revByte = currentDriver->versionRev;
 	    if(revByte == 0) {
@@ -257,12 +257,27 @@ void ShowDriverSelectionScreen()
 }
 
 
-void ComposeSlotString(byte slot, char* destination)
+void ComposeSlotString(byte slot, byte segment, char* destination)
 {
 	*destination++ = (slot & 3) + '0';
 	if(slot & 0x80) {
 		*destination++ = '-';
 		*destination++ = ((slot >> 2) & 3) + '0';
+	}
+	if(segment != 0xFF) {
+		if(is80ColumnsDisplay) {
+			char* s = ", segment ";
+			while(*s) *destination++ = *s++;
+		} else {
+			*destination++ = ':';
+		}
+		if(segment >= 100) {
+			*destination++ = (segment / 100) + '0';
+		}
+		if(segment >= 10) {
+			*destination++ = ((segment / 10) % 10) + '0';
+		}
+		*destination++ = (segment % 10) + '0';
 	}
 	*destination = '\0';
 }
@@ -270,14 +285,14 @@ void ComposeSlotString(byte slot, char* destination)
 
 void GoDeviceSelectionScreen(byte driverIndex)
 {
-	char slot[4];
+	char slot[20];
 	int i;
 	byte key;
 	byte driverNameLength;
 	byte deviceInfoIndex;
 
 	selectedDriver = &drivers[driverIndex - 1];
-	ComposeSlotString(selectedDriver->slot, slot);
+	ComposeSlotString(selectedDriver->slot, selectedDriver->segment, slot);
 	strcpy(selectedDriverName, selectedDriver->driverName);
 	driverNameLength = strlen(selectedDriverName);
 	sprintf(selectedDriverName + driverNameLength,
@@ -438,7 +453,7 @@ void GetDevicesInformation()
 	byte maxDeviceNameLength = (is80ColumnsDisplay ? DRIVER_NAME_LENGTH_80 : DRIVER_NAME_LENGTH_40) + 1;
 
 	regs.Bytes.A = DRVQ_GET_MAX_DEVICE_NUMBER;
-	DriverCall(selectedDriver->slot, DRIVER_QUERY);
+	DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_QUERY);
 	maxDeviceNumber = regs.Bytes.A == 0 ? regs.Bytes.B : DEFAULT_MAX_DEVICE_NUMBER;
 
     availableDevicesCount = 0;
@@ -454,7 +469,7 @@ void GetDevicesInformation()
 		regs.Bytes.C = deviceNumber;
 		regs.Bytes.D = maxDeviceNameLength;
 		regs.Words.HL = (int)currentDeviceName;
-		DriverCall(selectedDriver->slot, DEVICE_QUERY);
+		DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
 
 		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
 			regs.Bytes.A = DEVQ_GET_STRING;
@@ -462,7 +477,7 @@ void GetDevicesInformation()
 			regs.Bytes.C = deviceNumber;
 			regs.Bytes.D = maxDeviceNameLength;
 			regs.Words.HL = (int)currentDeviceName;
-			DriverCall(selectedDriver->slot, DEVICE_QUERY);
+			DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
 			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
 				strcpy(currentDeviceName, "(Unnamed device)");
 			}
@@ -497,7 +512,7 @@ void GetDevicesInformation()
 
 		regs.Bytes.A = DEVQ_GET_AVAILABILITY;
 		regs.Bytes.C = currentDevice->deviceNumber;
-		DriverCall(selectedDriver->slot, DEVICE_QUERY);
+		DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
 
 		deviceIndex++;
 
@@ -525,7 +540,7 @@ void GetDevicesInformation()
 			regs.Bytes.A = DEVQ_GET_PARAMS;
 			regs.Bytes.C = currentDevice->deviceNumber;
 			regs.Words.HL = (int)currentDevice->params;
-			DriverCall(selectedDriver->slot, DEVICE_QUERY);
+			DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
 
 			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
 				currentDevice->params.mediumType = DEV_TYPE_BLOCK;
@@ -1850,7 +1865,7 @@ byte DeviceSectorRW(ulong firstDeviceSector, byte write)
 	regs.Words.HL = (int)sectorBuffer;
 	regs.Words.DE = (int)&firstDeviceSector;
 
-	DriverCall(selectedDriver->slot, READ_WRITE);
+	DriverCall(selectedDriver->slot, selectedDriver->segment,READ_WRITE);
 	return regs.Bytes.A;
 }
 

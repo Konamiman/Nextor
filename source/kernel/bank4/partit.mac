@@ -11,7 +11,13 @@
 
 EMU_RAM_ADDRESS equ 0A000h
 
-DISKID	equ	0FD99h
+DISKID		equ	0FD99h
+
+; Driver query constants (from data.mac, not included in bank 4)
+QUERY_OK		equ	0
+QUERY_NOT_IMPLEMENTED	equ	255
+DRVQ_INIT_RAM		equ	6
+DRVQ_SHUTDOWN_RAM	equ	7
 
 MBR_PSTART	equ	01BEh	;Start of partition table in MBR
 MBR_PSIZE	equ	16	;Size of partition table entry
@@ -38,6 +44,7 @@ DCOMPR	equ	0020h
 GETBYT	equ	521Ch
 CHRGTR	equ	4666h
 FRMEVL	equ	4C64h
+FRESTR	equ	67D0h
 FRMQNT	equ	542Fh
 NLONLY	equ	0F87CH
 FLBMEM	equ	0FCAEH
@@ -356,8 +363,13 @@ DEV_READ:
 	push	bc
 	push	de
 	push	hl
-
-	ld iyh,c
+;
+	ld	a,b
+	cp	0FFh
+	jr	nz,DEV_READ_RAM
+;
+	;--- ROM driver path
+	ld	iyh,c
 	ld	ix,DRIVER.READ_WRITE##
 	ld	(BK4_ADD##),ix
 	ld	ix,CALDRV##
@@ -369,7 +381,23 @@ DEV_READ:
 	ld	de,TMP_SEC##
 
 	call	CALSLT##
-
+	jr	DEV_READ_DONE
+;
+	;--- RAM driver path
+DEV_READ_RAM:
+	ld	h,c		;H = slot
+	ld	l,b		;L = segment
+	ld	a,d		;A = device number
+	ld	c,e		;C = LUN
+	ld	b,1		;B = 1 sector
+	push	hl		;Save slot:segment for IY
+	ld	hl,($SECBUF##)	;HL = buffer
+	ld	de,TMP_SEC##	;DE = sector number pointer
+	ld	ix,DRIVER.READ_WRITE##
+	pop	iy		;IY = slot:segment
+	call	CALL_MAP##
+;
+DEV_READ_DONE:
 	pop	hl
 	pop	de
 	pop	bc
@@ -432,9 +460,15 @@ GDRV_LOOP:
 GDRV_NEXT:
 	djnz	GDRV_LOOP	;Loop for entries in DRVTBL
 
-	;--- Then search in KERNEX
+	;--- Check DOS mode
 
-	ld	b,4	;D=Entries in KERNEX
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,GDRV_DOS1_KERNEX
+
+	;--- DOS 2: search in KERNEX
+
+	ld	b,4	;B=Entries in KERNEX
 	ld	ix,DRVTBL##
 	ld	hl,KERNEX##
 GDRV_LOOP3:
@@ -452,16 +486,61 @@ GDRV_LOOP3:
 	jr	z,GDRV_NEXT2
 	ld	c,a
 
-	ld	a,d
-	dec	a
-	ld	d,a
+	dec	d
 	jr	z,GDRV_OK_ROM
 GDRV_NEXT2:
 	djnz	GDRV_LOOP3	;Loop for entries in KERNEX
 
-	;--- No driver found with that index
+	;--- DOS 2: search in RAM driver registration list
 
-	xor	a
+	ld	a,d			;A = remaining index
+	call	RAMDRV_ENUMERATE
+	or	a			;A=slot (0 if not found)
+	ret	nz			;Returns A=slot, B=segment
+	jr	GDRV_NOTFOUND
+
+	;--- DOS 1: search in KERNEX_DOS1
+
+GDRV_DOS1_KERNEX:
+	ld	ix,DRVTBL##
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	jr	z,GDRV_NOTFOUND	;No KERNEX_DOS1 table
+	ld	b,(hl)
+	inc	hl
+	ld	a,b
+	or	a
+	jr	z,GDRV_NOTFOUND	;0 entries
+	ld	e,0FFh			;E = last seen slot (FFh = none)
+
+GDRV_KD1_LOOP:
+	ld	a,(hl)			;A = UD1_SLOT
+	cp	e			;Same driver as previous entry?
+	jr	z,GDRV_KD1_NEXT	;Skip consecutive duplicate
+	ld	e,a			;Update last seen slot
+	cp	(ix+1)			;Check against DRVTBL entries
+	jr	z,GDRV_KD1_NEXT
+	cp	(ix+3)
+	jr	z,GDRV_KD1_NEXT
+	cp	(ix+5)
+	jr	z,GDRV_KD1_NEXT
+	cp	(ix+7)
+	jr	z,GDRV_KD1_NEXT
+
+	ld	c,a			;Unique driver not in DRVTBL
+	dec	d
+	jr	z,GDRV_OK_ROM
+
+GDRV_KD1_NEXT:
+	push	de
+	ld	de,UD1_SIZE##
+	add	hl,de
+	pop	de
+	djnz	GDRV_KD1_LOOP
+
+GDRV_NOTFOUND:
+	xor	a			;A = 0 = not found
 	ret
 
 	;--- ROM driver found, C=slot number
@@ -2011,21 +2090,25 @@ GDRVR_CHECK_DRVR:
 	ld	c,d	;C=Slot number
 	ld	a,e
 	cp	0FFh
-	jr	nz,GDRVR_IDRVR
-		
+	jp	nz,GDRVR_CHK_RAM
+
 	ld	b,1	;B=Driver index
 GDRVR_CHECK_LOOP:
 	push	bc
 	ld	a,b
-	call	GDRIVER
+	call	GDRIVER		;A=slot, B=segment
+	ld	e,b		;E=segment (preserve across pop)
 	or	a
 	pop	bc
 	jr	z,GDRVR_IDRVR
 
 	cp	c
-	jr	z,GDRVR_OKSLOT
+	jr	z,GDRVR_CL_MATCH
 	inc	b
 	jr	GDRVR_CHECK_LOOP
+
+GDRVR_CL_MATCH:
+	ld	b,e		;B=segment from GDRIVER
 
 	;--- Driver found, A=Slot number
 
@@ -2033,9 +2116,13 @@ GDRVR_OKSLOT:
 	pop	ix
 
 	ld	(ix),a
-	ld	(ix+1),0FFh
+	ld	(ix+1),b	;Segment: FFh for ROM, other for RAM
 	ld	(ix+2),0	;Start assuming zero assigned drives
 	ld	(ix+3),0
+	ld	a,b
+	cp	0FFh
+	jp	nz,GDRV_IS_RAM
+	ld	a,(ix)		;Reload slot for DRVTBL search
 
 	;--- Search the driver in DRVTBL
 
@@ -2167,6 +2254,95 @@ GDRV_END:
 	pop	ix
 	pop	iy
 
+	xor	a
+	ret
+
+	;--- Direct slot+segment: validate RAM driver
+
+GDRVR_CHK_RAM:
+	ld	a,d		;A=slot
+	ld	b,e		;B=segment
+	push	de
+	call	RAMDRV_FIND
+	pop	de
+	jp	nc,GDRVR_IDRVR	;Not registered
+	ld	a,d		;A=slot
+	ld	b,e		;B=segment
+	jp	GDRVR_OKSLOT
+
+	;--- RAM driver: get version and name via CALL_MAP
+
+GDRV_IS_RAM:
+	ld	(ix+4),85h	;Nextor, device-based, provides config
+	ld	d,(ix)		;D = slot
+	ld	e,(ix+1)	;E = segment
+	push	de
+	pop	iy		;IY = slot:segment
+;
+	push	iy
+	push	ix
+	ld	ix,DRIVER.DRIVER_QUERY##
+	ld	a,DRIVER.DRVQ_GET_VERSION##
+	call	CALL_MAP##
+	or	a
+	jr	z,GDRV_RAM_VER_OK
+	ld	bc,0100h
+	ld	d,0
+GDRV_RAM_VER_OK:
+	pop	ix
+	pop	iy
+	ld	(ix+5),b	;Major version
+	ld	(ix+6),c	;Minor version
+	ld	(ix+7),d	;Revision
+;
+	push	iy
+	push	ix
+	push	hl
+	push	bc
+;
+	ld	a,(ix+8)	;Extended name flag
+	and	80h
+	ld	d,33
+	jr	z,GDRV_RAM_STR_SZ
+	ld	d,64-8
+GDRV_RAM_STR_SZ:
+	push	af		;Save extended flag
+	ld	(ix+8),0	;Clear in case of error
+	push	ix
+	pop	hl
+	ld	bc,8
+	add	hl,bc
+	push	hl		;Save dest pointer
+	ld	a,DRIVER.DRVQ_GET_STRING##
+	ld	b,DRIVER.DRVQ_STR_DRIVER_NAME##
+	ld	ix,DRIVER.DRIVER_QUERY##
+	call	CALL_MAP##
+;
+	pop	hl		;String dest pointer
+	pop	bc		;B = extended flag (high byte from push af)
+	bit	7,b
+	jr	nz,GDRV_RAM_END	;Extended format, no conversion
+;
+	;Convert from zero-terminated to space-padded
+	ld	b,32
+GDRV_RAM_PAD_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,GDRV_RAM_PAD
+	inc	hl
+	djnz	GDRV_RAM_PAD_LOOP
+	jr	GDRV_RAM_END
+;
+GDRV_RAM_PAD:
+	ld	(hl),' '
+	inc	hl
+	djnz	GDRV_RAM_PAD
+;
+GDRV_RAM_END:
+	pop	bc
+	pop	hl
+	pop	ix
+	pop	iy
 	xor	a
 	ret
 
@@ -2503,6 +2679,12 @@ F_CDRVR_GO:
 	or	a
 	ret	nz
 
+	ld	a,b
+	cp	0FFh
+	jr	nz,CDRVR_RAM
+
+	;--- ROM driver path
+
 	ld	(BK4_ADD##),de
 	ld iyh,c
 	ld	l,(ix)
@@ -2571,6 +2753,89 @@ CDRV_NORAM0:
 	call	$CALSLT##
 	push	af
 	pop	ix
+
+	ld	a,(CODE_SEG##)
+	call	PUT_P0##
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+
+	xor	a
+	ret
+
+	;--- RAM driver path
+
+CDRVR_RAM:
+	; B=segment, C=slot, DE=routine addr, IX=input buffer ptr
+
+	ld	(BUF),de	;Save routine address to page-3 scratch
+
+	ld	iyh,c		;IY = slot:segment
+	ld	iyl,b
+
+	;Load input params from buffer (IX still = buffer ptr)
+
+	ld	l,(ix)
+	ld	h,(ix+1)
+	push	hl		;Save input AF on stack
+	ld	c,(ix+2)
+	ld	b,(ix+3)
+	ld	e,(ix+4)
+	ld	d,(ix+5)
+	ld	l,(ix+6)
+	ld	h,(ix+7)
+
+	ld	ix,(BUF)	;IX = routine address
+
+	;Check DOS version (A is free, input AF on stack)
+
+	ld	a,(DOS_VER##)
+	or	a
+	jr	nz,CDRV_RAM_D2
+
+	;--- DOS 1: call CALL_MAP directly
+
+	pop	af
+	call	CALL_MAP##
+	push	af
+	pop	ix		;IX = result AF
+	xor	a
+	ret
+
+CDRV_RAM_D2:
+	;--- DOS 2: restore TPA segments, call, restore kernel segments
+
+	push	bc		;Save input BC (BDOS slot check uses B)
+	push	de		;Save input DE
+
+	ld	a,(PS_BDOS##)
+	and	11b
+	ld	b,a
+	ld	a,(SS_BDOS##)
+	rla
+	rla
+	and	1100b
+	or	b
+	ld	b,a
+
+	ld	a,(RAMAD0##)
+	and	1111b
+	cp	b
+	jr	nz,CRMD2_NOP0
+
+	ld	a,(P0_TPA##)
+	call	PUT_P0##
+
+CRMD2_NOP0:
+	ld	a,(P2_TPA##)
+	call	PUT_P2##
+
+	pop	de		;Restore input DE
+	pop	bc		;Restore input BC
+	pop	af		;Input AF
+
+	call	CALL_MAP##
+	push	af
+	pop	ix		;IX = result AF
 
 	ld	a,(CODE_SEG##)
 	call	PUT_P0##
@@ -2946,7 +3211,6 @@ MAP_FOUND:
 	ret	nz
 	ld	(ix+UD_SLOT##),d
 	ld	(ix+UD_RELATIVE_UNIT_NUMBER##),e		;Start assuming a legacy MSX-DOS driver
-	ld	(ix+UD_OFFSET##),10h
 
 	;* Now check the type of driver, if it is a Nextor driver,
 	;  perform a drive auto-assign
@@ -3070,6 +3334,23 @@ MAP_SPECIFIC:
 	ld	a,.IDRVR##
 	jp	nz,SETNUMDRV
 
+	;* Copy F_GDRVR's resolved slot to the mapping buffer
+	;  (user may omit expansion bit, F_GDRVR resolves it)
+
+	ld	a,(ix)
+	ld	(iy),a		;Actual slot
+
+	;* Validate segment: user's value must match the resolved one.
+	;  This prevents using FFh (ROM) for a RAM driver slot or
+	;  a specific segment for a ROM driver slot.
+
+	ld	a,(ix+1)
+	cp	(iy+1)
+	jr	z,MAPS_SEG_OK
+	ld	a,.IDRVR##
+	jp	SETNUMDRV
+MAPS_SEG_OK:
+
 	;* Check that the specified slot/device/sector
 	;  is not mapped to any other drive
 
@@ -3100,6 +3381,10 @@ MAP_SPECIFIC:
 	push	bc
 	push	iy
 
+	ld	a,(iy+1)
+	cp	0FFh
+	jr	nz,MAPS_RAM_GP
+
 	ld	hl,DRIVER.DEVICE_QUERY##
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
@@ -3109,6 +3394,20 @@ MAP_SPECIFIC:
 	ld	ix,CALDRV##
 	ld a,DRIVER.DEVQ_GET_PARAMS##
 	call	CALSLT
+	jr	MAPS_DONE_GP
+
+MAPS_RAM_GP:
+	ld	c,(iy+2)
+	ld	h,(iy)
+	ld	l,(iy+1)
+	push	hl
+	pop	iy
+	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	hl,($SECBUF##)
+	ld	a,DRIVER.DEVQ_GET_PARAMS##
+	call	CALL_MAP##
+
+MAPS_DONE_GP:
 	pop	iy
 	pop	bc
 	pop	hl
@@ -3137,6 +3436,11 @@ MAP_SPECIFIC:
 	push	bc
 	push	hl
 	push	iy
+
+	ld	a,(iy+1)
+	cp	0FFh
+	jr	nz,MAPS_RAM_GS
+
 	ld	hl,DRIVER.DEVICE_QUERY##
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
@@ -3145,6 +3449,19 @@ MAP_SPECIFIC:
 	ld a,DRIVER.DEVQ_GET_STATUS##
 	ld	ix,CALDRV##
 	call	CALSLT
+	jr	MAPS_DONE_GS
+
+MAPS_RAM_GS:
+	ld	c,(iy+2)
+	ld	h,(iy)
+	ld	l,(iy+1)
+	push	hl
+	pop	iy
+	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	a,DRIVER.DEVQ_GET_STATUS##
+	call	CALL_MAP##
+
+MAPS_DONE_GS:
 	ld d,b
 	pop	iy
 	pop	hl
@@ -3182,7 +3499,7 @@ MAP_DRV_CH:
 	ld	d,(hl)
 	ex	de,hl
 	ld	b,(iy)
-	ld	c,0FFh
+	ld	c,(iy+1)
 	ld	d,(iy+2)
 	ld	e,(iy+3)
 	call	UNMAPALL
@@ -4552,7 +4869,8 @@ MAPDRV_MNT	equ	MAPDRV_SEC+5	;0=no file mount, 1=mount normal, 2=mount read-only
 	pop	de
 	push	hl
 
-	ld	hl,(DAC+2)
+	ld	ix,FRESTR
+	call	BASIC_ROUT	;Free temp string; HL = descriptor ptr
 	ld	a,(hl)
 	ld	c,a
 	ld	b,0
@@ -4845,14 +5163,11 @@ MAPDRV_END:
 
 
 MAPDRV_HELP:
-	;    ---------------------------------------- 
-	db	"CALL MAPDRV[L](<drive>",1
-	db  "               [,<partition>",1
-	db  "               [,<device>",1
-	db  "               [,<driver slot>]]])",13,10
-	db	"CALL MAPDRV[L](<drive>",1
-	db	"               ,<filename>",1
-	db	"               [,<flags>])",13,10
+	;    ----------------------------------------
+	db	"CALL MAPDRV[L](<drive>[,<partition>",2
+	db  "  [,<device>[,<slot>[,<segment>]]]])",13,10
+	db	"CALL MAPDRV[L](<drive>,<filename>",2
+	db  "  [,<flags>])",13,10
 	db  13,10
 	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
 	db  "         or 0 for default drive",13,10
@@ -4861,18 +5176,21 @@ MAPDRV_HELP:
 	db  "             -1: unmap drive",13,10
 	db  "             -2: automatic mapping",13,10
 	db	"<device>: device number (1-255)",13,10
-	db  "<driver slot>: main + 4*subslot, or",1
-	db  "               0 for primary controller",13,10
+	db  "<slot>: of driver, main + 4*sub, or",1
+	db  "        0 for primary controller",13,10
+	db  "<segment>: RAM driver segment",1
+	db  "           (FFh or omit for ROM)",13,10
 	db	13,10
 	db	"<filename>: full path of file to mount",13,10
-	db	"<flags>: 1 to mount file in read-only",1
-	db  "    mode, 0 for default (read-write)",13,10
+	db	"<flags>: 1 for read-only mount mode",1
+	db  "         0 for default (read/write)",13,10
 	db  13,10
-	db  "MAPDRVL locks the drive after mapping",1
-	db	"      (not available in MSX-DOS 1 mode)",13,10
+	db  3 ;Pause and ask for key press
+	db  "MAPDRVL locks drive after mapping",1
+	db  "      (not available in MSX-DOS 1 mode)",13,10
 	db  "Default <partition>: automatic mapping",13,10
-	db  "Default <device>, <slot>: the ones",1
-	db  "        already mapped"
+	db  "Default <device>, <slot>:",1
+	db  "  the ones already mapped",13,10
 	db 0
 
 
@@ -5002,7 +5320,7 @@ CUSR_GO:
 
 USR_HELP:
 	;    ---------------------------------------- 
-	db	"CALL USR(<run address>",1
+	db	"CALL USR(<run address>",2
 	db  "         [,<registers address>])",13,10
 	db  13,10
 	db  "<run address>: Address of code to run",13,10
@@ -5089,7 +5407,7 @@ LOCKDRV_SHOW:
 	push	bc
 
 	ld	hl,DRIVE_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(MAPDRV_TMP)
 	ld	e,a
 	add	a,'A'
@@ -5101,7 +5419,7 @@ LOCKDRV_SHOW:
 	jr	z,LOCKDRV_SHOW2
 	ld	hl,LOCK_S
 LOCKDRV_SHOW2:
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	
 	pop	hl
 	ret
@@ -5117,7 +5435,7 @@ LOCK_S:
 
 LOCKDRV_HELP:
 	;    ---------------------------------------- 
-	db	"CALL LOCKDRV(<drive> [,<action>])",13,10
+	db	"CALL LOCKDRV(<drive>[,<action>])",13,10
 	db	13,10
 	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 7,",1
 	db  "         or 0 for default drive",13,10
@@ -5160,17 +5478,30 @@ LOCKDRV_HELP:
 	jp		CHDRV_DO
 
 CHDRV2:
+	inc	sp		;Discard old HL from stack
 	inc	sp
-	inc	sp
+	push	hl		;Save updated HL (BASIC text ptr)
+	ld	ix,FRESTR
+	call	BASIC_ROUT	;Free temp string; HL = descriptor ptr
+	;Read descriptor now (IX is clobbered by BASIC_ROUT calls)
+	ld	a,(hl)		;String length
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = string data address
+	pop	hl		;Restore BASIC text pointer
+	push	af		;Save string length
+	push	de		;Save string address
 	ld	a,')'
 	call	SYNCHR
 	push	hl
-	ld	ix,(DAC+2)
-	ld	a,(ix)	;String length
+	pop	ix		;IX = updated BASIC ptr (safe on stack)
+	pop	de		;DE = string data address
+	pop	af		;A = string length
+	push	ix		;Re-push BASIC ptr for later pop
 	cp	2
 	jp	nz,JDERBDN
-	ld	l,(ix+1)
-	ld	h,(ix+2)	;Address of string storage
+	ex	de,hl		;HL = string data address
 	ld	a,(hl)
 	and	0DFh		; force upper
 	cp	'A'
@@ -5222,51 +5553,7 @@ CHDRV_HELP:
 	db 0
 
 
-; Print the string pointed by HL
-; Character 1 acts as follows:
-; For 80 columns: print 1 space, then skip spaces
-; For 40 columns: print new line
-
-PRINT:
-	ld	a,(0F3AEh)
-	cp	41
-	jr	c,PRINT_40
-
-PRINT_80:
-	ld	a,(hl)
-	inc	hl
-	or	a
-	ret	z
-	cp	1
-	jr	nz,P80_DO
-
-	ld	a,' '
-	call	CHPUT
-P80_NOSPC:
-	ld	a,(hl)
-	inc	hl
-	cp	' '
-	jr	z,P80_NOSPC
-
-P80_DO:
-	call	CHPUT
-	jr	PRINT_80
-
-PRINT_40:
-	ld	a,(hl)
-	inc	hl
-	or	a
-	ret	z
-	cp	1
-	jr	nz,P40_DO
-
-	ld	a,13
-	call	CHPUT
-	ld	a,10
-
-P40_DO:
-	call	CHPUT
-	jr	PRINT_40
+; PRINT_CALL_HELP is in print_call_help.mac (linked into this bank)
 
 
 ; Call a DOS function from a BASIC CALL command
@@ -5415,13 +5702,21 @@ GDRL_NOCUR:
 GDL_GO:
 	inc	sp	;Discard pushed HL
 	inc	sp
-	ld	ix,(DAC+2)
-	ld	a,(ix)
+	push	hl	;Save updated HL (BASIC text ptr from FRMEVL)
+	ld	ix,FRESTR
+	call	BASIC_ROUT	;Free temp string; HL = descriptor ptr
+	;Read descriptor now (IX/HL may be clobbered by later calls)
+	ld	a,(hl)		;String length
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = string data address
+	pop	hl		;Restore BASIC text pointer
 	cp	2
+	jr	z,GDL_OK
 	ld	e,62	;"Bad drive name"
-	jp	nz,BASIC_ERR
-	ld	e,(ix+1)
-	ld	d,(ix+2)	;Now DE = pointer to drive letter
+	jp	BASIC_ERR
+GDL_OK:
 	ld	a,(de)
 	push	de
 	or	32	;To lower case
@@ -5456,7 +5751,7 @@ GDL_GO:
 
 	push	hl
 	ld	hl,CDRVIS_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	c,_CURDRV##
 	call	BASIC_DOS_NE
 	add	a,'A'
@@ -5496,7 +5791,7 @@ NEXVER_LOOP:
 NEXVER_END:
 
 	ld	hl,CNEXTOR_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	pop	hl
 	ret
 
@@ -5510,15 +5805,18 @@ CNEXTOR_S:
 	db	"_DRIVERS",13,10
 	db	"_DRVINFO",13,10
 	db	"_FDISK",13,10
+	db  "_IDRIVER()",13,10
 	db	"_LOCKDRV() *",13,10
 	db	"_MAPDRV()",13,10
 	db	"_MAPDRVL() *",13,10
+	db  "_UDRIVER()",13,10
 	db	"_USR()",13,10
 	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10
 	db	13,10
 	db	"Commands with * are not available",1
 	db	"in MSX-DOS 1 mode.",13,10
 	db	13,10
+	db  3 ;Pause and ask for key press
 	db	"Commands with () accept parameters.",13,10
 	db	"Invoke them without parameters",1
 	db	"for parameter usage information."
@@ -5544,7 +5842,7 @@ BUF_LETTER	equ	BUF_DRIVER+64
 	ld	(DRVINDEX),a
 
 	ld	hl,CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	;--- Loop for all drive letters
 
@@ -5561,18 +5859,18 @@ DRVI_LOOP:
 	jp	z,NEXT_DRIVE
 
 	ld	hl,DRIVE1_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(DRVINDEX)
 	add	a,"A"
 	call	CHPUT
 	ld	hl,DRIVE2_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,(BUF_LETTER)
 	cp	4
 	jr	nz,DRVI_NORD
 	ld	hl,RAMDISK_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	jp	NEXT_DRIVE
 DRVI_NORD:
 
@@ -5582,14 +5880,14 @@ DRVI_NORD:
 	cp	5
 	jr	nz,DRVI_NOGHOST
 	ld	hl,GHOST_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(BUF_LETTER+1)
 	add	a,"A"
 	call	CHPUT
 	ld	a,":"
 	call	CHPUT
 	ld	hl,TWOCRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	jp	NEXT_DRIVE
 DRVI_NOGHOST:
 
@@ -5600,13 +5898,13 @@ DRVI_NOGHOST:
 	jr	nz,DRVI_NOMOUNT
 
 	ld	hl,FILE_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,BUF_LETTER+4
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,ONDRV_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,(BUF_LETTER+1)
 	add	a,"A"
@@ -5617,10 +5915,10 @@ DRVI_NOGHOST:
 	ld	a,(BUF_LETTER+2)
 	and	1
 	ld	hl,RO_S
-	call	nz,PRINT
+	call	nz,PRINT_CALL_HELP##
 
 	ld	hl,TWOCRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,0FFh
 	ld	(BUF_LETTER),a
@@ -5659,21 +5957,21 @@ OK_INFO:
 
 IS_LEGACY:
 	ld	hl,LEGACY_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 OK_NAME:
 
 
 	;* Print slot number
 
 	ld	hl,ONSLOT_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,(ix)
 	ld	b,(ix+1)
 	call	PRSLOT
 
 	ld	hl,CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	;* Print relative unit number or device number
 
@@ -5686,12 +5984,12 @@ OK_NAME:
     or a
     jr nz,SHOW_DEVNUM
     ld hl,NO_DEV_MSG
-    call PRINT
+    call PRINT_CALL_HELP
     jr OK_DEVNUM
 
 SHOW_DEVNUM:
 	ld	hl,DEV_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(ix+4)
 	add	a,"0"
 	call	CHPUT
@@ -5699,14 +5997,14 @@ SHOW_DEVNUM:
 
 SHOW_REL:
 	ld	hl,RELUNIT_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(ix+3)
 	add	a,"0"
 	call	CHPUT
 OK_DEVNUM:
 
 	ld	hl,TWOCRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	;* Go to the next drive
 
@@ -5773,7 +6071,7 @@ CDRV_BUF	equ	BUF+1
 	ld	(CDRV_INDEX),a
 
 	ld	hl,CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 CDRIVERS_MAIN_LOOP:
 	ld	a,(CDRV_INDEX)
@@ -5801,24 +6099,29 @@ GDRVML_OK:
 
 IS_LEGACY2:
 	ld	hl,LEGACY_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 OK_NAME2:
 
 
 	;* Print slot number
 
 	ld	hl,ONSLOT_S
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,(ix)
 	ld	b,(ix+1)
 	call	PRSLOT
 
 	ld	hl,CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 
 	;* Print number of assigned drives
+	;  Skip for RAM drivers (segment != FFh): they never have boot drives
+
+	ld	a,(ix+1)
+	cp	0FFh
+	jr	nz,OK_PRINT_DRIVES
 
 	ld	a,(ix+2)
 
@@ -5826,25 +6129,25 @@ OK_NAME2:
 	jr	nz,HAS_DRIVES
 
 	ld	hl,NODRIVES_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	jr	OK_PRINT_DRIVES
 HAS_DRIVES:
 
 	cp	1
 	jr	nz,HAS_MANY_DRIVES
 	ld	hl,ONEDRIVE_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(ix+3)
 	add	a,"A"
 	call	CHPUT
 	ld	hl,COLON_AND_CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	jr	OK_PRINT_DRIVES
 
 HAS_MANY_DRIVES:
 	push	af
 	ld	hl,DRVASSIGN_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	pop	af
 
 	ld	b,a
@@ -5852,7 +6155,7 @@ HAS_MANY_DRIVES:
 	call	CHPUT
 
 	ld	hl,COMMA_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	a,(ix+3)
 	add	a,"A"
@@ -5861,7 +6164,7 @@ HAS_MANY_DRIVES:
 
 	push	bc
 	ld	hl,TO_MSG
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	pop	bc
 
 	ld	a,b
@@ -5870,14 +6173,14 @@ HAS_MANY_DRIVES:
 	call	CHPUT
 
 	ld	hl,COLON_AND_CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 OK_PRINT_DRIVES:
 
 
 	;* Go to the next driver
 
 	ld	hl,CRLF
-	call	PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,CDRV_INDEX
 	inc	(hl)
@@ -5885,11 +6188,11 @@ OK_PRINT_DRIVES:
 
 
 NODRIVES_MSG:
-	db	"No drives assigned at boot time",13,10,0
+	db	"No boot drives assigned",13,10,0
 ONEDRIVE_MSG:
-	db	"Drives assigned at boot time: 1, ",0
+	db	"Boot drives: 1, ",0
 DRVASSIGN_MSG:
-	db	"Drives assigned at boot time: ",0
+	db	"Boot drives: ",0
 COMMA_MSG:
 	db	", ",0
 FROM_MSG:
@@ -5900,8 +6203,8 @@ TO_MSG:
 
 ;-----------------------------------------------------------------------------
 ;
-; Print driver name, version and slot
-; Input: IX = Driver info block returned by GDRVR
+; Print driver name (with truncation) and version number.
+; Input: IX = Driver info block (in page 3, from GDRVR)
 
 PRINT_DRVINFO:
 	push	ix
@@ -5915,13 +6218,37 @@ PRINT_DRVINFO:
 	ld hl,STR_UNNAMED_DRIVER
 
 PRINT_DRVNAME:
+	;Max name length: 46 (>=41 cols) or 15 (<41 cols)
+	ld	a,(0F3AEh)	;Screen width
+	ld	c,46
+	cp	41
+	jr	nc,PDI_MAXOK
+	ld	c,15
+PDI_MAXOK:
+
+PDI_LOOP:
 	ld	a,(hl)
-	or a
-	jr z,PRINT_DRVNAME_END
+	or	a
+	jr	z,PDI_DONE	;End of string
+	ld	a,c
+	or	a
+	jr	z,PDI_TRUNC	;Max reached, truncate
+	ld	a,(hl)
 	call	CHPUT
 	inc	hl
-	jr	PRINT_DRVNAME
-PRINT_DRVNAME_END:
+	dec	c
+	jr	PDI_LOOP
+
+PDI_TRUNC:
+	;Check if there's more text (need "...")
+	ld	a,(hl)
+	or	a
+	jr	z,PDI_DONE
+	ld	a,'.'
+	call	CHPUT
+	call	CHPUT
+	call	CHPUT
+PDI_DONE:
 
 	ld	a," "
 	call	CHPUT
@@ -5953,11 +6280,13 @@ PRINT_DRVNAME_END:
 	ret
 
 STR_UNNAMED_DRIVER:
-	db "Unnamed driver",0
+	db	"Unnamed driver",0
 
 ;-----------------------------------------------------------------------------
 ;
-; Print a slot number
+; Print a slot number, optionally with segment
+; Input: A = Slot number, B = Segment number (FFh = ROM, skip segment)
+; Output format: <slot>[-<subslot>][:<segment>]
 ; Modifies: AF, BC, DE, HL
 
 PRSLOT::
@@ -5969,7 +6298,7 @@ PRSLOT::
 
 	pop	af
 	bit	7,a
-	ret	z
+	jr	z,PRSLOT_SEG	;Not expanded, skip sub-slot
 	rrca
 	rrca
 	and	11b
@@ -5978,9 +6307,65 @@ PRSLOT::
 	ld	a,"-"
 	call	CHPUT
 	pop	af
-	jp	CHPUT		;Print sub-slot number
+	call	CHPUT		;Print sub-slot number
 
-		
+PRSLOT_SEG:
+	pop	bc
+	ld	a,b
+	cp	0FFh
+	ret	z		;ROM driver, no segment to print
+
+	push	af
+	ld	a,(0F3AEh)	;LINL40: screen width
+	cp	41
+	jr	c,PRSLOT_S40
+	ld	hl,PRSEG_S	;80-col: ", segment "
+	call	PRINT_CALL_HELP##
+	jr	PRSLOT_SNUM
+PRSLOT_S40:
+	ld	a,':'		;40-col: ":"
+	call	CHPUT
+PRSLOT_SNUM:
+	pop	af
+	;fall through to PRDEC8
+
+;--- Print byte in A as decimal (0-255), no leading zeros
+;    Modifies: AF, BC, DE
+
+PRDEC8:
+	ld	e,a
+	ld	d,0		;D = have printed a digit flag
+	ld	b,100
+	call	PRDEC8_DGT
+	ld	a,e		;Reload remainder (CHPUT corrupts A)
+	ld	b,10
+	call	PRDEC8_DGT
+	ld	a,e
+	add	a,"0"
+	jp	CHPUT
+
+PRDEC8_DGT:
+	ld	c,"0"-1
+PRDEC8_DL:
+	inc	c
+	sub	b
+	jr	nc,PRDEC8_DL
+	add	a,b
+	ld	e,a		;Save remainder
+	ld	a,c
+	cp	"0"
+	jr	nz,PRDEC8_PR
+	ld	a,d
+	or	a
+	ret	z		;Suppress leading zero
+PRDEC8_PR:
+	ld	d,1
+	ld	a,c
+	jp	CHPUT
+
+PRSEG_S:
+	db	', segment ',0
+
 ;-----------------------------------------------------------------------------
 ;
 ; Try to extract '(' from text. If end of instruction,
@@ -6003,7 +6388,7 @@ GET_PARENT_OR_HELP:
 DO_CALL_HELP:
 	pop	af	;To prevent the rest of the CALL from being executed
 	ex	de,hl
-	call	PRINT
+	call	PRINT_CALL_HELP##
 	ex	de,hl
 	ret
 
@@ -6725,6 +7110,922 @@ IS_EXT_PART:
 	ret z
 	cp PT_EXT_LBA
 	ret
+
+;=============================================================================
+;  RAM DRIVER MANAGEMENT
+;=============================================================================
+
+;--- Constants for RAM driver table cluster structure
+
+RDRV_ENTRIES	equ	4	;Entries per cluster
+RDRV_ENTRY_SZ	equ	2	;Bytes per entry (slot + segment)
+RDRV_CL_SZ	equ	RDRV_ENTRIES*RDRV_ENTRY_SZ+2	;10 bytes: 4 entries + next ptr
+
+; Slot byte in cluster entry:
+;   bits 0-1: primary slot
+;   bits 2-3: sub-slot
+;   bit 4:    timer interrupt hooked flag
+;   bit 5:    EXTBIO handler flag
+;   bit 7:    expanded slot flag
+;   Slot byte = 0 means empty entry.
+
+RDRV_TIMER_BIT	equ	4
+RDRV_EXTBIO_BIT	equ	5
+RDRV_SLOT_MASK	equ	10001111b
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	RAMDRV_FIND
+;
+;    Find a registered RAM driver in the registration table.
+;
+; Entry:      A = slot number (MSX format)
+;             B = segment number
+; Returns:    Cy = 1 if found, HL = pointer to entry
+;             Cy = 0 if not found
+; Preserves:  DE
+
+	and	RDRV_SLOT_MASK
+	ld	c,a		;C = target slot (masked)
+				;B = target segment
+
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	ret	z		;No list, Cy=0
+
+RDF_CL:	push	de
+	ld	d,RDRV_ENTRIES
+RDF_ENT:
+	ld	a,(hl)
+	or	a
+	jr	z,RDF_SKIP	;Empty entry
+
+	and	RDRV_SLOT_MASK
+	cp	c
+	jr	nz,RDF_SKIP
+	inc	hl
+	ld	a,(hl)
+	dec	hl
+	cp	b
+	jr	z,RDF_YES
+
+RDF_SKIP:
+	inc	hl
+	inc	hl
+	dec	d
+	jr	nz,RDF_ENT
+
+	;--- Follow next-cluster pointer
+
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	or	h
+	jr	nz,RDF_CL2
+
+	pop	de
+	or	a		;Cy=0
+	ret
+
+RDF_CL2:
+	pop	de
+	push	de
+	jr	RDF_CL+1	;Re-enter loop (skip push de)
+
+RDF_YES:
+	pop	de
+	scf
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	RAMDRV_REGISTER
+;
+;    Register a new RAM driver in the table. Allocates a new cluster
+;    if needed. Interrupts are disabled during list modification.
+;
+; Entry:      A = slot byte (with timer flag in bit 4 if needed)
+;             B = segment number
+; Returns:    A = 0 on success, .NORAM## on allocation failure
+; Corrupts:   AF, BC, DE, HL
+
+	ld	d,a		;D = slot byte
+	ld	e,b		;E = segment
+
+	;--- Try to find an empty entry in existing clusters
+
+	call	RAMDRV_FIND_SLOT
+	jr	c,RDR_STORE	;Found empty at HL
+
+	;--- No empty entry. HL = tail link address (0 if no list).
+	;    Allocate a new cluster.
+
+	push	hl		;Save tail link address
+	push	de		;Save slot/segment
+	call	RAMDRV_ALLOC_CL
+	pop	de		;D=slot, E=segment
+	jr	nz,RDR_NORAM
+
+	;--- Link new cluster. Stack has tail link address.
+
+	di
+	ex	(sp),hl		;HL = tail link, (SP) = new cluster
+	ld	a,h
+	or	l
+	jr	z,RDR_HEAD	;No existing list, set as head
+
+	;--- Link from tail: write new cluster address at tail
+	pop	bc		;BC = new cluster address
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+	push	bc		;Re-push for RDR_STORE
+
+RDR_HEAD_DONE:
+	pop	hl		;HL = new cluster
+	jr	RDR_STORE
+
+RDR_HEAD:
+	pop	bc		;BC = new cluster address
+	ld	(RDRV_PTR##),bc
+	push	bc
+	jr	RDR_HEAD_DONE
+
+RDR_STORE:
+	di
+	ld	(hl),d		;Slot byte
+	inc	hl
+	ld	(hl),e		;Segment byte
+	ei
+	ld	a,(MFLAGS##)
+	or	RDRVM##		;Mark that RAM drivers exist
+	ld	(MFLAGS##),a
+	xor	a
+	ret
+
+RDR_NORAM:
+	pop	hl		;Clean stack (tail link)
+	ld	a,.NORAM##
+	or	a
+	ret
+
+
+;--- Find first empty entry or tail link address in the cluster list.
+;
+; Returns:    Cy = 1: empty entry found, HL = entry address
+;             Cy = 0: no empty entry
+;                HL = address of null next-pointer (to link from)
+;                HL = 0 if no list exists
+; Corrupts:   AF, C
+
+RAMDRV_FIND_SLOT:
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	ret	z		;Cy=0, HL=0
+
+RDFS_CL:
+	ld	c,RDRV_ENTRIES
+RDFS_ENT:
+	ld	a,(hl)
+	or	a
+	scf
+	ret	z		;Cy=1, HL=empty entry
+
+	inc	hl
+	inc	hl
+	dec	c
+	jr	nz,RDFS_ENT
+
+	;--- HL points to next-pointer field. Follow or return as tail.
+
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	dec	hl
+	ret	z		;Cy=0, HL=null next-pointer (tail)
+
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	jr	RDFS_CL
+
+
+;--- Allocate a new zeroed cluster in the kernel data segment.
+;    Moves RAM_PTR down, writes block header compatible with ALL_P2.
+;
+; Returns:    Z: HL = cluster data address
+;             NZ: A = .NORAM##
+; Corrupts:   AF, BC
+
+RAMDRV_ALLOC_CL:
+	ld	hl,(RAM_PTR##)
+	ld	bc,RDRV_CL_SZ+2	;+2 for block size header
+	or	a
+	sbc	hl,bc
+	jr	c,RDAC_FAIL		;Underflow
+	bit	7,h
+	jr	z,RDAC_FAIL		;Below 8000h
+
+	ld	(RAM_PTR##),hl
+
+	;--- Write block header: size=RDRV_CL_SZ with allocated bit
+
+	ld	(hl),RDRV_CL_SZ or 1	;Size low byte, bit 0=allocated
+	inc	hl
+	ld	(hl),0			;Size high byte
+	inc	hl
+
+	;--- Zero the cluster data
+
+	push	hl
+	xor	a
+	ld	b,RDRV_CL_SZ
+RDAC_Z:	ld	(hl),a
+	inc	hl
+	djnz	RDAC_Z
+	pop	hl			;HL = cluster data start
+
+	xor	a			;Z flag set
+	ret
+
+RDAC_FAIL:
+	ld	a,.NORAM##
+	or	a			;NZ flag set
+	ret
+
+;-----------------------------------------------------------------------------
+;
+	PROC	RAMDRV_UNREGISTER
+;
+;    Unregister a RAM driver by clearing its entry.
+;
+; Entry:      A = slot number
+;             B = segment number
+; Returns:    A = 0 on success, .IDRVR## if not found
+; Corrupts:   AF, BC, HL
+
+	call	RAMDRV_FIND
+	jr	nc,RDU_NF
+
+	di
+	xor	a
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a
+	ei
+
+	;Check if any drivers remain; if not, clear RDRV flag
+	push	af		;Save A=0 (success)
+	ld	hl,(RDRV_PTR##)
+RDU_CL:	ld	a,h
+	or	l
+	jr	z,RDU_NONE	;End of list, no drivers left
+	ld	b,4		;4 entries per cluster
+RDU_ENT:
+	ld	a,(hl)
+	or	a
+	jr	nz,RDU_HAS	;Found a non-empty entry, flag stays set
+	inc	hl		;Skip slot+segment (2 bytes)
+	inc	hl
+	djnz	RDU_ENT
+	;HL now points to next-cluster pointer
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	jr	RDU_CL
+
+RDU_NONE:
+	ld	a,(MFLAGS##)
+	and	RDRVM## xor 0FFh	;Clear RDRV flag
+	ld	(MFLAGS##),a
+RDU_HAS:
+	pop	af		;Restore A=0 (success)
+	ret
+
+RDU_NF:	ld	a,.IDRVR##
+	or	a
+	ret
+
+;-----------------------------------------------------------------------------
+;
+	PROC	RAMDRV_ENUMERATE
+;
+;    Get a RAM driver entry by 1-based index (skipping empty entries).
+;
+; Entry:      A = 1-based index
+; Returns:    A = slot number (masked, 0 if not found)
+;             B = segment number
+; Corrupts:   AF, BC, DE, HL
+
+	ld	d,a		;D = index counter
+
+	ld	a,(MFLAGS##)	;Any RAM drivers installed?
+	and	RDRVM##		;Any RAM drivers installed?
+	jr	z,RDE_NF
+
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	jr	z,RDE_NF
+
+RDE_CL:	ld	c,RDRV_ENTRIES
+RDE_ENT:
+	ld	a,(hl)
+	or	a
+	jr	z,RDE_SKIP
+
+	dec	d
+	jr	z,RDE_YES
+
+RDE_SKIP:
+	inc	hl
+	inc	hl
+	dec	c
+	jr	nz,RDE_ENT
+
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	or	h
+	jr	nz,RDE_CL
+
+RDE_NF:	xor	a		;A = 0 = not found
+	ret
+
+RDE_YES:
+	and	RDRV_SLOT_MASK
+	inc	hl
+	ld	b,(hl)		;B = segment
+	ret			;A = slot (masked)
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	VERIFY_DRV_SIG
+;
+;    Verify that a RAM segment contains a valid Nextor driver signature
+;    at address 4100h ("NEXTORv3_DRIVER",0).
+;
+; Entry:      A = slot, B = segment
+; Returns:    Cy = 0 if valid, Cy = 1 if invalid
+; Corrupts:   AF, C, DE, HL
+; Preserves:  B (segment)
+
+	push	af		;Save slot
+	ld	hl,4100h	;DRIVER.SIGNATURE address
+	ld	de,RDRV_SIG_STR
+	ld	c,16
+
+VDS_LP:	pop	af
+	push	af		;A = slot (B preserved by RD_MAP)
+	call	RD_MAP##	;A = byte; BC,DE,HL preserved
+
+	ex	de,hl		;HL = expected ptr
+	cp	(hl)
+	ex	de,hl		;Restore HL = driver addr, DE = expected
+	jr	nz,VDS_BAD
+
+	inc	hl
+	inc	de
+	dec	c
+	jr	nz,VDS_LP
+
+	pop	af
+	or	a		;Cy = 0, valid
+	ret
+
+VDS_BAD:
+	pop	af
+	scf			;Cy = 1, invalid
+	ret
+
+RDRV_SIG_STR:
+	db	"NEXTORv3_DRIVER",0
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	F_DRVRO
+;
+;    Operate on a RAM-loaded driver.
+;
+; Entry:      A  = Slot number
+;             B  = Segment number
+;             DE = Printing routine, or 0 for "none"
+;             H  = Operation: 1=Initialize, 2=Shut down
+; Returns:    A  = Error code (0 = success)
+;
+;    When the driver's init/shutdown query is invoked, pages 0 and 2 are
+;    temporarily switched to the caller's TPA segments (P0_TPA/P2_TPA)
+;    so that user-supplied print routines in the TPA are directly reachable.
+;    The only constraint on the print routine address is that it must NOT
+;    be in page 1 (4000h-7FFFh), since page 1 holds the driver segment
+;    during the callback.
+
+	;--- Map kernel data segment to page 2 (caller may have BASIC RAM)
+
+	push	af
+	ld	a,0C9h		;RET opcode: null print routine in page 3
+	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+	pop	af
+
+	;--- Save all parameters in BUF
+
+	ld	(BUF),a		;+0 = slot
+	ld	a,b
+	ld	(BUF+1),a	;+1 = segment
+	ld	(BUF+2),de	;+2,+3 = print routine
+	ld	a,h
+	ld	(BUF+4),a	;+4 = operation
+
+	;--- Dispatch operation
+
+	cp	1
+	jr	z,DRVRO_DO_INIT
+	cp	2
+	jr	z,DRVRO_DO_SHUT
+	ld	a,.ISBFN##
+	jr	DRVRO_EXIT
+
+DRVRO_DO_INIT:
+	call	DRVRO_INIT
+	jr	DRVRO_EXIT
+
+DRVRO_DO_SHUT:
+	call	DRVRO_SHUT
+
+DRVRO_EXIT:
+	;--- Restore BASIC RAM in page 2
+
+	push	af
+	ld	a,(P2_64K##)
+	call	PUT_P2##
+	pop	af
+	ret
+
+;--------------------------------------
+; Operation 1: Initialize a RAM driver
+;--------------------------------------
+
+DRVRO_INIT:
+	;--- Check if already registered
+
+	call	DRVRO_LOAD_AB
+	call	RAMDRV_FIND
+	ld	a,.IDRVR##
+	ret	c		;Already registered
+
+	;--- Verify driver signature
+
+	call	DRVRO_LOAD_AB
+	call	VERIFY_DRV_SIG
+	ld	a,.IDRVR##
+	ret	c		;Bad signature
+
+	;--- Set up print routine (DE = 0 -> point to a "ret")
+
+	ld	de,(BUF+2)
+	ld	a,d
+	or	e
+	jr	nz,DRVRO_I2
+	ld	de,BUF+5	;Page 3 RET stub
+DRVRO_I2:
+
+	;--- Switch pages 0/2 to caller's TPA so that user-supplied
+	;    print routines in the TPA are reachable during the callback.
+
+	call	DRVRO_TPA_ON
+
+	;--- Invoke DRVQ_INIT_RAM via CALL_MAP
+	;    B=slot, C=segment (for driver's use, e.g. setting up hooks)
+
+	ld	a,(BUF)
+	ld	b,a		;B = slot
+	db	0FDh,67h	;ld IYh,A  (slot for CALL_MAP)
+	ld	a,(BUF+1)
+	ld	c,a		;C = segment
+	db	0FDh,6Fh	;ld IYl,A  (segment for CALL_MAP)
+	ld	ix,DRIVER.DRIVER_QUERY##
+	ld	a,DRVQ_INIT_RAM
+
+	call	CALL_MAP##
+
+	;--- Restore kernel segments for RAMDRV_REGISTER
+
+	call	DRVRO_TPA_OFF
+
+	;--- Check result
+
+	cp	QUERY_OK
+	jr	z,DRVRO_I_OK
+	cp	QUERY_NOT_IMPLEMENTED
+	ld b,0 ;"Not implemented": treat as success, but assume no flags
+	jr	z,DRVRO_I_OK
+	ld	a,.INITE##
+	ret
+
+DRVRO_I_OK:
+	;--- B bit 0 = timer interrupt flag. Encode into slot byte.
+
+	ld	a,(BUF)
+	bit	0,b
+	jr	z,DRVRO_I3
+	set	RDRV_TIMER_BIT,a
+DRVRO_I3:
+	bit	1,b
+	jr	z,DRVRO_I3B
+	set	RDRV_EXTBIO_BIT,a
+DRVRO_I3B:
+	ld	b,a
+	ld	a,(BUF+1)
+	ld	c,a
+	ld	a,b
+	ld	b,c		;A=slot+timer, B=segment
+	call	RAMDRV_REGISTER
+	ret			;0 or .NORAM
+
+;--------------------------------------
+; Operation 2: Shut down a RAM driver
+;--------------------------------------
+
+DRVRO_SHUT:
+	;--- Check if registered
+
+	call	DRVRO_LOAD_AB
+	call	RAMDRV_FIND
+	ld	a,.IDRVR##
+	ret	nc		;Not registered
+
+	;--- Step 1: Clear timer and EXTBIO flags in the entry
+
+	di
+	ld	a,(hl)
+	res	RDRV_TIMER_BIT,a
+	res	RDRV_EXTBIO_BIT,a
+	ld	(hl),a
+	ei
+
+	;--- Step 2: Unmap all drives mapped to this driver
+	;    (walks UDs, clears matching ones, invalidates buffers)
+
+	call	DRVRO_UNMAP_DRIVES
+
+	;--- Step 3: If signature valid, call shutdown query
+
+	call	DRVRO_LOAD_AB
+	call	VERIFY_DRV_SIG
+	jr	c,DRVRO_S4	;Signature corrupt, skip shutdown query
+
+	ld	de,(BUF+2)
+	ld	a,d
+	or	e
+	jr	nz,DRVRO_S3
+	ld	de,BUF+5	;Page 3 RET stub
+DRVRO_S3:
+	call	DRVRO_TPA_ON	;TPA in pages 0/2 for print routine
+
+	ld	a,(BUF)
+	db	0FDh,67h	;ld IYh,A
+	ld	a,(BUF+1)
+	db	0FDh,6Fh	;ld IYl,A
+	ld	ix,DRIVER.DRIVER_QUERY##
+	ld	a,DRVQ_SHUTDOWN_RAM
+	call	CALL_MAP##
+
+	call	DRVRO_TPA_OFF	;Restore kernel for unregister
+
+DRVRO_S4:
+	;--- Step 4: Unregister
+
+	call	DRVRO_LOAD_AB
+	call	RAMDRV_UNREGISTER
+
+	xor	a
+	ret
+
+;--- Load slot and segment from BUF
+;    Returns: A=slot, B=segment
+;    Corrupts: C
+
+DRVRO_LOAD_AB:
+	ld	a,(BUF)
+	ld	b,a
+	ld	a,(BUF+1)
+	ld	c,a
+	ld	a,b
+	ld	b,c
+	ret
+
+;--- Switch pages 0 and 2 to the caller's TPA segments so that
+;    user-supplied print routines in the TPA are reachable.
+;    Preserves DE (print routine address for CALL_MAP setup).
+
+DRVRO_TPA_ON:
+	push	de
+	ld	a,(P0_TPA##)
+	call	PUT_P0##
+	ld	a,(P2_TPA##)
+	call	PUT_P2##
+	pop	de
+	ret
+
+;--- Restore kernel code/data segments in pages 0 and 2.
+;    Preserves AF and BC (driver query results).
+
+DRVRO_TPA_OFF:
+	push	af
+	push	bc
+	ld	a,(CODE_SEG##)
+	call	PUT_P0##
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##
+	pop	bc
+	pop	af
+	ret
+
+
+;--- Unmap all drives associated with the driver specified by
+;    BUF+0 (slot) and BUF+1 (segment).
+;    Walks all unit descriptors, unmaps matching drives,
+;    invalidates associated disk buffers.
+
+DRVRO_UNMAP_DRIVES:
+	;Walk all unit descriptors and clear UNIT_TAB entries for any
+	;drive that matches the driver slot:segment in BUF+0:BUF+1.
+	;
+	;Cannot call MAP_UNMAP here because it uses pcall (bank 2
+	;routines via page 0 kernel RAM), but F_DRVRO runs from a
+	;BASIC CALL context where page 0 = BIOS ROM.
+	;The UD memory is not freed (minor leak, segment is freed by
+	;the caller anyway) and file handles are not explicitly closed
+	;(they become invalid when the drive disappears).
+
+	ld	a,(BUF)
+	ld	d,a
+	ld	a,(BUF+1)
+	ld	e,a		;DE = target slot:segment
+
+	ld	hl,UNIT_TAB##+2
+	ld	b,MAX_UNITS
+
+DRUMD_LOOP:
+	push	de
+	push	hl
+	push	bc
+
+	;Get UD pointer
+	ld	c,(hl)
+	inc	hl
+	ld	b,(hl)
+	ld	a,b
+	or	c
+	jr	z,DRUMD_NEXT	;No UD, skip
+
+	push	bc
+	pop	ix		;IX = UD pointer
+
+	ld	a,d
+	cp	(ix+UD_SLOT##)
+	jr	nz,DRUMD_NEXT
+	ld	a,e
+	cp	(ix+UD_RAM_SEGMENT##)
+	jr	nz,DRUMD_NEXT
+
+	;Match: zero the UNIT_TAB entry to unmap
+	pop	bc
+	pop	hl		;HL = table pointer
+	xor	a
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a
+	dec	hl		;Restore HL for inc hl/inc hl below
+	push	hl
+	push	bc
+
+DRUMD_NEXT:
+	pop	bc
+	pop	hl
+	pop	de
+	inc	hl
+	inc	hl
+	djnz	DRUMD_LOOP
+
+	;Update $NUMDRV after any changes
+	jp	SETNUMDRV
+
+
+;-----------------------------------------------------------------------------
+;
+	PROC	CTIMI_RAM
+;
+; Timer interrupt handler for RAM-loaded drivers.
+; Called from bank 0 via CALBNK when MFLAGS.RDRV is set.
+; Walks the registration list and calls TIMER_INT on each driver
+; that has the timer flag (bit 4) set.
+;
+; Page 2 may not have the kernel data segment mapped (we're in
+; interrupt context), so we must switch it ourselves.
+;
+	call	GET_P2##		;Save current page 2 segment
+	push	af
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##		;Map kernel data segment to page 2
+;
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	jr	z,TRAM_EXIT		;No RAM drivers registered
+;
+TRAM_CL:
+	push	hl			;Save cluster base address
+	ld	b,4			;4 entries per cluster
+TRAM_ENT:
+	ld	a,(hl)			;Get slot byte
+	or	a
+	jr	z,TRAM_NXT		;Empty entry, skip
+	bit	4,a			;Timer flag set?
+	jr	z,TRAM_NXT		;No timer for this driver
+;
+	push	hl
+	push	bc
+	and	10001111b		;Mask to slot number
+	ld	d,a
+	inc	hl
+	ld	e,(hl)			;E = segment
+	push	de
+	pop	iy			;IY = slot:segment
+	ld	ix,DRIVER.TIMER_INT##
+	call	CALL_MAP##
+	pop	bc
+	pop	hl
+;
+TRAM_NXT:
+	inc	hl
+	inc	hl			;Next entry (2 bytes each)
+	djnz	TRAM_ENT
+;
+	pop	af			;Discard saved cluster base
+	;HL now points to the next cluster pointer (after 4 entries)
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a			;HL = next cluster address
+	or	h
+	jr	nz,TRAM_CL		;Continue if next != 0
+;
+TRAM_EXIT:
+	pop	af
+	call	PUT_P2##		;Restore original page 2 segment
+	ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	PROC	COEM_RAM
+;
+; Iterate registered RAM drivers, calling OEMSTAT on each.
+; HL = BASIC text pointer (passed through to driver).
+; Returns: carry clear if any driver handled, carry set if none did.
+;
+	ld	de,DRIVER.OEMSTAT##
+	jr	ITER_RAM_DRV
+;
+	PROC	CBAS_DRV
+;
+; Handle BASIC expansion device (BASDEV) for the master ROM driver only.
+; Called from BASDEV_CHK when this is NOT the master kernel.
+; Entry: AF = BASIC AF, HL = text pointer, BC/DE/IY = BASIC state.
+; Returns: carry clear if driver handled, carry set if not.
+;
+	ex	af,af'
+	ld	a,DV_BANK##
+	ld	ix,DRIVER.BASDEV##
+	jp	CALBNK##
+;
+	PROC	CBAS_ALL
+;
+; Handle BASIC expansion device (BASDEV) for master driver and RAM drivers.
+; Called from BASDEV_CHK when this IS the master kernel.
+; Entry: AF = BASIC AF, HL = text pointer, BC/DE/IY = BASIC state.
+; Returns: carry clear if any driver handled, carry set if none did.
+;
+	;--- Save function code for RAM drivers (CALBNK clobbers AF')
+	ld	(BUF+14),a
+
+	;--- First try the master driver via nested CALBNK
+	ex	af,af'
+	ld	a,DV_BANK##
+	ld	ix,DRIVER.BASDEV##
+	call	CALBNK##		;Nested: bank 4 → bank 6 → bank 4
+	ret	nc			;Master driver handled it
+
+	;--- Not handled, restore function code and try RAM drivers
+	ld	a,(BUF+14)
+	ld	de,DRIVER.BASDEV##
+	;Fall through to ITER_RAM_DRV
+
+ITER_RAM_DRV:
+;
+; Shared iteration: call driver routine on each registered RAM driver.
+; DE = driver routine address, HL = text pointer for driver.
+; Returns: carry clear if any driver handled (HL may be updated),
+;          carry set if none did (HL preserved).
+;
+; Page 2 may not have the kernel data segment mapped (we're in
+; BASIC context), so we must switch it ourselves.
+;
+	ld	a,(MFLAGS##)		;Any RAM drivers installed?
+	and	RDRVM##			;Any RAM drivers installed?
+	scf
+	ret	z
+;
+	ld	(BUF),de		;Save routine address in page 3
+	push	hl			;Save text pointer
+	call	GET_P2##		;Save current page 2 segment
+	push	af
+	ld	a,(DATA_SEG##)
+	call	PUT_P2##		;Map kernel data segment to page 2
+	ld	hl,(RDRV_PTR##)
+	ld	a,h
+	or	l
+	jr	z,IRDR_NONE		;No RAM drivers registered
+;
+IRDR_CL:
+	push	hl			;Save cluster base
+	ld	b,4			;4 entries per cluster
+IRDR_ENT:
+	ld	a,(hl)			;Get slot byte
+	or	a
+	jr	z,IRDR_NXT		;Empty entry
+;
+	push	hl			;Save entry pointer
+	push	bc			;Save counter
+	and	10001111b		;Mask to slot number
+	ld	d,a
+	inc	hl
+	ld	e,(hl)			;E = segment
+	push	de
+	pop	iy			;IY = slot:segment
+	ld	ix,(BUF)		;IX = routine address
+	;HL for the driver = text pointer, currently on stack.
+	;Stack: [BC(2), HL_entry(2), HL_cluster(2), AF_p2(2), HL_text(2)]
+	ld	hl,8			;Offset to HL_text
+	add	hl,sp
+	ld	c,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,c			;HL = text pointer (from stack)
+	ld	a,(BUF+14)		;Restore function code for BASDEV
+	call	CALL_MAP##
+	jr	nc,IRDR_FOUND		;Driver handled it (carry clear)
+	pop	bc
+	pop	hl
+;
+IRDR_NXT:
+	inc	hl
+	inc	hl			;Next entry
+	djnz	IRDR_ENT
+;
+	pop	af			;Discard saved cluster base
+	;HL now points to next cluster pointer
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a			;HL = next cluster address
+	or	h
+	jr	nz,IRDR_CL		;Continue if next != 0
+;
+IRDR_NONE:
+	pop	af
+	call	PUT_P2##		;Restore original page 2 segment
+	pop	hl			;Restore original text pointer
+	scf				;Not handled
+	ret
+;
+IRDR_FOUND:
+	;Driver handled it. HL from CALL_MAP = updated text pointer.
+	ex	de,hl			;DE = driver's updated text pointer
+	pop	bc			;Discard saved counter
+	pop	hl			;Discard saved entry pointer
+	pop	hl			;Discard saved cluster base
+	pop	af
+	call	PUT_P2##		;Restore original page 2 segment
+	pop	hl			;Discard saved text pointer
+	ex	de,hl			;HL = driver's updated text pointer
+	or	a			;Clear carry
+	ret
+;
+;-----------------------------------------------------------------------------
 
 	finish <PARTIT>
 	end

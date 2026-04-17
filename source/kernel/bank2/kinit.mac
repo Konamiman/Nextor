@@ -121,11 +121,12 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 ;
 		ld	de,RM_DPB##		;Get address of DPB pointer
 		ld	bc,(MASTER_SLOT##)	;C := RAM disk slot number
-		ld	l,80h			;D := offset to entry table
+		ld	l,0			;L := entry table offset (unused for RAM disk)
 		ld	b,1			;Only one unit.
 		call	INIT_UNITS		;Create a unit descriptor
 		ld	a,4
 		jr	nz,kinit_fail_nz	; for the RAM disk.
+		set	UF_RDD,(ix+UD_DFLAGS##)	;Mark as built-in RAM disk
 ;
 ;	+++++  SETUP UNIT DESCRIPTORS FOR ALL DRIVES  +++++
 ;
@@ -300,7 +301,7 @@ INIT_UNITS:
 ;
 ;   This routine creates and  initialises  all  the  unit  descriptors  for  a
 ; particular disk driver (including the RAM disk). A pointer to the MSX DPB is
-; put in the unit descriptor.  The unit descriptor has its UD_SLOT, UD_OFFSET,
+; put in the unit descriptor.  The unit descriptor has its UD_SLOT,
 ; UD_DPB_ADDRESS,  UD_RELATIVE_UNIT_NUMBER and UD_PHYSICAL_UNIT fields set up and UD_CURRENT_DIR_FIRST_CLUSTER is set -ve to indicate
 ; the root directory.  The rest of the unit descriptor is zeroed.   A  pointer
 ; to  the unit descriptor is store in the appropriate place in UNIT_TAB unless
@@ -315,6 +316,7 @@ INIT_UNITS:
 ; Returns:     Z-flag set (and A=0) if succesful.
 ;		      cler (and A<>0) if insufficient memory
 ;	       HL = Pointer to next entry in DPB pointer array (if A=0)
+;	       IX = Pointer to the last allocated unit descriptor
 ; Corrupts:    AF,BC,DE,HL,IX,AF'
 ;
 		xor	a			;Start at relative unit 0
@@ -361,7 +363,6 @@ init_ramunit:	add	hl,hl			; UNIT_TAB depending on the
 		pop	bc			;Restore loop count & slot
 		pop	hl			;Restore entry table offset
 		ld	(ix+UD_SLOT##),c	;Store slot number
-		ld	(ix+UD_OFFSET##),l	;  ..  entry table offset
 ;
 		ex	af,af'
 		ld	(ix+UD_RELATIVE_UNIT_NUMBER##),a		;Store relative unit number
@@ -812,6 +813,8 @@ kbdos_table:
 
 	dw	F_Z80MODE##		;Enable or disable the Z80 access mode for a driver
     dw  F_GETCLUS##     ;Get information about a cluster in a FAT drive
+
+	dw	F_DRVRO##		;Operate on a RAM-loaded driver
 ;
 ;
 num_kbdos_fns	equ	($-kbdos_table)/2

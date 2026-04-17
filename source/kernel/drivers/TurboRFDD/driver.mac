@@ -1,18 +1,28 @@
 	.z80
 	title	Nextor v3 Driver for MSX Turbo-R FDD (TC8566AF)
-	subttl	Floppy disk driver for FS-A1GT/FS-A1ST
+	subttl	Floppy disk driver for Panasonic FS-A1GT/FS-A1ST
+
+; Define RAM_DRIVER externally (--define-symbols RAM_DRIVER) for standalone
+; .DRV build that loads in a mapped RAM segment via CALL IDRIVER or DRVROP.COM.
 
 ;=============================================================================
 ;
 ; Nextor v3 driver for the floppy disk drive built into MSX Turbo-R computers.
 ; Drives the TC8566AF FDC and uses S1990 hardware for disk change detection.
-; Assumes ASCII16 mapper for the Nextor ROM. FDC hardware is in slot 3-2.
+; Assumes ASCII16 mapper for the Nextor ROM.
 ;
 ; The Nextor ROM is in a different slot than the FDC hardware.
 ; All FDC register accesses go through RDSLT/WRSLT (BIOS inter-slot I/O).
 ; The time-critical 512-byte data transfer runs from a RAM routine in page 3
 ; that temporarily switches page 1 to slot 3-2 for direct FDC access.
 ;
+; The default slot for the FDC hardware is 3-2, this can be overridden as follows:
+;
+; - ROM variant: assemble passing --define-symbols FDC_SLOT=<slot_number>
+;   (slot + 4*subslot + 128, e.g. 8Bh for 3-2).
+; - RAM variant: pass the slot number as initialization data to CALL IDRIVER or DRVROP.COM.
+;   Under the hood this means writting the value 1 to 4000h and the slot number
+;   to 4001h in the segment of the driver before initializing it.
 ;=============================================================================
 ;
 ; HARDWARE SPECIFICATION
@@ -234,16 +244,35 @@ FDC_DAT:	equ	7FF5h		;Data Register (read/write)
 
 S1990:	equ	7FF1h		;bit 4 = ~DC0, bit 5 = ~DC1
 
-;--- BIOS entry points
+;--- BIOS / inter-slot entry points
+;    During driver calls, page 0 has the kernel code segment, which has
+;    BIOS-compatible trampolines at the standard entry points (see kinit.mac).
+;    So RDSLT at 000Ch and WRSLT at 0014h work in both ROM and RAM variants.
 
 RDSLT:	equ	000Ch		;Read byte from slot: A=slot,HL=addr -> A=byte
 WRSLT:	equ	0014h		;Write byte to slot: A=slot,HL=addr,E=byte
 
 ;--- Hardware constants
 
+ifdef RAM_DRIVER
+FDC_SLOT_DEFAULT:	equ	8Bh	;Default slot 3-2 (can be overridden via init data)
+else
+ifndef FDC_SLOT
 FDC_SLOT:	equ	8Bh		;Slot 3-2 (primary 3, secondary 2, expanded)
+endif
+endif
+
+LOAD_FDC_SLOT	macro
+ifdef RAM_DRIVER
+	ld	a,(WK_BASE+WK_SLOT)
+else
+	ld	a,FDC_SLOT
+endif
+	endm
 
 ;--- Work area offsets (relative to IX)
+;    ROM: IX points to GWORK-allocated page 3 area
+;    RAM: IX points to 4000h (segment init data area, repurposed as work area)
 
 WK_NDRV:	equ	0		;Number of physical drives detected
 WK_MT0:	equ	1		;Motor timeout counter drive 0
@@ -253,8 +282,10 @@ WK_FLAGS:	equ	5		;bit 0 = write operation
 WK_SCNT:	equ	6		;Sectors successfully transferred
 WK_CMD:	equ	10		;FDC command buffer (9 bytes, +10..+18)
 WK_RES:	equ	19		;FDC result buffer (7 bytes, +19..+25)
-WK_XFER:	equ	26		;Start of RAM transfer routine code
 
+ifndef RAM_DRIVER
+
+WK_XFER:	equ	26		;Start of RAM transfer routine code
 WK_XFER_SIZE:	equ 52		;Space reserved for RAM transfer routine
 
 ;--- Format state (after XFER code area)
@@ -266,12 +297,35 @@ FMT_SIDE:	equ	FMT_TRACK+1		;Current side (0 or 1)
 
 WK_SIZE:	equ	FMT_SIDE+1
 
+else
+
+;RAM variant: no XFER code in work area (copied to stack on each transfer).
+;Format state starts right after the base work area fields.
+FMT_SIDES:	equ	26		;Number of sides (1 or 2)
+FMT_DRIVE:	equ	FMT_SIDES+1	;0-based drive number
+FMT_TRACK:	equ	FMT_DRIVE+1	;Current track number
+FMT_SIDE:	equ	FMT_TRACK+1	;Current side (0 or 1)
+WK_SLOT:	equ	FMT_SIDE+1	;FDC slot number (from init data or default)
+
+WK_SIZE:	equ	WK_SLOT+1
+
+endif
+
 MOTOR_TIMEOUT:	equ 60		;~1 second at 60Hz VDP interrupt
 
-;--- Kernel page 0 routines
+;--- Kernel page 0 routines (ROM variant only; RAM can't access these)
 
+ifndef RAM_DRIVER
 GWORK:	equ	4045h
 CALBNK:	equ	4042h
+CALBAS:	equ	403Fh
+endif
+
+;--- RAM variant: work area base address (init data area, 4000h-40FFh)
+
+ifdef RAM_DRIVER
+WK_BASE:	equ	4000h
+endif
 
 
 ;*********************
@@ -330,20 +384,11 @@ TI_CHK1:
 ;=============================================================================
 
 OEMSTAT:
-	scf
-	ret
-	ret
-
 BASDEV:
 	scf
 	ret
-	ret
 
 EXTBIO:
-	ret
-	ret
-	ret
-
 DIRECT_0:
 	ret
 	ret
@@ -393,6 +438,12 @@ DRIVER_QUERY:
 	jp	z,DO_DRVQ_INIT
 	dec	a
 	jp	z,DO_DRVQ_GET_MAX_DEVICE
+ifdef RAM_DRIVER
+	dec	a
+	jp	z,DO_DRVQ_INIT_RAM
+	dec	a
+	jp	z,DO_DRVQ_SHUTDOWN_RAM
+endif
 	ld	a,QUERY_NOT_IMPLEMENTED
 	ret
 
@@ -431,16 +482,145 @@ DO_DRVQ_GET_STRING:
 ;--- Get init params: request work area and timer hook
 
 DO_DRVQ_GET_INIT_PARAMS:
+ifdef RAM_DRIVER
+	;RAM variant: not used (DRVQ_INIT_RAM is used instead)
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+else
 	xor	a
 	ld	b,1		;Request timer interrupt hook
 	ld	hl,WK_SIZE
 	ret
+endif
 
 
 ;--- Initialize driver: detect drives and init FDC
 
+ifdef RAM_DRIVER
+
 DO_DRVQ_INIT:
-	;Print init message (DE = CHPUT from kernel)
+	;RAM variant: not used (DRVQ_INIT_RAM is used instead)
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+;=============================================================================
+;  RAM DRIVER INITIALIZATION AND SHUTDOWN
+;=============================================================================
+
+;--- Initialize RAM driver: detect drives and init FDC
+;    Input: DE = print routine address
+;    Output: A = QUERY_OK or QUERY_INIT_ERROR
+;            B = flags (bit 0 = timer hook requested)
+
+DO_DRVQ_INIT_RAM:
+	push	de		;Save print routine for error printing
+	ld	hl,INIT_MSG
+	call	PRINT_WITH_DE
+
+	;Read optional FDC slot from init data (before clearing work area)
+	ld	a,(WK_BASE)	;Init data length (0 = none)
+	ld	c,FDC_SLOT_DEFAULT
+	or	a
+	jr	z,INITR_SLOT
+	ld	a,(WK_BASE+1)	;User-supplied slot number
+	ld	c,a
+INITR_SLOT:
+
+	;Work area at 4000h; clear it
+	ld	ix,WK_BASE
+	push	ix
+	pop	hl
+	ld	b,WK_SIZE
+	xor	a
+INITR_CLR:
+	ld	(hl),a
+	inc	hl
+	djnz	INITR_CLR
+
+	;Store FDC slot in work area
+	ld	(ix+WK_SLOT),c
+
+	;Initialize FDC
+	call	FDC_INIT
+	jr	c,INITR_FDC_ERR
+
+	;Detect drive 0 (always present on Turbo-R)
+	ld	a,14h		;Motor on drive 0, FDC enabled
+	call	DETECT_DRIVE
+	jr	c,INITR_NO_DRV
+
+	ld	(ix+WK_NDRV),1
+
+	;Try drive 1 (external)
+	ld	a,25h		;Motor on drive 1, FDC enabled
+	call	DETECT_DRIVE
+	jr	c,INITR_DONE
+
+	ld	(ix+WK_NDRV),2
+
+INITR_DONE:
+	call	MOTOR_OFF
+	ld	a,(ix+WK_NDRV)
+	add	a,'0'
+	ld	c,a		;C = ASCII digit
+	pop	de		;DE = print routine
+
+	push	bc		;Save digit
+	ld	hl,STR_NDRV_1
+	call	PRINT_WITH_DE	;Print "Found "
+	pop	bc
+
+	;Output digit character via print trampoline
+	push	de
+	ld	de,0C300h	;JP opcode + 00
+	push	de
+	ld	ix,1
+	add	ix,sp		;IX -> JP <print> on stack
+	ld	a,c
+	call	JP_IX		;Print digit
+	pop	de
+	pop	de
+
+	ld	hl,STR_NDRV_2
+	call	PRINT_WITH_DE	;Print " drive(s)"
+	ld	b,1		;B = flags: timer hook requested
+	xor	a		;QUERY_OK
+	ret
+
+INITR_FDC_ERR:
+	call	MOTOR_OFF
+	pop	de		;DE = print routine
+	ld	hl,STR_ERR_FDC
+	call	PRINT_WITH_DE
+	ld	a,QUERY_INIT_ERROR
+	ret
+
+INITR_NO_DRV:
+	call	MOTOR_OFF
+	pop	de		;DE = print routine
+	ld	hl,STR_ERR_NODRIVE
+	call	PRINT_WITH_DE
+	ld	a,QUERY_INIT_ERROR
+	ret
+
+
+;--- Shutdown RAM driver: turn off motors
+;    Input: DE = print routine address
+
+DO_DRVQ_SHUTDOWN_RAM:
+	push	de
+	call	MOTOR_OFF
+	pop	de
+	ld	hl,STR_SHUTDOWN
+	call	PRINT_WITH_DE
+	xor	a		;QUERY_OK
+	ret
+
+else
+
+;--- ROM variant: standard initialization
+
+DO_DRVQ_INIT:
 	push	de		;Save CHPUT for error printing
 	ld	hl,INIT_MSG
 	call	PRINT_WITH_DE
@@ -528,6 +708,8 @@ INIT_NO_DRV:
 	call	PRINT_WITH_DE
 	ld	a,QUERY_INIT_ERROR
 	ret
+
+endif	;ifdef RAM_DRIVER / else / endif for initialization code
 
 
 ;--- Detect a drive: turn on motor, wait, recalibrate
@@ -694,7 +876,7 @@ DSTAT_POLL:
 	push	de
 	push	ix
 	ld	hl,S1990
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	RDSLT
 	pop	ix
 	pop	de
@@ -1915,7 +2097,7 @@ READ_MSR:
 	push	hl
 	push	ix
 	ld	hl,FDC_MSR
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	RDSLT
 	pop	ix
 	pop	hl
@@ -1934,7 +2116,7 @@ READ_DAT:
 	push	hl
 	push	ix
 	ld	hl,FDC_DAT
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	RDSLT
 	pop	ix
 	pop	hl
@@ -1954,7 +2136,7 @@ WRITE_DOR:
 	push	ix
 	ld	hl,FDC_DOR
 	ld	e,a
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	WRSLT
 	pop	ix
 	pop	hl
@@ -1974,7 +2156,7 @@ WRITE_TDR:
 	push	ix
 	ld	hl,FDC_TDR
 	ld	e,a
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	WRSLT
 	pop	ix
 	pop	hl
@@ -1994,7 +2176,7 @@ WRITE_DAT:
 	push	ix
 	ld	hl,FDC_DAT
 	ld	e,a
-	ld	a,FDC_SLOT
+	LOAD_FDC_SLOT
 	call	WRSLT
 	pop	ix
 	pop	hl
@@ -2012,6 +2194,88 @@ WRITE_DAT:
 ;           WK_FLAGS bit 0 = 0 for read, 1 for write
 ;    Trashes: IY, DE, BC
 ;    Note: This is a trampoline; the RAM routine's RET returns to our caller.
+
+ifdef RAM_DRIVER
+
+;--- RAM variant: copy XFER_CODE to stack space (page 3) before each transfer
+;    Input: IX = work area, HL = buffer, WK_FLAGS bit 0 = direction
+;    This is a trampoline; XFER_CODE's RET returns to our caller.
+
+CALL_XFER:
+	;--- Patch direction bytes directly in the segment code
+	bit	0,(ix+WK_FLAGS)
+	jr	nz,XFER_WR_P
+	ld	a,1Ah			;ld a,(de) for read
+	ld	(XFER_PATCH),a
+	ld	a,77h			;ld (hl),a for read
+	ld	(XFER_PATCH+1),a
+	jr	XFER_JP
+XFER_WR_P:
+	ld	a,7Eh			;ld a,(hl) for write
+	ld	(XFER_PATCH),a
+	ld	a,12h			;ld (de),a for write
+	ld	(XFER_PATCH+1),a
+XFER_JP:
+	ex	de,hl			;DE = buffer
+
+	;--- Copy XFER_CODE from segment (page 1) to page 3 stack area
+	;    Layout after setup (addresses decrease downward):
+	;
+	;     [XFER_CODE, ~48 bytes]     ← IY (code runs from here)
+	;     [new_A8h]                  ← SP after 4 pushes
+	;     [new_FFFF]
+	;     [old_FFFF]
+	;     [old_A8h]
+	;     [return_addr]              ← original SP
+	;
+	;    XFER_CODE pops the 4 slot values, transfers data, restores
+	;    slots, then RET pops return_addr.
+
+	;Save buffer and compute destination
+	push	de			;Save buffer on stack
+
+	ld	hl,0
+	add	hl,sp			;HL = current SP (after push de)
+	ld	bc,XFER_CODE_SIZE+8+2	;Code + 4 slot push values + saved DE
+	or	a
+	sbc	hl,bc			;HL = destination for code copy
+
+	push	hl			;Save code destination
+
+	;LDIR copy: source=XFER_CODE_START, dest=HL
+	ex	de,hl			;DE = destination
+	ld	hl,XFER_CODE_START
+	ld	bc,XFER_CODE_SIZE
+	ldir				;Copy to stack area
+
+	pop	iy			;IY = code start on stack
+	pop	de			;DE = buffer
+
+	;--- Precalculate slot switch/restore values and push
+	in	a,(0A8h)
+	push	af			;old A8h
+	and	11110011b
+	or	00001100b		;Primary slot 3 for page 1
+	ld	c,a
+
+	ld	a,(0FFFFh)
+	cpl
+	push	af			;old FFFFh
+	and	11110011b
+	or	00001000b		;Secondary slot 2 for page 1
+	push	af			;new FFFFh
+
+	ld	a,c
+	push	af			;new A8h
+
+	;--- Jump to XFER_CODE on the stack
+	ld	b,0			;B=0 for DJNZ 256-byte passes
+	ex	de,hl			;HL = buffer
+	jp	(iy)
+
+else
+
+;--- ROM variant: XFER_CODE was copied to work area at init time
 
 CALL_XFER:
 	;--- Patch the transfer direction bytes in the RAM routine
@@ -2055,6 +2319,8 @@ XFER_JP:
 	;--- Jump to RAM routine
 	ex	de,hl		;HL = buffer
 	jp	(iy)
+
+endif
 
 
 ;=============================================================================
@@ -2136,6 +2402,14 @@ XFER_PATCH_OFF:	equ XFER_PATCH - XFER_CODE_START
 ;    Preserves: AF, BC, DE, HL
 
 MY_GWORK:
+ifdef RAM_DRIVER
+
+	;RAM variant: work area is at WK_BASE (4000h) in the driver segment
+	ld	ix,WK_BASE
+	ret
+
+else
+
 	push	af
 	push	bc
 	push	de
@@ -2154,6 +2428,8 @@ MY_GWORK:
 	pop	bc
 	pop	af
 	ret
+
+endif
 
 
 ;--- Check device number validity
@@ -2284,9 +2560,15 @@ STR_NDRV_2:	db	" drive(s)\r\n",0
 STR_ERR_FDC:	db	"FDC not responding\r\n",0
 STR_ERR_NODRIVE: db	"No drives found\r\n",0
 
+ifdef RAM_DRIVER
+STR_SHUTDOWN:	db	"Turbo-R FDD driver unloaded\r\n",0
+endif
+
 
 ;=============================================================================
 
+ifndef RAM_DRIVER
 	ds	7ED0h-$,0FFh
+endif
 
 	end

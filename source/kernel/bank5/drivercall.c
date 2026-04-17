@@ -7,7 +7,7 @@
 //byte OUT_FLAGS;
 //Z80_registers regs;
 
-void DriverCall(byte slot, uint routineAddress)
+void DriverCall(byte slot, byte segment, uint routineAddress)
 {
 	byte registerData[8];
 	int i;
@@ -15,7 +15,7 @@ void DriverCall(byte slot, uint routineAddress)
 	memcpy(registerData, &regs, 8);
 
 	regs.Bytes.A = slot | CDRVR_NEXTOR_3_FLAG;
-	regs.Bytes.B = 0xFF;
+	regs.Bytes.B = segment;
 	regs.UWords.DE = routineAddress;
 	regs.Words.HL = (int)registerData;
 
