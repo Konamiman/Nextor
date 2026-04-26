@@ -2103,7 +2103,13 @@ GDRVR_CHECK_LOOP:
 	jr	z,GDRVR_IDRVR
 
 	cp	c
+	jr	nz,GDRVR_NO_MATCH
+	ld	d,a
+	ld	a,e
+	cp	0FFh
+	ld	a,d
 	jr	z,GDRVR_CL_MATCH
+GDRVR_NO_MATCH:
 	inc	b
 	jr	GDRVR_CHECK_LOOP
 
