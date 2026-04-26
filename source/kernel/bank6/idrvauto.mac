@@ -973,8 +973,7 @@ IAM_UTFOUND:
 	ld	hl,IAM_MAP_MSG
 	call	PRINT_CALL_HELP##		;": mapped to device "
 	ld	a,(BUF+11)
-	add	a,"0"
-	rst	18h		;Print device number (assumes 1-9)
+	call	PRDEC6		;Print device number in decimal
 
 	;--- Step 6: Get device name (optional)
 
