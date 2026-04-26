@@ -511,7 +511,8 @@ void DoAutoMap()
        (mirrors IDRV_AUTOMAP in idrvauto.mac: query DEVQ_GET_PARAMS,
        check byte 0 = 0 (block) and bytes 1-2 = 0x0200 (512)) */
     foundDevice = 0;
-    for(device = 1; device <= maxDevices; device++) {
+    /* device != 0 guards against wrap when maxDevices == 255 */
+    for(device = 1; device != 0 && device <= maxDevices; device++) {
         REGBUF[0] = DEVQ_GET_PARAMS << 8; /* AF: A=query */
         REGBUF[1] = device;               /* BC: C=device */
         REGBUF[2] = 0;                    /* DE */
