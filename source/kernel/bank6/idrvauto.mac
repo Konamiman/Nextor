@@ -890,6 +890,7 @@ IAM_DEVLOOP:
 
 IAM_DEVNEXT:
 	inc	c
+	jr	z,IAM_NODEV	;Wrapped past 255 (driver reported max=255)
 	ld	a,(BUF+10)
 	cp	c
 	jr	nc,IAM_DEVLOOP
