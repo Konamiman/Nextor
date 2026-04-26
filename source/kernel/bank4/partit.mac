@@ -7768,15 +7768,18 @@ DRVRO_TPA_OFF:
 ;    invalidates associated disk buffers.
 
 DRVRO_UNMAP_DRIVES:
-	;Walk all unit descriptors and clear UNIT_TAB entries for any
-	;drive that matches the driver slot:segment in BUF+0:BUF+1.
+	;Walk all unit descriptors, free the UD memory and clear UNIT_TAB
+	;entries for any drive that matches the driver slot:segment in
+	;BUF+0:BUF+1.
 	;
-	;Cannot call MAP_UNMAP here because it uses pcall (bank 2
-	;routines via page 0 kernel RAM), but F_DRVRO runs from a
-	;BASIC CALL context where page 0 = BIOS ROM.
-	;The UD memory is not freed (minor leak, segment is freed by
-	;the caller anyway) and file handles are not explicitly closed
-	;(they become invalid when the drive disappears).
+	;Cannot call MAP_UNMAP here because it uses pcall (bank 2 routines
+	;via page 0 kernel RAM), but F_DRVRO may run from a BASIC CALL
+	;context where page 0 = BIOS ROM. We free the UD's page-2 block by
+	;invoking FR_P2 in bank 2 directly via CALBNK, which doesn't need
+	;the page-0 trampolines that pcall depends on.
+	;Open file handles are NOT explicitly closed (closing them would
+	;require pcall too); they become invalid and any I/O through them
+	;will fail when the drive disappears.
 
 	ld	a,(BUF)
 	ld	d,a
@@ -7809,7 +7812,17 @@ DRUMD_LOOP:
 	cp	(ix+UD_RAM_SEGMENT##)
 	jr	nz,DRUMD_NEXT
 
-	;Match: zero the UNIT_TAB entry to unmap
+	;Match: free the UD memory in page 2, then zero UNIT_TAB entry.
+	;FR_P2 lives in bank 2 and only touches RAM_PTR (page 3) and the
+	;page-2 free chain (page 2 is currently kernel data segment as
+	;set up by F_DRVRO on entry), so it can be reached via CALBNK
+	;without needing the page-0 pcall trampolines.
+	ld	h,b
+	ld	l,c		;HL = UD pointer (input to FR_P2)
+	ld	ix,?FR_P2##
+	ld	a,2
+	call	CALBNK##
+
 	pop	bc
 	pop	hl		;HL = table pointer
 	xor	a
