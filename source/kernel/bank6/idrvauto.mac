@@ -400,21 +400,30 @@ IDRV_INL_LOOP:
 	inc	a
 	jr	z,IDRV_INL_1B	;D==FFh → single byte
 
-	;Double byte: store E then D (little-endian)
+	;Double byte: cap total length at 254 to match IDRV_MEMPTR and to
+	;keep the staging copy at BUF+16 inside the BASIC line input buffer.
+	pop	af
+	add	a,2
+	jr	c,IDRV_INL_NXT	;Wrap -> silently drop value
+	cp	255
+	jr	nc,IDRV_INL_NXT	;Would exceed 254 -> silently drop value
+	;Store E then D (little-endian)
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-	pop	af
-	add	a,2
 	jr	IDRV_INL_STO
 
 IDRV_INL_1B:
-	ld	(hl),e
 	pop	af
 	inc	a
+	jr	z,IDRV_INL_NXT	;Wrap -> silently drop value
+	cp	255
+	jr	nc,IDRV_INL_NXT	;Would exceed 254 -> silently drop value
+	ld	(hl),e
 
 IDRV_INL_STO:
 	ld	(IDRV_INITLEN),a
+IDRV_INL_NXT:
 	pop	hl
 	call	NEXT_CALL_PAR6
 	jr	nc,IDRV_INL_LOOP ;Comma → more values
