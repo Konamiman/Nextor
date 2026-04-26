@@ -7539,6 +7539,8 @@ RDRV_SIG_STR:
 	;--- Map kernel data segment to page 2 (caller may have BASIC RAM)
 
 	push	af
+	call	GET_P2##
+	ld	(BUF+6),a	;Save caller's original page 2 segment for restore on exit
 	ld	a,0C9h		;RET opcode: null print routine in page 3
 	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
 	ld	a,(DATA_SEG##)
@@ -7571,10 +7573,10 @@ DRVRO_DO_SHUT:
 	call	DRVRO_SHUT
 
 DRVRO_EXIT:
-	;--- Restore BASIC RAM in page 2
+	;--- Restore caller's original page 2 segment
 
 	push	af
-	ld	a,(P2_64K##)
+	ld	a,(BUF+6)
 	call	PUT_P2##
 	pop	af
 	ret
