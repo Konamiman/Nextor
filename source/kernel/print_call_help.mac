@@ -35,6 +35,8 @@ PCH_80:
 PCH_80NS:
 	ld	a,(hl)
 	inc	hl
+	or	a
+	ret	z		;String ends with code 1/2 + only spaces
 	cp	' '
 	jr	z,PCH_80NS
 PCH_80DO:
