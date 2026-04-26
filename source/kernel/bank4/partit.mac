@@ -7812,16 +7812,28 @@ DRUMD_LOOP:
 	cp	(ix+UD_RAM_SEGMENT##)
 	jr	nz,DRUMD_NEXT
 
-	;Match: free the UD memory in page 2, then zero UNIT_TAB entry.
-	;FR_P2 lives in bank 2 and only touches RAM_PTR (page 3) and the
-	;page-2 free chain (page 2 is currently kernel data segment as
-	;set up by F_DRVRO on entry), so it can be reached via CALBNK
-	;without needing the page-0 pcall trampolines.
+	;Match: invalidate the buffer cache for this UD's drive, then free
+	;the UD memory and zero the UNIT_TAB entry. Without the cache
+	;invalidation, remapping the same drive letter later could pick up
+	;stale FAT/directory data tagged with the freed UD's physical unit.
+	;
+	;INV_UD and FR_P2 both live in bank 2 and only need page 2 = kernel
+	;data segment (set up by F_DRVRO on entry) plus page 3 (buffer
+	;chain). We reach them via CALBNK rather than pcall, because
+	;F_DRVRO may run from a BASIC CALL context where page 0 = BIOS ROM
+	;and the page-0 pcall trampolines aren't there.
+	;
+	;FL_UD (which would write back dirty buffers via the driver before
+	;invalidating) is not called: BF_FLUSH internally uses pcall, which
+	;wouldn't work here. Dirty buffers for this drive are discarded.
 	ld	h,b
-	ld	l,c		;HL = UD pointer (input to FR_P2)
-	ld	ix,?FR_P2##
+	ld	l,c		;HL = UD pointer
+	ld	ix,?INV_UD##
 	ld	a,2
-	call	CALBNK##
+	call	CALBNK##	;Invalidate cached buffers for this UD
+	ld	ix,?FR_P2##	;HL still = UD pointer (INV_UD preserves HL)
+	ld	a,2
+	call	CALBNK##	;Free UD memory in page-2 free list
 
 	pop	bc
 	pop	hl		;HL = table pointer
