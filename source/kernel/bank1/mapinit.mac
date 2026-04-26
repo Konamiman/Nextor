@@ -762,7 +762,7 @@ EXB_NEX:
 EXB_RAM:
 	ex af,af'
 	ld a,1
-	ld (EXTBIO_SAVE##),a		;IY=1: system hook must be called
+	ld (EXTBIO_SAVE##),a		;IYl=1: system hook must be called
 	ex af,af'
 
 	ld	ix,KERNEX##
@@ -873,7 +873,7 @@ EXB_DJNZ:
 	jr	EXB_LOOP_PROXY
 
 EXB_RAM_FIN:
-	ld	iy,(EXTBIO_SAVE##)	;IY=1: system hook must be called
+	ld	iy,(EXTBIO_SAVE##)	;IYl=1: system hook must be called
 	ex	af,af'
 	exx
 	push	af
@@ -1026,7 +1026,7 @@ KBUF	equ	0F41Fh			;Buffer space in main MSX work area
 ;
 ; Input:  AF/BC/DE/HL = EXTBIO parameters
 ; Output: AF/BC/DE/HL = results (possibly modified by driver)
-;         D' bit 0 = 0 if a driver consumed the request, 1 otherwise
+;         IYl bit 0 = 0 if a driver consumed the request, 1 otherwise
 ;
 EXB_RAM_DRV:
 	push	af

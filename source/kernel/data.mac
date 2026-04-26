@@ -61,8 +61,9 @@ ram_ad	defl	DATABASE
     ;NOTE! BK4_ADD is manually defined in bank5/dos.h, and must be updated if it changes
     var2 BK4_ADD,F1D0   ;Address of routine to be called via C4PBK
     var0 TMP_SEC        ;Used for temporary storage of a 32 bit sector number
-	var2 TMP_IX			;Used for CALL_B0_IX_IY
-	var2 TMP_IY			;Used for CALL_B0_IX_IY
+						;(overlays TMP_IX/TMP_IY—intentional, separate usage paths)
+	var2 TMP_IX			;Used for CALLB0_IX_IY
+	var2 TMP_IY			;Used for CALLB0_IX_IY
 ;
 ;	------------------------
 ;

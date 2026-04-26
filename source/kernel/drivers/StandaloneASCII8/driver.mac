@@ -153,9 +153,9 @@ BASDEV:
 
 	;--- Extended BIOS hook.
 	;    Works the expected way, except that it must return
-	;    D'=1 if the old hook must be called, D'=0 otherwise.
-	;    It is entered with D'=1.
-
+	;    IYl=1 if the old hook must be called, IYl=0 otherwise.
+	;    Only called if the driver has returned EXTBIO flag set 
+	;    in the "get driver initialization parameters" query.
 EXTBIO:
 	ret
 	ret
