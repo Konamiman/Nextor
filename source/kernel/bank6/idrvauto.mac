@@ -539,15 +539,24 @@ IDRV_NOINI:
 	ld	hl,0
 	ld	(IDRV_OFFSET),hl
 
-	;* Read loop: read file in 512-byte chunks into the segment
+	;* Read the file into the segment.
+	;  First chunk is 256 bytes; subsequent chunks are 512 bytes.
+	;  256 + 31*512 = 3F00h, exactly the size of the driver code area
+	;  (8100h-BFFFh), so chunk boundaries always land within the area
+	;  and we never need to cap or write past the end.
 
+	ld	hl,100h		;First read: 256 bytes
 IDRV_RDLOOP:
 	ld	a,(IDRV_HANDLE)
 	ld	b,a
 	ld	de,($SECBUF##)
-	ld	hl,200h		;512 bytes
 	ld	c,_READ##
 	call	BASIC_DOS6	;BASIC_DOS6 never returns on error
+				;HL = bytes read (0 = EOF)
+
+	ld	a,h
+	or	l
+	jr	z,IDRV_RDDONE	;0 bytes read: EOF
 
 	push	hl		;Save bytes-read count
 
@@ -573,20 +582,19 @@ IDRV_RDLOOP:
 	ex	af,af'		;Recover saved page 2 segment
 	call	PUT_P2##
 
-	;Update offset and check for end
+	;Update offset
 	pop	hl		;Bytes-read count
-	ld	a,h
-	cp	2
-	jr	c,IDRV_RDDONE	;Bytes < 512: EOF reached, stop
-
 	ld	de,(IDRV_OFFSET)
 	add	hl,de
 	ld	(IDRV_OFFSET),hl
 
-	;Check if segment nearly full
+	;Check if segment is full (offset reached 3F00h)
 	ld	a,h
 	cp	3Fh
 	jr	nc,IDRV_RDDONE	;Offset >= 3F00h, stop reading
+
+	;Subsequent reads are 512 bytes
+	ld	hl,200h
 	jr	IDRV_RDLOOP
 
 IDRV_RDDONE:
