@@ -588,10 +588,13 @@ FN_ADD:
 ;    Output: HL = Result
 
 FN_MULT:
+        ld      hl,0
+        ld      a,e
+        or      a
+        ret     z               ;E=0 → result is 0 (avoids DJNZ wrap to 256)
         ld      b,e
         ld      e,l
         ld      d,0
-        ld      hl,0
 MULT_LOOP:
         add     hl,de
         djnz    MULT_LOOP
