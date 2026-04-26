@@ -14,6 +14,8 @@
 ; - Hooks to EXTBIO and provides a hook to implement a simple UNAPI API 
 ;   (specification identifier: SIMPLE_MATH) with three functions:
 ;   get API info, add, and multiply.
+; - If additional data is supplied at install time, the first byte is returned
+;   as part of the driver name (1 to 9 are supported only); otherwise 0 is used.
 ;
 ; Not implemented: BASIC devices handler (aka OPEN "XYZ:"),
 ; the implementation would be similar to the OEMSTAT handler.
