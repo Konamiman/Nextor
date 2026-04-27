@@ -55,6 +55,7 @@ CALSLT:		equ	001Ch
 CALBAS:		equ	0159h
 BK4_ADD:		equ	0F1D0h
 TMP_IX:		equ	0F1D2h
+TMP_IY:		equ	0F1D4h
 PROCNM:		equ	0FD89h
 VALTYP:		equ	0F663h
 MASTER_SLOT:	equ	0F348h
@@ -176,17 +177,13 @@ OEMSTAT_CMD:	db	"PRINT",0
 ;    target address, but CALLB0_IX_IY restores it from TMP_IX).
 
 DRV_BASIC_ROUT:
-	push	hl
-	ld	hl,CALBAS
-	ld	(BK4_ADD),hl
-	pop	hl
-	ld	(TMP_IX),ix	;BASIC routine address for CALLB0_IX_IY
-	push	iy
-	ld	a,(MASTER_SLOT)
-	ld	iyh,a
+	ld	(TMP_IX),ix
+	ld	(TMP_IY),iy
+	ld	ix,CALBAS
+	ld	(BK4_ADD),ix
+	ld	iy,(MASTER_SLOT-1)
 	ld	ix,CALLB0_IX_IY
 	call	CALSLT
-	pop	iy
 	ei
 	ret
 
@@ -232,7 +229,7 @@ DRIVER_QUERY:
 	dec	a
 	jp	z,DO_DRVQ_GET_STRING
 	dec	a
-	jp	z,DO_DRVQ_GET_INIT_PARAMS
+	jr	z,DQ_NOT_IMPL		;DRVQ_GET_INIT_PARAMS: not used for RAM drivers
 	dec	a
 	jr	z,DQ_NOT_IMPL		;DRVQ_INIT: not used for RAM drivers
 	dec	a
@@ -274,15 +271,6 @@ DO_DRVQ_GET_STRING:
 	ld	hl,STR_HW_AUTHOR
 	jp	z,OUTPUT_STRING
 	ld	a,QUERY_NOT_IMPLEMENTED
-	ret
-
-
-;--- Get init params: no work area, no timer
-
-DO_DRVQ_GET_INIT_PARAMS:
-	xor	a		;A = 0
-	ld	b,0		;B = 0 (no timer interrupt hook)
-	ld	hl,0		;HL = 0 (no work area needed)
 	ret
 
 

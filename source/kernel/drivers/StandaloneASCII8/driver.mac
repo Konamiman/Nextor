@@ -367,8 +367,15 @@ DO_DRVQ_GET_MAX_DEVICE:
 ;
 ; If QUERY_NOT_IMPLEMENTED is returned, B=0 is assumed.
 ;
-; Not implemented as this is a ROM driver,
-; this query will never be invoked by the kernel.
+;
+; Driver query 7: Shutdown RAM driver
+;
+; Input:  DE = Address of a routine for printing a character
+; Output: A  = QUERY_OK or QUERY_NOT_IMPLEMENTED
+;
+;
+; Queries 6 and 7 not implemented as this is a ROM driver,
+; these queries will never be invoked by the kernel.
 
 
 	;--- Device query
