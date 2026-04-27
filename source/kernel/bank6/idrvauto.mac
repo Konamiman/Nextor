@@ -551,12 +551,16 @@ IDRV_RDLOOP:
 	ld	b,a
 	ld	de,($SECBUF##)
 	ld	c,_READ##
-	call	BASIC_DOS6	;BASIC_DOS6 never returns on error
-				;HL = bytes read (0 = EOF)
+	call	BASIC_DOS6_NE	;A = error code, HL = bytes read on success.
+				;BASIC_DOS6_NE (vs BASIC_DOS6) does NOT abort
+				;on error, so we can spot .EOF when the file
+				;size is an exact multiple of a chunk boundary.
+	or	a
+	jr	nz,IDRV_RDDONE	;.EOF or other error: stop reading
 
 	ld	a,h
 	or	l
-	jr	z,IDRV_RDDONE	;0 bytes read: EOF
+	jr	z,IDRV_RDDONE	;Defensive: 0 bytes (shouldn't happen with A=0)
 
 	push	hl		;Save bytes-read count
 
