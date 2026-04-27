@@ -8,7 +8,7 @@
 	INCLUDE ../const.inc
 ;
 ;-----------------------------------------------------------------------------
-;  Local equates
+;  Local EQUs
 ;-----------------------------------------------------------------------------
 
 CALLB0:		equ	403Fh
@@ -26,6 +26,7 @@ KILBUF:		equ	0156h
 POSIT:		equ	00C6h
 
 EXPTBL:		equ	0FCC1h
+SLTTBL:		equ	0FCC5h
 H_CHPH:		equ	0FDA4h
 MSXVER:		equ	002Dh
 CSRY:		equ	0F3DCh
@@ -87,9 +88,10 @@ SNSMAT_BIT_N:	equ	3	;Bit position for N key in row 4
 
 ;=============================================================================
 ;  BOOT_MENU - Main entry point
-;  Called from bank 0 via CALL4 (BK4_ADD mechanism)
+;  Called from bank 0 via BPROC trampoline (bank 1)
 ;=============================================================================
 
+BOOT_MENU::			;Public alias for BPROC mechanism
 	PROC	BOOT_MENU
 
 	;--- Save original BOOTKEYS and make working copy ---
@@ -293,7 +295,16 @@ CHECK_AND_ADD_SLOT:
 	push bc
 	ld b,a			;B = slot address to check
 
-	;--- Check for "AB" ROM signature at 4000h ---
+	;--- Skip signature checks for our own slot
+
+	;We know we're a Nextor 3 kernel; also calling BSC in our own
+	;slot would change the bank register and corrupt running code.
+	call GET_PAGE1_SLOT
+	cp b
+	jp z,CAS_IS_NEXTOR3
+
+	;--- Check for "AB" ROM signature at 4000h
+
 	;Note: RDSLT clobbers AF,BC,DE,HL so we must preserve B (slot addr)
 
 	ld a,b
@@ -348,6 +359,7 @@ CHECK_AND_ADD_SLOT:
 
 	;--- This is a Nextor 3 kernel. Add it to the list. ---
 
+CAS_IS_NEXTOR3:
 	push bc			;Save B = slot address (GET_ENTRY_PTR uses B)
 	ld a,(KERNEL_COUNT)
 	call GET_ENTRY_PTR	;IX = pointer to kernel entry
@@ -385,6 +397,12 @@ CHECK_AND_ADD_SLOT:
 	;Critical for ASCII 8 mappers where the upper 8KB page
 	;(6000h-7FFFh) may not be showing the correct ROM page
 	;at power-on. BSC is in the lower 8KB, always accessible.
+	;Skip for our own slot (mapper already set up, and BSC
+	;would corrupt the active bank register).
+
+	call GET_PAGE1_SLOT
+	cp b
+	jr z,CAS_AFTER_BSC
 
 	push ix			;Save kernel entry pointer
 	xor a			;A = 0 (select bank 0)
@@ -396,6 +414,8 @@ CHECK_AND_ADD_SLOT:
 	ei
 	pop bc			;Restore B = slot address
 	pop ix			;Restore kernel entry pointer
+
+CAS_AFTER_BSC:
 
 	;--- Query driver name ---
 
@@ -501,6 +521,36 @@ CAS_ADD_DONE:
 
 CAS_NOT_FOUND:
 	pop bc
+	ret
+
+
+;=============================================================================
+;  GET_PAGE1_SLOT - Get the full slot address currently mapped in page 1
+;  Output: A = slot address (primary | subslot<<2 | 80h if expanded)
+;  Clobbers: C, D, E, HL
+;=============================================================================
+
+GET_PAGE1_SLOT:
+	in a,(0A8h)		;Read primary slot register
+	rrca
+	rrca
+	and 3			;A = primary slot for page 1
+	ld c,a
+	ld e,a
+	ld d,0
+	ld hl,EXPTBL
+	add hl,de
+	bit 7,(hl)
+	ld a,c
+	ret z			;Not expanded, return primary only
+
+	;Expanded: include sub-slot from SLTTBL
+	ld hl,SLTTBL
+	add hl,de
+	ld a,(hl)		;Sub-slot register for this primary
+	and 00001100b		;Page 1 sub-slot (bits 2-3)
+	or c			;Add primary (bits 0-1)
+	or 80h			;Set expansion flag
 	ret
 
 

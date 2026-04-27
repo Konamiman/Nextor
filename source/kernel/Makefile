@@ -336,6 +336,32 @@ drivers/TurboRFDD/chgbnk.bin: \
 	$(call assemble,drivers/TurboRFDD/chgbnk.mac,--build-type abs --output-file-extension bin)
 
 
+### Turbo-R FDD driver RAM variant (standalone .drv for loading in RAM)
+
+dsk-tr-ram: drivers/TurboRFDD/turbofdd.drv
+
+drivers/TurboRFDD/turbofdd.drv: \
+	drivers/TurboRFDD/driver.mac
+
+	$(call assemble_as,drivers/TurboRFDD/driver.mac,$$/driver.ram.drv,--build-type abs --output-file-extension drv --define-symbols RAM_DRIVER)
+	cp drivers/TurboRFDD/driver.ram.drv drivers/TurboRFDD/turbofdd.drv
+	@mkdir -p ../../bin/ram-drivers
+	cp drivers/TurboRFDD/turbofdd.drv ../../bin/ram-drivers/turbofdd.drv
+
+
+### RAM disk driver (standalone .drv for loading in RAM)
+
+ramdisk: drivers/RAMDisk/ramdisk.drv
+
+drivers/RAMDisk/ramdisk.drv: \
+	drivers/RAMDisk/driver.mac
+
+	$(call assemble,drivers/RAMDisk/driver.mac,--build-type abs --output-file-extension drv)
+	cp drivers/RAMDisk/driver.drv drivers/RAMDisk/ramdisk.drv
+	@mkdir -p ../../bin/ram-drivers
+	cp drivers/RAMDisk/ramdisk.drv ../../bin/ram-drivers/ramdisk.drv
+
+
 ### Common rules
 
 256.bytes:
@@ -353,7 +379,6 @@ nextor_base.dat: \
 	bank2/B2.BIN \
 	bank3/B3.BIN \
 	bank4/B4.BIN \
-	bank4/B4RD.BIN \
 	bank5/B5.BIN \
 	bank5/fdisk.dat \
 	bank6/B6.BIN
@@ -366,7 +391,6 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=80k
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
-	dd conv=notrunc if=bank4/B4RD.BIN of=nextor_base.dat bs=1 count=15 seek=65664
 
 	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base.dat)
 
@@ -378,16 +402,16 @@ B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskba
 B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
-B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel)
+B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
-B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel)
+B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel)
 
 lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,\
 	$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,\
 	$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$1))))))))))))))))))))))))))
 
 .SECONDEXPANSION:
-$(COMRELS) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) drv.rel rel.rel: \
+$(COMRELS) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
 	macros.inc \
 	const.inc \
 	condasm.inc \
@@ -419,7 +443,7 @@ bank0/B0.BIN bank0/B0.SYM: \
 bank0/b0labels.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT|R_DSK[^[:space:]]+|R_GETDPB|R_CHOICE)
 
 bank0/b0lab_b3.inc: \
 	bank0/B0.SYM
@@ -429,7 +453,7 @@ bank0/b0lab_b3.inc: \
 bank0/b0lab_b6.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b6.inc,ALLOC)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b6.inc,ALLOC|BDOSE|GETERR|C4PBK)
 
 
 ###  Bank 1
@@ -446,11 +470,12 @@ bank1/B1.BIN: \
 	bank1/msg.rel \
 	bank1/b1.rel \
 	bank0/alloc.rel \
+	bank4/bootmenu.rel \
 	bank0/b0labels.inc
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel msg.rel \
+			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel ../bank4/bootmenu.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -508,11 +533,6 @@ bank3/B3.BIN: \
 
 ###  Bank 4
 
-bank4/b4rdlabs.inc: \
-	bank4/B4.SYM
-
-	$(call SymToEqus,bank4/B4.SYM,bank4/b4rdlabs.inc,R4_[1-9])
-
 bank4/b4.rel: \
 	bank.inc \
 	bank4/b4.mac \
@@ -526,34 +546,18 @@ bank4/partit.rel: \
 
 	$(call assemble,bank4/partit.mac)
 
-bank4/ramdrvh.rel: \
-	macros.inc \
-	const.inc \
-	bank4/ramdrvh.mac \
-	bank4/b4rdlabs.inc
-
-	$(call assemble,bank4/ramdrvh.mac)
-
-bank4/B4RD.BIN: \
-	bank4/ramdrvh.rel \
-	bank4/b4rdlabs.inc
-
-	$(call print_linking,"bank 4 B4RD")
-	@$(LK80) --working-dir bank4 --symbols-file B4RD.SYM --output-file B4RD.BIN \
-			--code 4080h ramdrvh.rel
-
 bank4/B4.BIN bank4/B4.SYM: \
 	$(COMRELS) \
 	$(B4RELS) \
 	bank4/partit.rel \
+	print_call_help.rel \
 	bank4/b4.rel \
-	bank4/ramdrv.rel \
 	bank0/b0labels.inc \
 	bank2/b2labels.inc \
 
 	$(call print_linking,"bank 4")
 	@$(LK80) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel ramdrv.rel time.rel seg.rel misc.rel bootmenu.rel \
+			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel time.rel seg.rel misc.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -572,12 +576,13 @@ bank5/B5.BIN: \
 bank6/B6.BIN bank6/B6.SYM: \
 	$(COMRELS) \
 	$(B6RELS) \
+	print_call_help.rel \
 	chgbnk.rel \
 	bank0/b0lab_b6.inc
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel \
+			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \
@@ -618,4 +623,3 @@ clean:
 	rm -f nextor_base.dat
 	rm -f bank0/b0lab*.inc
 	rm -f bank2/b2labels.inc
-	rm -f bank4/b4rdlabs.inc

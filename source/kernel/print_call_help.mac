@@ -1,0 +1,88 @@
+	.z80
+	name('pch')
+;
+; PRINT_CALL_HELP — Print a zero-terminated CALL command help text.
+;
+; Special character codes:
+;   1: 80 columns: print 1 space then skip spaces. 40 columns: print new line.
+;   2: 80 columns: skip spaces (no leading space). 40 columns: print new line.
+;   3: 80 columns: nothing. 40 columns: print "Press any key to continue...",
+;      wait for key, erase the message line, then continue printing.
+;
+; Input: HL = pointer to string.
+; Modifies: AF, BC, DE, HL
+
+CHGET: equ	009Fh
+LINL40: equ 0F3AEh
+
+PRINT_CALL_HELP::
+	ld	a,(LINL40)
+	cp	41
+	jr	c,PCH_40
+
+PCH_80:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	4
+	jr	nc,PCH_80DO
+	cp	3
+	jr	z,PCH_80	;Code 3: no-op in 80-col
+	cp	1
+	ld	a,' '
+	call	z,0018h
+PCH_80NS:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z		;String ends with code 1/2 + only spaces
+	cp	' '
+	jr	z,PCH_80NS
+PCH_80DO:
+	rst	18h
+	jr	PCH_80
+
+PCH_40:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	4
+	jr	nc,PCH_40_DO
+	cp	3
+	jr	z,PCH_40_PAUSE
+	;Codes 1 and 2: new line
+	ld	a,13
+	rst	18h
+	ld	a,10
+PCH_40_DO:
+	rst	18h
+	jr	PCH_40
+
+PCH_40_PAUSE:
+	push	hl		;Save string pointer
+	ld	hl,PCH_PAUSE_MSG
+PCH_40_PMSG:
+	ld	a,(hl)
+	or	a
+	jr	z,PCH_40_WAIT
+	rst	18h
+	inc	hl
+	jr	PCH_40_PMSG
+PCH_40_WAIT:
+	call	CHGET		;Wait for key press
+	;Erase the message: CR + ESC K (VT52 erase to end of line)
+	ld	a,13
+	rst	18h
+	ld	a,27
+	rst	18h
+	ld	a,"K"
+	rst	18h
+	pop	hl		;Restore string pointer
+	jr	PCH_40
+
+PCH_PAUSE_MSG:
+	db "Press any key to continue...",0
+
+	end

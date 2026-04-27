@@ -9284,6 +9284,12 @@ RD_MEM:
 	push	hl
 	jp	XF36B           ; enable system diskrom
 
+BASDEV_CHK::
+	ex	af,af'
+	ld	a,DV_BANK##
+	ld	ix,DRIVER.BASDEV##
+	jp	CALBNK##
+
 	;KABR and KDERR stubs, see drv.mac for details
 
 KABR::

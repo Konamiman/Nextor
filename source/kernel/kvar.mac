@@ -146,7 +146,6 @@ size	macro	name
 	ifield	0		;Start at offset zero
 ;
 	field	1,UD_SLOT	;Slot address of appropriate disk driver
-	field	0,UD_OFFSET	;Offset to entry table of disk driver (for MSX-DOS drivers)
 	field	1,UD_DEVICE_NUMBER   ;Device number (for Nextor drivers)
 	field	2,UD_DPB_ADDRESS     ;Address of MSX DPB in system RAM
 	field	1,UD_FLAGS	;Various flags for the unit:
@@ -167,6 +166,7 @@ size	macro	name
 				;               (so that BUILD_UPB will not auto-assign partition)
 				;        bit 5: drive is a ghost drive
 				;        bit 6: drive was last accessed in ghost pair
+				;        bit 7: unit is the built-in kernel RAM disk
 ;
 	field	1,UD_RAM_SEGMENT	;Segment number for RAM based drivers, FFh for ROM based drivers
 ;
@@ -787,6 +787,9 @@ iy_flag defl	FALSE			; Suppress +/- 128 byte checking
 	var     GHO_PAIR,1		;Ghost pair info:
 	                        ;bits 0-4 = real drive (0=none, 1=A:, etc)
 	                        ;bit 5 = last accessed (0=real, 1=ghost)
+;
+	var2	RDRV_PTR		;Pointer to first cluster of RAM driver
+	                        ;registration list (0 = no RAM drivers)
 ;
 	var2	RAM_PTR			;Pointer to start of RAM chain
 	var2	VAR_BOT			;End of RAM chain marker

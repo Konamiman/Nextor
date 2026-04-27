@@ -1,0 +1,962 @@
+	.z80
+	title	Nextor v3 RAM loadable driver example
+	subttl	Example RAM-loadable driver implementing various features
+
+;=============================================================================
+;
+; Example of RAM loadable driver for Nextor.
+;
+; Demonstrates the features that can be implemented by drivers loaded in RAM:
+;
+; - Implements a small (14K) RAM disk using the driver's own segment space.
+; - Hooks to the timer interrupt to make the CAPS LOCK led blink.
+; - Implements a CALL PRINT("string") command that just prints the passed string.
+; - Hooks to EXTBIO and provides a hook to implement a simple UNAPI API 
+;   (specification identifier: SIMPLE_MATH) with three functions:
+;   get API info, add, and multiply.
+; - If additional data is supplied at install time, the first byte is returned
+;   as part of the driver name (1 to 9 are supported only); otherwise 0 is used.
+;
+; Not implemented: BASIC devices handler (aka OPEN "XYZ:"),
+; the implementation would be similar to the OEMSTAT handler.
+;
+; This driver is designed to be loaded into a mapped RAM segment
+; via CALL IDRIVER or DRVROP.COM.
+;
+; To build: N80 driver.mac RAMDRIVR.DRV
+;
+; To install and automatically map a drive letter to the RAM disk use one of:
+;
+; CALL IDRIVER("RAMDRIVR.DRV", 1)
+; DRVROP.COM i RAMDRIVR.DRV /m
+;
+;=============================================================================
+
+
+;--- Constants
+
+QUERY_OK:		equ	0
+QUERY_TRUNCATED_STRING:	equ	1
+QUERY_INVALID_DEVICE:	equ	2
+QUERY_NOT_IMPLEMENTED:	equ	255
+QUERY_INIT_ERROR:	equ	1
+
+DATA_START:	equ	4800h	;Start of data area in segment
+TOTAL_SECTORS:	equ	28	;Total sectors in the disk
+SECTOR_SIZE:	equ	512
+MEDIA_BYTE:	equ	0F0h	;Media descriptor for unpartitioned media
+
+_IDEVN:		equ	0B5h	;Invalid device number error
+_DISK:		equ	0F0h	;General disk error
+
+ARG:    equ     0F847h
+
+CALSLT:		equ	001Ch
+CALBAS:		equ	0159h
+BK4_ADD:		equ	0F1D0h
+TMP_IX:		equ	0F1D2h
+TMP_IY:		equ	0F1D4h
+PROCNM:		equ	0FD89h
+VALTYP:		equ	0F663h
+MASTER_SLOT:	equ	0F348h
+FRMEVL:		equ	4C64h
+FRESTR:		equ	67D0h
+CALLB0_IX_IY:	equ	404Bh
+
+NEWSTT: equ     4601h
+
+
+;*********************
+;***  DRIVER CODE  ***
+;*********************
+
+	org	4100h
+
+DRIVER_START:
+
+	;--- Driver signature
+
+	db	"NEXTORv3_DRIVER",0
+
+	;--- Jump table
+
+	jp	TIMER_INT
+	jp	OEMSTAT
+	jp	BASDEV
+	jp	DO_EXTBIO
+
+	rept 5*3  ;DIRECT_0..4 entry points, meaningless in RAM drivers
+	ret
+	endm
+
+	jp	DRIVER_QUERY
+	jp	DEVICE_QUERY
+	jp	CUSTOM_DRIVER_QUERY
+	jp	CUSTOM_DEVICE_QUERY
+	jp	READ_WRITE
+
+
+;=============================================================================
+;  OEM statements handler (aka "BASIC CALL commands")
+;  Implements a simple CALL PRINT("string") command that prints the passed string
+;=============================================================================
+
+OEMSTAT:
+	;Check if the command is "PRINT"
+	ld	de,PROCNM
+	push	hl
+	ld	hl,OEMSTAT_CMD
+OEMSTAT_CHK:
+	ld	a,(de)
+	cp	(hl)
+	jr	nz,OEMSTAT_NOP
+	inc	de
+	inc	hl
+	or	a
+	jr	nz,OEMSTAT_CHK
+	pop	hl
+
+	;Parse: CALL PRINT("string")
+	ld	a,(hl)
+	cp	'('
+	jr	nz,THROW_SYNTAX_ERROR
+	inc	hl
+
+	;Evaluate string expression
+	ld	ix,FRMEVL
+	call	DRV_BASIC_ROUT
+
+	ld	a,(VALTYP)
+	cp	3		;String?
+	jp	nz,THROW_SYNTAX_ERROR
+
+	;Free temp string, get descriptor (save BASIC text ptr first)
+	push	hl
+	ld	ix,FRESTR
+	call	DRV_BASIC_ROUT	;HL = descriptor ptr
+	ld	a,(hl)		;String length
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = string data address
+	ld	b,a		;B = length
+	pop	hl		;Restore BASIC text pointer
+
+	;Check for closing parenthesis
+	ld	a,(hl)
+	cp	')'
+	jr	nz,THROW_SYNTAX_ERROR
+	inc	hl
+
+	;Print the string (B=length, DE=data)
+	ld	a,b
+	or	a
+	jr	z,OEMSTAT_DONE
+OEMSTAT_PRT:
+	ld	a,(de)
+	rst	18h
+	inc	de
+	djnz	OEMSTAT_PRT
+OEMSTAT_DONE:
+	or	a		;Clear carry (command handled)
+	ret
+
+OEMSTAT_NOP:
+	pop	hl		;Restore BASIC text pointer
+	scf
+	ret
+
+OEMSTAT_CMD:	db	"PRINT",0
+
+;--- Call a BASIC ROM routine from a RAM driver.
+;    Input: IX = BASIC routine address.
+;
+;    Uses CALLB0_IX_IY (404Bh) in the kernel ROM, which loads
+;    IX and IY from page 3 (TMP_IX/TMP_IY) then falls into CALLB0.
+;    CALSLT to 404Bh avoids the IX conflict (CALSLT uses IX as
+;    target address, but CALLB0_IX_IY restores it from TMP_IX).
+
+DRV_BASIC_ROUT:
+	ld	(TMP_IX),ix
+	ld	(TMP_IY),iy
+	ld	ix,CALBAS
+	ld	(BK4_ADD),ix
+	ld	iy,(MASTER_SLOT-1)
+	ld	ix,CALLB0_IX_IY
+	call	CALSLT
+	ei
+	ret
+
+;--- Throw a "Syntax error"
+
+THROW_SYNTAX_ERROR:
+	;Put the BASIC program ":error 2" in memory:
+	;3a = ":"
+	;a6 = "error"
+	;20 = " "
+	;13 = "2" (code for Syntax error)
+	;0 = end of program
+	ld de,0
+	push de
+	ld de,1320h
+	push de
+	ld de,0a63ah
+	push de
+	ld hl,0
+	add hl,sp
+
+	;...and execute it.
+	ld ix,NEWSTT
+	jp	DRV_BASIC_ROUT
+
+
+;=============================================================================
+;  BASIC devices statements handler (not implemented)
+;=============================================================================
+
+BASDEV:
+	scf
+	ret
+
+
+;=============================================================================
+;  DRIVER QUERY HANDLER
+;=============================================================================
+
+DRIVER_QUERY:
+	dec	a
+	jp	z,DO_DRVQ_GET_VERSION
+	dec	a
+	jp	z,DO_DRVQ_GET_STRING
+	dec	a
+	jr	z,DQ_NOT_IMPL		;DRVQ_GET_INIT_PARAMS: not used for RAM drivers
+	dec	a
+	jr	z,DQ_NOT_IMPL		;DRVQ_INIT: not used for RAM drivers
+	dec	a
+	jp	z,DO_DRVQ_GET_MAX_DEVICE
+	dec	a
+	jp	z,DO_DRVQ_INIT_RAM
+	dec	a
+	jp	z,DO_DRVQ_SHUTDOWN_RAM
+DQ_NOT_IMPL:
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;--- Get driver version
+
+DO_DRVQ_GET_VERSION:
+	ld	bc,0100h	;B=major=1, C=minor=0
+	ld	d,0		;D=revision=0
+	xor	a
+	ret
+
+
+;--- Get driver string
+
+DO_DRVQ_GET_STRING:
+	ld	a,b
+	ld	b,d		;B = max length
+	ex	de,hl		;DE = dest buffer
+	dec	a
+	ld	hl,STR_DRV_NAME
+	jp	z,OUTPUT_STRING
+	dec	a
+	ld	hl,STR_DRV_AUTHOR
+	jp	z,OUTPUT_STRING
+	dec	a
+	ld	hl,STR_HW_NAME
+	jp	z,OUTPUT_STRING
+	dec	a
+	ld	hl,STR_HW_AUTHOR
+	jp	z,OUTPUT_STRING
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;--- Get max device number
+
+DO_DRVQ_GET_MAX_DEVICE:
+	ld	b,1		;1 device
+	xor	a
+	ret
+
+
+;--- Initialize the driver
+;    Input: DE = print routine address
+;           B  = RAM slot number where the driver is located
+;           C  = RAM segment number where the driver is located
+;   Output: A = QUERY_OK or QUERY_INIT_ERROR
+;           B = flags (bit 0 = timer hook requested)
+
+MY_SEGMENT: equ 40FEh
+MY_SLOT: equ 40FFh
+
+DO_DRVQ_INIT_RAM:
+	ld (MY_SEGMENT),bc
+
+	push de ;Save pointer to print routine for later
+
+	ld a,(4000h)
+	or a
+	jr z,INDEX_OK
+	ld a,(4001h)
+	add "0"
+	ld (INDEX),a
+INDEX_OK:
+
+	;--- Print init message
+
+	ld	hl,INIT_MSG
+	call	PRINT_WITH_DE
+
+	;--- Zero data area (4800h-7FFFh)
+
+	ld	hl,DATA_START
+	ld	de,DATA_START+1
+	ld	bc,7FFFh-DATA_START	;14335 bytes
+	ld	(hl),0
+	ldir
+
+	;--- Write boot sector at DATA_START (sector 0)
+
+	ld	hl,BPB_DATA
+	ld	de,DATA_START
+	ld	bc,BPB_DATA_END-BPB_DATA
+	ldir
+
+	;Boot signature at offset 510-511
+	ld	hl,DATA_START+510
+	ld	(hl),55h
+	inc	hl
+	ld	(hl),0AAh
+
+	;--- Initialize FAT 1 (sector 1) and FAT 2 (sector 2)
+	;    FAT12 entries 0-1: F0 FF FF
+
+	ld	hl,DATA_START+SECTOR_SIZE	;FAT 1 start
+	ld	(hl),MEDIA_BYTE
+	inc	hl
+	ld	(hl),0FFh
+	inc	hl
+	ld	(hl),0FFh
+
+	ld	hl,DATA_START+(SECTOR_SIZE*2)	;FAT 2 start
+	ld	(hl),MEDIA_BYTE
+	inc	hl
+	ld	(hl),0FFh
+	inc	hl
+	ld	(hl),0FFh
+
+	;Root directory (sector 3) is already zeroed.
+
+	;--- Print ready message and return OK
+
+	pop de ;Restore pointer to print routine
+	ld	hl,STR_READY
+	call	PRINT_WITH_DE
+	ld a,1
+	ld (TIMER_CNT),a
+	xor	a		;QUERY_OK
+	ld (TIMER_STAT),a
+	ld b,3 ;Request timer interrupt + EXTBIO handling
+	ret
+
+
+;--- Shut down driver: nothing to clean up
+
+DO_DRVQ_SHUTDOWN_RAM:
+	ld	hl,STR_SHUTDOWN
+	call	PRINT_WITH_DE
+	xor	a		;QUERY_OK
+	ret
+
+
+;=============================================================================
+;  Timer routine: make the CAPS LOCK led blink
+;=============================================================================
+
+TIMER_INTERTVAL: equ 30  ; Half of the blink rate (50 or 60 = 1s)
+
+TIMER_INT:
+	ld a,(TIMER_CNT)
+	dec a
+	ld (TIMER_CNT),a
+	ret nz
+
+	ld a,TIMER_INTERTVAL
+	ld (TIMER_CNT),a
+	ld a,(TIMER_STAT)
+	cpl
+	ld (TIMER_STAT),a
+	or a
+	jp z,CAPSOFF
+	jp CAPSON
+
+TIMER_CNT: db 0
+TIMER_STAT: db 0
+
+
+;=============================================================================
+;  Extended BIOS handler (used for UNAPI)
+;=============================================================================
+
+DO_EXTBIO:
+	exx
+	ld d,1
+	exx
+	call _DO_EXTBIO
+	exx
+	ld e,d
+	push de
+	pop iy
+	exx
+	ret
+
+_DO_EXTBIO:
+        push    hl
+        push    bc
+        push    af
+        ld      a,d
+        cp      22h
+        jr      nz,JUMP_OLD
+        cp      e
+        jr      nz,JUMP_OLD
+
+        ;Check API ID
+
+        ld      hl,UNAPI_ID
+        ld      de,ARG
+LOOP:   ld      a,(de)
+        call    TOUPPER
+        cp      (hl)
+        jr      nz,JUMP_OLD2
+        inc     hl
+        inc     de
+        or      a
+        jr      nz,LOOP
+
+        ;A=255: Jump to old hook
+
+        pop     af
+        push    af
+        inc     a
+        jr      z,JUMP_OLD2
+
+        ;A=0: B=B+1 and jump to old hook
+
+        pop     af
+        pop     bc
+        or      a
+        jr      nz,DO_EXTBIO2
+        inc     b
+        pop     hl
+        ld      de,2222h
+        ret
+DO_EXTBIO2:
+
+        ;A=1: Return A=Slot, B=Segment, HL=UNAPI entry address
+
+        dec     a
+        jr      nz,DO_EXTBIO3
+        pop     hl
+        ld      a,(MY_SEGMENT)
+        ld      b,a
+        ld      a,(MY_SLOT)
+        ld      hl,UNAPI_ENTRY
+        ld      de,2222h
+		exx
+        res 0,d ;Tell Nextor to stop processing the EXTBIO call
+        exx
+        ret
+
+        ;A>1: A=A-1, and jump to old hook
+
+DO_EXTBIO3:     ;A=A-1 already done
+        pop     hl
+        ld      de,2222h
+        ret
+
+
+        ;--- Jump here to execute old EXTBIO code
+
+JUMP_OLD2:
+        ld      de,2222h
+JUMP_OLD:       ;Assumes "push hl,bc,af" done
+        pop     af
+        pop     bc
+        pop     hl
+		ret
+
+        ;--- Specification identifier (up to 15 chars)
+
+UNAPI_ID:
+        db      "SIMPLE_MATH",0
+
+        ;--- Implementation name (up to 63 chars and zero terminated)
+
+APIINFO:
+        db      "Konamiman's RAM implementation of SIMPLE_MATH UNAPI",0
+
+
+;=============================================================================
+;  UNAPI entry point
+;=============================================================================
+
+UNAPI_ENTRY:
+        push    hl
+        push    af
+        ld      hl,FN_TABLE
+        bit     7,a
+        jr      nz,UNDEFINED
+
+        cp      MAX_FN
+        jr      z,OK_FNUM
+        jr      nc,UNDEFINED
+
+OK_FNUM:
+        add     a,a
+        push    de
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        pop     de
+
+        ld      a,(hl)
+        inc     hl
+        ld      h,(hl)
+        ld      l,a
+
+        pop     af
+        ex      (sp),hl
+        ret
+
+        ;--- Undefined function: return with registers unmodified
+
+UNDEFINED:
+        pop     af
+        pop     hl
+        ret
+
+
+FN_TABLE:
+FN_0:   dw      FN_INFO
+FN_1:   dw      FN_ADD
+FN_2:   dw      FN_MULT
+MAX_FN:         equ     2
+
+
+;--- Mandatory routine 0: return API information
+;    Input:  A  = 0
+;    Output: HL = Descriptive string for this implementation, on this slot, zero terminated
+;            DE = API version supported, D.E
+;            BC = This implementation version, B.C.
+;            A  = 0 and Cy = 0
+
+FN_INFO:
+        ld      bc,0100h
+        ld      de,0100h
+        ld      hl,APIINFO
+        xor     a
+        ret
+
+;TODO: Replace the FN_* routines below with the appropriate routines for your implementation
+
+;--- Sample routine 1: adds two 8-bit numbers
+;    Input: E, L = Numbers to add
+;    Output: HL = Result
+
+FN_ADD:
+        ld      h,0
+        ld      d,0
+        add     hl,de
+        ret
+
+
+;--- Sample routine 2: multiplies two 8-bit numbers
+;    Input: E, L = Numbers to multiply
+;    Output: HL = Result
+
+FN_MULT:
+        ld      hl,0
+        ld      a,e
+        or      a
+        ret     z               ;E=0 → result is 0 (avoids DJNZ wrap to 256)
+        ld      b,e
+        ld      e,l
+        ld      d,0
+MULT_LOOP:
+        add     hl,de
+        djnz    MULT_LOOP
+        ret
+
+
+;=============================================================================
+;  DEVICE QUERY HANDLER
+;=============================================================================
+
+DEVICE_QUERY:
+	dec	a
+	jp	z,DO_DEVQ_GET_STRING
+	dec	a
+	jp	z,DO_DEVQ_GET_PARAMS
+	dec	a
+	jp	z,DO_DEVQ_GET_STATUS
+	dec	a
+	jp	z,DO_DEVQ_GET_AVAILABILITY
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;--- Check device number: must be 1
+;    Input: C = device number (1-based)
+;    Output: A = 0 and Z if valid, A = QUERY_INVALID_DEVICE and NZ if not
+
+CHECK_DEVICE:
+	ld	a,c
+	dec	a
+	ld	a,QUERY_INVALID_DEVICE
+	ret	nz
+	xor	a
+	ret
+
+
+;--- Get device string
+
+DO_DEVQ_GET_STRING:
+	call	CHECK_DEVICE
+	ret	nz
+	ld	a,b
+	ld	b,d		;B = max length
+	ex	de,hl		;DE = dest buffer
+	cp	2		;Medium name
+	ld	hl,STR_DEV_NAME
+	jp	z,OUTPUT_STRING
+	cp	4		;Device name
+	jp	z,OUTPUT_STRING
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;--- Get device parameters
+
+DO_DEVQ_GET_PARAMS:
+	call	CHECK_DEVICE
+	ret	nz
+	ld	a,h
+	or	l
+	jr	z,DEVP_NOINFO
+	ld	(hl),0		;+0: block device
+	inc	hl
+	ld	(hl),0		;+1: sector size low = 0
+	inc	hl
+	ld	(hl),2		;+2: sector size high = 2 (512)
+	inc	hl
+	ld	(hl),TOTAL_SECTORS	;+3: total sectors byte 0
+	inc	hl
+	ld	(hl),0		;+4: total sectors byte 1
+	inc	hl
+	ld	(hl),0		;+5: total sectors byte 2
+	inc	hl
+	ld	(hl),0		;+6: total sectors byte 3
+	inc	hl
+	ld	(hl),0		;+7: flags = 0 (non-removable, non-floppy)
+	inc	hl
+	ld	(hl),TOTAL_SECTORS	;+8: cylinders low
+	inc	hl
+	ld	(hl),0		;+9: cylinders high
+	inc	hl
+	ld	(hl),1		;+10: heads = 1
+	inc	hl
+	ld	(hl),1		;+11: sectors per track = 1
+DEVP_NOINFO:
+	xor	a
+	ret
+
+
+;--- Get device status: always "available + not changed"
+
+DO_DEVQ_GET_STATUS:
+	call	CHECK_DEVICE
+	ret	nz
+	ld	b,1		;Status: available, not changed
+	xor	a
+	ret
+
+
+;--- Get device availability: always available
+
+DO_DEVQ_GET_AVAILABILITY:
+	call	CHECK_DEVICE
+	ret	nz
+	ld	b,1		;Available
+	xor	a
+	ret
+
+
+;=============================================================================
+; CUSTOM DRIVER/DEVICE QUERY (not implemented)
+;=============================================================================
+
+CUSTOM_DRIVER_QUERY:
+CUSTOM_DEVICE_QUERY:
+	ld	a,QUERY_NOT_IMPLEMENTED
+	ret
+
+
+;=============================================================================
+;  READ / WRITE SECTORS
+;=============================================================================
+;  Input:  Cy = 0 to read, 1 to write
+;          A = Device number (1-based)
+;          B = Number of sectors to read or write
+;          C = Media descriptor byte
+;          HL = Source or destination memory address (DTA)
+;          DE = Address where the 4-byte sector number is stored
+;  Output: A = Error code (0 = OK)
+;          B = Sectors successfully transferred
+
+READ_WRITE:
+
+	;--- Store direction flag (Cy: 0=read, 1=write) before anything clobbers it
+
+	push	af		;Save A=device number
+	ld	a,0
+	jr	nc,RW_ISRD
+	ld	a,1
+RW_ISRD:
+	ld	(RW_DIR),a
+	pop	af		;Restore A=device number
+
+	;--- Validate device number (must be 1)
+
+	cp	1
+	jr	nz,RW_BADDEV
+
+	;--- Read 4-byte sector number from (DE)
+
+	push	bc		;Save B=count
+	push	hl		;Save buffer
+
+	ex	de,hl		;HL = sector number pointer
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	or	(hl)		;Check bytes 2-3
+	or	d		;Check byte 1
+	jr	nz,RW_BADSEC	;Sector number >= 256
+
+	ld	a,e		;A = sector number (low byte)
+	cp	TOTAL_SECTORS
+	jr	nc,RW_BADSEC
+
+	pop	hl		;HL = buffer
+	pop	bc		;B = count
+
+	;--- Transfer loop
+	;    Registers: HL=buffer, E=sector, D=transferred, B=remaining
+
+	ld	d,0		;D = sectors successfully transferred
+	ld	e,a		;E = current sector number
+
+RW_LOOP:
+	ld	a,b
+	or	a
+	jr	z,RW_DONE	;All requested sectors done
+
+	ld	a,e
+	cp	TOTAL_SECTORS
+	jr	nc,RW_DONE	;Past end of disk
+
+	;--- Calculate data address: DATA_START + sector * 512
+
+	push	bc		;Save B=remaining
+	push	de		;Save D=transferred, E=sector
+	push	hl		;Save buffer
+
+	ld	h,e
+	ld	l,0		;HL = sector * 256
+	add	hl,hl		;HL = sector * 512
+	ld	bc,DATA_START
+	add	hl,bc		;HL = data address in segment
+	ex	de,hl		;DE = data address
+
+	pop	hl		;HL = buffer
+
+	;--- Copy 512 bytes in the right direction
+
+	ld	a,(RW_DIR)
+	or	a
+	jr	nz,RW_WR
+
+	;Read: segment → buffer. HL=buffer(dest), DE=segment(src)
+	ex	de,hl		;HL = segment, DE = buffer
+	ld	bc,SECTOR_SIZE
+	ldir
+	ex	de,hl		;HL = updated buffer pointer
+	jr	RW_NEXT
+
+RW_WR:
+	;Write: buffer → segment. HL=buffer(src), DE=segment(dest)
+	ld	bc,SECTOR_SIZE
+	ldir			;HL = updated buffer pointer
+
+RW_NEXT:
+	pop	de		;D=transferred, E=sector
+	pop	bc		;B=remaining
+	inc	e		;Next sector
+	inc	d		;One more transferred
+	dec	b		;One less remaining
+	jr	RW_LOOP
+
+RW_DONE:
+	ld	b,d		;B = sectors transferred
+	xor	a		;A = 0 (no error)
+	ret
+
+RW_BADDEV:
+	ld	a,_IDEVN
+	ld	b,0
+	ret
+
+RW_BADSEC:
+	pop	hl
+	pop	bc
+	ld	a,_DISK
+	ld	b,0
+	ret
+
+RW_DIR:	db	0		;0 = read, 1 = write
+
+
+;=============================================================================
+;  HELPERS
+;=============================================================================
+
+;--- Copy string with length limit
+;    Input: HL = source (zero-terminated), DE = dest, B = max length
+;    Output: A = QUERY_OK or QUERY_TRUNCATED_STRING
+
+OUTPUT_STRING:
+	ld	a,b
+	or	a
+	ret	z
+
+OUTPUT_STRING_LOOP:
+	ld	a,(hl)
+	or	a
+	ld	(de),a
+	ret	z		;A=0=QUERY_OK
+
+	inc	hl
+	inc	de
+	djnz	OUTPUT_STRING_LOOP
+
+	dec	de
+	xor	a
+	ld	(de),a
+	ld	a,QUERY_TRUNCATED_STRING
+	ret
+
+
+;--- Print zero-terminated string via character output routine
+;    Input: HL = string, DE = character output address
+;    Trashes: AF, HL, IX
+
+PRINT_WITH_DE:
+	push	de
+	ld	de,0C300h	;JP opcode + 00
+	push	de
+	ld	ix,1
+	add	ix,sp		;IX -> JP <charout> trampoline on stack
+	call	PRINT_HL
+	pop	de
+	pop	de
+	ret
+
+
+;--- Print zero-terminated string
+;    IX must point to a JP <charout> trampoline
+
+PRINT_HL:
+	ld	a,(hl)
+	or	a
+	ret	z
+	call	JP_IX
+	inc	hl
+	jr	PRINT_HL
+
+JP_IX:	jp	(ix)
+
+
+;--- Turn the CAPS LOCK led on or off
+
+CAPSON:
+	in	a,(0AAh)
+	and	10111111b
+	out	(0AAh),a
+	ret
+
+CAPSOFF:
+	push	af
+	in	a,(0AAh)
+	or	01000000b
+	out	(0AAh),a
+	pop	af
+	ret
+
+;--- Convert a character to upper-case if it is a lower-case letter
+
+TOUPPER:
+        cp      "a"
+        ret     c
+        cp      "z"+1
+        ret     nc
+        and     0DFh
+        ret
+
+;=============================================================================
+;  DATA
+;=============================================================================
+
+	.stresc	on
+
+STR_DRV_NAME:	db	"Simple RAM disk driver #"
+INDEX: db "0",0
+STR_DRV_AUTHOR:	db	"Konamiman",0
+STR_HW_NAME:	db	"RAM disk",0
+STR_HW_AUTHOR:	db	"N/A",0
+STR_DEV_NAME:	db	"RAM disk",0
+
+INIT_MSG:	db	"\r\nNextor RAM disk driver v1.0\r\n"
+		db	"by Konamiman\r\n",0
+
+STR_READY:	db	"12KB RAM disk ready\r\n",0
+
+STR_SHUTDOWN:	db	"RAM disk driver unloaded\r\n",0
+
+	;--- Boot sector data for the RAM disk
+
+BPB_DATA:
+	db	0EBh,0FEh,90h		;+0: JMP $, NOP (boot jump)
+	db	"NXTRDISK"		;+3: OEM name (8 bytes)
+	dw	SECTOR_SIZE		;+11: bytes per sector
+	db	1			;+13: sectors per cluster
+	dw	1			;+14: reserved sectors (boot)
+	db	2			;+16: number of FATs
+	dw	16			;+17: root directory entries
+	dw	TOTAL_SECTORS		;+19: total sectors
+	db	MEDIA_BYTE		;+21: media descriptor
+	dw	1			;+22: sectors per FAT
+	dw	1			;+24: sectors per track (dummy)
+	dw	1			;+26: heads (dummy)
+	dw	0,0			;+28: hidden sectors (32-bit)
+	dw	0,0			;+32: total sectors large (32-bit, 0=use 16-bit)
+BPB_DATA_END:
+
+;=============================================================================
+
+	end

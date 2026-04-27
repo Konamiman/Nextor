@@ -11,7 +11,7 @@ define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
 endef
 
-COMS := emufile.com fsize.com nexboot.com vsft.com eptcft.com
+COMS := emufile.com fsize.com nexboot.com vsft.com eptcft.com drvrop.com
 
 c-tools: $(COMS)
 

@@ -342,6 +342,14 @@ STATEMENT:
 	cp	(hl)		;am I the master?
 	jr	nz,ABORT	;no, I am not allowed to proceed
 ;
+	pop	hl			;Try RAM-loaded drivers (master only)
+	ex	af,af'
+	ld	a,4
+	ld	ix,COEM_RAM##
+	call	CALBNK##
+	ret	nc
+	push	hl			;Re-save text pointer for command search
+;
 	ld	hl,COMMAND
 CKCMD1:
 	ld	de,PROCNM
@@ -357,13 +365,38 @@ CKCMD2:
 	inc	hl
 	ld	d,(hl)
 	pop	hl		;restore text pointer
+;
+;	Check high byte of address for bank dispatch (before CHRGOT,
+;	so the Z flag from CHRGOT is preserved for bank 0 handlers).
+;
+;	D=C1h: bank 6
+;	D=41h: bank 4
+;	Other: direct call in bank 0
+;
+	ld	a,d
+	cp	0C1h
+	jr	z,JPDE_B6
+	cp	41h
+	jr	z,JPDE_B4
 	call	CHRGOT
-	call	JPDE
+	call	JPDE		;Direct bank 0 call
 	and	a
 	ret
-;
-JPDE:
+JPDE:	push	de
+	ret
+JPDE_B4:
 	push	de
+	pop	ix
+	ld	a,4
+	jr	JPDE_CALB
+JPDE_B6:
+	res	7,d
+	push	de
+	pop	ix
+	ld	a,6
+JPDE_CALB:
+	call	CALBNK##
+	and	a
 	ret
 ;
 NOTCMD:
@@ -383,7 +416,39 @@ ABORT:
 	ret			;command not in this cartridge
 
 ;
-;	Table of expanded statements
+;-----------------------------------------------------------------------------
+;
+;   BASDEV check: route BASIC extension device to ROM driver only (slave)
+;   or ROM driver + RAM drivers (master).
+;
+	public	BASDEV_CHK
+BASDEV_CHK:
+	push	af
+	push	hl
+	call	GSLOT1		;A = my slot address
+	ld	hl,MASTER_SLOT
+	cp	(hl)
+	pop	hl
+	ld	ix,CBAS_DRV##	;Default: Slave (ROM driver only)
+	jr nz,BASDEV_GO
+	ld	ix,CBAS_ALL##	;Master: ROM driver + RAM drivers
+BASDEV_GO:
+	pop	af
+	ex	af,af'
+	ld	a,4
+	jp	CALBNK##
+
+;
+;	Table of expanded statements.
+;
+;	Each entry is: name (zero-terminated), address (2 bytes).
+;	Address encoding for the dispatch routine:
+;	  - High byte = 41h: bank 4 jump table entry (called via CALBNK)
+;	  - High byte = C1h: bank 6 jump table entry (bit 15 set, called via CALBNK)
+;	  - Any other high byte: direct call in bank 0
+;
+;	This means bank 4 and 6 jump tables must not exceed 256 bytes
+;	(i.e. must stay within 4100h-41FFh), which allows up to 85 entries each.
 ;
 COMMAND:
 	defb	'SYSTEM2',0
@@ -393,7 +458,7 @@ COMMAND:
 	defb	'FORMAT',0
 	defw	FORMAT
 	defb	'CHDRV',0
-	defw	CHDRV
+	defw	CCHDRV##
 	defb	'CHDIR',0
 	defw	CHDIR
 	defb	'MKDIR',0
@@ -409,18 +474,21 @@ COMMAND:
 	defb	'MAPDRVL',0
 	defw	MAPDRVL
 	defb	'LOCKDRV',0
-	defw	LOCKDRV
+	defw	CLOCKDRV##
 	defb	'USR',0
-	defw	USR
+	defw	CUSR##
 	defb	'CURDRV',0
-	defw	CURDRV
+	defw	CCURDRV##
 	defb	'NEXTOR',0
-	defw	NEXTOR
+	defw	CNEXTOR##
 	defb	'DRVINFO',0
-	defw	DRVINFO
+	defw	CDRVINFO##
 	defb	'DRIVERS',0
-	defw	DRIVERS
-
+	defw	CDRIVERS##
+	defb	'IDRIVER',0
+	defw	CIDRIVER## or 8000h
+	defb	'UDRIVER',0
+	defw	CUDRIVER## or 8000h
 ;
 	defb	0		;end of table
 
@@ -517,11 +585,6 @@ FORMAT:
 ;	example:
 ;		_CHDRV("H:") or _CHDRV(8)
 ;
-CHDRV:
-	ld	a,4
-	ld	ix,CCHDRV##
-	jp	CALBNK##
-
 VAL_DRV:
 	push	af
 	ld	c,_LOGIN##	; get login vector into [HL]
@@ -757,73 +820,14 @@ MAPDRVL:
 	ld	a,1
 
 MAPDRV_DO:
-	ld	b,a
-	ex	af,af
-	ld	a,b
-	ex	af,af
-	ld	a,4
+	ex	af,af'
 	ld	ix,CMAPDRV##
+	jr	CALB4
+
+
+CALB4:	ld	a,4
 	jp	CALBNK##
 
-
-	subttl	CALL LOCKDRV command
-;
-;	LOCKDRV
-;
-LOCKDRV:
-	ld	a,4
-	ld	ix,CLOCKDRV##
-	jp	CALBNK##
-
-
-	subttl	CALL USR command
-;
-;	USR
-;
-USR:
-	ld	a,4
-	ld	ix,CUSR##
-	jp	CALBNK##
-
-
-	subttl	CALL CURDRV command
-;
-;	CURDRV
-;
-CURDRV:
-	ld	a,4
-	ld	ix,CCURDRV##
-	jp	CALBNK##
-
-
-	subttl	CALL NEXTOR command
-;
-;	NEXTOR
-;
-NEXTOR:
-	ld	a,4
-	ld	ix,CNEXTOR##
-	jp	CALBNK##
-
-
-	subttl	CALL DRVINFO command
-;
-;	DRVINFO
-;
-DRVINFO:
-	ld	a,4
-	ld	ix,CDRVINFO##
-	jp	CALBNK##
-
-
-	subttl	CALL DRIVERS command
-;
-;	DRIVERS
-;
-DRIVERS:
-	ld	a,4
-	ld	ix,CDRIVERS##
-	jp	CALBNK##
 
 
 	subttl	Utilities
@@ -3447,7 +3451,7 @@ DBABORT_ROUTINE:
 ;
 ;	Analyze errors returned from BDOS call
 ;
-.FRSTER	equ	0B0h	;0BAh		; lowest MSXDOS2 error code supported
+.FRSTER	equ	0AFh	; lowest MSXDOS2 error code supported
 ;
 DERNUM	macro	ERRNAM
     ifidn   <ERRNAM>,<*>
@@ -3462,7 +3466,8 @@ QQQQ	defl	.FRSTER
 ;
 DERR_TAB:
 
-    DERNUM  ERRICL  ; Invalid cluster sequence
+	DERNUM	ERRINI	; Initialization error
+	DERNUM	ERRICL	; Invalid cluster sequence
 	DERNUM	ERRBFS	; Bad file size
 	DERNUM	ERRFIM	; File is mounted
 
@@ -3621,7 +3626,8 @@ QQQQ	defl	DERFST
 
 	DERMAK	ERRFIM	; File is mounted
 	DERMAK	ERRBFS	; Bad file size
-	DERMAK  ERRICL  ; Invalid cluster sequence
+	DERMAK	ERRICL	; Invalid cluster sequence
+	DERMAK	ERRINI	; Initialization error
 ;
 DERLST	equ	QQQQ-1		;
 ;
@@ -4009,7 +4015,8 @@ DERMSG:	defb	0
 
 	defb	'File is mounted',         0
 	defb	'Bad file size',           0
-	defb    'Invalid cluster sequence',0
+	defb	'Cluster sequence error',  0
+	defb	'Initialization error',    0
 
 ;		    '----+----1----+----2----'
 ;

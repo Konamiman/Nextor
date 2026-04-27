@@ -698,14 +698,26 @@ fpc_dots:
 	db "...",13,10,0
 
 
-;--- Call DEVICE_QUERY in the correct driver slot via inter-slot call.
+;--- Call DEVICE_QUERY in the correct driver slot.
 ;    Input:  A = query number (e.g. DEVQ_GET_FORMAT_CHOICES)
 ;            C, DE, HL = parameters for DEVICE_QUERY
 ;            BUF+100 = driver slot
+;            BUF+106 = RAM segment (FFh = ROM driver, only in DOS 2)
 ;    Output: AF, B = results from DEVICE_QUERY
 ;    Corrupts: all registers
 
 CALL_DEVICE_QUERY:
+	push	af		;Save query number
+	ld	a,(DOS_VER##)	;DOS 1 (DOS_VER=0) has no RAM drivers
+	or	a
+	jr	z,CDQ_ROM
+	ld	a,(BUF+106)
+	cp	0FFh
+	jr	nz,CDQ_RAM
+CDQ_ROM:
+	pop	af
+
+	;--- ROM driver: inter-slot call to CALDRV → bank switch → DEVICE_QUERY
 	push	hl		;Save buffer address
 	push	af		;Save query number
 	ld	hl,DRIVER.DEVICE_QUERY##
@@ -715,7 +727,16 @@ CALL_DEVICE_QUERY:
 	ld	ix,CALDRV##	;IX = CALDRV entry (doshead)
 	pop	af		;A = query number
 	pop	hl		;HL = buffer address
-	jp	001Ch		;CALSLT: inter-slot call to CALDRV → bank switch → DEVICE_QUERY
+	jp	001Ch		;CALSLT → CALDRV → DEVICE_QUERY
+
+CDQ_RAM:
+	;--- RAM driver: call DEVICE_QUERY via CALL_MAP
+	ld	iyl,a		;IYl = segment (A still has BUF+106 value)
+	ld	a,(BUF+100)
+	ld	iyh,a		;IYh = slot
+	ld	ix,DRIVER.DEVICE_QUERY##
+	pop	af		;A = query number
+	jp	CALL_MAP##
 
 ;-----------------------------------------------------------------------------
 ;
@@ -825,9 +846,11 @@ dcb_nextor:
 	ret
 
 dcb_nxt_fdd:
-	;Save driver slot in BUF+100 for CALL_DEVICE_QUERY
+	;Save driver slot and RAM segment in BUF for CALL_DEVICE_QUERY
 	ld	a,(iy+UD_SLOT##)
 	ld	(BUF+100),a
+	ld	a,(iy+UD_RAM_SEGMENT##)
+	ld	(BUF+106),a		;FFh = ROM driver
 	ld	c,(iy+UD_DEVICE_NUMBER##)
 
 	pop	de		;DE = user buffer size

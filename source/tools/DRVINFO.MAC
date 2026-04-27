@@ -4,7 +4,7 @@
 
         ;        -------------------------------------------------------------------------------
 	db	13
-	db	"DRVINFO v1.1 - displays information about the driver and drive/device/LUN",13,10
+	db	"DRVINFO v1.1 - displays information about the driver and drive/device",13,10
 	db	"for all drive letters",13,10
 	db	13,10
 	db	"Usage: DRVINFO",13,10

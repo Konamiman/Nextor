@@ -11,3 +11,8 @@
 	jentry	UNDO_GHOST_DRVTBL
 	jentry	FMT_PRINT_AND_CHOOSE
 	jentry	DSK_CHOICE_BUF
+	jentry	IDRV_PRINT_OK
+	jentry	UDRV_PRINT_OK
+	jentry	IDRV_AUTOMAP
+	jentry	CIDRIVER
+	jentry	CUDRIVER

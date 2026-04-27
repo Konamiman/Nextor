@@ -21,6 +21,7 @@ bin/**
 *.LK
 *.orig
 *.rej
+*.drv
 *.base.dat
 dos250ba.dat
 kernel.dat

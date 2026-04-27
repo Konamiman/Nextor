@@ -72,4 +72,8 @@
 	jentry	F_RAMD
 	jentry	ZAP_RAMD
 
-	jentry	BOOT_MENU
+	jentry	F_DRVRO
+	jentry	COEM_RAM
+	jentry	CBAS_DRV
+	jentry	CBAS_ALL
+	jentry	CTIMI_RAM
