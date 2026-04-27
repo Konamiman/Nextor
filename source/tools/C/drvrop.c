@@ -217,7 +217,7 @@ void ParseSlotNumber(char* arg, byte* slot)
         return;
     }
 
-    if(arg[1] != '-' || arg[2] < '0' || arg[2] > '3') {
+    if(arg[1] != '-' || arg[2] < '0' || arg[2] > '3' || arg[3] != '\0') {
         Terminate(strInvParam);
     }
 
@@ -438,7 +438,13 @@ void DoUninstall(char** argv, int argc)
     }
 
     ParseSlotNumber(argv[1], &slot);
-    segment = (byte)atoi(argv[2]);
+    {
+        int parsedSegment = atoi(argv[2]);
+        if(parsedSegment < 0 || parsedSegment > 255) {
+            Terminate(strInvParam);
+        }
+        segment = (byte)parsedSegment;
+    }
 
     silent = false;
     for(i = 3; i < argc; i++) {
