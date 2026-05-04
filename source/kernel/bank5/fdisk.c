@@ -50,7 +50,7 @@ typedef struct {
 char buffer[1000];
 driverInfo drivers[MAX_MANAGED_DRIVERS];
 driverInfo* selectedDriver;
-char selectedDriverName[50];
+char selectedDriverName[80];
 deviceInfo* selectedDevice;
 deviceParams* selectedDeviceParams;
 deviceInfo devices[MAX_DEVICES_PER_DRIVER];
