@@ -24,6 +24,7 @@ RELS := CODES.REL DATA.REL SHARED.REL
 
 asm-tools: prerequisites $(COMS)
 
+.PHONY: asm-tools
 .PHONY: prerequisites
 
 TOOLS := $(N80) $(LK80)

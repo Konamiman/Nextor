@@ -57,6 +57,7 @@ all: prerequisites base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 asc
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
+.PHONY: all prerequisites base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
 .PHONY: prerequisites
 
 prerequisites:

@@ -45,9 +45,9 @@ uint sectorsPerTrack;
 int remote_CreateFatFileSystem(byte* callerParameters);
 byte CreateFatFileSystem(byte driverSlot, byte deviceIndex, byte lunIndex, ulong firstDeviceSector, ulong fileSystemSizeInK);
 void CreateFatBootSector(dosFilesystemParameters* parameters);
-ulong GetNewSerialNumber();
-void ClearSectorBuffer();
-void SectorBootCode();
+ulong GetNewSerialNumber(void);
+void ClearSectorBuffer(void);
+void SectorBootCode(void);
 int remote_CalculateFatFileSystemParameters(byte* callerParameters);
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 int CalculateFatFileSystemParametersFat12(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
@@ -186,7 +186,7 @@ void CreateFatBootSector(dosFilesystemParameters* parameters)
 }
 
 
-ulong GetNewSerialNumber() __naked
+ulong GetNewSerialNumber(void) __naked
 {
 	__asm
 
@@ -230,7 +230,7 @@ gnsn_3:
 }
 
 
-void ClearSectorBuffer() __naked
+void ClearSectorBuffer(void) __naked
 {
 	__asm
 
@@ -246,7 +246,7 @@ void ClearSectorBuffer() __naked
 }
 
 
-void SectorBootCode() __naked
+void SectorBootCode(void) __naked
 {
 	__asm
 

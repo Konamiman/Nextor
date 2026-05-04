@@ -19,6 +19,7 @@ endef
 
 nextor-sys: prerequisites NEXTOR.SYS NEXTORK.SYS
 
+.PHONY: nextor-sys
 .PHONY: prerequisites
 
 TOOLS := $(N80) $(LK80)

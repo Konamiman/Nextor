@@ -32,7 +32,7 @@ To build Nextor you'll need:
 * [The Nestor80 tools](https://github.com/Konamiman/Nestor80). Go to [the releases section](https://github.com/Konamiman/Nestor80/releases) and download the appropriate variant of the latest version for the assembler (N80), the linker (LK80) and the library manager (LB80). You can also use [next80](https://github.com/lvitals/next80), the native C port that provides compatible `n80`, `lk80` and `lb80` tools.
 * [SDCC](http://sdcc.sourceforge.net/) **v4.2 or newer**, for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
 * `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
-* `mknexrom` to generate the ROM files with the drivers. You have it in the `buildtools/Linux` folder, but you can also build it from the source in the `buildtools/sources` directory.
+* `mknexrom` to generate the ROM files with the drivers. You have it in the `buildtools/linux` folder, but you can also build it from the source in the `buildtools/sources` directory.
 
 Except for those obtained via `apt`, you'll need to place these tools at a suitable location to be able to use them, e.g. `/usr/bin`.
 
