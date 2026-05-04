@@ -111,6 +111,7 @@ void PrintSize(ulong sizeInK);
 byte GetRemainingBy1024String(ulong value, char* destination);
 void GetLunsInformation(void);
 void PrintDeviceInfoWithIndex(void);
+void PrintTargetInfo(void);
 void GoPartitioningMainMenuScreen(void);
 bool GetYesOrNo(void);
 byte GetDiskPartitionsInfo(void);
