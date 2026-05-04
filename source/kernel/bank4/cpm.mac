@@ -494,7 +494,7 @@ endif
 	PROC	F_WRRND
 ;
 		XOR	A			;Signify function "write" or
-		CODE	LXI HL			; "write with zero fill" and
+code	<LXI>,<HL>			; "write with zero fill" and
 						; call routine to set up FAB
 						; and  do  the transfer from
 	PROC	F_WRZER				; TPA.

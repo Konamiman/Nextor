@@ -96,55 +96,57 @@ ulong fakeDeviceSizeInK;
 #define NewLine() print("\x0A\x0D");
 
 
-void DoFdisk();
-void GoDriverSelectionScreen();
-void ShowDriverSelectionScreen();
+void DoFdisk(void);
+void GoDriverSelectionScreen(void);
+void ShowDriverSelectionScreen(void);
 void ComposeSlotString(byte slot, char* destination);
 void GoDeviceSelectionScreen(byte driverIndex);
-void ShowDeviceSelectionScreen();
-void GetDevicesInformation();
+void ShowDeviceSelectionScreen(void);
+void GetDevicesInformation(void);
 void EnsureMaximumStringLength(char* string, int maxLength);
 void GoLunSelectionScreen(byte deviceIndex);
 void InitializePartitioningVariables(byte lunIndex);
-void ShowLunSelectionScreen();
+void ShowLunSelectionScreen(void);
 void PrintSize(ulong sizeInK);
 byte GetRemainingBy1024String(ulong value, char* destination);
-void GetLunsInformation();
-void PrintDeviceInfoWithIndex();
-void GoPartitioningMainMenuScreen();
-bool GetYesOrNo();
-byte GetDiskPartitionsInfo();
-void ShowPartitions();
+void GetLunsInformation(void);
+void PrintDeviceInfoWithIndex(void);
+void PrintTargetInfo(void);
+void GoPartitioningMainMenuScreen(void);
+bool GetYesOrNo(void);
+byte GetDiskPartitionsInfo(void);
+void ShowPartitions(void);
 void TogglePartitionActive(byte partitionIndex);
 void PrintOnePartitionInfo(partitionInfo* info);
-void DeleteAllPartitions();
+void DeleteAllPartitions(void);
 void RecalculateAutoPartitionSize(bool setToAllSpaceAvailable);
-void AddPartition();
-void AddAutoPartition();
-void UndoAddPartition();
-void TestDeviceAccess();
+void AddPartition(void);
+void AddAutoPartition(void);
+void UndoAddPartition(void);
+void TestDeviceAccess(void);
 void InitializeScreenForTestDeviceAccess(char* message);
 void PrintDosErrorMessage(byte code, char* header);
-bool FormatWithoutPartitions();
+bool FormatWithoutPartitions(void);
 byte CreateFatFileSystem(ulong firstDeviceSector, ulong fileSystemSizeInK);
 #ifdef TEST_FAT_PARAMETERS
 void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemParameters* parameters);
 #endif
-bool WritePartitionTable();
-void PreparePartitioningProcess();
+bool WritePartitionTable(void);
+void PreparePartitioningProcess(void);
 byte CreatePartition(int index);
 byte ToggleStatusBit(byte partitionTableEntryIndex, ulong partitionTablesector);
 bool ConfirmDataDestroy(char* action);
-void ClearInformationArea();
-void GetDriversInformation();
+void ClearInformationArea(void);
+void GetDriversInformation(void);
 void TerminateRightPaddedStringWithZero(char* string, byte length);
-byte WaitKey();
-byte GetKey();
-void SaveOriginalScreenConfiguration();
-void ComposeWorkScreenConfiguration();
+byte WaitKey(void);
+byte GetKey(void);
+
+void SaveOriginalScreenConfiguration(void);
+void ComposeWorkScreenConfiguration(void);
 void SetScreenConfiguration(ScreenConfiguration* screenConfig);
 void InitializeWorkingScreen(char* header);
-void PrintRuler();
+void PrintRuler(void);
 void Locate(byte x, byte y);
 void LocateX(byte x);
 void PrintCentered(char* string);
@@ -198,7 +200,7 @@ void main(int bc, int hl)
 }
 
 
-void DoFdisk()
+void DoFdisk(void)
 {
 	installedDriversCount = 0;
 	selectedDeviceIndex = 0;
@@ -216,7 +218,7 @@ void DoFdisk()
 }
 
 
-void GoDriverSelectionScreen()
+void GoDriverSelectionScreen(void)
 {
     byte key;
 
@@ -242,7 +244,7 @@ void GoDriverSelectionScreen()
 }
 
 
-void ShowDriverSelectionScreen()
+void ShowDriverSelectionScreen(void)
 {
     byte i;
     char slot[4];
@@ -362,7 +364,7 @@ void GoDeviceSelectionScreen(byte driverIndex)
 }
 
 
-void ShowDeviceSelectionScreen()
+void ShowDeviceSelectionScreen(void)
 {
 	deviceInfo* currentDevice;
 	byte i;
@@ -407,7 +409,7 @@ void ShowDeviceSelectionScreen()
 }
 
 
-void GetDevicesInformation()
+void GetDevicesInformation(void)
 {
     byte error = 0;
     byte deviceIndex = 1;
@@ -528,7 +530,7 @@ void InitializePartitioningVariables(byte lunIndex)
 }
 
 
-void ShowLunSelectionScreen()
+void ShowLunSelectionScreen(void)
 {
 	byte i;
 	lunInfo* currentLun;
@@ -629,7 +631,7 @@ byte GetRemainingBy1024String(ulong value, char* destination)
 }
 
 
-void GetLunsInformation()
+void GetLunsInformation(void)
 {
     byte error = 0;
     byte lunIndex = 1;
@@ -666,13 +668,13 @@ void GetLunsInformation()
 }
 
 
-void PrintDeviceInfoWithIndex()
+void PrintDeviceInfoWithIndex(void)
 {
 	printf(is80ColumnsDisplay ? " (Id = %i)" : " (%i)", selectedDeviceIndex);
 }
 
 
-void PrintTargetInfo()
+void PrintTargetInfo(void)
 {
 	Locate(0,3);
 	print(selectedDriverName);
@@ -685,7 +687,7 @@ void PrintTargetInfo()
 }
 
 
-void GoPartitioningMainMenuScreen()
+void GoPartitioningMainMenuScreen(void)
 {
 	char key;
 	byte error;
@@ -799,7 +801,7 @@ void GoPartitioningMainMenuScreen()
 }
 
 
-bool GetYesOrNo()
+bool GetYesOrNo(void)
 {
 	char key;
 
@@ -810,7 +812,7 @@ bool GetYesOrNo()
 }
 
 
-byte GetDiskPartitionsInfo()
+byte GetDiskPartitionsInfo(void)
 {
 	byte primaryIndex = 1;
 	byte extendedIndex = 0;
@@ -868,7 +870,7 @@ byte GetDiskPartitionsInfo()
 }
 
 
-void ShowPartitions()
+void ShowPartitions(void)
 {
 	int i;
 	int firstShownPartitionIndex = 1;
@@ -1041,7 +1043,7 @@ void PrintOnePartitionInfo(partitionInfo* info)
 }
 
 
-void DeleteAllPartitions()
+void DeleteAllPartitions(void)
 {
 	sprintf(buffer, "Discard all %s partitions? (y/n) ", partitionsExistInDisk ? "existing" : "defined");
 	PrintStateMessage(buffer);
@@ -1082,7 +1084,7 @@ void RecalculateAutoPartitionSize(bool setToAllSpaceAvailable)
 }
 
 
-void AddPartition()
+void AddPartition(void)
 {
 	uint maxPartitionSizeInM;
 	uint maxPartitionSizeInK;
@@ -1184,7 +1186,7 @@ void AddPartition()
 }
 
 
-void AddAutoPartition()
+void AddAutoPartition(void)
 {
 	partitionInfo* partition = &partitions[partitionsCount];
 
@@ -1207,7 +1209,7 @@ void AddAutoPartition()
 }
 
 
-void UndoAddPartition()
+void UndoAddPartition(void)
 {
 	partitionInfo* partition = &partitions[partitionsCount - 1];
 	autoPartitionSizeInK = partition->sizeInK;
@@ -1218,7 +1220,7 @@ void UndoAddPartition()
 }
 
 
-void TestDeviceAccess()
+void TestDeviceAccess(void)
 {
 	ulong sectorNumber = 0;
 	char* message = "Now reading device sector ";
@@ -1291,7 +1293,7 @@ void PrintDosErrorMessage(byte code, char* header)
 }
 
 
-void PrintDone()
+void PrintDone(void)
 {
 	PrintCentered("Done!");
 	print("\x0A\x0D\x0A\x0A\x0A");
@@ -1300,7 +1302,7 @@ void PrintDone()
 	PrintCentered("please reset the computer.");
 }
 
-bool FormatWithoutPartitions()
+bool FormatWithoutPartitions(void)
 {
 	dosFilesystemParameters parameters;
 	byte error;
@@ -1359,7 +1361,7 @@ void CalculateFatFileSystemParameters(ulong fileSystemSizeInK, dosFilesystemPara
 #endif
 
 
-bool WritePartitionTable()
+bool WritePartitionTable(void)
 {
 	//http://www.rayknights.org/pc_boot/ext_tbls.htm
 
@@ -1405,7 +1407,7 @@ bool WritePartitionTable()
 }
 
 
-void PreparePartitioningProcess()
+void PreparePartitioningProcess(void)
 {
 	byte* remoteCallParams = buffer;
 
@@ -1462,7 +1464,7 @@ bool ConfirmDataDestroy(char* action)
 }
 
 
-void ClearInformationArea()
+void ClearInformationArea(void)
 {
     int i;
     
@@ -1473,7 +1475,7 @@ void ClearInformationArea()
 }
 
 
-void GetDriversInformation()
+void GetDriversInformation(void)
 {
     byte error = 0;
     byte driverIndex = 1;
@@ -1527,7 +1529,7 @@ void TerminateRightPaddedStringWithZero(char* string, byte length)
 }
 
 
-byte WaitKey()
+byte WaitKey(void)
 {
 	byte key;
 
@@ -1536,7 +1538,7 @@ byte WaitKey()
 }
 
 
-byte GetKey()
+byte GetKey(void)
 {
 	regs.Bytes.E = 0xFF;
 	DosCallFromRom(_DIRIO, REGS_AF);
@@ -1544,7 +1546,7 @@ byte GetKey()
 }
 
 
-void SaveOriginalScreenConfiguration()
+void SaveOriginalScreenConfiguration(void)
 {
 	originalScreenConfig.screenMode = *(byte*)SCRMOD;
 	originalScreenConfig.screenWidth = *(byte*)LINLEN;
@@ -1552,7 +1554,7 @@ void SaveOriginalScreenConfiguration()
 }
 
 
-void ComposeWorkScreenConfiguration()
+void ComposeWorkScreenConfiguration(void)
 {
 	currentScreenConfig.screenMode = 0;
 	currentScreenConfig.screenWidth = (*(byte*)LINLEN <= MAX_LINLEN_MSX1 ? MAX_LINLEN_MSX1 : MAX_LINLEN_MSX2);
@@ -1587,7 +1589,7 @@ void InitializeWorkingScreen(char* header)
 }
 
 
-void PrintRuler()
+void PrintRuler(void)
 {
 	int i;
 	byte width;

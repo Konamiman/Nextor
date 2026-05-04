@@ -513,7 +513,7 @@ reached_eof:	add	hl,bc			;REACHED EOF.  Only pre-read if
 						; start of sector
 ;
 must_read_sec:	ld	b,3
-		code	lxi hl
+code	<lxi>,<hl>
 dont_read_sec:	ld	b,2
 		ld	de,(RW_PSEC##)		;DE := sector number
 ;===== start add FAT16 (BUF_2 patch)

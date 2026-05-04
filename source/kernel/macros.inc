@@ -160,7 +160,7 @@ endm
 OFFSET  equ     4100h
 PHASED  defl    FALSE
 ;
-rammod  macro
+RAMMOD  macro
 PHASED   defl    TRUE
 	 .phase  $-OFFSET
 	endm
@@ -182,7 +182,7 @@ finish  macro   name
 ;--- The "proc" macro is used to define a label that is invoked
 ;    at RAM in page 0 (when PHASED) or at ROM bank 4 (when not PHASED).
 
-proc    macro   name                    ;;Macro for declaring a public
+PROC    macro   name                    ;;Macro for declaring a public
 	if	PHASED
 name&:                                  ;; label to be called.
 	 .dephase

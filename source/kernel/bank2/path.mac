@@ -826,7 +826,7 @@ char_match:	inc	hl
 ;
 		ld	a,(hl)			;Get attributes from entry and
 		scf				; set carry flag to show match.
-		code	mvi b
+code	<mvi>,<b>
 no_name_match:	or	a			;No match - set NC and NZ
 		pop	de
 		ret

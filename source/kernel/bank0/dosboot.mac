@@ -211,8 +211,8 @@ PPAT1:
 PCODE1:
 		ex	(sp),hl
 		ld	hl,H.PROMPT##
-		code	MVI M
-		code	RET
+code	<MVI>,<M>
+code	<RET>
 		pop	hl
 		ret
 PPAT2:
@@ -220,11 +220,11 @@ PPAT2:
 		push	hl
 		ld	hl,H.PROMPT##
 		ld	a,(hl)
-		code	CPI
-		code	RET
+code	<CPI>
+code	<RET>
 		jr	nz,PP30
-		code	MVI M
-		code	JMP
+code	<MVI>,<M>
+code	<JMP>
 		push	hl
 		push	de
 		push	bc
@@ -251,14 +251,14 @@ PP20:
 		pop	de
 		pop	hl
 PP30:
-		code	MVI M
-		code	RET
+code	<MVI>,<M>
+code	<RET>
 		inc	hl
-		code	MVI M
-		code	RET
+code	<MVI>,<M>
+code	<RET>
 		inc	hl
-		code	MVI M
-		code	RET
+code	<MVI>,<M>
+code	<RET>
 		pop	hl
 		pop	af
 		ret

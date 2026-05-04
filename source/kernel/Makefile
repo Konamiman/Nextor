@@ -6,31 +6,20 @@
 
 # The N80, LK80, LB80 and MKNEXROM binaries to use can be overriden with environment variables, e.g.:
 # N80=/path/to/N80 make
+# Use NEXT80=1 to use the native C next80 n80/lk80/lb80 tools.
 
 
 VERSION := 2.1.4
 
-ifeq ($(strip $(N80)),)
-N80=N80
-endif
+MKNEXROM ?= ../../buildtools/linux/mknexrom
+
+include ../toolchain.mk
 
 export N80_ARGS=--no-string-escapes --no-show-banner --build-type rel --verbosity 0 --output-file-case lower
 
-ifeq ($(strip $(LK80)),)
-LK80=LK80
-endif
-
 export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin
 
-ifeq ($(strip $(LB80)),)
-LB80=LB80
-endif
-
 export LB80_ARGS=--no-show-banner --verbosity 0
-
-ifeq ($(strip $(MKNEXROM)),)
-MKNEXROM=mknexrom
-endif
 
 define SymToEqus
     $(eval REGEX:=([0-9A-F]{4}) ($(3)))
@@ -47,12 +36,12 @@ endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2)
+	@$(N80) $(N80_ARGS) $(1) $@ $(2)
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3)
+	@$(N80) $(N80_ARGS) $(1) $(2) $(3)
 endef
 
 define print_linking
@@ -64,18 +53,17 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+all: prerequisites base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
-.phony: prerequisites
+.PHONY: all prerequisites base ide ide-masteronly ide-emu ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm
+.PHONY: prerequisites
 
 prerequisites:
 	@mkdir -p ../../bin/kernels
 	$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
-
--include prerequisites
 
 
 #################################
@@ -87,12 +75,12 @@ prerequisites:
 
 ###  Kernel Base file
 
-base: nextor_base.dat
+base: prerequisites nextor_base.dat
 
 
 ### Sunrise IDE, normal ROM
 
-ide: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM
+ide: prerequisites drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM: \
 	nextor_base.dat \
@@ -110,7 +98,7 @@ drivers/SunriseIDE/sunride.bin: \
 
 ### Sunrise IDE, normal ROM, master device only
 
-ide-masteronly: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM
+ide-masteronly: prerequisites drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM: \
 	nextor_base.dat \
@@ -128,7 +116,7 @@ drivers/SunriseIDE/sunride.masteronly.bin: \
 
 ### Sunrise IDE, ROM for blueMSX
 
-ide-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
+ide-emu: prerequisites drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
 	nextor_base.dat \
@@ -148,7 +136,7 @@ drivers/SunriseIDE/driver.bin: \
 
 ### Sunrise IDE, ROM for blueMSX, master device only
 
-ide-masteronly-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
+ide-masteronly-emu: prerequisites drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
 	nextor_base.dat \
@@ -176,7 +164,7 @@ drivers/SunriseIDE/chgbnk.bin: \
 
 ### Standalone ASCII8
 
-ascii8: drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM
+ascii8: prerequisites drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM
 
 drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
 	nextor_base.dat \
@@ -201,7 +189,7 @@ drivers/StandaloneASCII8/chgbnk.bin: \
 
 ### Standalone ASCII16
 
-ascii16: drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM
+ascii16: prerequisites drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM
 
 drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM: \
 	nextor_base.dat \
@@ -221,7 +209,7 @@ drivers/StandaloneASCII16/chgbnk.bin: \
 
 ### MegaFlashROM SCC+ SD
 
-mfrsd: \
+mfrsd: prerequisites \
 	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
 	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM \
 	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
@@ -281,7 +269,7 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM: \
 
 ### Flashjacks
 
-flashjacks: drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM
+flashjacks: prerequisites drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM
 
 drivers/Flashjacks/flashjacks.bin: \
 	drivers/Flashjacks/flashjacks.asm
@@ -299,7 +287,7 @@ drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
 
 ### OCM (1-chip MSX, SX|2, and compatibles)
 
-ocm: drivers/OCM/Nextor-$(VERSION).OCM.ROM
+ocm: prerequisites drivers/OCM/Nextor-$(VERSION).OCM.ROM
 
 drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 	nextor_base.dat \
@@ -380,7 +368,7 @@ bank0/B0.BIN bank0/B0.SYM: \
 	rel.rel
 
 	$(call print_linking,"bank 0")
-	@$(LK80) --working-dir bank0 --symbols-file B0.SYM --output-file B0.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank0 --symbols-file B0.SYM --output-file B0.BIN \
 			--code 4000h ../codes.rel ../kvar.rel ../data.rel ../rel.rel doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel \
 			--code 7700h ../drv.rel \
 			--code 7fd0h ../chgbnk.rel
@@ -413,7 +401,7 @@ bank1/B1.BIN: \
 	bank0/b0labels.inc
 
 	$(call print_linking,"bank 1")
-	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
@@ -432,12 +420,12 @@ bank2/B2.BIN bank2/B2.SYM: \
 	bank2/b2.rel \
 	bank0/b0labels.inc
 
-	@$(LB80) --working-dir bank2 create TEMP21.REL char.rel dev.rel kbios.rel misc.rel seg.rel
-	@$(LB80) --working-dir bank2 create TEMP22.REL path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel
-	@$(LB80) --working-dir bank2 create TEMP23.REL buf.rel fat.rel val.rel err.rel
+	@$(LB80) $(LB80_ARGS) --working-dir bank2 create TEMP21.REL char.rel dev.rel kbios.rel misc.rel seg.rel
+	@$(LB80) $(LB80_ARGS) --working-dir bank2 create TEMP22.REL path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel
+	@$(LB80) $(LB80_ARGS) --working-dir bank2 create TEMP23.REL buf.rel fat.rel val.rel err.rel
 
 	$(call print_linking,"bank 2")
-	@$(LK80) --working-dir bank2 --symbols-file B2.SYM --output-file B2.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank2 --symbols-file B2.SYM --output-file B2.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b2.rel kinit.rel TEMP21.REL TEMP22.REL TEMP23.REL \
 			--code 7fd0h ../chgbnk.rel
 
@@ -464,7 +452,7 @@ bank3/B3.BIN: \
 	bank0/40ff.rel
 
 	$(call print_linking,"bank 3")
-	@$(LK80) --working-dir bank3 --symbols-file B3.SYM --output-file B3.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank3 --symbols-file B3.SYM --output-file B3.BIN \
 			--code 4000h ../codes.rel ../kvar.rel ../data.rel ../bank0/doshead.rel ../bank0/40ff.rel b3.rel dos1ker.rel \
 			--code 7700h ../drv.rel \
 			--code 7fd0h ../chgbnk.rel
@@ -497,7 +485,7 @@ bank4/B4RD.BIN: \
 	bank4/b4rdlabs.inc
 
 	$(call print_linking,"bank 4 B4RD")
-	@$(LK80) --working-dir bank4 --symbols-file B4RD.SYM --output-file B4RD.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank4 --symbols-file B4RD.SYM --output-file B4RD.BIN \
 			--code 4080h ramdrvh.rel
 
 bank4/B4.BIN bank4/B4.SYM: \
@@ -509,7 +497,7 @@ bank4/B4.BIN bank4/B4.SYM: \
 	bank2/b2labels.inc \
 
 	$(call print_linking,"bank 4")
-	@$(LK80) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel ramdrv.rel time.rel seg.rel misc.rel \
 			--code 7BC0h dskab.rel \
 			--code 7fd0h ../chgbnk.rel
@@ -523,7 +511,7 @@ bank5/B5.BIN: \
 	bank0/40ff.rel
 
 	$(call print_linking,"bank 5")
-	@$(LK80) --working-dir bank5 --symbols-file B5.SYM --output-file B5.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank5 --symbols-file B5.SYM --output-file B5.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b5.rel \
 			--code 7fd0h ../chgbnk.rel
 
@@ -533,7 +521,7 @@ bank6/B6.BIN: \
 	bank0/40ff.rel
 
 	$(call print_linking,"bank 6")
-	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
+	@$(LK80) $(LK80_ARGS) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
 			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel \
 			--code 7fd0h ../chgbnk.rel
 

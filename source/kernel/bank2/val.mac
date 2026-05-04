@@ -1798,7 +1798,7 @@ dirsize_loop:	add	hl,hl			; calc no. of directory
 		ld	h,(ix+15)		; decrement it by one to get
 		dec	hl			; number of clusters.
 		ld	b,(ix+7)		;Get cluster shift and
-		code	mvi c			; calc no. of data sectors.
+code	<mvi>,<c>			; calc no. of data sectors.
 secsize_loop:	add	hl,hl
 		djnz	secsize_loop
 		pop	bc			;Add the first data sector

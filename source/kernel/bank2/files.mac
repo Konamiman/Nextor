@@ -895,7 +895,7 @@ cshft_lp_start:	djnz	cshft_loop		; the logical cluster number.
 		ld	d,e			;DE := logical cluster number
 		ld	e,a
 		ld	a,c			; A := sector within cluster
-		code	lxi hl			;Skip to return no error (Z)
+code	<lxi>,<hl>			;Skip to return no error (Z)
 file_error_nz:	ld	a,.FILE##		;Error - load up error code
 		pop	bc			;BC := byte offset
 		pop	hl
@@ -950,7 +950,7 @@ chain_lp:	ld	a,b			;Return with no error when
 ;;		bit	7,d
 ;;		jr	z,chain_lp
 ;===== end mod FAT16
-		code	mvi a
+code	<mvi>,<a>
 null_file:	pop	hl			;Restore unit descriptor
 		ld	a,.FILE##		;Return error if premature
 		or	a			; end of chain.  File size
