@@ -310,78 +310,7 @@ _IFORM	equ	0F0h
 _IDEVL	equ	0B5h
 _IPARM	equ	08Bh
 
-;-----------------------------------------------------------------------------
-;
-; Routines available on kernel page 0
-;
-
-;* Get in A the current slot for page 1. Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;  xor a
-;  ld ix,GSLOT1
-;  call CALBNK
-
-GSLOT1	equ	402Dh
-
-
-;* This routine reads a byte from another bank.
-;  Must be called by using CALBNK to the desired bank,
-;  passing the address to be read in HL:
-;  ld a,bank
-;  ld hl,address
-;  ld ix,RDBANK
-;  call CALBNK
-
-RDBANK	equ	403Ch
-
-
-;* This routine temporarily switches kernel bank 0/3,
-;  then jumps to CALBAS in MSX BIOS.
-;  This is necessary so that kernel bank is correct in case of BASIC error.
-
-CALBAS	equ	403Fh
-
-
-;* Call a routine in another bank.
-;  Must be used if the driver spawns across more than one bank.
-;  Input: A = bank
-;         IX = routine address
-;         AF' = AF for the routine
-;         BC, DE, HL, IY = input for the routine
-
-CALBNK	equ	4042h
-
-
-;* Get in IX the address of the SLTWRK entry for the slot passed in A,
-;  which will in turn contain a pointer to the allocated page 3
-;  work area for that slot (0 if no work area was allocated).
-;  If A=0, then it uses the slot currently switched in page 1.
-;  Returns A=current slot for page 1, if A=0 was passed.
-;  Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;  ld a,slot
-;  ex af,af'
-;  xor a
-;  ld ix,GWORK
-;  call CALBNK
-
-GWORK	equ	4045h
-
-
-;* Call a routine in the driver bank.
-;  Input: (BK4_ADD) = routine address
-;         AF, BC, DE, HL, IY = input for the routine
-;
-; Calls a routine in the driver bank. This routine is the same as CALBNK,
-; except that the routine address is passed in address BK4_ADD (#F2ED)
-; instead of IX, and the bank number is always 5. This is useful when used
-; in combination with CALSLT to call a driver routine from outside
-; the driver itself.
-;
-; Note that register IX can't be used as input parameter, it is
-; corrupted before reaching the invoked code.
-
-CALDRV	equ	4048h
+	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
 
 
 ;* Set the current bank
@@ -505,7 +434,7 @@ DRV_INIT:
 
 	xor	a			; Request the WorkArea base pointer
 	call	MY_GWORK
-	call	INIWORK			; Initialize the work-area
+	call	INIWORK			; Initialize the work area
 	call	IDE_ON
 
 .init:	ld	(ix+WRKAREA.MASTER+DEVINFO.t321D),#FE	; error: No master detected yet
@@ -2643,7 +2572,7 @@ SETLDIRHLPR:
 
 
 ; ------------------------------------------------
-; Initialize the Work-area
+; Initialize the work area
 ; ------------------------------------------------
 INIWORK:
 	; Clear the WorkArea

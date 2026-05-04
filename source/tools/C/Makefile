@@ -26,20 +26,36 @@ prerequisites:
 
 -include prerequisites
 
+SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
+
 .SECONDEXPANSION:
 $(COMS): \
 	$$(patsubst %.com,%.c,$$@) \
-	crt0_msxdos_advanced.rel \
-	asmcall.h
+	crt0_msxdos.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
 
-	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 crt0_msxdos_advanced.rel $(patsubst %.com,%.c,$@)
+	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(patsubst %.com,%.c,$@)
 	$(call hex2bin,$(patsubst %.com,%.ihx,$@),$@)
 	$(call copy_to_bin,$@)
 
-crt0_msxdos_advanced.rel: \
-	crt0_msxdos_advanced.s
+crt0_msxdos.rel: \
+	../../../sdk/C/code/crt0_msxdos.asm
 
-	sdasz80 -o crt0_msxdos_advanced.rel crt0_msxdos_advanced.s
+	sdasz80 -o crt0_msxdos.rel ../../../sdk/C/code/crt0_msxdos.asm
+
+# SDK C library .rel files (compiled once, linked into every tool).
+asmcall.rel: ../../../sdk/C/code/asmcall.c ../../../sdk/C/includes/asmcall.h
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/asmcall.c
+
+printf.rel: ../../../sdk/C/code/printf.c ../../../sdk/C/includes/msx_bios.h
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 --max-allocs-per-node 100000 --allow-unsafe-read --opt-code-size -I../../../sdk/C/includes ../../../sdk/C/code/printf.c
+
+print_msxdos.rel: ../../../sdk/C/code/print_msxdos.c
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/print_msxdos.c
+
+strcmpi.rel: ../../../sdk/C/code/strcmpi.c ../../../sdk/C/includes/strcmpi.h
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/strcmpi.c
 
 .PHONY: clean
 

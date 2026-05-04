@@ -3,8 +3,8 @@
 
    Compilation command line:
 
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel drvrop.c
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+          crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel drvrop.c
    hex2bin -e com drvrop.ihx
 */
 
@@ -17,8 +17,13 @@
 #include <ctype.h>
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
-#include "system.h"
+#include "dos_functions.h"
+#include "drivers.h"
+#include "driver_routines.h"
+#include "driver_driver_queries.h"
+#include "driver_device_queries.h"
+#include "msx_bios.h"
+#include "msx_workarea.h"
 
 
 /* Defines */
@@ -51,8 +56,6 @@
 /* Global variables */
 
 Z80_registers regs;
-byte ASMRUT[4];
-byte OUT_FLAGS;
 
 uint mapperTable;
 byte allocSlot;
@@ -150,7 +153,6 @@ const char* strCRLF = "\r\n";
 
 int main(char** argv, int argc)
 {
-    ASMRUT[0] = 0xC3;
     print(strTitle);
 
     if(argc == 0) {
@@ -489,14 +491,14 @@ void DoAutoMap()
     byte i;
 
     /* 1. Get max device number from driver using _CDRVR */
-    REGBUF[0] = DRVQ_GET_MAX_DEVICE_NUMBER << 8; /* AF: A=query, F=0 */
+    REGBUF[0] = DRIVER_QUERY_GET_MAX_DEVICE << 8; /* AF: A=query, F=0 */
     REGBUF[1] = 0; /* BC */
     REGBUF[2] = 0; /* DE */
     REGBUF[3] = 0; /* HL */
 
     regs.Bytes.A = allocSlot | CDRVR_NEXTOR_3_FLAG;
     regs.Bytes.B = allocSegment;
-    regs.Words.DE = DRIVER_QUERY;
+    regs.Words.DE = DRIVER_DRIVER_QUERY_ENTRY;
     regs.Words.HL = (int)REGBUF;
     DoDosCall(_CDRVR);
 
@@ -514,19 +516,19 @@ void DoAutoMap()
     }
 
     /* 2. Find first suitable block device with 512-byte sectors
-       (mirrors IDRV_AUTOMAP in idrvauto.mac: query DEVQ_GET_PARAMS,
+       (mirrors IDRV_AUTOMAP in idrvauto.mac: query DEVICE_QUERY_GET_PARAMS,
        check byte 0 = 0 (block) and bytes 1-2 = 0x0200 (512)) */
     foundDevice = 0;
     /* device != 0 guards against wrap when maxDevices == 255 */
     for(device = 1; device != 0 && device <= maxDevices; device++) {
-        REGBUF[0] = DEVQ_GET_PARAMS << 8; /* AF: A=query */
+        REGBUF[0] = DEVICE_QUERY_GET_PARAMS << 8; /* AF: A=query */
         REGBUF[1] = device;               /* BC: C=device */
         REGBUF[2] = 0;                    /* DE */
         REGBUF[3] = (int)MAPDATA;         /* HL = info buffer */
 
         regs.Bytes.A = allocSlot | CDRVR_NEXTOR_3_FLAG;
         regs.Bytes.B = allocSegment;
-        regs.Words.DE = DEVICE_QUERY;
+        regs.Words.DE = DRIVER_DEVICE_QUERY_ENTRY;
         regs.Words.HL = (int)REGBUF;
         DoDosCall(_CDRVR);
 
@@ -611,6 +613,3 @@ void TerminateWithDosError(byte errorCode)
 
 #define COM_FILE
 #define SUPPORT_LONG
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"

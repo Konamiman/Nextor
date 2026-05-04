@@ -5,7 +5,9 @@
 
 // Compilation command line:
 //
-// sdcc --code-loc 0x4150 --data-loc 0x8000 -mz80 --disable-warning 196 --disable-warning 84 --no-std-crt0 fdisk_crt0.rel msxchar.lib asm.lib fdisk.c
+// sdcc --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
+//      --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 \
+//      fdisk_crt0.rel asmcall.rel printf.rel fdisk.c
 // hex2bin -e dat fdisk.ihx
 //
 // Once compiled, embed the first 16000 bytes of fdisk.dat at position 82176 of the appropriate Nextor ROM file:
@@ -15,12 +17,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "../../tools/C/system.h"
-#include "../../tools/C/dos.h"
-#include "../../tools/C/types.h"
-#include "../../tools/C/asmcall.h"
+#include "msx_bios.h"      /* INITXT, INIT32, CHPUT, POSIT, ERAFNK, DSPFNK */
+#include "msx_workarea.h"  /* LINL40, LINL32, LINLEN, CRTCNT, CSRY, CNSDFG, SCRMOD, H_CHPH */
+#include "dos_functions.h"
+#include "dos_errors.h"
+#include "drivers.h"
+#include "driver_routines.h"        /* DRIVER_DRIVER_QUERY_ENTRY / DEVICE_QUERY_ENTRY / READ_WRITE_ENTRY */
+#include "driver_driver_queries.h"  /* DRIVER_QUERY_GET_MAX_DEVICE */
+#include "driver_device_queries.h"  /* DEVICE_QUERY_*, STRING_MEDIUM_NAME, STRING_DEVICE_NAME */
+#include "driver_result_codes.h"     /* DRIVER_RESULT_TRUNCATED_STRING, DRIVER_RESULT_NOT_IMPLEMENTED */
+#include "types.h"
+#include "asmcall.h"
 #include "drivercall.h"
-#include "../../tools/C/partit.h"
+#include "partit.h"
 #include "fdisk.h"
 
 #define MESSAGE_ROW 9
@@ -39,7 +48,7 @@ typedef struct {
 } ScreenConfiguration;
 
 char buffer[1000];
-driverInfo drivers[MAX_INSTALLED_DRIVERS];
+driverInfo drivers[MAX_MANAGED_DRIVERS];
 driverInfo* selectedDriver;
 char selectedDriverName[50];
 deviceInfo* selectedDevice;
@@ -50,8 +59,6 @@ byte selectedDeviceIndex;
 byte installedDriversCount;
 bool availableDevicesCount;
 Z80_registers regs;
-byte ASMRUT[4];
-byte OUT_FLAGS;
 ScreenConfiguration originalScreenConfig;
 ScreenConfiguration currentScreenConfig;
 bool is80ColumnsDisplay;
@@ -153,7 +160,6 @@ int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector);
 
 void main(int bc, int hl)
 {
-    ASMRUT[0] = 0xC3;   //Code for JP
 	dos1 = (*((byte*)0xF313) == 0);
 
 	installedDriversCount = 0;
@@ -452,8 +458,8 @@ void GetDevicesInformation()
 	byte maxDeviceNumber;
 	byte maxDeviceNameLength = (is80ColumnsDisplay ? DRIVER_NAME_LENGTH_80 : DRIVER_NAME_LENGTH_40) + 1;
 
-	regs.Bytes.A = DRVQ_GET_MAX_DEVICE_NUMBER;
-	DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_QUERY);
+	regs.Bytes.A = DRIVER_QUERY_GET_MAX_DEVICE;
+	DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DRIVER_QUERY_ENTRY);
 	maxDeviceNumber = regs.Bytes.A == 0 ? regs.Bytes.B : DEFAULT_MAX_DEVICE_NUMBER;
 
     availableDevicesCount = 0;
@@ -464,31 +470,31 @@ void GetDevicesInformation()
 		currentDevice->deviceNumber = deviceNumber;
 		currentDeviceName = currentDevice->deviceName;
 
-		regs.Bytes.A = DEVQ_GET_STRING;
+		regs.Bytes.A = DEVICE_QUERY_GET_STRING;
 		regs.Bytes.B = STRING_MEDIUM_NAME;
 		regs.Bytes.C = deviceNumber;
 		regs.Bytes.D = maxDeviceNameLength;
 		regs.Words.HL = (int)currentDeviceName;
-		DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
+		DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DEVICE_QUERY_ENTRY);
 
-		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
-			regs.Bytes.A = DEVQ_GET_STRING;
+		if(regs.Bytes.A == DRIVER_RESULT_NOT_IMPLEMENTED) {
+			regs.Bytes.A = DEVICE_QUERY_GET_STRING;
 			regs.Bytes.B = STRING_DEVICE_NAME;
 			regs.Bytes.C = deviceNumber;
 			regs.Bytes.D = maxDeviceNameLength;
 			regs.Words.HL = (int)currentDeviceName;
-			DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
-			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+			DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DEVICE_QUERY_ENTRY);
+			if(regs.Bytes.A == DRIVER_RESULT_NOT_IMPLEMENTED) {
 				strcpy(currentDeviceName, "(Unnamed device)");
 			}
 		}
 
 		deviceNumber++;
 
-		if(regs.Bytes.A == ERR_QUERY_TRUNCATED_STRING) {
+		if(regs.Bytes.A == DRIVER_RESULT_TRUNCATED_STRING) {
 			ReplaceLastCharsWithDots(currentDeviceName, 0);
 		}
-		else if(regs.Bytes.A != 0 && regs.Bytes.A != ERR_QUERY_NOT_IMPLEMENTED) {
+		else if(regs.Bytes.A != 0 && regs.Bytes.A != DRIVER_RESULT_NOT_IMPLEMENTED) {
 			//sprintf(currentDeviceName, "! %i !", regs.Bytes.A);
 			continue;
 		}
@@ -510,20 +516,20 @@ void GetDevicesInformation()
 		currentDevice = &devices[deviceIndex];
 		currentDevice->isOnline = true;
 
-		regs.Bytes.A = DEVQ_GET_AVAILABILITY;
+		regs.Bytes.A = DEVICE_QUERY_GET_AVAILABILITY;
 		regs.Bytes.C = currentDevice->deviceNumber;
-		DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
+		DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DEVICE_QUERY_ENTRY);
 
 		deviceIndex++;
 
-		if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+		if(regs.Bytes.A == DRIVER_RESULT_NOT_IMPLEMENTED) {
 			continue;
 		}
 
 		if(regs.Bytes.A != 0) {
 			//Should never happen if the driver is consistent
 			//(for a given device number it either returns "Invalid device" error for
-			//all the queries invoked through the DEVICE_QUERY routine,
+			//all the queries invoked through the DRIVER_DEVICE_QUERY_ENTRY routine,
 			//or for none of them)
 			currentDevice->isValid = false;
 		}
@@ -537,12 +543,12 @@ void GetDevicesInformation()
 	while(deviceIndex < availableDevicesCount) {
 		currentDevice = &devices[deviceIndex];
 		if(currentDevice->isValid && currentDevice->isOnline) {
-			regs.Bytes.A = DEVQ_GET_PARAMS;
+			regs.Bytes.A = DEVICE_QUERY_GET_PARAMS;
 			regs.Bytes.C = currentDevice->deviceNumber;
 			regs.Words.HL = (int)currentDevice->params;
-			DriverCall(selectedDriver->slot, selectedDriver->segment,DEVICE_QUERY);
+			DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DEVICE_QUERY_ENTRY);
 
-			if(regs.Bytes.A == ERR_QUERY_NOT_IMPLEMENTED) {
+			if(regs.Bytes.A == DRIVER_RESULT_NOT_IMPLEMENTED) {
 				currentDevice->params.mediumType = DEV_TYPE_BLOCK;
 				currentDevice->params.sectorSize = 512;
 				currentDevice->params.sectorCount = 0;
@@ -551,7 +557,7 @@ void GetDevicesInformation()
 			else if(regs.Bytes.A != 0) {
 				//Should never happen if the driver is consistent
 				//(for a given device number it either returns "Invalid device" error for
-				//all the queries invoked through the DEVICE_QUERY routine,
+				//all the queries invoked through the DRIVER_DEVICE_QUERY_ENTRY routine,
 				//or for none of them)
 				currentDevice->isValid = false;
 			}
@@ -1339,7 +1345,7 @@ void GetDriversInformation()
     installedDriversCount = 0;
     
    
-    while(error == 0 && driverIndex <= MAX_INSTALLED_DRIVERS) {
+    while(error == 0 && driverIndex <= MAX_MANAGED_DRIVERS) {
         regs.Bytes.A = driverIndex | GDRVR_EXTENDED_DRIVER_NAME_FLAG;
         regs.Words.HL = (int)currentDriver;
         DosCallFromRom(_GDRVR, REGS_AF);
@@ -1865,7 +1871,7 @@ byte DeviceSectorRW(ulong firstDeviceSector, byte write)
 	regs.Words.HL = (int)sectorBuffer;
 	regs.Words.DE = (int)&firstDeviceSector;
 
-	DriverCall(selectedDriver->slot, selectedDriver->segment,READ_WRITE);
+	DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_READ_WRITE_ENTRY);
 	return regs.Bytes.A;
 }
 
@@ -1948,6 +1954,4 @@ int ToggleStatusBit(byte partitionTableEntryIndex, ulong partitonTablesector)
 }
 
 
-#include "../../tools/C/printf.c"
-#include "../../tools/C/asmcall.c"
 #include "drivercall.c"

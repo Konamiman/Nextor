@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	RAMMOD
 ;
 ;-----------------------------------------------------------------------------
@@ -43,7 +44,7 @@ DO_CALL:
 	ld	(BK4_ADD##),ix
 	ld	ix,C4PBK##
 	ld	iy,(MASTER_SLOT##-1)
-	call	CALSLT##
+	call	CALSLT
 
 	ex	af,af'
 	pop	af

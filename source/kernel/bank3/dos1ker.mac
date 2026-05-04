@@ -18,6 +18,10 @@
 	;ASEG
 	;ORG	04100H
 
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
+	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
+
 PRINTL	macro	NAME,VALUE
 	if2
 	.PRINTX % Size of NAME = VALUE bytes %
@@ -68,10 +72,6 @@ START:
 
 
 WBOOT	equ	00000H
-RDSLT	equ	0000CH
-WRSLT	equ	00014H
-CALSLT	equ	0001CH
-ENASLT	equ	00024H
 IDBYT0	equ	0002BH
 CALLF	equ	00030H
 M0034	equ	00034H
@@ -79,17 +79,13 @@ KEYINT	equ	00038H
 LDIRMV	equ	00059H
 LDIRVM	equ	0005CH
 CHSNS	equ	0009CH
-CHGET	equ	0009FH
-CHPUT	equ	000A2H
 LPTOUT	equ	000A5H
 BREAKX	equ	000B7H
-CKCNTC	equ	000BDH
 ERAFNK	equ	000CCH
 TOTEXT	equ	000D2H
 SNSMAT	equ	00141H
 PHYDIO	equ	00144H
 KILBUF	equ	00156H
-CALBAS	equ	00159H
 
 X003B	equ	0003BH			; helper routine in DOS memoryspace: save and change secundairy slotregister
 X0046	equ	00046H			; helper routine in DOS memoryspace: restore secundairy slotregister (RDSLT/WRSLT)
@@ -209,10 +205,7 @@ YF33B	equ	0F33BH			; days since 1-1-1980, used when no clockchip
 YF33D	equ	0F33DH			; recordsize GET/PUT recordoperations
 YF33F	equ	0F33FH			; at systeminit: CTRL key flag, later: saved driveid driveroperation (0=A:)
 YF340	equ	0F340H			; flag kernel cold boot (0 = cold, <>0 = warm)
-RAMAD0	equ	0F341H			; slotid DOS ram page 0
-RAMAD1	equ	0F342H			; slotid DOS ram page 1
-RAMAD2	equ	0F343H			; slotid DOS ram page 2
-RAMAD3	equ	0F344H			; slotid DOS ram page 3
+; F341h to F344h defined in msx_workarea.inc
 YF345	equ	0F345H			; maximum number of diskbasic FCB's
 YF346	equ	0F346H			; flag MSXDOS has been running (0 = no MSXDOS yet)
 YF347	equ	0F347H			; number of drives in disksystem
@@ -244,9 +237,7 @@ LPTPOS	equ	0F415H
 PRTFLG	equ	0F416H
 CURLIN	equ	0F41CH
 KBUF	equ	0F41FH
-BUF	equ	0F55EH
 TTYPOS	equ	0F661H
-VALTYP	equ	0F663H
 MEMSIZ	equ	0F672H
 STKTOP	equ	0F674H
 TXTTAB	equ	0F676H
@@ -258,28 +249,21 @@ AUTLIN	equ	0F6ABH
 SAVSTK	equ	0F6B1H
 VARTAB	equ	0F6C2H
 STREND	equ	0F6C6H
-DAC	equ	0F7F6H
 ARG	equ	0F847H
 MAXFIL	equ	0F85FH
 FILTAB	equ	0F860H
 NULBUF	equ	0F862H
 PTRFIL	equ	0F864H
 FILNAM	equ	0F866H
-NLONLY	equ	0F87CH
 SAVEND	equ	0F87DH
 HOKVLD	equ	0FB20H
 YFB21	equ	0FB21H			; diskdriver table
 YFB29	equ	0FB29H			; diskdriver interrupt table
 BOTTOM	equ	0FC48H
 HIMEM	equ	0FC4AH
-FLBMEM	equ	0FCAEH
 RUNBNF	equ	0FCBEH
 SAVENT	equ	0FCBFH
-EXPTBL	equ	0FCC1H
 SLTTBL	equ	0FCC5H
-SLTATR	equ	0FCC9H
-SLTWRK	equ	0FD09H
-PROCNM	equ	0FD89H
 DEVICE	equ	0FD99H
 
 H.TIMI	equ	0FD9FH
@@ -4599,7 +4583,7 @@ A410A::	dec	c
 ;BASIC extended statement handler
 
 DRIVER_STAT:
-	ld	ix,DRIVER.OEMSTAT##
+	ld	ix,DRIVER.BASSTAT_ENTRY##
 	ld	a,DV_BANK##
 	call	CALBNK##	;Call first the driver handler...
 	ld	a,(H.GETP+0)
@@ -4771,20 +4755,20 @@ A5967:	inc	hl
 	call	A40B8			; check for and initialize clockchip
 	call	A5C6E			; initialize hooks
 	ld	a,(EXPTBL+0)
-	ld	(RAMAD0),a
-	ld	(RAMAD1),a		; assume no ram available for page 0 and 1
+	ld	(RAMAD0##),a
+	ld	(RAMAD1##),a		; assume no ram available for page 0 and 1
 	call	A5F98
-	ld	(RAMAD2),a		; slotid of current page 2
+	ld	(RAMAD2##),a		; slotid of current page 2
 	call	A5F95
-	ld	(RAMAD3),a		; slotid of current page 3
+	ld	(RAMAD3##),a		; slotid of current page 3
 	ld	c,000H
 	call	A5E52			; search ram in page 0
 	jr	c,A59C1
-	ld	(RAMAD0),a		; found, set ram slotid page 0
+	ld	(RAMAD0##),a		; found, set ram slotid page 0
 A59C1:	ld	c,040H
 	call	A5E52			; search ram in page 1
 	jr	c,A59CB
-	ld	(RAMAD1),a		; found, set ram slotid page 1
+	ld	(RAMAD1##),a		; found, set ram slotid page 1
 A59CB:	ld	sp,0C200H		; switch to a temporary stack, just above temp startbuffer
 	call	TRRAMAD	;ld	a,(H.STKE+0)
 	cp	0C9H			; STKE hook set ?
@@ -4814,7 +4798,7 @@ A59F3:	ld	hl,A5B3A
 	ld	de,08000H
 	rst	020H			; check if ram on both page 3 and 2
 	ret	nz			; nope, start diskbasic
-	ld	hl,RAMAD0
+	ld	hl,RAMAD0##
 	ld	a,(EXPTBL+0)
 	cp	(hl)
 	ret	z			; no ram available on page 0, start diskbasic
@@ -4831,7 +4815,7 @@ A5A11:	XOR	A
 	CALL	A5AE7			; try reading bootsector of drive 0
 	JP	C,A5B3A			; error, start diskbasic
 	LD	(YF346),A		; flag bootable disk
-	LD	A,(RAMAD0)
+	LD	A,(RAMAD0##)
 	LD	H,00H
 	CALL	C64C2			; calculate masks
 	SCF
@@ -5047,7 +5031,7 @@ A5B9C:	xor	a
 ;	Subroutine	start DiskBASIC
 
 A5BA0:	ld	sp,0C200H		; switch to a temporary stack
-	ld	a,(RAMAD2)
+	ld	a,(RAMAD2##)
 	ld	h,080H
 	call	ENASLT			; ram on page 2
 	ld	a,(EXPTBL+0)
@@ -6306,7 +6290,7 @@ I637B:	PUSH	AF
 	CALL	A402D
 	PUSH	AF
 	LD	H,40H
-	LD	A,(RAMAD1)
+	LD	A,(RAMAD1##)
 	CALL	ENASLT
 	POP	AF
 	POP	BC
@@ -6328,7 +6312,7 @@ I637B:	PUSH	AF
 I63A1:	JR	J63A9
 
 ?63A3:	PUSH	AF
-	LD	A,(RAMAD1)
+	LD	A,(RAMAD1##)
 	JR	J63AD
 
 J63A9:	PUSH	AF
@@ -6607,7 +6591,7 @@ C6511:	LD	C,A
 	CP	03H
 	LD	A,C
 	RET	NZ		; not page 0, quit
-	LD	A,(RAMAD0)
+	LD	A,(RAMAD0##)
 	AND	E		; primary slot of the helper routines
 	CP	B		; same as requested ?
 	LD	A,C
@@ -9012,9 +8996,6 @@ MOREFS:
 
 ; CALL FDISK handler.
 
-NEWSTT	equ	04601h
-CALBAS	equ	0159h		;call a BASIC routine in ROM
-
 DO_FDISK:
 	push	hl
 
@@ -9287,7 +9268,7 @@ RD_MEM:
 BASDEV_CHK::
 	ex	af,af'
 	ld	a,DV_BANK##
-	ld	ix,DRIVER.BASDEV##
+	ld	ix,DRIVER.BASDEV_ENTRY##
 	jp	CALBNK##
 
 	;KABR and KDERR stubs, see drv.mac for details

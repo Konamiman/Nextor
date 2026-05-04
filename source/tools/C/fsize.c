@@ -3,8 +3,8 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel fsize.c
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+        crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel fsize.c
    hex2bin -e com fsize.ihx
 */
 
@@ -16,7 +16,8 @@
 #include <ctype.h>
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
+#include "dos_functions.h"
+#include "dos_errors.h"
 
 /* Defines */
 
@@ -47,8 +48,6 @@ const char* strCRLF = "\r\n";
 
 /* Global variables */
 
-byte ASMRUT[4];
-byte OUT_FLAGS;
 Z80_registers regs;
 char* fileName;
 bool isAbsoluteSize;
@@ -81,7 +80,6 @@ int main(char** argv, int argc)
 	byte fileHandle;
 	ulong oldSize;
 
-    ASMRUT[0] = 0xC3;
 	fileName = (char*)0x8000;
 
 	print(strTitle);
@@ -282,6 +280,3 @@ void WriteOneByte(byte fileHandle, byte value)
 }
 
 #define COM_FILE
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"

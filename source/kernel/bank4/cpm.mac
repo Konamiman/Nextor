@@ -6,6 +6,7 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	;RAMMOD		;Removed since now this code is ran from bank 4 of ROM
 ;
 ;-----------------------------------------------------------------------------
@@ -803,7 +804,7 @@ if 0
 		ld	(BK4_ADD##),ix
 		ld	ix,?CALL4##
 		ld	iy,(MASTER_SLOT##-1)
-		jp	CALSLT##
+		jp	CALSLT
 		pop	iy
 endif
 

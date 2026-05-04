@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	RAMMOD
 
 MAXCLUS_FAT12	equ	4084
@@ -38,7 +39,7 @@ MAXCLUS_12BITS	equ	4095
 		ex	(sp),ix
 		ex	de,hl			;HL := address of string
 		ld	a,(ix+UD_SLOT##)	; A := slot address of driver
-		call	RDSLT##
+		call	RDSLT
 		ex	de,hl
 		ex	(sp),ix
 		pop	hl			;If returned string is
@@ -2604,7 +2605,7 @@ _no_ghost:
 
 	;--- End ghost drive check ---
 
-	ld	hl,DRIVER.READ_WRITE##	;HL'=routine address
+	ld	hl,DRIVER.READ_WRITE_ENTRY##	;HL'=routine address
 	exx
 	ld	a,c		;A=required page 2 segment number
 
@@ -2662,16 +2663,16 @@ mc_devcmd_routine:
 	ret
 
 mc_devcmd_remv:
-	ld	hl,DRIVER.DEVICE_QUERY##	;HL'=routine address
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##	;HL'=routine address
 	ld	a,c		;A=required page 2 segment number
 	exx
 
 	ld	c,(ix+UD_DEVICE_NUMBER##)	;A'=Device number
 	ex af,af'
-	ld a,DRIVER.DEVQ_GET_STATUS##
+	ld a,DEVICE_QUERY.GET_STATUS##
 	ex af,af'
 	call	CALL_DRV
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr z,mc_devcmd_notchanged	;Treat "not implemented" as "unchanged"
 	or	a
 	jr	nz,mc_devcmd_idev	;Treat any other error as "invalid device number"
@@ -2732,17 +2733,17 @@ fmt_devcmd_routine:
 	ret
 ;
 fmt_devcmd_fdd:
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ex	af,af'			;A = P2_TPA (page-2 segment)
 	exx				;Switch to main set:
 					; B=choice, DE=bufsize, HL=buffer
 	ld	c,(ix+UD_DEVICE_NUMBER##)
 	ex	af,af'
-	ld	a,DRIVER.DEVQ_DO_FORMAT##
+	ld	a,DEVICE_QUERY.DO_FORMAT##
 	ex	af,af'			;A' = query number
 	call	CALL_DRV
 ;
-	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr	z,fmt_devcmd_ni
 	or	a
 	ret
@@ -2793,12 +2794,12 @@ CALLDRV3:
 ;
 CALDRV_RAMDISK:
 ;    HL = 4000h + cmd_offset (0,3,6,9,12)
-;    Point to jump table entry in bank 0 and dispatch via CALLB0
+;    Point to jump table entry in bank 0 and dispatch via CALLB0##
 ;
 		ld	de,RAMDISK_TABLE-4000h
 		add	hl,de			;HL = RAMDISK_TABLE + cmd_offset
 		ld	(BK4_ADD##),hl		;Store jump table entry address
-		ld	hl,CALLB0_ADDR		;CALLB0 at 403Fh
+		ld	hl,CALLB0##		;CALLB0## at 403Fh
 		jr	CALDRV_NEXT
 ;
 CALDRV_DEVBASED:
@@ -2904,7 +2905,6 @@ CALDRV_RAM:
 		ret				; driver.
 ;
 ;
-CALLB0_ADDR	equ	403Fh
 ;
 ; Jump table for RAM disk driver routines in bank 0.
 ; 3 bytes per entry (jp), at offsets 0, 3, 6, 9, 12.
@@ -3129,7 +3129,7 @@ CALL4_PRESERVE_ALT:
 	ld	(BK4_ADD##),ix
 	ld	ix,C4PBK##
 	ld	iy,(MASTER_SLOT##-1)
-	call	CALSLT##
+	call	CALSLT
 
     exx
     ex af,af'

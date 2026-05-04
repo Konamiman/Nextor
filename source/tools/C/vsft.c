@@ -3,8 +3,8 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+        crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
         vsft.c
    hex2bin -e com vsft.ihx
 */
@@ -19,7 +19,7 @@
 #include "strcmpi.h"
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
+#include "dos_functions.h"
 
 	/* Typedefs */
 
@@ -95,8 +95,6 @@ const char* strCRLF = "\r\n";
 
 	/* Global variables */
 
-byte ASMRUT[4];
-byte OUT_FLAGS;
 Z80_registers regs;
 bool isNextor;
 fatBootSector* Buffer = (fatBootSector*)0x8000;
@@ -137,7 +135,6 @@ void print(char* s);
 
 int main(char** argv, int argc)
 {
-    ASMRUT[0] = 0xC3;
 	print(strTitle);
 
     if(argc == 0) {
@@ -406,7 +403,3 @@ void WritebootSector()
 
 
 #define COM_FILE
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"
-#include "strcmpi.c"

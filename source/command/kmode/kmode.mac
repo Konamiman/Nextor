@@ -302,7 +302,9 @@ NEWSTT	equ	4601h
 ;
 BASIC	equ	4022h
 ;
-DOSFLG	equ	0F346h
+
+	INCLUDE ../../../sdk/asm/constants/driver_workarea.inc
+
 STKTOP	equ	0F674h
 H.ERRO	equ	0FFB1h
 ;

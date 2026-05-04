@@ -68,7 +68,7 @@ NO_PRIMARY:
 	;--- Loop for all devices
 
 	ld	iy,BUF_REG
-	ld  (iy+1),DRIVER.DEVQ_GET_STRING##
+	ld  (iy+1),DEVICE_QUERY.GET_STRING##
 	ld	(iy+2),1	;Device number
 	ld  (iy+5),255	;Buffer size
 	ld	hl,BUF_INFO
@@ -87,7 +87,7 @@ GET_INFO_1:
 	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
-	cp DRIVER.QUERY_INVALID_DEVICE##
+	cp DRIVER.RESULT_INVALID_DEVICE##
 	jp z,DEV_LOOP_NEXT2
 
 	push af
@@ -170,19 +170,19 @@ GET_INFO_4:
 	ld	a,(iy+2)
 	ld	iy,BUF_REG2
 	ld	(iy+2),a
-	ld	(iy+1),DRIVER.DEVQ_GET_PARAMS##
+	ld	(iy+1),DEVICE_QUERY.GET_PARAMS##
 	ld	hl,BUF_INFO
 	ld	(iy+6),l
 	ld	(iy+7),h
 
-	ld	de,DRIVER.DEVICE_QUERY##
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	hl,BUF_REG2
 	call	CALL_DRIVER	
 	push	ix
 	pop	af
 	or	a
 	jr z,GOT_DEV_INFO
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr z,DEFAULT_DEV_INFO
 	jp	DEV_LOOP_NEXT
 
@@ -202,15 +202,15 @@ GOT_DEV_INFO::
 	ld	a,(iy+2)
 	ld	iy,BUF_REG2
 	ld	(iy+2),a
-	ld	(iy+1),DRIVER.DEVQ_GET_AVAILABILITY##
+	ld	(iy+1),DEVICE_QUERY.GET_AVAILABILITY##
 	ld	hl,BUF_REG2
-	ld	de,DRIVER.DEVICE_QUERY##
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
 	call	CALL_DRIVER	
 	push	ix
 	pop	af
 	or	a
 	jr z,GOT_DEVICE_AVAILABILITY
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	ld b,1
 	jr z,GOT_DEVICE_AVAILABILITY
 	jp	DEV_LOOP_NEXT
@@ -379,7 +379,7 @@ DEV_LOOP_NEXT2:
 
 
 CALL_DEV_QUERY:
-	ld	de,DRIVER.DEVICE_QUERY##
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
 	ld b,255
 	ld	hl,BUF_REG
 
@@ -391,7 +391,7 @@ CALL_DRIVER:
 	ld	c,_CDRVR##
 	call	5
 	jr nz,CALL_DRIVER_ERROR
-	cp DRIVER.QUERY_TRUNCATED_STRING##
+	cp DRIVER.RESULT_TRUNCATED_STRING##
 	ret nz
 	xor a
 	ret

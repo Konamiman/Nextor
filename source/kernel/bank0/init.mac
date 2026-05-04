@@ -5,6 +5,8 @@
 	INCLUDE	../condasm.inc
 	INCLUDE ../const.inc
 	INCLUDE ../macros.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
 ;	Conditional assembly switch
 ;
@@ -23,22 +25,13 @@ ESC	equ	1Bh
 ;
 ;	MSX specific constants
 ;
-RDSLT	equ	000Ch		;inter-slot read
-WRSLT	equ	0014h		;inter-slot write
-CALSLT	equ	001Ch		;inter-slot call
-ENASLT	equ	0024h		;enable slot
 OUTDO	equ	0018h		;output a character
-DCOMPR	equ	0020h		;compare HL with DE
 ID_BYTE	equ	002Bh
 VERSION	equ	002Dh
 CHAR_16	equ	0034h
-INTRPT	equ	0038h		;hardware interrupt entry
-CHGET	equ	009Fh		;Get from console
-CHPUT	equ	00A2h
 SNSMAT	equ	0141h		;sense key matrix
 PHYDIO	equ	0144h		;physical disk read/write
 KILBUF	equ	0156h		;flush buffer
-CALBAS	equ	0159h		;call BASIC interpreter routine
 CHGCPU	equ	0180h
 GETCPU	equ	0183h
 ;
@@ -56,7 +49,6 @@ USRTAB	equ	0F39Ah		;!=FCERR ==> ROM appl. /w MSX-DOS2
 endif
 CNSDFG	equ	0F3DEh		;Console display flag
 CURLIN	equ	0F41Ch		;Current line number
-BUF	equ	0F55Eh		;Line input buffer (used as scratch)
 GHO_DRVTBL_PTR	equ	0FD8Eh	;PROCNM+5: DRVTBL pointer saved by ghost setup
 STKTOP	equ	0F674h		;Pointer to bottom of stack
 TXTTAB	equ	0F676h		;Beginning of BASIC text
@@ -66,7 +58,6 @@ MAXFIL	equ	0F85Fh		;Maximum file number
 ;
 			;; RS2IQ equ 0FAF5h
 HOKVLD	equ	0FB20h		;RS2IQ+43 Flag table for "hook valid"
-DRVTBL	equ	0FB21h		;RS2IQ+44 Table of disk driver slots
 HOOKSAV	equ	0FB29h		;RS2IQ+52 Table of disk driver interrupt
 ;
 ;	Definition of hooks
@@ -83,7 +74,6 @@ MAXSEC	equ	0F6ABh		;AUTLIN, used to detect the maximum
 				; sector size within the disk system.
 DISKID	equ	0FD99h		;DEVICE, used to determine who is going
 				; to be the master.
-PROCNM	equ	0FD89h		;Used to avoid duplicate initialization
 ;
 ;	Extended BIOS hooks.
 ;
@@ -594,7 +584,6 @@ CAPST	EQU	0FCABH
 KANAST	EQU	0FCACH
 CLIKSW	EQU	0F3DBH
 KILBUF	EQU	0156H
-CHGET	EQU     09FH
 
     ;Returns A=1 if we have a Russian keyboard, A=0 otherwise
 CHECK_IS_RUSSIAN: ; in case of ZF
@@ -1018,8 +1007,8 @@ INIWRK:
 ;
 	ld	(MAXSEC),bc	;initialize maximum sector size
 ;
-	ld	b,4*2+4*3	;clear DRVTBL and HOOKSAV
-	ld	hl,DRVTBL
+	ld	b,4*2+4*3	;clear DRVTBL## and HOOKSAV
+	ld	hl,DRVTBL##
 CLEAR_HOOKSAV:
 	ld	(hl),a
 	inc	hl
@@ -1147,8 +1136,8 @@ SLAVE:
 ;	There's enough room for additional cartridges and drives
 ;
 	;Temporary work area used:
-	;PROCNM+4: Interrupt flag returned by DRVQ_INIT in B:0
-	;PROCNM+5: Number of required drives, returned by DRVQ_GET_INIT_PARAMS
+	;PROCNM+4: Interrupt flag returned by INIT_ROM query in B:0
+	;PROCNM+5: Number of required drives, returned by GET_INIT_PARAMS_ROM query
 	;PROCNM+7: 1 to boot in DOS 1 mode
 	;PROCNM+8: replacement for DISKID when MSX-DOS kernels are disabled
 	;IN_EMU_MODE: 1 if in disk emulation mode (set by AUTODRV in partit.mac)
@@ -1169,11 +1158,11 @@ BOTTOM_OK:
 	sbc	hl,de	;HL = -DE
 	add	hl,sp
 
-    ld a,DRIVER.DRVQ_GET_INIT_PARAMS##
+    ld a,DRIVER_QUERY.GET_INIT_PARAMS_ROM##
 	call	CALL_DV_INIT
 	or a
 	jr z,GET_DRIVER_INIT_PARAMS_OK
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	ld b,0
 	ld hl,0
 	jr z,GET_DRIVER_INIT_PARAMS_OK
@@ -1219,12 +1208,12 @@ BIGENOUGH:
 	;to actually get the number of drives to allocate.
 	;(We can't call COUNTDRV before finishing the initialization of the driver)
 
-    ld a,DRIVER.DRVQ_INIT##
+    ld a,DRIVER_QUERY.INIT_ROM##
     call CALL_DV_INIT   ;Initialize environment and hardware
 
 	or a
 	jr z,DRIVER_INIT_OK
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr z,DRIVER_INIT_OK
 	ld c,3		;Type 3: "*** Driver initialization failed!"
 	call CALL_PRINT_KERNEL_MSG
@@ -1239,8 +1228,8 @@ DRIVER_INIT_OK:
 	ld	(PROCNM+5),a
 
 	call	VALTBL		;get empty entry again
-	ld	hl,DRVTBL
-	ld	d,0		;[DE] = offset into DRVTBL
+	ld	hl,DRVTBL##
+	ld	d,0		;[DE] = offset into DRVTBL##
 	add	hl,de
 	add	hl,de
 	ex	de,hl		;get it into DE
@@ -1374,7 +1363,7 @@ CLEAN1:
 	ld (SCANKEYS_RAM_BASE),a
 NO_CLEAN_SCANKEYS_RAM:
 
-	; Clean up Nextor 2 kernel entries from DRVTBL and KERNEX
+	; Clean up Nextor 2 kernel entries from DRVTBL## and KERNEX
 	call	CLEAN_V2_KERNELS
 
 	call	GET_DISKID_HL
@@ -1385,10 +1374,10 @@ NO_CLEAN_SCANKEYS_RAM:
 ;
 	ld	d,a		;save number of cartridges
 ;
-	call	VALTBL		;validate the DRVTBL
+	call	VALTBL		;validate the DRVTBL##
 	ld	($NUMDRV##),a	;set number of drives
 ;
-	ld	a,d		;If DISKID and number of DRVTBL entries
+	ld	a,d		;If DISKID and number of DRVTBL## entries
 	sub	e		; differ by one, first cartridge has
 	jr	z,NO_DUMMY	; a dummy driver,
 	dec	a		;Otherwise, both must exactly match.
@@ -1588,17 +1577,17 @@ PAST_DOSINIT:
 ;	set default screen size
 ;
 	ld	hl,PRTTTL+7	;get higher address of INIT??
-	ld	a,(EXPTBL##)
+	ld	a,(EXPTBL)
 	call	RDSLT
 	push	af		;save it
 	inc	sp
 	dec	hl		;get lower address of INIT??
-	ld	a,(EXPTBL##)
+	ld	a,(EXPTBL)
 	call	RDSLT
 	push	af
 	inc	sp
 	pop	ix		;set address
-	ld	iy,(EXPTBL##-1)	;load expanded flag to [IYH]
+	ld	iy,(EXPTBL-1)	;load expanded flag to [IYH]
 	call	CALSLT		;set default screen size
 ;
 	call	PBAS_HOOK
@@ -1824,7 +1813,7 @@ BASIC1:	ld	sp,BOOTAD+512	;set stack pointer to a safe area
 	ld	a,(RAMAD2##)	;enable possible RAM at page-2
 	ld	h,80h
 	call	ENASLT
-	ld	a,(EXPTBL##)	;enable ROM at page-0
+	ld	a,(EXPTBL)	;enable ROM at page-0
 	ld	h,0
 	call	ENASLT
 ;
@@ -1874,7 +1863,7 @@ endif
 	ld	(hl),0E1h	;"POP HL"
 	inc	hl
 	ld	(hl),0C9h	;"RET"
-	ld	a,(EXPTBL##)	;enable ROM at 4000h..7FFFh
+	ld	a,(EXPTBL)	;enable ROM at 4000h..7FFFh
 	ld	h,40h
 	jp	ENASLT
 
@@ -2078,7 +2067,7 @@ endif
 MAPDRV:
 	push	bc
 	ld	(TARGET),a	;Save target drive (0 based)
-	ld	hl,DRVTBL
+	ld	hl,DRVTBL##
 	ld	b,MAXCARD
 MAPDR1:
 	sub	(hl)		;Subtract number of drives assigned
@@ -2102,7 +2091,7 @@ MAPDR2:
 ;
 	public	$MTOFF
 $MTOFF:
-	ld	hl,DRVTBL
+	ld	hl,DRVTBL##
 	ld	b,MAXCARD
 MTOFF_LOOP:
 	inc	hl
@@ -2165,13 +2154,13 @@ TIMI_DOS2_DRV:
 ;
 ;   Call the interrupt routines of drivers attached to MSX-DOS 2 kernels.
 ;   These are the ones that have an entry in HOOKSAV whose slot number matches
-;   the entry with the same index in DRVTBL, thus representing a "my hook" entry
+;   the entry with the same index in DRVTBL##, thus representing a "my hook" entry
 ;   (if the slot number is different then the HOOKSAV entry has been
 ;   set by a driver attached to a MSX-DOS 1 kernel, and in this case
 ;   it represents a "previous hook" entry and the driver itself will call it
 ;   at the end of its own interrupt routine).
 ;
-	ld	de,DRVTBL
+	ld	de,DRVTBL##
 	ld	hl,HOOKSAV
 	ld	b,MAXCARD
 scan_loop:
@@ -2180,13 +2169,13 @@ scan_loop:
 	ret	z		; yes, done
 
 	inc	de
-	ld	a,(de)		;Get slot address from DRVTBL
+	ld	a,(de)		;Get slot address from DRVTBL##
 	inc	de
 	cp	(hl)		; same slot number in equivalent HOOKSAV entry?
 	jr	nz,next_cart	; no, HOOKSAV entry has been set by DOS 1 SETINT
 	ld	a,(hl)		; slot number
 	push	bc		; save count
-	push	de		;  DRVTBL pointer
+	push	de		;  DRVTBL## pointer
 	push	hl		;  HOOKSAV pointer
 	inc	hl
 	ld	e,(hl)
@@ -2310,7 +2299,7 @@ IN_OUT:
 
 CALROM:
 	push	iy
-	ld	iy,(EXPTBL##-1)
+	ld	iy,(EXPTBL-1)
 	call	CALSLT
 	ei			;make sure interrupt is enabled
 	pop	iy
@@ -2407,7 +2396,7 @@ GSLT_SLTTBL:
 	and	00000011b
 	ld	c,a
 	ld	b,0
-	ld	hl,EXPTBL##
+	ld	hl,EXPTBL
 	add	hl,bc		;Look at expanded slot flag
 	bit	7,(hl)		; for this slot and return
 	ret	z		; if slot is not expanded.
@@ -2441,10 +2430,10 @@ SFIRST:	CALLDOS	11h	;;Search for first (FCB)
 ;
 
 SET_DPBS:
-	ld	(de),a		;set number of drives in DRVTBL
+	ld	(de),a		;set number of drives in DRVTBL##
 	inc	de
 	call	GSLOT1##	;get slot address in [A]
-	ld	(de),a		;set slot address in DRVTBL
+	ld	(de),a		;set slot address in DRVTBL##
 	ld	b,0		;[BC] = offset into $DPBLIST
 	ld	hl,$DPBLIST##
 	add	hl,bc		;double since word table
@@ -2521,10 +2510,10 @@ SETDTA:	CALLDOS	1Ah	;Set disk transfer address
 GETDPB:	CALLDOS	1Bh	;Get allocation information
 ;
 ;
-;	Validate DRVTBL
+;	Validate DRVTBL##
 ;
 VALTBL:
-	ld	hl,DRVTBL
+	ld	hl,DRVTBL##
 	ld	b,MAXCARD
 	xor	a
 	ld	e,a
@@ -2700,7 +2689,7 @@ NOCHCPU:
 	;a byte that tells how many entries are in the table.
 
 	;If DOSINIT ran and created a ghost drive, undo the
-	;DRVTBL/$NUMDRV increment that SETUP_GHOST_DOS2 did,
+	;DRVTBL##/$NUMDRV increment that SETUP_GHOST_DOS2 did,
 	;so AUTODRV_DOS1 sees the original drive counts.
 	;GHO_PAIR is page 2 (kernel data), need segment switch.
 	ld	a,(DATA_SEG##)
@@ -2719,7 +2708,7 @@ NOCHCPU:
 	call	C4PBK##
 
 	;SETUP_GHOST_DOS1 updates KERNEX_DOS1 and also
-	;increments DRVTBL/$NUMDRV directly if ghost created.
+	;increments DRVTBL##/$NUMDRV directly if ghost created.
 	ld	ix,SETUP_GHOST_DOS1##
 	ex	af,af'
 	ld	a,6
@@ -2812,7 +2801,7 @@ END_DVB_TBL:
 	pop	hl
 	ld	(KERNEX##),hl
 ;
-	ld	de,DRVTBL
+	ld	de,DRVTBL##
 	ld	hl,HOOKSAV
 	ld	b,MAXCARD
 olddos_0:
@@ -3206,7 +3195,7 @@ GWORK2:
 	or	c
 	ld	c,a
 	ld	b,0
-	ld	ix,SLTWRK##
+	ld	ix,SLTWRK
 	add	ix,bc
 	pop	bc
 	pop	af
@@ -3239,7 +3228,7 @@ CLEAR_STAT_P2:
 clstat_noexp:
 	ld	c,a
 	ld	b,0
-	ld	hl,SLTATR##
+	ld	hl,SLTATR
 	add	hl,bc	;Base address for this slot
 
 	ld	(hl),0	;Clear page 0 bits
@@ -3616,8 +3605,8 @@ DO_LDIR:
 	ldir
 	ret
 
-    ;Call DRVQ_GET_INIT_PARAMS or DRVQ_INIT in my slot.
-    ;Input: A, B, HL = Input for the routine (A = DRVQ_GET_INIT_PARAMS or DRVQ_INIT).
+    ;Call GET_INIT_PARAMS_ROM or INIT_ROM query in my slot.
+    ;Input: A, B, HL = Input for the routine (A = GET_INIT_PARAMS_ROM or INIT_ROM).
 
 CALL_DV_INIT::
     push af
@@ -3630,7 +3619,7 @@ CALL_DV_INIT::
     pop af
 
 CALL_DRIVER_QUERY:
-    ld	ix,DRIVER.DRIVER_QUERY##	;Initialize environment and hardware
+    ld	ix,DRIVER.DRIVER_QUERY_ENTRY##	;Initialize environment and hardware
 
 	;Input: IX = Routine address, other params: input for routine
 CALL_DRIVER:
@@ -3643,25 +3632,25 @@ FOURZEROS:	db	0,0,0,0
 
 ;-----------------------------------------------------------------------------
 ;
-; Remove Nextor 2 kernels from DRVTBL, HOOKSAV and KERNEX tables.
+; Remove Nextor 2 kernels from DRVTBL##, HOOKSAV and KERNEX tables.
 ; Nextor 3 kernels are identified by bit 4 set in their KERNEX entry.
 ; Uses: AF, BC, DE, HL, IX, IY
 
 CLEAN_V2_KERNELS::
 
-	; --- Combined clean+compact of DRVTBL (4 entries, 2 bytes each)
+	; --- Combined clean+compact of DRVTBL## (4 entries, 2 bytes each)
 	;     and HOOKSAV (4 entries, 3 bytes each) in a single pass.
 	;     Also counts removed v2 entries to adjust DISKID.
 
-	ld	hl,DRVTBL		; DRVTBL source
-	ld	de,DRVTBL		; DRVTBL dest
+	ld	hl,	DRVTBL##		; DRVTBL## source
+	ld	de,DRVTBL##		; DRVTBL## dest
 	ld	ix,HOOKSAV		; HOOKSAV source
 	ld	iy,HOOKSAV		; HOOKSAV dest
 	ld	b,4			; Loop counter
 	ld	c,0			; Count of removed v2 entries
 
 CLEAN_COMPACT_LOOP:
-	ld	a,(hl)			; Drive count (first byte of DRVTBL entry)
+	ld	a,(hl)			; Drive count (first byte of DRVTBL## entry)
 	or	a
 	jr	z,CLEAN_COMPACT_SKIP_EMPTY	; Empty entry, skip both tables
 
@@ -3669,9 +3658,9 @@ CLEAN_COMPACT_LOOP:
 	ld	a,(hl)			; Slot address (second byte)
 	dec	hl			; HL back to start of entry
 	and	10001111b		; Mask to get slot + expansion bit
-	push	hl			; Save DRVTBL pointer (GET_KERNEX_ENTRY clobbers HL)
+	push	hl			; Save DRVTBL## pointer (GET_KERNEX_ENTRY clobbers HL)
 	call	GET_KERNEX_ENTRY	; Get KERNEX entry for this slot
-	pop	hl			; Restore DRVTBL pointer
+	pop	hl			; Restore DRVTBL## pointer
 	jr	nz,CLEAN_COMPACT_COPY	; NZ = not in KERNEX, keep it (legacy)
 
 	; It's in KERNEX, check bit 4 for Nextor v3
@@ -3683,7 +3672,7 @@ CLEAN_COMPACT_LOOP:
 	jr	CLEAN_COMPACT_SKIP_ENTRY
 
 CLEAN_COMPACT_COPY:
-	; Copy DRVTBL entry (2 bytes: HL → DE)
+	; Copy DRVTBL## entry (2 bytes: HL → DE)
 	ld	a,(hl)
 	ld	(de),a
 	inc	hl
@@ -3712,7 +3701,7 @@ CLEAN_COMPACT_COPY:
 	jr	CLEAN_COMPACT_FILL
 
 CLEAN_COMPACT_SKIP_ENTRY:
-	; Advance DRVTBL source only (dest stays)
+	; Advance DRVTBL## source only (dest stays)
 	inc	hl
 	inc	hl
 	; Advance HOOKSAV source only (dest stays)
@@ -3723,7 +3712,7 @@ CLEAN_COMPACT_SKIP_ENTRY:
 	jr	CLEAN_COMPACT_FILL
 
 CLEAN_COMPACT_SKIP_EMPTY:
-	; Empty DRVTBL entry: advance source pointers only
+	; Empty DRVTBL## entry: advance source pointers only
 	inc	hl
 	inc	hl
 	inc	ix
@@ -3732,12 +3721,12 @@ CLEAN_COMPACT_SKIP_EMPTY:
 	djnz	CLEAN_COMPACT_LOOP
 
 CLEAN_COMPACT_FILL:
-	; Fill remaining DRVTBL slots with zeros
+	; Fill remaining DRVTBL## slots with zeros
 	push	ix			; Save IX (will need for HOOKSAV bounds check)
 	push	hl
-	ld	hl,DRVTBL+8		; End of DRVTBL
+	ld	hl,	DRVTBL##+8		; End of DRVTBL##
 	or	a			; Clear carry
-	sbc	hl,de			; HL = remaining bytes in DRVTBL
+	sbc	hl,de			; HL = remaining bytes in DRVTBL##
 	ld	a,l
 	pop	hl
 	or	a

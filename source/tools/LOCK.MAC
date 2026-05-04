@@ -28,7 +28,7 @@ START:
 	;--- Get drive letter
 
 	ld	hl,BUF
-	call	CHKL2##
+	call	CHKLET_NOTERM##
 	cp	.IPARM##
 	ld	b,a
 	jp	z,DO_TERM

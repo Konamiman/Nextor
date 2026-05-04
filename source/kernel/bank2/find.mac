@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	RAMMOD
 ;
 ;------------------------------------------------------------------------------
@@ -974,7 +975,7 @@ not_root:	ld	bc,-4			;Point back at start cluster
 		ld	(BK4_ADD##),ix
 		ld	ix,C4PBK##
 		ld	iy,(MASTER_SLOT##-1)
-		call	CALSLT##
+		call	CALSLT
 		ex	af,af'
 		pop af
 		ex af,af'

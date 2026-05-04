@@ -7,9 +7,11 @@
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
 	INCLUDE	../condasm.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 
 MAXDRV	equ	8		;max number of drives supported by disk
-DRVTBL	equ	0FB21h	
+
 
 ;
 ;-----------------------------------------------------------------------------
@@ -93,14 +95,14 @@ DEFMBYTE_SET:
 
 MSXVER	equ	002Dh
 
-		ld	a,(EXPTBL##)
+		ld	a,(EXPTBL)
 		ld	hl,MSXVER
-		call	RDSLT##
+		call	RDSLT
 		cp	3
 		jr	c,NEEDZ80_DONE
 
 		ld	ix,TURBO_VECT##		;Build the table of drivers that need Z80 mode
-		ld	hl,DRVTBL		;enabled to work in Turbo-R, initially
+		ld	hl,DRVTBL##		;enabled to work in Turbo-R, initially
 		ld	b,4			;with the slots of all the legacy drivers found
 NEEDZ80_LOOP:
 		ld	a,(hl)
@@ -181,9 +183,9 @@ copy_done:	pop	hl
 		ex	af,af'			; in downloaded code.
 ;
 		di
-		ld	a,(EXPTBL##)
+		ld	a,(EXPTBL)
 		ld	h,0
-		call	ENASLT##		;Re-enable BIOS ROM in page-0
+		call	ENASLT		;Re-enable BIOS ROM in page-0
 		ld	a,(P2_TPA##)
 		call	PUT_P2##		;Restore original RAM segments
 		ld	a,(P0_TPA##)		; to page-0 and page-2.
@@ -526,7 +528,7 @@ ram_not_exp:
 ;
 ;	+++++  PATCH P0_BIOS SWITCHING ROUTINE & other bits  +++++
 ;
-		ld	a,(EXPTBL##)
+		ld	a,(EXPTBL)
 		and	00000011b		;Patch primary BIOS slot
 		ld	hl,_patch_25+1		; number into P0_BIOS code
 		add	hl,de
@@ -540,7 +542,7 @@ ram_not_exp:
 		add	hl,de
 		ld	(hl),a
 ;
-		ld	a,(EXPTBL##)
+		ld	a,(EXPTBL)
 		bit	7,a			;Skip if BIOS slot is not
 		jr	z,bios_not_exp		; expanded.
 		ld	hl,_patch_20
@@ -738,7 +740,7 @@ _dos_on_off:	push	hl
 		push	de
 		push	bc
 		ld	h,040h			;Enable either the master
-		call	ENASLT##		; cartridge or the RAM slot
+		call	ENASLT		; cartridge or the RAM slot
 		pop	bc			; in page-1.
 		pop	de
 		pop	hl
@@ -767,7 +769,7 @@ _XFER:
 		push	af			; address.
 		ld	a,(RAMAD1##)
 		ld	h,040h
-		call	ENASLT##		;Enable RAM slot in page-1
+		call	ENASLT		;Enable RAM slot in page-1
 		pop	af
 		pop	bc
 		pop	de
@@ -777,7 +779,7 @@ _XFER:
 		push	de
 		push	bc
 		ld	h,040h			;Re-enable the original
-		call	ENASLT##		; slot in page-1.
+		call	ENASLT		; slot in page-1.
 		pop	bc
 		pop	de
 		pop	hl
@@ -802,7 +804,7 @@ _RD_LDIR:
 		push	hl
 		ld	a,b
 		ld	h,040h			;Select required slot into
-		call	ENASLT##		; page-1.
+		call	ENASLT		; page-1.
 ;
 ; Unless we enable interrupt here, interrupt will be disabled for about  105ms
 ; in  the  worst  (full  page  transfer)  case.   This  is  too  much  for the
@@ -820,7 +822,7 @@ write_noswap:	ex	af,af'
 		ldir				;Copy the data
 		ld	a,(MASTER_SLOT##)
 		ld	h,040h			;Restore master disk ROM to
-		call	ENASLT##		; page-1 and return
+		call	ENASLT		; page-1 and return
 		ei
 		ret
 ;
@@ -830,7 +832,7 @@ write_noswap:	ex	af,af'
 _BDOS_JUMP:	ld	(IX_BDOS##),ix	;IX doesn't survive inter-slot call.
 		ld	iy,(MASTER_SLOT##-1)
 		ld	ix,($BDOS##)
-		jp	CALSLT##
+		jp	CALSLT
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -874,7 +876,7 @@ _go_drv_skip1_super_turbo:
 endif
 		ex	af,af'
 ;
-		call	CALSLT##
+		call	CALSLT
 
 if STURBO
 _patch_71:	jr	_go_drv_skip2_super_turbo
@@ -913,14 +915,14 @@ _PROMPT:
 ;
 		ld	iy,(MASTER_SLOT##-1)
 		ld	ix,($PROMPT##)	;Call prompt routine with user hook
-		call	CALSLT##	; active.
+		call	CALSLT	; active.
 ;
 ...	      < call	_PUT_BDOS >
 		pop	af
 ...	      < call	_PUT_P2 >
 		pop	af
 		ld	h,40h
-		call	ENASLT##
+		call	ENASLT
 		pop	de
 		pop	iy
 ;
@@ -1408,7 +1410,7 @@ _U_CALLRAM:
         ld a,iyl
 ...	      < call	_PUT_P1 >
         ex      af,af
-        call    CALSLT##
+        call    CALSLT
         ex      af,af
         pop     af
 ...	      < call	_PUT_P1 >
@@ -1429,12 +1431,12 @@ _U_CALLRAM:
 
 _U_READRAM:
         push ix
-        ld ix,RDSLT##
+        ld ix,RDSLT
         jr _U_RW
 
 _U_WRITERAM:
         push ix
-        ld ix,WRSLT##
+        ld ix,WRSLT
 
 _U_RW:
         push bc

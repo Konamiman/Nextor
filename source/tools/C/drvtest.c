@@ -3,8 +3,8 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel drvtest.c
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+          crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel drvtest.c
    hex2bin -e com drvtest.ihx
 */
 
@@ -17,8 +17,12 @@
 #include <ctype.h>
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
-#include "system.h"
+#include "dos_functions.h"
+#include "drivers.h"
+#include "driver_routines.h"
+#include "driver_driver_queries.h"
+#include "driver_device_queries.h"
+#include "driver_result_codes.h"
 
 
 /* Defines */
@@ -27,7 +31,6 @@
 #define REGS_BUFFER ((int*)0x8100)
 #define STRING_BUFFER_ADDRESS 0x8200
 #define STRING_BUFFER ((byte*)STRING_BUFFER_ADDRESS)
-#define DEV_PARAMS ((deviceInfo*)STRING_BUFFER_ADDRESS)
 #define deviceInfoBuffer ((deviceParams*)STRING_BUFFER_ADDRESS)
 
 
@@ -36,15 +39,13 @@
 #define PrintNewLine() print(strCRLF)
 #define InvalidParameter() Terminate(strInvParam)
 #define DoDosCall(functionCode) DosCall(functionCode, &regs, REGS_ALL, REGS_ALL)
-#define DriverQuery(queryIndex) ((regs.Bytes.A = queryIndex), CallDriver(DRIVER_QUERY))
-#define DeviceQuery(queryIndex) (regs.Bytes.A = queryIndex, regs.Bytes.C = deviceNumber, CallDriver(DEVICE_QUERY))
+#define DriverQuery(queryIndex) ((regs.Bytes.A = queryIndex), CallDriver(DRIVER_DRIVER_QUERY_ENTRY))
+#define DeviceQuery(queryIndex) (regs.Bytes.A = queryIndex, regs.Bytes.C = deviceNumber, CallDriver(DRIVER_DEVICE_QUERY_ENTRY))
 
 
 /* Global variables */
 
 Z80_registers regs;
-byte ASMRUT[4];
-byte OUT_FLAGS;
 byte slotNumber;
 byte maxStringLength;
 byte deviceNumber;
@@ -83,7 +84,7 @@ char* YesOrNo(bool condition);
 
 const char* strTitle=
     "Nextor driver test tool v1.0\r\n"
-    "(tests the DRIVER_QUERY and DEVICE_QUERY routines)\r\n"
+    "(tests the DRIVER_DRIVER_QUERY_ENTRY and DRIVER_DEVICE_QUERY_ENTRY routines)\r\n"
     "By Konamiman, 9/2023\r\n"
     "\r\n";
     
@@ -120,7 +121,6 @@ const char* strNoNextor = "Not a Nextor driver";
 
 int main(char** argv, int argc)
 {
-    ASMRUT[0] = 0xC3;
 	print(strTitle);
 
     if(argc == 0) {
@@ -287,15 +287,15 @@ bool CallDriver(int routineAddress)
     regs.Words.AF = regs.Words.IX;
     lastDriverError = regs.Bytes.A;
 
-    if(lastDriverError == ERR_QUERY_INVALID_DEVICE) {
+    if(lastDriverError == DRIVER_RESULT_INVALID_DEVICE) {
         print("  *** Error: Invalid device number\r\n");
         return false;
     }
-    else if(lastDriverError == ERR_QUERY_NOT_IMPLEMENTED) {
+    else if(lastDriverError == DRIVER_RESULT_NOT_IMPLEMENTED) {
         print("  *** Error: Query not implemented\r\n");
         return false;
     }
-    else if(lastDriverError != ERR_QUERY_OK && regs.Bytes.A != ERR_QUERY_TRUNCATED_STRING) {
+    else if(lastDriverError != DRIVER_RESULT_OK && regs.Bytes.A != DRIVER_RESULT_TRUNCATED_STRING) {
         printf("  *** Error: %d\r\n", regs.Bytes.A);
         return false;
     }
@@ -306,7 +306,7 @@ bool CallDriver(int routineAddress)
 
 void PrintStringFromDriver(char* title, char* address)
 {
-    if(lastDriverError == ERR_QUERY_TRUNCATED_STRING) {
+    if(lastDriverError == DRIVER_RESULT_TRUNCATED_STRING) {
         printf("  %s (truncated): %s\r\n", title, address);
     }
     else {
@@ -318,7 +318,7 @@ void PrintStringFromDriver(char* title, char* address)
 void DoDriverQueries()
 {
     print("Driver query: get version number\r\n");
-    success = DriverQuery(DRVQ_GET_VERSION);
+    success = DriverQuery(DRIVER_QUERY_GET_VERSION);
     if(success) {
         printf("  Version: %d.%d.%d\r\n", regs.Bytes.B, regs.Bytes.C, regs.Bytes.D);
     }
@@ -360,7 +360,7 @@ void DoGetDriverInitParamsQuery(bool reducedDriveCount)
     regs.Bytes.B = reducedDriveCount ? 0x20 : 0;
     regs.Words.DE = (int)&PrintChar;
     bufferIndex = 0;
-    success = DriverQuery(DRVQ_GET_INIT_PARAMS);
+    success = DriverQuery(DRIVER_QUERY_GET_INIT_PARAMS_ROM);
     MaybePrintStringBuffer();
     if(success) {
         printf("  Hook timer interrupt: %s\r\n", regs.Bytes.B & 1 ? "YES" : "NO");
@@ -389,7 +389,7 @@ void DoDriverInitQuery(bool reducedDriveCount)
     regs.Bytes.C = reducedDriveCount ? 0x20 : 0;
     regs.Words.DE = (int)&PrintChar;
     bufferIndex = 0;
-    success = DriverQuery(DRVQ_INIT_DRIVER);
+    success = DriverQuery(DRIVER_QUERY_INIT_ROM);
     MaybePrintStringBuffer();
 
     if(success && bufferIndex == 0) {
@@ -434,7 +434,7 @@ void GetDriverName(byte nameIndex)
     regs.Bytes.B = nameIndex;
     regs.Bytes.D = maxStringLength;
     regs.Words.HL = (int)BUFFER;
-    success = DriverQuery(DRVQ_GET_INFO_STRING);
+    success = DriverQuery(DRIVER_QUERY_GET_STRING);
     if(success) {
         PrintStringFromDriver("Name", BUFFER);
     }
@@ -446,7 +446,7 @@ void GetDeviceInfo(byte infoIndex)
     regs.Bytes.B = infoIndex;
     regs.Bytes.D = maxStringLength;
     regs.Words.HL = (int)BUFFER;
-    success = DeviceQuery(DEVQ_GET_STRING);
+    success = DeviceQuery(DEVICE_QUERY_GET_STRING);
     if(success) {
         PrintStringFromDriver("Value", BUFFER);
     }
@@ -471,7 +471,7 @@ void DoDeviceQueries()
 
     print("\r\nDevice query: get device parameters\r\n");
     regs.Words.HL = (int)deviceInfoBuffer;
-    success = DeviceQuery(DEVQ_GET_PARAMS);
+    success = DeviceQuery(DEVICE_QUERY_GET_PARAMS);
     if(success) {
         print("  Medium type:  ");
         switch(deviceInfoBuffer->mediumType) {
@@ -503,7 +503,7 @@ void DoDeviceQueries()
 
     if(invokeGetDeviceStatus) {
         print("\r\nDevice query: get device status\r\n");
-        success = DeviceQuery(DEVQ_GET_STATUS);
+        success = DeviceQuery(DEVICE_QUERY_GET_STATUS);
         if(success) {
             printf("  Status: ");
             switch(regs.Bytes.B) {
@@ -526,7 +526,7 @@ void DoDeviceQueries()
     }
 
     print("\r\nDevice query: get device availability\r\n");
-    success = DeviceQuery(DEVQ_GET_AVAILABILITY);
+    success = DeviceQuery(DEVICE_QUERY_GET_AVAILABILITY);
     if(success) {
         printf("  Available: ");
         switch(regs.Bytes.B) {
@@ -550,6 +550,3 @@ char* YesOrNo(bool condition)
 
 #define COM_FILE
 #define SUPPORT_LONG
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"

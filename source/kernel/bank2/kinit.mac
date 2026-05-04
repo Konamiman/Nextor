@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	RAMMOD
 ;
 ;-----------------------------------------------------------------------------
@@ -634,7 +635,7 @@ kbdos_fn_ok:	ex	af,af'
 		ld	c,a	
 		ld	ix,C4PBK##
 		ld	iy,(MASTER_SLOT##-1)
-		jp	CALSLT##
+		jp	CALSLT
 
 no_bank1:	ex	af,af'
 		ld	iy,RAM_BASE##		;Setup RAM addressability

@@ -12,7 +12,6 @@
 ;  Local EQUs
 ;-----------------------------------------------------------------------------
 
-CALDRV_ADDR:	equ	4048h
 CALSLT:		equ	001Ch
 
 BUF:		equ	0F55Eh
@@ -101,16 +100,16 @@ PKM_INIT_80:
 PKM_INIT_QUERY:
 	;Query driver name via CALSLT + CALDRV
 	pop bc
-	ld hl,DRIVER.DRIVER_QUERY##
+	ld hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld (BK4_ADD##),hl
 	push bc
 	pop iy			;IYh = slot for CALSLT
 
-	ld a,DRIVER.DRVQ_GET_STRING##
-	ld b,DRIVER.DRVQ_STR_DRIVER_NAME##
+	ld a,DRIVER_QUERY.GET_STRING##
+	ld b,DRIVER_QUERY.STR_DRIVER_NAME##
 	;D already set (33 or 32)
 	ld hl,BUF
-	ld ix,CALDRV_ADDR
+	ld ix,CALDRV##
 	call CALSLT
 	ei
 
@@ -118,7 +117,7 @@ PKM_INIT_QUERY:
 	ld de,BUF
 	or a
 	jr z,PKM_PRINT_NAME
-	cp DRIVER.QUERY_TRUNCATED_STRING##
+	cp DRIVER.RESULT_TRUNCATED_STRING##
 	jr z,PKM_TRUNCATED
 	ld de,STR_UNNAMED_DRIVER
 	jr PKM_PRINT_NAME

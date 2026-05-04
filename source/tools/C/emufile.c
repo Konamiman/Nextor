@@ -3,8 +3,8 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-          --no-std-crt0 crt0_msxdos_advanced.rel emufile.c
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+          crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel strcmpi.rel emufile.c
    hex2bin -e com emufile.ihx
 */
 
@@ -16,10 +16,19 @@
 #include <ctype.h>
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
-#include "system.h"
+#include "data_structures.h"
+#include "dos_functions.h"
+#include "dos_errors.h"
+#include "drivers.h"
+#include "driver_routines.h"
+#include "msx_bios.h"
+#include "msx_workarea.h"
 #include "partit.h"
 #include "strcmpi.h"
+
+/* Nextor 2 legacy driver DEV_RW entry point address (this tool dispatches
+   on isNextor3 to choose between DRIVER_READ_WRITE_ENTRY and this). */
+#define NEXTOR2_DEV_RW 0x4160
 
 	/* Typedefs */
 
@@ -113,8 +122,6 @@ const char* emuDataSignature = "NEXTOR_EMU_DATA";
 /* Global variables */
 
 Z80_registers regs;
-byte ASMRUT[4];
-byte OUT_FLAGS;
 void* mallocPointer;
 char* outputFileName;
 int bootFileIndex;
@@ -188,7 +195,6 @@ int main(char** argv, int argc)
 {
     bool isSetupFile;
 
-    ASMRUT[0] = 0xC3;
 	print(strTitle);
 
     CheckPreconditions();
@@ -486,7 +492,7 @@ void StartSearchingFiles(char* fileName)
 bool DirectoryExists(char* dirName)
 {
     regs.Words.DE = (int)dirName;
-    regs.Bytes.B = FILEATTR_DIRECTORY;
+    regs.Bytes.B = ATTR_SUB_DIR;
     regs.Words.IX = (int)fib;
     
     DosCall(_FFIRST, &regs, REGS_ALL, REGS_ALL);
@@ -495,7 +501,7 @@ bool DirectoryExists(char* dirName)
     if(regs.Bytes.A != 0)
         TerminateWithDosError(regs.Bytes.A);
 
-    return (fib->attributes & FILEATTR_DIRECTORY) != 0;
+    return (fib->attributes & ATTR_SUB_DIR) != 0;
 }
 
 void ProcessFileFound()
@@ -793,7 +799,7 @@ byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sect
 	regs.Words.HL = (int)buffer;
 	regs.Words.DE = (int)&sectorNumber;
 
-	DriverCall(driverSlot, isNextor3 ? READ_WRITE : DEV_RW);
+	DriverCall(driverSlot, isNextor3 ? DRIVER_READ_WRITE_ENTRY : NEXTOR2_DEV_RW);
 	return regs.Bytes.A;
 }
 
@@ -906,7 +912,3 @@ void DoDosCall(byte functionCode)
 }
 
 #define COM_FILE
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"
-#include "strcmpi.c"

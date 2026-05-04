@@ -1,7 +1,7 @@
 #ifndef __DRIVERCALL_H
 #define __DRIVERCALL_H
 
-#include "../../tools/C/types.h"
+#include "types.h"
 
 void DriverCall(byte slot, byte segment, uint routineAddress);
 void DosCall(byte function, Z80_registers* regs, register_usage inRegistersDetail, register_usage outRegistersDetail);

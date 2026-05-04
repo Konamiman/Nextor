@@ -6,43 +6,10 @@
 ;
 	INCLUDE	macros.inc
 	INCLUDE	const.inc
-;
-;-----------------------------------------------------------------------------
-;
-spare	macro	size
-ram_ad	 defl	 ram_ad+(size)
-	endm
-;
-var	macro	name,size,fixed
-	 if1
-	  ifnb	 <fixed>
-	   if	  ram_ad ne x'&fixed'
-	    .radix  16
-	    pr_hex  <name address is>,%ram_ad
-	    .radix  10
-	   endif
-	  endif
-	 endif
-	 const	 name,ram_ad
-ram_ad	 defl	 ram_ad+(size)
-	endm
-;
-var0	macro	name,fixed
-	 var	 name,0,fixed
-	endm
-;
-var1	macro	name,fixed
-	 var	 name,1,fixed
-	endm
-;
-var2	macro	name,fixed
-	 var	 name,2,fixed
-	endm
-;
-var3	macro	name,fixed
-	 var	 name,3,fixed
-	endm
-;
+
+	;Variable layout macros (var / var0 / var1 / var2 / var3 / spare).
+	INCLUDE ../../sdk/asm/macros/var.inc
+
 ;-----------------------------------------------------------------------------
 ;
 	const	DATABASE,0F1C9h
@@ -375,10 +342,11 @@ ram_ad	defl	DATABASE
 ; particular  the  RAM segment versions can alter page-0 successfully, but the
 ; BIOS ROM version can only alter page-0 between the BIOS ROM and the SUB-ROM.
 ;
-	const	RDSLT,  000Ch		;Read from slot
-	const	WRSLT,  0014h		;Write to slot
-	const	CALSLT, 001Ch		;Inter-slot call
-	const	ENASLT, 0024h		;Enable slot
+	;Driver-relevant MSX BIOS routine addresses (RDSLT, WRSLT, CALSLT,
+	;ENASLT, CHGET, CHPUT) live in the SDK file msx_bios.inc, which is
+	;included directly by the kernel files that use them so the symbols
+	;are local equs rather than externally-resolved publics.
+
 	const	ID_BYTE,002Bh		;Only in MSX BIOS ROM
 	const	CALLF,  0030h		;Inter-slot call
 	const	LOAD_FLAG,0037h		;Only in TAP segment
@@ -427,10 +395,12 @@ ram_ad	defl	DATABASE
 
 	const	GSLOT1,402Dh
 	const	RDBANK,403Ch
-	const	CALBAS,403Fh
+	const	CALLB0,403Fh
 	const	CALBNK,4042h
 	const	GWORK,4045h
 	const	CALDRV,4048h
+	const	CALLB0_IX_IY,404Bh
+	const	NXT3_SIGNATURE,407Bh
 
 ;-----------------------------------------------------------------------------
 ;
@@ -445,14 +415,8 @@ ram_ad	defl	DATABASE
 	const	INTFLG,0FC9Bh		;ctrl-STOP flag
 	const	ESCCNT,0FCA7h		;Escape sequence counter
 ;
-	const	EXPTBL,0FCC1h		;Expanded slot flags
 	const	SLTTBL,0FCC5h		;Secondary slot register images
-	const	SLTATR,0FCC9h		;Attributes for each slot
-	const	SLTWRK,0FD09h		;Work area address for each slot
-;
-	const	KBUF,  0F41Fh		;\  Buffer space in main MSX work
-	const	BUF,   0F55Eh		; > area.  May or may not use this
-					;/  depending where it is used.
+	const	KBUF,  0F41Fh		;Buffer space in main MSX work area
 ;
 ;	MAP_SCAN temporary scratch.  Copied later to real locations.
 ;
@@ -517,47 +481,20 @@ ram_ad	defl	4100h
 ;
 	module DRIVER
 
-	ram_ad	defl	4100h
+	INCLUDE ../../sdk/asm/constants/driver_routines.inc
+	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
 
-	var SIGNATURE,16
-	var3	TIMER_INT
-	var3	OEMSTAT
-	var3	BASDEV
-	var3	EXTBIO
-	var3	DIRECT_0
-	var3	DIRECT_1
-	var3	DIRECT_2
-	var3	DIRECT_3
-	var3	DIRECT_4
-	var3	DRIVER_QUERY
-	var3	DEVICE_QUERY
-	var3	CUSTOM_DRIVER_QUERY
-	var3	CUSTOM_DEVICE_QUERY
-	var3	READ_WRITE
+	endmod
 
-	const QUERY_OK,0
-	const QUERY_TRUNCATED_STRING,1
-	const QUERY_INVALID_DEVICE,2
-	const QUERY_NOT_IMPLEMENTED,255
-	const QUERY_INIT_ERROR,1
+	module DRIVER_QUERY
 
-	const DRVQ_GET_VERSION,1
-	const DRVQ_GET_STRING,2
-	const DRVQ_GET_INIT_PARAMS,3
-	const DRVQ_INIT,4
-	const DRVQ_GET_MAX_DEVICE,5
-	const DRVQ_INIT_RAM,6
-	const DRVQ_SHUTDOWN_RAM,7
+	INCLUDE ../../sdk/asm/constants/driver_driver_queries.inc
 
-	const DRVQ_STR_DRIVER_NAME,1
+	endmod
 
-	const DEVQ_GET_STRING,1
-	const DEVQ_GET_PARAMS,2
-	const DEVQ_GET_STATUS,3
-	const DEVQ_GET_AVAILABILITY,4
-	const DEVQ_GET_FORMAT_CHOICES,5
-	const DEVQ_DO_FORMAT,6
-	const DEVQ_STOP_MOTOR,7
+	module DEVICE_QUERY
+
+	INCLUDE ../../sdk/asm/constants/driver_device_queries.inc
 
 	endmod
 

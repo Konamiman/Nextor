@@ -5,24 +5,12 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE ../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
+	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
 ;
 
-BUF	equ	0F55Eh
-PROCNM	equ	0FD89h
-CALLB0	equ	403Fh
 CALBNK_ADDR	equ	4042h
-
-; BASIC ROM EQUs
-CALBAS	equ	0159h
-GETBYT	equ	521Ch
-CHRGTR	equ	4666h
-FRMEVL	equ	4C64h
-FRESTR	equ	67D0h
-FRMQNT	equ	542Fh
-NLONLY	equ	0F87Ch
-FLBMEM	equ	0FCAEh
-VALTYP	equ	0F663h
-DAC	equ	0F7F6h
 
 
 ;=============================================================================
@@ -38,7 +26,7 @@ DAC	equ	0F7F6h
 BASIC_ROUT6:
 	ld	iy,CALBAS
 	ld	(BK4_ADD##),iy
-	call	CALLB0
+	call	CALLB0##
 	ei
 	ret
 
@@ -97,7 +85,7 @@ BASIC_DOS6_1:
 	pop	af
 	ld	ix,0F37Dh
 	ld	(BK4_ADD##),ix
-	call	CALLB0
+	call	CALLB0##
 	or	a
 	ret	z
 
@@ -117,7 +105,7 @@ BASIC_DOS6_1:
 BASIC_DOS6_NE:
 	ld	ix,0F37Dh
 	ld	(BK4_ADD##),ix
-	jp	CALLB0
+	jp	CALLB0##
 
 
 ; Try to extract ',' or ')' from BASIC text,
@@ -194,7 +182,7 @@ UDRV_FLAGS	equ	PROCNM+2
 	and	11b
 	ld	c,a
 	ld	b,0
-	ld	ix,EXPTBL##
+	ld	ix,EXPTBL
 	add	ix,bc
 	ld	a,(ix)
 	and	10000000b
@@ -844,8 +832,8 @@ UDRV_OK_MSG:
 	db	0FDh,67h	;ld IYh,A
 	ld	a,(IDRV_SEG)
 	db	0FDh,6Fh	;ld IYl,A
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld	a,DRIVER.DRVQ_GET_MAX_DEVICE##
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	ld	a,DRIVER_QUERY.GET_MAX_DEVICE##
 	call	CALL_MAP##
 	or	a
 	jr	z,IAM_GOTMAX
@@ -867,8 +855,8 @@ IAM_DEVLOOP:
 	db	0FDh,67h	;ld IYh,A
 	ld	a,(IDRV_SEG)
 	db	0FDh,6Fh	;ld IYl,A
-	ld	ix,DRIVER.DEVICE_QUERY##
-	ld	a,DRIVER.DEVQ_GET_PARAMS##
+	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	a,DEVICE_QUERY.GET_PARAMS##
 	ld	hl,($SECBUF##)
 	call	CALL_MAP##
 
@@ -959,7 +947,7 @@ IAM_UTFOUND:
 	ld	c,_MAPDRV##
 	ld	ix,0F37Dh
 	ld	(BK4_ADD##),ix
-	call	CALLB0
+	call	CALLB0##
 	pop	bc		;Restore C = drive
 
 	or	a
@@ -983,14 +971,14 @@ IAM_UTFOUND:
 
 	pop	bc
 	ld	a,(BUF+11)
-	ld	c,a		;C = device number for DEVQ_GET_STRING
+	ld	c,a		;C = device number for GET_STRING query
 
 	ld	a,(IDRV_SLOT)
 	db	0FDh,67h	;ld IYh,A
 	ld	a,(IDRV_SEG)
 	db	0FDh,6Fh	;ld IYl,A
-	ld	ix,DRIVER.DEVICE_QUERY##
-	ld	a,DRIVER.DEVQ_GET_STRING##
+	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	a,DEVICE_QUERY.GET_STRING##
 	ld	b,4		;B = string type 4 (device name)
 	ld	d,32		;D = max length
 	ld	hl,($SECBUF##)

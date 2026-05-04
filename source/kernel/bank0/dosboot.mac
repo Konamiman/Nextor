@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -38,7 +39,7 @@ TRYBOOT::	ld	b,a
 ;
 		ld	a,(RAMAD3##)
 		ld	h,80h			;Enable RAM slot in page-2
-		call	ENASLT##
+		call	ENASLT
 		call	P0_RAM##		;Enable RAM slot in page-0
 ;
 		ld	hl,0			;Zero the bottom 256 bytes
@@ -98,10 +99,10 @@ setup_cmd_loop:	ld	a,(hl)			; by HL to the buffer at
 		ret
 ;
 ;
-JUMP_TABLE:	dw	RDSLT##,   $RDSLT##	;Jumps in page-0
-		dw	WRSLT##,   $WRSLT##
-		dw	CALSLT##,  $CALSLT##
-		dw	ENASLT##,  $ENASLT##
+JUMP_TABLE:	dw	RDSLT,   $RDSLT##	;Jumps in page-0
+		dw	WRSLT,   $WRSLT##
+		dw	CALSLT,  $CALSLT##
+		dw	ENASLT,  $ENASLT##
 		dw	CALLF##,   $CALLF##
 		dw	INTRPT##,  $IRQ##
 		dw	0

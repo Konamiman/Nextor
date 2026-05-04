@@ -13,7 +13,6 @@
 ;
 ;-----------------------------------------------------------------------------
 ;
-CALBAS		equ	0159h
 PPI.AR		equ	0A8h		;PPI Port A data read
 
 
@@ -120,7 +119,7 @@ CALDRV:
 ;
 		jp	BIOS_IN##	;Version 1 compatible $IN entry
 
-NXT3_SIGNATURE::
+NXT3_SIGNATURE:
 		db "NXT3",0		;407Bh - Signature for Nextor 3.0+ ROMs
 		defs	ROMST+80h-$,0FFh
 
@@ -194,7 +193,7 @@ CALLB0_CMN:	ld	ix,(BK4_ADD##)
 
 DV_TIRQ::	ex	af,af'
 		ld	a,DV_BANK##
-		ld	ix,DRIVER.TIMER_INT##
+		ld	ix,DRIVER.TIMI_ENTRY##
 
 CALBNK:		exx
 		ld	e,a

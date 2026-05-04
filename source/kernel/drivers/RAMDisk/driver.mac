@@ -35,11 +35,7 @@
 
 ;--- Constants
 
-QUERY_OK:		equ	0
-QUERY_TRUNCATED_STRING:	equ	1
-QUERY_INVALID_DEVICE:	equ	2
-QUERY_NOT_IMPLEMENTED:	equ	255
-QUERY_INIT_ERROR:	equ	1
+	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
 
 DATA_START:	equ	4800h	;Start of data area in segment
 TOTAL_SECTORS:	equ	28	;Total sectors in the disk
@@ -51,19 +47,11 @@ _DISK:		equ	0F0h	;General disk error
 
 ARG:    equ     0F847h
 
-CALSLT:		equ	001Ch
-CALBAS:		equ	0159h
-BK4_ADD:		equ	0F1D0h
-TMP_IX:		equ	0F1D2h
-TMP_IY:		equ	0F1D4h
-PROCNM:		equ	0FD89h
-VALTYP:		equ	0F663h
-MASTER_SLOT:	equ	0F348h
-FRMEVL:		equ	4C64h
-FRESTR:		equ	67D0h
-CALLB0_IX_IY:	equ	404Bh
-
-NEWSTT: equ     4601h
+	INCLUDE ../../../../sdk/asm/constants/driver_workarea.inc
+	INCLUDE ../../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../../sdk/asm/constants/msx_workarea.inc
+	INCLUDE ../../../../sdk/asm/constants/msx_basic.inc
+	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
 
 
 ;*********************
@@ -229,9 +217,9 @@ DRIVER_QUERY:
 	dec	a
 	jp	z,DO_DRVQ_GET_STRING
 	dec	a
-	jr	z,DQ_NOT_IMPL		;DRVQ_GET_INIT_PARAMS: not used for RAM drivers
+	jr	z,DQ_NOT_IMPL		;GET_INIT_PARAMS_ROM query: not used for RAM drivers
 	dec	a
-	jr	z,DQ_NOT_IMPL		;DRVQ_INIT: not used for RAM drivers
+	jr	z,DQ_NOT_IMPL		;INIT_ROM query: not used for RAM drivers
 	dec	a
 	jp	z,DO_DRVQ_GET_MAX_DEVICE
 	dec	a
@@ -239,7 +227,7 @@ DRIVER_QUERY:
 	dec	a
 	jp	z,DO_DRVQ_SHUTDOWN_RAM
 DQ_NOT_IMPL:
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -270,7 +258,7 @@ DO_DRVQ_GET_STRING:
 	dec	a
 	ld	hl,STR_HW_AUTHOR
 	jp	z,OUTPUT_STRING
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -286,7 +274,7 @@ DO_DRVQ_GET_MAX_DEVICE:
 ;    Input: DE = print routine address
 ;           B  = RAM slot number where the driver is located
 ;           C  = RAM segment number where the driver is located
-;   Output: A = QUERY_OK or QUERY_INIT_ERROR
+;   Output: A = RESULT_OK or RESULT_INIT_ERROR
 ;           B = flags (bit 0 = timer hook requested)
 
 MY_SEGMENT: equ 40FEh
@@ -357,7 +345,7 @@ INDEX_OK:
 	call	PRINT_WITH_DE
 	ld a,1
 	ld (TIMER_CNT),a
-	xor	a		;QUERY_OK
+	xor	a		;RESULT_OK
 	ld (TIMER_STAT),a
 	ld b,3 ;Request timer interrupt + EXTBIO handling
 	ret
@@ -368,7 +356,7 @@ INDEX_OK:
 DO_DRVQ_SHUTDOWN_RAM:
 	ld	hl,STR_SHUTDOWN
 	call	PRINT_WITH_DE
-	xor	a		;QUERY_OK
+	xor	a		;RESULT_OK
 	ret
 
 
@@ -604,18 +592,18 @@ DEVICE_QUERY:
 	jp	z,DO_DEVQ_GET_STATUS
 	dec	a
 	jp	z,DO_DEVQ_GET_AVAILABILITY
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
 ;--- Check device number: must be 1
 ;    Input: C = device number (1-based)
-;    Output: A = 0 and Z if valid, A = QUERY_INVALID_DEVICE and NZ if not
+;    Output: A = 0 and Z if valid, A = RESULT_INVALID_DEVICE and NZ if not
 
 CHECK_DEVICE:
 	ld	a,c
 	dec	a
-	ld	a,QUERY_INVALID_DEVICE
+	ld	a,RESULT_INVALID_DEVICE
 	ret	nz
 	xor	a
 	ret
@@ -634,7 +622,7 @@ DO_DEVQ_GET_STRING:
 	jp	z,OUTPUT_STRING
 	cp	4		;Device name
 	jp	z,OUTPUT_STRING
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -700,7 +688,7 @@ DO_DEVQ_GET_AVAILABILITY:
 
 CUSTOM_DRIVER_QUERY:
 CUSTOM_DEVICE_QUERY:
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -838,7 +826,7 @@ RW_DIR:	db	0		;0 = read, 1 = write
 
 ;--- Copy string with length limit
 ;    Input: HL = source (zero-terminated), DE = dest, B = max length
-;    Output: A = QUERY_OK or QUERY_TRUNCATED_STRING
+;    Output: A = RESULT_OK or RESULT_TRUNCATED_STRING
 
 OUTPUT_STRING:
 	ld	a,b
@@ -849,7 +837,7 @@ OUTPUT_STRING_LOOP:
 	ld	a,(hl)
 	or	a
 	ld	(de),a
-	ret	z		;A=0=QUERY_OK
+	ret	z		;A=0=RESULT_OK
 
 	inc	hl
 	inc	de
@@ -858,7 +846,7 @@ OUTPUT_STRING_LOOP:
 	dec	de
 	xor	a
 	ld	(de),a
-	ld	a,QUERY_TRUNCATED_STRING
+	ld	a,RESULT_TRUNCATED_STRING
 	ret
 
 

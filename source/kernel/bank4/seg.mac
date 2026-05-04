@@ -6,6 +6,7 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 	;RAMMOD		;Removed since now this code is ran from bank 4 of ROM
 ;
 P0_REG		equ	0FCh
@@ -67,7 +68,7 @@ not_type_010:
 ;    *****  TRY EVERY SLOT EXCEPT SPECIFIED ONE FOR ALL TYPES  *****
 ;
 		xor	a
-		ld	hl,EXPTBL##
+		ld	hl,EXPTBL
 all_pri_loop:	bit	7,(hl)			;Set expanded slot flag in A
 		jr	z,all_not_exp		; if this slot is expanded.
 		set	7,a

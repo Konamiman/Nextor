@@ -210,28 +210,8 @@
 ;
 ;=============================================================================
 
-;--- Query result codes
-
-QUERY_OK: equ 0
-QUERY_TRUNCATED_STRING: equ 1
-QUERY_INVALID_DEVICE: equ 2
-QUERY_INIT_ERROR: equ 3
-QUERY_NOT_IMPLEMENTED: equ 0FFh
-
-;--- MSX-DOS error codes for read/write operations
-
-_NCOMP:	equ	0FFh
-_WRERR:	equ	0FEh
-_DISK:	equ	0FDh
-_NRDY:	equ	0FCh
-_DATA:	equ	0FAh
-_RNF:	equ	0F9h
-_WPROT:	equ	0F8h
-_UFORM:	equ	0F7h
-_SEEK:	equ	0F3h
-_IFORM:	equ	0F0h
-_IDEVN:	equ	0B5h
-_IPARM:	equ	08Bh
+	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
+	INCLUDE ../../../../sdk/asm/constants/dos_errors.inc
 
 ;--- TC8566AF FDC registers (memory-mapped in slot 3-2)
 
@@ -249,8 +229,12 @@ S1990:	equ	7FF1h		;bit 4 = ~DC0, bit 5 = ~DC1
 ;    BIOS-compatible trampolines at the standard entry points (see kinit.mac).
 ;    So RDSLT at 000Ch and WRSLT at 0014h work in both ROM and RAM variants.
 
-RDSLT:	equ	000Ch		;Read byte from slot: A=slot,HL=addr -> A=byte
-WRSLT:	equ	0014h		;Write byte to slot: A=slot,HL=addr,E=byte
+	INCLUDE ../../../../sdk/asm/constants/msx_bios.inc
+
+;--- Kernel page 0 routines (ROM variant only; RAM can't access these)
+;    GWORK / CALBNK come from rom_bank_header.inc.
+
+	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
 
 ;--- Hardware constants
 
@@ -312,14 +296,6 @@ WK_SIZE:	equ	WK_SLOT+1
 endif
 
 MOTOR_TIMEOUT:	equ 60		;~1 second at 60Hz VDP interrupt
-
-;--- Kernel page 0 routines (ROM variant only; RAM can't access these)
-
-ifndef RAM_DRIVER
-GWORK:	equ	4045h
-CALBNK:	equ	4042h
-CALBAS:	equ	403Fh
-endif
 
 ;--- RAM variant: work area base address (init data area, 4000h-40FFh)
 
@@ -415,11 +391,11 @@ DIRECT_4:
 	ret
 
 CUSTOM_DRIVER_QUERY:
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 CUSTOM_DEVICE_QUERY:
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -444,7 +420,7 @@ ifdef RAM_DRIVER
 	dec	a
 	jp	z,DO_DRVQ_SHUTDOWN_RAM
 endif
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -475,7 +451,7 @@ DO_DRVQ_GET_STRING:
 	dec	a
 	ld	hl,STR_HW_AUTHOR
 	jp	z,OUTPUT_STRING
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -483,8 +459,8 @@ DO_DRVQ_GET_STRING:
 
 DO_DRVQ_GET_INIT_PARAMS:
 ifdef RAM_DRIVER
-	;RAM variant: not used (DRVQ_INIT_RAM is used instead)
-	ld	a,QUERY_NOT_IMPLEMENTED
+	;RAM variant: not used (the INIT_RAM query is used instead)
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 else
 	xor	a
@@ -499,8 +475,8 @@ endif
 ifdef RAM_DRIVER
 
 DO_DRVQ_INIT:
-	;RAM variant: not used (DRVQ_INIT_RAM is used instead)
-	ld	a,QUERY_NOT_IMPLEMENTED
+	;RAM variant: not used (the INIT_RAM query is used instead)
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 ;=============================================================================
@@ -509,7 +485,7 @@ DO_DRVQ_INIT:
 
 ;--- Initialize RAM driver: detect drives and init FDC
 ;    Input: DE = print routine address
-;    Output: A = QUERY_OK or QUERY_INIT_ERROR
+;    Output: A = RESULT_OK or RESULT_INIT_ERROR
 ;            B = flags (bit 0 = timer hook requested)
 
 DO_DRVQ_INIT_RAM:
@@ -584,7 +560,7 @@ INITR_DONE:
 	ld	hl,STR_NDRV_2
 	call	PRINT_WITH_DE	;Print " drive(s)"
 	ld	b,1		;B = flags: timer hook requested
-	xor	a		;QUERY_OK
+	xor	a		;RESULT_OK
 	ret
 
 INITR_FDC_ERR:
@@ -592,7 +568,7 @@ INITR_FDC_ERR:
 	pop	de		;DE = print routine
 	ld	hl,STR_ERR_FDC
 	call	PRINT_WITH_DE
-	ld	a,QUERY_INIT_ERROR
+	ld	a,RESULT_INIT_ERROR
 	ret
 
 INITR_NO_DRV:
@@ -600,7 +576,7 @@ INITR_NO_DRV:
 	pop	de		;DE = print routine
 	ld	hl,STR_ERR_NODRIVE
 	call	PRINT_WITH_DE
-	ld	a,QUERY_INIT_ERROR
+	ld	a,RESULT_INIT_ERROR
 	ret
 
 
@@ -613,7 +589,7 @@ DO_DRVQ_SHUTDOWN_RAM:
 	pop	de
 	ld	hl,STR_SHUTDOWN
 	call	PRINT_WITH_DE
-	xor	a		;QUERY_OK
+	xor	a		;RESULT_OK
 	ret
 
 else
@@ -690,7 +666,7 @@ INIT_DONE:
 
 	ld	hl,STR_NDRV_2
 	call	PRINT_WITH_DE	;Print " drive(s)"
-	xor	a		;QUERY_OK
+	xor	a		;RESULT_OK
 	ret
 
 INIT_FDC_ERR:
@@ -698,7 +674,7 @@ INIT_FDC_ERR:
 	pop	de		;DE = CHPUT
 	ld	hl,STR_ERR_FDC
 	call	PRINT_WITH_DE
-	ld	a,QUERY_INIT_ERROR
+	ld	a,RESULT_INIT_ERROR
 	ret
 
 INIT_NO_DRV:
@@ -706,7 +682,7 @@ INIT_NO_DRV:
 	pop	de		;DE = CHPUT
 	ld	hl,STR_ERR_NODRIVE
 	call	PRINT_WITH_DE
-	ld	a,QUERY_INIT_ERROR
+	ld	a,RESULT_INIT_ERROR
 	ret
 
 endif	;ifdef RAM_DRIVER / else / endif for initialization code
@@ -770,7 +746,7 @@ DEVICE_QUERY:
 	jp	z,DO_DEVQ_DO_FORMAT
 	dec	a
 	jp	z,DO_DEVQ_STOP_MOTOR
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -798,7 +774,7 @@ DO_DEVQ_GET_STRING:
 	cp 4 ;Device name
 	jp	z,OUTPUT_STRING
 DEVS_NOTIMP:
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -946,7 +922,7 @@ DO_DEVQ_DO_FORMAT:
 	jr	z,DOFMT_DS
 	pop	hl
 	pop	ix
-	ld	a,QUERY_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 DOFMT_SS:
@@ -1035,14 +1011,14 @@ DOFMT_NRDY:
 	pop	hl		;Discard saved buffer
 	call	DOFMT_TIMER
 	pop	ix
-	ld	a,_NRDY
+	ld	a,.NRDY
 	ret
 
 DOFMT_WP:
 	pop	hl		;Discard saved buffer
 	call	DOFMT_TIMER
 	pop	ix
-	ld	a,_WPROT
+	ld	a,.WPROT
 	ret
 
 ;--- Initialize boot sector, FAT, and root directory after format.
@@ -1351,12 +1327,12 @@ FT_BUILD:
 
 FT_ERR_SEEK:
 	pop	hl
-	ld	a,_SEEK
+	ld	a,.SEEK
 	ret
 
 FT_ERR_CMD:
 	pop	hl
-	ld	a,_DISK
+	ld	a,.DISK
 	ret
 
 FT_ERR_FDC:
@@ -1420,7 +1396,7 @@ RW_NOWR:
 
 RW_BADDEV:
 	pop	bc
-	ld	a,_IDEVN
+	ld	a,.IDEVN
 	ret
 
 RW_DEVOK:
@@ -1668,22 +1644,22 @@ RW_TMOK:
 	ret
 
 RW_ERR_NRDY:
-	ld	a,_NRDY
+	ld	a,.NRDY
 	jr	RW_TIMER
 
 RW_ERR_WP:
-	ld	a,_WPROT
+	ld	a,.WPROT
 	jr	RW_TIMER
 
 RW_ERR_SEEK:
-	ld	a,_SEEK
+	ld	a,.SEEK
 	jr	RW_TIMER
 
 RW_NRDY_LP:
 	pop	de
 	pop	bc
 	pop	hl
-	ld	a,_NRDY
+	ld	a,.NRDY
 	jr	RW_TIMER
 
 
@@ -2065,20 +2041,20 @@ REPOSITION:
 ERROR_FROM_ST:
 	ld	a,(ix+WK_RES+1)	;ST1
 	bit	2,a
-	ld	a,_RNF
+	ld	a,.RNF
 	scf
 	ret	nz
 	ld	a,(ix+WK_RES+1)
 	bit	5,a
-	ld	a,_DATA
+	ld	a,.DATA
 	scf
 	ret	nz
 	ld	a,(ix+WK_RES+1)
 	bit	1,a
-	ld	a,_WPROT
+	ld	a,.WPROT
 	scf
 	ret	nz
-	ld	a,_DISK
+	ld	a,.DISK
 	scf
 	ret
 
@@ -2434,7 +2410,7 @@ endif
 
 ;--- Check device number validity
 ;    Input: C = device number
-;    Output: A=0 and Z set if valid, A=QUERY_INVALID_DEVICE and NZ if invalid
+;    Output: A=0 and Z set if valid, A=RESULT_INVALID_DEVICE and NZ if invalid
 ;    Preserves: BC, DE, HL
 
 CHECK_DEVICE:
@@ -2459,7 +2435,7 @@ CD_BAD:
 	pop	hl
 	pop	de
 	pop	bc
-	ld	a,QUERY_INVALID_DEVICE
+	ld	a,RESULT_INVALID_DEVICE
 	or	a		;Set NZ
 	ret
 
@@ -2485,7 +2461,7 @@ DIV_NS:
 
 ;--- Copy string with length limit
 ;    Input: HL = source (zero-terminated), DE = dest, B = max length
-;    Output: A = QUERY_OK or QUERY_TRUNCATED_STRING
+;    Output: A = RESULT_OK or RESULT_TRUNCATED_STRING
 
 OUTPUT_STRING:
 	ld	a,b
@@ -2496,7 +2472,7 @@ OS_LP:
 	ld	a,(hl)
 	or	a
 	ld	(de),a
-	ret	z		;A=0=QUERY_OK
+	ret	z		;A=0=RESULT_OK
 
 	inc	hl
 	inc	de
@@ -2505,7 +2481,7 @@ OS_LP:
 	dec	de
 	xor	a
 	ld	(de),a
-	ld	a,QUERY_TRUNCATED_STRING
+	ld	a,RESULT_TRUNCATED_STRING
 	ret
 
 

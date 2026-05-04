@@ -6,26 +6,22 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE ../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
 ;-----------------------------------------------------------------------------
 ;  Local EQUs
 ;-----------------------------------------------------------------------------
 
-CALLB0:		equ	403Fh
-CALDRV_ADDR:	equ	4048h
-BSC_ADDR:	equ	47DCh
-NXT3_SIG_ADDR:	equ	407Bh
+	BSC_ADDR:	equ	47DCh
 
 BUF:		equ	0F55Eh
 KBUF:		equ	0F41Fh
 
-RDSLT:		equ	000Ch
-CALSLT:		equ	001Ch
 SNSMAT:		equ	0141h
 KILBUF:		equ	0156h
 POSIT:		equ	00C6h
 
-EXPTBL:		equ	0FCC1h
 SLTTBL:		equ	0FCC5h
 H_CHPH:		equ	0FDA4h
 MSXVER:		equ	002Dh
@@ -326,7 +322,7 @@ CHECK_AND_ADD_SLOT:
 	;--- Check for "NXT3" signature at 407Bh ---
 
 	ld a,b
-	ld hl,NXT3_SIG_ADDR
+	ld hl,NXT3_SIGNATURE##
 	push bc
 	call RDSLT
 	pop bc
@@ -334,7 +330,7 @@ CHECK_AND_ADD_SLOT:
 	jp nz,CAS_NOT_FOUND
 
 	ld a,b
-	ld hl,NXT3_SIG_ADDR+1
+	ld hl,NXT3_SIGNATURE##+1
 	push bc
 	call RDSLT
 	pop bc
@@ -342,7 +338,7 @@ CHECK_AND_ADD_SLOT:
 	jp nz,CAS_NOT_FOUND
 
 	ld a,b
-	ld hl,NXT3_SIG_ADDR+2
+	ld hl,NXT3_SIGNATURE##+2
 	push bc
 	call RDSLT
 	pop bc
@@ -350,7 +346,7 @@ CHECK_AND_ADD_SLOT:
 	jp nz,CAS_NOT_FOUND
 
 	ld a,b
-	ld hl,NXT3_SIG_ADDR+3
+	ld hl,NXT3_SIGNATURE##+3
 	push bc
 	call RDSLT
 	pop bc
@@ -425,7 +421,7 @@ CAS_AFTER_BSC:
 	push iy
 
 	;Set up BK4_ADD for CALDRV to call DRIVER_QUERY
-	ld hl,DRIVER.DRIVER_QUERY##
+	ld hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld (BK4_ADD##),hl
 
 	;Calculate max name length based on screen width
@@ -446,10 +442,10 @@ CAS_GOT_NAMELEN:
 	ld bc,KE_NAME
 	add hl,bc
 
-	;Call DRVQ_GET_STRING via CALSLT + CALDRV
-	ld a,DRIVER.DRVQ_GET_STRING##
-	ld b,DRIVER.DRVQ_STR_DRIVER_NAME##
-	ld ix,CALDRV_ADDR
+	;Call GET_STRING query via CALSLT + CALDRV
+	ld a,DRIVER_QUERY.GET_STRING##
+	ld b,DRIVER_QUERY.STR_DRIVER_NAME##
+	ld ix,CALDRV##
 	pop iy			;IYh = slot address
 	call CALSLT
 	ei
@@ -458,8 +454,8 @@ CAS_GOT_NAMELEN:
 
 	;Check result
 	or a
-	jr z,CAS_NAME_OK	;QUERY_OK
-	cp DRIVER.QUERY_TRUNCATED_STRING##
+	jr z,CAS_NAME_OK	;RESULT_OK
+	cp DRIVER.RESULT_TRUNCATED_STRING##
 	jr z,CAS_NAME_TRUNC
 
 	;Bad driver or query not supported
@@ -499,8 +495,8 @@ CAS_NAME_OK:
 	push bc
 	pop iy			;IYh = slot address for CALSLT
 
-	ld a,DRIVER.DRVQ_GET_VERSION##
-	ld ix,CALDRV_ADDR
+	ld a,DRIVER_QUERY.GET_VERSION##
+	ld ix,CALDRV##
 	call CALSLT
 	ei
 

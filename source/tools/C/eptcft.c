@@ -3,8 +3,8 @@
 
    Compilation command line:
 
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+        crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
         eptcft.c
    hex2bin -e com eptcft.ihx
 */
@@ -19,7 +19,12 @@
 #include "strcmpi.h"
 #include "asmcall.h"
 #include "types.h"
-#include "dos.h"
+#include "dos_functions.h"
+#include "dos_errors.h"
+#include "drivers.h"
+#include "driver_routines.h"
+#include "driver_device_queries.h"
+#include "driver_result_codes.h"
 #include "partit.h"
 
 	/* Defines */
@@ -58,8 +63,6 @@ const char* strCRLF = "\r\n";
 
 	/* Global variables */
 
-byte ASMRUT[4];
-byte OUT_FLAGS;
 Z80_registers regs;
 Z80_registers regs2;
 bool isNextor;
@@ -101,7 +104,6 @@ void print(char* s);
 
 int main(char** argv, int argc)
 {
-    ASMRUT[0] = 0xC3;
 	print(strTitle);
 
     if(argc == 0) {
@@ -265,9 +267,9 @@ void ProcessParameters() {
 
 	regs.Bytes.A = slotNumber | 0x10;
 	regs.Bytes.B = 0xFF;
-	regs.Words.DE = DEVICE_QUERY;
+	regs.Words.DE = DRIVER_DEVICE_QUERY_ENTRY;
 	regs.Words.HL = (int)&regs2;
-	regs2.Bytes.A = DEVQ_GET_STRING;
+	regs2.Bytes.A = DEVICE_QUERY_GET_STRING;
 	regs2.Bytes.C = deviceNumber;
 	regs2.Bytes.B = 2;	//Device name string
 	regs2.Bytes.D = 255; //Buffer size
@@ -275,10 +277,10 @@ void ProcessParameters() {
 
 	DoDosCall(_CDRVR);
 
-	if(regs.Bytes.IXh == ERR_QUERY_OK) {
+	if(regs.Bytes.IXh == DRIVER_RESULT_OK) {
 		printf("Device %i, %s\r\n", deviceNumber, stringBuffer);
 	}
-	else if(regs.Bytes.IXh == ERR_QUERY_TRUNCATED_STRING) {
+	else if(regs.Bytes.IXh == DRIVER_RESULT_TRUNCATED_STRING) {
 		printf("Device %i, %s...\r\n", deviceNumber, stringBuffer);
 	}
 	else {
@@ -385,7 +387,7 @@ void ScanAndFixPartitions()
 void ReadOrWriteSector(bool write) {
 	regs.Bytes.A = slotNumber | 0x10;
 	regs.Bytes.B = 0xFF;
-	regs.Words.DE = READ_WRITE;
+	regs.Words.DE = DRIVER_READ_WRITE_ENTRY;
 	regs.Words.HL = (int)&regs2;
 	regs2.Bytes.A = deviceNumber;
 	regs2.Flags.C = write ? 1 : 0;
@@ -396,7 +398,3 @@ void ReadOrWriteSector(bool write) {
 }
 
 #define COM_FILE
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"
-#include "strcmpi.c"

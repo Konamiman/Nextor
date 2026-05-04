@@ -7,6 +7,8 @@
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
 	INCLUDE	../condasm.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
 P0_REG		equ	0FCh
 P1_REG		equ	0FDh
@@ -54,8 +56,6 @@ MAP_INIT::
 ;
 ;    *****  LOOP TO FIND MAPPERS AND BUILD UP TEMPORARY MAPPER RECORDS  *****
 ;
-
-PROCNM	equ	0FD89h
 
 if BUILTIN
 		ld	(RAMAD2##),a
@@ -127,7 +127,7 @@ endif
 		ld	(RAMAD1##),a		; enable the mapper slot in
 		ld	(RAMAD0##),a		; page-2.
 		ld	h,80h
-		call	ENASLT##
+		call	ENASLT
 		pop	hl
 ;
 		inc	hl
@@ -282,7 +282,7 @@ MAP_SCAN::
 		ld	(hl),a			;No primary mapper yet.
 		push	hl
 ;
-		ld	hl,EXPTBL##
+		ld	hl,EXPTBL
 pri_slot_loop:	bit	7,(hl)			;Set expanded slot flag in A
 		jr	z,not_exp_slot		; if this slot is expanded.
 		set	7,a
@@ -290,7 +290,7 @@ not_exp_slot:
 sec_slot_loop:	push	hl
 		push	af			;Enable the slot under
 		ld	h,80h			; question into page-2 and
-		call	ENASLT##		; find out if it contains a
+		call	ENASLT		; find out if it contains a
 		call	TEST_MAPPER_SLOT	; mapper or not.
 		or	a
 		jr	z,no_mapper		;Skip if not a mapper slot
@@ -378,7 +378,7 @@ not_exp_slot_2:	inc	hl
 ;
 		push	hl			;Restore page-2 slot
 		ld	h,80h			; in case mapper RAM was
-		call	ENASLT##		; not available.
+		call	ENASLT		; not available.
 		pop	hl
 ;
 		ld	a,(hl)			;Return an error if we don't
@@ -507,7 +507,7 @@ SWAP_RAM_SLOT:
 		push	af			;Remember the new mapper slot.
 ;
 		ld	h,80h			;Enable the required mapper
-		call	ENASLT##		; slot into page-2 and then
+		call	ENASLT		; slot into page-2 and then
 		xor	a			; page segment zero of this
 		out	(P2_REG),a		; slot into page-2.
 ;
@@ -536,7 +536,7 @@ SWAP_RAM_SLOT:
 		ld	sp,0C000h		; stack in page-2.
 		push	af
 		push	hl			;Now page the new mapper slot
-		call	ENASLT##		; into page-3.
+		call	ENASLT		; into page-3.
 		pop	hl
 		pop	af
 		ld	sp,hl
@@ -659,7 +659,7 @@ MAPBDO_FOUND:
 
 		exx
 
-		ld	ix,DRIVER.EXTBIO##
+		ld	ix,DRIVER.EXTBIO_ENTRY##
 		;ex	af,af'
 		ld	a,DV_BANK##
 		call	DH_CABNK##
@@ -818,7 +818,7 @@ EXB_SLOT_BACKUP:
 
    	ld	h,40h
 	call	ENASLT
-	ld	hl,DRIVER.EXTBIO##
+	ld	hl,DRIVER.EXTBIO_ENTRY##
 	ld (BK4_ADD##),hl
 	ld	iy,1		;IY=1: continue calling hooks
 	pop	hl
@@ -990,7 +990,7 @@ EXTWRT:		push	bc
 		push	de
 		ld	e,a		;Set data to write
 		ld	a,b		;Set slot address of table
-		call	WRSLT##		;Fill [HL] with [E], HL is preserved
+		call	WRSLT		;Fill [HL] with [E], HL is preserved
 		pop	de
 		pop	bc
 		inc	hl
@@ -1072,7 +1072,7 @@ ERAMX_ENT:
 	ld	e,(hl)			;E = segment
 	push	de
 	pop	iy			;IY = slot:segment for CALL_MAP
-	ld	ix,DRIVER.EXTBIO##
+	ld	ix,DRIVER.EXTBIO_ENTRY##
 ;
 	;Restore EXTBIO params for the driver call
 	ld	hl,(KBUF)
