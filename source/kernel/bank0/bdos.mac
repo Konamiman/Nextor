@@ -478,7 +478,7 @@ MAXFN	EQU	($-FUNTAB)/2	;Largest function number.
 
 strout_slow:
 
-	do_strout	KBDOS_GO,CPMRET,1	;Macro defined in macros.inc
+do_strout	<KBDOS_GO>,<CPMRET>,<1>	;Macro defined in macros.inc
 ;
 ;
 ;
@@ -567,7 +567,7 @@ CPMRET:	XOR	A
 @FMAKE:
 @FREN:
 	LD	A,33		;Ordinary FCBs are 33 bytes long.
-	CODE	LXI H		;Skip 36 byte FCB entry point.
+code	<LXI>,<H>		;Skip 36 byte FCB entry point.
 ;
 ;
 @RDRND:

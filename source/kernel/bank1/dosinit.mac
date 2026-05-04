@@ -162,11 +162,11 @@ if 1
 ;
 ;   At the moment...    (H.F., JeyS)
 ;
-		code	lxi h			;Build following routine on
+code	<lxi>,<h>			;Build following routine on
 		pop	af			; the stack.
 		ret				;
 		push	hl			;   LDIR
-		code	lxi h			;   POP AF
+code	<lxi>,<h>			;   POP AF
 		ldir				;   RET
 		push	hl			;
 		ld	hl,copy_done		;Where to return in this bank.
@@ -536,8 +536,8 @@ if 1
 ;
 		ld	hl,_patch_16
 		add	hl,de
-		code	mvi m			;Patch the RET at RE_RAM.
-		 code	sta
+code	<mvi>,<m>			;Patch the RET at RE_RAM.
+code	<sta>
 endif
 ;
 		rrca
@@ -640,8 +640,8 @@ if 0
 		inc	hl
 		ld	(hl),b
 else
-		code	mvi m
-		 code	sta
+code	<mvi>,<m>
+code	<sta>
 		inc	hl
 		ld	(hl),0FFh
 		inc	hl
@@ -650,7 +650,7 @@ endif
 		jr	bios_is_ram
 ;
 bios_not_ram:	code	mvi a			;If BIOS slot is expanded and
-		 code	push psw		; is in a different primary
+code	<push>,<psw>		; is in a different primary
 		ld	hl,_patch_30		; slot from the RAM then
 		add	hl,de			; enable the saving of the BIOS
 		ld	(hl),a			; secondary slot register.
@@ -662,8 +662,8 @@ bios_not_ram:	code	mvi a			;If BIOS slot is expanded and
 		ld	(hl),a			;.... also in "GO_IRQ"
 		ld	hl,_patch_51
 		add	hl,de			;Change "JP P0_RAM" into a
-		code	mvi m			; "CALL" in "GO_IRQ"
-		 code	call
+code	<mvi>,<m>			; "CALL" in "GO_IRQ"
+code	<call>
 		ld	hl,_patch_31
 		add	hl,de			;Patch the "JR" out of
 		ld	(hl),b			; "P0_CALL"
@@ -1065,7 +1065,7 @@ if 1 ;PANABUG
 endif
 ;
 _drv_prompt:	code	mvi a		;Kill $DOSON routine while disk driver
-		 code	ret		; is active.
+code	<ret>		; is active.
 ;
 _swap_prompt:	ld	($DOSON##),a
 		exx

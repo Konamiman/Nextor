@@ -278,8 +278,8 @@ BOOT:	CALL	$DOSOFF##	; Set up page 1.
 	LD	(ENTERS),A
 ;
 	LD	HL,0		; Set up jump vectors at bottom of memory.
-	CODE	MVI A
-	 CODE	JMP
+code	<MVI>,<A>
+code	<JMP>
 	LD	(HL),A
 	INC	HL
 	LD	(HL),LOW BIOS_TAB+3
@@ -330,8 +330,8 @@ MEMOK:	LD	SP,BIOS_STACK	; Use MSX-DOS.SYS's own stack in page 3.
 if 0 ;Hal_F
 	LD	HL,(6)		; Make the F37D entry point jump to the same
 	LD	(P3BDOS+1),HL	;   place as the normal entry point at 5.
-	CODE	MVI A
-	 CODE	JMP
+code	<MVI>,<A>
+code	<JMP>
 	LD	(P3BDOS),A
 endif
 ;
@@ -619,19 +619,19 @@ NOINC:	LD	A,(HL)
 	LD	H,(HL)
 	LD	L,A
 	EX	(SP),HL		; Save routine address, get HL back.
-	CODE	MVI A		; Get A back again.
+code	<MVI>,<A>		; Get A back again.
 A_SAVE:	 DEFB	0
 	RET			; Jump to routine for this function.
 ;
 ;
 BDOS_DONE:
 	EX	AF,AF'		; Save returned A.
-	CODE	MVI A		; Ensure final 'RET' is set up.
-	CODE	RET
+code	<MVI>,<A>		; Ensure final 'RET' is set up.
+code	<RET>
 	LD	(RETPAT),A
 	EX	AF,AF'
 BDOS_RET:
-	CODE	LXI SP
+code	<LXI>,<SP>
 SP_SAVE: DEFW	0		; Restore stack pointer.
 	EXX			; Save returned registers.
 	EX	AF,AF'
@@ -672,7 +672,7 @@ JP_ABORT:			; Abort user's BDOS or BIOS call.
 	POP	HL		; H=error code.
 	LD	A,H		; AF=error code.
 	POP	HL
-	CODE	CNZ		; Call user's routine if defined.
+code	<CNZ>		; Call user's routine if defined.
 ABORT_VECT:
 	 DEFW	0
 	LD	(ERROR),A	; Save error and re-boot if no user routine or
@@ -928,7 +928,7 @@ endif
 
 strout_slow:
 
-	do_strout	KBDOS,CPMRET,1	;Macro defined in macros.inc
+do_strout	<KBDOS>,<CPMRET>,<1>	;Macro defined in macros.inc
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -1053,7 +1053,7 @@ FUNC_WITH_IXIY:
 @FMAKE:
 @FREN:
 	LD	A,33		; Ordinary FCBs are 33 bytes long.
-	CODE	LXI H		; Skip 36 byte FCB entry point.
+code	<LXI>,<H>		; Skip 36 byte FCB entry point.
 ;
 ;	    ;
 	    ;
@@ -1872,7 +1872,7 @@ OUTCH:	PUSH	HL
 	PUSH	BC
 	LD	E,A
 	LD	C,_CONOUT##
-	CODE	CALL		; This CALL either points to F37D (initially)
+code	<CALL>		; This CALL either points to F37D (initially)
 OVEC:	 DEFW	 P3BDOS		;   or to the normal BDOS entry.
 	POP	BC
 	POP	DE

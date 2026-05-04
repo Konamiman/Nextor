@@ -1383,7 +1383,7 @@ ctrl_c_in:	ld	a,.CTRLC##		;Ctrl-C so abort the program
 		jr	$
 ;
 ctrl_p_in:	ld	a,0FFh			;Ctrl-P enables printer echo
-		code	cpi			; and Ctrl-N disables it.
+code	<cpi>			; and Ctrl-N disables it.
 ctrl_n_in:	xor	a
 		ld	(PR_ECHO##),a
 		xor	a

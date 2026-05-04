@@ -513,7 +513,7 @@ if 0
 endif
 ;===== start mod FAT16 (0CBAh patch)
 		;assume A=0 and Cy=0 (set "xor a")
-		code	MVI C			;Skip "ADD HL,HL" first time
+code	<MVI>,<C>			;Skip "ADD HL,HL" first time
 dp_shift_lp:	add	hl,hl			;Shift this according to the
 		adc	a,a			; cluster shift to get
 ;;		jr	dp_shift_st

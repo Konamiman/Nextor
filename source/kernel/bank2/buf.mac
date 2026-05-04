@@ -244,13 +244,13 @@ allow_ignore:	push	bc
 		jr	z,try_read_loop		;Loop to try again if RETRY.
 ;
 ;
-		code	jz			;Skip the two "POP"s
+code	<jz>			;Skip the two "POP"s
 pre_read_ok:	pop	de
 		pop	bc
 no_pre_read:	ex	(sp),hl			;HL -> buffer descriptor
 		pop	ix			;IX -> unit descriptor
 ;
-		code	cpi			 ;Skip the "POP BC"
+code	<cpi>			 ;Skip the "POP BC"
 already_in_buf:	pop	bc			 ;Clean up stack
 		set	FF_DBUF,(iy+@FAT_FLAGS##);Directory buffer not cached
 		ld	(B_CACHE##),hl		 ;Record buffer as cache
@@ -347,11 +347,11 @@ bf_cmp_ret:	ld	a,b			;restore A
 		pcall	LG_TO_PHYS	; drive number and skip to
 		pop	hl		; "FL_PHYS".
 		pop	bc
-		code	cpi
+code	<cpi>
 ;
 	PROC	FL_UD
 ;
-		code	ori		;Clear carry => drive in unit descr
+code	<ori>		;Clear carry => drive in unit descr
 ;
 	PROC	FL_PHYS
 ;
@@ -384,7 +384,7 @@ flush_loop:	call	FLG_NEXT		;Find next buffer and return
 ;
 	PROC	INV_UD
 ;
-		code	ori		;Clear cy if drive in unit descriptor
+code	<ori>		;Clear cy if drive in unit descriptor
 ;
 	PROC	INV_PHYS
 ;
