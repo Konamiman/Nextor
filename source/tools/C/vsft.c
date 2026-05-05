@@ -3,7 +3,7 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code
         crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
         vsft.c
    hex2bin -e com vsft.ihx

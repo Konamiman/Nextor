@@ -102,7 +102,7 @@
 	const	.PUSED, 0B3h	;Partition is already in use
 	const	.FMNT,  0B2h	;File is mounted
 	const	.BFSZ,  0B1h    ;Bad file size
-    const   .ICLUS, 0B0h    ;Invalid cluster number
+	const	.ICLUS, 0B0h	;Invalid cluster number
 	const	.INITE, 0AFh	;Initialization error
 				;0AEh \
 				; ..   > Reserved for future use

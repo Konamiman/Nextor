@@ -7,6 +7,7 @@
 //
 // sdcc --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
 //      --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 \
+//      -I../../../sdk/C/includes -I../../../sdk/C/code \
 //      fdisk_crt0.rel asmcall.rel printf.rel fdisk.c
 // hex2bin -e dat fdisk.ihx
 //
