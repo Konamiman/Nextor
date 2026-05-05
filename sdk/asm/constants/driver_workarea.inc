@@ -46,6 +46,9 @@
 ;0 for MSX-DOS 1.
 	const	DOS_VER, 0F313h
 
+;Disk-BASIC / DOS state flag.
+	const	DOSFLG,  0F346h
+
 ;Slot of the master driver currently being addressed.
 	const	MASTER_SLOT, 0F348h
 

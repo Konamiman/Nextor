@@ -156,7 +156,7 @@
 ;
 ;
 ;    Error codes below 40h may be used by user programs for any purpose  which
-; they desire, and will be guarenteed to be different from any errors returned
+; they desire, and will be guaranteed to be different from any errors returned
 ; by the system.  COMMAND2.COM will not print an error message  for  codes  in
 ; the range 00h...1Fh.
 

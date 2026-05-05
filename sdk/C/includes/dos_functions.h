@@ -17,8 +17,8 @@
 #define _TERM0     0x00  /* Terminate program                       */
 #define _CONIN     0x01  /* Console input                           */
 #define _CONOUT    0x02  /* Console output                          */
-#define _AUXIN     0x03  /* Auxilliary input                        */
-#define _AUXOUT    0x04  /* Auxilliary output                       */
+#define _AUXIN     0x03  /* Auxiliary input                         */
+#define _AUXOUT    0x04  /* Auxiliary output                        */
 #define _LSTOUT    0x05  /* List output                             */
 #define _DIRIO     0x06  /* Direct console I/O                      */
 #define _DIRIN     0x07  /* Direct console input, no echo           */

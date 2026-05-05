@@ -16,6 +16,9 @@
 	endif
 
 PRPAD:
+	ld	a,b
+	or	c
+	ret	z	;Do nothing if BC=0
 	push	hl
 	add	hl,bc
 PRPAD_LOOP:
@@ -27,6 +30,7 @@ PRPAD_LOOP:
 	ld	a,b
 	or	c
 	jr	nz,PRPAD_LOOP
+	pop	hl
 	ret	;Do nothing if the string was just spaces
 
 PRPAD_FOUND:

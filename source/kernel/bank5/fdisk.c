@@ -545,7 +545,7 @@ void GetDevicesInformation()
 		if(currentDevice->isValid && currentDevice->isOnline) {
 			regs.Bytes.A = DEVICE_QUERY_GET_PARAMS;
 			regs.Bytes.C = currentDevice->deviceNumber;
-			regs.Words.HL = (int)currentDevice->params;
+			regs.Words.HL = (int)&currentDevice->params;
 			DriverCall(selectedDriver->slot, selectedDriver->segment,DRIVER_DEVICE_QUERY_ENTRY);
 
 			if(regs.Bytes.A == DRIVER_RESULT_NOT_IMPLEMENTED) {
