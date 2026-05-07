@@ -7492,25 +7492,9 @@ RDRV_SIG_STR:
 ;             H  = Operation: 1=Initialize, 2=Shut down
 ; Returns:    A  = Error code (0 = success)
 ;
-;    When the driver's init/shutdown query is invoked, pages 0 and 2 are
-;    temporarily switched to the caller's TPA segments (P0_TPA/P2_TPA)
-;    so that user-supplied print routines in the TPA are directly reachable.
-;    The only constraint on the print routine address is that it must NOT
-;    be in page 1 (4000h-7FFFh), since page 1 holds the driver segment
-;    during the callback.
 
-	;--- Map kernel data segment to page 2 (caller may have BASIC RAM)
-
-	push	af
-	call	GET_P2##
-	ld	(BUF+6),a	;Save caller's original page 2 segment for restore on exit
-	ld	a,0C9h		;RET opcode: null print routine in page 3
-	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-	pop	af
-
-	;--- Save all parameters in BUF
+	;--- Save parameters in BUF and prepare a page-3 RET stub for the
+	;    silent ("DE = 0") print routine.
 
 	ld	(BUF),a		;+0 = slot
 	ld	a,b
@@ -7519,30 +7503,24 @@ RDRV_SIG_STR:
 	ld	a,h
 	ld	(BUF+4),a	;+4 = operation
 
+	ld	a,0C9h		;RET opcode: null print routine target in page 3
+	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
+
 	;--- Dispatch operation
 
+	ld	a,h
 	cp	1
 	jr	z,DRVRO_DO_INIT
 	cp	2
 	jr	z,DRVRO_DO_SHUT
 	ld	a,.ISBFN##
-	jr	DRVRO_EXIT
+	ret
 
 DRVRO_DO_INIT:
-	call	DRVRO_INIT
-	jr	DRVRO_EXIT
+	jp	DRVRO_INIT
 
 DRVRO_DO_SHUT:
-	call	DRVRO_SHUT
-
-DRVRO_EXIT:
-	;--- Restore caller's original page 2 segment
-
-	push	af
-	ld	a,(BUF+6)
-	call	PUT_P2##
-	pop	af
-	ret
+	jp	DRVRO_SHUT
 
 ;--------------------------------------
 ; Operation 1: Initialize a RAM driver
@@ -7697,32 +7675,18 @@ DRVRO_LOAD_AB:
 	ld	b,c
 	ret
 
-;--- Switch pages 0 and 2 to the caller's TPA segments so that
-;    user-supplied print routines in the TPA are reachable.
-;    Preserves DE (print routine address for CALL_MAP setup).
+;--- Switch pages 0 and 2 (slot + mapper) from kernel to the caller's
+;    TPA so user-supplied print routines are reachable during the
+;    driver-query callback. PUT_USER preserves BC, DE, HL.
 
 DRVRO_TPA_ON:
-	push	de
-	ld	a,(P0_TPA##)
-	call	PUT_P0##
-	ld	a,(P2_TPA##)
-	call	PUT_P2##
-	pop	de
-	ret
+	jp	PUT_USER##
 
-;--- Restore kernel code/data segments in pages 0 and 2.
-;    Preserves AF and BC (driver query results).
+;--- Switch pages 0 and 2 (slot + mapper) back to kernel.
+;    PUT_BDOS preserves AF, BC, DE, HL (driver query results).
 
 DRVRO_TPA_OFF:
-	push	af
-	push	bc
-	ld	a,(CODE_SEG##)
-	call	PUT_P0##
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-	pop	bc
-	pop	af
-	ret
+	jp	PUT_BDOS##
 
 
 ;--- Unmap all drives associated with the driver specified by
@@ -7730,19 +7694,16 @@ DRVRO_TPA_OFF:
 ;    Walks all unit descriptors, unmaps matching drives,
 ;    invalidates associated disk buffers.
 
-DRVRO_UNMAP_DRIVES:
-	;Walk all unit descriptors, free the UD memory and clear UNIT_TAB
-	;entries for any drive that matches the driver slot:segment in
-	;BUF+0:BUF+1.
+DRVRO_UNMAP_DRIVES::
+	;Walk all unit descriptors, invalidate cached buffers, free the UD
+	;memory and clear the UNIT_TAB entry for any drive that matches the
+	;driver slot:segment in BUF+0:BUF+1.
 	;
-	;Cannot call MAP_UNMAP here because it uses pcall (bank 2 routines
-	;via page 0 kernel RAM), but F_DRVRO may run from a BASIC CALL
-	;context where page 0 = BIOS ROM. We free the UD's page-2 block by
-	;invoking FR_P2 in bank 2 directly via CALBNK, which doesn't need
-	;the page-0 trampolines that pcall depends on.
-	;Open file handles are NOT explicitly closed (closing them would
-	;require pcall too); they become invalid and any I/O through them
-	;will fail when the drive disappears.
+	;Open file handles are NOT explicitly closed; they become invalid
+	;and any I/O through them will fail when the drive disappears.
+	;FL_UD (which would write back dirty buffers via the driver before
+	;invalidating) is not called: BF_FLUSH calls the driver via DSKIO
+	;and isn't safe from this context. Dirty buffers are discarded.
 
 	ld	a,(BUF)
 	ld	d,a
@@ -7775,28 +7736,14 @@ DRUMD_LOOP:
 	cp	(ix+UD_RAM_SEGMENT##)
 	jr	nz,DRUMD_NEXT
 
-	;Match: invalidate the buffer cache for this UD's drive, then free
-	;the UD memory and zero the UNIT_TAB entry. Without the cache
-	;invalidation, remapping the same drive letter later could pick up
-	;stale FAT/directory data tagged with the freed UD's physical unit.
-	;
-	;INV_UD and FR_P2 both live in bank 2 and only need page 2 = kernel
-	;data segment (set up by F_DRVRO on entry) plus page 3 (buffer
-	;chain). We reach them via CALBNK rather than pcall, because
-	;F_DRVRO may run from a BASIC CALL context where page 0 = BIOS ROM
-	;and the page-0 pcall trampolines aren't there.
-	;
-	;FL_UD (which would write back dirty buffers via the driver before
-	;invalidating) is not called: BF_FLUSH internally uses pcall, which
-	;wouldn't work here. Dirty buffers for this drive are discarded.
+	;Match: invalidate cached buffers for this UD's drive, then free
+	;its memory. Without invalidation, remapping the same drive letter
+	;later could pick up stale FAT/directory data tagged with the
+	;freed UD's physical unit.
 	ld	h,b
 	ld	l,c		;HL = UD pointer
-	ld	ix,?INV_UD##
-	ld	a,2
-	call	CALBNK##	;Invalidate cached buffers for this UD
-	ld	ix,?FR_P2##	;HL still = UD pointer (INV_UD preserves HL)
-	ld	a,2
-	call	CALBNK##	;Free UD memory in page-2 free list
+	pcall	INV_UD		;Invalidate cached buffers (preserves HL)
+	pcall	FR_P2		;Free UD memory in page-2 free list
 
 	pop	bc
 	pop	hl		;HL = table pointer
