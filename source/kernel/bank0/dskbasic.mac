@@ -1,6 +1,10 @@
 	.z80
 	name('dskbasic')
 	title	DSKBASIC - disk BASIC statement handler -
+
+	include ../../../sdk/asm/constants/msx_bios.inc
+	include ../../../sdk/asm/constants/msx_workarea.inc
+	include ../../../sdk/asm/constants/msx_basic.inc
 ;
 ;	Conditional assembly switches
 ;
@@ -22,8 +26,6 @@ DEBUG	equ	OFF		;check for internal error
 ;
 ;	Disk BASIC version
 ;
-
-NEWSTT	equ	04601h
 
 ;
 ;	MACRO
@@ -114,11 +116,9 @@ DERFST	equ	60
 ;
 LDIRMV	equ	0059h
 LDIRVM	equ	005Ch
-CKCNTC	equ	00BDh		;check control-STOP
 ERAFNK	equ	00CCh		;erase function key display
 TOTEXT	equ	00D2h		;force screen to text mode
 PHYDIO	equ	0144h		;physical disk I/O
-RCALBAS	equ	0159h		;call a BASIC routine in ROM
 
 DECSUB	equ	268Ch		;DAC = DAC - ARG
 DECADD	equ	269Ah		;DAC = DAC + ARG
@@ -135,26 +135,19 @@ INTXT	equ	3FD2h
 ERROR	equ	406Fh		;'xxxx error'
 READYR	equ	409Bh		;Warm start of BASIC
 LINKER	equ	4253h		;fix text links
-NEWSTT	equ	4601h		;new statement fetcher
-CHRGTR	equ	4666h		;get next character from text
 FLTLIN	equ	46FFh		;JP INEG2
 INTID2	equ	4756h
 FINPRT	equ	4AFFh		;finish up with printing
 FRMEQL	equ	4C5Fh
-FRMEVL	equ	4C64h
 DOCNVF	equ	517Ah
 GETIN2	equ	520Fh
 GTBYTC	equ	521Bh
-GETBYT	equ	521Ch
 CONINT	equ	521Fh
 FOUT	equ	537Bh		; where 'JP FOUT' is!
-FRMQNT	equ	542Fh
 SCCPTR	equ	54F7h
 GETYPR	equ	5597h
-PTRGET	equ	5EA4h
 STRINI	equ	6627h
 GETSPA	equ	668Eh
-FRESTR	equ	67D0h
 FINBCK	equ	6825h
 NAMSCN	equ	6A0Eh
 RGETPTR	equ	6A6Dh		;get file pointer
@@ -173,9 +166,7 @@ RETURN	equ	0F38Bh		;where a 'RET' instruction is stored
 LINLEN	equ	0F3B0h		;console width
 LPTPOS	equ	0F415h		;printer head position (0 based)
 PRTFLG	equ	0F416h		;printer flag
-BUF	equ	0F55Eh		;line input buffer (used as scratch)
 TTYPOS	equ	0F661h		;cursor x position (0 based)
-VALTYP	equ	0F663h
 STKTOP	equ	0F674h
 TXTTAB	equ	0F676h
 TEMPPT	equ	0F678h
@@ -184,7 +175,6 @@ DSCPTR	equ	0F699h
 FRETOP	equ	0F69Bh
 VARTAB	equ	0F6C2h
 STREND	equ	0F6C6h
-DAC	equ	0F7F6h
 FACLO	equ	0F7F8h
 ARG	equ	0F847h
 MAXFIL	equ	0F85Fh
@@ -193,12 +183,9 @@ NULBUF	equ	0F862h
 PTRFIL	equ	0F864h
 FILNAM	equ	0F866h
 RUNFLG	equ	FILNAM
-NLONLY	equ	0F87Ch
 SAVEND	equ	0F87Dh
-FLBMEM	equ	0FCAEh
 RUNBNF	equ	0FCBEh
 SAVENT	equ	0FCBFh
-PROCNM	equ	0FD89h
 ;
 ;	temporary work area
 ;
@@ -328,7 +315,7 @@ STATEMENT:
 	ei			;make sure interrupts are enabled
 ;
 	ld	a,DV_BANK##		;Call statement handler in disk driver first
-	ld	ix,DRIVER.OEMSTAT##
+	ld	ix,DRIVER.BASSTAT_ENTRY##
 	call	CALBNK##
 	ret	nc
 
@@ -507,10 +494,10 @@ SYSTEM:
 	jr	z,SYSTEM_NO_ARG	; good assumption
 	SYNCHK	'('
 	ld	ix,FRMEVL	; evaluate string
-	call	CALBAS
+	call	DO_CALBAS
 	push	hl		; save text pointer
 	ld	ix,FRESTR	; get the string
-	call	CALBAS
+	call	DO_CALBAS
 	ld	c,(hl)		; get length of string
 	inc	hl
 	ld	a,(hl)		; get pointer to string
@@ -560,7 +547,7 @@ SYSTEM_NO_ARG:
 
 DO_SYSTEM:
 	ld	ix,CLSALL	;close all files
-	call	CALBAS
+	call	DO_CALBAS
 	call	TOTEXT		;force screen to text mode
 	call	ERAFNK		;erase function key display
 
@@ -672,7 +659,7 @@ RAMDISK:
 	ld	a,0FFh		; assume not
 	jr	z,HAVE_SIZE	; good assumption, inquire ramdisk
 	ld	ix,GETIN2	; get new size (0..32767)
-	call	CALBAS
+	call	DO_CALBAS
 	inc	d		; negative value?
 	dec	d
 	jp	m,JFCERR	; yes, error
@@ -701,7 +688,7 @@ HAVE_SIZE:
 				; good assumption
 	call	CHRGET		; skip ','
 	ld	ix,PTRGET
-	call	CALBAS
+	call	DO_CALBAS
 RETURN_NOSIZE:
 	pop	bc		; restore specified size (or 0ffh) in B
 	SYNCHK	')'		; correct end of statement?
@@ -749,7 +736,7 @@ SET_NUMBER:
 NUMFLT:
 	push	bc
 	ld	ix,DOCNVF
-	call	CALBAS
+	call	DO_CALBAS
 	pop	bc		; set amount to transfer
 	ld	hl,DAC		; transfer value to variable
 NUMINT:
@@ -804,7 +791,7 @@ DO_FDISK_OK:
 	ldir
 	ld	hl,09000h
 	ld	ix,NEWSTT
-	jp	CALBAS
+	jp	DO_CALBAS
 
 NEWTXT:	db	3ah, 94h, 0	; ":NEW"
 
@@ -1083,7 +1070,7 @@ NOFORP:	add	hl,sp
 	SYNCHK	$LEN
 	SYNCHK	EQULTK
 	ld	ix,INTID2	;get integer in [DE]
-	call	CALBAS
+	call	DO_CALBAS
 	dec	de		;between 1..256?
 	inc	d
 	dec	d
@@ -1499,7 +1486,7 @@ $HOOK	BINSAV
 	call	REMHOK
 	push	hl		;save text pointer
 	ld	ix,SCCPTR	;get rid of pointers
-	call	CALBAS
+	call	DO_CALBAS
 	ld	a,0FFh		;ID byte for BASIC text file
 	call	PUT1BYTE
 	ld	de,(TXTTAB)	;set transfer address to the top
@@ -1510,7 +1497,7 @@ $HOOK	BINSAV
 	ld	(NLONLY),a	;clear NLONLY
 	pop	hl		;restore text pointer
 	ld	ix,CLSFIL
-	jp	CALBAS		;close file #0
+	jp	DO_CALBAS		;close file #0
 
 	subttl	binary load
 ;
@@ -1519,7 +1506,7 @@ $HOOK	BINLOD
 	pop	af		;restore MERGE flag
 	jp	z,JDERBFM	;cannot merge binary
 	ld	ix,CLSALL	;close all files unless ',R'
-	call	CALBAS
+	call	DO_CALBAS
 	ld	hl,-199		; calculate maximum length we can load
 	add	hl,sp		; hl = sp-199
 	ld	de,(TXTTAB)
@@ -1549,7 +1536,7 @@ $HOOK	BINLOD
 	add	hl,de
 	ld	(VARTAB),hl	;Set end of program
 	ld	ix,LINKER
-	call	CALBAS		;Fix links
+	call	DO_CALBAS		;Fix links
 	ld	a,(RUNFLG)	;should run?
 	and	a
 	ret	nz		;yes, leave it to the ROM program
@@ -1561,7 +1548,7 @@ $HOOK	BINLOD
 	ldir
 	pop	hl
 	ld	ix,NEWSTT
-	jp	CALBAS
+	jp	DO_CALBAS
 ;
 CLRCMD:	defb	':',92H,0,0,0	;clear statement
 
@@ -1612,7 +1599,7 @@ SCRSAV:
 	xor	a		;open file 0 for output
 	ld	e,MD.SQO	;will get 'syntax error' if not end of
 	ld	ix,RNULOPN	;statement
-	call	CALBAS
+	call	DO_CALBAS
 	ld	a,0FEh		;ID byte for memory image file
 	call	PUT1BYTE
 	pop	af		;save screen flag
@@ -1641,7 +1628,7 @@ BSAVE_END:
 	ld	(FLBMEM),a
 	xor	a
 	ld	ix,CLSFIL
-	call	CALBAS
+	call	DO_CALBAS
 	jp	JFINPRT		;restore text pointer and clear PTRFIL
 ;
 SCREEN_SAVE:
@@ -1724,7 +1711,7 @@ BLOD1:	pop	de		;[D]=drive, [BC]=offset
 	xor	a		;open file 0 for input
 	ld	e,MD.SQI	;will get 'syntax error' if not end of
 	ld	ix,RNULOPN	;statement
-	call	CALBAS
+	call	DO_CALBAS
 	call	GET1BYTE	;grab header byte
 	cp	0FEh
 	jp	nz,JDERBFM	;must be a memory image file
@@ -1750,7 +1737,7 @@ BLOD1:	pop	de		;[D]=drive, [BC]=offset
 	call	BDOSE
 BLOAD_END:
 	ld	ix,FINPRT
-	call	CALBAS
+	call	DO_CALBAS
 	pop	hl		;restore text pointer
 	ret
 ;
@@ -1819,7 +1806,7 @@ CHK_ADRGET:
 ;
 CALLADRGET:
 	ld	ix,ADRGET
-	jp	CALBAS
+	jp	DO_CALBAS
 
 PUT1WORD:
 	push	hl
@@ -1943,11 +1930,11 @@ DSKO$1:
 ;
 GET_PARAM:
 	ld	ix,GETBYT	; get drive number
-	call	CALBAS
+	call	DO_CALBAS
 	push	de		; save drive number ( 1='A:' )
 	SYNCHK	','
 	ld	ix,FRMEVL	; get logical sector number
-	call	CALBAS
+	call	DO_CALBAS
 	push	hl
 	call	DAC2LONG
 	ld	(BUF),hl
@@ -2159,7 +2146,7 @@ $HOOK	DGET
 	jr	z,GETCUR	; end of statement, act on current record
 	SYNCHK	','		; comma must follow
 	ld	ix,FRMEVL	; evaluate formula
-	call	CALBAS
+	call	DO_CALBAS
 	push	hl		; save text pointer
 	call	FLTINT		; get record number in [HL:BC]
 	ld	a,c		; record 0 specified?
@@ -2240,11 +2227,11 @@ $HOOK	FIELD
 	cp	'#'
 	call	z,CHRGET	;eat possible '#'
 	ld	ix,GETBYT
-	call	CALBAS
+	call	DO_CALBAS
 	jp	z,JSNERR	;end of statement encountered
 	push	hl		;save text pointer
 	ld	ix,RGETPTR	;get address of FCB to [HL]
-	call	CALBAS
+	call	DO_CALBAS
 	ld	e,l		;copy it also to [DE]
 	ld	d,h
 	jp	z,JDERFNO	;file not open
@@ -2272,14 +2259,14 @@ LOPFLD:	ex	de,hl		;save text pointer in [DE]
 	ret	nz		;back to NEWSTT if not
 	push	de		;save the pointer into the data block
 	ld	ix,GTBYTC	;read number into [a] from text
-	call	CALBAS
+	call	DO_CALBAS
 	push	af		;save this number
 	SYNCHK	'A'
 	SYNCHK	'S'
 	ld	ix,PTRGET	;get a pointer at the string descriptor
-	call	CALBAS		;into [DE]
+	call	DO_CALBAS		;into [DE]
 	ld	ix,GETYPR	;make sure it's a string
-	call	CALBAS
+	call	DO_CALBAS
 	jp	nz,JTMERR
 	pop	af		;get the number of characters
 	ex	(sp),hl		;save the text pointer and
@@ -2325,19 +2312,19 @@ $HOOK	LSET
 	call	REMHOK		;remove hook return
 	push	af		;save LSET/RSET flag
 	ld	ix,PTRGET	;get pointer to stringvar
-	call	CALBAS
+	call	DO_CALBAS
 	ld	ix,GETYPR	;make sure it's a string
-	call	CALBAS
+	call	DO_CALBAS
 	jp	nz,JTMERR
 	push	de		;save pointer to descriptor
 	ld	ix,FRMEQL	;eat "=" and evaluate stringexp
-	call	CALBAS
+	call	DO_CALBAS
 	pop	bc		;[BC] = pointer to descriptor
 	ex	(sp),hl		;text pointer on bottom of stack
 	push	hl		;LSET/RSET flag next
 	push	bc		;put descriptor pointer back on
 	ld	ix,FRESTR	;error if not string, free temp if string
-	call	CALBAS
+	call	DO_CALBAS
 	ld	b,(hl)		;get length of stringexp
 	ex	(sp),hl		;[HL] = descriptor of var, save other
 	ld	a,(hl)		;get length of stringvar
@@ -2379,14 +2366,14 @@ $HOOK	LSET
 	pop	af		;get rid of temp indicator
 MADESC:	ld	a,c		;get length of stringvar
 	ld	ix,GETSPA	;get space for result
-	call	CALBAS
+	call	DO_CALBAS
 	pop	hl		;get stringvar descriptor
 	pop	bc		;get lengths off stack
 	ex	(sp),hl		;get what we wanted, stringexp descriptor
 	push	de
 	push	bc
 	ld	ix,FRESTR	;free temp if any
-	call	CALBAS
+	call	DO_CALBAS
 	pop	bc
 	pop	de
 	ex	(sp),hl
@@ -2458,7 +2445,7 @@ MAKDSC:	pop	af		;get temp flag
 	push	bc
 	ld	a,b
 	ld	ix,STRINI	;make a temp point to stringexp
-	call	CALBAS
+	call	DO_CALBAS
 	call	MOVE_STR
 	pop	bc
 MAKDS1:	ex	(sp),hl
@@ -2481,10 +2468,10 @@ $HOOK	MKD$
 	call	REMHOK		;remove hook return
 	push	af		;save # of bytes
 	ld	ix,DOCNVF	;convert FAC to type
-	call	CALBAS
+	call	DO_CALBAS
 	pop	af		;get length back
 	ld	ix,STRINI	;make a string of proper length
-	call	CALBAS
+	call	DO_CALBAS
 	ld	hl,(DSCPTR)	;get place to store string
 	call	VMOVMF		;move to string
 MOVE_STR:
@@ -2514,7 +2501,7 @@ $HOOK	CVD
 	call	REMHOK		;remove hook return
 	push	af		;save length - 1
 	ld	ix,FRESTR	;make sure a string
-	call	CALBAS
+	call	DO_CALBAS
 	pop	af		;get length - 1 back
 	cp	(hl)		;see if string long enough
 	jp	nc,JFCERR	;error if not long enough
@@ -2533,7 +2520,7 @@ $HOOK	CVD
 ;
 FLTINT:
 	ld	ix,GETYPR	;get type of formula
-	call	CALBAS
+	call	DO_CALBAS
 	jp	m,FLTINT_INT	;already integer
 	jp	z,JTMERR	;string, 'type mismatch'
 	ld	hl,DAC		;save original DAC
@@ -2551,11 +2538,11 @@ FLTINT:
 	and	a
 	call	VINT+2		;discard fraction
 	ld	ix,FRMQNT+3	;convert to unsigned integer in [HL]
-	call	CALBAS
+	call	DO_CALBAS
 	push	de		;save higher word
 	ex	de,hl
 	ld	ix,FLTLIN	;force unsigned [HL] to single precision
-	call	CALBAS
+	call	DO_CALBAS
 	call	CONDS		;force to double
 	ld	bc,6545H	;multiply by 65536
 	ld	de,6053H
@@ -2571,7 +2558,7 @@ FLTINT:
 	ldir
 	call	DECSUB		;get value mod 65536
 	ld	ix,FRMQNT+3	;convert to unsigned integer in [HL]
-	call	CALBAS
+	call	DO_CALBAS
 	ld	c,e		;set lower word
 	ld	b,d
 	pop	hl		;restore higher word
@@ -2642,7 +2629,7 @@ FILES_SHORT:
 	dec	a
 	push	af		; save as a flag on stack
 	ld	ix,CRDONZ	; force cursor to the top of line
-	call	CALBAS
+	call	DO_CALBAS
 	pop	af
 	push	af
 	ld	a,ATM_DIR+ATM_HID+ATM_SYS
@@ -2673,7 +2660,7 @@ SEARCH_LONG:
 	pop	hl
 	call	PRINT_HL
 	ld	ix,CRDO
-	call	CALBAS
+	call	DO_CALBAS
 ;
 ;	keep printing file names while there
 ;	top of the stack contains the flag as shown below
@@ -2712,7 +2699,7 @@ POSTTY:
 ;
 NWFILN:
 	ld	ix,CRDO
-	call	CALBAS		;type CRLF
+	call	DO_CALBAS		;type CRLF
 NOCRLF:
 	ld	ix,FIB
 	ld	c,_FNEXT##
@@ -2722,7 +2709,7 @@ NOCRLF:
 JFINPRT:
 	pop	hl		;restore text pointer
 	ld	ix,FINPRT
-	jp	CALBAS		;finish printing
+	jp	DO_CALBAS		;finish printing
 
 ;
 ;	routine to print an entry
@@ -2778,7 +2765,7 @@ PRINT_LONG:
 	ld	hl,(FIB+23)
 	call	TO_FLOAT	; set this as float in DAC
 	ld	ix,FOUT		; convert to ASCII string
-	call	CALBAS
+	call	DO_CALBAS
 	inc	hl		; skip blank at the beginning
 	push	hl
 	ld	b,12		; count how many digits we have
@@ -3033,7 +3020,7 @@ CHK_CALL_NAMSCN:
 	SYNCHK	'('
 CALL_NAMSCN:
 	ld	ix,NAMSCN	;parse file name
-	call	CALBAS
+	call	DO_CALBAS
 	ld	a,d
 	cp	8+1		;disk?
 	ret	c		;yes
@@ -3050,9 +3037,9 @@ $HOOK	LOC
 	call	REMHOK
 	push	af		; save method
 	ld	ix,CONINT	; get file number in [A]
-	call	CALBAS
+	call	DO_CALBAS
 	ld	ix,RGETPTR	; get address of FCB to [HL]
-	call	CALBAS
+	call	DO_CALBAS
 	jp	c,JFCERR	; special device
 	jp	z,JDERFNO	; file is not open
 	inc	hl
@@ -3118,7 +3105,7 @@ RET_LOC:
 TO_FLOAT:
 	push	bc		;save lower word
 	ld	ix,FLTLIN	;convert unsigned 16 bit to single in DAC
-	call	CALBAS
+	call	DO_CALBAS
 	ld	bc,6545H	;multiply by 65536
 	ld	de,6053H
 	call	FMULT		;DAC = DAC * 65536
@@ -3128,7 +3115,7 @@ TO_FLOAT:
 	ldir
 	pop	hl		;get lower word
 	ld	ix,FLTLIN	;convert unsigned 16 bit to single
-	call	CALBAS
+	call	DO_CALBAS
 	call	CONDS		;force to double
 	jp	DECADD		;DAC = DAC + ARG
 
@@ -3192,7 +3179,7 @@ $HOOK	DSKF
 
 	call	REMHOK		; remove hook
 	ld	ix,CONINT	; convert to integer in [A]
-	call	CALBAS
+	call	DO_CALBAS
 	and	a		; default drive?
 	call	nz,VAL_DRV	; validate drive number if not
 	ld	e,a
@@ -3445,7 +3432,7 @@ DBABORT_ROUTINE:
 	call	CPABORT_ROUTINE
 	jr	nz,DOS_ERROR
 	ld	ix,READYR
-	jp	CALBAS
+	jp	DO_CALBAS
 
 	subttl	error dispatcher
 ;
@@ -3569,7 +3556,7 @@ DOS_ERROR:
 	cp	.CTRLC##	;Ctrl-C pressed
 was_break:
 	ld	ix,READYR	;Go to READYR without any indication of error
-	jp	z,CALBAS	; (must be a better way).
+	jp	z,DO_CALBAS	; (must be a better way).
 ;
 
 	;This entry point allows to convert a DOS error code
@@ -3635,7 +3622,7 @@ DERLST	equ	QQQQ-1		;
 	ld	(NLONLY),a
 	push	de		;save error code
 	ld	ix,CLSFIL
-	call	CALBAS		;close file #0
+	call	DO_CALBAS		;close file #0
 	pop	de
 	jr	GO_ERROR
 ;
@@ -3682,8 +3669,8 @@ JDERFNO:ld	e,ERRFNO
 	xor	a		;always clear binary mode flag
 	ld	(FLBMEM),a
 	ld	ix,ERROR
-CALBAS:
-	call	RCALBAS
+DO_CALBAS:
+	call	CALBAS
 	ei			;make sure interrupt is enabled
 	ret
 
@@ -3706,7 +3693,7 @@ CHRGOT:	dec	hl
 ;	get next token
 ;
 CHRGET:	ld	ix,CHRGTR
-	jr	CALBAS
+	jr	DO_CALBAS
 
 ;
 ;	H.PARDEV

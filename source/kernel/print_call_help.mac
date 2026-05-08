@@ -12,7 +12,8 @@
 ; Input: HL = pointer to string.
 ; Modifies: AF, BC, DE, HL
 
-CHGET: equ	009Fh
+	INCLUDE ../../sdk/asm/constants/msx_bios.inc
+
 LINL40: equ 0F3AEh
 
 PRINT_CALL_HELP::

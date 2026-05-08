@@ -8,10 +8,7 @@ TRUE    equ     NOT FALSE
 ;
 
 
-const   macro   name,value
-name     equ    (value)
-	 public name
-	endm
+	include ../../sdk/asm/macros/const.inc
 ;
 ;
 ;

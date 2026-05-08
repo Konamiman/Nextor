@@ -3,10 +3,10 @@
 
    Compilation command line:
    
-   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196
-        --no-std-crt0 crt0_msxdos_advanced.rel msxchar.rel
+   sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code
+        crt0_msxdos.rel asmcall.rel printf.rel print_msxdos.rel
         nexboot.c
-   hex2bin -e com emufile.ihx
+   hex2bin -e com nexboot.ihx
 */
 
 #include <stdio.h>
@@ -14,8 +14,9 @@
 #include <string.h>
 #include <ctype.h>
 #include "types.h"
-#include "system.h"
-#include "dos.h"
+#include "msx_bios.h"      /* CALSLT */
+#include "msx_workarea.h"  /* EXPTBL */
+#include "dos_functions.h"
 #include "asmcall.h"
 
 /* Defines */
@@ -51,8 +52,6 @@ const char* strCRLF = "\r\n";
 /* Global variables */
 
 Z80_registers regs;
-byte ASMRUT[4];
-byte OUT_FLAGS;
 byte keyFlags[5];
 
 //First value: byte offset in keyFlags
@@ -92,7 +91,6 @@ void ResetComputer();
 
 int main(char** argv, int argc)
 {
-    ASMRUT[0] = 0xC3;
     memset(keyFlags, 0, 5);
 
     printf(strTitle);
@@ -206,6 +204,3 @@ void ResetComputer()
 }
 
 #define COM_FILE
-#include "print_msxdos.c"
-#include "printf.c"
-#include "asmcall.c"

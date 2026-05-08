@@ -5,9 +5,10 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
 
-BUF	equ	0F55Eh
 CALBNK_ADDR	equ	4042h	;doshead CALBNK routine (same address in all banks)
 DPBSIZE	equ	21
 GHO_DRVTBL_PTR	equ	0FD8Eh	;PROCNM+5: scratch area for DRVTBL pointer
@@ -656,10 +657,7 @@ SGD1_DPB_DONE:
 ;    Input:  TARGET## = 0-based drive number
 ;    Modifies: AF, BC, DE, HL, IX
 
-CHPUT	equ	00A2h
-CHGET	equ	009Fh
 KILBUF	equ	0156h
-EXPTBL	equ	0FCC1h
 
 	public	?GHOST_PROMPT_DOS2
 

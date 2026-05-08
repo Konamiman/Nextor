@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	RAMMOD
 ;
 ;------------------------------------------------------------------------------
@@ -647,7 +648,7 @@ flush_got_phys:	ld	a,b			;Flush all buffers for this
 		push	iy
 		ld	iy,(MASTER_SLOT##-1)	;Inter-slot call to page-1
 		ld	ix,($ERR_MSG##)		; to get string for this
-		call	CALSLT##		; error code.
+		call	CALSLT		; error code.
 		ei
 		pop	iy
 		ld	b,a			;If default error message then

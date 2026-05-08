@@ -7,55 +7,18 @@
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
 	INCLUDE ../bank0/b0labels.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
+	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
 ;
 
 EMU_RAM_ADDRESS equ 0A000h
 
 DISKID		equ	0FD99h
 
-; Driver query constants (from data.mac, not included in bank 4)
-QUERY_OK		equ	0
-QUERY_NOT_IMPLEMENTED	equ	255
-DRVQ_INIT_RAM		equ	6
-DRVQ_SHUTDOWN_RAM	equ	7
+	INCLUDE ../../../sdk/asm/constants/partit.inc
 
-MBR_PSTART	equ	01BEh	;Start of partition table in MBR
-MBR_PSIZE	equ	16	;Size of partition table entry
-POFF_STATUS equ 0   ;Offset of status byte in p. table entry
-POFF_CHS_START equ 1
-POFF_TYPE	equ	4	;Offset of partition type in p. table entry
-POFF_CHS_END equ 5
-POFF_PSTART	equ	8	;Offset of partition start in p. table entry
-POFF_PSIZE	equ	12	;Offset of partition size in p. table entry
-PT_FAT12	equ	1	;Partition type code for FAT12
-PT_FAT16_S	equ	4	;Partition type code for FAT16 (< 32M)
-PT_EXT		equ	5	;Partition type code for extended partition (CHS)
-PT_EXT_LBA  equ 15  ;Partition type code for extended partition (LBA)
-PT_FAT16	equ	6	;Partition type code for FAT16
-PT_FAT16_L	equ 14  ;Partition type code for FAT16 (LBA)
-
-CALLB0	equ	403Fh
-CALBAS	equ	0159h
-
-PROCNM	equ	0FD89h
-
-DCOMPR	equ	0020h
-;CHPUT	equ	00A2h
-GETBYT	equ	521Ch
-CHRGTR	equ	4666h
-FRMEVL	equ	4C64h
-FRESTR	equ	67D0h
-FRMQNT	equ	542Fh
-NLONLY	equ	0F87CH
-FLBMEM	equ	0FCAEH
-CKCNTC	equ	00BDh		;check control-STOP
-
-VALTYP equ	0F663h
-DAC	equ 0F7F6h
-
-BUF	equ	0F55Eh		;line input buffer (used as scratch)
-
-CHPUT:
+DO_CHPUT:
 	cp	10
 	jp	nz,18h
 	printchar
@@ -63,7 +26,7 @@ CHPUT:
 	ld	hl,CKCNTC
 	ld	(BK4_ADD##),hl
 	pop	hl
-	jp	CALLB0
+	jp	CALLB0##
 
 
 ;-----------------------------------------------------------------------------
@@ -370,7 +333,7 @@ DEV_READ:
 ;
 	;--- ROM driver path
 	ld	iyh,c
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),ix
 	ld	ix,CALDRV##
 
@@ -380,7 +343,7 @@ DEV_READ:
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
 
-	call	CALSLT##
+	call	CALSLT
 	jr	DEV_READ_DONE
 ;
 	;--- RAM driver path
@@ -393,7 +356,7 @@ DEV_READ_RAM:
 	push	hl		;Save slot:segment for IY
 	ld	hl,($SECBUF##)	;HL = buffer
 	ld	de,TMP_SEC##	;DE = sector number pointer
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	pop	iy		;IY = slot:segment
 	call	CALL_MAP##
 ;
@@ -947,11 +910,11 @@ AUTO_ASSIGN:
 	push bc
 	push de
 	push ix
-	ld hl,DRIVER.DRIVER_QUERY##
+	ld hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld a,(iy+UD_SLOT##)
 	ld iyh,a
-	ld a,DRIVER.DRVQ_GET_MAX_DEVICE##
+	ld a,DRIVER_QUERY.GET_MAX_DEVICE##
 	ld	ix,CALDRV##
 	call	CALSLT
 	or a
@@ -1029,11 +992,11 @@ AA_DLOOP:
 AA_GET_DEVINFO:
 	ld	a,(ix+AAD_DRIVER_SLOT)
 	ld iyh,a
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF##)
 	ld	c,(ix+AAD_LOOP_DEVICE_NUMBER)
-	ld  a,DRIVER.DEVQ_GET_PARAMS##
+	ld  a,DEVICE_QUERY.GET_PARAMS##
 	push	ix
 	ld	ix,CALDRV##
 	call	CALSLT
@@ -1611,7 +1574,7 @@ AA_RSEC:
     or a
 AA_DOSEC:    
 	ld iyh,c
-	ld	hl,DRIVER.READ_WRITE##
+	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
 	ld	hl,($SECBUF##)
@@ -2190,11 +2153,11 @@ GDRV_IS_KERNEX:
 
 	push	iy
 	push	ix
-	ld	hl,DRIVER.DRIVER_QUERY##
+	ld	hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	ix,CALDRV##
-	ld a,DRIVER.DRVQ_GET_VERSION##
-	call	CALSLT##
+	ld a,DRIVER_QUERY.GET_VERSION##
+	call	CALSLT
 	or a
 	jr z,GDRV_OK_GET_VERSION
 	ld bc,0100h
@@ -2225,13 +2188,13 @@ GDRV_LEGACY_STRING_SIZE:
 	add hl,bc
 	push hl	;Save pointer to driver name
 	ld a,d
-	ld	de,DRIVER.DRIVER_QUERY##
+	ld	de,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),de
 	ld d,a
-	ld a,DRIVER.DRVQ_GET_STRING##
-	ld b,DRIVER.DRVQ_STR_DRIVER_NAME##
+	ld a,DRIVER_QUERY.GET_STRING##
+	ld b,DRIVER_QUERY.STR_DRIVER_NAME##
 	ld	ix,CALDRV##
-	call	CALSLT##
+	call	CALSLT
 
 	pop hl
 	pop bc
@@ -2287,8 +2250,8 @@ GDRV_IS_RAM:
 ;
 	push	iy
 	push	ix
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld	a,DRIVER.DRVQ_GET_VERSION##
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	ld	a,DRIVER_QUERY.GET_VERSION##
 	call	CALL_MAP##
 	or	a
 	jr	z,GDRV_RAM_VER_OK
@@ -2319,9 +2282,9 @@ GDRV_RAM_STR_SZ:
 	ld	bc,8
 	add	hl,bc
 	push	hl		;Save dest pointer
-	ld	a,DRIVER.DRVQ_GET_STRING##
-	ld	b,DRIVER.DRVQ_STR_DRIVER_NAME##
-	ld	ix,DRIVER.DRIVER_QUERY##
+	ld	a,DRIVER_QUERY.GET_STRING##
+	ld	b,DRIVER_QUERY.STR_DRIVER_NAME##
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	call	CALL_MAP##
 ;
 	pop	hl		;String dest pointer
@@ -2715,7 +2678,7 @@ F_CDRVR_GO:
 	ld	b,(ix+3)
 	ld	ix,CALDRV##
 	pop	af
-	call	CALSLT##
+	call	CALSLT
 	push	af
 	pop	ix
 
@@ -2878,7 +2841,7 @@ GSLT_SLTTBL:
 	and	00000011b
 	ld	c,a
 	ld	b,0
-	ld	hl,EXPTBL##
+	ld	hl,EXPTBL
 	add	hl,bc		;Look at expanded slot flag
 	bit	7,(hl)		; for this slot and return
 	ret	z		; if slot is not expanded.
@@ -3391,14 +3354,14 @@ MAPS_SEG_OK:
 	cp	0FFh
 	jr	nz,MAPS_RAM_GP
 
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
 	ld	c,(iy+2)
 	ld iyh,a
 	ld	hl,($SECBUF##)
 	ld	ix,CALDRV##
-	ld a,DRIVER.DEVQ_GET_PARAMS##
+	ld a,DEVICE_QUERY.GET_PARAMS##
 	call	CALSLT
 	jr	MAPS_DONE_GP
 
@@ -3408,9 +3371,9 @@ MAPS_RAM_GP:
 	ld	l,(iy+1)
 	push	hl
 	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	hl,($SECBUF##)
-	ld	a,DRIVER.DEVQ_GET_PARAMS##
+	ld	a,DEVICE_QUERY.GET_PARAMS##
 	call	CALL_MAP##
 
 MAPS_DONE_GP:
@@ -3447,12 +3410,12 @@ MAPS_DONE_GP:
 	cp	0FFh
 	jr	nz,MAPS_RAM_GS
 
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
 	ld	c,(iy+2)
 	ld iyh,a
-	ld a,DRIVER.DEVQ_GET_STATUS##
+	ld a,DEVICE_QUERY.GET_STATUS##
 	ld	ix,CALDRV##
 	call	CALSLT
 	jr	MAPS_DONE_GS
@@ -3463,8 +3426,8 @@ MAPS_RAM_GS:
 	ld	l,(iy+1)
 	push	hl
 	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY##
-	ld	a,DRIVER.DEVQ_GET_STATUS##
+	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	a,DEVICE_QUERY.GET_STATUS##
 	call	CALL_MAP##
 
 MAPS_DONE_GS:
@@ -3473,7 +3436,7 @@ MAPS_DONE_GS:
 	pop	hl
 	pop	bc
 
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr z,MAP_DRV_UNCH
 	or	a
 	jp	nz,MAP_IDEVN_END
@@ -4413,7 +4376,7 @@ MAPDOS1_CHK_NEXT:
 	push	ix
 	push	iy
 
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
 	ld	c,(iy+2)
@@ -4421,7 +4384,7 @@ MAPDOS1_CHK_NEXT:
 	ld iyh,a
 	ld	hl,($SECBUF##)
 	ld	ix,CALDRV##
-	ld a,DRIVER.DEVQ_GET_PARAMS##
+	ld a,DEVICE_QUERY.GET_PARAMS##
 	call	CALSLT
 	pop	iy
 	call CHECK_DEVQ_GET_PARAMS_ERROR
@@ -4452,9 +4415,9 @@ MAPDOS1_CHK_NEXT:
 	ld	a,(iy+7)
 	ld	(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3),a
 
-	;Check if device is FDD (DEVQ_GET_PARAMS result still in SECBUF)
+	;Check if device is FDD (GET_PARAMS query result still in SECBUF)
 	ld	iy,($SECBUF##)
-	bit	2,(iy+7)		;FDD flag in DEVQ result
+	bit	2,(iy+7)		;FDD flag in GET_PARAMS result
 	jr	z,MAPDOS1_END_OK
 	set	6,(ix+UD1_RELATIVE_DRIVE##)	;Set FDD flag
 	call	MAYBE_CREATE_GHOST_DOS1
@@ -4596,9 +4559,9 @@ F_Z80MODE_GO:
 
 	push	bc
 	push	de
-	ld	a,(EXPTBL##)
+	ld	a,(EXPTBL)
 	ld	hl,MSXVER
-	call	RDSLT##
+	call	RDSLT
 	pop	de
 	pop	bc
 	cp	3
@@ -4941,7 +4904,7 @@ MAPDRV_NOPRIM:
 	and	11b
 	ld	c,a
 	ld	b,0
-	ld	ix,EXPTBL##	;Set bit 7 if necessary
+	ld	ix,EXPTBL	;Set bit 7 if necessary
 	add	ix,bc
 	ld	a,(ix)
 	and	10000000b
@@ -5290,7 +5253,7 @@ GET_REGS:
 	ld	hl,(BUF)
 	ld	(BK4_ADD##),hl
 	exx
-	call	CALLB0
+	call	CALLB0##
 
 	ld	(BUF),ix
 	pop		ix
@@ -5319,7 +5282,7 @@ CUSR_GO:
 	push	hl
 	ld	hl,(BUF)
 	ld	(BK4_ADD##),hl
-	call	CALLB0
+	call	CALLB0##
 	pop	hl
 	ret
 
@@ -5417,7 +5380,7 @@ LOCKDRV_SHOW:
 	ld	a,(MAPDRV_TMP)
 	ld	e,a
 	add	a,'A'
-	call	CHPUT
+	call	DO_CHPUT
 
 	pop	af
 	or	a
@@ -5581,7 +5544,7 @@ BASIC_DOS1:
 	pop	af
 	ld	ix,0F37Dh
 	ld	(BK4_ADD##),ix
-	call	CALLB0
+	call	CALLB0##
 	or	a
 	ret	z
 
@@ -5601,7 +5564,7 @@ BASIC_DOS1:
 BASIC_DOS_NE:
 	ld	ix,0F37Dh
 	ld	(BK4_ADD##),ix
-	jp	CALLB0
+	jp	CALLB0##
 
 
 ; Call a routine in the BASIC interpreter
@@ -5610,7 +5573,7 @@ BASIC_DOS_NE:
 BASIC_ROUT:
 	ld	iy,CALBAS
 	ld	(BK4_ADD##),iy
-	call	CALLB0
+	call	CALLB0##
 	ei
 	ret
 
@@ -5761,9 +5724,9 @@ GDL_OK:
 	ld	c,_CURDRV##
 	call	BASIC_DOS_NE
 	add	a,'A'
-	call	CHPUT
+	call	DO_CHPUT
 	ld	a,':'
-	call	CHPUT
+	call	DO_CHPUT
 	pop	hl
 	ret
 
@@ -5791,7 +5754,7 @@ NEXVER_LOOP:
 	pop hl
 	or a
 	jr z,NEXVER_END
-	call CHPUT
+	call DO_CHPUT
 	inc hl
 	jr NEXVER_LOOP
 NEXVER_END:
@@ -5868,7 +5831,7 @@ DRVI_LOOP:
 	call	PRINT_CALL_HELP##
 	ld	a,(DRVINDEX)
 	add	a,"A"
-	call	CHPUT
+	call	DO_CHPUT
 	ld	hl,DRIVE2_MSG
 	call	PRINT_CALL_HELP##
 
@@ -5889,9 +5852,9 @@ DRVI_NORD:
 	call	PRINT_CALL_HELP##
 	ld	a,(BUF_LETTER+1)
 	add	a,"A"
-	call	CHPUT
+	call	DO_CHPUT
 	ld	a,":"
-	call	CHPUT
+	call	DO_CHPUT
 	ld	hl,TWOCRLF
 	call	PRINT_CALL_HELP##
 	jp	NEXT_DRIVE
@@ -5914,9 +5877,9 @@ DRVI_NOGHOST:
 
 	ld	a,(BUF_LETTER+1)
 	add	a,"A"
-	call	CHPUT
+	call	DO_CHPUT
 	ld	a,':'
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	a,(BUF_LETTER+2)
 	and	1
@@ -5998,7 +5961,7 @@ SHOW_DEVNUM:
 	call	PRINT_CALL_HELP##
 	ld	a,(ix+4)
 	add	a,"0"
-	call	CHPUT
+	call	DO_CHPUT
 	jr	OK_DEVNUM
 
 SHOW_REL:
@@ -6006,7 +5969,7 @@ SHOW_REL:
 	call	PRINT_CALL_HELP##
 	ld	a,(ix+3)
 	add	a,"0"
-	call	CHPUT
+	call	DO_CHPUT
 OK_DEVNUM:
 
 	ld	hl,TWOCRLF
@@ -6145,7 +6108,7 @@ HAS_DRIVES:
 	call	PRINT_CALL_HELP##
 	ld	a,(ix+3)
 	add	a,"A"
-	call	CHPUT
+	call	DO_CHPUT
 	ld	hl,COLON_AND_CRLF
 	call	PRINT_CALL_HELP##
 	jr	OK_PRINT_DRIVES
@@ -6158,7 +6121,7 @@ HAS_MANY_DRIVES:
 
 	ld	b,a
 	add	a,"0"
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	hl,COMMA_MSG
 	call	PRINT_CALL_HELP##
@@ -6166,7 +6129,7 @@ HAS_MANY_DRIVES:
 	ld	a,(ix+3)
 	add	a,"A"
 	ld	c,a
-	call	CHPUT
+	call	DO_CHPUT
 
 	push	bc
 	ld	hl,TO_MSG
@@ -6176,7 +6139,7 @@ HAS_MANY_DRIVES:
 	ld	a,b
 	add	a,c
 	dec	a
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	hl,COLON_AND_CRLF
 	call	PRINT_CALL_HELP##
@@ -6240,7 +6203,7 @@ PDI_LOOP:
 	or	a
 	jr	z,PDI_TRUNC	;Max reached, truncate
 	ld	a,(hl)
-	call	CHPUT
+	call	DO_CHPUT
 	inc	hl
 	dec	c
 	jr	PDI_LOOP
@@ -6251,37 +6214,37 @@ PDI_TRUNC:
 	or	a
 	jr	z,PDI_DONE
 	ld	a,'.'
-	call	CHPUT
-	call	CHPUT
-	call	CHPUT
+	call	DO_CHPUT
+	call	DO_CHPUT
+	call	DO_CHPUT
 PDI_DONE:
 
 	ld	a," "
-	call	CHPUT
+	call	DO_CHPUT
 	ld	a,"v"
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	a,(ix+5)
 	add	a,"0"
-	call	CHPUT		;Main version number
+	call	DO_CHPUT		;Main version number
 
 	ld	a,"."
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	a,(ix+6)
 	add	a,"0"
-	call	CHPUT		;Secondary version number
+	call	DO_CHPUT		;Secondary version number
 
 	ld	a,(ix+7)
 	or	a
 	ret	z
 
 	ld	a,"."
-	call	CHPUT
+	call	DO_CHPUT
 
 	ld	a,(ix+7)
 	add	a,"0"
-	call	CHPUT		;Revision number, only if not zero
+	call	DO_CHPUT		;Revision number, only if not zero
 
 	ret
 
@@ -6300,7 +6263,7 @@ PRSLOT::
 	push	af
 	and	11b
 	add	a,"0"
-	call	CHPUT		;Print main slot number
+	call	DO_CHPUT		;Print main slot number
 
 	pop	af
 	bit	7,a
@@ -6311,9 +6274,9 @@ PRSLOT::
 	add	a,"0"
 	push	af
 	ld	a,"-"
-	call	CHPUT
+	call	DO_CHPUT
 	pop	af
-	call	CHPUT		;Print sub-slot number
+	call	DO_CHPUT		;Print sub-slot number
 
 PRSLOT_SEG:
 	pop	bc
@@ -6330,7 +6293,7 @@ PRSLOT_SEG:
 	jr	PRSLOT_SNUM
 PRSLOT_S40:
 	ld	a,':'		;40-col: ":"
-	call	CHPUT
+	call	DO_CHPUT
 PRSLOT_SNUM:
 	pop	af
 	;fall through to PRDEC8
@@ -6343,12 +6306,12 @@ PRDEC8:
 	ld	d,0		;D = have printed a digit flag
 	ld	b,100
 	call	PRDEC8_DGT
-	ld	a,e		;Reload remainder (CHPUT corrupts A)
+	ld	a,e		;Reload remainder (DO_CHPUT corrupts A)
 	ld	b,10
 	call	PRDEC8_DGT
 	ld	a,e
 	add	a,"0"
-	jp	CHPUT
+	jp	DO_CHPUT
 
 PRDEC8_DGT:
 	ld	c,"0"-1
@@ -6367,7 +6330,7 @@ PRDEC8_DL:
 PRDEC8_PR:
 	ld	d,1
 	ld	a,c
-	jp	CHPUT
+	jp	DO_CHPUT
 
 PRSEG_S:
 	db	', segment ',0
@@ -6511,18 +6474,18 @@ GET_DVB_NEXT:
     and 00100000b
     ld c,a
 
-	;Invoke DEVQ_GET_PARAMS on all possible devices of the driver,
+	;Invoke GET_PARAMS query on all possible devices of the driver,
 	;and return in A the number of devices found.
     ;Input: (in stack) C=00100000b if "5" key is pressed, C=0 otherwise
 
 COUNT_DEVICES:
 
-	;First try to invoke DRVQ_GET_MAX_DEVICE to know 
+	;First try to invoke GET_MAX_DEVICE query to know
 	;how many devices we should query
 
 	push bc
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld  a,DRIVER.DRVQ_GET_MAX_DEVICE##
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	ld  a,DRIVER_QUERY.GET_MAX_DEVICE##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
@@ -6549,13 +6512,13 @@ COUNTDEVS_MAX_DEV_OK:
     ld a,1  ;Only 1 device if "5" key is pressed
     ret
 
-	;Loop through DEVQ_GET_PARAMS for all device numbers,
+	;Loop through GET_PARAMS query for all device numbers,
 	;return A=Number of devices found.
 	;For offline devices, only count them if they are removable.
 	;Input: B = Max device number, D=0
 
 COUNT_DEVICES_LOOP:
-	;Allocate 12-byte buffer on stack for DEVQ_GET_PARAMS response
+	;Allocate 12-byte buffer on stack for GET_PARAMS query response
 	ld hl,-12
 	add hl,sp
 	ld sp,hl
@@ -6576,15 +6539,15 @@ COUNTDEVS_LOOP_ITER:
 	add iy,sp
 	ld l,(iy+4)
 	ld h,(iy+5)		;HL = buffer address
-	ld ix,DRIVER.DEVICE_QUERY##
-	ld a,DRIVER.DEVQ_GET_PARAMS##
+	ld ix,DRIVER.DEVICE_QUERY_ENTRY##
+	ld a,DEVICE_QUERY.GET_PARAMS##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
 
 	or a
 	jr z,COUNTDEVS_PARAMS_OK
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr z,COUNTDEVS_ONLINE	;Not implemented = try to count partitions anyway
 	jr COUNTDEVS_DEV_NOT_FOUND	;Error = don't count
 
@@ -6604,8 +6567,8 @@ COUNTDEVS_PARAMS_OK:
 	ld c,(iy+3)		;C = device number
 
 	push de			;Save E=removable
-	ld ix,DRIVER.DEVICE_QUERY##
-	ld a,DRIVER.DEVQ_GET_AVAILABILITY##
+	ld ix,DRIVER.DEVICE_QUERY_ENTRY##
+	ld a,DEVICE_QUERY.GET_AVAILABILITY##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
@@ -6879,7 +6842,7 @@ STRCOMP:
 CHECK_DEVQ_GET_PARAMS_ERROR:
 	or a
 	ret z
-	cp DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	ret nz
 	push ix
 	ld ix,($SECBUF##)
@@ -7069,7 +7032,7 @@ GET_P1_SLOT:
 	and 00000011b
 	ld c,a			;C = primary slot
 	ld b,0
-	ld hl,EXPTBL##
+	ld hl,EXPTBL
 	add hl,bc
 	bit 7,(hl)
 	ld a,c
@@ -7529,25 +7492,9 @@ RDRV_SIG_STR:
 ;             H  = Operation: 1=Initialize, 2=Shut down
 ; Returns:    A  = Error code (0 = success)
 ;
-;    When the driver's init/shutdown query is invoked, pages 0 and 2 are
-;    temporarily switched to the caller's TPA segments (P0_TPA/P2_TPA)
-;    so that user-supplied print routines in the TPA are directly reachable.
-;    The only constraint on the print routine address is that it must NOT
-;    be in page 1 (4000h-7FFFh), since page 1 holds the driver segment
-;    during the callback.
 
-	;--- Map kernel data segment to page 2 (caller may have BASIC RAM)
-
-	push	af
-	call	GET_P2##
-	ld	(BUF+6),a	;Save caller's original page 2 segment for restore on exit
-	ld	a,0C9h		;RET opcode: null print routine in page 3
-	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-	pop	af
-
-	;--- Save all parameters in BUF
+	;--- Save parameters in BUF and prepare a page-3 RET stub for the
+	;    silent ("DE = 0") print routine.
 
 	ld	(BUF),a		;+0 = slot
 	ld	a,b
@@ -7556,30 +7503,24 @@ RDRV_SIG_STR:
 	ld	a,h
 	ld	(BUF+4),a	;+4 = operation
 
+	ld	a,0C9h		;RET opcode: null print routine target in page 3
+	ld	(BUF+5),a	;(DRVRO_RET can't be used, it's in page 1)
+
 	;--- Dispatch operation
 
+	ld	a,h
 	cp	1
 	jr	z,DRVRO_DO_INIT
 	cp	2
 	jr	z,DRVRO_DO_SHUT
 	ld	a,.ISBFN##
-	jr	DRVRO_EXIT
+	ret
 
 DRVRO_DO_INIT:
-	call	DRVRO_INIT
-	jr	DRVRO_EXIT
+	jp	DRVRO_INIT
 
 DRVRO_DO_SHUT:
-	call	DRVRO_SHUT
-
-DRVRO_EXIT:
-	;--- Restore caller's original page 2 segment
-
-	push	af
-	ld	a,(BUF+6)
-	call	PUT_P2##
-	pop	af
-	ret
+	jp	DRVRO_SHUT
 
 ;--------------------------------------
 ; Operation 1: Initialize a RAM driver
@@ -7614,7 +7555,7 @@ DRVRO_I2:
 
 	call	DRVRO_TPA_ON
 
-	;--- Invoke DRVQ_INIT_RAM via CALL_MAP
+	;--- Invoke DRIVER_QUERY.INIT_RAM## via CALL_MAP
 	;    B=slot, C=segment (for driver's use, e.g. setting up hooks)
 
 	ld	a,(BUF)
@@ -7623,8 +7564,8 @@ DRVRO_I2:
 	ld	a,(BUF+1)
 	ld	c,a		;C = segment
 	db	0FDh,6Fh	;ld IYl,A  (segment for CALL_MAP)
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld	a,DRVQ_INIT_RAM
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	ld	a,DRIVER_QUERY.INIT_RAM##
 
 	call	CALL_MAP##
 
@@ -7634,9 +7575,9 @@ DRVRO_I2:
 
 	;--- Check result
 
-	cp	QUERY_OK
+	cp	DRIVER.RESULT_OK##
 	jr	z,DRVRO_I_OK
-	cp	QUERY_NOT_IMPLEMENTED
+	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
 	ld b,0 ;"Not implemented": treat as success, but assume no flags
 	jr	z,DRVRO_I_OK
 	ld	a,.INITE##
@@ -7706,8 +7647,8 @@ DRVRO_S3:
 	db	0FDh,67h	;ld IYh,A
 	ld	a,(BUF+1)
 	db	0FDh,6Fh	;ld IYl,A
-	ld	ix,DRIVER.DRIVER_QUERY##
-	ld	a,DRVQ_SHUTDOWN_RAM
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	ld	a,DRIVER_QUERY.SHUTDOWN_RAM##
 	call	CALL_MAP##
 
 	call	DRVRO_TPA_OFF	;Restore kernel for unregister
@@ -7734,32 +7675,18 @@ DRVRO_LOAD_AB:
 	ld	b,c
 	ret
 
-;--- Switch pages 0 and 2 to the caller's TPA segments so that
-;    user-supplied print routines in the TPA are reachable.
-;    Preserves DE (print routine address for CALL_MAP setup).
+;--- Switch pages 0 and 2 (slot + mapper) from kernel to the caller's
+;    TPA so user-supplied print routines are reachable during the
+;    driver-query callback. PUT_USER preserves BC, DE, HL.
 
 DRVRO_TPA_ON:
-	push	de
-	ld	a,(P0_TPA##)
-	call	PUT_P0##
-	ld	a,(P2_TPA##)
-	call	PUT_P2##
-	pop	de
-	ret
+	jp	PUT_USER##
 
-;--- Restore kernel code/data segments in pages 0 and 2.
-;    Preserves AF and BC (driver query results).
+;--- Switch pages 0 and 2 (slot + mapper) back to kernel.
+;    PUT_BDOS preserves AF, BC, DE, HL (driver query results).
 
 DRVRO_TPA_OFF:
-	push	af
-	push	bc
-	ld	a,(CODE_SEG##)
-	call	PUT_P0##
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-	pop	bc
-	pop	af
-	ret
+	jp	PUT_BDOS##
 
 
 ;--- Unmap all drives associated with the driver specified by
@@ -7767,19 +7694,16 @@ DRVRO_TPA_OFF:
 ;    Walks all unit descriptors, unmaps matching drives,
 ;    invalidates associated disk buffers.
 
-DRVRO_UNMAP_DRIVES:
-	;Walk all unit descriptors, free the UD memory and clear UNIT_TAB
-	;entries for any drive that matches the driver slot:segment in
-	;BUF+0:BUF+1.
+DRVRO_UNMAP_DRIVES::
+	;Walk all unit descriptors, invalidate cached buffers, free the UD
+	;memory and clear the UNIT_TAB entry for any drive that matches the
+	;driver slot:segment in BUF+0:BUF+1.
 	;
-	;Cannot call MAP_UNMAP here because it uses pcall (bank 2 routines
-	;via page 0 kernel RAM), but F_DRVRO may run from a BASIC CALL
-	;context where page 0 = BIOS ROM. We free the UD's page-2 block by
-	;invoking FR_P2 in bank 2 directly via CALBNK, which doesn't need
-	;the page-0 trampolines that pcall depends on.
-	;Open file handles are NOT explicitly closed (closing them would
-	;require pcall too); they become invalid and any I/O through them
-	;will fail when the drive disappears.
+	;Open file handles are NOT explicitly closed; they become invalid
+	;and any I/O through them will fail when the drive disappears.
+	;FL_UD (which would write back dirty buffers via the driver before
+	;invalidating) is not called: BF_FLUSH calls the driver via DSKIO
+	;and isn't safe from this context. Dirty buffers are discarded.
 
 	ld	a,(BUF)
 	ld	d,a
@@ -7812,28 +7736,14 @@ DRUMD_LOOP:
 	cp	(ix+UD_RAM_SEGMENT##)
 	jr	nz,DRUMD_NEXT
 
-	;Match: invalidate the buffer cache for this UD's drive, then free
-	;the UD memory and zero the UNIT_TAB entry. Without the cache
-	;invalidation, remapping the same drive letter later could pick up
-	;stale FAT/directory data tagged with the freed UD's physical unit.
-	;
-	;INV_UD and FR_P2 both live in bank 2 and only need page 2 = kernel
-	;data segment (set up by F_DRVRO on entry) plus page 3 (buffer
-	;chain). We reach them via CALBNK rather than pcall, because
-	;F_DRVRO may run from a BASIC CALL context where page 0 = BIOS ROM
-	;and the page-0 pcall trampolines aren't there.
-	;
-	;FL_UD (which would write back dirty buffers via the driver before
-	;invalidating) is not called: BF_FLUSH internally uses pcall, which
-	;wouldn't work here. Dirty buffers for this drive are discarded.
+	;Match: invalidate cached buffers for this UD's drive, then free
+	;its memory. Without invalidation, remapping the same drive letter
+	;later could pick up stale FAT/directory data tagged with the
+	;freed UD's physical unit.
 	ld	h,b
 	ld	l,c		;HL = UD pointer
-	ld	ix,?INV_UD##
-	ld	a,2
-	call	CALBNK##	;Invalidate cached buffers for this UD
-	ld	ix,?FR_P2##	;HL still = UD pointer (INV_UD preserves HL)
-	ld	a,2
-	call	CALBNK##	;Free UD memory in page-2 free list
+	pcall	INV_UD		;Invalidate cached buffers (preserves HL)
+	pcall	FR_P2		;Free UD memory in page-2 free list
 
 	pop	bc
 	pop	hl		;HL = table pointer
@@ -7897,7 +7807,7 @@ TRAM_ENT:
 	ld	e,(hl)			;E = segment
 	push	de
 	pop	iy			;IY = slot:segment
-	ld	ix,DRIVER.TIMER_INT##
+	ld	ix,DRIVER.TIMI_ENTRY##
 	call	CALL_MAP##
 	pop	bc
 	pop	hl
@@ -7930,7 +7840,7 @@ TRAM_EXIT:
 ; HL = BASIC text pointer (passed through to driver).
 ; Returns: carry clear if any driver handled, carry set if none did.
 ;
-	ld	de,DRIVER.OEMSTAT##
+	ld	de,DRIVER.BASSTAT_ENTRY##
 	jr	ITER_RAM_DRV
 ;
 	PROC	CBAS_DRV
@@ -7942,7 +7852,7 @@ TRAM_EXIT:
 ;
 	ex	af,af'
 	ld	a,DV_BANK##
-	ld	ix,DRIVER.BASDEV##
+	ld	ix,DRIVER.BASDEV_ENTRY##
 	jp	CALBNK##
 ;
 	PROC	CBAS_ALL
@@ -7958,13 +7868,13 @@ TRAM_EXIT:
 	;--- First try the master driver via nested CALBNK
 	ex	af,af'
 	ld	a,DV_BANK##
-	ld	ix,DRIVER.BASDEV##
+	ld	ix,DRIVER.BASDEV_ENTRY##
 	call	CALBNK##		;Nested: bank 4 → bank 6 → bank 4
 	ret	nc			;Master driver handled it
 
 	;--- Not handled, restore function code and try RAM drivers
 	ld	a,(BUF+14)
-	ld	de,DRIVER.BASDEV##
+	ld	de,DRIVER.BASDEV_ENTRY##
 	;Fall through to ITER_RAM_DRV
 
 ITER_RAM_DRV:

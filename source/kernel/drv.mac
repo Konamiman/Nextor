@@ -10,6 +10,7 @@
 ;
 	INCLUDE	macros.inc
 	INCLUDE	const.inc
+	INCLUDE ../../sdk/asm/constants/msx_bios.inc
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -123,7 +124,7 @@ CHGF3:
 	ld	(TMP_SEC##+2),hl
 
 	ld	iy,(0F348h-1)	;Master controller slot
-	ld	hl,DRIVER.READ_WRITE##
+	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
 	ld	hl,($SECBUF##)
@@ -132,7 +133,7 @@ CHGF3:
 
 	push	ix
 	ld	ix,CALDRV##
-	call	CALSLT##	;Call DEV_RW
+	call	CALSLT	;Call DEV_RW
 	pop	ix
 	pop	bc
 	call	CAPSOFF
@@ -279,7 +280,7 @@ DIRCALL:
 DO_DIRCALL:
 	pop	ix
 	push	bc
-	ld	bc,DRIVER.DIRECT_0##-DIRCALL-3
+	ld	bc,DRIVER.DIRECT0_ENTRY##-DIRCALL-3
 	add	ix,bc
 	pop	bc
 	jp	DO_CALBNK
@@ -547,7 +548,7 @@ DIO_DO_CALDRV:
 	ld	hl,($SECBUF##)
 	ld	b,1
 
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	ex	af,af'
 	ld	a,DV_BANK##
 	call	CALBNK##
@@ -562,7 +563,7 @@ DIO_DO_CALDRV:
 
 DIO_NOP1:
 	pop	af
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	call	DO_CALBNK
 	jp	CONV_ERR
 
@@ -695,7 +696,7 @@ _dpb_b0_done:
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	call	DO_CALBNK
 	pop	de
 	inc	de
@@ -936,7 +937,7 @@ READ_BOOT:
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
-	ld	ix,DRIVER.READ_WRITE##
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	jp	DO_CALBNK
 
 

@@ -64,7 +64,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-blue ide-masteronly-emu ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
+all: base ide ide-masteronly ide-blue ide-masteronly-bluemsx ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -148,7 +148,7 @@ drivers/SunriseIDE/driver.bin: \
 
 ### Sunrise IDE, ROM for blueMSX, master device only
 
-ide-masteronly-emu: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
+ide-masteronly-bluemsx: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
 
 drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
 	nextor_base.dat \
@@ -397,7 +397,8 @@ nextor_base.dat: \
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
 
-COMRELS = codes.rel kvar.rel data.rel chgbnk.rel
+SDK_COMRELS = dos_calls.rel dos_errors.rel dos_file_handles.rel
+COMRELS = $(SDK_COMRELS) kvar.rel data.rel chgbnk.rel
 B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
 B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
@@ -411,13 +412,23 @@ lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(s
 	$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$1))))))))))))))))))))))))))
 
 .SECONDEXPANSION:
-$(COMRELS) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
+$(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
 	macros.inc \
 	const.inc \
 	condasm.inc \
 	$$(patsubst %.rel,%.mac,$$@)
 
-	$(call assemble,$(patsubst %.rel,%.mac,$@))
+	$(call assemble,$(patsubst %.rel,%.mac,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+
+dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+dos_file_handles.rel: ../../sdk/asm/constants/dos_file_handles.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
 data.rel: bank4/jtable.inc bank6/jtable.inc
@@ -436,7 +447,7 @@ bank0/B0.BIN bank0/B0.SYM: \
 
 	$(call print_linking,"bank 0")
 	@$(LK80) --working-dir bank0 --symbols-file B0.SYM --output-file B0.BIN \
-			--code 4000h ../codes.rel ../kvar.rel ../data.rel ../rel.rel doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel \
+			--code 4000h ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel ../rel.rel doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel \
 			--code 7700h ../drv.rel \
 			--code 7fd0h ../chgbnk.rel
 
@@ -462,7 +473,7 @@ bank1/b1.rel: \
 	bank1/b1.mac \
 	bank0/b0labels.inc
 
-	$(call assemble,bank1/b1.mac)
+	$(call assemble,bank1/b1.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank1/B1.BIN: \
 	$(COMRELS) \
@@ -475,7 +486,7 @@ bank1/B1.BIN: \
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel ../bank4/bootmenu.rel msg.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel ../bank4/bootmenu.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -485,7 +496,7 @@ bank2/b2.rel: \
 	bank2/b2.mac \
 	bank0/b0labels.inc
 
-	$(call assemble,bank2/b2.mac)
+	$(call assemble,bank2/b2.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank2/B2.BIN bank2/B2.SYM: \
 	$(COMRELS) \
@@ -499,7 +510,7 @@ bank2/B2.BIN bank2/B2.SYM: \
 
 	$(call print_linking,"bank 2")
 	@$(LK80) --working-dir bank2 --symbols-file B2.SYM --output-file B2.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b2.rel kinit.rel TEMP21.REL TEMP22.REL TEMP23.REL \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b2.rel kinit.rel TEMP21.REL TEMP22.REL TEMP23.REL \
 			--code 7fd0h ../chgbnk.rel
 
 bank2/b2labels.inc: \
@@ -514,7 +525,7 @@ bank3/b3.rel: \
 	bank3/b3.mac \
 	bank0/b0lab_b3.inc
 
-	$(call assemble,bank3/b3.mac)
+	$(call assemble,bank3/b3.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank3/B3.BIN: \
 	$(COMRELS) \
@@ -526,7 +537,7 @@ bank3/B3.BIN: \
 
 	$(call print_linking,"bank 3")
 	@$(LK80) --working-dir bank3 --symbols-file B3.SYM --output-file B3.BIN \
-			--code 4000h ../codes.rel ../kvar.rel ../data.rel ../bank0/doshead.rel ../bank0/40ff.rel b3.rel dos1ker.rel \
+			--code 4000h ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel ../bank0/doshead.rel ../bank0/40ff.rel b3.rel dos1ker.rel \
 			--code 7700h ../drv.rel \
 			--code 7fd0h ../chgbnk.rel
 
@@ -538,13 +549,13 @@ bank4/b4.rel: \
 	bank4/b4.mac \
 	bank2/b2labels.inc
 
-	$(call assemble,bank4/b4.mac)
+	$(call assemble,bank4/b4.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank4/partit.rel: \
 	bank4/partit.mac \
 	bank0/b0labels.inc
 
-	$(call assemble,bank4/partit.mac)
+	$(call assemble,bank4/partit.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank4/B4.BIN bank4/B4.SYM: \
 	$(COMRELS) \
@@ -557,7 +568,7 @@ bank4/B4.BIN bank4/B4.SYM: \
 
 	$(call print_linking,"bank 4")
 	@$(LK80) --working-dir bank4 --symbols-file B4.SYM --output-file B4.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel time.rel seg.rel misc.rel ../print_call_help.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b4.rel jump.rel env.rel cpm.rel partit.rel time.rel seg.rel misc.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -570,7 +581,7 @@ bank5/B5.BIN: \
 
 	$(call print_linking,"bank 5")
 	@$(LK80) --working-dir bank5 --symbols-file B5.SYM --output-file B5.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b5.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b5.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank6/B6.BIN bank6/B6.SYM: \
@@ -582,32 +593,43 @@ bank6/B6.BIN bank6/B6.SYM: \
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../codes.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel ../print_call_help.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \
 	bank5/fdisk_crt0.rel \
+	bank5/asmcall.rel \
+	bank5/printf.rel \
 	bank5/fdisk.h \
 	bank5/fdisk.c \
 	$(patsubst %.dat,%.c,$@) \
 	bank5/drivercall.h \
 	bank5/drivercall.c \
-	../tools/C/system.h \
-	../tools/C/dos.h \
-	../tools/C/types.h \
-	../tools/C/asmcall.h \
-	../tools/C/printf.c \
-	../tools/C/asmcall.c \
-	../tools/C/partit.h
+	../../sdk/C/includes/msx_bios.h \
+	../../sdk/C/includes/msx_workarea.h \
+	../../sdk/C/includes/dos_functions.h \
+	../../sdk/C/includes/dos_errors.h \
+	../../sdk/C/includes/drivers.h \
+	../../sdk/C/includes/types.h \
+	../../sdk/C/includes/asmcall.h \
+	../../sdk/C/includes/partit.h
 
 	sdcc -o bank5/ --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
-	     --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 bank5/fdisk_crt0.rel $(patsubst %.dat,%.c,$@)
+	     --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 -I../../sdk/C/includes -I../../sdk/C/code bank5/fdisk_crt0.rel bank5/asmcall.rel bank5/printf.rel $(patsubst %.dat,%.c,$@)
 	$(call hex2bin,$(patsubst %.dat,%.ihx,$@),$@)
 
 bank5/fdisk_crt0.rel: \
 	bank5/fdisk_crt0.s
 
 	sdasz80 -o bank5/fdisk_crt0.rel bank5/fdisk_crt0.s
+
+# SDK C library .rel files compiled with fdisk's flags (so they share code/data sections cleanly).
+bank5/%.rel: ../../sdk/C/code/%.c
+	sdcc -c -o bank5/ -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
+	     --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size -I../../sdk/C/includes $<
+
+bank5/asmcall.rel: ../../sdk/C/includes/asmcall.h
+bank5/printf.rel:  ../../sdk/C/includes/msx_bios.h
 
 
 #################

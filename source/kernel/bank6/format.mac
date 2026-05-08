@@ -5,14 +5,13 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
 
-BUF	equ	0F55Eh
 CALBNK_ADDR	equ	4042h	;doshead CALBNK routine (same address in all banks)
-CHPUT	equ	00A2h
-CHGET	equ	009Fh
 KILBUF	equ	0156h
-EXPTBL	equ	0FCC1h
+
 
 
 ;-----------------------------------------------------------------------------
@@ -170,13 +169,13 @@ fformat_nxt_choice:
 	ld	hl,($SECBUF##)	;HL = SECBUF (page 3, always accessible)
 	ld	de,512		;DE = SECBUF size
 
-	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
+	ld	a,DEVICE_QUERY.GET_FORMAT_CHOICES##
 	call	CALL_DEVICE_QUERY
 
 	;Handle result
-	cp	DRIVER.QUERY_TRUNCATED_STRING##
+	cp	DRIVER.RESULT_TRUNCATED_STRING##
 	jr	z,fnc_truncated
-	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr	z,fnc_default
 	or	a
 	jr	nz,fnc_err	;Error from driver
@@ -356,7 +355,7 @@ fformat_iform:
 	or	a
 	ret
 
-;--- Nextor FDD: do format via DEVICE_QUERY with DEVQ_DO_FORMAT.
+;--- Nextor FDD: do format via DEVICE_QUERY with the DO_FORMAT query.
 ;    At entry: HL = &UD1_RELATIVE_DRIVE, C = choice (1-9)
 ;              BUF+100 = driver slot
 ;              Stack: [DE=bufsize] [HL=bufaddr]
@@ -368,7 +367,7 @@ fformat_nxt_do_format:
 	pop	de		;Discard buffer size
 	pop	hl		;HL = format buffer address
 
-	ld	a,DRIVER.DEVQ_DO_FORMAT##
+	ld	a,DEVICE_QUERY.DO_FORMAT##
 	call	CALL_DEVICE_QUERY
 
 	;Driver returns A = 0 on success, kernel error code on failure.
@@ -498,13 +497,13 @@ fpc_nextor:
 
 	ld	hl,($SECBUF##)	;HL = buffer for driver
 	ld	de,512		;DE = buffer size
-	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
+	ld	a,DEVICE_QUERY.GET_FORMAT_CHOICES##
 	call	CALL_DEVICE_QUERY
 
 	;Handle result
-	cp	DRIVER.QUERY_TRUNCATED_STRING##
+	cp	DRIVER.RESULT_TRUNCATED_STRING##
 	jr	z,fpc_nxt_truncated
-	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr	z,fpc_nxt_default
 	or	a
 	jp	nz,fpc_no_choice	;Error: treat as no choices
@@ -699,7 +698,7 @@ fpc_dots:
 
 
 ;--- Call DEVICE_QUERY in the correct driver slot.
-;    Input:  A = query number (e.g. DEVQ_GET_FORMAT_CHOICES)
+;    Input:  A = query number (e.g. GET_FORMAT_CHOICES)
 ;            C, DE, HL = parameters for DEVICE_QUERY
 ;            BUF+100 = driver slot
 ;            BUF+106 = RAM segment (FFh = ROM driver, only in DOS 2)
@@ -720,7 +719,7 @@ CDQ_ROM:
 	;--- ROM driver: inter-slot call to CALDRV → bank switch → DEVICE_QUERY
 	push	hl		;Save buffer address
 	push	af		;Save query number
-	ld	hl,DRIVER.DEVICE_QUERY##
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl	;Store routine address for CALDRV
 	ld	a,(BUF+100)
 	ld	iyh,a		;IYh = driver slot
@@ -734,7 +733,7 @@ CDQ_RAM:
 	ld	iyl,a		;IYl = segment (A still has BUF+106 value)
 	ld	a,(BUF+100)
 	ld	iyh,a		;IYh = slot
-	ld	ix,DRIVER.DEVICE_QUERY##
+	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	pop	af		;A = query number
 	jp	CALL_MAP##
 
@@ -864,13 +863,13 @@ dcb_nxt_fdd:
 	ld	hl,($SECBUF##)	;HL = SECBUF (page 3, always accessible)
 	ld	de,512		;DE = SECBUF size
 
-	ld	a,DRIVER.DEVQ_GET_FORMAT_CHOICES##
+	ld	a,DEVICE_QUERY.GET_FORMAT_CHOICES##
 	call	CALL_DEVICE_QUERY
 
 	;Handle result
-	cp	DRIVER.QUERY_TRUNCATED_STRING##
+	cp	DRIVER.RESULT_TRUNCATED_STRING##
 	jr	z,dcb_nxt_truncated
-	cp	DRIVER.QUERY_NOT_IMPLEMENTED##
+	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
 	jr	z,dcb_nxt_default
 	or	a
 	jr	nz,dcb_nxt_err

@@ -6,21 +6,15 @@
 	INCLUDE	../../macros.inc
 	INCLUDE	../../const.inc
 
-QUERY_OK: equ 0
-QUERY_TRUNCATED_STRING: equ 1
-QUERY_INVALID_DEVICE: equ 2
-QUERY_INIT_ERROR: equ 3
-QUERY_NOT_IMPLEMENTED: equ 0FFh
+	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
 
-DRVQ_GET_VERSION: equ 1
-DRVQ_GET_STRING: equ 2
-DRVQ_GET_INIT_PARAMS: equ 3
-DRVQ_INIT: equ 4
-DRVQ_GET_MAX_DEVICE: equ 5
+	module DRIVER_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_driver_queries.inc
+	endmod
 
-DEVQ_GET_STRING: equ 1
-DEVQ_GET_PARAMS: equ 2
-DEVQ_GET_STATUS: equ 3
+	module DEVICE_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_device_queries.inc
+	endmod
 
 	org 4100h
 
@@ -117,8 +111,9 @@ M_SRST	equ	(1 SHL SRST)
 ;-----------------------------------------------------------------------------
 ;
 ; Standard BIOS and work area entries
+; (CHPUT is implemented by this driver as a trampoline label, not a BIOS
+; address, so msx_bios.inc is intentionally not included here.)
 
-;CHPUT	equ	00A2h	;Character output
 CHGET	equ	009Fh
 
 
@@ -157,94 +152,17 @@ CHGET	equ	009Fh
 
 ;-----------------------------------------------------------------------------
 ;
-; Error codes for DEV_RW and DEV_FORMAT
+; BDOS / disk error codes used by DEV_RW and DEV_FORMAT
 ;
 
-.NCOMP	equ	0FFh
-.WRERR	equ	0FEh
-.DISK	equ	0FDh
-.NRDY	equ	0FCh
-.DATA	equ	0FAh
-.RNF	equ	0F9h
-.WPROT	equ	0F8h
-.UFORM	equ	0F7h
-.SEEK	equ	0F3h
-.IFORM	equ	0F0h
-.IDEVN	equ	0B5h
-.IPARM	equ	08Bh
+	INCLUDE ../../../../sdk/asm/constants/dos_errors.inc
 
 ;-----------------------------------------------------------------------------
 ;
-; Routines available on kernel page 0
+; Routines available on the kernel ROM bank header (page 1)
 ;
 
-;* Get in A the current slot for page 1. Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;  xor a
-;  ld ix,GSLOT1
-;  call CALBNK
-
-GSLOT1	equ	402Dh
-
-
-;* This routine reads a byte from another bank.
-;  Must be called by using CALBNK to the desired bank,
-;  passing the address to be read in HL:
-;  ld a,bank
-;  ld hl,address
-;  ld ix,RDBANK
-;  call CALBNK
-
-RDBANK	equ	403Ch
-
-
-;* This routine temporarily switches kernel bank 0/3,
-;  then jumps to CALBAS in MSX BIOS.
-;  This is necessary so that kernel bank is correct in case of BASIC error.
-
-CALBAS	equ	403Fh
-
-
-;* Call a routine in another bank.
-;  Must be used if the driver spawns across more than one bank.
-;  Input: A = bank
-;         IX = routine address
-;         AF' = AF for the routine
-;         BC, DE, HL, IY = input for the routine
-
-CALBNK	equ	4042h
-
-
-;* Get in IX the address of the SLTWRK entry for the slot passed in A,
-;  which will in turn contain a pointer to the allocated page 3
-;  work area for that slot (0 if no work area was allocated).
-;  If A=0, then it uses the slot currently switched in page 1.
-;  Returns A=current slot for page 1, if A=0 was passed.
-;  Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;  ld a,slot
-;  ex af,af'
-;  xor a
-;  ld ix,GWORK
-;  call CALBNK
-
-GWORK	equ	4045h
-
-
-;* Call a routine in the driver bank.
-;  Input: (BK4_ADD) = routine address
-;         AF, BC, DE, HL, IY = input for the routine
-;
-; Calls a routine in the driver bank. This routine is the same as CALBNK,
-; except that the routine address is passed in address BK4_ADD (#F2ED)
-; instead of IX, and the bank number is always 5. This is useful when used
-; in combination with CALSLT to call a driver routine from outside
-; the driver itself.
-;
-; Note that register IX can't be used as input parameter, it is
-; corrupted before reaching the invoked code.
-
-CALDRV	equ	4048h
+	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
 
 
 ;-----------------------------------------------------------------------------
@@ -294,7 +212,7 @@ DRV_NAME:
 	;Input:  HL = String
 	;        DE = Destination
 	;        B  = Max length including terminator
-	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING 
+	;Output: A  = RESULT_OK or RESULT_TRUNCATED_STRING 
 	
 OUTPUT_STRING:
 	ld a,b
@@ -314,7 +232,7 @@ OUTPUT_STRING_LOOP:
     dec de
 	xor a
 	ld (de),a
-	ld a,QUERY_TRUNCATED_STRING
+	ld a,RESULT_TRUNCATED_STRING
 	ret
 
 
@@ -322,8 +240,8 @@ OUTPUT_STRING_LOOP:
 	;    Input:  A = Query index
 	;            F, BC, DE, HL = Depends on the query
 	;    Output: A = Error code:
-	;                QUERY_OK: success
-	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 
@@ -338,7 +256,7 @@ DRIVER_QUERY:
 	jr z,DO_DRVQ_INIT
 	dec a
 	jr z,DO_DRVQ_GET_MAX_DEVICE
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 DO_DRVQ_GET_VERSION:
@@ -356,7 +274,7 @@ DO_DRVQ_GET_STRING:
 	dec a
 	ld hl,DRV_NAME
 	jp z,OUTPUT_STRING
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 DO_DRVQ_GET_INIT_PARAMS:
@@ -395,9 +313,9 @@ CHPUT: jp (iy)
 	;            C = Device number
 	;            F, B, DE, HL = Depends on the query
 	;    Output: A = Error code:
-	;                QUERY_OK: success
-	;                QUERY_INVALID_DEVICE: Invalid device number
-	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_OK: success
+	;                RESULT_INVALID_DEVICE: Invalid device number
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 
@@ -424,12 +342,12 @@ DEVICE_QUERY:
 	jr z,DO_DEVQ_GET_STATUS
 	dec a
 	jr z,DO_DEVQ_GET_AVAILABILITY
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 INVALID_DEVICE:
 	pop af
-	ld a,QUERY_INVALID_DEVICE
+	ld a,RESULT_INVALID_DEVICE
 	ret
 
 DO_DEVQ_GET_STRING:
@@ -462,7 +380,7 @@ DO_DEVQ_GET_STRING_2:
 	cp 21
 	ld a,0
 	ret nc
-	ld a,QUERY_TRUNCATED_STRING
+	ld a,RESULT_TRUNCATED_STRING
 	ret
 
 DO_DEVQ_GET_DEV_NAME:
@@ -529,7 +447,7 @@ DO_DEVQ_GET_AVAILABILITY:
 
 CUSTOM_DRIVER_QUERY:
 CUSTOM_DEVICE_QUERY:
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 READ_WRITE:
@@ -539,7 +457,7 @@ READ_WRITE:
 	ret
 
 RETURN_NOT_IMP:
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 ;-----------------------------------------------------------------------------

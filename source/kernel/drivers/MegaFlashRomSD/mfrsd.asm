@@ -65,11 +65,11 @@ CARD_SDHC	equ	3
 CODE_ADD:	equ	0F2EDh
 
 ; BIOS
-ENASLT:		equ	#24
-CHGET		equ	#9f
+
+	INCLUDE ../../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../../sdk/asm/constants/msx_workarea.inc
+
 RSLREG:		equ	#138
-EXPTBL:		equ	#FCC1
-SLTWRK:		equ	#FD09
 
 ; SD
 DATA_TOKEN	equ	#FE
@@ -82,38 +82,25 @@ VER_SEC		equ	4
 VER_REV		equ	0
 
 
-; Error codes for DEV_RW
-NCOMP		equ	0FFh
-WRERR		equ	0FEh
-DISK		equ	0FDh
-NRDY		equ	0FCh
-DATA		equ	0FAh
-RNF		equ	0F9h
-WPROT		equ	0F8h
-UFORM		equ	0F7h
-SEEK		equ	0F3h
-IFORM		equ	0F0h
-IDEVL		equ	0B5h
-IPARM		equ	08Bh
+; This driver defines several `.local:` labels, so a bare `.NAME` reference
+; inside those scopes would be parsed as `<parent_label>.NAME`.
+; To force absolute (file-scope) lookup for the DOS error codes we prefix
+; the references with ":"; see the Nestor80 LanguageReference
+; ("Relative labels") for the exact rule.
 
+	INCLUDE ../../../../sdk/asm/constants/dos_errors.inc
 
-; Nextor 3 driver constants
+	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
 
-QUERY_OK: equ 0
-QUERY_TRUNCATED_STRING: equ 1
-QUERY_INVALID_DEVICE: equ 2
-QUERY_INIT_ERROR: equ 3
-QUERY_NOT_IMPLEMENTED: equ 0FFh
+	module DRIVER_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_driver_queries.inc
+	endmod
 
-DRVQ_GET_VERSION: equ 1
-DRVQ_GET_STRING: equ 2
-DRVQ_GET_INIT_PARAMS: equ 3
-DRVQ_INIT: equ 4
-DRVQ_GET_MAX_DEVICE: equ 5
+	module DEVICE_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_device_queries.inc
+	endmod
 
-DEVQ_GET_STRING: equ 1
-DEVQ_GET_PARAMS: equ 2
-DEVQ_GET_STATUS: equ 3
+	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
 
 ;-----------------------------------------------------------------------------
 ; Start
@@ -124,86 +111,6 @@ DEVQ_GET_STATUS: equ 3
 	ds	256,0	; Dummy bytes. Will be overwriten by Page 0 code
 
 DRV_START:
-
-;-----------------------------------------------------------------------------
-;
-; Routines and information available on kernel page 0
-;
-;-----------------------------------------------------------------------------
-;* Get in A the current slot for page 1. Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;    xor a
-;    ld ix,GSLOT1
-;    call CALBNK
-
-GSLOT1		equ	402Dh
-
-
-;* This routine reads a byte from another bank.
-;  Must be called by using CALBNK to the desired bank,
-;  passing the address to be read in HL:
-;    ld a,<bank number>
-;    ld hl,<byte address>
-;    ld ix,RDBANK
-;    call CALBNK
-
-RDBANK		equ	403Ch
-
-
-;* This routine temporarily switches kernel main bank
-;  (usually bank 0, but will be 3 when running in MSX-DOS 1 mode),
-;  then invokes the routine whose address is at (CODE_ADD).
-;  It is necessary to use this routine to invoke CALBAS
-;  (so that kernel bank is correct in case of BASIC error)
-;  and to invoke DOS functions via F37Dh hook.
-;
-;  Input:  Address of code to invoke in (CODE_ADD).
-;          AF, BC, DE, HL, IX, IY passed to the called routine.
-;  Output: AF, BC, DE, HL, IX, IY returned from the called routine.
-
-CALLB0		equ	403Fh
-
-
-;* Call a routine in another bank.
-;  Must be used     IF the driver spawns across more than one bank.
-;
-;  Input:  A = bank number
-;          IX = routine address
-;          AF' = AF for the routine
-;          HL' = Ix for the routine
-;          BC, DE, HL, IY = input for the routine
-;  Output: AF, BC, DE, HL, IX, IY returned from the called routine.
-
-CALBNK		equ	4042h
-
-
-;* Get in IX the address of the SLTWRK entry for the slot passed in A,
-;  which will in turn contain a pointer to the allocated page 3
-;  work area for that slot (0     IF no work area was allocated).
-;      IF A=0, then it uses the slot currently switched in page 1.
-;  Returns A=current slot for page 1,     IF A=0 was passed.
-;  Corrupts F.
-;  Must be called by using CALBNK to bank 0:
-;    ld a,<slot number> (xor a for current page 1 slot)
-;    ex af,af'
-;    xor a
-;    ld ix,GWORK
-;    call CALBNK
-
-GWORK		equ	4045h
-
-
-;* This address contains one byte that tells how many banks
-;  form the Nextor kernel (or alternatively, the first bank
-;  number of the driver).
-
-K_SIZE		equ	40FEh
-
-
-;* This address contains one byte with the current bank number.
-
-CUR_BANK	equ	40FFh
-
 
 ;-----------------------------------------------------------------------------
 
@@ -247,8 +154,8 @@ DRV_NAME:
 	;    Input:  A = Query index
 	;            F, BC, DE, HL = Depends on the query
 	;    Output: A = Error code:
-	;                QUERY_OK: success
-	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 
@@ -263,7 +170,7 @@ DRIVER_QUERY:
 	jr z,DO_DRVQ_INIT
 	dec a
 	jr z,DO_DRVQ_GET_MAX_DEVICE
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 DO_DRVQ_GET_VERSION:
@@ -281,7 +188,7 @@ DO_DRVQ_GET_STRING:
 	dec a
 	ld hl,DRV_NAME
 	jp z,OUTPUT_STRING
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 DO_DRVQ_GET_INIT_PARAMS:
@@ -307,7 +214,7 @@ DO_DRVQ_GET_MAX_DEVICE:
 	xor a
 	ret
 
-CHPUT: jp (iy)
+DO_CHPUT: jp (iy)
 
 
 	;--- Device query
@@ -315,9 +222,9 @@ CHPUT: jp (iy)
 	;            C = Device number
 	;            F, B, DE, HL = Depends on the query
 	;    Output: A = Error code:
-	;                QUERY_OK: success
-	;                QUERY_INVALID_DEVICE: Invalid device number
-	;                QUERY_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_OK: success
+	;                RESULT_INVALID_DEVICE: Invalid device number
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 
@@ -344,12 +251,12 @@ DEVICE_QUERY:
 	jr z,DO_DEVQ_GET_STATUS
 	dec a
 	jr z,DO_DEVQ_GET_AVAILABILITY
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 INVALID_DEVICE:
 	pop af
-	ld a,QUERY_INVALID_DEVICE
+	ld a,RESULT_INVALID_DEVICE
 	ret
 
 DO_DEVQ_GET_STRING:
@@ -431,7 +338,7 @@ DO_DEVQ_GET_STATUS_AVAILABILITY:
 
 CUSTOM_DRIVER_QUERY:
 CUSTOM_DEVICE_QUERY:
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 READ_WRITE:
@@ -441,7 +348,7 @@ READ_WRITE:
 	ret
 
 RETURN_NOT_IMP:
-	ld a,QUERY_NOT_IMPLEMENTED
+	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
@@ -544,7 +451,7 @@ NEXTOR2_DRV_INIT:
 		ld a,e
 		and #f
 		add a,"0"
-		call	CHPUT	; Error code
+		call	DO_CHPUT	; Error code
 		pop	af
 		;*
 
@@ -557,9 +464,9 @@ NEXTOR2_DRV_INIT:
 	
 		ld	a,c			; SD slot
 		add	a,'1'
-		call	CHPUT
+		call	DO_CHPUT
 		ld	a,':'
-		call	CHPUT
+		call	DO_CHPUT
 		
 		ld	a,b		; Card type
 		rlca
@@ -642,7 +549,7 @@ DRV_DIRECT4:
 ;          DE = Address where the 4 byte sector number is stored.
 ;Output:   A = Error code (the same codes of MSX-DOS are used):
 ;              0: Ok
-;              .IDEVL: Invalid device or LUN
+;              .IDEVN: Invalid device or LUN
 ;              .NRDY: Not ready
 ;              .DISK: General unknown disk error
 ;              .DATA: CRC error when reading
@@ -718,7 +625,7 @@ NEXTOR2_DEV_RW:
 	jr	nc,.ok
 	
 	ld	b,0
-	;ld	a,DISK		; General unknown disk error
+	;ld	a,:.DISK		; General unknown disk error
 	ret
 	
 .ok:	
@@ -746,13 +653,13 @@ NEXTOR2_DEV_RW:
 
 .writeError:
 	ld	b,0	
-	ld	a,WRERR		; Write error
+	ld	a,:.WRERR	; Write error
 	ret			; Error
 	
 .error:
 	pop	af
 	ld	b,0
-	ld	a,IDEVL		; Invalid device or LUN
+	ld	a,:.IDEVN	; Invalid device or LUN
 	ret
 
 ;----------
@@ -779,10 +686,10 @@ NEXTOR2_DEV_RW:
 ;         HL = Pointer to a buffer in RAM
 ;         D  = Buffer size (added in Nextor 3)
 ;Output:  A = Error code:
-;             QUERY_OK: success
-;             QUERY_INVALID_DEVICE: Invalid device number
-;             QUERY_NOT_IMPLEMENTED: query not implemented
-;             QUERY_TRUNCATED_STRING: truncated string
+;             RESULT_OK: success
+;             RESULT_INVALID_DEVICE: Invalid device number
+;             RESULT_NOT_IMPLEMENTED: query not implemented
+;             RESULT_TRUNCATED_STRING: truncated string
 ;
 ; The strings must be printable ASCII string (ASCII codes 32 to 126),
 ; left justified and padded with spaces. All the strings are optional,
@@ -896,11 +803,11 @@ NEXTOR2_DEV_INFO:
 		ld a,iyh
 		cp 6+1	; Enough space for the entire string (4 bytes + zero byte)?
 		ld c,5  ; C = Length to copy
-		ld a,QUERY_OK  ; A = Error to return
+		ld a,RESULT_OK  ; A = Error to return
 		jr nc,.DEV_INFO2_OKLEN
 		ld c,iyh
 		dec c	;Copy one byte less to make size for the zero byte
-		ld a,QUERY_TRUNCATED_STRING
+		ld a,RESULT_TRUNCATED_STRING
 .DEV_INFO2_OKLEN:
 
 		push af
@@ -924,7 +831,7 @@ NEXTOR2_DEV_INFO:
 
 		ld a,iyh
 		cp 5	;Enough buffer (4 hex bytes + zero)?
-		ld a,QUERY_NOT_IMPLEMENTED
+		ld a,RESULT_NOT_IMPLEMENTED
 		jp c,SD_OFF_EI
 
 		ld	b,9
@@ -954,14 +861,14 @@ NEXTOR2_DEV_INFO:
 		ret
 
 .DEV_INFO_NOT_IMP:
-		ld a,QUERY_NOT_IMPLEMENTED
+		ld a,RESULT_NOT_IMPLEMENTED
 		ret
 
 .DEV_INFO_BAD_DEVICE_SDOFF:
 		call SD_OFF
 		ei
 .DEV_INFO_BAD_DEVICE:
-		ld a,QUERY_NOT_IMPLEMENTED
+		ld a,RESULT_NOT_IMPLEMENTED
 		ret
 
 
@@ -1681,7 +1588,7 @@ ReadSD2:
 	call	MMCCMD
 	scf			;Cy=1 
 .exit:
-	ld	a,NRDY		;error code
+	ld	a,:.NRDY	;error code
 	ret
 
 .error2:
@@ -1699,7 +1606,7 @@ ReadSD2:
 	dec	c
 	jp	nz,ReadSD2
 
-	ld	a,DISK		;Other error		[SD_1]
+	ld	a,:.DISK	;Other error		[SD_1]
 	scf			;Card inserted or removed
 	ret
 
@@ -2157,7 +2064,7 @@ PRINT:
 	or	a
 	ret	z
 	
-	call	CHPUT
+	call	DO_CHPUT
 	inc	de
 	jr	PRINT
 
@@ -2166,7 +2073,7 @@ PRINT:
 	;Input:  HL = String
 	;        DE = Destination
 	;        B  = Max length including terminator
-	;Output: A  = QUERY_OK or QUERY_TRUNCATED_STRING
+	;Output: A  = RESULT_OK or RESULT_TRUNCATED_STRING
 	;        DE = Pointer to the 0
 ;-----------------------------------------------------------------------------
 
@@ -2188,7 +2095,7 @@ OUTPUT_STRING_LOOP:
     dec de
 	xor a
 	ld (de),a
-	ld a,QUERY_TRUNCATED_STRING
+	ld a,RESULT_TRUNCATED_STRING
 	ret
 
 ;-----------------------------------------------------------------------------

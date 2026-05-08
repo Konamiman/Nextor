@@ -23,6 +23,11 @@ define assemble
 	@$(N80) $(1) $(2)
 endef
 
+define assemble_as
+	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
+	@$(N80) $(1) $(2) $(3)
+endef
+
 nextor-sys: NEXTOR.SYS NEXTORK.SYS
 
 .phony: prerequisites
@@ -39,25 +44,26 @@ prerequisites:
 INCS := ../../kernel/macros.inc ../../kernel/const.inc ../../kernel/condasm.inc
 RELS := messages.rel real.rel ref.rel reloc.rel ver.rel end.rel
 JRELS := $(RELS) kmsg.rel
+SDK_RELS := dos_calls.rel dos_errors.rel dos_file_handles.rel
 
 NEXTOR.SYS: \
 	$(RELS) \
-	codes.rel \
+	$(SDK_RELS) \
 	data.rel \
 	sys.mac
 
-	$(call assemble,sys.mac,--define-symbols NO_J_MSG)
-	@$(LK80) --output-file NEXTOR.SYS --code 0100h codes.rel data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel end.rel
+	$(call assemble,sys.mac,--define-symbols NO_J_MSG --define-symbols GENERATE_PUBLIC_SYMBOLS)
+	@$(LK80) --output-file NEXTOR.SYS --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS)
 
 NEXTORK.SYS: \
 	$(JRELS) \
-	codes.rel \
+	$(SDK_RELS) \
 	data.rel \
 	sys.mac
 
-	$(call assemble,sys.mac)
-	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h codes.rel data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel kmsg.rel end.rel
+	$(call assemble,sys.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel kmsg.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS.japanese)
 
 .SECONDEXPANSION:
@@ -65,19 +71,22 @@ $(JRELS): \
 	$$(patsubst %.rel,%.mac,$$@) \
 	$(INCS) \
 
-	$(call assemble,$(patsubst %.rel,%.mac,$@))
+	$(call assemble,$(patsubst %.rel,%.mac,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-codes.rel: \
-	../../kernel/codes.mac \
-	$(INCS)
+dos_calls.rel: ../../../sdk/asm/constants/dos_calls.inc
+	$(call assemble_as,../../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-	$(call assemble,../../kernel/codes.mac)
+dos_errors.rel: ../../../sdk/asm/constants/dos_errors.inc
+	$(call assemble_as,../../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+dos_file_handles.rel: ../../../sdk/asm/constants/dos_file_handles.inc
+	$(call assemble_as,../../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 data.rel: \
 	../../kernel/data.mac \
 	$(INCS)
 
-	$(call assemble,../../kernel/data.mac)
+	$(call assemble,../../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 .PHONY: clean
 

@@ -1,11 +1,12 @@
 #include "drivercall.h"
-#include "../../tools/C/asmcall.h"
-#include "../../tools/C/dos.h"
+#include "asmcall.h"
+#include "dos_functions.h"
+#include "drivers.h"           /* CDRVR_NEXTOR_3_FLAG */
+#include "driver_workarea.h"   /* BK4_ADD */
+#include "rom_bank_header.h"   /* CALLB0 */
 
-//The following is required in the main program:
-//byte ASMRUT[4];
-//byte OUT_FLAGS;
-//Z80_registers regs;
+//The main program is required to provide a global Z80_registers regs;
+//(the routines below use it as the shared register-marshalling buffer).
 
 void DriverCall(byte slot, byte segment, uint routineAddress)
 {

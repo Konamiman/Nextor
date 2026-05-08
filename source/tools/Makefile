@@ -24,9 +24,19 @@ define assemble
 	@$(N80) $(1) $(2)
 endef
 
+define assemble_as
+	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
+	@$(N80) $(1) $(2) $(3)
+endef
+
+uc = $(shell echo $(1) | tr a-z A-Z)
+
 COMS := CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM LOCK.COM MAPDRV.COM NSYSVER.COM RALLOC.COM
 INCS := ../kernel/macros.inc ../kernel/const.inc
-RELS := CODES.REL DATA.REL SHARED.REL
+SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
+SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot
+SHARED_RELS  := $(foreach n,$(SHARED_NAMES),$(call uc,$(n)).REL)
+RELS := $(SDK_RELS) DATA.REL $(SHARED_RELS)
 
 asm-tools: $(COMS)
 
@@ -45,31 +55,36 @@ prerequisites:
 $(COMS): \
 	$$(patsubst %.COM,%.MAC,$$@) \
 	$(INCS) \
-	CODES.REL \
+	$(SDK_RELS) \
 	DATA.REL \
-	SHARED.REL
+	$(SHARED_RELS)
 
-	$(call assemble,$(patsubst %.COM,%.MAC,$@))
-	@$(LK80) --output-file $@ --code 0100h CODES.REL DATA.REL $(patsubst %.COM,%.REL,$@) SHARED.REL
+	$(call assemble,$(patsubst %.COM,%.MAC,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
+	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) DATA.REL $(patsubst %.COM,%.REL,$@) $(SHARED_RELS)
 	$(call copy_to_bin,$@)
 
-SHARED.REL: \
-	SHARED.MAC \
-	$(INCS)
+# Build rules for each individual SDK shared routine .asm file (one per public routine).
+define shared_rel_rule
+$(2).REL: ../../sdk/asm/code/$(1).asm
+	$$(call assemble_as,../../sdk/asm/code/$(1).asm,$(2).REL,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+endef
 
-	$(call assemble,SHARED.MAC)
+$(foreach n,$(SHARED_NAMES),$(eval $(call shared_rel_rule,$(n),$(call uc,$(n)))))
 
-CODES.REL: \
-	../kernel/codes.mac \
-	$(INCS)
+DOS_CALLS.REL: ../../sdk/asm/constants/dos_calls.inc ../../sdk/asm/macros/const.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,DOS_CALLS.REL,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-	$(call assemble,../kernel/codes.mac)
+DOS_ERRORS.REL: ../../sdk/asm/constants/dos_errors.inc ../../sdk/asm/macros/const.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,DOS_ERRORS.REL,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+DOS_FILE_HANDLES.REL: ../../sdk/asm/constants/dos_file_handles.inc ../../sdk/asm/macros/const.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_file_handles.inc,DOS_FILE_HANDLES.REL,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 DATA.REL: \
 	../kernel/data.mac \
 	$(INCS)
 
-	$(call assemble,../kernel/data.mac)
+	$(call assemble,../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 .PHONY: clean
 
