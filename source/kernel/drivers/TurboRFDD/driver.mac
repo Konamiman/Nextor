@@ -322,16 +322,16 @@ DRIVER_START:
 	jp	OEMSTAT
 	jp	BASDEV
 	jp	EXTBIO
-	jp	DIRECT_0
-	jp	DIRECT_1
-	jp	DIRECT_2
-	jp	DIRECT_3
-	jp	DIRECT_4
 	jp	DRIVER_QUERY
 	jp	DEVICE_QUERY
 	jp	CUSTOM_DRIVER_QUERY
 	jp	CUSTOM_DEVICE_QUERY
 	jp	READ_WRITE
+	jp	DIRECT_0
+	jp	DIRECT_1
+	jp	DIRECT_2
+	jp	DIRECT_3
+	jp	DIRECT_4
 
 
 ;=============================================================================
