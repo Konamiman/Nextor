@@ -400,6 +400,3 @@ void WritebootSector()
 		TerminateWithDosError(regs.Bytes.A);
 	}
 }
-
-
-#define COM_FILE

@@ -7,6 +7,9 @@
    To compile:
    sdcc -mz80 -c --disable-warning 85 --disable-warning 196 --max-allocs-per-node 100000 --allow-unsafe-read --opt-code-size printf.c
 
+   Add also -DCOM_FILE when compiling a .COM file (so character output is done properly
+   and -DSUPPORT_LONG to support long integers.
+
    Supported format specifiers:
 
    %d or %i: signed int

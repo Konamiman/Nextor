@@ -13,13 +13,19 @@
 	extrn _TERM0
 	endif
 
+	ifdef COM_FILE
+BDOS	equ 5
+	else
+BDOS	equ 0F37Dh
+	endif
+
 CHK_NEXTOR:
 	ld	b,05Ah
 	ld	hl,01234h
 	ld	de,0ABCDh
 	ld	c,_DOSVER
 	ld	ix,0
-	call	5
+	call	BDOS
 	push	de
 
 	ld	de,BADKER_MSG
@@ -43,9 +49,9 @@ CHK_NEXTOR:
 
 CHK_NEXTOR_ERR:
 	ld	c,_STROUT
-	call	5
+	call	BDOS
 	ld	c,_TERM0
-	jp	5
+	jp	BDOS
 
 BADKER_MSG:
 	db	"*** This program requires Nextor 3.0 or later",13,10,"$"

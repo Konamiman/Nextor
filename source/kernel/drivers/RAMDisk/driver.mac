@@ -67,16 +67,12 @@ DRIVER_START:
 	db	"NEXTORv3_DRIVER",0
 
 	;--- Jump table
+	;The DIRECT_0..4 entries are omitted: they only apply to ROM drivers.
 
 	jp	TIMER_INT
 	jp	OEMSTAT
 	jp	BASDEV
 	jp	DO_EXTBIO
-
-	rept 5*3  ;DIRECT_0..4 entry points, meaningless in RAM drivers
-	ret
-	endm
-
 	jp	DRIVER_QUERY
 	jp	DEVICE_QUERY
 	jp	CUSTOM_DRIVER_QUERY

@@ -202,5 +202,3 @@ void ResetComputer()
     //Just in case, but we should never reach here
     Terminate(null);
 }
-
-#define COM_FILE

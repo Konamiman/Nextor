@@ -15,6 +15,12 @@
 	extrn _TERM
 	endif
 
+	ifdef COM_FILE
+BDOS	equ 5
+	else
+BDOS	equ 0F37Dh
+	endif
+
 CHKLET:
 	ld	a,(hl)
 	or	32
@@ -39,4 +45,4 @@ CHKLET:
 IPARM:
 	ld	b,.IPARM
 	ld	c,_TERM
-	jp	5
+	jp	BDOS

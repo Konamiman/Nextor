@@ -7560,10 +7560,10 @@ DRVRO_I2:
 
 	ld	a,(BUF)
 	ld	b,a		;B = slot
-	db	0FDh,67h	;ld IYh,A  (slot for CALL_MAP)
+	ld	iyh,a		;slot for CALL_MAP
 	ld	a,(BUF+1)
 	ld	c,a		;C = segment
-	db	0FDh,6Fh	;ld IYl,A  (segment for CALL_MAP)
+	ld	iyl,a		;segment for CALL_MAP
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.INIT_RAM##
 
@@ -7644,9 +7644,9 @@ DRVRO_S3:
 	call	DRVRO_TPA_ON	;TPA in pages 0/2 for print routine
 
 	ld	a,(BUF)
-	db	0FDh,67h	;ld IYh,A
+	ld	iyh,a
 	ld	a,(BUF+1)
-	db	0FDh,6Fh	;ld IYl,A
+	ld	iyl,a
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.SHUTDOWN_RAM##
 	call	CALL_MAP##
@@ -7675,18 +7675,171 @@ DRVRO_LOAD_AB:
 	ld	b,c
 	ret
 
-;--- Switch pages 0 and 2 (slot + mapper) from kernel to the caller's
-;    TPA so user-supplied print routines are reachable during the
-;    driver-query callback. PUT_USER preserves BC, DE, HL.
+;-----------------------------------------------------------------------------
+;
+;    DRVRO_TPA_ON / DRVRO_TPA_OFF
+;
+;    Switch pages 0 and 2 between the caller's TPA setup (so user-supplied
+;    print routines are reachable) and the kernel mapping (so F_DRVRO can
+;    continue running normally after the driver-query callback).
+;
+;    These mirror PUT_USER / PUT_BDOS in dosinit.mac, except that only pages
+;    0 and 2 are switched, and the save areas ((PS_BDOS, SS_BDOS, P0_TPA,
+;    P2_TPA)are not touched.
+;
+;    Both routines preserve all registers except AF.
+
+	;--- Switch pages 0 and 2 to caller's TPA mapping (slot + mapper
+	;    segments). Pages 1 and 3 are untouched.
 
 DRVRO_TPA_ON:
-	jp	PUT_USER##
+	push	hl
+	push	bc
+	push	af
 
-;--- Switch pages 0 and 2 (slot + mapper) back to kernel.
-;    PUT_BDOS preserves AF, BC, DE, HL (driver query results).
+	;Update primary slot register: pages 0, 2 from PS_BDOS,
+	;pages 1, 3 from current state.
+
+	ld	a,(PS_BDOS##)
+	and	00110011b	;Caller's pages 0, 2 primary slot bits
+	ld	b,a
+	di
+	in	a,(0A8h)
+	and	11001100b	;Current pages 1, 3 bits (kernel ROM, system)
+	or	b
+	out	(0A8h),a
+
+	;If RAM is in an expanded slot, also update its secondary slot
+	;register: pages 0, 2 from SS_BDOS, pages 1, 3 from current state.
+	;Page 3 = RAM, so 0FFFFh accesses RAM's secondary slot register.
+
+	ld	a,(RAMAD3##)
+	bit	7,a
+	jr	z,DRVRO_TPA_ON_NOEXP
+
+	ld	a,(SS_BDOS##)
+	and	00110011b	;Caller's pages 0, 2 secondary slot bits
+	ld	b,a
+	ld	a,(0FFFFh)
+	cpl			;Hardware reads complemented; un-complement
+	and	11001100b	;Current pages 1, 3 secondary bits
+	or	b
+	call	DRVRO_WRITE_SS
+
+DRVRO_TPA_ON_NOEXP:
+	;Switch page 0 and page 2 mapper segments to the caller's.
+
+	ld	a,(P0_TPA##)
+	ld	b,a
+	ld	a,(P2_TPA##)
+	ld	c,a
+	jr	DRVRO_SET_SEGS_RET
+
+
+	;--- Switch pages 0 and 2 to the kernel mapping (slot + mapper
+	;    segments). Pages 1 and 3 are untouched.
 
 DRVRO_TPA_OFF:
-	jp	PUT_BDOS##
+	push	hl
+	push	bc
+	push	af
+
+	;Update primary slot register: pages 0, 2 to RAM primary slot
+	;(from RAMAD3), pages 1, 3 from current state.
+
+	ld	a,(RAMAD3##)
+	call	DRVRO_DUP_SLOT_BITS	;B = (slot << 4) | slot
+	di
+	in	a,(0A8h)
+	and	11001100b		;Current pages 1, 3 bits
+	or	b
+	out	(0A8h),a
+
+	;If RAM is in an expanded slot, also update its secondary slot
+	;register: pages 0, 2 to RAM secondary slot, pages 1, 3 from
+	;current state.
+
+	ld	a,(RAMAD3##)
+	bit	7,a
+	jr	z,DRVRO_TPA_OFF_NOEXP
+
+	ld	a,(RAMAD3##)
+	rrca			;Move secondary slot bits (RAMAD3 bits 2-3)
+	rrca			; down to bits 0-1
+	call	DRVRO_DUP_SLOT_BITS	;B = (subslot << 4) | subslot
+	ld	a,(0FFFFh)
+	cpl
+	and	11001100b
+	or	b
+	call	DRVRO_WRITE_SS
+
+DRVRO_TPA_OFF_NOEXP:
+	;Switch page 0 and page 2 mapper segments to the kernel's.
+
+	ld	a,(CODE_SEG##)
+	ld	b,a
+	ld	a,(DATA_SEG##)
+	ld	c,a
+	jr	DRVRO_SET_SEGS_RET
+
+
+;--- Spread the low 2 bits of A into both pages 0 and 2 positions of an
+;    8-bit slot register value (primary or secondary). Used to build the
+;    OR mask for setting both pages to the kernel RAM slot/subslot.
+;
+;    Input:  A = slot/subslot bits in bits 0-1 (other bits ignored)
+;    Output: B = (bits << 4) | bits  (zero in pages 1, 3 positions)
+;    Corrupts: AF.
+
+DRVRO_DUP_SLOT_BITS:
+	and	00000011b
+	ld	b,a
+	rlca
+	rlca
+	rlca
+	rlca
+	or	b
+	ld	b,a
+	ret
+
+
+;--- Common epilogue for DRVRO_TPA_ON / DRVRO_TPA_OFF: set page 0 and
+;    page 2 mapper segments, re-enable interrupts, restore registers
+;    saved by the caller's prologue (push HL / BC / AF), and return.
+;
+;    Input: B = page 0 segment, C = page 2 segment.
+
+DRVRO_SET_SEGS_RET:
+	ld	a,b
+	ld	(P0_SEG##),a
+	out	(0FCh),a
+	ld	a,c
+	ld	(P2_SEG##),a
+	out	(0FEh),a
+	pop	af
+	pop	bc
+	pop	hl
+	ei
+	ret
+
+
+;--- Write the secondary slot register value in A to both the SLTTBL
+;    image variable for the RAM primary slot and the hardware register
+;    at 0FFFFh (which auto-complements on write). Caller must have
+;    interrupts disabled and RAM must be the slot currently in page 3.
+;    Corrupts: F, HL.
+
+DRVRO_WRITE_SS:
+	push	af
+	ld	a,(RAMAD3##)
+	and	00000011b	;A = RAM primary slot index
+	ld	hl,SLTTBL##	;SLTTBL low byte is C5h, +0..3 never carries
+	add	a,l
+	ld	l,a		;HL = SLTTBL + slot
+	pop	af
+	ld	(hl),a		;Update SLTTBL image
+	ld	(0FFFFh),a	;Update hardware (auto-complemented)
+	ret
 
 
 ;--- Unmap all drives associated with the driver specified by

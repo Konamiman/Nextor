@@ -11,7 +11,7 @@ define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
 endef
 
-COMS := emufile.com fsize.com nexboot.com vsft.com eptcft.com drvrop.com
+COMS := emufile.com fsize.com nexboot.com vsft.com eptcft.com drvrop.com drvtest.com
 
 c-tools: $(COMS)
 
@@ -49,7 +49,7 @@ asmcall.rel: ../../../sdk/C/code/asmcall.c ../../../sdk/C/includes/asmcall.h
 	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/asmcall.c
 
 printf.rel: ../../../sdk/C/code/printf.c ../../../sdk/C/includes/msx_bios.h
-	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 --max-allocs-per-node 100000 --allow-unsafe-read --opt-code-size -I../../../sdk/C/includes ../../../sdk/C/code/printf.c
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 --max-allocs-per-node 100000 --allow-unsafe-read --opt-code-size -DCOM_FILE -DSUPPORT_LONG -I../../../sdk/C/includes ../../../sdk/C/code/printf.c
 
 print_msxdos.rel: ../../../sdk/C/code/print_msxdos.c
 	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/print_msxdos.c

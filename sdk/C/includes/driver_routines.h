@@ -15,16 +15,18 @@
 #define DRIVER_BASSTAT_ENTRY              0x4113  /* jp <handler>  (BASIC statement) */
 #define DRIVER_BASDEV_ENTRY               0x4116  /* jp <handler>  (BASIC device) */
 #define DRIVER_EXTBIO_ENTRY               0x4119  /* jp <handler>  (EXTBIO hook) */
-#define DRIVER_DIRECT0_ENTRY              0x411C
-#define DRIVER_DIRECT1_ENTRY              0x411F
-#define DRIVER_DIRECT2_ENTRY              0x4122
-#define DRIVER_DIRECT3_ENTRY              0x4125
-#define DRIVER_DIRECT4_ENTRY              0x4128
-#define DRIVER_DRIVER_QUERY_ENTRY         0x412B
-#define DRIVER_DEVICE_QUERY_ENTRY         0x412E
-#define DRIVER_CUSTOM_DRIVER_QUERY_ENTRY  0x4131
-#define DRIVER_CUSTOM_DEVICE_QUERY_ENTRY  0x4134
-#define DRIVER_READ_WRITE_ENTRY           0x4137
+#define DRIVER_DRIVER_QUERY_ENTRY         0x411C
+#define DRIVER_DEVICE_QUERY_ENTRY         0x411F
+#define DRIVER_CUSTOM_DRIVER_QUERY_ENTRY  0x4122
+#define DRIVER_CUSTOM_DEVICE_QUERY_ENTRY  0x4125
+#define DRIVER_READ_WRITE_ENTRY           0x4128
+/* The DIRECT*_ENTRY entries are only used by ROM drivers
+   and may be omitted from the jump table of RAM drivers. */
+#define DRIVER_DIRECT0_ENTRY              0x412B
+#define DRIVER_DIRECT1_ENTRY              0x412E
+#define DRIVER_DIRECT2_ENTRY              0x4131
+#define DRIVER_DIRECT3_ENTRY              0x4134
+#define DRIVER_DIRECT4_ENTRY              0x4137
 #define DRIVER_HEADER_END                 0x413A  /* First address after the header */
 
 #endif   //__DRIVER_ROUTINES_H

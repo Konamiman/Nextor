@@ -14,8 +14,14 @@
 	public PRSLOT
 	extrn _CONOUT
 	extrn _ZSTROUT
-	extrn BYTE2ASC	
-	
+	extrn BYTE2ASC
+
+	endif
+
+	ifdef COM_FILE
+BDOS	equ 5
+	else
+BDOS	equ 0F37Dh
 	endif
 
 PRSLOT:
@@ -25,7 +31,7 @@ PRSLOT:
 	add	a,"0"
 	ld	e,a
 	ld	c,_CONOUT
-	call	5		;Print main slot number
+	call	BDOS		;Print main slot number
 
 	pop	af
 	bit	7,a
@@ -38,10 +44,10 @@ PRSLOT:
 	push	de
 	ld	e,"-"
 	ld	c,_CONOUT
-	call	5
+	call	BDOS
 	pop	de
 	ld	c,_CONOUT
-	call	5		;Print sub-slot number
+	call	BDOS		;Print sub-slot number
 
 DO_PRINT_SEGMENT:
 	pop	bc
@@ -56,7 +62,7 @@ DO_PRINT_SEGMENT:
 	pop	ix
 	ld	de,PRSLOT_BUF
 	ld	c,_ZSTROUT
-	jp	5
+	jp	BDOS
 
 PRSLOT_BUF:
 	db	":000",0

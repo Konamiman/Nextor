@@ -18,6 +18,12 @@
 	extrn _TERM
 	endif
 
+	ifdef COM_FILE
+BDOS	equ 5
+	else
+BDOS	equ 0F37Dh
+	endif
+
 GETSLOT:
 	ld	a,-1
 	ld	(SUBSLOT),a
@@ -90,4 +96,4 @@ EXTNUM_TERM:
 IPARM:
 	ld	b,.IPARM
 	ld	c,_TERM
-	jp	5
+	jp	BDOS

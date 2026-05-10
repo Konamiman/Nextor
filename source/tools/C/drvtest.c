@@ -47,12 +47,15 @@
 
 Z80_registers regs;
 byte slotNumber;
+byte segmentNumber;
 byte maxStringLength;
 byte deviceNumber;
 bool success;
 byte lastDriverError;
 int bufferIndex;
 bool invokeInit;
+bool invokeShutdown;
+bool initBeforeShutdown;
 byte relativeDriveNumber;
 bool invokeGetDeviceStatus;
 int spaceAvailableInPage3;
@@ -64,7 +67,7 @@ void Terminate(const char* errorMessage);
 void TerminateWithDosError(byte errorCode);
 void print(char* s);
 void CheckDosVersion();
-void ParseSlotNumber(char* arg);
+void ParseSlotAndSegment(char* arg);
 void VerifySlotNumber();
 void ParseArguments(char** argv, int argc);
 bool CallDriver(int routineAddress);
@@ -76,6 +79,8 @@ void PrintCharCore(char theChar);
 void DoGetDriverInitParamsQuery(bool reducedDriveCount);
 void MaybePrintStringBuffer();
 void DoDriverInitQuery(bool reducedDriveCount);
+void DoDriverInitRamQuery();
+void DoDriverShutdownRamQuery();
 void DoDeviceQueries();
 char* YesOrNo(bool condition);
 
@@ -84,25 +89,30 @@ char* YesOrNo(bool condition);
 
 const char* strTitle=
     "Nextor driver test tool v1.0\r\n"
-    "(tests the DRIVER_DRIVER_QUERY_ENTRY and DRIVER_DEVICE_QUERY_ENTRY routines)\r\n"
+    "(tests the DRIVER_QUERY and DEVICE_QUERY routines)\r\n"
     "By Konamiman, 9/2023\r\n"
     "\r\n";
     
 const char* strUsage=
-    "Usage: drvtest <slot>[-<subslot>] [-l <string length>]  [-a <space>] [-i]\r\n"
-    "               [-n <drive number>] [-d <device number>] [-t]\r\n"
+    "Usage: drvtest <slot>[-<subslot>][:<segment>] [-l <string length>]\r\n"
+    "               [-a <space>] [-i] [-u] [-n <drive number>]\r\n"
+    "               [-d <device number>] [-t]\r\n"
     "       drvtest ?\r\n";
 
 const char* strHelp=
     "\r\n"
-    "<slot>[-<subslot>]: Slot of the driver being tested\r\n"
+    "<slot>[-<subslot>][:<segment>]: Slot of the driver being tested.\r\n"
+    "                                Specify <segment> for RAM drivers.\r\n"
     "<string length>: Maximum string length to request (max 255)\r\n"
     "\r\n"
     "To test DRIVER_QUERY: don't use -d, or use -d 0\r\n"
     "\r\n"
     "  -i: Invoke the driver initialization query too\r\n"
+    "      (\"Init RAM\" query for RAM drivers, ROM init queries otherwise)\r\n"
+    "  -u: Invoke the \"Shut down RAM\" query (RAM drivers only)\r\n"
+    "      (-i and -u may be combined; they run in the order given)\r\n"
     "  <space>: Value to pass in HL to \"Get driver init params\" and \"Init driver\"\r\n"
-    "           (default: 1024)\r\n"
+    "           (default: 1024, ROM drivers only)\r\n"
     "  <drive number>: Relative drive number to pass to the\r\n"
     "                  \"Get drive configuration at boot time\" query\r\n"
     "                  (default: 0)\r\n"
@@ -135,7 +145,7 @@ int main(char** argv, int argc)
     }
 
     CheckDosVersion();
-    ParseSlotNumber(argv[0]);
+    ParseSlotAndSegment(argv[0]);
     VerifySlotNumber();
     ParseArguments(argv, argc);
 
@@ -183,8 +193,12 @@ void CheckDosVersion()
 }
 
 
-void ParseSlotNumber(char* arg)
+void ParseSlotAndSegment(char* arg)
 {
+    int parsedSegment;
+
+    segmentNumber = 0xFF;
+
     if(arg[0] < '0' || arg[0] > '3') {
         Terminate(strInvParam);
     }
@@ -195,11 +209,34 @@ void ParseSlotNumber(char* arg)
         return;
     }
 
+    if(arg[1] == ':') {
+        parsedSegment = atoi(&arg[2]);
+        if(parsedSegment < 0 || parsedSegment > 255) {
+            Terminate(strInvParam);
+        }
+        segmentNumber = (byte)parsedSegment;
+        return;
+    }
+
     if(arg[2] < '0' || arg[2] > '3') {
         Terminate(strInvParam);
     }
 
     slotNumber += ((arg[2] - '0') << 2) + 0x80;
+
+    if(arg[3] == '\0') {
+        return;
+    }
+
+    if(arg[3] != ':') {
+        Terminate(strInvParam);
+    }
+
+    parsedSegment = atoi(&arg[4]);
+    if(parsedSegment < 0 || parsedSegment > 255) {
+        Terminate(strInvParam);
+    }
+    segmentNumber = (byte)parsedSegment;
 }
 
 
@@ -207,7 +244,7 @@ void VerifySlotNumber()
 {
     regs.Bytes.A = 0x80;
     regs.Bytes.D = slotNumber;
-    regs.Bytes.E = 0xFF;
+    regs.Bytes.E = segmentNumber;
     regs.Words.HL = (int)BUFFER;
     DoDosCall(_GDRVR);
 
@@ -229,6 +266,8 @@ void ParseArguments(char** argv, int argc)
     maxStringLength = 255;
     deviceNumber = 0;
     invokeInit = false;
+    invokeShutdown = false;
+    initBeforeShutdown = true;
     relativeDriveNumber = 0;
     invokeGetDeviceStatus = false;
     spaceAvailableInPage3 = 1024;
@@ -257,12 +296,22 @@ void ParseArguments(char** argv, int argc)
         else if(arg == 'i') {
             invokeInit = true;
         }
+        else if(arg == 'u') {
+            if(!invokeInit) {
+                initBeforeShutdown = false;
+            }
+            invokeShutdown = true;
+        }
         else if(arg == 't') {
             invokeGetDeviceStatus = true;
         }
         else {
             Terminate(strInvParam);
         }
+    }
+
+    if(invokeShutdown && segmentNumber == 0xFF) {
+        Terminate("-u requires a RAM driver (specify a segment number)");
     }
 }
 
@@ -275,7 +324,7 @@ bool CallDriver(int routineAddress)
     REGS_BUFFER[3] = regs.Words.HL;
 
     regs.Bytes.A = slotNumber | CDRVR_NEXTOR_3_FLAG;
-    regs.Bytes.B = 0xFF;
+    regs.Bytes.B = segmentNumber;
     regs.Words.DE = routineAddress;
     regs.Words.HL = (int)REGS_BUFFER;
 
@@ -338,18 +387,34 @@ void DoDriverQueries()
     print("\r\nDriver query: get serial number\r\n");
     GetDriverName(5);
 
-    print("\r\nDriver query: get driver init parameters\r\n");
-    DoGetDriverInitParamsQuery(false);
+    if(segmentNumber != 0xFF) {
+        if(invokeInit && initBeforeShutdown) {
+            print("\r\nDriver query: init RAM driver\r\n");
+            DoDriverInitRamQuery();
+        }
+        if(invokeShutdown) {
+            print("\r\nDriver query: shut down RAM driver\r\n");
+            DoDriverShutdownRamQuery();
+        }
+        if(invokeInit && !initBeforeShutdown) {
+            print("\r\nDriver query: init RAM driver\r\n");
+            DoDriverInitRamQuery();
+        }
+    }
+    else {
+        print("\r\nDriver query: get driver init parameters\r\n");
+        DoGetDriverInitParamsQuery(false);
 
-    print("\r\nDriver query: get driver init parameters (reduced drive count)\r\n");
-    DoGetDriverInitParamsQuery(true);
+        print("\r\nDriver query: get driver init parameters (reduced drive count)\r\n");
+        DoGetDriverInitParamsQuery(true);
 
-    if(invokeInit) {
-        print("\r\nDriver query: init driver\r\n");
-        DoDriverInitQuery(false);
+        if(invokeInit) {
+            print("\r\nDriver query: init driver\r\n");
+            DoDriverInitQuery(false);
 
-        print("\r\nDriver query: init driver (reduced drive count)\r\n");
-        DoDriverInitQuery(true);
+            print("\r\nDriver query: init driver (reduced drive count)\r\n");
+            DoDriverInitQuery(true);
+        }
     }
 }
 
@@ -364,6 +429,7 @@ void DoGetDriverInitParamsQuery(bool reducedDriveCount)
     MaybePrintStringBuffer();
     if(success) {
         printf("  Hook timer interrupt: %s\r\n", regs.Bytes.B & 1 ? "YES" : "NO");
+        printf("  Hook EXTBIO: %s\r\n", regs.Bytes.B & 2 ? "YES" : "NO");
         printf("  Space required in page 3: %d bytes\r\n", regs.Words.HL);
     }
 }
@@ -390,6 +456,36 @@ void DoDriverInitQuery(bool reducedDriveCount)
     regs.Words.DE = (int)&PrintChar;
     bufferIndex = 0;
     success = DriverQuery(DRIVER_QUERY_INIT_ROM);
+    MaybePrintStringBuffer();
+
+    if(success && bufferIndex == 0) {
+        print("  Ok!\r\n");
+    }
+}
+
+
+void DoDriverInitRamQuery()
+{
+    regs.Bytes.B = slotNumber;
+    regs.Bytes.C = segmentNumber;
+    regs.Words.DE = (int)&PrintChar;
+    bufferIndex = 0;
+    success = DriverQuery(DRIVER_QUERY_INIT_RAM);
+    MaybePrintStringBuffer();
+    if(success) {
+        printf("  Hook timer interrupt: %s\r\n", regs.Bytes.B & 1 ? "YES" : "NO");
+        printf("  Hook EXTBIO: %s\r\n", regs.Bytes.B & 2 ? "YES" : "NO");
+    }
+}
+
+
+void DoDriverShutdownRamQuery()
+{
+    regs.Bytes.B = slotNumber;
+    regs.Bytes.C = segmentNumber;
+    regs.Words.DE = (int)&PrintChar;
+    bufferIndex = 0;
+    success = DriverQuery(DRIVER_QUERY_SHUTDOWN_RAM);
     MaybePrintStringBuffer();
 
     if(success && bufferIndex == 0) {
@@ -547,6 +643,3 @@ char* YesOrNo(bool condition)
 {
     return condition ? "YES" : "NO";
 }
-
-#define COM_FILE
-#define SUPPORT_LONG
