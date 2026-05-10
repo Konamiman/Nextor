@@ -609,7 +609,3 @@ void TerminateWithDosError(byte errorCode)
     regs.Bytes.B = errorCode;
     DoDosCall(_TERM);
 }
-
-
-#define COM_FILE
-#define SUPPORT_LONG

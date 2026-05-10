@@ -396,5 +396,3 @@ void ReadOrWriteSector(bool write) {
 	regs2.Words.DE = (int)SECTOR_NUMBER_BUFFER;
 	DoDosCall(_CDRVR);
 }
-
-#define COM_FILE

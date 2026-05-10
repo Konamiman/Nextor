@@ -278,5 +278,3 @@ void WriteOneByte(byte fileHandle, byte value)
 		TerminateWithDosError(regs.Bytes.A);
 	}
 }
-
-#define COM_FILE

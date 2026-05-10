@@ -547,6 +547,3 @@ char* YesOrNo(bool condition)
 {
     return condition ? "YES" : "NO";
 }
-
-#define COM_FILE
-#define SUPPORT_LONG

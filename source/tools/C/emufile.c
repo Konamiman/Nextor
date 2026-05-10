@@ -910,5 +910,3 @@ void DoDosCall(byte functionCode)
         TerminateWithDosError(regs.Bytes.A);
     }
 }
-
-#define COM_FILE
