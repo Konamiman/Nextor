@@ -15,6 +15,12 @@
 	extrn _ZSTROUT
 	endif
 
+	ifdef COM_FILE
+BDOS	equ 5
+	else
+BDOS	equ 0F37Dh
+	endif
+
 PRPAD:
 	ld	a,b
 	or	c
@@ -39,4 +45,4 @@ PRPAD_FOUND:
 
 	pop	de
 	ld	c,_ZSTROUT
-	jp	5
+	jp	BDOS
