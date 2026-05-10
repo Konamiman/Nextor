@@ -7560,10 +7560,10 @@ DRVRO_I2:
 
 	ld	a,(BUF)
 	ld	b,a		;B = slot
-	db	0FDh,67h	;ld IYh,A  (slot for CALL_MAP)
+	ld	iyh,a		;slot for CALL_MAP
 	ld	a,(BUF+1)
 	ld	c,a		;C = segment
-	db	0FDh,6Fh	;ld IYl,A  (segment for CALL_MAP)
+	ld	iyl,a		;segment for CALL_MAP
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.INIT_RAM##
 
@@ -7644,9 +7644,9 @@ DRVRO_S3:
 	call	DRVRO_TPA_ON	;TPA in pages 0/2 for print routine
 
 	ld	a,(BUF)
-	db	0FDh,67h	;ld IYh,A
+	ld	iyh,a
 	ld	a,(BUF+1)
-	db	0FDh,6Fh	;ld IYl,A
+	ld	iyl,a
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.SHUTDOWN_RAM##
 	call	CALL_MAP##
