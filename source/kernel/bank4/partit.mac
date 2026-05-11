@@ -182,14 +182,14 @@ DO_EXTPAR:
 	jp	nz,UNEX_PART
 
 	ld	a,(ix+POFF_PSTART)	;Save the start sector number of the outer extended partition
-	ld iyl,a			;(the one that includes all other extended partitions).
+	ld_ iyl,a			;(the one that includes all other extended partitions).
 	ld	a,(ix+POFF_PSTART+1)	;We need it to calculate the offsets of the inner
-	ld iyh,a			;extended partitions.
+	ld_ iyh,a			;extended partitions.
 	push	iy
 	ld	a,(ix+POFF_PSTART+2)
-	ld iyl,a
+	ld_ iyl,a
 	ld	a,(ix+POFF_PSTART+3)
-	ld iyh,a
+	ld_ iyh,a
 	push	iy
 
 	;=== Loop for extended partition search ===
@@ -332,7 +332,7 @@ DEV_READ:
 	jr	nz,DEV_READ_RAM
 ;
 	;--- ROM driver path
-	ld	iyh,c
+	ld_	iyh,c
 	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),ix
 	ld	ix,CALDRV##
@@ -640,7 +640,7 @@ AUTODRV_DRVLOOP:
 	;      A  = Relative drive for the driver
 
 	ld	c,a
-	ld a,iyl
+	ld_ a,iyl
 	ld	(ix+UD1_SLOT##),a		;Set slot number in table entry
 	ld	a,c
     ld  (ix+UD1_RELATIVE_DRIVE##),a    
@@ -718,7 +718,7 @@ AUTOD_UDFND:
 	;--- Check if it is assigned to a device based driver
 
 	ld	a,(ix+UD_SLOT##)
-	ld iyh,a
+	ld_ iyh,a
 
 	ld	c,a
 	ld	a,(KERNEX##)
@@ -913,7 +913,7 @@ AUTO_ASSIGN:
 	ld hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld a,(iy+UD_SLOT##)
-	ld iyh,a
+	ld_ iyh,a
 	ld a,DRIVER_QUERY.GET_MAX_DEVICE##
 	ld	ix,CALDRV##
 	call	CALSLT
@@ -991,7 +991,7 @@ AA_DLOOP:
 
 AA_GET_DEVINFO:
 	ld	a,(ix+AAD_DRIVER_SLOT)
-	ld iyh,a
+	ld_ iyh,a
 	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF##)
@@ -1572,8 +1572,8 @@ AA_WSEC:
 
 AA_RSEC:
     or a
-AA_DOSEC:    
-	ld iyh,c
+AA_DOSEC:
+	ld_ iyh,c
 	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
@@ -2655,7 +2655,7 @@ F_CDRVR_GO:
 	;--- ROM driver path
 
 	ld	(BK4_ADD##),de
-	ld iyh,c
+	ld_ iyh,c
 	ld	l,(ix)
 	ld	h,(ix+1)
 	push	hl
@@ -2738,8 +2738,8 @@ CDRVR_RAM:
 
 	ld	(BUF),de	;Save routine address to page-3 scratch
 
-	ld	iyh,c		;IY = slot:segment
-	ld	iyl,b
+	ld_	iyh,c		;IY = slot:segment
+	ld_	iyl,b
 
 	;Load input params from buffer (IX still = buffer ptr)
 
@@ -2885,10 +2885,10 @@ UNMAP_LOOP:
 	inc	hl
 	ld	h,(hl)
 	ld	l,a
-	cp iyl
+	cp_ iyl
 	jr	nz,UNMAP_OK1
 	ld	a,h
-	cp iyh
+	cp_ iyh
 	jr	z,UNMAP_NEXT2	;It is the unit not to be unassigned
 UNMAP_OK1:
 
@@ -3358,7 +3358,7 @@ MAPS_SEG_OK:
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
 	ld	c,(iy+2)
-	ld iyh,a
+	ld_ iyh,a
 	ld	hl,($SECBUF##)
 	ld	ix,CALDRV##
 	ld a,DEVICE_QUERY.GET_PARAMS##
@@ -3414,7 +3414,7 @@ MAPS_DONE_GP:
 	ld	(BK4_ADD##),hl
 	ld	a,(iy)
 	ld	c,(iy+2)
-	ld iyh,a
+	ld_ iyh,a
 	ld a,DEVICE_QUERY.GET_STATUS##
 	ld	ix,CALDRV##
 	call	CALSLT
@@ -4381,7 +4381,7 @@ MAPDOS1_CHK_NEXT:
 	ld	a,(iy)
 	ld	c,(iy+2)
 	ld	b,(iy+3)
-	ld iyh,a
+	ld_ iyh,a
 	ld	hl,($SECBUF##)
 	ld	ix,CALDRV##
 	ld a,DEVICE_QUERY.GET_PARAMS##
@@ -7560,10 +7560,10 @@ DRVRO_I2:
 
 	ld	a,(BUF)
 	ld	b,a		;B = slot
-	ld	iyh,a		;slot for CALL_MAP
+	ld_	iyh,a		;slot for CALL_MAP
 	ld	a,(BUF+1)
 	ld	c,a		;C = segment
-	ld	iyl,a		;segment for CALL_MAP
+	ld_	iyl,a		;segment for CALL_MAP
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.INIT_RAM##
 
@@ -7644,9 +7644,9 @@ DRVRO_S3:
 	call	DRVRO_TPA_ON	;TPA in pages 0/2 for print routine
 
 	ld	a,(BUF)
-	ld	iyh,a
+	ld_	iyh,a
 	ld	a,(BUF+1)
-	ld	iyl,a
+	ld_	iyl,a
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.SHUTDOWN_RAM##
 	call	CALL_MAP##

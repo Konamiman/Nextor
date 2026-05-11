@@ -1,5 +1,4 @@
 	.z80
-	;include	MACROS.INC
 
 FIB	equ	3000h
 
@@ -11,13 +10,14 @@ PT_EXT_LBA: equ 15
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV v1.1 - map a drive to a driver, device, LUN and partition,",13,10
+	db	"MAPDRV v1.2 - map a drive to a driver, device, LUN and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>]|0]]",13,10
-	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [0]",13,10
+	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device",13,10
 	db	"of the driver in the specified slot (must be a device-based driver).",13,10
@@ -33,6 +33,7 @@ PT_EXT_LBA: equ 15
 	db	13,10
 	db	"<slot> and <subslot> must be a number from 0 to 3. If 0 is specified instead,",13,10
 	db	"the primary disk controller slot is assumed.",13,10
+	db  "<segment> must be a number from 0 to 255, only used for RAM drivers.",13,10
 	db	13,10
 	db	"If device information is provided but slot is omitted, the drive is mapped to",13,10
 	db	"the specified partition of the specified device in the driver already",13,10
@@ -56,8 +57,9 @@ USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
 	db  "         or mount a file on a drive",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>]|0]]",13,10
-	db      "MAPDRV <drive>: [/]<filename> [/ro]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [0]",13,10
+	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
@@ -115,10 +117,7 @@ NO_LOCK:
 
 	;* Partition number, or "d", "u", or file name
 
-	ld	de,BUF
-	ld a,iyl
-	inc	iy
-	call	EXTPAR##
+	call	GET_NEXT_PARAM
 	ld	b,.NOPAR##
 	ld	c,_TERM##
 	jp	c,5
@@ -150,10 +149,7 @@ IS_PART:
 
 	;* Device
 
-	ld	de,BUF
-	ld a,iyl
-	inc	iy
-	call	EXTPAR##
+	call	GET_NEXT_PARAM
 	jp	c,DO_MAP
 
 	ld hl,BUF
@@ -163,10 +159,7 @@ IS_PART:
 
 	;* Slot, subslot, segment
 
-	ld	de,BUF
-	ld a,iyl
-	inc	iy
-	call	EXTPAR##
+	call	GET_NEXT_PARAM
 	jp	c,DO_MAP
 
 	ld	hl,BUF
@@ -405,6 +398,20 @@ NOPARM_TERM:
 	ld	b,.NOPAR##
 	ld	c,_TERM##
 	jp	5
+
+
+	;Get the next command-line parameter.
+	;Input:   IY = parameter index in IYl
+	;Output:  same as EXTPAR##, with IY advanced past this parameter
+	;Corrupts: HL (in addition to whatever EXTPAR## corrupts)
+
+GET_NEXT_PARAM:
+	ld	de,BUF
+	push	iy
+	pop	hl
+	ld	a,l
+	inc	iy
+	jp	EXTPAR##
 
 
 CHKNEX21:

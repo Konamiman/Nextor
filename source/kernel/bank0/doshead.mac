@@ -81,7 +81,7 @@ $DOSVER::	defw	_$DOSVER##	;DOS version string.
 		call	CALBNK
 		exx
 		ex	af,af'
-		ld	a,iyl
+		ld_	a,iyl
 		or	a
 		jr	z,EXTB_RET
 		exx

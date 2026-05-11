@@ -32,6 +32,15 @@ ifeq ($(strip $(MKNEXROM)),)
 MKNEXROM=mknexrom
 endif
 
+# Optional: replace undocumented Z80 opcodes (the ones operating on ixh/ixl/
+# iyh/iyl) with documented equivalents, for compatibility with Z180-based
+# MSX machines. Set NO_UNDOC_CPU_INSTRUCTIONS=1 on the make command line.
+ifeq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
+UNDOC_DEFINE=
+else
+UNDOC_DEFINE=NO_UNDOC_CPU_INSTRUCTIONS
+endif
+
 define SymToEqus
     $(eval REGEX:=([0-9A-F]{4}) ($(3)))
     cat $(1) | grep -Eo "$(REGEX)" | sed -r "s/$(REGEX)/\2 equ \1h\n\tpublic \2\n/g" > $(2)
@@ -47,12 +56,12 @@ endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2)
+	@$(N80) $(1) $$ $(2) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3)
+	@$(N80) $(1) $(2) $(3) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
 endef
 
 define print_linking
@@ -382,6 +391,19 @@ nextor_base.dat: \
 	bank5/B5.BIN \
 	bank5/fdisk.dat \
 	bank6/B6.BIN
+
+	@for f in bank0/B0.BIN bank3/B3.BIN; do \
+		sz=$$(stat -c '%s' $$f); \
+		if [ $$sz -gt 16384 ]; then \
+			echo "ERROR: $$f is $$sz bytes; max is 16384 (16 KB) per bank"; exit 1; \
+		fi; \
+	done
+	@for f in bank1/B1.BIN bank2/B2.BIN bank4/B4.BIN bank5/B5.BIN bank6/B6.BIN; do \
+		sz=$$(stat -c '%s' $$f); \
+		if [ $$sz -gt 16129 ]; then \
+			echo "ERROR: $$f is $$sz bytes; max is 16129 (16 KB minus the 4000h-40FEh doshead gap)"; exit 1; \
+		fi; \
+	done
 
 	cat bank0/B0.BIN 255.bytes bank1/B1.BIN 255.bytes bank2/B2.BIN bank3/B3.BIN 255.bytes bank4/B4.BIN 255.bytes bank5/B5.BIN 255.bytes bank6/B6.BIN > nextor_base.dat
 	dd conv=notrunc if=nextor_base.dat of=doshead.BIN bs=1 count=255

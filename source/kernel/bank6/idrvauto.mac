@@ -827,9 +827,9 @@ UDRV_OK_MSG:
 	;--- Step 1: Get max device number
 
 	ld	a,(IDRV_SLOT)
-	ld	iyh,a
+	ld_	iyh,a
 	ld	a,(IDRV_SEG)
-	ld	iyl,a
+	ld_	iyl,a
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.GET_MAX_DEVICE##
 	call	CALL_MAP##
@@ -850,9 +850,9 @@ IAM_DEVLOOP:
 	push	bc
 
 	ld	a,(IDRV_SLOT)
-	ld	iyh,a
+	ld_	iyh,a
 	ld	a,(IDRV_SEG)
-	ld	iyl,a
+	ld_	iyl,a
 	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	a,DEVICE_QUERY.GET_PARAMS##
 	ld	hl,($SECBUF##)
@@ -972,9 +972,9 @@ IAM_UTFOUND:
 	ld	c,a		;C = device number for GET_STRING query
 
 	ld	a,(IDRV_SLOT)
-	ld	iyh,a
+	ld_	iyh,a
 	ld	a,(IDRV_SEG)
-	ld	iyl,a
+	ld_	iyl,a
 	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	a,DEVICE_QUERY.GET_STRING##
 	ld	b,4		;B = string type 4 (device name)
