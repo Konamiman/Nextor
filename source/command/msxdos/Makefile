@@ -14,15 +14,9 @@ endif
 
 export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin
 
-# Optional: replace undocumented Z80 opcodes (the ones operating on
-# ixh/ixl/iyh/iyl) with documented equivalents, for compatibility with
-# Z180-based MSX machines. Set NO_UNDOC_CPU_INSTRUCTIONS=1 on the make
-# command line. See sdk/asm/macros/undoc.inc for details.
-ifeq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
-UNDOC_DEFINE=
-else
-UNDOC_DEFINE=NO_UNDOC_CPU_INSTRUCTIONS
-endif
+# NEXTOR.SYS contains no undocumented Z80 instructions, so the
+# NO_UNDOC_CPU_INSTRUCTIONS build flag (see sdk/asm/macros/undoc.inc)
+# has no effect here and is intentionally not plumbed through.
 
 define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
@@ -30,12 +24,12 @@ endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $(2) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $(2)
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $(2) $(3)
 endef
 
 nextor-sys: NEXTOR.SYS NEXTORK.SYS
