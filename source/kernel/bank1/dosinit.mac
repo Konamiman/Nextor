@@ -1407,7 +1407,7 @@ _U_CALLRAM:
         ex      af,af
 ...	      < call	_GET_P1 >
         push    af
-        ld a,iyl
+        ld_ a,iyl
 ...	      < call	_PUT_P1 >
         ex      af,af
         call    CALSLT
@@ -1494,7 +1494,7 @@ _U_CALLRAM2:
         dec     ix
         dec     ix
         push    ix
-        ld iyl,e
+        ld_ iyl,e
 
         ld      a,d
         and     00111111b
@@ -1518,13 +1518,21 @@ _U_CALLRAM2:
         ld      bc,(MAP_TAB##)
         add     hl,bc
         ld      a,(hl)  ;A = Slot to call
-        ld iyh,a
+        ld_ iyh,a
 
         ex      af,af'
         exx
         inc     sp
         inc     sp
+
+        ;The NO_UNDOC variants of `ld_ iyl,e` and `ld_ iyh,a` above
+        ;expand by 5 bytes each, pushing the target out of jr range.
+
+        ifdef	NO_UNDOC_CPU_INSTRUCTIONS
+        jp      _U_CALLRAM
+        else
         jr      _U_CALLRAM
+        endif
 ;
 ;-----------------------------------------------------------------------------
 ;

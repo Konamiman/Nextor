@@ -669,6 +669,61 @@ FREN:	CALLDOS	17h	;;Rename file (FCB)
 	ALIGN	4462h
 FOPEN:	CALLDOS	0Fh	;;Open file (FCB)
 ;
+;-----------------------------------------------------------------------------
+;
+TIMI_DOS2_DRV:
+;
+;   Call the interrupt routines of drivers attached to MSX-DOS 2 kernels.
+;   These are the ones that have an entry in HOOKSAV whose slot number matches
+;   the entry with the same index in DRVTBL##, thus representing a "my hook" entry
+;   (if the slot number is different then the HOOKSAV entry has been
+;   set by a driver attached to a MSX-DOS 1 kernel, and in this case
+;   it represents a "previous hook" entry and the driver itself will call it
+;   at the end of its own interrupt routine).
+;
+	ld	de,DRVTBL##
+	ld	hl,HOOKSAV
+	ld	b,MAXCARD
+scan_loop:
+	ld	a,(de)		;Get number of drives
+	and	a		; no drives?
+	ret	z		; yes, done
+
+	inc	de
+	ld	a,(de)		;Get slot address from DRVTBL##
+	inc	de
+	cp	(hl)		; same slot number in equivalent HOOKSAV entry?
+	jr	nz,next_cart	; no, HOOKSAV entry has been set by DOS 1 SETINT
+	ld	a,(hl)		; slot number
+	push	bc		; save count
+	push	de		;  DRVTBL## pointer
+	push	hl		;  HOOKSAV pointer
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+
+	;Set IYh = slot (the value CALSLT will use as the target slot).
+
+	ld	h,a
+	push	hl
+	pop	iy
+
+	push	de
+	pop	ix
+	call	CALSLT
+	pop	hl
+	pop	de
+	pop	bc
+next_cart:
+	inc	hl
+	inc	hl
+	inc	hl
+	djnz	scan_loop
+	ret
+;
+;-----------------------------------------------------------------------------
+;
 	ALIGN	456Fh
 FCLOSE:	CALLDOS	10h	;;Close file (FCB)
 ;
@@ -2149,54 +2204,9 @@ DOS2INT:
 	pop	af		;Restore VDP status.
 	jp	TIMI_SAVE##	;Jump to the previous interrupt routine.
 
+;
+;
 
-TIMI_DOS2_DRV:
-;
-;   Call the interrupt routines of drivers attached to MSX-DOS 2 kernels.
-;   These are the ones that have an entry in HOOKSAV whose slot number matches
-;   the entry with the same index in DRVTBL##, thus representing a "my hook" entry
-;   (if the slot number is different then the HOOKSAV entry has been
-;   set by a driver attached to a MSX-DOS 1 kernel, and in this case
-;   it represents a "previous hook" entry and the driver itself will call it
-;   at the end of its own interrupt routine).
-;
-	ld	de,DRVTBL##
-	ld	hl,HOOKSAV
-	ld	b,MAXCARD
-scan_loop:
-	ld	a,(de)		;Get number of drives
-	and	a		; no drives?
-	ret	z		; yes, done
-
-	inc	de
-	ld	a,(de)		;Get slot address from DRVTBL##
-	inc	de
-	cp	(hl)		; same slot number in equivalent HOOKSAV entry?
-	jr	nz,next_cart	; no, HOOKSAV entry has been set by DOS 1 SETINT
-	ld	a,(hl)		; slot number
-	push	bc		; save count
-	push	de		;  DRVTBL## pointer
-	push	hl		;  HOOKSAV pointer
-	inc	hl
-	ld	e,(hl)
-	inc	hl
-	ld	d,(hl)
-	ld	iyh,a
-	push	de
-	pop	ix
-	call	CALSLT
-	pop	hl
-	pop	de
-	pop	bc
-next_cart:
-	inc	hl
-	inc	hl
-	inc	hl
-	djnz	scan_loop
-	ret
-;
-;
-;
 TIMI_NEXTOR_DRV:
 ;
 ;   Call the interrupt routine of all drivers attached to Nextor kernels.
@@ -2211,10 +2221,12 @@ TNEX_LOOP:
 	push	hl
 	push	bc
 	and	10001111b
-	ld	iyh,a
+	ld	h,a		;H = slot (also stand-in for iyh)
+	push	hl
+	pop	iy		;IYh = slot
 	ld	a,(MASTER_SLOT##)
-	cp	iyh
-	ld	a,iyh
+	cp	h
+	ld	a,h
 	ld	h,40h
 	ld	ix,DV_TIRQ##
 	call	call_drv

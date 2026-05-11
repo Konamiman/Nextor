@@ -21,6 +21,7 @@
 	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
+	INCLUDE ../../../sdk/asm/macros/undoc.inc
 
 PRINTL	macro	NAME,VALUE
 	if2
@@ -5979,7 +5980,7 @@ A6101:	call	A609A			; mark FAT buffer as invalid
 	;--- Get format choice via common bank 6 routine
 
 	ld	c,a		;C = device number
-	ld	a,iyh
+	ld_	a,iyh
 	ld	(BUF+100),a	;Save slot for bank 6 routine
 	ld	hl,FMT_PRINT_AND_CHOOSE##
 	set	7,h		;Bit 15 = call bank 6

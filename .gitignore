@@ -49,6 +49,7 @@ source/tools/data.mac
 *conflicto*.*
 *.sln
 *.suo
+.undoc-mode-*
 NEXTOR.SYS
 NEXTORK.SYS
 nextor_base.dat

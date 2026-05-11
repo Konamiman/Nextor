@@ -9,9 +9,11 @@
 
 	.RELAB
 
+	INCLUDE ../../../../sdk/asm/macros/undoc.inc
+
 ;---------------------------------------------------------------------------
 ; MACROS
-;---------------------------------------------------------------------------				
+;---------------------------------------------------------------------------
 
 ADD_HL_A macro
 		add	a, l	; 4
@@ -766,7 +768,7 @@ NEXTOR2_DEV_INFO:
 		ld	b,15 + 2
 		call	SkipBytes
 		call	GetManufacName
-		ld	b,iyh
+		ld_	b,iyh
 		call OUTPUT_STRING		; Copy manufacturer name to buffer
 		pop	bc	;B = ID
 		or a
@@ -775,7 +777,7 @@ NEXTOR2_DEV_INFO:
 		; Add [id] to the manufacturer name
 		; if the buffer was at least 20 bytes long
 
-		ld a,iyh
+		ld_ a,iyh
 		cp 20
 		jr c,.DEV_END_NOERR
 		ld a," "
@@ -800,12 +802,12 @@ NEXTOR2_DEV_INFO:
 		
 		; 2: Device name string
 
-		ld a,iyh
+		ld_ a,iyh
 		cp 6+1	; Enough space for the entire string (4 bytes + zero byte)?
 		ld c,5  ; C = Length to copy
 		ld a,RESULT_OK  ; A = Error to return
 		jr nc,.DEV_INFO2_OKLEN
-		ld c,iyh
+		ld_ c,iyh
 		dec c	;Copy one byte less to make size for the zero byte
 		ld a,RESULT_TRUNCATED_STRING
 .DEV_INFO2_OKLEN:
@@ -829,7 +831,7 @@ NEXTOR2_DEV_INFO:
 		
 		; 3: Serial number string
 
-		ld a,iyh
+		ld_ a,iyh
 		cp 5	;Enough buffer (4 hex bytes + zero)?
 		ld a,RESULT_NOT_IMPLEMENTED
 		jp c,SD_OFF_EI

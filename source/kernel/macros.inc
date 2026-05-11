@@ -9,6 +9,7 @@ TRUE    equ     NOT FALSE
 
 
 	include ../../sdk/asm/macros/const.inc
+	include ../../sdk/asm/macros/undoc.inc
 ;
 ;
 ;

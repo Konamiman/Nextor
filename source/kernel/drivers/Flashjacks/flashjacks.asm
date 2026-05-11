@@ -4,7 +4,9 @@
 	; Based on version 0.1 by Konamiman and 0.15 by Piter Punk
 
 	;output	"sunride_aquijacks.bin"
-	
+
+	INCLUDE ../../../../sdk/asm/macros/undoc.inc
+
 	org		4000h
 
 	ds		256, 0FFh		; 256 dummy bytes
@@ -1703,9 +1705,9 @@ _TURBO3:
 
 _CIEL1:	ld	b,3
 _CIEL2: ld	a,(hl)
-	ld	ixh,a
+	ld_	ixh,a
 	ld	a,(de)
-	cp	ixh
+	cp_	ixh
 	jr	nz,NOTCIEL
 	inc	hl
 	inc	de

@@ -14,6 +14,10 @@ endif
 
 export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin
 
+# NEXTOR.SYS contains no undocumented Z80 instructions, so the
+# NO_UNDOC_CPU_INSTRUCTIONS build flag (see sdk/asm/macros/undoc.inc)
+# has no effect here and is intentionally not plumbed through.
+
 define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
 endef

@@ -32,6 +32,26 @@ ifeq ($(strip $(MKNEXROM)),)
 MKNEXROM=mknexrom
 endif
 
+# Optional: replace undocumented Z80 opcodes (the ones operating on ixh/ixl/
+# iyh/iyl) with documented equivalents, for compatibility with Z180-based
+# MSX machines. Set NO_UNDOC_CPU_INSTRUCTIONS=1 on the make command line.
+#
+# A mode-specific stamp file is touched whenever the flag changes, and is
+# listed as a prerequisite of every assembled target. That forces full
+# reassembly when switching between undoc and undoc-free builds so existing
+# .rel/.bin/.drv outputs from the previous mode are not silently reused.
+ifeq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
+UNDOC_DEFINE=
+UNDOC_MODE_STAMP=.undoc-mode-default
+else
+UNDOC_DEFINE=NO_UNDOC_CPU_INSTRUCTIONS
+UNDOC_MODE_STAMP=.undoc-mode-no-undoc
+endif
+
+$(UNDOC_MODE_STAMP):
+	@rm -f .undoc-mode-*
+	@touch $@
+
 define SymToEqus
     $(eval REGEX:=([0-9A-F]{4}) ($(3)))
     cat $(1) | grep -Eo "$(REGEX)" | sed -r "s/$(REGEX)/\2 equ \1h\n\tpublic \2\n/g" > $(2)
@@ -47,12 +67,12 @@ endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2)
+	@$(N80) $(1) $$ $(2) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3)
+	@$(N80) $(1) $(2) $(3) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
 endef
 
 define print_linking
@@ -103,6 +123,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/sunride.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/sunride.asm
 
 	$(call assemble,drivers/SunriseIDE/sunride.asm,--build-type abs --output-file-extension bin --define-symbols BAD_POPS)
@@ -121,6 +142,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/sunride.masteronly.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/sunride.asm
 
 	$(call assemble_as,drivers/SunriseIDE/sunride.asm,$$/sunride.masteronly.bin,--build-type abs --output-file-extension bin --define-symbols MASTER_ONLY,BAD_POPS)
@@ -141,6 +163,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/driver.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/driver.mac
 
 	$(call assemble,drivers/SunriseIDE/driver.mac,--build-type abs --output-file-extension bin)
@@ -161,6 +184,7 @@ drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/SunriseIDE/drvmonly.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/driver.mac
 
 	$(call assemble_as,drivers/SunriseIDE/driver.mac,$$/drvmonly.bin,--build-type abs  --output-file-extension bin --define-symbols MASTER_ONLY)
@@ -169,6 +193,7 @@ drivers/SunriseIDE/drvmonly.bin: \
 ### Sunrise IDE, common rules
 
 drivers/SunriseIDE/chgbnk.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/chgbnk.mac
 
 	$(call assemble,drivers/SunriseIDE/chgbnk.mac,--build-type abs --output-file-extension bin)
@@ -189,11 +214,13 @@ drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/StandaloneASCII8/driver.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/StandaloneASCII8/driver.mac
 
 	$(call assemble,drivers/StandaloneASCII8/driver.mac,--build-type abs --output-file-extension bin)
 
 drivers/StandaloneASCII8/chgbnk.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/StandaloneASCII8/chgbnk.mac
 
 	$(call assemble,drivers/StandaloneASCII8/chgbnk.mac,--build-type abs --output-file-extension bin)
@@ -214,6 +241,7 @@ drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/StandaloneASCII16/chgbnk.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/StandaloneASCII16/chgbnk.mac
 
 	$(call assemble,drivers/StandaloneASCII16/chgbnk.mac,--build-type abs --output-file-extension bin)
@@ -228,18 +256,21 @@ mfrsd: \
 	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM \
 
 drivers/MegaFlashRomSD/mfrsd-1slot.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/MegaFlashRomSD/mfrsd.asm \
 	drivers/MegaFlashRomSD/romdisk.asm
 
 	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-1slot.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=1)
 
 drivers/MegaFlashRomSD/mfrsd-2slots.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/MegaFlashRomSD/mfrsd.asm \
 	drivers/MegaFlashRomSD/romdisk.asm
 
 	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-2slots.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=2)
 
 drivers/MegaFlashRomSD/recovery_header.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/MegaFlashRomSD/recovery_header.asm
 
 	$(call assemble,drivers/MegaFlashRomSD/recovery_header.asm,--build-type abs --output-file-extension bin)
@@ -286,6 +317,7 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM: \
 flashjacks: drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM
 
 drivers/Flashjacks/flashjacks.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/Flashjacks/flashjacks.asm
 
 	$(call assemble,drivers/Flashjacks/flashjacks.asm,--build-type abs --output-file-extension bin)
@@ -326,11 +358,13 @@ drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM: \
 	$(call copy_to_bin,$@)
 
 drivers/TurboRFDD/driver.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/TurboRFDD/driver.mac
 
 	$(call assemble,drivers/TurboRFDD/driver.mac,--build-type abs --output-file-extension bin)
 
 drivers/TurboRFDD/chgbnk.bin: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/TurboRFDD/chgbnk.mac
 
 	$(call assemble,drivers/TurboRFDD/chgbnk.mac,--build-type abs --output-file-extension bin)
@@ -341,6 +375,7 @@ drivers/TurboRFDD/chgbnk.bin: \
 dsk-tr-ram: drivers/TurboRFDD/turbofdd.drv
 
 drivers/TurboRFDD/turbofdd.drv: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/TurboRFDD/driver.mac
 
 	$(call assemble_as,drivers/TurboRFDD/driver.mac,$$/driver.ram.drv,--build-type abs --output-file-extension drv --define-symbols RAM_DRIVER)
@@ -354,6 +389,7 @@ drivers/TurboRFDD/turbofdd.drv: \
 ramdisk: drivers/RAMDisk/ramdisk.drv
 
 drivers/RAMDisk/ramdisk.drv: \
+	$(UNDOC_MODE_STAMP) \
 	drivers/RAMDisk/driver.mac
 
 	$(call assemble,drivers/RAMDisk/driver.mac,--build-type abs --output-file-extension drv)
@@ -382,6 +418,19 @@ nextor_base.dat: \
 	bank5/B5.BIN \
 	bank5/fdisk.dat \
 	bank6/B6.BIN
+
+	@for f in bank0/B0.BIN bank3/B3.BIN; do \
+		sz=$$(stat -c '%s' $$f); \
+		if [ $$sz -gt 16384 ]; then \
+			echo "ERROR: $$f is $$sz bytes; max is 16384 (16 KB) per bank"; exit 1; \
+		fi; \
+	done
+	@for f in bank1/B1.BIN bank2/B2.BIN bank4/B4.BIN bank5/B5.BIN bank6/B6.BIN; do \
+		sz=$$(stat -c '%s' $$f); \
+		if [ $$sz -gt 16129 ]; then \
+			echo "ERROR: $$f is $$sz bytes; max is 16129 (16 KB minus the 4000h-40FEh doshead gap)"; exit 1; \
+		fi; \
+	done
 
 	cat bank0/B0.BIN 255.bytes bank1/B1.BIN 255.bytes bank2/B2.BIN bank3/B3.BIN 255.bytes bank4/B4.BIN 255.bytes bank5/B5.BIN 255.bytes bank6/B6.BIN > nextor_base.dat
 	dd conv=notrunc if=nextor_base.dat of=doshead.BIN bs=1 count=255
@@ -413,6 +462,7 @@ lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(s
 
 .SECONDEXPANSION:
 $(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
+	$(UNDOC_MODE_STAMP) \
 	macros.inc \
 	const.inc \
 	condasm.inc \
@@ -421,13 +471,13 @@ $(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) 
 	$(call assemble,$(patsubst %.rel,%.mac,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
-dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
+dos_calls.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_calls.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
+dos_errors.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_errors.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_file_handles.rel: ../../sdk/asm/constants/dos_file_handles.inc
+dos_file_handles.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_file_handles.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
@@ -470,6 +520,7 @@ bank0/b0lab_b6.inc: \
 ###  Bank 1
 
 bank1/b1.rel: \
+	$(UNDOC_MODE_STAMP) \
 	bank1/b1.mac \
 	bank0/b0labels.inc
 
@@ -493,6 +544,7 @@ bank1/B1.BIN: \
 ###  Bank 2
 
 bank2/b2.rel: \
+	$(UNDOC_MODE_STAMP) \
 	bank2/b2.mac \
 	bank0/b0labels.inc
 
@@ -522,6 +574,7 @@ bank2/b2labels.inc: \
 ###  Bank 3
 
 bank3/b3.rel: \
+	$(UNDOC_MODE_STAMP) \
 	bank3/b3.mac \
 	bank0/b0lab_b3.inc
 
@@ -545,6 +598,7 @@ bank3/B3.BIN: \
 ###  Bank 4
 
 bank4/b4.rel: \
+	$(UNDOC_MODE_STAMP) \
 	bank.inc \
 	bank4/b4.mac \
 	bank2/b2labels.inc
@@ -552,6 +606,7 @@ bank4/b4.rel: \
 	$(call assemble,bank4/b4.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank4/partit.rel: \
+	$(UNDOC_MODE_STAMP) \
 	bank4/partit.mac \
 	bank0/b0labels.inc
 
@@ -645,3 +700,4 @@ clean:
 	rm -f nextor_base.dat
 	rm -f bank0/b0lab*.inc
 	rm -f bank2/b2labels.inc
+	rm -f .undoc-mode-*

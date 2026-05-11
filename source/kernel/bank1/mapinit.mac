@@ -664,7 +664,7 @@ MAPBDO_FOUND:
 		ld	a,DV_BANK##
 		call	DH_CABNK##
 		ex	af,af'		;Save driver's AF
-		ld	a,iyl
+		ld_	a,iyl
 		or	a
 		jr	nz,MAPBIO2
 		ex	af,af'		;Restore driver's AF
@@ -676,7 +676,7 @@ MAPBIO2:
 MAPBDO_SK2:
 		call	EXB_NEX
 		ex	af,af'
-		ld	a,iyl
+		ld_	a,iyl
 		or	a
 		jr	nz,MAPBIO22
 		ex	af,af'
@@ -694,7 +694,7 @@ MAPBIO22:
 
 		call	EXB_RAM_DRV
 		ex	af,af'		;Save driver's AF
-		ld	a,iyl
+		ld_	a,iyl
 		or	a
 		jr	nz,MAPBIO3
 ;
@@ -712,7 +712,7 @@ MAPBIO3:
 		push	af
 		call	CHK_DEV
 		ex af,af'
-		ld	a,iyl
+		ld_	a,iyl
 		or	a
 		jr	z,MAPB_DONT_CALL_OLD
 
@@ -1091,7 +1091,7 @@ ERAMX_ENT:
 	pop	hl
 	ld	(KBUF),hl
 	;Check IYl (A is free since results already saved)
-	ld	a,iyl
+	ld_	a,iyl
 	bit	0,a
 	pop	bc
 	pop	hl

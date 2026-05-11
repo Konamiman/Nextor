@@ -13,6 +13,8 @@ DRV_START:
 
 	.RELAB
 
+	INCLUDE ../../../../sdk/asm/macros/undoc.inc
+
 TESTADD	equ	0F3F5h
 
 ;A few Panasonic FS machines uses the area around C000-C400 at boot time,
@@ -981,8 +983,7 @@ DEV_RW2:
 	ld	b,0
 	ret	
 DEV_RW_NO0SEC:
- 	ld iyl,e
- 	ld iyh,d
+ 	ld_ iy,de
 	ld	a,(iy+3)
 	and	11110000b
 	jp	nz,DEV_RW_NOSEC	;Only 28 bit sector numbers supported
@@ -1020,7 +1021,7 @@ DEV_ATA_RD:
 
 	call	CHK_RW_FAULT
 	ret	c
-	ld	iyl,b		; iyl=number of blocks
+	ld_	iyl,b		; iyl=number of blocks
 	ex	de,hl		; de=destination address
 
 	ld	bc,512		; block size  ***Hardcoded. Ignores (BLKLEN)
@@ -1037,7 +1038,7 @@ DEV_ATA_WR:
 	ld	a,ATACMD.PWRSECTRT	; PIO write sector with retry
 	call	PIO_CMD
 	jp	c,DEV_RW_ERR
-	ld	iyl,b		; iyl=number of blocks
+	ld_	iyl,b		; iyl=number of blocks
 
 	ld	bc,512		; block size  ***Hardcoded. Ignores (BLKLEN)
 	call	WRITE_DATA
@@ -1055,8 +1056,7 @@ DEV_ATAPI_RW:
 	push	de
 	ld	e,(ix+DEVINFO.pBASEWRK)		; hl=pointer to WorkArea
 	ld	d,(ix+DEVINFO.pBASEWRK+1)
-	ld iyl,e
- 	ld iyh,d				; iy=WRKAREA pointer
+	ld_ iy,de				; iy=WRKAREA pointer
 	pop	de
 
 	; Set the block size
@@ -1103,7 +1103,7 @@ DEV_ATAPI_RD:
 	push	bc
 	push 	hl
 	push	iy
-	ld	iyl,1			; 1 block
+	ld_	iyl,1			; 1 block
 	ld	hl,WRKAREA.PCTBUFF
 	ld	bc,PCTRW10._SIZE		; block size=10 bytes
 	call	WRITE_DATA		; Send the packet to the device
@@ -1135,7 +1135,7 @@ DEV_ATAPI_RD:
 	ld	e,(ix+DEVINFO.SECTSIZE)
 	ld	d,(ix+DEVINFO.SECTSIZE+1)
 
-.init2:	
+.init2:
 	ld	c,a		; c=number of 512-byte blocks per sector
 
 	push	bc
@@ -1146,13 +1146,13 @@ DEV_ATAPI_RD:
 	ex	de,hl		; de=destination address
 .loopsector:
 	push	bc
-	ld	iyl,c		; get the number of blocks per sector
+	ld_	iyl,c		; get the number of blocks per sector
 .loopblock:
 	call	WAIT_DRQ
 	jr	c,.rderr
 	ld	hl,IDE_DATA
 	call	RUN_HLPR
-	dec	iyl
+	dec_	iyl
 	jr	nz,.loopblock
 	pop	bc
 	djnz	.loopsector
@@ -1174,7 +1174,7 @@ DEV_ATAPI_WR:
 	push	bc
 	push	hl
 	push	iy
-	ld	iyl,1			; 1 block
+	ld_	iyl,1			; 1 block
 	ld	hl,WRKAREA.PCTBUFF
 	ld	bc,PCTRW10._SIZE		; block size=10 bytes
 	call	WRITE_DATA		; Send the packet to the device
@@ -1206,7 +1206,7 @@ DEV_ATAPI_WR:
 	ld	e,(ix+DEVINFO.SECTSIZE)
 	ld	d,(ix+DEVINFO.SECTSIZE+1)
 
-.init2:	
+.init2:
 	ld	c,a		; c=number of 512-byte blocks per sector
 
 	push	bc
@@ -1216,7 +1216,7 @@ DEV_ATAPI_WR:
 	pop	bc
 .loopsector:
 	push	bc
-	ld	iyl,c		; get the number of blocks per sector
+	ld_	iyl,c		; get the number of blocks per sector
 .loopblock:
 	call	WAIT_DRQ
 	jr	c,.rderr
@@ -1224,7 +1224,7 @@ DEV_ATAPI_WR:
 	call	RUN_HLPR
 	call	CHK_RW_FAULT
 	jr	c,.rderr
-	dec	iyl
+	dec_	iyl
 	jp	nz,.loopblock
 	pop	bc
 	djnz	.loopsector
@@ -1776,7 +1776,7 @@ LUN_NFO_ATAPI:
 	push	hl		; Source=PCTBUF
 	ld	bc,12		; 12 byte packet
 	push	iy
-	ld	iyl,1
+	ld_	iyl,1
 	call	WRITE_DATA	; Send the packet to the device
 	pop	iy
 	jr	nc,.rdmediapropr	; No error? Then read media proprieties
@@ -1794,7 +1794,7 @@ LUN_NFO_ATAPI:
 	pop	de		; Destination=PCTBUFF
 	ld	bc,8		; 8 byte response
 	push	iy
-	ld	iyl,1
+	ld_	iyl,1
 	call	READ_DATA
 	pop	iy
 	jr	c,LUN_INFO_ERROR
@@ -2391,13 +2391,13 @@ READ_DATA:
 	ret	c
 	ld	hl,IDE_DATA
 	call	RUN_HLPR
-	dec	iyl
+	dec_	iyl
 	jp	nz,.loop
 	ret
 
 
 ;-----------------------------------------------------------------------------
-; Subroutine to write blocks of arbitrary size on the IDE 
+; Subroutine to write blocks of arbitrary size on the IDE
 ; Input: HL =Data source
 ;        BC =block size
 ;        IYL=Number of blocks
@@ -2410,7 +2410,7 @@ WRITE_DATA:
 	call	RUN_HLPR
 	call	CHK_RW_FAULT
 	ret	c
-	dec	iyl
+	dec_	iyl
 	jp	nz,.loop
 	ret
 
