@@ -34,7 +34,7 @@ endef
 
 nextor-sys: NEXTOR.SYS NEXTOR.SYS.japanese
 
-.phony: prerequisites
+.PHONY: nextor-sys prerequisites
 
 TOOLS := N80 LK80
 
