@@ -35,3 +35,7 @@ CKCNTC	equ	00BDh
 
 ;Call a routine in the BASIC interpreter ROM (address in IX)
 CALBAS	equ	0159h
+
+;Extended BIOS entry point.
+;Call with D = device number, E = function number; other registers as required.
+EXTBIO	equ	0FFCAh

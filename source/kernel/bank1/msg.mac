@@ -242,6 +242,8 @@ ERR_MSG_TABLE:
 	err	.BFSZ,  <"Bad file size">
 	err	.ICLUS, <"Invalid cluster number or sequence">
 	err	.INITE, <"Initialization error">
+	err	.NOCMD, <"No command interpreter found">
+	err	.IDOSV, <"Incompatible DOS version">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.
@@ -411,6 +413,8 @@ ERR_KMSG_TABLE:
 	err	.BFSZ,  <"無効なファイルサイズ">           ;<"Bad file size">
 	err	.ICLUS, <"無効なクラスター番号またはシーケンス">		;<"Invalid cluster number or sequence">
 	err	.INITE, <"初期化エラー">		;<"Initialization error">
+	err	.NOCMD, <"コマンドインタプリタが見つかりません">	;<"Command interpreter not found">
+	err	.IDOSV, <"DOSのバージョンが違います">		;<"Incompatible DOS version">
 ;
 ;
 ;    The following are errors which the KBDOS may pass to the  ABORT  routine.

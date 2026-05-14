@@ -6,6 +6,7 @@
 ;
 	INCLUDE	../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE	../do_strout.inc
 ;
 ;-----------------------------------------------------------------------------
 ;

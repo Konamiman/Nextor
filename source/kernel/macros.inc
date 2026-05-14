@@ -206,66 +206,6 @@ pcall   macro   cc,name                 ;;Macro for calling an external
 ;
 ;
 
-; STROUT implementation with the ESC-Y bug corrected.
-; It is declared as as macro because it is defined
-; twince in the kernel (bdos.mac, char.mac)
-; and once more in MSXDOS2.SYS.
-;
-; OUTDIR is the routine used to print a character.
-; RETDIR is the routine jumped to at end. If 0, ret is generated instead.
-; LOADCE: if specified, E and C registers are loaded prior to calling CONOUT.
-
-do_strout	macro	OUTDIR,RETDIR,LOADCE
-	local	stro_init
-	local	STROU2
-	local	ST10
-
-stro_init:
-	LD	A,(DE)
-	INC	DE
-	cp	ESC
-	jr	nz,STROU2
-
-	call	ST10		;Print 'ESC'
-	ld	a,(DE)
-	inc	de
-	cp	'Y'
-	jr	nz,STROU2
-
-	call	ST10		;Print 'Y'
-	ld	a,(DE)
-	inc	de
-	call	ST10		;Print X coordinate
-	ld	a,(DE)
-	inc	de
-	call	ST10		;Print Y coordinate
-
-	jr	stro_init
-
-STROU2:
-	CP	'$'	
-	ifidn <RETDIR>,<0>
-	RET	Z
-	else	
-	JP	Z,&RETDIR&
-	endif
-	call	ST10
-	JR	stro_init
-
-ST10:	PUSH	DE
-
-	ifnb	<LOADCE>
-	LD	E,A
-	LD	C,_CONOUT##
-	endif
-
-	CALL	&OUTDIR&
-	POP	DE
-
-	RET
-
-	endm
-
 
 djpnz macro address
     dec b

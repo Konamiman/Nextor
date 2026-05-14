@@ -1448,6 +1448,8 @@ NO_DUMMY:
 ;
 	call	GSLOT1##	;Set slot address of the master
 	ld	(MASTER_SLOT##),a
+	xor	a		;ERR_TO_BASIC isn't in the F2B8-F326 LDIR clear range,
+	ld	(ERR_TO_BASIC##),a	; so zero it explicitly at cold boot.
 	ld	hl,CHAR_16	;Get KANJI range
 	ld	de,KANJTABLE##
 	ld	bc,4
@@ -1909,6 +1911,16 @@ else
 	call	STROUT
 	defb	CR,LF,"Disk BASIC version 1.0",CR,LF,0
 endif
+;
+;	If the DOS environment loader (typically NEXTOR.SYS) left an error code
+;	at ERR_TO_BASIC, format the corresponding message via ERR_MSG and print
+;	it now, after the MSX BIOS title and Nextor banner have been emitted
+;	but before BASIC's prompt.
+;
+	ld	a,(ERR_TO_BASIC##)
+	or	a
+	call	nz,PRINT_ERR_TO_BASIC##
+;
 	ld	hl,INILIN	;set jump address
 	push	hl
 	ld	hl,RUNSTR-1

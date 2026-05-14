@@ -11,6 +11,7 @@
 	INCLUDE	macros.inc
 	INCLUDE	const.inc
 	INCLUDE ../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../sdk/asm/constants/msx_workarea.inc
 ;
 ;-----------------------------------------------------------------------------
 ;
@@ -1070,6 +1071,43 @@ _gp_found:
 	pop	bc
 	ret
 
+;-----------------------------------------------------------------------------
+;
+;	Print a message corresponding to the error code passed in A, left by the
+;   DOS environment initializer (typically NEXTOR.SYS) in ERR_TO_BASIC.
+;
+	public	PRINT_ERR_TO_BASIC
+PRINT_ERR_TO_BASIC:
+	push	af
+	ld	de,PETB_PREFIX		;Print prefix line first.
+	ld	c,_STROUT##
+	call	BDOS##
+	pop	af
+	ld	b,a			;B = error code for _EXPLAIN.
+	ld	de,BUF			;Reuse the BASIC line buffer as scratch
+	ld	c,_EXPLAIN##		;  (BASIC will overwrite it shortly anyway).
+	call	BDOS##			;DE preserved, buffer holds ASCIIZ text.
+	ld	h,d
+	ld	l,e			;HL = DE = buffer start.
+PETB_SCAN:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	jr	nz,PETB_SCAN
+	dec	hl			;HL -> terminating null.
+	ld	(hl),'$'
+	ld	c,_STROUT##
+	call	BDOS##
+	ld	de,TWO_CRLF
+	ld	c,_STROUT##
+	call	BDOS##
+;
+	xor	a
+	ld	(ERR_TO_BASIC##),a	;Consume the marker.
+	ret
+;
+PETB_PREFIX:	db	13,10,"Error initializing DOS environment: ",13,10,"$"
+TWO_CRLF: db 13,10,13,10,"$"
 
 	finish	<DRV>
 ;
