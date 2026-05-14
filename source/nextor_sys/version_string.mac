@@ -1,0 +1,6 @@
+	; See also ver.mac
+    
+    DEFB	'NEXTOR.SYS version '
+	DEFB	VERSION##+'0', '.'
+	DEFB	'0' ;TODO: When RELEASE is not ".00" anymore, remove this line and uncomment the next one.
+	;DEFB	RELEASE##/256+'0', RELEASE##+'0'

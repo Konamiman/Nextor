@@ -4,6 +4,10 @@
 	SUBTTL	Booting Up Relocation
 ;
 	.Z80
+
+	include ../../sdk/asm/constants/dos_calls.inc
+	include ../../sdk/asm/constants/msx_bios.inc
+	include ../../sdk/asm/constants/msx_workarea.inc
 ;
 ;
 LF	EQU	0AH
@@ -59,8 +63,8 @@ SERIAL::DEFB	0,0,0,0		; Serial number, may be patched by OEM.
 ;
 	DEFB	CR ;,LF				; Message at file start in case
 MSG:
-	DEFB	'NEXTOR.SYS version '		;   someone TYPEs the file.
-	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0',CR,LF
+	include "version_string.mac"	;   someone TYPEs the file.
+	DEFB	CR,LF
 
 	DEFB	'Copyright ('
 	DEFB	CRYEAR##/1000 MOD 10 +'0'
@@ -81,8 +85,8 @@ INITP:
 
 	push	hl
 	LD	E,A
-	LD	C,_CONOUT##
-	call	0F37Dh
+	LD	C,_CONOUT
+	call	BDOS##
 	pop	hl
 	inc	hl
 	jr	INITP
@@ -119,6 +123,26 @@ COPY:	EXX
 	EX	DE,HL
 	LD	BC,END##-(REAL##+(REAL##-REF##)); BC = no. bytes in messages.
 	LDIR			; Copy messages to immediately after code.
+;
+; Clear SLTATR for RAM slot page 1 (prevents call extension crash
+; when returning to BASIC if cartridge shares primary slot with RAM)
+;
+	LD	A,(RAMAD1##)	; Slot ID for DOS RAM in page 1.
+	LD	B,A
+	AND	3		; Primary slot number
+	RLCA
+	RLCA
+	RLCA
+	RLCA			; * 16
+	LD	C,A
+	LD	A,B
+	AND	0CH		; Sub-slot * 4
+	ADD	A,C
+	LD	C,A
+	LD	B,0
+	LD	HL,SLTATR+1	; Page-1 entry of the per-slot attribute table.
+	ADD	HL,BC
+	LD	(HL),0
 ;
 	RET			; Jump to start of re-located code.
 ;
