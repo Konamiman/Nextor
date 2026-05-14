@@ -3,9 +3,14 @@
 	SUBTTL	BDOS and BIOS
 ;
 	.Z80
+
 	include macros.inc
 
-	;NO_J_MSG constant must be defined externally 
+	include ../../sdk/asm/constants/dos_calls.inc
+	include ../../sdk/asm/constants/dos_errors.inc
+	include ../kernel/do_strout.inc
+
+	;NO_J_MSG constant must be defined externally
 	;when Japanese error messages aren't included in the build.
 ;
 ;
@@ -92,8 +97,8 @@ VERNUM:
 	defb	VERSION##
 ;
 ;
-VERMSG:	DEFB	'NEXTOR.SYS version '
-	DEFB	VERSION##+'0', '.', RELEASE##/256+'0', RELEASE##+'0'
+VERMSG:	
+	include "version_string.mac"	
 	DEFB	0
 ;
 ;
@@ -118,12 +123,12 @@ VERMSG:	DEFB	'NEXTOR.SYS version '
 STARTUP:LD	HL,P3BDOS	; Character outputs initially go through page 3
 	LD	(OVEC),HL	;   entry point.
 ;
-	LD	C,_DOSVER##	; Get the version number.
+	LD	C,_DOSVER	; Get the version number.
 	CALL	P3BDOS		; In case it's an old system.
 	LD	A,B
 	CP	2		; Check KBDOS is 2.00 or later.
-	LD	A,__BADVER##	; Print error & halt if not.
-	JP	C,HANG
+	LD	A,.IDOSV	; Hand "Incompatible DOS version" to the kernel
+	JP	C,LDERR		;   and drop to BASIC if the check fails.
 ;
 	LD	HL,SERIAL##	; Copy the serial number (will probably be
 	LD	DE,SERNO	;   wrong if this is entered a second time
@@ -273,36 +278,30 @@ BOOT:	CALL	$DOSOFF##	; Set up page 1.
 	DEC	HL
 	LD	(HL),0
 ;
-	LD	A,H		; If out of page 3, then print out of memory
-	CP	0C0H		;   error & hang.
-	JR	NC,MEMOK
-;
-	LD	A,__NOMEM##	; Get DE -> message.
-HANG:	CALL	MESSAGE
-	CALL	DERRM		; Print error.
-	CALL	CRLF
-	DI
-	HALT
+	LD	A,H		; If out of page 3, hand "Not enough memory" to
+	CP	0C0H		;   the kernel and drop to BASIC.
+	LD	A,.NORAM
+	JP	C,LDERR
 ;
 MEMOK:	LD	SP,BIOS_STACK	; Use MSX-DOS.SYS's own stack in page 3.
 	LD	HL,BDOS		; OK to use the normal BDOS entry point now.
 	LD	(OVEC),HL
 ;
-	LD	C,_CURDRV##	; Get the current drive and put it at 4 for
+	LD	C,_CURDRV	; Get the current drive and put it at 4 for
 	CALL	BDOS		;   CP/M compatibility.
 	LD	(4),A
 ;
 	LD	A,(ERROR)	; Get error code from COMMAND without doing a
-	CP	.BADCMD##	;   JOIN, and don't reload if .BADCMD or .OKCMD
+	CP	.BADCMD	;   JOIN, and don't reload if .BADCMD or .OKCMD
 	JR	Z,LOADOK	;   =>COMMAND is still in memory. Go with NC.
 ;
-	CP	.OKCMD##	;   (ERROR will be 0 first time round)
+	CP	.OKCMD	;   (ERROR will be 0 first time round)
 	JR	Z,LOADOK	; Go with NC.
 ;
-	CP	.BATEND##	; Means AUTOEXEC/REBOOT were terminated by the
+	CP	.BATEND	; Means AUTOEXEC/REBOOT were terminated by the
 	JR	Z,LOADOK	;   user. Go with NC.
 ;
-REJOIN:	LD	BC,0*256+_JOIN##; Reset file handles etc.
+REJOIN:	LD	BC,0*256+_JOIN; Reset file handles etc.
 	CALL	BDOS
 	JR	NZ,REJOIN	; May fail first time, but should then be OK.
 ;
@@ -312,7 +311,7 @@ REJOIN:	LD	BC,0*256+_JOIN##; Reset file handles etc.
 	CALL	DERR		; Else print error message.
 	CALL	CRLF
 NPERR:	LD	DE,CMNDM	; DE -> '\COMMAND.COM'.
-	LD	C,_OPEN##
+	LD	C,_OPEN
 	XOR	A
 	CALL	BDOS		; Attempt to open COMMAND.COM.
 	JR	NZ,LDERR	; Go if error.
@@ -321,17 +320,17 @@ NPERR:	LD	DE,CMNDM	; DE -> '\COMMAND.COM'.
 	LD	HL,JBDOS-100H	; Maximum number of bytes loadable.
 	PUSH	HL
 	PUSH	BC		; Save file handle.
-	LD	C,_READ##
+	LD	C,_READ
 	CALL	BDOS		; Read COMMAND.COM to 100H.
 	POP	BC		; Restore file handle.
 	POP	DE		; Restore maximum number of bytes usable.
 	JR	NZ,LDERR	; Go if error.
 ;
 	SBC	HL,DE		; All of memory filled up?
-	LD	A,.NORAM##	;   (should not really occur)
+	LD	A,.NORAM	;   (should not really occur)
 	JR	Z,LDERR		; Print 'Not enough memory' if yes.
 ;
-	LD	C,_CLOSE##	; Close file handle.
+	LD	C,_CLOSE	; Close file handle.
 	CALL	BDOS
 	JR	NZ,LDERR
 ;
@@ -345,7 +344,7 @@ ZLOOP:	LD	(HL),H
 	JP	P,ZLOOP		; Zero until 80H, which is the command line.
 ;
 	EX	DE,HL		; Set up default DMA address to 80H.
-	LD	C,_SETDTA##
+	LD	C,_SETDTA
 	CALL	BDOS
 ;
 	POP	AF		; Set LOAD_FLAG to FF if a real load => loaded
@@ -372,23 +371,24 @@ CMDLEN	EQU	$-CMNDM
 ;
 ;
 LDERR:				; Error during re-loading - A=error code.
-	CP	.NOFIL##	; If 'file not found', then suppress error
-	LD	B,A		;   message & just prompt for COMMAND disk.
-	CALL	NZ,DERR
-	CALL	CRLF
-	LD	A,__INSERT##
-	CALL	DMSG		; Print 'Insert COMMAND.COM disk' etc.
-	LD	C,_CURDRV##
-	CALL	BDOS		; Get current drive.
-	ADD	A,'A'		; Convert to drive letter and print it.
-	CALL	OUTCH
-	LD	A,__INSDRV##	; Print rest of message (':' in English).
-	CALL	DMSG
-	CALL	CRLF
-	LD	A,__PAUSE##	; Print 'Press any key to continue' etc.
-	CALL	DMSG
-	CALL	INCH		; Wait for a keypress.
-	JP	REBOOT		; Try again.
+				; Abort initialization and drop to Disk BASIC.
+				; The kernel reads the error code from ERR_TO_BASIC
+				; during BASIC entry and prints _EXPLAIN's text.
+				; .NOFIL ('File not found') is rewritten to .NOCMD
+				; so the user sees 'Command interpreter not found'.
+	CP	.NOFIL
+	JR	NZ,LDERR_SAVE
+	LD	A,.NOCMD
+LDERR_SAVE:
+	LD	(ERR_TO_BASIC##),A	; Hand the error code to the kernel.
+	XOR	A
+	LD	(80H),A		; Clear CP/M-style command buffer at TPA+80h.
+	LD	HL,NOTFIRST##	; Flag a non-first start so BASIC re-entry is
+	LD	(HL),H		;   recognised as coming from DOS.
+	LD	SP,0F51FH	; Safe SP in MSX-BIOS scratch area.
+	CALL	$DOSON##	; Restore BASIC ROM pages
+				;   (kernel also flushes ERR_TO_BASIC there).
+	JP	4022H		; Disk BASIC warm start (BASENT in NEXTOR cart).
 ;
 ;
 ;
@@ -554,22 +554,32 @@ BDOS10:	EX	AF,AF'		; Save alternate register set, as the KBDOS
 ;
 	EXX			; Get back BDOS call parameters.
 	PUSH	HL
-	LD	A,C		; Get function number.
-	CP	MAXFN		; If function number is greater than we know
-	JR	C,OKFN		;   about, then just pass it through to KBDOS.
-;
-	LD	A,BADNO
-OKFN:	LD	HL,FNTAB	; HL -> table of function routine addresses.
-	ADD	A,A		; *2 (addresses in table are 2 bytes)
-	ADD	A,L
-	LD	L,A
-	JR	NC,NOINC
-;
-	INC	H
-NOINC:	LD	A,(HL)
+	PUSH	BC
+	PUSH	DE
+	LD	B,C		; B = function number to look up.
+	LD	HL,FNTAB	; HL -> many-to-one dispatch table.
+FNLP:	LD	E,(HL)		; Handler address low byte.
 	INC	HL
-	LD	H,(HL)
-	LD	L,A
+	LD	D,(HL)		; Handler address high byte.
+	INC	HL
+	LD	A,D
+	OR	E		; End of table (0000h)?
+	JR	Z,FN_DEF	; Not found -> default handler (KBDOS).
+FNLP2:	LD	A,(HL)		; Get function code (bit 7 = last in group).
+	INC	HL
+	LD	C,A		; Save raw byte (preserve sentinel bit).
+	AND	7FH
+	CP	B		; Matches target function?
+	JR	Z,FN_FOUND
+	BIT	7,C		; Was this the last code in the group?
+	JR	Z,FNLP2		; No: try the next code.
+	JR	FNLP		; Yes: try the next group.
+FN_DEF:	LD	DE,KBDOS	; Default: pass through to KBDOS.
+FN_FOUND:
+	LD	C,B		; Restore function number in C.
+	EX	DE,HL		; HL = handler address.
+	POP	DE
+	POP	BC
 	EX	(SP),HL		; Save routine address, get HL back.
 	CODE	MVI A		; Get A back again.
 A_SAVE:	 DEFB	0
@@ -651,161 +661,68 @@ GO_REBOOT:
 ;
 ;------------------------------------------------------------------------------
 ;
-FNTAB:				; Table of routine addresses for the functions.
-	DEFW	@TERM0		; Terminate program with no error.
-	DEFW	@CONIN		; Console input.
-	DEFW	@CONOUT		; Console output.
-	DEFW	@AUXIN		; Auxiliary input.
-	DEFW	@AUXOUT		; Auxiliary output.
-	DEFW	@LSTOUT		; List output.
-	DEFW	@DIRIO		; Direct console I/O.
-	DEFW	@DIRIN		; Direct console input, no echo.
-	DEFW	@INNOE		; Console input, no echo.
-	DEFW	@STROUT		; String output.
-	DEFW	@BUFIN		; Buffered line input.
-	DEFW	@CONST		; Console status.
 ;
-	DEFW	@CPMVER		; Return CP/M version number.
-	DEFW	@DSKRST		; Disk reset.
-	DEFW	@SELDSK		; Select disk.
+; Macro to define a function group entry in the dispatch table.
+; Emits: DEFW handler, DEFB fn1..fnN. The dispatcher uses bit 7 of each
+; code byte as an "end of group" sentinel, so the macro ORs 80H into the
+; last code. All defined function codes are below 80H, so bit 7 is free.
 ;
-	DEFW	@FOPEN		; Open file (FCB).
-	DEFW	@FCLOSE		; Close file (FCB).
-	DEFW	@SFIRST		; Search for first (FCB).
-	DEFW	@SNEXT		; Search fir next (FCB).
-	DEFW	@FDEL		; Delete file (FCB).
-	DEFW	@RDSEQ		; Read sequential (FCB).
-	DEFW	@WRSEQ		; Write sequential (FCB).
-	DEFW	@FMAKE		; Create file (FCB).
-	DEFW	@FREN		; Rename file (FCB).
+FG	macro	handler,codes
+fg_n	defl	0
+	irp	_,<codes>
+fg_n	defl	fg_n + 1
+	endm
+fg_i	defl	0
+	DEFW	handler
+	irp	code,<codes>
+fg_i	defl	fg_i + 1
+		if	fg_i eq fg_n
+			DEFB	code OR 80H
+		else
+			DEFB	code
+		endif
+	endm
+	endm
 ;
-	DEFW	@LOGIN		; Get login vector.
-	DEFW	@CURDRV		; Get current drive.
-	DEFW	@SETDTA		; Set disk transfer address.
-	DEFW	@ALLOC		; Get allocation information.
+FNTAB:				; Many-to-one dispatch table.
+				; Unknown functions default to KBDOS passthrough.
 ;
-	DEFW	@BADCPM		; Write protect disk in CP/M.
-	DEFW	@BADCPM		; Get read only vector in CP/M.
-	DEFW	@BADCPM		; Set file attributes in CP/M.
-	DEFW	@BADCPM		; Get Disk Parameter Block in CP/M.
-	DEFW	@BADCPM		; Get/set user code in CP/M.
+	; Codes 1Ch-20h are reserved CP/M-compatibility slots routed to the
+	; BADCPM passthrough; they have no SDK name, so they stay as hex.
+	FG	@CONIN,<_CONIN,_CONOUT,_AUXIN,_AUXOUT,_LSTOUT,_DIRIO,_DIRIN,_INNOE,_CONST,_CPMVER,_SNEXT,_LOGIN,_CURDRV,_SETDTA,1CH,1DH,1EH,1FH,20H,_VERIFY>
+	FG	@STROUT,<_STROUT>
+	FG	@BUFIN,<_BUFIN>
+	FG	@DSKRST,<_DSKRST>
+	FG	@SELDSK,<_SELDSK>
+	FG	@FOPEN,<_FOPEN,_FCLOSE,_SFIRST,_FDEL,_RDSEQ,_WRSEQ,_FMAKE,_FREN>
+	FG	@ALLOC,<_ALLOC>
+	FG	@RDRND,<_RDRND,_WRRND,_FSIZE,_SETRND,_WRZER>
+	FG	@WRBLK,<_WRBLK,_RDBLK>
+	FG	@GDATE,<_GDATE,_SDATE,_GTIME,_STIME>
+	FG	@DPARM,<_DPARM>
+	FG	@FFIRST,<_FFIRST,_FNEW>
+	FG	@FNEXT,<_FNEXT>
+	FG	@DELETE,<_OPEN,_CREATE,_HTEST,_DELETE,_ATTR,_FTIME>
+	FG	@RENAME,<_RENAME,_MOVE>
+	FG	@HRENAME,<_HRENAME,_HMOVE>
+	FG	@GETCD,<_GETCD,_WPATH>
+	FG	@CHDIR,<_CHDIR>
+	FG	@PARSE,<_PARSE>
+	FG	@PFILE,<_PFILE>
+	FG	@FORK,<_FORK>
+	FG	@JOIN,<_JOIN>
+	FG	@DEFAB,<_DEFAB>
+	FG	@DEFER,<_DEFER>
+	FG	@EXPLAIN,<_EXPLAIN>
+	FG	@DOSVER,<_DOSVER>
+	FG	@ZSTROUT,<_ZSTROUT>
+	FG	@GDRVR,<_GDRVR,_GDLI>
+	FG	@GPART,<_GPART>
+	FG	@CDRVR,<_CDRVR>
+	FG	@MAPDRV,<_MAPDRV>
+	FG	@GETCLUS,<_GETCLUS>
 ;
-	DEFW	@RDRND		; Read random (FCB).
-	DEFW	@WRRND		; Write random (FCB).
-	DEFW	@FSIZE		; Get file size (FCB).
-	DEFW	@SETRND		; Set random record (FCB).
-	DEFW	@BADFN		; Undefined function in CP/M.
-	DEFW	@WRBLK		; Write random block (FCB).
-	DEFW	@RDBLK		; Read random block (FCB).
-	DEFW	@WRZER		; Write random with zero fill (FCB).
-	DEFW	@BADFN		; Unused.
-;
-	DEFW	@GDATE		; Get date.
-	DEFW	@SDATE		; Set date.
-	DEFW	@GTIME		; Get time.
-	DEFW	@STIME		; Set time.
-	DEFW	@VERIFY		; Set/reset verify flag.
-;
-	DEFW	@RDABS		; Absolute sector read.
-	DEFW	@WRABS		; Absolute sector write.
-;
-	DEFW	@DPARM		; Get disk parameters.
-;
-BADNO	EQU	32H		; Function no. used for un-implemented fns.
-	DEFW	@BADFN		; Un-implemented functions.
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-	DEFW	@BADFN
-;
-				; Start of MSX-DOS 2 functions.
-	DEFW	@FFIRST		; Find first entry.
-	DEFW	@FNEXT		; Find next entry.
-	DEFW	@FNEW		; Find new entry.
-;
-	DEFW	@OPEN		; Open file handle.
-	DEFW	@CREATE		; Create file and open file handle.
-	DEFW	@CLOSE		; Close file handle.
-	DEFW	@ENSURE		; Ensure file handle.
-	DEFW	@DUP		; Duplicate file handle.
-	DEFW	@READ		; Read from file handle.
-	DEFW	@WRITE		; Write to file handle.
-	DEFW	@SEEK		; Seek (position file pointer).
-	DEFW	@IOCTL		; I/O control for devices.
-	DEFW	@HTEST		; Test file handle.
-;
-	DEFW	@DELETE		; Delete file or sub-directory.
-	DEFW	@RENAME		; Rename file or sub-directory.
-	DEFW	@MOVE		; Move file or sub-directory.
-	DEFW	@ATTR		; Get/set file attributes.
-	DEFW	@FTIME		; Get/set file time.
-;
-	DEFW	@HDELETE	; Delete file handle.
-	DEFW	@HRENAME	; Rename file handle.
-	DEFW	@HMOVE		; Move file handle.
-	DEFW	@HATTR		; Get/set file handle attributes.
-	DEFW	@HFTIME		; Get/set file handle time.
-;
-	DEFW	@GETDTA		; Get disk transfer address.
-	DEFW	@GETVFY		; Get verify flag setting.
-	DEFW	@GETCD		; Get current directory.
-	DEFW	@CHDIR		; Set current directory.
-	DEFW	@PARSE		; Parse path-name string.
-	DEFW	@PFILE		; Parse filename.
-	DEFW	@CHKCHR		; Check character.
-	DEFW	@WPATH		; Get whole path string.
-	DEFW	@FLUSH		; Flush disk buffers.
-;
-	DEFW	@FORK		; Fork to process.
-	DEFW	@JOIN		; Join to process.
-	DEFW	@TERM		; Terminate with error code.
-	DEFW	@DEFAB		; Define abort exit routine.
-	DEFW	@DEFER		; Define critical error handler routine.
-	DEFW	@ERROR		; Get previous error code.
-	DEFW	@EXPLAIN	; Explain error code.
-	DEFW	@FORMAT		; Format a disk.
-	DEFW	@RAMD		; Create or destroy RAM-disk.
-	DEFW	@BUFFER		; Allocate sector buffers.
-	DEFW	@ASSIGN		; Logical drive assignment.
-;
-	DEFW	@GENV		; Get environment string.
-	DEFW	@SENV		; Set environment string.
-	DEFW	@FENV		; Find environment name.
-;
-	DEFW	@DSKCHK		; Get/set disk check status.
-	DEFW	@DOSVER		; Get version number.
-	DEFW	@REDIR		; Get/set redirection status (missing in the original???)
-
-	DEFW	@FOUT		; Get/set fast STROUT mode.
-	DEFW	@ZSTROUT	; Zero-terminated string output.
-
-	DEFW	@RDDRV		; Absolute drive sector read.
-	DEFW	@WRDRV		; Absolute drive sector write.
-
-	DEFW	@RALLOC		; Get/set reduced allocation information mode vector
-	DEFW	@DSPACE		; Get disk space information
-
-	DEFW	@LOCK		; Lock/unlock drive
-
-	DEFW	@GDRVR		; Get driver information
-	DEFW	@GDLI		; Get drive letter information
-	DEFW	@GPART		; Get information about disk partition
-	DEFW	@CDRVR		; Call a routine in a disk driver
-	DEFW	@MAPDRV		; Map a drive to a driver/device/LUN/sector
-
-	DEFW	@Z80MODE	; Enable or disable the Z80 access mode for a driver
-    DEFW    @GETCLUS    ; Get information about a cluster in a FAT drive
-;
-MAXFN	EQU	($-FNTAB)/2	; Largest function number.
+	DEFW	0		; End of table marker.
 ;
 ;
 ;
@@ -866,7 +783,7 @@ BAD_DRIVE:
 	ldir
 	ld	a,"$"
 	ld	(de),a
-	ld	c,_STROUT##
+	ld	c,_STROUT
 	call	KBDOS
 	jr	CPMRET
 
@@ -917,7 +834,7 @@ CPMRET:	XOR	A
 	ldir
 	xor	a
 	ld	(de),a
-	ld	c,_ZSTROUT##
+	ld	c,_ZSTROUT
 	call	KBDOS
 	xor	a
 	ret
@@ -931,7 +848,7 @@ zstr_slow:
 	ret	z
 	PUSH	DE
 	LD	E,A
-	LD	C,_CONOUT##
+	LD	C,_CONOUT
 	CALL	KBDOS
 	POP	DE
 	JR	zstr_slow
@@ -1462,7 +1379,7 @@ STRCPY:	LD	A,(HL)		; Get character from string.
 	RET	Z		; Return with no error & NC if end of string.
 ;
 	DJNZ	STRCPY		; Else copy up to 64 bytes.
-	LD	A,.PLONG##	; String too long if null not encountered.
+	LD	A,.PLONG	; String too long if null not encountered.
 	RET			; Still NC.
 ;
 ;
@@ -1596,7 +1513,7 @@ DSK_ERR:
 	LD	B,A		; B=error number.
 	EX	AF,AF'
 	LD	DE,ERRBUF	; Point to buffer for error message.
-	LD	C,_EXPLAIN##	; Function number.
+	LD	C,_EXPLAIN	; Function number.
 	CALL	BDOS		; Get error message.
 	CALL	CRLF		; Print new line and error message.
 	PUSH	DE
@@ -1605,13 +1522,12 @@ DSK_ERR:
 	POP	DE
 	CALL	DSTR		; Print actual error message.
 	POP	BC		; Get back flags.
+	PUSH	BC		; Save drive and flags again.
 ;
 	LD	A,__READING##	; In case reading.
-	BIT	0,C
-	JR	Z,RDERR		; Go if reading.
-;
-	LD	A,__WRITING##	; Else writing.
-RDERR:	PUSH	BC		; Save drive and flags again.
+	RR	C		; b0 (read/write) -> carry
+	ADC	A,0		; A = __READING + carry = __WRITING if writing
+RDERR:
 	CALL	DMSG		; Print 'reading' or 'writing' message.
 	LD	A,__DRIVE##	; Print 'drive'.
 	CALL	DMSG
@@ -1691,7 +1607,7 @@ ARIT10:	LD	A,(DE)
 ;
 ;
 DERR:	LD	DE,ERRBUF	; Point DE to buffer for message.
-	LD	C,_EXPLAIN##	; C=function code to get error message.
+	LD	C,_EXPLAIN	; C=function code to get error message.
 	CALL	BDOS		; Attempt to get a message for the error.
 ;
 DERRM:	PUSH	DE		; Save message pointer.
@@ -1776,11 +1692,11 @@ GMSG20:	LD	A,(DE)
 ;
 INCH:	PUSH	BC
 ;
-IN10:	LD	C,_CONST##	; See if a key has already been pressed.
+IN10:	LD	C,_CONST	; See if a key has already been pressed.
 	CALL	BDOS
 	PUSH	AF
 ;
-	LD	C,_INNOE##	; Get a keypress anyway.
+	LD	C,_INNOE	; Get a keypress anyway.
 	CALL	BDOS
 	LD	H,A		; Return it in H.
 ;
@@ -1815,7 +1731,7 @@ OUTCH:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
 	LD	E,A
-	LD	C,_CONOUT##
+	LD	C,_CONOUT
 	CODE	CALL		; This CALL either points to F37D (initially)
 OVEC:	 DEFW	 P3BDOS		;   or to the normal BDOS entry.
 	POP	BC

@@ -39,7 +39,7 @@ Except for those obtained via `apt`, you'll need to place these tools at a suita
 There are five makefiles that will take care of building the different components of Nextor. Once the tools are in place you can just `cd` to the appropriate directory and run `make`:
 
 * `source/kernel`: builds the kernel ROM files and copies them to the `bin/kernels` directory. There are handy aliases for the different ROM files, so you can run e.g. `make ide`; see the `kernels` rule at the beginning of the file for the full list.
-* `source/command/msxdos`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
+* `source/nextor_sys`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
 * `source/tools`: builds the command line tools written in assembler and copies them to the `bin/tools` directory.
 * `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
 * `source`: this one just invokes the other four in sequence, so it builds pretty much everything. It supports `make clean` too.

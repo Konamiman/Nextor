@@ -104,7 +104,9 @@
 	const	.BFSZ,  0B1h    ;Bad file size
 	const	.ICLUS, 0B0h	;Invalid cluster number
 	const	.INITE, 0AFh	;Initialization error
-				;0AEh \
+	const	.NOCMD, 0AEh	;Command interpreter not found
+	const	.IDOSV, 0ADh	;Incompatible DOS version
+				;0ACh \
 				; ..   > Reserved for future use
 				;0A0h /
 ;

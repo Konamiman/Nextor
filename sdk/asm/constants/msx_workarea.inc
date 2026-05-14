@@ -63,3 +63,7 @@ PROCNM	equ	0FD89h
 
 ;CHPUT extension hook.
 H_CHPH	equ	0FDA4h
+
+;Extended BIOS hook validity flags. Bit 0 set => EXTBIO has been initialised
+;and the mapper support routines are available.
+HOKVLD	equ	0FB20h

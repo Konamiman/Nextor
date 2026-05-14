@@ -6,7 +6,7 @@ ifeq ($(strip $(N80)),)
 N80=N80
 endif
 
-export N80_ARGS=--no-string-escapes --no-show-banner --build-type rel --verbosity 0 --output-file-case lower --include-directory ../../kernel
+export N80_ARGS=--no-string-escapes --no-show-banner --build-type rel --verbosity 0 --output-file-case lower --include-directory ../kernel
 
 ifeq ($(strip $(LK80)),)
 LK80=LK80
@@ -19,7 +19,7 @@ export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --outpu
 # has no effect here and is intentionally not plumbed through.
 
 define copy_to_bin
-	cp $(1) ../../../bin/tools/$(2)
+	cp $(1) ../../bin/tools/$(2)
 endef
 
 define assemble
@@ -32,20 +32,20 @@ define assemble_as
 	@$(N80) $(1) $(2) $(3)
 endef
 
-nextor-sys: NEXTOR.SYS NEXTORK.SYS
+nextor-sys: NEXTOR.SYS NEXTOR.SYS.japanese
 
-.phony: prerequisites
+.PHONY: nextor-sys prerequisites
 
 TOOLS := N80 LK80
 
 prerequisites:
-	@mkdir -p ../../../bin/tools
+	@mkdir -p ../../bin/tools
 	$(foreach exec,$(TOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 
 -include prerequisites
 
-INCS := ../../kernel/macros.inc ../../kernel/const.inc ../../kernel/condasm.inc
+INCS := ../kernel/macros.inc ../kernel/const.inc ../kernel/condasm.inc
 RELS := messages.rel real.rel ref.rel reloc.rel ver.rel end.rel
 JRELS := $(RELS) kmsg.rel
 SDK_RELS := dos_calls.rel dos_errors.rel dos_file_handles.rel
@@ -56,17 +56,17 @@ NEXTOR.SYS: \
 	data.rel \
 	sys.mac
 
-	$(call assemble,sys.mac,--define-symbols NO_J_MSG --define-symbols GENERATE_PUBLIC_SYMBOLS)
+	$(call assemble,sys.mac,--define-symbols NO_J_MSG)
 	@$(LK80) --output-file NEXTOR.SYS --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS)
 
-NEXTORK.SYS: \
+NEXTOR.SYS.japanese: \
 	$(JRELS) \
 	$(SDK_RELS) \
 	data.rel \
 	sys.mac
 
-	$(call assemble,sys.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+	$(call assemble,sys.mac)
 	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel kmsg.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS.japanese)
 
@@ -75,22 +75,22 @@ $(JRELS): \
 	$$(patsubst %.rel,%.mac,$$@) \
 	$(INCS) \
 
-	$(call assemble,$(patsubst %.rel,%.mac,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
+	$(call assemble,$(patsubst %.rel,%.mac,$@))
 
-dos_calls.rel: ../../../sdk/asm/constants/dos_calls.inc
-	$(call assemble_as,../../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_errors.rel: ../../../sdk/asm/constants/dos_errors.inc
-	$(call assemble_as,../../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_file_handles.rel: ../../../sdk/asm/constants/dos_file_handles.inc
-	$(call assemble_as,../../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+dos_file_handles.rel: ../../sdk/asm/constants/dos_file_handles.inc
+	$(call assemble_as,../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 data.rel: \
-	../../kernel/data.mac \
+	../kernel/data.mac \
 	$(INCS)
 
-	$(call assemble,../../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+	$(call assemble,../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 .PHONY: clean
 

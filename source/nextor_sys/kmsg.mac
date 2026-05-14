@@ -163,36 +163,12 @@ CR	EQU	0DH
 ; trying  to  re-load  itself  from  disk  after  running a program, and it is
 ; desirable that the messages here and in COMMAND.COM are similar.
 ;
-;        A special variation of the error message printing occurs  when  there
-; is not enough memory for  MSX-DOS.SYS  to  start  up  (it  needs  to  reside
-; entirely in page 3). In this case, the message NOMEM is printed as the error
-; message, and the system then just halts. Is useful if this  message  informs
-; the user of this (as the standard English message given here  does),  rather
-; than  the  machine  just  dying. Similarly, the message BADVER is printed if
-; MSXDOS.SYS is run under a pre-2.00 version of the system.
-;
 ;
 	MSG	SPLATS			; Part (a)
 	 DEFB	'*** ',0
 ;
 	MSG	EREND			; Part (c)
 	 DEFB	0
-;
-	MSG	INSERT			; Part (d)
-	 DEFB	"COMMAND2.COMの入ったディスクをドライブ ",0
-;
-	MSG	INSDRV			; Part (e).
-	 DEFB	": に入れて",0
-;
-	MSG	PAUSE			; Part (f), one
-					;   trailing space.
-	 DEFB	"何かキーを押してください. ",0
-;
-	MSG	NOMEM
-	 DEFB	"メモリが足りません. システムは停止しました",0
-;
-	MSG	BADVER
-	 DEFB	"MSX-DOSのバージョンが違います. システムは停止しました",0
 ;
 ;
 ;

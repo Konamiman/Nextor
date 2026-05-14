@@ -86,7 +86,8 @@ ram_ad	defl	DATABASE
 ;
 	var3	$IRQ		;Interrupt entry point
     var3    RAM_ABORT   ;Stores a RET and a pointer to it (see SET_BOOT_VECTORS in dosboot.mac)
-	spare	1
+	var1	ERR_TO_BASIC,F245	;Error code to print at next BASIC entry (0 = none).
+				;Set by NEXTOR.SYS on load error; checked and cleared by _$DOSON.
 ;
 	var1	DIRBFD, F246	;** May be corrupted sometimes.
 ;

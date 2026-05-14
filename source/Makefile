@@ -12,7 +12,7 @@
 
 all:
 	$(MAKE) -C kernel NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS)
-	$(MAKE) -C command/msxdos
+	$(MAKE) -C nextor_sys
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
@@ -20,6 +20,6 @@ all:
 
 clean:
 	$(MAKE) -C kernel clean
-	$(MAKE) -C command/msxdos clean
+	$(MAKE) -C nextor_sys clean
 	$(MAKE) -C tools clean
 	$(MAKE) -C tools/C clean
