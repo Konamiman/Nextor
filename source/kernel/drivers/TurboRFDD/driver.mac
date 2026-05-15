@@ -318,27 +318,27 @@ DRIVER_START:
 
 	;--- Jump table
 
-	jp	TIMER_INT
-	jp	OEMSTAT
-	jp	BASDEV
-	jp	EXTBIO
+	jp	DRV_TIMI
+	jp	DRV_BASSTAT
+	jp	DRV_BASDEV
+	jp	DRV_EXTBIO
 	jp	DRIVER_QUERY
 	jp	DEVICE_QUERY
 	jp	CUSTOM_DRIVER_QUERY
 	jp	CUSTOM_DEVICE_QUERY
 	jp	READ_WRITE
-	jp	DIRECT_0
-	jp	DIRECT_1
-	jp	DIRECT_2
-	jp	DIRECT_3
-	jp	DIRECT_4
+	jp	DRV_DIRECT0
+	jp	DRV_DIRECT1
+	jp	DRV_DIRECT2
+	jp	DRV_DIRECT3
+	jp	DRV_DIRECT4
 
 
 ;=============================================================================
 ;  TIMER INTERRUPT
 ;=============================================================================
 
-TIMER_INT:
+DRV_TIMI:
 	call	MY_GWORK
 	ld	a,(ix+WK_MT0)
 	or	a
@@ -359,33 +359,33 @@ TI_CHK1:
 ;  STUBS
 ;=============================================================================
 
-OEMSTAT:
-BASDEV:
+DRV_BASSTAT:
+DRV_BASDEV:
 	scf
 	ret
 
-EXTBIO:
-DIRECT_0:
+DRV_EXTBIO:
+DRV_DIRECT0:
 	ret
 	ret
 	ret
 
-DIRECT_1:
+DRV_DIRECT1:
 	ret
 	ret
 	ret
 
-DIRECT_2:
+DRV_DIRECT2:
 	ret
 	ret
 	ret
 
-DIRECT_3:
+DRV_DIRECT3:
 	ret
 	ret
 	ret
 
-DIRECT_4:
+DRV_DIRECT4:
 	ret
 	ret
 	ret
