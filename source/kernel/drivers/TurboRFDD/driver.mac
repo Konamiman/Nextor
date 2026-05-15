@@ -2459,30 +2459,7 @@ DIV_NS:
 	ret
 
 
-;--- Copy string with length limit
-;    Input: HL = source (zero-terminated), DE = dest, B = max length
-;    Output: A = RESULT_OK or RESULT_TRUNCATED_STRING
-
-OUTPUT_STRING:
-	ld	a,b
-	or	a
-	ret	z
-
-OS_LP:
-	ld	a,(hl)
-	or	a
-	ld	(de),a
-	ret	z		;A=0=RESULT_OK
-
-	inc	hl
-	inc	de
-	djnz	OS_LP
-
-	dec	de
-	xor	a
-	ld	(de),a
-	ld	a,RESULT_TRUNCATED_STRING
-	ret
+	INCLUDE ../../../../sdk/asm/code/output_string.asm
 
 
 ;--- Print zero-terminated string via character output routine

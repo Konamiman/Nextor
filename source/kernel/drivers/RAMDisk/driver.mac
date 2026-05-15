@@ -820,30 +820,7 @@ RW_DIR:	db	0		;0 = read, 1 = write
 ;  HELPERS
 ;=============================================================================
 
-;--- Copy string with length limit
-;    Input: HL = source (zero-terminated), DE = dest, B = max length
-;    Output: A = RESULT_OK or RESULT_TRUNCATED_STRING
-
-OUTPUT_STRING:
-	ld	a,b
-	or	a
-	ret	z
-
-OUTPUT_STRING_LOOP:
-	ld	a,(hl)
-	or	a
-	ld	(de),a
-	ret	z		;A=0=RESULT_OK
-
-	inc	hl
-	inc	de
-	djnz	OUTPUT_STRING_LOOP
-
-	dec	de
-	xor	a
-	ld	(de),a
-	ld	a,RESULT_TRUNCATED_STRING
-	ret
+	INCLUDE ../../../../sdk/asm/code/output_string.asm
 
 
 ;--- Print zero-terminated string via character output routine

@@ -2070,35 +2070,7 @@ PRINT:
 	inc	de
 	jr	PRINT
 
-;-----------------------------------------------------------------------------
-	;Output a string
-	;Input:  HL = String
-	;        DE = Destination
-	;        B  = Max length including terminator
-	;Output: A  = RESULT_OK or RESULT_TRUNCATED_STRING
-	;        DE = Pointer to the 0
-;-----------------------------------------------------------------------------
-
-OUTPUT_STRING:
-	ld a,b
-	or a
-	ret z
-
-OUTPUT_STRING_LOOP:
-	ld a,(hl)
-	or a
-	ld (de),a
-	ret z
-
-	inc hl
-	inc de
-	djnz OUTPUT_STRING
-
-    dec de
-	xor a
-	ld (de),a
-	ld a,RESULT_TRUNCATED_STRING
-	ret
+	INCLUDE ../../../../sdk/asm/code/output_string.asm
 
 ;-----------------------------------------------------------------------------
 ; Includes
