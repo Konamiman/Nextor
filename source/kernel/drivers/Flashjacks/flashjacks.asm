@@ -1,4 +1,4 @@
-	; Device-based driver for the FLASHJACKS IDE interface for Nextor
+	; Driver for the FLASHJACKS IDE interface for Nextor
 	;
 	; By Aquijacks v1.4
 	; Based on version 0.1 by Konamiman and 0.15 by Piter Punk
@@ -6,6 +6,16 @@
 	;output	"sunride_aquijacks.bin"
 
 	INCLUDE ../../../../sdk/asm/macros/undoc.inc
+
+	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
+
+	module DRIVER_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_driver_queries.inc
+	endmod
+
+	module DEVICE_QUERY
+	INCLUDE ../../../../sdk/asm/constants/driver_device_queries.inc
+	endmod
 
 	org		4000h
 
@@ -22,18 +32,21 @@ TESTADD	equ	0F3F5h
 ;
 
 
-;Hot-plug devices support (device-based drivers only):
-;   0 for no hot-plug support
-;   1 for hot-plug support
-
-DRV_HOTPLUG	equ	1
-
-
 ;Driver version
 
 VER_MAIN	equ	1
 VER_SEC		equ	4
 VER_REV		equ	1
+
+
+;Page-3 work area layout (allocated via NEXTOR2_DRV_INIT first call).
+;The first 8 bytes preserve the original SLTWRK layout
+;(master flag at +0, slave flag at +4); STRBUFF is a 65-byte scratch
+;buffer used by the DEVICE_QUERY GET_STRING compatibility wrapper
+;(64 bytes of NEXTOR2_DEV_INFO image plus a trailing terminator).
+
+WRKAREA_STRBUFF	equ	8
+WRKAREA_SIZE	equ	WRKAREA_STRBUFF + 65
 
 ;This is a very barebones driver. It has important limitations:
 ;- CHS mode not supported, disks must support LBA mode.
@@ -108,8 +121,6 @@ M_SRST	equ	(1 SHL SRST)
 ;-----------------------------------------------------------------------------
 ;
 ; Standard BIOS and work area entries
-
-	INCLUDE ../../../../sdk/asm/constants/msx_bios.inc
 
 CLS	equ	00C3h
 MSXVER	equ	002Dh
@@ -189,49 +200,306 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 
 ;-----------------------------------------------------------------------------
 ;
-; Driver signature
-;
-	db	"NEXTOR_DRIVER",0
+	;Driver signature
 
-; Driver flags:
-;    bit 0: 0 for drive-based, 1 for device-based
-;    bit 1: 1 for hot-plug devices supported (device-based drivers only)
+	db	"NEXTORv3_DRIVER",0
 
-	db 1+(2*DRV_HOTPLUG)
+	;Jump table
 
-;Reserved byte
-	db	0
+	jp	DRV_TIMI ;TIMER_INT
+	jp	DRV_BASSTAT ;OEMSTAT
+	jp	DRV_BASDEV ;BASDEV
+	jp	DRV_EXTBIO ;EXTBIO
+	jp	DRIVER_QUERY
+	jp	DEVICE_QUERY
+	jp	CUSTOM_DRIVER_QUERY
+	jp	CUSTOM_DEVICE_QUERY
+	jp	READ_WRITE
+	jp	DRV_DIRECT0 ;DIRECT_0
+	jp	DRV_DIRECT1 ;DIRECT_1
+	jp	DRV_DIRECT2 ;DIRECT_2
+	jp	DRV_DIRECT3 ;DIRECT_3
+	jp	DRV_DIRECT4 ;DIRECT_4
 
-;Driver name
 
 DRV_NAME:
-	db	"Sunrise IDE"
-	ds	32-($-DRV_NAME)," "
-
-;Jump table
-
-	jp	DRV_TIMI
-	jp	DRV_VERSION
-	jp	DRV_INIT
-	jp	DRV_BASSTAT
-	jp	DRV_BASDEV
-        jp      DRV_EXTBIO
-        jp      DRV_DIRECT0
-        jp      DRV_DIRECT1
-        jp      DRV_DIRECT2
-        jp      DRV_DIRECT3
-        jp      DRV_DIRECT4
+	db	"Sunrise IDE",0
 
 
-	ds	15
+;-----------------------------------------------------------------------------
+;
+; Compatibility layer for translating Nextor v2 driver routines
+; to the Nextor v3 driver structure
 
-	jp	DEV_RW
-	jp	DEV_INFO
-	jp	DEV_STATUS
-	jp	LUN_INFO
-	jp	DEV_FORMAT
-	jp	DEV_CMD
-	
+
+	INCLUDE ../../../../sdk/asm/code/output_string.asm
+
+
+	;--- Driver query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DRIVER_QUERY:
+	dec a
+	jr z,DO_DRVQ_GET_VERSION
+	dec a
+	jr z,DO_DRVQ_GET_STRING
+	dec a
+	jr z,DO_DRVQ_GET_INIT_PARAMS
+	dec a
+	jr z,DO_DRVQ_INIT
+	dec a
+	jr z,DO_DRVQ_GET_MAX_DEVICE
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_VERSION:
+	call NEXTOR2_DRV_VERSION
+	ld d,c
+	ld c,b
+	ld b,a
+	xor a
+	ret
+
+DO_DRVQ_GET_STRING:
+	ld a,b	;String index
+	ld b,d	;Buffer size
+	ex de,hl
+	dec a
+	ld hl,DRV_NAME
+	jp z,OUTPUT_STRING
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+DO_DRVQ_GET_INIT_PARAMS:
+	push de
+	pop iy
+	xor a
+	call NEXTOR2_DRV_INIT
+	ld b,0
+	rl b
+	xor a
+	ret
+
+DO_DRVQ_INIT:
+	push de
+	pop iy
+	ld a,1
+	call NEXTOR2_DRV_INIT
+	xor a
+	ret
+
+DO_DRVQ_GET_MAX_DEVICE:
+	ld b,2
+	xor a
+	ret
+
+CHPUT: jp (iy)
+
+
+	;--- Device query
+	;    Input:  A = Query index
+	;            C = Device number
+	;            F, B, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_INVALID_DEVICE: Invalid device number
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DEVICE_QUERY:
+	push af
+	ld a,c
+	or a
+	jr z,INVALID_DEVICE
+	cp 3
+	jr nc,INVALID_DEVICE
+
+	pop af
+	dec a
+	jr z,DO_DEVQ_GET_STRING
+	dec a
+	jp z,DO_DEVQ_GET_PARAMS
+	dec a
+	jp z,DO_DEVQ_GET_STATUS
+	dec a
+	jp z,DO_DEVQ_GET_AVAILABILITY
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+INVALID_DEVICE:
+	pop af
+	ld a,RESULT_INVALID_DEVICE
+	ret
+
+DO_DEVQ_GET_STRING:
+	ld a,b
+	or a
+	jp z,RETURN_NOT_IMP
+
+	cp 4
+	jp z,DO_DEVQ_GET_DEV_NAME
+
+	ld a,d
+	or a
+	ret z	   ;Buffer size=0: do nothing, no error
+	dec a
+	jr nz,DO_DEVQ_GET_STRING_2
+	ld (hl),0  ;Buffer size=1: just output terminating 0, no error
+	ret
+
+DO_DEVQ_GET_STRING_2:
+	;HL=user buf, D=user size, B=substring code, C=device number
+	;
+	;Flashjacks NEXTOR2_DEV_INFO ignores the user buffer size and always
+	;writes a fixed-layout 64-byte image to its HL argument:
+	;
+	;   substring 2 (device name): 40 chars at offsets  0..39, then spaces
+	;   substring 3 (serial)     : spaces, 20 chars at offsets 44..63
+	;
+	;The wrapper therefore points it at a scratch buffer in the page-3
+	;work area, then writes a zero terminator at the end of the actual
+	;content and copies the substring into the user buffer with
+	;OUTPUT_STRING (which handles the truncation / RESULT_TRUNCATED_STRING
+	;accounting against D).
+
+	push hl                     ;[SP+4] user buffer
+	push de                     ;[SP+2] user size (D=size)
+	push bc                     ;[SP+0] B=substring, C=device
+
+	xor a
+	call MY_GWORK               ;IX = page-3 work area base
+
+	push ix
+	pop hl
+	ld bc,WRKAREA_STRBUFF
+	add hl,bc                   ;HL = STRBUFF base
+
+	pop bc                      ;Restore B=substring, C=device
+	push bc                     ;Re-save for after NEXTOR2_DEV_INFO
+	push hl                     ;Save STRBUFF for after NEXTOR2_DEV_INFO
+
+	ld a,c                      ;A = device number for NEXTOR2_DEV_INFO
+	call NEXTOR2_DEV_INFO       ;A = result code
+
+	pop hl                      ;HL = STRBUFF
+	pop bc                      ;B = substring, C = device
+
+	or a
+	jr nz,DO_DEVQ_GET_STRING_FAIL
+
+	;Place a 0 at the end of the actual content so OUTPUT_STRING
+	;can detect the real string length:
+	;  substring 2 (device name): terminator at STRBUFF+40
+	;  substring 3 (serial)     : terminator at STRBUFF+64
+	push hl
+	ld de,40
+	ld a,b
+	cp 3
+	jr nz,DO_DEVQ_GET_STRING_TERM
+	ld de,64
+DO_DEVQ_GET_STRING_TERM:
+	add hl,de
+	ld (hl),0
+	pop hl                      ;HL = STRBUFF
+
+	;For the serial number, point the source past the 44 bytes of left
+	;padding NEXTOR2_DEV_INFO writes before the content.
+	ld a,b
+	cp 3
+	jr nz,DO_DEVQ_GET_STRING_SRC
+	ld de,44
+	add hl,de                   ;HL = STRBUFF + 44
+DO_DEVQ_GET_STRING_SRC:
+
+	;Stack: [user_size, user_buf]. HL is the zero-terminated source.
+	pop de                      ;D = user size
+	ld b,d                      ;B = max length for OUTPUT_STRING
+	pop de                      ;DE = user buffer (destination)
+	jp OUTPUT_STRING
+
+DO_DEVQ_GET_STRING_FAIL:
+	;Stack: [user_size, user_buf]
+	pop de
+	pop hl
+	jp RETURN_NOT_IMP
+
+DO_DEVQ_GET_DEV_NAME:
+	ex de,hl
+	ld b,h                      ;B = user buffer size (was D)
+
+	ld a,c
+	dec a
+	ld hl,MASTER_DEV_S
+	jp z,OUTPUT_STRING
+	ld hl,SLAVE_DEV_S
+	jp OUTPUT_STRING
+
+DO_DEVQ_GET_PARAMS:
+	ld a,h
+	or l
+	ret z	;No buffer: just return no error (device id is ok)
+
+	ld a,c
+	ld b,1
+	call NEXTOR2_LUN_INFO
+	or a
+	ret z
+
+	;Assume error is "device not available" (we checked the device id first),
+	;then return default parameters but with removable bit set
+	push hl
+	pop ix
+	xor a
+	ld (ix),a
+	ld (ix+1),a
+	ld (ix+2),2	;Sector size, high byte
+	ld (ix+3),a
+	ld (ix+4),a
+	ld (ix+5),a
+	ld (ix+6),a
+	ld (ix+7),1	;Removable flag
+	ld (ix+8),a
+	ld (ix+9),a
+	ld (ix+10),a
+	ld (ix+11),a
+	xor a
+	ret
+
+DO_DEVQ_GET_STATUS:
+DO_DEVQ_GET_AVAILABILITY:
+	ld a,c
+	ld b,1
+	call NEXTOR2_DEV_STATUS
+	ld b,a
+	;Assume A=0 means "device not available" and not "invalid device id"
+	;(we checked the device id first)
+	xor a
+	ret
+
+CUSTOM_DRIVER_QUERY:
+CUSTOM_DEVICE_QUERY:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+READ_WRITE:
+	ld c,1
+	jp NEXTOR2_DEV_RW
+
+RETURN_NOT_IMP:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+MASTER_DEV_S:
+	db	"IDE master device",0
+SLAVE_DEV_S:
+	db	"IDE slave device",0
 
 
 ;-----------------------------------------------------------------------------
@@ -277,12 +545,12 @@ DRV_TIMI:
 
 TEMP_WORK	equ	0C000h
 
-DRV_INIT:
-	;--- If first execution, just inform that no work area is needed
-	;    (the 8 bytes in SLTWRK are enough)
+NEXTOR2_DRV_INIT:
+	;--- If first execution, request the page-3 work area (legacy
+	;    device-flag layout plus the GET_STRING scratch buffer).
 
 	or	a
-	ld	hl,0
+	ld	hl,WRKAREA_SIZE
 	ld	a,2
 	ret	z			;Note that Cy is 0 (no interrupt hooking needed)
 
@@ -755,7 +1023,7 @@ DEVNAME_LOOP:
 ;         B = Secondary version number
 ;         C = Revision number
 
-DRV_VERSION:
+NEXTOR2_DRV_VERSION:
 	ld	a,VER_MAIN
 	ld	b,VER_SEC
 	ld	c,VER_REV
@@ -839,8 +1107,8 @@ DRV_DIRECT4:
 ;              .SEEK: Seek error
 ;          B = Number of sectors actually read/written
 
-DEV_RW:
-	
+NEXTOR2_DEV_RW:
+
 	push	af
 
 	ld	a,b	;Swap B and C
@@ -1106,7 +1374,7 @@ DEV_RW_NODEV:
 ; and if it is too long, the rightmost characters must be
 ; provided, not the leftmost.
 
-DEV_INFO:
+NEXTOR2_DEV_INFO:
 	or	a	;Check device index
 	jr	z,DEV_INFO_ERR1
 	cp	3
@@ -1283,7 +1551,7 @@ DEV_STRING_SKIP:
 ; Devices not supporting hot-plugging must always return status value 1.
 ; Non removable logical units may return values 0 and 1.
 
-DEV_STATUS:
+NEXTOR2_DEV_STATUS:
 	set	0,b	;So that CHECK_DEV_LUN admits B=0
 
 	call	CHECK_DEV_LUN
@@ -1341,7 +1609,7 @@ DEV_STATUS:
 ;+10 (1): Number of heads (0, if not a hard disk)
 ;+11 (1): Number of sectors per track (0, if not a hard disk)
 
-LUN_INFO:
+NEXTOR2_LUN_INFO:
 	call	CHECK_DEV_LUN
 	jp	c,LUN_INFO_ERROR
 
@@ -1433,74 +1701,6 @@ LUN_INFO_ERROR:
 	ld	a,1
 	ret
 
-
-;-----------------------------------------------------------------------------
-;
-; Physical format a device
-;
-;Input:   A = Device index, 1 to 7
-;         B = Logical unit number, 1 to 7
-;         C = Format choice, 0 to return choice string
-;Output:
-;        When C=0 at input:
-;        A = 0: Ok, address of choice string returned
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        HL = Address of format choice string (in bank 0 or 3),
-;             only if A=0 returned.
-;             Zero, if only one choice is available.
-;
-;        When C<>0 at input:
-;        A = 0: Ok, device formatted
-;            Other: error code, same as DEV_RW plus:
-;            .IPARM: Invalid format choice
-;            .IFORM: Invalid device or logical unit number,
-;                    or device not formattable
-;        B = Media ID if the device is a floppy disk, zero otherwise
-;            (only if A=0 is returned)
-;
-; Media IDs are:
-; F0h: 3.5" Double Sided, 80 tracks per side, 18 sectors per track (1.44MB)
-; F8h: 3.5" Single sided, 80 tracks per side, 9 sectors per track (360K)
-; F9h: 3.5" Double sided, 80 tracks per side, 9 sectors per track (720K)
-; FAh: 5.25" Single sided, 80 tracks per side, 8 sectors per track (320K)
-; FBh: 3.5" Double sided, 80 tracks per side, 8 sectors per track (640K)
-; FCh: 5.25" Single sided, 40 tracks per side, 9 sectors per track (180K)
-; FDh: 5.25" Double sided, 40 tracks per side, 9 sectors per track (360K)
-; FEh: 5.25" Single sided, 40 tracks per side, 8 sectors per track (160K)
-; FFh: 5.25" Double sided, 40 tracks per side, 8 sectors per track (320K)
-
-DEV_FORMAT:
-	ld	a,IFORM
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Execute direct command on a device
-;
-;Input:    A = Device number, 1 to 7
-;          B = Logical unit number, 1 to 7 (if applicable)
-;          HL = Address of input buffer
-;          DE = Address of output buffer, 0 if not necessary
-;Output:   Output buffer appropriately filled (if applicable)
-;          A = Error code:
-;              0: Ok
-;              1: Invalid device number or logical unit number,
-;                 or device not ready
-;              2: Invalid or unknown command
-;              3: Insufficient output buffer space
-;              4-15: Reserved
-;              16-255: Device specific error codes
-;
-; The first two bytes of the input and output buffers must contain the size
-; of the buffer, not incuding the size bytes themselves.
-; For example, if 16 bytes are needed for a buffer, then 18 bytes must
-; be allocated, and the first two bytes of the buffer must be 16, 0.
-
-DEV_CMD:
-	ld	a,2
-	ret
 
 ;=====
 ;=====  END of DEVICE-BASED specific routines
@@ -1619,7 +1819,9 @@ PRINT:
 ;-----------------------------------------------------------------------------
 ;
 ; Obtain the work area address for the driver
-; Input: A=1  to obtain the work area for the master, 2 for the slave
+; Input: A=0 or 1 to obtain the page-3 work area base
+;        A=2 to obtain the slave-device entry (base + 4)
+; Output: IX = selected work area pointer
 ; Preserves A
 
 MY_GWORK:
@@ -1630,12 +1832,18 @@ MY_GWORK:
 	LD IX,GWORK
 	call CALBNK
 	pop	af
-	cp	1
-	ret	z
+	push	de
+	ld	e,(ix)		;DE = pointer to the page-3 work area
+	ld	d,(ix+1)
+	push	de
+	pop	ix		;IX = page-3 work area base
+	pop	de
+	cp	2
+	ret	nz		;A=0 or A=1: return base
 	inc	ix
 	inc	ix
 	inc	ix
-	inc	ix
+	inc	ix		;A=2: return base + 4
 	ret
 
 
