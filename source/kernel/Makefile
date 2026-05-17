@@ -32,24 +32,54 @@ ifeq ($(strip $(MKNEXROM)),)
 MKNEXROM=mknexrom
 endif
 
-# Optional: replace undocumented Z80 opcodes (the ones operating on ixh/ixl/
-# iyh/iyl) with documented equivalents, for compatibility with Z180-based
-# MSX machines. Set NO_UNDOC_CPU_INSTRUCTIONS=1 on the make command line.
+# The build is controlled by three external variables (set via env or on
+# the make command line). Each variable, when non-empty, both defines a
+# symbol that gets passed to N80 via --define-symbols, and adds a
+# fragment to the output-filename suffix:
 #
-# A mode-specific stamp file is touched whenever the flag changes, and is
-# listed as a prerequisite of every assembled target. That forces full
-# reassembly when switching between undoc and undoc-free builds so existing
-# .rel/.bin/.drv outputs from the previous mode are not silently reused.
-ifeq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
-UNDOC_DEFINE=
-UNDOC_MODE_STAMP=.undoc-mode-default
-else
-UNDOC_DEFINE=NO_UNDOC_CPU_INSTRUCTIONS
-UNDOC_MODE_STAMP=.undoc-mode-no-undoc
+#   NO_UNDOC_CPU_INSTRUCTIONS  -> defines NO_UNDOC_CPU_INSTRUCTIONS,
+#                                 suffix fragment ".NO_UNDOC". Replaces
+#                                 undocumented Z80 opcodes (ixh/ixl/iyh/
+#                                 iyl) with documented equivalents, for
+#                                 compatibility with Z180-based MSX
+#                                 machines.
+#   INVERT_SHIFT               -> defines INVERT_SHIFT, suffix fragment
+#                                 ".SHIFT_INV". Inverts the meaning of
+#                                 the SHIFT boot key.
+#   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
+#                                 ".CTRL_INV". Inverts the meaning of
+#                                 the CTRL boot key.
+#
+# Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1 make ide-blue`
+# produces Nextor-$(VERSION).SunriseIDE.blueMSX.NO_UNDOC.SHIFT_INV.ROM.
+#
+# A single variant-specific stamp file (its filename encodes the active
+# variant signature) is listed as a prereq of every assembled .rel, so
+# switching variants forces a full reassembly and previously built .rels
+# from a different variant are never silently reused.
+
+_VARIANT_DEFINES :=
+_VARIANT_SUFFIX :=
+
+ifneq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
+_VARIANT_DEFINES += NO_UNDOC_CPU_INSTRUCTIONS
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).NO_UNDOC
 endif
 
+ifneq ($(strip $(INVERT_SHIFT)),)
+_VARIANT_DEFINES += INVERT_SHIFT
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).SHIFT_INV
+endif
+
+ifneq ($(strip $(INVERT_CTRL)),)
+_VARIANT_DEFINES += INVERT_CTRL
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
+endif
+
+UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
+
 $(UNDOC_MODE_STAMP):
-	@rm -f .undoc-mode-*
+	@rm -f .build-variant*
 	@touch $@
 
 define SymToEqus
@@ -67,12 +97,12 @@ endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $$ $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $(2) $(3) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
 endef
 
 define print_linking
@@ -85,6 +115,29 @@ endef
 ###################
 
 all: base ide ide-masteronly ide-blue ide-masteronly-bluemsx ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
+
+# `everything` builds every output of `all` across all six variant
+# combinations (default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
+# NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL). Each variant runs as a
+# recursive make invocation with the corresponding env vars set, so the
+# variant stamp inside the sub-make is correctly tracked.
+#
+# Sub-makes within a single variant are incremental, but switching
+# variants between sub-makes forces a full reassembly (intrinsic to the
+# single-stamp mechanism). The default variant is built last so the
+# on-disk intermediate files (nextor_base.dat, etc.) are left as the
+# non-inverted, undoc kernel that every other direct target consumes.
+#
+# Each sub-make is prefixed with `-` and passes --keep-going so a
+# failure in one variant does not stop the other five from running.
+.PHONY: everything
+everything:
+	-@$(MAKE) --no-print-directory --keep-going all INVERT_SHIFT=1
+	-@$(MAKE) --no-print-directory --keep-going all INVERT_CTRL=1
+	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1
+	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1
+	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1
+	-@$(MAKE) --no-print-directory --keep-going all
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
 
@@ -112,9 +165,9 @@ base: nextor_base.dat
 
 ### Sunrise IDE, normal ROM
 
-ide: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM
+ide: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE$(_VARIANT_SUFFIX).ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/sunride.bin \
 	drivers/SunriseIDE/chgbnk.bin
@@ -131,9 +184,9 @@ drivers/SunriseIDE/sunride.bin: \
 
 ### Sunrise IDE, normal ROM, master device only
 
-ide-masteronly: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM
+ide-masteronly: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly$(_VARIANT_SUFFIX).ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/sunride.masteronly.bin \
 	drivers/SunriseIDE/chgbnk.bin
@@ -150,9 +203,9 @@ drivers/SunriseIDE/sunride.masteronly.bin: \
 
 ### Sunrise IDE, ROM for blueMSX
 
-ide-blue: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
+ide-blue: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX$(_VARIANT_SUFFIX).ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/driver.bin \
 	drivers/SunriseIDE/chgbnk.bin \
@@ -171,9 +224,9 @@ drivers/SunriseIDE/driver.bin: \
 
 ### Sunrise IDE, ROM for blueMSX, master device only
 
-ide-masteronly-bluemsx: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
+ide-masteronly-bluemsx: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX$(_VARIANT_SUFFIX).ROM
 
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
+drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/SunriseIDE/drvmonly.bin \
 	drivers/SunriseIDE/chgbnk.bin \
@@ -201,9 +254,9 @@ drivers/SunriseIDE/chgbnk.bin: \
 
 ### Standalone ASCII8
 
-ascii8: drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM
+ascii8: drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
 
-drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
+drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/driver.bin \
 	drivers/StandaloneASCII8/chgbnk.bin \
@@ -228,9 +281,9 @@ drivers/StandaloneASCII8/chgbnk.bin: \
 
 ### Standalone ASCII16
 
-ascii16: drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM
+ascii16: drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
 
-drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM: \
+drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/driver.bin \
 	drivers/StandaloneASCII16/chgbnk.bin \
@@ -250,10 +303,10 @@ drivers/StandaloneASCII16/chgbnk.bin: \
 ### MegaFlashROM SCC+ SD
 
 mfrsd: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot$(_VARIANT_SUFFIX).ROM \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery$(_VARIANT_SUFFIX).ROM \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots$(_VARIANT_SUFFIX).ROM \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery$(_VARIANT_SUFFIX).ROM \
 
 drivers/MegaFlashRomSD/mfrsd-1slot.bin: \
 	$(UNDOC_MODE_STAMP) \
@@ -275,7 +328,7 @@ drivers/MegaFlashRomSD/recovery_header.bin: \
 
 	$(call assemble,drivers/MegaFlashRomSD/recovery_header.asm,--build-type abs --output-file-extension bin)
 
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM: \
+drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/chgbnk.bin \
 	drivers/MegaFlashRomSD/mfrsd-1slot.bin
@@ -283,17 +336,17 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM: \
 	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-1slot.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
+drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery$(_VARIANT_SUFFIX).ROM: \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot$(_VARIANT_SUFFIX).ROM \
 	drivers/MegaFlashRomSD/recovery_header.bin
 
 	cat drivers/MegaFlashRomSD/recovery_header.bin \
-		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
-		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM
+		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot$(_VARIANT_SUFFIX).ROM \
+		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery$(_VARIANT_SUFFIX).ROM
 
 	$(call copy_to_bin,$@)
 	
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM: \
+drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/chgbnk.bin \
 	drivers/MegaFlashRomSD/mfrsd-2slots.bin
@@ -301,20 +354,20 @@ drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM: \
 	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-2slots.bin /m:drivers/StandaloneASCII8/chgbnk.bin
 	$(call copy_to_bin,$@)
 
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
+drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery$(_VARIANT_SUFFIX).ROM: \
+	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots$(_VARIANT_SUFFIX).ROM \
 	drivers/MegaFlashRomSD/recovery_header.bin
 
 	cat drivers/MegaFlashRomSD/recovery_header.bin \
-		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
-		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM
+		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots$(_VARIANT_SUFFIX).ROM \
+		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery$(_VARIANT_SUFFIX).ROM
 
 	$(call copy_to_bin,$@)
 
 
 ### Flashjacks
 
-flashjacks: drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM
+flashjacks: drivers/Flashjacks/Nextor-$(VERSION).Flashjacks$(_VARIANT_SUFFIX).ROM
 
 drivers/Flashjacks/flashjacks.bin: \
 	$(UNDOC_MODE_STAMP) \
@@ -322,7 +375,7 @@ drivers/Flashjacks/flashjacks.bin: \
 
 	$(call assemble,drivers/Flashjacks/flashjacks.asm,--build-type abs --output-file-extension bin)
 
-drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
+drivers/Flashjacks/Nextor-$(VERSION).Flashjacks$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/Flashjacks/flashjacks.bin \
 	drivers/SunriseIDE/chgbnk.bin
@@ -333,9 +386,9 @@ drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
 
 ### OCM (1-chip MSX, SX|2, and compatibles)
 
-ocm: drivers/OCM/Nextor-$(VERSION).OCM.ROM
+ocm: drivers/OCM/Nextor-$(VERSION).OCM$(_VARIANT_SUFFIX).ROM
 
-drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
+drivers/OCM/Nextor-$(VERSION).OCM$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/StandaloneASCII8/chgbnk.bin
 
@@ -345,9 +398,9 @@ drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
 
 ### Turbo-R FDD
 
-dsk-tr: drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM
+dsk-tr: drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD$(_VARIANT_SUFFIX).ROM
 
-drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM: \
+drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD$(_VARIANT_SUFFIX).ROM: \
 	nextor_base.dat \
 	drivers/TurboRFDD/driver.bin \
 	drivers/TurboRFDD/chgbnk.bin \
@@ -441,7 +494,7 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
 
-	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base.dat)
+	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat)
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
@@ -700,4 +753,4 @@ clean:
 	rm -f nextor_base.dat
 	rm -f bank0/b0lab*.inc
 	rm -f bank2/b2labels.inc
-	rm -f .undoc-mode-*
+	rm -f .build-variant*

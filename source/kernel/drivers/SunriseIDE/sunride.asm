@@ -2019,9 +2019,9 @@ LUN_NFO_ATAPI:
 	inc	hl
 	djnz	.zloop
 
-	ld	a,ATAPICMD.PACKET	; PIO send PACKET command 
+	ld	a,ATAPICMD.PACKET	; PIO send PACKET command
 	call	PIO_CMD
-	jr	c,.errorpop
+	jp	c,.errorpop
 
 	pop	hl
 	push	hl		; Source=PCTBUF
