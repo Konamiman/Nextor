@@ -20,13 +20,18 @@
 #define DRIVER_CUSTOM_DRIVER_QUERY_ENTRY  0x4122
 #define DRIVER_CUSTOM_DEVICE_QUERY_ENTRY  0x4125
 #define DRIVER_READ_WRITE_ENTRY           0x4128
+/* These entries are reserved for future use,
+	driver don't need to implement them. */
+#define DRIVER_RESERVED0_ENTRY            0x412B
+#define DRIVER_RESERVED1_ENTRY            0x412E
+#define DRIVER_RESERVED2_ENTRY            0x4131
 /* The DIRECT*_ENTRY entries are only used by ROM drivers
    and may be omitted from the jump table of RAM drivers. */
-#define DRIVER_DIRECT0_ENTRY              0x412B
-#define DRIVER_DIRECT1_ENTRY              0x412E
-#define DRIVER_DIRECT2_ENTRY              0x4131
-#define DRIVER_DIRECT3_ENTRY              0x4134
-#define DRIVER_DIRECT4_ENTRY              0x4137
-#define DRIVER_HEADER_END                 0x413A  /* First address after the header */
+#define DRIVER_DIRECT0_ENTRY              0x4134
+#define DRIVER_DIRECT1_ENTRY              0x4137
+#define DRIVER_DIRECT2_ENTRY              0x413A
+#define DRIVER_DIRECT3_ENTRY              0x413D
+#define DRIVER_DIRECT4_ENTRY              0x4140
+#define DRIVER_HEADER_END                 0x4143  /* First address after the header */
 
 #endif   //__DRIVER_ROUTINES_H

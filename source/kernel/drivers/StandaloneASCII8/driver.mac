@@ -48,6 +48,9 @@ DRIVER_START:
 	jp	CUSTOM_DRIVER_QUERY
 	jp  CUSTOM_DEVICE_QUERY
 	jp	READ_WRITE
+	jp	RESERVED_0
+	jp	RESERVED_1
+	jp	RESERVED_2
 	jp	DIRECT_0
 	jp	DIRECT_1
 	jp	DIRECT_2
@@ -89,6 +92,14 @@ BASDEV:
 EXTBIO:
 	ret
 	ret
+	ret
+
+
+	;* Jump table entries reserved for future use.
+
+RESERVED_0:
+RESERVED_1:
+RESERVED_2:
 	ret
 
 

@@ -344,12 +344,11 @@ SING_DBL  equ     7420h ;"1-Single side / 2-Double side"
 	jp	CUSTOM_DRIVER_QUERY
 	jp	CUSTOM_DEVICE_QUERY
 	jp	READ_WRITE
-	jp	DRV_DIRECT0 ;DIRECT_0
-	jp	DRV_DIRECT1 ;DIRECT_1
-	jp	DRV_DIRECT2 ;DIRECT_2
-	jp	DRV_DIRECT3 ;DIRECT_3
-	jp	DRV_DIRECT4 ;DIRECT_4
 
+	; 3 reserved entries + 5 direct call entries
+	rept 8*3
+	ret
+	endm
 
 DRV_NAME:
 	db	"Sunrise IDE",0
@@ -1190,22 +1189,6 @@ DRV_BASDEV:
 ; It is entered with D'=1.
 
 DRV_EXTBIO:
-	ret
-
-
-;-----------------------------------------------------------------------------
-;
-; Direct calls entry points.
-; Calls to addresses 7450h, 7453h, 7456h, 7459h and 745Ch
-; in kernel banks 0 and 3 will be redirected
-; to DIRECT0/1/2/3/4 respectively.
-; Receives all register data from the caller except IX and AF'.
-
-DRV_DIRECT0:
-DRV_DIRECT1:
-DRV_DIRECT2:
-DRV_DIRECT3:
-DRV_DIRECT4:
 	ret
 
 
