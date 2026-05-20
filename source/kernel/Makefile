@@ -179,7 +179,7 @@ drivers/SunriseIDE/sunride.bin: \
 	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/sunride.asm
 
-	$(call assemble,drivers/SunriseIDE/sunride.asm,--build-type abs --output-file-extension bin --define-symbols BAD_POPS)
+	$(call assemble,drivers/SunriseIDE/sunride.asm,--build-type abs --output-file-extension bin)
 
 
 ### Sunrise IDE, normal ROM, master device only
@@ -198,7 +198,7 @@ drivers/SunriseIDE/sunride.masteronly.bin: \
 	$(UNDOC_MODE_STAMP) \
 	drivers/SunriseIDE/sunride.asm
 
-	$(call assemble_as,drivers/SunriseIDE/sunride.asm,$$/sunride.masteronly.bin,--build-type abs --output-file-extension bin --define-symbols MASTER_ONLY,BAD_POPS)
+	$(call assemble_as,drivers/SunriseIDE/sunride.asm,$$/sunride.masteronly.bin,--build-type abs --output-file-extension bin --define-symbols MASTER_ONLY)
 
 
 ### Sunrise IDE, ROM for blueMSX

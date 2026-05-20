@@ -1369,19 +1369,9 @@ DEV_ATAPI_RD:
 	ld	bc,PCTRW10._SIZE		; block size=10 bytes
 	call	WRITE_DATA		; Send the packet to the device
 
-	ifdef BAD_POPS
-
-	pop bc
-	pop hl
-	pop iy
-
-	else
-
 	pop	iy
-	pop hl
-	pop bc
-
-	endif
+	pop	hl
+	pop	bc
 
 	jp	c,DEV_RW_ERR
 
@@ -1440,19 +1430,9 @@ DEV_ATAPI_WR:
 	ld	bc,PCTRW10._SIZE		; block size=10 bytes
 	call	WRITE_DATA		; Send the packet to the device
 
-	ifdef BAD_POPS
-
-	pop bc
-	pop hl
-	pop iy
-
-	else
-
 	pop	iy
-	pop hl
-	pop bc
-
-	endif
+	pop	hl
+	pop	bc
 
 	jp	c,DEV_RW_ERR
 
