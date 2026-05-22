@@ -61,6 +61,21 @@
 ; flags as the original would. The HL and stack top are temporarily
 ; clobbered, but both are restored before the macro returns.
 ;
+; A single-instruction undocumented opcode that reads an index half
+; (e.g. `ld a,iyh`) is replaced by the documented sequence
+;
+;       push  iy
+;       ex    (sp),hl   ; HL = original IY,  stack top = original HL
+;       <op via h or l>
+;       pop   hl        ; HL restored
+;
+; This is 5 bytes / ~48 T-states, vs 2 bytes / 8 T-states for the
+; original undocumented opcode. Flags are preserved exactly because
+; `push`, `pop` and `ex (sp),hl` do not touch them; only the inner
+; `<op>` (which is the documented counterpart of the original) sets
+; flags as the original would. The HL and stack top are temporarily
+; clobbered, but both are restored before the macro returns.
+;
 ; The compound `ld_ iy,de` / `ld_ ix,de` shortcuts expand to a single
 ; `push de` + `pop iy/ix` (3 bytes / 25 T-states), which is far smaller
 ; than two independent `ld_ iyl,e` / `ld_ iyh,d` expansions.
