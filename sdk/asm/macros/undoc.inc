@@ -108,8 +108,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	a,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	a,ixh
 	  endif
@@ -121,8 +120,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	a,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	a,ixl
 	  endif
@@ -134,8 +132,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	a,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	a,iyh
 	  endif
@@ -147,8 +144,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	a,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	a,iyl
 	  endif
@@ -166,8 +162,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	b,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	b,ixh
 	  endif
@@ -179,8 +174,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	b,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	b,ixl
 	  endif
@@ -192,8 +186,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	b,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	b,iyh
 	  endif
@@ -205,8 +198,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	b,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	b,iyl
 	  endif
@@ -224,8 +216,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	c,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	c,ixh
 	  endif
@@ -237,8 +228,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	c,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	c,ixl
 	  endif
@@ -250,8 +240,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	c,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	c,iyh
 	  endif
@@ -263,8 +252,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	c,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	c,iyl
 	  endif
@@ -282,8 +270,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	d,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	d,ixh
 	  endif
@@ -295,8 +282,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	d,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	d,ixl
 	  endif
@@ -308,8 +294,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	d,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	d,iyh
 	  endif
@@ -321,8 +306,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	d,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	d,iyl
 	  endif
@@ -340,8 +324,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	e,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	e,ixh
 	  endif
@@ -353,8 +336,7 @@ ld_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   ld	e,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   ld	e,ixl
 	  endif
@@ -366,8 +348,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	e,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	e,iyh
 	  endif
@@ -379,8 +360,7 @@ ld_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   ld	e,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   ld	e,iyl
 	  endif
@@ -766,8 +746,7 @@ cp_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  cp	h
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  cp	ixh
 	 endif
@@ -779,8 +758,7 @@ cp_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  cp	l
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  cp	ixl
 	 endif
@@ -792,8 +770,7 @@ cp_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  cp	h
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  cp	iyh
 	 endif
@@ -805,8 +782,7 @@ cp_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  cp	l
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  cp	iyl
 	 endif
@@ -836,8 +812,7 @@ or_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  or	h
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  or	ixh
 	 endif
@@ -849,8 +824,7 @@ or_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  or	l
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  or	ixl
 	 endif
@@ -862,8 +836,7 @@ or_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  or	h
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  or	iyh
 	 endif
@@ -875,8 +848,7 @@ or_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  or	l
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  or	iyl
 	 endif
@@ -896,8 +868,7 @@ and_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  and	h
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  and	ixh
 	 endif
@@ -909,8 +880,7 @@ and_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  and	l
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  and	ixl
 	 endif
@@ -922,8 +892,7 @@ and_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  and	h
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  and	iyh
 	 endif
@@ -935,8 +904,7 @@ and_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  and	l
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  and	iyl
 	 endif
@@ -956,8 +924,7 @@ xor_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  xor	h
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  xor	ixh
 	 endif
@@ -969,8 +936,7 @@ xor_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  xor	l
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  xor	ixl
 	 endif
@@ -982,8 +948,7 @@ xor_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  xor	h
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  xor	iyh
 	 endif
@@ -995,8 +960,7 @@ xor_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  xor	l
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  xor	iyl
 	 endif
@@ -1016,8 +980,7 @@ sub_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  sub	h
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  sub	ixh
 	 endif
@@ -1029,8 +992,7 @@ sub_ macro src
 	  push	ix
 	  ex	(sp),hl
 	  sub	l
-	  ex	(sp),hl
-	  pop	ix
+	  pop	hl
 	 else
 	  sub	ixl
 	 endif
@@ -1042,8 +1004,7 @@ sub_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  sub	h
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  sub	iyh
 	 endif
@@ -1055,8 +1016,7 @@ sub_ macro src
 	  push	iy
 	  ex	(sp),hl
 	  sub	l
-	  ex	(sp),hl
-	  pop	iy
+	  pop	hl
 	 else
 	  sub	iyl
 	 endif
@@ -1083,8 +1043,7 @@ add_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   add	a,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   add	a,ixh
 	  endif
@@ -1096,8 +1055,7 @@ add_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   add	a,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   add	a,ixl
 	  endif
@@ -1109,8 +1067,7 @@ add_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   add	a,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   add	a,iyh
 	  endif
@@ -1122,8 +1079,7 @@ add_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   add	a,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   add	a,iyl
 	  endif
@@ -1147,8 +1103,7 @@ adc_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   adc	a,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   adc	a,ixh
 	  endif
@@ -1160,8 +1115,7 @@ adc_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   adc	a,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   adc	a,ixl
 	  endif
@@ -1173,8 +1127,7 @@ adc_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   adc	a,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   adc	a,iyh
 	  endif
@@ -1186,8 +1139,7 @@ adc_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   adc	a,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   adc	a,iyl
 	  endif
@@ -1211,8 +1163,7 @@ sbc_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   sbc	a,h
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   sbc	a,ixh
 	  endif
@@ -1224,8 +1175,7 @@ sbc_ macro dest,src
 	   push	ix
 	   ex	(sp),hl
 	   sbc	a,l
-	   ex	(sp),hl
-	   pop	ix
+	   pop	hl
 	  else
 	   sbc	a,ixl
 	  endif
@@ -1237,8 +1187,7 @@ sbc_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   sbc	a,h
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   sbc	a,iyh
 	  endif
@@ -1250,8 +1199,7 @@ sbc_ macro dest,src
 	   push	iy
 	   ex	(sp),hl
 	   sbc	a,l
-	   ex	(sp),hl
-	   pop	iy
+	   pop	hl
 	  else
 	   sbc	a,iyl
 	  endif
