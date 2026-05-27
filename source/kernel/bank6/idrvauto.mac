@@ -460,7 +460,7 @@ IDRV_PARSED:
 	ld	b,00110000b		;Try mappers other than primary first
 	call	ALL_SEG##
 	jr	nc,IDRV_ALLOK
-	ld	e,70		;"Not enough memory"
+	ld	e,7		;ERROM, "Out of memory"
 	jp	BASIC_ERR6
 
 IDRV_ALLOK:
