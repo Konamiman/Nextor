@@ -419,9 +419,6 @@ ram_ad	defl	DATABASE
 	const	SLTTBL,0FCC5h		;Secondary slot register images
 	const	KBUF,  0F41Fh		;Buffer space in main MSX work area
 ;
-;	MAP_SCAN temporary scratch.  Copied later to real locations.
-;
-	const	MAP_REC,KBUF		;Temporary mapper record 16*2 + 1
 	const	CH_TYPE,KBUF		;Type of character generator 0...3
 					; (controls upper-casing routine)
 ;

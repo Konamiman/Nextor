@@ -75,8 +75,16 @@ endif
 		ret
 DO_MAPINIT:
 
-		call	MAP_SCAN		;This is the second time round
-		ret	c			; MAP_SCAN is called.
+		;Reuse the MAP_SCAN result captured by the earlier MEM_CHK call
+		;instead of re-probing the mapper. Repeating the destructive
+		;AAh/55h probe at this point (which is what MSX-DOS 2 and Nextor 2 did)
+		;breaks on Turbo-R due to the changes introduced in Nextor 3:
+		;BIOS calls made between the two scans (INITXT, console prints)
+		;leave the firmware in a state where writes to the top 4 segments (the
+		;ROM-image shadow at 12-15) no longer survive the read-back,
+		;so the second scan would find four less segment in the primary mapper.
+		;The first scan ran before those BIOS calls and saw the mapper correctly.
+		ld	hl,(MAP_REC_END_PTR##)
 ;
 ;
 ;    *****  ALLOCATE AND BUILD UP MAP_TAB IN PAGE-3  *****
@@ -389,6 +397,9 @@ not_exp_slot_2:	inc	hl
 		inc	hl
 		call	SWAP_RAM_SLOT		; the RAM slot.
 		pop	hl
+		ld	(MAP_REC_END_PTR##),hl	;Save end-of-records pointer so
+						; MAP_INIT can reuse this scan's
+						; result instead of re-probing.
 		xor	a
 		ret
 ;
