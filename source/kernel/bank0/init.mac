@@ -1492,7 +1492,7 @@ FILAUX:	ld	(hl),0C9h
 	ld	($PROMPT##),hl	; disk change prompt routine.
 	ld	hl,KABJ_HOOKS_TEMPLATE##	;Copy KABJ/KDERJ hook code
 	ld	de,KABJ_CODE##			; to page 3 RAM so the hooks
-	ld	bc,14				; are ready before any BDOS
+	ld	bc,KABJ_HOOKS_TEMPLATE_END##-KABJ_HOOKS_TEMPLATE##	;are ready before any BDOS
 	ldir					; call can happen.
 ;
 	ld	hl,BDOS_GO##

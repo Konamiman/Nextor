@@ -37,16 +37,23 @@ DB_INIT::
 ;
 ;    Template for the KABJ/KDERJ hooks that get copied to page 3 RAM
 ; (KABJ_CODE and KDERJ_CODE) during initialization. These hooks switch
-; to bank 0 via CHGBNK before jumping to KABR/KDERR, so they work
-; regardless of which bank is currently paged in.
+; to bank 0 via CHGBNK_KEEP_AF (in doshead, mirrored across all kernel
+; banks) before jumping to KABR/KDERR, so they work regardless of which
+; bank is currently paged in.
+;
+; A must be preserved across the bank switch: KABR's caller (the disk
+; error abort path) passes the .ABORT marker in A, and DBABORT_ROUTINE
+; needs to see it to distinguish a disk-error abort from a Ctrl-STOP.
+; The original "xor a / call CHGBNK" sequence set A to 0, which made
+; CPABORT_ROUTINE skip the "fetch original error from B" branch and the
+; whole disk-error abort path silently fell through to READYR.
 ;
 KABJ_HOOKS_TEMPLATE::
-		xor	a
-		call	7FD0h		;CHGBNK - switch to bank 0
+		call	CHGBNK_KEEP_AF##
 		jp	KABR
-		xor	a
-		call	7FD0h		;CHGBNK - switch to bank 0
+		call	CHGBNK_KEEP_AF##
 		jp	KDERR
+KABJ_HOOKS_TEMPLATE_END::
 ;
 ;
 ;-----------------------------------------------------------------------------

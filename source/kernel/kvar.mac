@@ -297,8 +297,8 @@ size	macro	name
     field  5,BOOTKEYS              ;To store the state of boot keys
     field  1,I_AM_RUSSIAN
     field  1,ALL_KERNELS_DISABLED
-    field  7,KABJ_CODE              ;RAM hook: xor a + call CHGBNK + jp KABR
-    field  7,KDERJ_CODE             ;RAM hook: xor a + call CHGBNK + jp KDERR
+    field  6,KABJ_CODE              ;RAM hook: call CHGBNK_KEEP_AF + jp KABR
+    field  6,KDERJ_CODE             ;RAM hook: call CHGBNK_KEEP_AF + jp KDERR
 
     ;Mapper scan scratch. Populated by the early MAP_SCAN call in MEM_CHK
     ;and re-read (instead of re-scanning) by MAP_INIT. Lives here, in the
