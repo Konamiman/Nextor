@@ -112,6 +112,23 @@ CALDRV:
 ;
 ;-----------------------------------------------------------------------------
 ;
+; Switch to bank 0 while preserving AF (and all other registers).
+; Used by the KABJ/KDERJ page-3 RAM hooks: those hooks are invoked from
+; an unknown kernel bank, and must end up in bank 0 (where KABR/KDERR live)
+; with A still holding the .ABORT/.STOP/error marker the caller supplied.
+;
+; This routine lives inside the doshead area (4000h-40FEh) which the Makefile
+; copies byte-for-byte into every kernel bank, so "call CHGBNK_KEEP_AF" from
+; the page-3 RAM hook works regardless of which kernel bank happens to be
+; paged in page 1. The 7FD0h-7FFFh range can't be used for this because it's
+; reserved for the OEM/driver CHGBNK implementation.
+
+CHGBNK_KEEP_AF::
+		push	af
+		xor	a
+		call	7FD0h		;CHGBNK - select bank 0
+		pop	af
+		ret
 
 		defs	ROMST+78h-$,0FFh
 ;

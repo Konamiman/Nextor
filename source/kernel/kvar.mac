@@ -297,8 +297,17 @@ size	macro	name
     field  5,BOOTKEYS              ;To store the state of boot keys
     field  1,I_AM_RUSSIAN
     field  1,ALL_KERNELS_DISABLED
-    field  7,KABJ_CODE              ;RAM hook: xor a + call CHGBNK + jp KABR
-    field  7,KDERJ_CODE             ;RAM hook: xor a + call CHGBNK + jp KDERR
+    field  6,KABJ_CODE              ;RAM hook: call CHGBNK_KEEP_AF + jp KABR
+    field  6,KDERJ_CODE             ;RAM hook: call CHGBNK_KEEP_AF + jp KDERR
+
+    ;Mapper scan scratch. Populated by the early MAP_SCAN call in MEM_CHK
+    ;and re-read (instead of re-scanning) by MAP_INIT. Lives here, in the
+    ;BOOT_TMP region, because the previous location (KBUF, F41Fh) is part
+    ;of the MSX BIOS work area and gets corrupted by INITXT / CHPUT calls
+    ;that now run between the two scans on Turbo-R. The end-of-records
+    ;pointer is what MAP_SCAN would have returned in HL.
+    field  2*16+1,MAP_REC
+    field  2,MAP_REC_END_PTR
 ;
 ;-----------------------------------------------------------------------------
 ;
