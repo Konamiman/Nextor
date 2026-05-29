@@ -1,0 +1,581 @@
+	.z80
+	title	MSX-DOS 2 Copyright (1986)  IS Systems Ltd.
+	subttl	Dummy driver bank for standalone kernel
+
+;-----------------------------------------------------------------------------
+
+; This is a dummy driver that allows using the kernel as a standalone cartridge
+; without any associated hardware.
+;
+
+;-----------------------------------------------------------------------------
+
+	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
+
+	module DRIVER_QUERY
+	INCLUDE ../../sdk/asm/constants/driver_driver_queries.inc
+	endmod
+
+	module DEVICE_QUERY
+	INCLUDE ../../sdk/asm/constants/driver_device_queries.inc
+	endmod
+
+	INCLUDE ../../sdk/asm/constants/dos_errors.inc
+
+	INCLUDE ../../sdk/asm/constants/rom_bank_header.inc
+
+
+	;*********************
+	;***  DRIVER CODE  ***
+	;*********************
+
+	org 4100h
+
+DRIVER_START:
+
+	;Driver signature
+
+	db	"NEXTORv3_DRIVER",0
+
+	;Jump table
+
+	jp	TIMER_INT
+	jp	OEMSTAT
+	jp	BASDEV
+	jp	EXTBIO
+	jp	DRIVER_QUERY
+	jp	DEVICE_QUERY
+	jp	CUSTOM_DRIVER_QUERY
+	jp  CUSTOM_DEVICE_QUERY
+	jp	READ_WRITE
+	jp	RESERVED_0
+	jp	RESERVED_1
+	jp	RESERVED_2
+	jp	DIRECT_0
+	jp	DIRECT_1
+	jp	DIRECT_2
+	jp	DIRECT_3
+	jp	DIRECT_4
+
+
+	;--- Timer interrupt routine
+
+TIMER_INT:
+	ret	;TIMER_INT	
+	ret
+	ret
+
+	;--- Handler for BASIC expanded statement ("CALL") handler.
+	;    Works the expected way, except that CALBAS in kernel page 0
+	;    must be called instead of CALBAS in MSX BIOS.
+
+OEMSTAT:
+	scf
+	ret
+	ret
+
+
+	;--- Handler for BASIC expanded devices.
+	;    Works the expected way, but see CALBAS exception for STATEMENT.
+
+BASDEV:
+	scf
+	ret
+	ret
+
+
+	;--- Extended BIOS hook.
+	;    Works the expected way, except that it must return
+	;    IYl=1 if the old hook must be called, IYl=0 otherwise.
+	;    Only called if the driver has returned EXTBIO flag set 
+	;    in the "get driver initialization parameters" query.
+EXTBIO:
+	ret
+	ret
+	ret
+
+
+	;* Jump table entries reserved for future use.
+
+RESERVED_0:
+RESERVED_1:
+RESERVED_2:
+	ret
+
+
+	;* Direct calls entry points.
+	;  There is a jump table at address 7850h in ROM banks 0 and 3,
+	;  that will be redirected here.
+
+DIRECT_0:
+	ret
+	ret
+	ret
+
+DIRECT_1:
+	ret
+	ret
+	ret
+
+DIRECT_2:
+	ret
+	ret
+	ret
+
+DIRECT_3:
+	ret
+	ret
+	ret
+
+DIRECT_4:
+	ret
+	ret
+	ret
+
+
+	;--- Driver query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DRIVER_QUERY:
+	dec a
+	jp z,DO_DRVQ_GET_VERSION
+	dec a
+	jp z,DO_DRVQ_GET_STRING
+	dec a
+	jp z,DO_DRVQ_GET_INIT_PARAMS
+	dec a
+	jp z,DO_DRVQ_INIT
+	dec a
+	jp z,DO_DRVQ_GET_MAX_DEVICE
+	;dec a
+	;jp z,DO_DRVQ_INIT_RAM
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+; Driver query 1: Get driver version number
+;
+; Input:  A = 1
+; Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
+;         Version in B.C.D (if A=RESULT_OK)
+;
+; Note: Same as the Nextor 2 DRV_VERSION, but version is now returned
+; in B.C.D instead of A.B.C, and an error code is returned in A.
+
+DO_DRVQ_GET_VERSION:
+	ld bc,0100h
+	ld d,0
+	xor a
+	ret
+
+
+; Driver query 2: Get driver information string
+;
+; Input:  B  = String index:
+;              1: Driver name
+;              2: Driver author name
+;              3: Hardware name
+;              4: Hardware author name
+;              5: Serial number
+;        D  = Buffer size
+;        HL = Buffer address
+; Output: A = RESULT_OK: ok, full string provided
+;             RESULT_TRUNCATED_STRING: string was truncated due to buffer size too short
+;             RESULT_NOT_IMPLEMENTED: requested string not available
+;
+; String is always provided zero-terminated, so the max effective string length is 254.
+
+DO_DRVQ_GET_STRING:
+	ld a,b
+	ld b,d
+	ex de,hl
+	dec a
+	ld hl,STR_DRIVER_NAME
+	jp z,OUTPUT_STRING
+	dec a
+	ld hl,STR_DRIVER_AUTHOR
+	jp z,OUTPUT_STRING
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+; Driver query 3: Get driver initialization parameters
+;
+; Input:  HL = Amount of work area available to allocate
+;         B  = Number of available drives in the system (???)
+;         C  = Flags:
+;              5: set if user is requesting reduced drive count (by pressing the 5 key)
+;              Others: 0
+;         DE = Address of a routine for printing a character	 
+; Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+;         B  = Flags
+;              0: TIMER_INT should be hooked
+;              1: EXTBIO should be hooked
+;              2-7: Must be zero
+;         HL = Space required in page 3
+;
+; If RESULT_NOT_IMPLEMENTED is returned, B=0 and HL=0 is assumed.
+; RESULT_INIT_ERROR will cause the "initialize driver" call to be skipped
+; and the driver to be ignored (not counted as an existing Nextor kernel).
+;
+; Note: this is the same as Nextor 2 DV_INIT when called with A=0, except that
+; TIMER_INT flag is returned in B, not in Cy; an error code is returned in A;
+; and DE is passed at input.
+
+DO_DRVQ_GET_INIT_PARAMS:
+	xor a
+	ld b,0
+	ld hl,0
+	ret
+
+
+; Driver query 4: Initialize driver
+;
+; Input:  HL = Amount of work area allocated for the driver in page 3
+;         C  = Flags:
+;              5: set if user is requesting reduced drive count (by pressing the 5 key)
+;              Others: 0
+;         DE = Address of a routine for printing a character
+; Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+;
+; RESULT_NOT_IMPLEMENTED is interpreted as equivalent to RESULT_OK.
+; RESULT_INIT_ERROR will cause the driver to be ignored (not counted as an existing Nextor kernel).
+;
+; Note: this is the same as Nextor 2 DV_INIT when called with A=1, except that number of
+; allocated drives is not passed in B, DE is passed at input, and an error code can be returned.
+
+DO_DRVQ_INIT:
+	push de
+	ld de,0C300h
+	push de
+	ld ix,1
+	add ix,sp
+
+	ld hl,INIT_MSG
+	call PRINT_HL_USING_IX
+
+	pop de
+	pop de
+	xor a
+	ret
+
+PRINT_HL_USING_IX:
+	ld a,(hl)
+	or a
+	ret z
+	call JPIX
+	inc hl
+	jr 	PRINT_HL_USING_IX
+
+JPIX: jp (ix)
+
+	.stresc on
+
+STR_DRIVER_NAME: db "Dummy standalone driver for Nextor",0 ; es bueno para la oreja, te lo pones asin y te crece la oreja",0
+STR_DRIVER_AUTHOR: db "Konamiman",0
+
+INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
+          db "by Konamiman\r\n",0
+
+
+; Driver query 5: Get maximum supported device number
+;
+; Input:  -
+; Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
+;         B = Maximum supported device number
+;
+; RESULT_NOT_IMPLEMENTED is equivalent to returning RESULT_OK and B=4.
+
+DO_DRVQ_GET_MAX_DEVICE:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+;Driver query 6: Initialize RAM driver
+;
+;Input:  DE = Address of a routine for printing a character
+;Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+;        B  = Flags
+;             0: TIMER_INT should be hooked
+;             1: EXTBIO should be hooked
+;             2-7: Must be zero
+;
+; If RESULT_NOT_IMPLEMENTED is returned, B=0 is assumed.
+;
+;
+; Driver query 7: Shutdown RAM driver
+;
+; Input:  DE = Address of a routine for printing a character
+; Output: A  = RESULT_OK or RESULT_NOT_IMPLEMENTED
+;
+;
+; Queries 6 and 7 not implemented as this is a ROM driver,
+; these queries will never be invoked by the kernel.
+
+
+	;--- Device query
+	;    Input:  A = Query index
+	;            C = Device number
+	;            F, B, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_INVALID_DEVICE: Invalid device number
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+DEVICE_QUERY:
+	dec a
+	jr z,DO_DEVQ_GET_STRING
+	dec a
+	jr z,DO_DEVQ_GET_PARAMS
+	dec a
+	jr z,DO_DEVQ_GET_STATUS
+	dec a
+	jr z,DO_DEVQ_GET_AVAILABILITY
+	dec a
+	jr z,DO_DEVQ_GET_FORMAT_CHOICES
+	dec a
+	jr z,DO_DEVQ_DO_FORMAT
+	dec a
+	jr z,DO_DEVQ_STOP_MOTOR
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+; Device query 1: Get device information string
+;
+; Input:  B  = String index:
+;              1: Manufacturer name
+;              2: Medium name
+;              3: Serial number
+;              4: Device name
+;         D  = Buffer size
+;         HL = Buffer address
+; Output: A = RESULT_OK: ok, full string provided
+;            RESULT_TRUNCATED_STRING: string was truncated due to buffer size too short
+;            RESULT_INVALID_DEVICE: device does not exist
+;            RESULT_NOT_IMPLEMENTED: requested string not available
+;
+; String is always provided zero-terminated, so the max effective string length is 254.
+;
+; Note: this is the same as Nextor 2 DEV_INFO (minus B=0 at input), but device id
+; is passed in C instead of A, there's the buffer size parameter, and error codes differ.
+
+DO_DEVQ_GET_STRING:
+	ld a,RESULT_INVALID_DEVICE
+	ret
+
+
+; Device query 2: Get device parameters
+;
+; Input:  HL = Buffer address, 0 for not returning info (only return error code)
+; Output: A =  RESULT_OK: ok, device information provided
+;              RESULT_INVALID_DEVICE: device does not exist
+;              RESULT_NOT_IMPLEMENTED: query not implemented
+;
+; On success, buffer filled with the following information:
+;
+; +0 (1): Device type:
+;         0: Block device
+;         1: CD or DVD reader or recorder
+;         2-254: Unused. Additional codes may be defined in the future.
+;         255: Other
+; +1 (2): Sector size, 0 if this information does not apply or is
+;         not available.
+; +3 (4): Total number of available sectors.
+;         0 if this information does not apply or is not available.
+; +7 (1): Flags:
+;         bit 0: 1 if the device is removable.
+;         bit 1: 1 if the device is read only. A device that can dinamically
+;                  be write protected or write enabled is not considered
+;                  to be read-only.
+;         bit 2: 1 if the device is a floppy disk drive.
+;         bit 3: 1 if this device shouldn't be used for automapping.
+;         bits 4-7: must be zero.
+; +8 (2): Number of cylinders
+; +10 (1): Number of heads
+; +11 (1): Number of sectors per track
+;
+;RESULT_NOT_IMPLEMENTED is interpreted as a block device with 512 byte sectors, unknown total number of sectors, and flags equal to 0.
+;
+;This is the same as Nextor 2 LUN_INFO, but device id is passed in C instead of A, there's no LUN index, and error codes differ.
+;Also HL=0 at input must be supported.
+
+DO_DEVQ_GET_PARAMS:
+	ld a,RESULT_INVALID_DEVICE
+	ret
+
+
+; Device query 3: Get device status
+;
+; Input: -
+; Output: A = RESULT_OK: ok, device information provided
+;             RESULT_INVALID_DEVICE: device does not exist
+;             RESULT_NOT_IMPLEMENTED: query not implemented or device isn't removable
+;         B = Status for the specified device:
+;             0: The device exists but is not available at the moment
+;                (typically this means: removable device with no medium inserted)
+;             1: The device is available and has not
+;                changed since the last status request.
+;             2: The device is available and has changed
+;                since the last status request
+;             3: The device is available, but it is not
+;                possible to determine whether it has been changed
+;                or not since the last status request.
+;
+; RESULT_NOT_IMPLEMENTED is interpreted as retruning B=1.
+;
+; For fixed devices the routine can return either RESULT_NOT_IMPLEMENTED, or RESULT_OK and B=1.
+;
+; This is the same as Nextor 2 DEV_STATUS, but device id is passed in C instead of A, there's no LUN index, and error codes differ.
+; Also the behavior when input is a non existing device is different (previously it would return a status of 0, now it returns RESULT_INVALID_DEVICE).
+
+DO_DEVQ_GET_STATUS:
+	ld a,RESULT_INVALID_DEVICE
+	ret
+
+
+; Device query 4: Get device availability
+;
+; Input: -
+; Output: A = RESULT_OK: ok, device information provided
+;             RESULT_INVALID_DEVICE: device does not exist
+;             RESULT_NOT_IMPLEMENTED: query not implemented or device isn't removable
+;         B = Status for the specified device:
+;             0: The device exists but is not available at the moment
+;                (typically this means: removable device with no medium inserted)
+;             1: The device is available
+;
+; RESULT_NOT_IMPLEMENTED is interpreted as retruning B=1.
+;
+; Note: this is the same as "Get device status" but it only returns B=0 or B=1,
+; and it does not change the internal "changed" status of the device.
+
+DO_DEVQ_GET_AVAILABILITY:
+	ld a,RESULT_INVALID_DEVICE
+	ret
+
+
+; Device query 5: Get format choices for a floppy disk device
+;
+; Input:  DE = Buffer size (used if B=255 is returned)
+;         HL = Buffer address (used if B=255 is returned)
+; Output: A = RESULT_OK: ok, format information provided
+;             RESULT_INVALID_DEVICE: device does not exist
+;             RESULT_NOT_IMPLEMENTED: not a floppy disk, 
+;                                    or formatting not supported
+;             RESULT_TRUNCATED_STRING: string was truncated due to buffer size too short
+;         B = Choices:
+;             0: Only one format choice available
+;             1: Single side / double side, double density
+;             2: Single side / double side DD / double side HD
+;             255: Driver has written a custom null-terminated choice
+;                  string to the buffer at HL
+;
+
+DO_DEVQ_GET_FORMAT_CHOICES:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+; Device query 6: Format a floppy disk device
+;
+; Input:  B  = Choice number (1-9, as chosen by user from choice string)
+; Output: A = RESULT_OK: ok, disk has been formatted
+;             RESULT_INVALID_DEVICE: device does not exist
+;             RESULT_NOT_IMPLEMENTED: the device is not a floppy disk,
+;                                    formatting is not supported,
+;                                    or the choice number is invalid.
+;
+; The driver should format the floppy disk according to the selected choice.
+; Choice numbers correspond to the format choices returned by query 5.
+;
+; Disk parameters (MSX-DOS 1 compatible boot sector, FAT, root directory)
+; must be initialized by this routine upon succesful formatting.
+
+DO_DEVQ_DO_FORMAT:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+; Device query 7: Stop the floppy disk drive motor
+;
+; Input:  -
+; Output: RESULT_OK: ok, motor has been stopped
+;         RESULT_INVALID_DEVICE: device does not exist
+;         RESULT_NOT_IMPLEMENTED: the device is not a floppy disk
+;                                or stopping the drive motor is not supported
+
+DO_DEVQ_STOP_MOTOR:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+	;--- Custom driver query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+CUSTOM_DRIVER_QUERY:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+	;--- Custom device query
+	;    Input:  A = Query index
+	;            F, BC, DE, HL = Depends on the query
+	;    Output: A = Error code:
+	;                RESULT_OK: success
+	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                Others: depends on the query
+	;            F, BC, DE, HL = Depends on the query
+
+CUSTOM_DEVICE_QUERY:
+	ld a,RESULT_NOT_IMPLEMENTED
+	ret
+
+
+    ;--- Read or write logical sectors from/to a device
+    ;
+    ;    Input:    Cy=0 to read, 1 to write
+    ;              A = Device number, 1 to 255
+    ;              B = Number of sectors to read or write
+    ;              C = Media descriptor byte from the DPB if the device
+    ;                  is a floppy disk drive, zero otherwise
+    ;              HL = Source or destination memory address for the transfer
+    ;              DE = Address where the 4 byte sector number is stored.
+    ;    Output:   A = Error code (the same codes of MSX-DOS are used):
+    ;                  0: Ok
+    ;                  .IDEVN: Invalid device or LUN
+    ;                  .NRDY: Not ready
+    ;                  .DISK: General unknown disk error
+    ;                  .DATA: CRC error when reading
+    ;                  .RNF: Sector not found
+    ;                  .UFORM: Unformatted disk
+    ;                  .WPROT: Write protected media, or read-only logical unit
+    ;                  .WRERR: Write error
+    ;                  .NCOMP: Incompatible disk.
+    ;                  .SEEK: Seek error.
+	;               B = Sectors successfully transferred
+
+READ_WRITE:
+	ld a,.IDEVN
+	ret
+
+
+	INCLUDE ../../sdk/asm/code/output_string.asm
+
+	ds 7ED0h-$,0FFh
+
+	end

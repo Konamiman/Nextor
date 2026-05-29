@@ -35,7 +35,7 @@
 
 ;--- Constants
 
-	INCLUDE ../../../../sdk/asm/constants/driver_result_codes.inc
+	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
 
 DATA_START:	equ	4800h	;Start of data area in segment
 TOTAL_SECTORS:	equ	28	;Total sectors in the disk
@@ -47,11 +47,11 @@ _DISK:		equ	0F0h	;General disk error
 
 ARG:    equ     0F847h
 
-	INCLUDE ../../../../sdk/asm/constants/driver_workarea.inc
-	INCLUDE ../../../../sdk/asm/constants/msx_bios.inc
-	INCLUDE ../../../../sdk/asm/constants/msx_workarea.inc
-	INCLUDE ../../../../sdk/asm/constants/msx_basic.inc
-	INCLUDE ../../../../sdk/asm/constants/rom_bank_header.inc
+	INCLUDE ../../sdk/asm/constants/driver_workarea.inc
+	INCLUDE ../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../sdk/asm/constants/msx_workarea.inc
+	INCLUDE ../../sdk/asm/constants/msx_basic.inc
+	INCLUDE ../../sdk/asm/constants/rom_bank_header.inc
 
 
 ;*********************
@@ -820,7 +820,7 @@ RW_DIR:	db	0		;0 = read, 1 = write
 ;  HELPERS
 ;=============================================================================
 
-	INCLUDE ../../../../sdk/asm/code/output_string.asm
+	INCLUDE ../../sdk/asm/code/output_string.asm
 
 
 ;--- Print zero-terminated string via character output routine
