@@ -11,6 +11,7 @@
 ;         B  = Maximum length including the terminator
 ; Output: A  = RESULT_OK or RESULT_TRUNCATED_STRING
 ;         DE = Pointer to the terminator zero in the destination
+;              (undefined when B=0 since no terminator could be written)
 ; Modifies: AF, B, DE, HL
 
 	ifrel
@@ -20,7 +21,9 @@
 OUTPUT_STRING:
 	ld	a,b
 	or	a
-	ret	z
+	jr	nz,OUTPUT_STRING_LOOP
+	ld	a,RESULT_TRUNCATED_STRING
+	ret
 
 OUTPUT_STRING_LOOP:
 	ld	a,(hl)
