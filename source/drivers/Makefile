@@ -79,9 +79,11 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-.PHONY: all base ascii8 ascii16 ram-example clean
+.PHONY: all base ascii8 ascii16 ram-example clean FORCE
 
 all: base ascii8 ascii16
+
+FORCE:
 
 # `everything` builds the kernel base file and both standalone ROMs
 # across all six variant combinations (default, INVERT_SHIFT, INVERT_CTRL,
@@ -138,7 +140,10 @@ LOCAL_BASE := Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat
 
 base: $(LOCAL_BASE)
 
-$(LOCAL_BASE):
+# FORCE prereq so the kernel sub-make always runs: the sub-make is
+# incremental and only does work if something under ../kernel changed,
+# but without this we'd silently package ROMs against a stale base file.
+$(LOCAL_BASE): FORCE
 	@printf "\n\033[0;36mBuilding kernel base via ../kernel\033[0m\n\n"
 	@$(MAKE) -C ../kernel base \
 	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
