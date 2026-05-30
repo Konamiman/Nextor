@@ -134,16 +134,22 @@ all: base
 # non-inverted, undoc kernel that downstream consumers (source/drivers)
 # pick up by default.
 #
-# Each sub-make is prefixed with `-` and passes --keep-going so a
-# failure in one variant does not stop the other five from running.
+# Sub-make failures don't abort the matrix — the loop collects the worst
+# exit code and exits with it at the end, so CI / release scripts see a
+# failure if any variant broke while still attempting all six.
 .PHONY: everything
 everything:
-	-@$(MAKE) --no-print-directory --keep-going all INVERT_SHIFT=1
-	-@$(MAKE) --no-print-directory --keep-going all INVERT_CTRL=1
-	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1
-	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1
-	-@$(MAKE) --no-print-directory --keep-going all NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1
-	-@$(MAKE) --no-print-directory --keep-going all
+	@status=0; \
+	for args in \
+	    "INVERT_SHIFT=1" \
+	    "INVERT_CTRL=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
+	    ""; do \
+	    $(MAKE) --no-print-directory --keep-going all $$args || status=$$?; \
+	done; \
+	exit $$status
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
 
