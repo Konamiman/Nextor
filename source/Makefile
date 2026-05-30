@@ -24,7 +24,7 @@ all:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-.PHONY: clean
+.PHONY: all clean
 
 clean:
 	$(MAKE) -C kernel clean
