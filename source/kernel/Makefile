@@ -153,7 +153,7 @@ everything:
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
 
-.phony: prerequisites
+.PHONY: prerequisites
 
 prerequisites:
 	@mkdir -p ../../bin/kernel-base
