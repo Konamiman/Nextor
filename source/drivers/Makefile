@@ -45,6 +45,8 @@ ifeq ($(strip $(MKNEXROM)),)
 MKNEXROM=mknexrom
 endif
 
+export N80_ARGS=--no-show-banner --verbosity 0
+
 _VARIANT_DEFINES :=
 _VARIANT_SUFFIX :=
 
@@ -72,6 +74,14 @@ $(UNDOC_MODE_STAMP):
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
 	@$(N80) $(1) $$ $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
+endef
+
+# $(1)=output ROM, $(2)=driver bin, $(3)=mapper (chgbnk) bin
+define mknexrom_rom
+	@printf "\n\033[0;36mBuilding ROM %s\033[0m\n\n" $(1)
+	@$(MKNEXROM) $(NEXTOR_BASE) $(1) /d:$(2) /m:$(3)
+	@mkdir -p ../../bin/roms
+	@cp $(1) ../../bin/roms/$(1)
 endef
 
 
@@ -140,15 +150,18 @@ LOCAL_BASE := Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat
 
 base: $(LOCAL_BASE)
 
-# FORCE prereq so the kernel sub-make always runs: the sub-make is
-# incremental and only does work if something under ../kernel changed,
-# but without this we'd silently package ROMs against a stale base file.
-$(LOCAL_BASE): FORCE
-	@printf "\n\033[0;36mBuilding kernel base via ../kernel\033[0m\n\n"
-	@$(MAKE) -C ../kernel base \
+# Always re-invoke the kernel sub-make so source/kernel changes are
+# picked up. The sub-make is incremental and only touches
+# ../kernel/nextor_base.dat if something there actually changed; that
+# file's mtime drives whether $(LOCAL_BASE) (and the ROMs that depend
+# on it) need to rebuild.
+../kernel/nextor_base.dat: FORCE
+	@$(MAKE) --no-print-directory -C ../kernel base \
 	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
 	    INVERT_SHIFT=$(INVERT_SHIFT) \
 	    INVERT_CTRL=$(INVERT_CTRL)
+
+$(LOCAL_BASE): ../kernel/nextor_base.dat
 	cp ../kernel/nextor_base.dat $@
 	@mkdir -p ../../bin/kernel-base
 	cp $@ ../../bin/kernel-base/$@
@@ -203,18 +216,14 @@ $(ROM_ASCII8): \
 	_standalone-rom-driver.bin \
 	chgbnk-ascii8.bin
 
-	$(MKNEXROM) $(NEXTOR_BASE) $@ /d:_standalone-rom-driver.bin /m:chgbnk-ascii8.bin
-	@mkdir -p ../../bin/roms
-	cp $@ ../../bin/roms/$@
+	$(call mknexrom_rom,$@,_standalone-rom-driver.bin,chgbnk-ascii8.bin)
 
 $(ROM_ASCII16): \
 	$(NEXTOR_BASE) \
 	_standalone-rom-driver.bin \
 	chgbnk-ascii16.bin
 
-	$(MKNEXROM) $(NEXTOR_BASE) $@ /d:_standalone-rom-driver.bin /m:chgbnk-ascii16.bin
-	@mkdir -p ../../bin/roms
-	cp $@ ../../bin/roms/$@
+	$(call mknexrom_rom,$@,_standalone-rom-driver.bin,chgbnk-ascii16.bin)
 
 
 ########################
