@@ -1030,10 +1030,9 @@ IS_SUPER_TURBO:
 ;
 ;-----------------------------------------------------------------------------
 ;
-KBUF	equ	0F41Fh			;Buffer space in main MSX work area
-;
 ;   Call the EXTBIO routine of each registered RAM-loaded driver.
-;   Uses KBUF as scratch space for saving/restoring EXTBIO params.
+;   Uses EXB_RAM_SAVE (page 3 system RAM, see kvar.mac) as scratch space for
+;   saving/restoring the EXTBIO params across the inter-segment driver calls.
 ;
 ; Input:  AF/BC/DE/HL = EXTBIO parameters
 ; Output: AF/BC/DE/HL = results (possibly modified by driver)
@@ -1049,12 +1048,12 @@ EXB_RAM_DRV:
 ERAMX_READY:
 	pop	af
 ;
-	ld	(KBUF+2),bc
-	ld	(KBUF+4),de
-	ld	(KBUF+6),hl
+	ld	(EXB_RAM_SAVE##+2),bc
+	ld	(EXB_RAM_SAVE##+4),de
+	ld	(EXB_RAM_SAVE##+6),hl
 	push	af
 	pop	hl
-	ld	(KBUF),hl		;Save AF (H=A, L=F)
+	ld	(EXB_RAM_SAVE##),hl		;Save AF (H=A, L=F)
 ;
 	call	GET_P2##		;Save current page 2 segment
 	push	af
@@ -1086,21 +1085,21 @@ ERAMX_ENT:
 	ld	ix,DRIVER.EXTBIO_ENTRY##
 ;
 	;Restore EXTBIO params for the driver call
-	ld	hl,(KBUF)
+	ld	hl,(EXB_RAM_SAVE##)
 	push	hl
 	pop	af
-	ld	bc,(KBUF+2)
-	ld	de,(KBUF+4)
-	ld	hl,(KBUF+6)
+	ld	bc,(EXB_RAM_SAVE##+2)
+	ld	de,(EXB_RAM_SAVE##+4)
+	ld	hl,(EXB_RAM_SAVE##+6)
 	call	CALL_MAP##
 ;
-	;Save driver's results to KBUF for next iteration/return
-	ld	(KBUF+2),bc
-	ld	(KBUF+4),de
-	ld	(KBUF+6),hl
+	;Save driver's results to EXB_RAM_SAVE for next iteration/return
+	ld	(EXB_RAM_SAVE##+2),bc
+	ld	(EXB_RAM_SAVE##+4),de
+	ld	(EXB_RAM_SAVE##+6),hl
 	push	af
 	pop	hl
-	ld	(KBUF),hl
+	ld	(EXB_RAM_SAVE##),hl
 	;Check IYl (A is free since results already saved)
 	ld_	a,iyl
 	bit	0,a
@@ -1125,12 +1124,12 @@ ERAMX_REST:
 	;No driver handled it, restore page 2 and original params
 	pop	af
 	call	PUT_P2##		;Restore original page 2 segment
-	ld	hl,(KBUF)
+	ld	hl,(EXB_RAM_SAVE##)
 	push	hl
 	pop	af
-	ld	bc,(KBUF+2)
-	ld	de,(KBUF+4)
-	ld	hl,(KBUF+6)
+	ld	bc,(EXB_RAM_SAVE##+2)
+	ld	de,(EXB_RAM_SAVE##+4)
+	ld	hl,(EXB_RAM_SAVE##+6)
 	ret
 ;
 ERAMX_FOUND:
@@ -1138,13 +1137,13 @@ ERAMX_FOUND:
 	pop	af
 	call	PUT_P2##		;Restore original page 2 segment
 	ld	iy,0			;IY=0 (request consumed)
-	;Restore driver's results from KBUF
-	ld	hl,(KBUF)
+	;Restore driver's results from EXB_RAM_SAVE
+	ld	hl,(EXB_RAM_SAVE##)
 	push	hl
 	pop	af
-	ld	bc,(KBUF+2)
-	ld	de,(KBUF+4)
-	ld	hl,(KBUF+6)
+	ld	bc,(EXB_RAM_SAVE##+2)
+	ld	de,(EXB_RAM_SAVE##+4)
+	ld	hl,(EXB_RAM_SAVE##+6)
 	ret
 ;
 ;
