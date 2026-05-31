@@ -19,8 +19,6 @@
 ;
 ; Only AF can be modified
 ;
-; *** CODE STRTS HERE ***	CAUTION!!  This must be the first module.
-;
 BNKREG	equ	6000h		;System IC version
 BNKID	equ	40FFh		;Where Bank ID is stored
 
