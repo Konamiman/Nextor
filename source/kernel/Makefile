@@ -1,10 +1,45 @@
-# Makefile for the Nextor kernel ROM files
-
-# All the generated ROM files are copied to the bin/kernels directory.
-# See the "all" main rule for some handy aliases to generate specific ROMs
-# (e.g. you can run "make base" or "make ide").
-
-# The N80 and LK80 binaries to use can be overriden with environment variables, e.g.:
+# Makefile for the Nextor kernel base file.
+#
+# This Makefile only builds the kernel base file (nextor_base.dat),
+# which is the input to MKNEXROM for producing complete kernel ROMs.
+# The standalone ROM drivers (Standalone ASCII8/16) and the example RAM
+# driver live in source/drivers; third-party drivers (Sunrise IDE,
+# MegaFlash ROM SCC+ SD...) have their own dedicated repositories.
+#
+# The build is controlled by three external variables (set via env or on
+# the make command line). Each variable, when non-empty, both defines a
+# symbol that gets passed to N80 via --define-symbols, and adds a
+# fragment to the output-filename suffix:
+#
+#   NO_UNDOC_CPU_INSTRUCTIONS  -> defines NO_UNDOC_CPU_INSTRUCTIONS,
+#                                 suffix fragment ".NO_UNDOC". Replaces
+#                                 undocumented Z80 opcodes (ixh/ixl/iyh/
+#                                 iyl) with documented equivalents, for
+#                                 compatibility with Z180-based MSX
+#                                 machines.
+#   INVERT_SHIFT               -> defines INVERT_SHIFT, suffix fragment
+#                                 ".SHIFT_INV". Inverts the meaning of
+#                                 the SHIFT boot key.
+#   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
+#                                 ".CTRL_INV". Inverts the meaning of
+#                                 the CTRL boot key.
+#
+# Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1 make`
+# produces Nextor-$(VERSION).base.NO_UNDOC.SHIFT_INV.dat.
+#
+# A single variant-specific stamp file (its filename encodes the active
+# variant signature) is listed as a prereq of every assembled .rel, so
+# switching variants forces a full reassembly and previously built .rels
+# from a different variant are never silently reused.
+#
+# `make everything` invokes make six times to build the kernel base file
+# for all six variant combinations (default, INVERT_SHIFT, INVERT_CTRL,
+# NO_UNDOC, NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL).
+#
+# The generated base files are copied to ../../bin/kernel-base.
+#
+# The N80 and LK80 binaries to use can be overriden with environment
+# variables, e.g.:
 # N80=/path/to/N80 make
 
 
@@ -28,28 +63,28 @@ endif
 
 export LB80_ARGS=--no-show-banner --verbosity 0
 
-ifeq ($(strip $(MKNEXROM)),)
-MKNEXROM=mknexrom
+_VARIANT_DEFINES :=
+_VARIANT_SUFFIX :=
+
+ifneq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
+_VARIANT_DEFINES += NO_UNDOC_CPU_INSTRUCTIONS
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).NO_UNDOC
 endif
 
-# Optional: replace undocumented Z80 opcodes (the ones operating on ixh/ixl/
-# iyh/iyl) with documented equivalents, for compatibility with Z180-based
-# MSX machines. Set NO_UNDOC_CPU_INSTRUCTIONS=1 on the make command line.
-#
-# A mode-specific stamp file is touched whenever the flag changes, and is
-# listed as a prerequisite of every assembled target. That forces full
-# reassembly when switching between undoc and undoc-free builds so existing
-# .rel/.bin/.drv outputs from the previous mode are not silently reused.
-ifeq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
-UNDOC_DEFINE=
-UNDOC_MODE_STAMP=.undoc-mode-default
-else
-UNDOC_DEFINE=NO_UNDOC_CPU_INSTRUCTIONS
-UNDOC_MODE_STAMP=.undoc-mode-no-undoc
+ifneq ($(strip $(INVERT_SHIFT)),)
+_VARIANT_DEFINES += INVERT_SHIFT
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).SHIFT_INV
 endif
+
+ifneq ($(strip $(INVERT_CTRL)),)
+_VARIANT_DEFINES += INVERT_CTRL
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
+endif
+
+UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
 
 $(UNDOC_MODE_STAMP):
-	@rm -f .undoc-mode-*
+	@rm -f .build-variant*
 	@touch $@
 
 define SymToEqus
@@ -62,17 +97,17 @@ define hex2bin
 endef
 
 define copy_to_bin
-	cp $(1) ../../bin/kernels/$(2)
+	cp $(1) ../../bin/kernel-base/$(2)
 endef
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $$ $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3) $(if $(UNDOC_DEFINE),--define-symbols $(UNDOC_DEFINE))
+	@$(N80) $(1) $(2) $(3) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
 endef
 
 define print_linking
@@ -84,324 +119,51 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base ide ide-masteronly ide-blue ide-masteronly-bluemsx ascii8 ascii16 mfrsd flashjacks ocm dsk-tr
+all: base
 
-TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc $(MKNEXROM) dd
+# `everything` builds the kernel base file across all six variant
+# combinations (default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
+# NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL). Each variant runs as a
+# recursive make invocation with the corresponding env vars set, so the
+# variant stamp inside the sub-make is correctly tracked.
+#
+# Sub-makes within a single variant are incremental, but switching
+# variants between sub-makes forces a full reassembly (intrinsic to the
+# single-stamp mechanism). The default variant is built last so the
+# on-disk intermediate file (nextor_base.dat) is left as the
+# non-inverted, undoc kernel that downstream consumers (source/drivers)
+# pick up by default.
+#
+# Sub-make failures don't abort the matrix — the loop collects the worst
+# exit code and exits with it at the end, so CI / release scripts see a
+# failure if any variant broke while still attempting all six.
+.PHONY: everything
+everything:
+	@status=0; \
+	for args in \
+	    "INVERT_SHIFT=1" \
+	    "INVERT_CTRL=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
+	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
+	    ""; do \
+	    $(MAKE) --no-print-directory --keep-going all $$args || status=$$?; \
+	done; \
+	exit $$status
 
-.phony: prerequisites
+TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
+
+.PHONY: prerequisites
 
 prerequisites:
-	@mkdir -p ../../bin/kernels
+	@mkdir -p ../../bin/kernel-base
 	$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 
 -include prerequisites
 
 
-#################################
-###  RULES FOR THE ROM FILES  ###
-#################################
-
-#TODO: The processing for ASCII8/16 and Sunrise IDE is basically the same, deduplicate a little bit
-
-
-###  Kernel Base file
-
 base: nextor_base.dat
-
-
-### Sunrise IDE, normal ROM
-
-ide: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM
-
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.ROM: \
-	nextor_base.dat \
-	drivers/SunriseIDE/sunride.bin \
-	drivers/SunriseIDE/chgbnk.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.bin /m:drivers/SunriseIDE/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/SunriseIDE/sunride.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/SunriseIDE/sunride.asm
-
-	$(call assemble,drivers/SunriseIDE/sunride.asm,--build-type abs --output-file-extension bin --define-symbols BAD_POPS)
-
-
-### Sunrise IDE, normal ROM, master device only
-
-ide-masteronly: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM
-
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.ROM: \
-	nextor_base.dat \
-	drivers/SunriseIDE/sunride.masteronly.bin \
-	drivers/SunriseIDE/chgbnk.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/sunride.masteronly.bin /m:drivers/SunriseIDE/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/SunriseIDE/sunride.masteronly.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/SunriseIDE/sunride.asm
-
-	$(call assemble_as,drivers/SunriseIDE/sunride.asm,$$/sunride.masteronly.bin,--build-type abs --output-file-extension bin --define-symbols MASTER_ONLY,BAD_POPS)
-
-
-### Sunrise IDE, ROM for blueMSX
-
-ide-blue: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM
-
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.blueMSX.ROM: \
-	nextor_base.dat \
-	drivers/SunriseIDE/driver.bin \
-	drivers/SunriseIDE/chgbnk.bin \
-	256.bytes
-
-	cat 256.bytes drivers/SunriseIDE/driver.bin > drivers/SunriseIDE/_driver.BIN
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/SunriseIDE/driver.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/SunriseIDE/driver.mac
-
-	$(call assemble,drivers/SunriseIDE/driver.mac,--build-type abs --output-file-extension bin)
-
-
-### Sunrise IDE, ROM for blueMSX, master device only
-
-ide-masteronly-bluemsx: drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM
-
-drivers/SunriseIDE/Nextor-$(VERSION).SunriseIDE.MasterOnly.blueMSX.ROM: \
-	nextor_base.dat \
-	drivers/SunriseIDE/drvmonly.bin \
-	drivers/SunriseIDE/chgbnk.bin \
-	256.bytes
-
-	cat 256.bytes drivers/SunriseIDE/drvmonly.bin > drivers/SunriseIDE/_driver.BIN
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/SunriseIDE/_driver.BIN /m:drivers/SunriseIDE/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/SunriseIDE/drvmonly.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/SunriseIDE/driver.mac
-
-	$(call assemble_as,drivers/SunriseIDE/driver.mac,$$/drvmonly.bin,--build-type abs  --output-file-extension bin --define-symbols MASTER_ONLY)
-
-
-### Sunrise IDE, common rules
-
-drivers/SunriseIDE/chgbnk.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/SunriseIDE/chgbnk.mac
-
-	$(call assemble,drivers/SunriseIDE/chgbnk.mac,--build-type abs --output-file-extension bin)
-
-
-### Standalone ASCII8
-
-ascii8: drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM
-
-drivers/StandaloneASCII8/Nextor-$(VERSION).StandaloneASCII8.ROM: \
-	nextor_base.dat \
-	drivers/StandaloneASCII8/driver.bin \
-	drivers/StandaloneASCII8/chgbnk.bin \
-	256.bytes
-
-	cat 256.bytes drivers/StandaloneASCII8/driver.bin > drivers/StandaloneASCII8/_driver.bin
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII8/_driver.bin /m:drivers/StandaloneASCII8/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/StandaloneASCII8/driver.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/StandaloneASCII8/driver.mac
-
-	$(call assemble,drivers/StandaloneASCII8/driver.mac,--build-type abs --output-file-extension bin)
-
-drivers/StandaloneASCII8/chgbnk.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/StandaloneASCII8/chgbnk.mac
-
-	$(call assemble,drivers/StandaloneASCII8/chgbnk.mac,--build-type abs --output-file-extension bin)
-
-
-### Standalone ASCII16
-
-ascii16: drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM
-
-drivers/StandaloneASCII16/Nextor-$(VERSION).StandaloneASCII16.ROM: \
-	nextor_base.dat \
-	drivers/StandaloneASCII8/driver.bin \
-	drivers/StandaloneASCII16/chgbnk.bin \
-	256.bytes
-
-	cat 256.bytes drivers/StandaloneASCII8/driver.bin > drivers/StandaloneASCII16/_driver.bin
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/StandaloneASCII16/_driver.bin /m:drivers/StandaloneASCII16/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/StandaloneASCII16/chgbnk.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/StandaloneASCII16/chgbnk.mac
-
-	$(call assemble,drivers/StandaloneASCII16/chgbnk.mac,--build-type abs --output-file-extension bin)
-
-
-### MegaFlashROM SCC+ SD
-
-mfrsd: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM \
-
-drivers/MegaFlashRomSD/mfrsd-1slot.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/MegaFlashRomSD/mfrsd.asm \
-	drivers/MegaFlashRomSD/romdisk.asm
-
-	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-1slot.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=1)
-
-drivers/MegaFlashRomSD/mfrsd-2slots.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/MegaFlashRomSD/mfrsd.asm \
-	drivers/MegaFlashRomSD/romdisk.asm
-
-	$(call assemble_as,drivers/MegaFlashRomSD/mfrsd.asm,$$/mfrsd-2slots.bin,--build-type abs --output-file-extension bin --define-symbols NUM_SLOTS=2)
-
-drivers/MegaFlashRomSD/recovery_header.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/MegaFlashRomSD/recovery_header.asm
-
-	$(call assemble,drivers/MegaFlashRomSD/recovery_header.asm,--build-type abs --output-file-extension bin)
-
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM: \
-	nextor_base.dat \
-	drivers/StandaloneASCII8/chgbnk.bin \
-	drivers/MegaFlashRomSD/mfrsd-1slot.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-1slot.bin /m:drivers/StandaloneASCII8/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
-	drivers/MegaFlashRomSD/recovery_header.bin
-
-	cat drivers/MegaFlashRomSD/recovery_header.bin \
-		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.ROM \
-		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.1-slot.Recovery.ROM
-
-	$(call copy_to_bin,$@)
-	
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM: \
-	nextor_base.dat \
-	drivers/StandaloneASCII8/chgbnk.bin \
-	drivers/MegaFlashRomSD/mfrsd-2slots.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/MegaFlashRomSD/mfrsd-2slots.bin /m:drivers/StandaloneASCII8/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM: \
-	drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
-	drivers/MegaFlashRomSD/recovery_header.bin
-
-	cat drivers/MegaFlashRomSD/recovery_header.bin \
-		drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.ROM \
-		> drivers/MegaFlashRomSD/Nextor-$(VERSION).MegaFlashSDSCC.2-slots.Recovery.ROM
-
-	$(call copy_to_bin,$@)
-
-
-### Flashjacks
-
-flashjacks: drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM
-
-drivers/Flashjacks/flashjacks.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/Flashjacks/flashjacks.asm
-
-	$(call assemble,drivers/Flashjacks/flashjacks.asm,--build-type abs --output-file-extension bin)
-
-drivers/Flashjacks/Nextor-$(VERSION).Flashjacks.ROM: \
-	nextor_base.dat \
-	drivers/Flashjacks/flashjacks.bin \
-	drivers/SunriseIDE/chgbnk.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/Flashjacks/flashjacks.bin /m:drivers/SunriseIDE/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-
-### OCM (1-chip MSX, SX|2, and compatibles)
-
-ocm: drivers/OCM/Nextor-$(VERSION).OCM.ROM
-
-drivers/OCM/Nextor-$(VERSION).OCM.ROM: \
-	nextor_base.dat \
-	drivers/StandaloneASCII8/chgbnk.bin
-
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/OCM/driver.dat /m:drivers/StandaloneASCII8/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-
-### Turbo-R FDD
-
-dsk-tr: drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM
-
-drivers/TurboRFDD/Nextor-$(VERSION).TurboRFDD.ROM: \
-	nextor_base.dat \
-	drivers/TurboRFDD/driver.bin \
-	drivers/TurboRFDD/chgbnk.bin \
-	256.bytes
-
-	cat 256.bytes drivers/TurboRFDD/driver.bin > drivers/TurboRFDD/_driver.bin
-	$(MKNEXROM) nextor_base.dat $@ /d:drivers/TurboRFDD/_driver.bin /m:drivers/TurboRFDD/chgbnk.bin
-	$(call copy_to_bin,$@)
-
-drivers/TurboRFDD/driver.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/TurboRFDD/driver.mac
-
-	$(call assemble,drivers/TurboRFDD/driver.mac,--build-type abs --output-file-extension bin)
-
-drivers/TurboRFDD/chgbnk.bin: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/TurboRFDD/chgbnk.mac
-
-	$(call assemble,drivers/TurboRFDD/chgbnk.mac,--build-type abs --output-file-extension bin)
-
-
-### Turbo-R FDD driver RAM variant (standalone .drv for loading in RAM)
-
-dsk-tr-ram: drivers/TurboRFDD/turbofdd.drv
-
-drivers/TurboRFDD/turbofdd.drv: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/TurboRFDD/driver.mac
-
-	$(call assemble_as,drivers/TurboRFDD/driver.mac,$$/driver.ram.drv,--build-type abs --output-file-extension drv --define-symbols RAM_DRIVER)
-	cp drivers/TurboRFDD/driver.ram.drv drivers/TurboRFDD/turbofdd.drv
-	@mkdir -p ../../bin/ram-drivers
-	cp drivers/TurboRFDD/turbofdd.drv ../../bin/ram-drivers/turbofdd.drv
-
-
-### RAM disk driver (standalone .drv for loading in RAM)
-
-ramdisk: drivers/RAMDisk/ramdisk.drv
-
-drivers/RAMDisk/ramdisk.drv: \
-	$(UNDOC_MODE_STAMP) \
-	drivers/RAMDisk/driver.mac
-
-	$(call assemble,drivers/RAMDisk/driver.mac,--build-type abs --output-file-extension drv)
-	cp drivers/RAMDisk/driver.drv drivers/RAMDisk/ramdisk.drv
-	@mkdir -p ../../bin/ram-drivers
-	cp drivers/RAMDisk/ramdisk.drv ../../bin/ram-drivers/ramdisk.drv
-
-
-### Common rules
-
-256.bytes:
-	dd if=/dev/zero of=256.bytes bs=1 count=256
 
 
 ########################################
@@ -441,7 +203,7 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
 
-	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base.dat)
+	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat)
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
@@ -696,8 +458,7 @@ bank5/printf.rel:  ../../sdk/C/includes/msx_bios.h
 clean:
 	for ext in bin BIN HEX REL rel SYM sym bytes ihx lk lst map noi; do find . -type f -name "*.$$ext" -delete; done
 	for ext in asm dat; do find ./bank5 -type f -name "*.$$ext" -delete; done
-	for ext in lst rom ROM; do find ./drivers -type f -name "*.$$ext" -delete; done
 	rm -f nextor_base.dat
 	rm -f bank0/b0lab*.inc
 	rm -f bank2/b2labels.inc
-	rm -f .undoc-mode-*
+	rm -f .build-variant*

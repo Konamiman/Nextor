@@ -294,9 +294,23 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
 
+    ; Set INVERT_SHIFT and/or INVERT_CTRL at assembly time to invert
+    ; the meaning of the corresponding boot key. By default no key is
+    ; inverted.
+
 KEYS_INV_0: db 00h
-;KEYS_INV_1: db 20h  ;Invert CTRL by default (so internal FDDs get only one drive)
-KEYS_INV_1: db 20h+10h;  ;Invert CTRL and SHIFT by default
+
+KEYS_INV_0_VALUE: defl 0
+
+    ifdef INVERT_SHIFT
+KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+10h
+    endif
+
+    ifdef INVERT_CTRL
+KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+20h
+    endif
+
+KEYS_INV_1: db KEYS_INV_0_VALUE
 
 ;
 ;=======================================================================

@@ -3,6 +3,16 @@
 MAX_UNITS	equ 	8	;Maximum number of total drives
 CHGBNK		equ		7FD0h	;Address of the bank change routine
 
+; Offset within every kernel bank where mknexrom writes the 8K-mapper
+; init patch (3 bytes: LD (XXXX), A, where XXXX comes from the mapper
+; code file's header). DOINIT in doshead.mac must arrange the bytes at
+; this offset to be CALL CHGBNK (CD D0 7F) with an XOR A immediately
+; before it, so that after mknexrom's patch the executed sequence is:
+;     XOR A             ; A = 0 (preserved from before the patch)
+;     LD (XXXX), A      ; mknexrom-injected mapper init
+;     ...               ; remaining DOINIT bytes
+M8K_MAPPER_PATCH_OFFSET	equ	0F7h
+
 ;
 ;------------------------------------------------------------------------------
 ;

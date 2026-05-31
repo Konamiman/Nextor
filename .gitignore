@@ -49,7 +49,7 @@ source/tools/data.mac
 *conflicto*.*
 *.sln
 *.suo
-.undoc-mode-*
+.build-variant*
 NEXTOR.SYS
 NEXTOR.SYS.japanese
 nextor_base.dat

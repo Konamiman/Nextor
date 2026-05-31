@@ -254,8 +254,16 @@ CBNK_CONT:
 		pop	af		;Restore VDP status
 		ret
 
+; DOINIT must be positioned so that its CALL CHGBNK lines up with
+; mknexrom's 8K-mapper patch slot (see M8K_MAPPER_PATCH_OFFSET in
+; const.inc).
+	if	$-ROMST gt M8K_MAPPER_PATCH_OFFSET-1
+	.error	<doshead exceeds the 8K mapper patch slot>
+	endif
+	defs	M8K_MAPPER_PATCH_OFFSET-1-($-ROMST), 0FFh
+
 DOINIT:		xor	a		;Jump to the INIT routine in bank-0
-		call	CHGBNK
+		call	CHGBNK		;mknexrom replaces this with LD (XXXX),A on 8K mappers
 		jp	INIT##
 
 HEADEND::
