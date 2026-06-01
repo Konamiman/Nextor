@@ -300,6 +300,14 @@ size	macro	name
     field  6,KABJ_CODE              ;RAM hook: call CHGBNK_KEEP_AF + jp KABR
     field  6,KDERJ_CODE             ;RAM hook: call CHGBNK_KEEP_AF + jp KDERR
 
+    ;Runtime scratch for EXB_RAM_DRV (mapinit.mac): the 8 bytes of EXTBIO
+    ;parameters (AF/BC/DE/HL) saved/restored across the inter-segment calls to
+    ;the RAM-loaded drivers. It deliberately overlays MAP_REC to avoid claiming
+    ;more page 3 RAM: MAP_REC is only used at boot (MAP_SCAN/MAP_INIT, before any
+    ;driver is loaded) and EXB_RAM_SAVE only afterwards (once a RAM driver is
+    ;installed), so the two never coexist.
+    field  0,EXB_RAM_SAVE
+
     ;Mapper scan scratch. Populated by the early MAP_SCAN call in MEM_CHK
     ;and re-read (instead of re-scanning) by MAP_INIT. Lives here, in the
     ;BOOT_TMP region, because the previous location (KBUF, F41Fh) is part
