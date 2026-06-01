@@ -213,6 +213,10 @@ _GO_BIOS:
 ;ASDF for slots 2-0 to 2-3
 ;ZXCV for slots 3-0 to 3-3
 ;For unexpanded slots, the key for subslot 0 applies (U, Q, A, Z)
+;
+;On return C = byte offset and B = bit mask of this slot's disable bit
+;within the boot keys; AFTER_BOOT_MENU relies on this to clear that bit
+;from the RAM boot keys (one-time use), so keep B and C set on return.
 
 DISABLE_KEY:
 	call	GSLOT1##
@@ -965,8 +969,30 @@ AFTER_BOOT_MENU:
 	or	a
 	call	z,INIT_SCREEN_AND_VERSION
 ABM_SKIP_SCREEN:
-	call	DISABLE_KEY
+	call	DISABLE_KEY	;Z=enabled, NZ=disabled; leaves C=byte offset, B=bit mask
 	jr	z,KERNEL_NOT_SKIPPED
+
+	;--- One-time use of RAM boot keys ---
+	;We are being disabled. If our disable bit came from the RAM boot
+	;keys (set by the boot menu or NEXBOOT tool) rather than the keyboard,
+	;clear just that bit now so the disable applies to this boot only:
+	;a soft reset doesn't erase this RAM, so otherwise we'd stay disabled
+	;forever. DISABLE_KEY left C = byte offset and B = bit mask for us.
+	;(When a kernel boots as master the whole keys block is cleared by
+	;CLEAN instead; this path covers the case where no master boots
+	;because every kernel is disabled.)
+	call	SCANKEYS_RAM_AVAILABLE	;Z if the RAM keys signature is present
+	jr	nz,ABM_KEPT_DISABLED	;Keys came from the keyboard: nothing to clear
+	ld	hl,SCANKEYS_RAM_BASE+17	;Start of the 5 boot key bytes
+	ld	e,c
+	ld	d,0
+	add	hl,de			;HL = the key byte holding our disable bit
+	ld	a,b
+	cpl
+	and	(hl)
+	ld	(hl),a			;Clear our disable bit in the RAM boot keys
+ABM_KEPT_DISABLED:
+
 	ld	a,(ALL_KERNELS_DISABLED##)
 	or	a
 	ret	nz		;All disabled: return silently
