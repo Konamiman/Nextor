@@ -7,6 +7,12 @@ Nextor: the constants, macros, data structures and helper sources that Nextor-aw
 
 ```
 sdk/
+├── nextor-kernel-version.txt
+│                     The Nextor kernel version this SDK corresponds to, on a
+│                     single line, e.g. "3.0.0" (or "3.0.0-beta1" for a
+│                     pre-release). Machine-readable; read it to stamp the
+│                     version into your ROM / output names without building
+│                     anything.
 ├── asm/                  Assembly language SDK (Nestor80 syntax)
 │   ├── chgbnk/           ROM bank change routines ASCII8 and ASCII16
 │   │                     mappers (to be used when building a
@@ -46,6 +52,9 @@ files from there in your build, e.g.:
 ```makefile
 # In a makefile
 NEXTOR_SDK := external/nextor/sdk
+
+# (Optional) the kernel version this SDK targets, e.g. to stamp output names:
+KERNEL_VERSION := $(shell cat $(NEXTOR_SDK)/nextor-kernel-version.txt)
 
 mydriver.bin: mydriver.asm
 	N80 $< $@ \

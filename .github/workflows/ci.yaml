@@ -64,3 +64,8 @@ jobs:
           done
       - name: Make all
         run: make -C source
+      - name: Verify sdk/nextor-kernel-version.txt is in sync
+        run: |
+          rm -f sdk/nextor-kernel-version.txt
+          make -C source/kernel ../../sdk/nextor-kernel-version.txt
+          git diff --exit-code -- sdk/nextor-kernel-version.txt

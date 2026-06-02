@@ -5,6 +5,7 @@
 	INCLUDE	../condasm.inc
 	INCLUDE ../const.inc
 	INCLUDE ../macros.inc
+	INCLUDE ../version.inc
 	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
@@ -152,17 +153,17 @@ endif
 _$DOSVER::
 DOSV0::
 	defb	"Nextor kernel version "
-	defb	MAIN_NEXTOR_VERSION##+"0", ".", SEC_NEXTOR_VERSION_HIGH##+"0" 
+	defb	MAIN_NEXTOR_VERSION+"0", ".", SEC_NEXTOR_VERSION_HIGH+"0" 
 	
-	defb ".", SEC_NEXTOR_VERSION_LOW##+"0"
+	defb ".", SEC_NEXTOR_VERSION_LOW+"0"
 
 	INCLUDE betainfo.mac
 	defb	0
 ;
 _$DSKBASIC::
 	defb	 "Nextor "
-	defb	MAIN_NEXTOR_VERSION##+"0", ".", SEC_NEXTOR_VERSION_HIGH##+"0" 
-	defb    ".", SEC_NEXTOR_VERSION_LOW##+"0"
+	defb	MAIN_NEXTOR_VERSION+"0", ".", SEC_NEXTOR_VERSION_HIGH+"0" 
+	defb    ".", SEC_NEXTOR_VERSION_LOW+"0"
 	defb     " BASIC"
 	defb	 0
 ;
@@ -1146,7 +1147,7 @@ VER_CHK:
 	or	a
 	jr	z,MAST_OK
 
-	cp	16*MAIN_NEXTOR_VERSION##+SEC_NEXTOR_VERSION_HIGH##	;If old master is same or newer than I
+	cp	16*MAIN_NEXTOR_VERSION+SEC_NEXTOR_VERSION_HIGH	;If old master is same or newer than I
 	jr	nc,SLAVE	; become its slave.
 ;
 MAST_OK:
@@ -1183,7 +1184,7 @@ OVERRIDE_GOTLINLEN::
 OVERRIDE_PAST_MSG:
 	ld	a,99h		;16*DOSVER##+SEC_DOS_VERSION_HIGH##
 	ld	(DOS_VER##),a	;set new DOS version
-	ld	a,16*MAIN_NEXTOR_VERSION##+SEC_NEXTOR_VERSION_HIGH##
+	ld	a,16*MAIN_NEXTOR_VERSION+SEC_NEXTOR_VERSION_HIGH
 	ld	(NXT_VER##),a
 ;
 ;	Set up hook for clean up procedure
