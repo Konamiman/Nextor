@@ -309,17 +309,17 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
 
 KEYS_INV_0: db 00h
 
-KEYS_INV_0_VALUE: defl 0
+KEYS_INV_1_VALUE: defl 0
 
     ifdef INVERT_SHIFT
-KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+10h
+KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+10h
     endif
 
     ifdef INVERT_CTRL
-KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+20h
+KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+20h
     endif
 
-KEYS_INV_1: db KEYS_INV_0_VALUE
+KEYS_INV_1: db KEYS_INV_1_VALUE
 
 ;
 ;=======================================================================
