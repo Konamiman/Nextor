@@ -155,7 +155,9 @@ DOSV0::
 	defb	"Nextor kernel version "
 	defb	MAIN_NEXTOR_VERSION+"0", ".", SEC_NEXTOR_VERSION_HIGH+"0" 
 	
+	if SEC_NEXTOR_VERSION_LOW gt 0
 	defb ".", SEC_NEXTOR_VERSION_LOW+"0"
+	endif
 
 	INCLUDE betainfo.mac
 	defb	0
@@ -163,7 +165,9 @@ DOSV0::
 _$DSKBASIC::
 	defb	 "Nextor "
 	defb	MAIN_NEXTOR_VERSION+"0", ".", SEC_NEXTOR_VERSION_HIGH+"0" 
+	if SEC_NEXTOR_VERSION_LOW gt 0
 	defb    ".", SEC_NEXTOR_VERSION_LOW+"0"
+	endif
 	defb     " BASIC"
 	defb	 0
 ;

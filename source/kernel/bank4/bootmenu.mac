@@ -1269,15 +1269,16 @@ PRINT_CENTERED_TITLE:
 	add a,'0'
 	ld (de),a
 	inc de
+
+	if SEC_NEXTOR_VERSION_LOW gt 0
 	ld a,'.'
 	ld (de),a
 	inc de
-
-	;Append minor version low digit
 	ld a,SEC_NEXTOR_VERSION_LOW
 	add a,'0'
 	ld (de),a
 	inc de
+	endif
 
 	;Append " boot menu"
 	ld hl,STR_BOOT_MENU_SUFFIX
