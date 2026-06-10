@@ -1,0 +1,28 @@
+# Keep the Docker build context small and clean. The image build only needs
+# source/, sdk/ and buildtools/sources/; everything below is either irrelevant
+# or a build artifact that the in-image build regenerates.
+.git
+.gitignore
+.github
+.ai
+docs
+bin
+tmp
+README.md
+LICENSE.md
+
+# Build artifacts (these extensions/names are never source in this repo).
+**/*.rel
+**/*.REL
+**/*.BIN
+**/*.sym
+**/*.SYM
+**/*.lst
+**/*.map
+**/*.noi
+**/*.ihx
+**/*.HEX
+**/*.hex
+**/.build-variant*
+source/kernel/nextor_base.dat
+source/kernel/doshead.BIN

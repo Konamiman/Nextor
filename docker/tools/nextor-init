@@ -1,0 +1,123 @@
+#!/bin/sh
+# nextor-init — scaffold a starter Nextor project inside the dev container.
+#
+# Copies a template from $NEXTOR_TEMPLATES into a new project directory,
+# substituting the project name, kernel version and image reference, and drops
+# in a VS Code Dev Container config. The templates are plain files, so the
+# generated project has no dependency on this script afterwards.
+set -eu
+
+prog=nextor-init
+TEMPLATES_DIR="${NEXTOR_TEMPLATES:-/opt/nextor/templates}"
+VERSION="${NEXTOR_VERSION:-unknown}"
+IMAGE="${NEXTOR_IMAGE:-ghcr.io/konamiman/nextor-dev:${VERSION}}"
+
+usage() {
+	cat <<EOF
+$prog — scaffold a starter Nextor project.
+
+Usage: $prog <template> [name] [--name NAME] [--force]
+
+Templates:
+  driver   A Nextor disk driver, built into a bootable kernel ROM.
+  tool     A Nextor-aware MSX-DOS command (.COM) in Z80 assembly.
+
+Arguments:
+  name        Target directory (default: the template name). Use "." for the
+              current directory.
+  --name NAME Project name (the ROM/COM base name). Defaults to the target
+              directory name. Set this with "." since the mounted directory is
+              seen as "work" inside the container.
+  --force     Scaffold into the current directory even if it is not empty.
+
+Examples:
+  $prog driver my-ide                 # ./my-ide/, builds my-ide.ROM
+  $prog driver . --name my-ide        # scaffold in place, builds my-ide.ROM
+  $prog tool   nxinfo
+EOF
+}
+
+template=
+name=
+projname=
+force=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-h|--help) usage; exit 0 ;;
+		--force)   force=1 ;;
+		--name)    shift; projname=${1:-} ;;
+		--name=*)  projname=${1#--name=} ;;
+		-*)        echo "$prog: unknown option: $1" >&2; exit 2 ;;
+		*)
+			if   [ -z "$template" ]; then template=$1
+			elif [ -z "$name" ];     then name=$1
+			else echo "$prog: too many arguments" >&2; exit 2
+			fi ;;
+	esac
+	shift
+done
+
+if [ -z "$template" ]; then
+	usage >&2
+	exit 2
+fi
+
+src="$TEMPLATES_DIR/$template"
+if [ ! -d "$src" ]; then
+	echo "$prog: unknown template '$template' (available: $(ls "$TEMPLATES_DIR" 2>/dev/null | tr '\n' ' '))" >&2
+	exit 2
+fi
+
+[ -n "$name" ] || name=$template
+dest=$name
+
+name_given=0
+[ -n "$projname" ] && name_given=1
+
+# Don't clobber existing work.
+if [ "$dest" = "." ]; then
+	if [ "$force" -ne 1 ] && [ -n "$(ls -A . 2>/dev/null)" ]; then
+		echo "$prog: current directory is not empty (use --force to scaffold anyway)" >&2
+		exit 1
+	fi
+	: "${projname:=$(basename "$(pwd)")}"
+	if [ "$name_given" -eq 0 ]; then
+		echo "$prog: project name defaults to '$projname' (the directory name); pass --name to change it" >&2
+	fi
+else
+	if [ -e "$dest" ]; then
+		echo "$prog: '$dest' already exists" >&2
+		exit 1
+	fi
+	: "${projname:=$name}"
+fi
+
+mkdir -p "$dest"
+cp -R "$src/." "$dest/"
+
+# Fill in the placeholders.
+find "$dest" -type f \( -name '*.asm' -o -name 'Makefile' -o -name '*.md' \) -exec \
+	sed -i \
+		-e "s|@@NAME@@|$projname|g" \
+		-e "s|@@VERSION@@|$VERSION|g" \
+		-e "s|@@IMAGE@@|$IMAGE|g" {} +
+
+# VS Code Dev Container, so "Reopen in Container" just works.
+mkdir -p "$dest/.devcontainer"
+cat > "$dest/.devcontainer/devcontainer.json" <<EOF
+{
+	"name": "Nextor dev",
+	"image": "$IMAGE",
+	"workspaceFolder": "/work",
+	"mounts": [
+		"source=\${localWorkspaceFolder},target=/work,type=bind,consistency=cached"
+	]
+}
+EOF
+
+echo "Scaffolded '$template' project in '$dest'."
+if [ "$dest" = "." ]; then
+	echo "Next:  make"
+else
+	echo "Next:  cd $dest && make"
+fi
