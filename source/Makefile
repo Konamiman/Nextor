@@ -24,7 +24,19 @@ all:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-.PHONY: all clean
+# Build the full matrix in one go: all six kernel base variants and both
+# standalone ROMs for each of them, plus NEXTOR.SYS and the assembler and C
+# command-line tools. The drivers' own `everything` target builds every kernel
+# base variant as it goes (it recurses into ../kernel per variant), so no
+# separate kernel pass is needed here. NEXTOR.SYS and the .COM tools have no
+# build variants, so they are built once.
+everything:
+	$(MAKE) -C drivers everything
+	$(MAKE) -C nextor_sys
+	$(MAKE) -C tools
+	$(MAKE) -C tools/C
+
+.PHONY: all everything clean distclean
 
 clean:
 	$(MAKE) -C kernel clean
@@ -32,3 +44,8 @@ clean:
 	$(MAKE) -C nextor_sys clean
 	$(MAKE) -C tools clean
 	$(MAKE) -C tools/C clean
+
+# Clear everything: the source-tree intermediates (via `clean`) plus the
+# generated outputs under <repo>/bin.
+distclean: clean
+	rm -rf ../bin/kernel-base ../bin/roms ../bin/ram-drivers ../bin/tools

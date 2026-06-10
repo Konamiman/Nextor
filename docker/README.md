@@ -281,7 +281,10 @@ git clone https://github.com/Konamiman/Nextor && cd Nextor
 docker/make.sh kernel              # build the default kernel base file
 docker/make.sh kernel everything   # all six kernel variants
 docker/make.sh kernel clean
-docker/make.sh all                 # every part (the umbrella Makefile)
+docker/make.sh nextor_sys          # build NEXTOR.SYS
+docker/make.sh all                 # one variant of every part
+docker/make.sh all everything      # the FULL matrix (see below)
+docker/make.sh all distclean       # remove every build artifact, incl. bin/
 ```
 
 `<part>` is any directory under `source/`; extra arguments (`everything`,
@@ -290,11 +293,16 @@ docker/make.sh all                 # every part (the umbrella Makefile)
 | `docker/make.sh …` | Builds |
 |---|---|
 | `kernel` | the kernel base file(s) → `bin/kernel-base/Nextor-<version>.base[<suffix>].dat`; `everything` = all six variants |
-| `nextor_sys` | `NEXTOR.SYS` |
-| `tools` | the bundled `.COM` utilities |
-| `tools/C` | the C-based tools |
-| `drivers` | the standalone / dummy / RAM example drivers |
-| `all` | every part above (the umbrella Makefile) |
+| `nextor_sys` | `NEXTOR.SYS` (+ `.japanese`) |
+| `tools` | all command-line `.COM` utilities - both the assembler tools (`source/tools`) and the C tools (`source/tools/C`) |
+| `tools/C` | just the C tools |
+| `drivers` | the standalone ROMs (ASCII8 + ASCII16); `everything` = all six variants of each; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/ram-drivers/`) |
+| `all` | the umbrella Makefile: bare = one variant of every part; `everything` = all kernel + standalone-ROM variants + NEXTOR.SYS + all tools; `clean` / `distclean` |
+
+`make.sh all everything` builds the complete release matrix: all six kernel base
+variants, both standalone ROMs (ASCII8/ASCII16) for each of those six variants,
+NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of
+that plus the source-tree intermediates.
 
 The explicit equivalent, if you'd rather not use the wrapper, is just
 `make -C source/<part>` with the **repository root** mounted:
