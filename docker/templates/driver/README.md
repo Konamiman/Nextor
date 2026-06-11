@@ -46,7 +46,7 @@ Guide** (`docs/` in the Nextor repository).
 `NEXTOR_BASE` selects which kernel your driver is fused with. The image ships
 six base files in `/opt/nextor/kernel_base/`:
 
-```
+```text
 kernel_base.dat                    (default)
 kernel_base.NO_UNDOC.dat           (Z180-safe, no undocumented opcodes)
 kernel_base.SHIFT_INV.dat          kernel_base.CTRL_INV.dat

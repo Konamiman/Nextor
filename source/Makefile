@@ -1,9 +1,9 @@
 # Top level makefile for Nextor.
 # It builds the kernel base file, the standalone ROM drivers, NEXTOR.SYS
-# and the command line tools. The generated files are copied to
-# bin/kernel-base (kernel base files), bin/roms (standalone ROMs),
-# bin/nextor_sys and bin/tools. The makefiles in each subdirectory can
-# be used independently as well.
+# and the command line tools. The generated files are copied under bin/:
+# kernel-base (kernel base files), roms (standalone ROMs), ram-drivers (the
+# example RAM driver) and tools (the command-line tools AND NEXTOR.SYS). The
+# makefiles in each subdirectory can be used independently as well.
 #
 # Set NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180-compatible kernel
 # variant that avoids all undocumented Z80 opcodes (those that operate

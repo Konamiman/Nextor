@@ -290,7 +290,7 @@ JPIX: jp (ix)
 
 	.stresc on
 
-STR_DRIVER_NAME: db "Dummy standalone driver",0 ; es bueno para la oreja, te lo pones asin y te crece la oreja",0
+STR_DRIVER_NAME: db "Dummy standalone driver",0
 STR_DRIVER_AUTHOR: db "Konamiman",0
 
 INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
@@ -443,7 +443,7 @@ DO_DEVQ_GET_PARAMS:
 ;                possible to determine whether it has been changed
 ;                or not since the last status request.
 ;
-; RESULT_NOT_IMPLEMENTED is interpreted as retruning B=1.
+; RESULT_NOT_IMPLEMENTED is interpreted as returning B=1.
 ;
 ; For fixed devices the routine can return either RESULT_NOT_IMPLEMENTED, or RESULT_OK and B=1.
 ;
@@ -466,7 +466,7 @@ DO_DEVQ_GET_STATUS:
 ;                (typically this means: removable device with no medium inserted)
 ;             1: The device is available
 ;
-; RESULT_NOT_IMPLEMENTED is interpreted as retruning B=1.
+; RESULT_NOT_IMPLEMENTED is interpreted as returning B=1.
 ;
 ; Note: this is the same as "Get device status" but it only returns B=0 or B=1,
 ; and it does not change the internal "changed" status of the device.

@@ -303,6 +303,12 @@ variants, both standalone ROMs (ASCII8/ASCII16) for each of those six variants,
 NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of
 that plus the source-tree intermediates.
 
+> **Out of scope: the legacy `source/command/` suite** (`COMMAND2.COM`,
+> `MSXDOS2.SYS`, and the classic DOS utilities). It still builds with the CP/M-era
+> Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`), which this image does **not**
+> include — and the top-level `source/Makefile` doesn't build it either. Use the
+> original vintage tools for that part of the repo.
+
 The explicit equivalent, if you'd rather not use the wrapper, is just
 `make -C source/<part>` with the **repository root** mounted:
 
@@ -390,6 +396,13 @@ The six base-file **variants** differ by two independent axes:
 
 (`NO_UNDOC` combines with either key inversion, giving the two `.NO_UNDOC.*_INV`
 files.)
+
+> **You rarely need a pre-inverted base for the keys.** The `.SHIFT_INV` /
+> `.CTRL_INV` variants are a convenience — `mknexrom` can flip the boot keys on
+> the *default* (or `.NO_UNDOC`) base at ROM-assembly time with `/k:<hex>` (LSB =
+> byte 0, MSB = byte 1; e.g. `/k:1002` inverts SHIFT and "1"). The `NO_UNDOC`
+> axis is different: it changes the assembled code, so it genuinely requires its
+> own base file.
 
 ### Naming conventions
 

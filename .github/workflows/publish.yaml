@@ -34,6 +34,12 @@ permissions:
   contents: read
   packages: write
 
+# Serialize publishes that share a revision, so two simultaneous runs can't both
+# pass the overwrite guard and race to corrupt the immutable <version>-<rev> tag.
+concurrency:
+  group: publish-${{ github.repository }}-${{ inputs.revision }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -47,10 +53,9 @@ jobs:
           REV: ${{ inputs.revision }}
         run: |
           set -eu
-          case "$REV" in
-            r[0-9]*) ;;
-            *) echo "revision must look like r1, r2, ... (got '$REV')" >&2; exit 1 ;;
-          esac
+          if ! [[ "$REV" =~ ^r[0-9]+$ ]]; then
+            echo "revision must look like r1, r2, ... (got '$REV')" >&2; exit 1
+          fi
 
           owner="$(printf '%s' "$OWNER" | tr 'A-Z' 'a-z')"   # GHCR requires lowercase
           image="ghcr.io/$owner/nextor-dev"
