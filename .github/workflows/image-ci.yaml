@@ -1,0 +1,50 @@
+name: Image CI
+
+# Build the Nextor dev image and run the acceptance suite (docker/test.sh) on
+# every pull request - and on pushes to the development branches - that touches
+# an input of the image. It NEVER pushes anything: this is the pre-merge proof
+# that the image builds and the 14 checks pass. Publishing is the separate,
+# manually-triggered publish.yaml.
+#
+# Paths cover the image's actual build inputs: the Dockerfile and helper scripts
+# (docker/), the kernel/tools/driver sources (source/), the SDK baked in (sdk/),
+# and mknexrom's source (buildtools/).
+
+on:
+  pull_request:
+    paths:
+      - 'docker/**'
+      - 'source/**'
+      - 'sdk/**'
+      - 'buildtools/**'
+      - '.github/workflows/image-ci.yaml'
+  push:
+    branches:
+      - 'v**'
+    paths:
+      - 'docker/**'
+      - 'source/**'
+      - 'sdk/**'
+      - 'buildtools/**'
+      - '.github/workflows/image-ci.yaml'
+
+permissions:
+  contents: read
+
+# A new commit on the same ref supersedes an in-flight run (the build is ~minutes).
+concurrency:
+  group: image-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker/build.sh -t nextor-dev
+
+      - name: Acceptance test (does not push)
+        run: docker/test.sh nextor-dev

@@ -498,7 +498,10 @@ docker/test.sh my-other-tag    # or any explicit tag
 runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), all six base
 variants are present, the baked `NEXTOR_VERSION` matches the built kernel and
 `manifest.json`, and both scaffolds (`driver`, `tool`) build end-to-end. It
-exits non-zero on any failure, so it doubles as a CI gate.
+exits non-zero on any failure, so it doubles as a CI gate — and indeed the
+**`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this
+(`build.sh` → `test.sh`, no push) on every pull request that touches an image
+input, so the build and the 14 checks are verified before merge.
 
 **2. Move it to another machine** without a registry, via a tarball:
 
@@ -531,7 +534,30 @@ The **official** image lives in Konamiman's account; anyone else can publish
 their own (for testing, forks, or private use) by pushing to their own account
 - the steps are identical, only the repository name changes.
 
-GitHub Container Registry (GHCR) is the primary home:
+### The automated way (GitHub Actions)
+
+The official publish is the **`Publish image`** workflow
+(`.github/workflows/publish.yaml`): in the repo's *Actions* tab, run it and give
+it the build revision (`r1`, `r2`, …). It builds the image, runs `docker/test.sh`
+as a gate, and pushes to `ghcr.io/<owner>/nextor-dev` only if the test passes,
+using the built-in `GITHUB_TOKEN` (no secrets to configure). Tags are derived
+from `sdk/nextor-kernel-version.txt` per the *Tag scheme* below — a prerelease
+publishes only its exact tags; a stable version also moves `major.minor` /
+`major` / `latest`. It's `workflow_dispatch`-only (no accidental publishes) and
+amd64-only for now. Forks get `ghcr.io/<their-owner>/nextor-dev` automatically.
+
+To avoid clobbering a build, the run **fails if the pinned `<version>-<rev>` tag
+already exists** unless you tick the **overwrite** checkbox — so re-running with
+the same revision is a deliberate choice, while bumping the revision (or moving
+the always-advancing `latest` / `major.minor` tags) is unaffected.
+
+> The first publish creates a **private** package; flip it to public once in the
+> package's settings on GitHub if others should be able to pull it.
+
+### The manual way
+
+For a one-off or a self-publish without Actions, push by hand. GitHub Container
+Registry (GHCR) is the primary home:
 
 ```sh
 # 1. Authenticate. GHCR uses a GitHub Personal Access Token with
