@@ -15,8 +15,8 @@ name: Publish image
 # the run fails unless you tick "overwrite". The moving tags (latest, major.minor,
 # exact version) are expected to advance on every publish and are not guarded.
 #
-# amd64 only for now. When an arm64 SDCC is available, switch the build to a
-# `docker buildx build --platform linux/amd64,linux/arm64 --push` step.
+# Multi-arch: builds and tests linux/amd64 and linux/arm64 (arm64 via QEMU on
+# the amd64 runner), then pushes a single manifest list.
 
 on:
   workflow_dispatch:
@@ -106,23 +106,52 @@ jobs:
             echo "$IMAGE:$PINNED is not published yet - OK to publish."
           fi
 
-      - name: Build image
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Gate: build each arch, load it, and run the acceptance suite. The kernel
+      # base files are built once (the kernelbuild stage is pinned to the runner
+      # arch and shared); arm64's tools/runtime and the test run under QEMU.
+      # Nothing is pushed here.
+      - name: Build and test each architecture
         env:
+          VER: ${{ steps.meta.outputs.version }}
           REV: ${{ inputs.revision }}
-        run: docker/build.sh -t nextor-dev --build-arg NEXTOR_IMAGE_REVISION="$REV"
+        run: |
+          set -eu
+          for arch in amd64 arm64; do
+            echo "::group::build + test linux/$arch"
+            docker buildx build --platform "linux/$arch" --load \
+              -f docker/Dockerfile \
+              --build-arg NEXTOR_VERSION="$VER" \
+              --build-arg NEXTOR_IMAGE_REVISION="$REV" \
+              -t "nextor-dev:$arch" .
+            docker/test.sh "nextor-dev:$arch"
+            echo "::endgroup::"
+          done
 
-      - name: Acceptance test (publish gate)
-        run: docker/test.sh nextor-dev
-
-      - name: Tag and push
+      # Both arches passed: build the multi-arch manifest and push it. Layers are
+      # reused from the per-arch builds above (same buildx builder/cache).
+      - name: Build and push multi-arch manifest
         env:
+          VER: ${{ steps.meta.outputs.version }}
+          REV: ${{ inputs.revision }}
           IMAGE: ${{ steps.meta.outputs.image }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -eu
-          echo "### Published \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
-          for t in $TAGS; do
-            docker tag nextor-dev "$IMAGE:$t"
-            docker push "$IMAGE:$t"
-            echo "- \`$IMAGE:$t\`" >> "$GITHUB_STEP_SUMMARY"
-          done
+          tagargs=""
+          for t in $TAGS; do tagargs="$tagargs -t $IMAGE:$t"; done
+          # shellcheck disable=SC2086
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -f docker/Dockerfile \
+            --build-arg NEXTOR_VERSION="$VER" \
+            --build-arg NEXTOR_IMAGE_REVISION="$REV" \
+            $tagargs .
+          {
+            echo "### Published \`$IMAGE\` (linux/amd64, linux/arm64)"
+            for t in $TAGS; do echo "- \`$IMAGE:$t\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"

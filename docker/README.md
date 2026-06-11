@@ -4,15 +4,14 @@ A Docker image that bundles everything needed to build [Nextor](https://github.c
 installing a Z80 toolchain on your host. It contains:
 
 - **Nestor80** - `N80` (assembler), `LK80` (linker), `LB80` (librarian).
-- **SDCC** - the Z80 C compiler (pruned to the Z80 world).
+- **SDCC** - the Z80 C compiler (Debian's `sdcc` 4.2.0).
 - **mknexrom** - combines a kernel base file with a driver into a ROM.
 - **make**, **binutils** (`objcopy`), **bash**.
 - The **Nextor SDK** (asm + C), the **six kernel base-file variants** built from
   this repository's source, and the **`nextor-init`** project scaffolder.
 
-> **Platform:** this first increment is **`linux/amd64` only**. It runs on
-> Apple Silicon / arm64 hosts through emulation, but a native arm64 image is not
-> built yet (see *Publishing → multi-arch*). Everything below assumes you have
+> **Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64`
+> (native on Apple Silicon and arm64 servers). Everything below assumes you have
 > Docker installed.
 
 > **How this document is organised.** The first three sections cover what most
@@ -347,7 +346,7 @@ Everything lives under `/opt/nextor`:
 ```
 /opt/nextor/
 ├── bin/            N80, LK80, LB80, mknexrom, nextor-init   (all on PATH)
-├── sdcc/           SDCC install (bin/ on PATH), Z80 targets only
+│                   (sdcc is Debian's apt package, at /usr/bin/sdcc)
 ├── kernel_base/
 │   ├── kernel_base.dat                       default variant
 │   ├── kernel_base.NO_UNDOC.dat
@@ -428,8 +427,12 @@ Use the wrapper (runnable from anywhere - it locates the repo itself):
 ```sh
 docker/build.sh                       # tags 'nextor-dev'
 docker/build.sh -t my-nextor:test     # pass your own tag and/or build flags
-docker/build.sh --no-cache --build-arg SDCC_VERSION=4.4.0
+docker/build.sh --no-cache --build-arg N80_VERSION=1.3.6
 ```
+
+> `docker/build.sh` builds a **single-arch** image for your host (handy for
+> local work). The multi-arch (amd64 + arm64) build lives in the publish
+> workflow — see *Publishing*.
 
 It fills in `--build-arg NEXTOR_VERSION` from `sdk/nextor-kernel-version.txt`
 (the authoritative kernel version) and forwards everything else to
@@ -456,8 +459,9 @@ build). That's the whole reason the value is injected from outside, and why
 the wrapper exists. It defaults to `unknown` if omitted.
 
 The build is fully reproducible from source: it downloads pinned Nestor80
-releases and the SDCC tarball, compiles `mknexrom` from `buildtools/sources`,
-and builds all six kernel base files via `make -C source/kernel everything`.
+releases (per target arch), installs SDCC 4.2.0 from Debian's apt, compiles
+`mknexrom` from `buildtools/sources`, and builds all six kernel base files via
+`make -C source/kernel everything`.
 
 ### Build arguments
 
@@ -470,12 +474,14 @@ Override with `--build-arg NAME=value`:
 | `N80_VERSION` | `1.3.5` | Nestor80 assembler release |
 | `LK80_VERSION` / `LK80_TAG` | `1.1.0` / `n80-v1.3.3-lk80-v1.1` | linker release + its GitHub tag |
 | `LB80_VERSION` | `1.0` | librarian release |
-| `SDCC_VERSION` | `4.2.0` | SDCC release (the one the kernel build is validated against) |
+| `SDCC_VERSION` | `4.2.0` | recorded in the manifest/labels; `sdcc` itself comes from Debian apt (also 4.2.0), so this only relabels |
 | `MKNEXROM_VERSION` | `1.1` | recorded in the manifest; `mknexrom` is compiled from source |
 | `DOTNET_TAG` | `8.0-bookworm-slim` | `dotnet/runtime` base image tag |
 
-Bumping a tool is a one-line change, e.g. `--build-arg SDCC_VERSION=4.4.0`; the
-new version automatically flows into `manifest.json` and the labels.
+Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.6`; the
+new version automatically flows into `manifest.json` and the labels. (`sdcc` is
+the apt package, so `SDCC_VERSION` only changes the recorded label, not the
+installed compiler.)
 
 ---
 
@@ -599,11 +605,15 @@ docker inspect --format '{{json .Config.Labels}}' nextor-dev | tr ',' '\n'
 docker run --rm nextor-dev cat /opt/nextor/manifest.json
 ```
 
-### Multi-arch (not yet)
+### Multi-arch
 
-This increment publishes `linux/amd64` only. A native arm64 image needs an
-arm64 SDCC (the official SDCC tarball is amd64-only), so it's deferred. When it
-lands, publishing becomes a single `buildx` invocation:
+The published image is a **manifest list** covering `linux/amd64` and
+`linux/arm64`; `docker pull` picks the right one automatically. The publish
+workflow builds and tests each arch (arm64 via QEMU) before pushing the
+manifest. The kernel base files are Z80 binaries — architecture-independent —
+so they're built once on the runner's native arch (the `kernelbuild` stage is
+pinned to `$BUILDPLATFORM`); only the host tools (N80/LK80/LB80/sdcc/mknexrom)
+are per-arch. To build a multi-arch image by hand:
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 \
