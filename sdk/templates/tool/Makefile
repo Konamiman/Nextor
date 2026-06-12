@@ -1,4 +1,4 @@
-# Makefile for a Nextor-aware MSX-DOS command (.COM), assembled with N80
+# Makefile for a Nextor-aware .COM program, assembled with N80
 # (Nestor80).
 #
 #   make            build the .COM

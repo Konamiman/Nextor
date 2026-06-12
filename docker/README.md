@@ -1,25 +1,24 @@
 # Nextor development image
 
-A Docker image that bundles everything needed to build [Nextor](https://github.com/Konamiman/Nextor), write disk **drivers**, and write Nextor-aware **tools**, all without
-installing a Z80 toolchain on your host. It contains:
+A Docker image that bundles everything needed to build Nextor, develop Nextor drivers, and develop Nextor-aware tools, all without installing a Z80 toolchain on your host. It contains:
 
-- **Nestor80** - `N80` (assembler), `LK80` (linker), `LB80` (librarian).
-- **SDCC** - the Z80 C compiler (Debian's `sdcc` 4.2.0).
+- **[Nestor80](https://github.com/Konamiman/Nestor80)** - `N80` (assembler), `LK80` (linker), `LB80` (library manager).
+- **[SDCC](https://sdcc.sourceforge.net/)** - the Z80 C compiler (Debian's `sdcc` 4.2.0).
 - **mknexrom** - combines a kernel base file with a driver into a ROM.
 - **make**, **binutils** (`objcopy`), **bash**.
-- The **Nextor SDK** (asm + C, including ready-to-copy **driver/tool project
+- The **Nextor SDK** (asm + C, including ready to copy **driver/tool project
   templates**) and the **six kernel base-file variants** built from this
   repository's source.
 
-> **Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64`
-> (native on Apple Silicon and arm64 servers). Everything below assumes you have
-> Docker installed.
+**Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64`
+(native on Apple Silicon and arm64 servers). Everything below assumes you have
+Docker installed.
 
 > **How this document is organised.** The first three sections cover what most
 > readers come here for: a quick intro to Docker, and how to use the official
 > image to develop drivers, tools, and Nextor itself. The remaining
 > sections are reference material for image internals, building the image
-> yourself, and publishing it — useful for maintainers and advanced users.
+> yourself, and publishing it - useful for maintainers and advanced users.
 
 ---
 
@@ -28,8 +27,8 @@ installing a Z80 toolchain on your host. It contains:
 [Docker](https://www.docker.com/) lets you run pre-packaged software in
 isolated environments called **containers**, so you don't have to install the
 software (or its dependencies) on your host machine. The package itself is an
-**image**: a read-only template with everything the software needs — files,
-libraries, environment variables — baked in. Running an image produces a
+**image**: a read-only template with everything the software needs (files,
+libraries, environment variables) baked in. Running an image produces a
 container; each run is independent, and you can throw it away when you're done.
 
 _If you are familiar with the concept of [virtual machine](https://en.wikipedia.org/wiki/Virtual_machine), you can think of Docker containers as "lightweight virtual machines", where instead of virtualizing the entire hardware you only virtualize the operating system._
@@ -37,16 +36,15 @@ _If you are familiar with the concept of [virtual machine](https://en.wikipedia.
 For Nextor, this means you don't have to install Nestor80, SDCC, `mknexrom`, or
 any of the other tools on your host: install Docker, pull this image, and run
 commands "inside" it. Your project files stay on your host machine; you make
-them visible to the container by **mounting** a host directory into it — that's
+them visible to the container by **mounting** a host directory into it - that's
 what the `-v "$PWD":/work` flag you'll see in every command below does
-(`$PWD` on the host becomes `/work` inside the container). The companion
-`--rm` flag is pure cleanup: each `docker run` always creates a brand-new
+(`$PWD` on the host becomes `/work` inside the container).
+
+_Note: the companion
+`--rm` flag in these commands is for cleanup: each `docker run` always creates a brand new
 container regardless, and `--rm` only decides whether the stopped container
 gets deleted automatically afterwards or sits around in `docker ps -a` until
-you remove it manually. Omitting it doesn't keep a container "live" for
-reuse and doesn't make subsequent runs any faster — see the
-*Tip — repeated builds* note in *Developing drivers and tools* below for the
-patterns that actually speed up tight edit/build loops.
+you remove it manually._
 
 If you've never used Docker, the
 [official "Get started" guide](https://docs.docker.com/get-started/) is a
@@ -62,18 +60,17 @@ which creates and starts a container from an image.
 - **macOS / Windows:** install
   [Docker Desktop](https://www.docker.com/products/docker-desktop/). On Windows,
   Docker Desktop integrates with the
-  [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/) —
+  [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/):
   open a WSL distro (Ubuntu, Debian, ...) and run the `docker` commands in this
   README from inside it. The *Appendix* at the end walks through a fresh WSL
   setup if you want to start from scratch.
 
----
 
 ## Developing drivers and tools
 
-This section assumes you'll use the **official** image, published as
+This section assumes you'll use the **official** Nextor development image, published as
 `ghcr.io/konamiman/nextor-dev`. You don't need to clone the Nextor repository
-or build the image yourself — Docker pulls it on first use.
+or build the image yourself: Docker pulls it on first use.
 
 ### Quick start
 
@@ -95,38 +92,41 @@ A shell alias makes day-to-day use feel native:
 ```sh
 alias nextor='docker run --rm -it -v "$PWD":/work ghcr.io/konamiman/nextor-dev'
 nextor make
-nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/tool nxinfo'
+nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/tool mytool'
 ```
 
-The rest of this section uses `nextor` for brevity; the full `docker run …`
+The rest of this section uses `nextor` for brevity; the full `docker run ...`
 form does exactly the same thing.
 
-> **Tip — repeated builds.** Each `docker run` creates a fresh container,
-> which adds roughly 100–500 ms of startup on top of whatever you're running.
-> That's negligible for a one-off `make`, but it dominates a tight
-> edit/build loop. For those, drop into an interactive shell *once* and run
-> every command inside it — you pay the startup cost only at the beginning:
->
-> ```sh
-> nextor                              # opens bash at /work
-> # now inside the container:
-> make
-> make clean && make
-> N80 mycode.asm mycode.bin
-> exit                                # the container is cleaned up on exit
-> ```
->
-> The `.devcontainer/` config included in the project templates uses the same
-> idea under the hood: VS Code keeps one long-lived container running and
-> `docker exec`s into it for each build.
->
-> A related question: does dropping `--rm` keep the container "live" for
-> reuse? No — without `--rm` the container still stops as soon as its command
-> finishes; it just isn't deleted afterwards, so it sits around in
-> `docker ps -a` taking up space. New `docker run` invocations create new
-> containers either way. The image layers (toolchain, SDK, kernel base
-> files) are what gets reused across runs, and those are cached
-> automatically.
+
+#### Tip: repeated builds
+
+Each `docker run` creates a fresh container,
+which adds roughly 100–500 ms of startup on top of whatever you're running.
+That's negligible for a one-off `make`, but it dominates a tight
+edit/build loop. For those, drop into an interactive shell *once* and run
+every command inside it; then you pay the startup cost only at the beginning:
+
+```sh
+nextor                        # opens bash at /work
+# now inside the container:
+make
+make clean && make
+N80 mycode.asm mycode.bin
+exit                          # the container is cleaned up on exit
+```
+
+The `.devcontainer/` config included in the project templates uses the same
+idea under the hood: VS Code keeps one long-lived container running and
+`docker exec`s into it for each build.
+
+A related question: does dropping `--rm` keep the container "live" for
+reuse? No: without `--rm` the container still stops as soon as its command
+finishes; it just isn't deleted afterwards, so it sits around in
+`docker ps -a` taking up space. New `docker run` invocations create new
+containers either way. The image layers (toolchain, SDK, kernel base
+files) are what gets reused across runs, and those are cached
+automatically.
 
 ### Working on an existing driver or tool
 
@@ -148,11 +148,11 @@ repository, so they work without Docker too):
 
 | Template | Produces |
 |---|---|
-| `driver` | a Nextor disk driver, built into a bootable kernel ROM (`driver.asm`, ASCII8 `chgbnk.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
-| `tool` | a Nextor-aware MSX-DOS command `.COM` in Z80 asm (`tool.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
+| `driver` | a Nextor disk driver, built into a bootable kernel ROM (`driver.asm`, `chgbnk.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
+| `tool` | a Nextor-aware `.COM` program in Z80 assembler (`tool.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
 
-There is no scaffolding step: copy the template directory, follow the `TODO`
-comments (project name, driver strings, handler bodies, ...), and `make`. Each
+You just copy the template directory, follow the `TODO`
+comments (project name, driver strings, handler bodies, ...), and run `make`. Each
 template builds as-is before you touch anything, and includes a
 [VS Code **Dev Container**](https://containers.dev/) config (a `.devcontainer/`
 folder that tells VS Code to open the project inside a running container with
@@ -164,23 +164,23 @@ usual patterns:
 nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/driver my-ide'
 nextor sh -c 'cd my-ide && make'
 
-# B) in place: copy into the mounted directory itself (note the /. — it also
+# B) in place: copy into the mounted directory itself (note the /. - it also
 #    brings the hidden .devcontainer/ along)
 mkdir my-ide && cd my-ide
 nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/driver/. .'
 nextor make            # -> mydriver.ROM
 ```
 
-> The output name is **not** derived from the directory: it's the `NAME`
-> variable at the top of the template's `Makefile` (`mydriver` / `mytool`
-> until you change it — the first `TODO`).
+Note that the output name is **not** derived from the directory: it's the `NAME`
+variable at the top of the template's `Makefile` (`mydriver` / `mytool`
+until you change it - see the first `TODO`).
 
 ### Running the tools from the CLI
 
 The image has no
 [`ENTRYPOINT`](https://docs.docker.com/engine/reference/builder/#entrypoint)
 (the command Docker would otherwise run by default when the container starts),
-so anything after the image name is run directly — handy for one-offs:
+so anything after the image name is run directly - handy for one-offs:
 
 ```sh
 # version / help
@@ -238,7 +238,7 @@ Key points:
   asm/constants/...` instead of long relative paths.
 - **Variants:** point `NEXTOR_BASE` at another base file to target a different
   kernel. For a `.NO_UNDOC.` base, also assemble the driver undoc-free
-  (`make NO_UNDOC=1 NEXTOR_BASE=…/kernel_base.NO_UNDOC.dat`); the template wires
+  (`make NO_UNDOC=1 NEXTOR_BASE=.../kernel_base.NO_UNDOC.dat`); the template wires
   `NO_UNDOC=1` to `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS`.
 
 A **tool** Makefile is simpler - `tool.asm` uses `org 0100h`, so `N80` emits a
@@ -266,12 +266,12 @@ your checkout and rebuild - the build uses the **mounted repository's** sources
 (its own `sdk/`, `source/`, version constants); the image only supplies the
 toolchain.
 
-> **Always mount the repository root**, and select the part with `make -C
-> source/<part>` (or `cd source/<part>` *inside* the container). Mounting a
-> subdirectory such as `source/kernel` on its own **fails immediately** - each
-> part's Makefile reaches up the tree (`../version.mk`, `../../sdk/...` for SDK
-> includes, `../../bin/kernel-base/` for outputs), so those paths must exist in
-> the container.
+**Important note:** Always mount the repository root, and select the part with `make -C
+source/<part>` (or `cd source/<part>` *inside* the container). Mounting a
+subdirectory such as `source/kernel` on its own **fails immediately** - each
+part's Makefile reaches up the tree (`../version.mk`, `../../sdk/...` for SDK
+includes, `../../bin/kernel-base/` for outputs), so those paths must exist in
+the container.
 
 The easiest way is the **`docker/make.sh`** wrapper: it mounts the root for you,
 runs `make -C source/<part>`, and writes outputs back as *your* user (not root).
@@ -289,9 +289,9 @@ docker/make.sh all distclean       # remove every build artifact, incl. bin/
 ```
 
 `<part>` is any directory under `source/`; extra arguments (`everything`,
-`clean`, a target, `-j`, …) pass straight through to `make`:
+`clean`, a target, `-j`, ...) pass straight through to `make`:
 
-| `docker/make.sh …` | Builds |
+| `docker/make.sh ...` | Builds |
 |---|---|
 | `kernel` | the kernel base file(s) → `bin/kernel-base/Nextor-<version>.base[<suffix>].dat`; `everything` = all six variants |
 | `nextor_sys` | `NEXTOR.SYS` (+ `.japanese`) |
@@ -305,11 +305,11 @@ variants, both standalone ROMs (ASCII8/ASCII16) for each of those six variants,
 NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of
 that plus the source-tree intermediates.
 
-> **Out of scope: the legacy `source/command/` suite** (`COMMAND2.COM`,
-> `MSXDOS2.SYS`, and the classic DOS utilities). It still builds with the CP/M-era
-> Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`), which this image does **not**
-> include — and the top-level `source/Makefile` doesn't build it either. Use the
-> original vintage tools for that part of the repo.
+**Note:** the legacy `source/command/` suite (`COMMAND2.COM`,
+`MSXDOS2.SYS`, and the classic DOS utilities) is for now out of scope. It still builds with the CP/M-era
+Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`), which this image does **not**
+include - and the top-level `source/Makefile` doesn't build it either. Use the
+original vintage tools for that part of the repository.
 
 The explicit equivalent, if you'd rather not use the wrapper, is just
 `make -C source/<part>` with the **repository root** mounted:
@@ -339,9 +339,9 @@ nextor
 
 ---
 
-> **If you only want to develop (Nextor itself, a Nextor driver, or a Nextor-aware tool) with the image, you can stop reading here.**
-> The remaining sections are reference material: how the image is laid out,
-> how to build it yourself, how to test it, and how to publish it.
+**Note: if you only want to develop Nextor, a Nextor driver, or a Nextor-aware tool with the image, you can stop reading here.**
+The remaining sections are reference material: how the image is laid out,
+how to build it yourself, how to test it, and how to publish it.
 
 ---
 
@@ -378,15 +378,15 @@ Recipes (and you) can rely on these being set inside the container:
 | Variable | Value | Use |
 |---|---|---|
 | `NEXTOR_VERSION` | e.g. `3.0.0-beta1` | the kernel version baked in |
-| `NEXTOR_BASE` | `…/kernel_base/kernel_base.dat` | default base file for `mknexrom` |
-| `NEXTOR_KERNEL_BASE_DIR` | `…/kernel_base` | directory of the six base files |
-| `NEXTOR_SDK` | `…/sdk` | SDK root (pass to N80 as `--include-directory`) |
-| `NEXTOR_SDK_ASM` / `NEXTOR_SDK_C` | `…/sdk/asm`, `…/sdk/C` | asm / C subtrees |
+| `NEXTOR_BASE` | `.../kernel_base/kernel_base.dat` | default base file for `mknexrom` |
+| `NEXTOR_KERNEL_BASE_DIR` | `.../kernel_base` | directory of the six base files |
+| `NEXTOR_SDK` | `.../sdk` | SDK root (pass to N80 as `--include-directory`) |
+| `NEXTOR_SDK_ASM` / `NEXTOR_SDK_C` | `.../sdk/asm`, `.../sdk/C` | asm / C subtrees |
 | `N80` `LK80` `LB80` `MKNEXROM` `SDCC` | absolute tool paths | for Makefiles that prefer explicit paths |
 
 ### Variants
 
-The six base-file **variants** differ by two independent axes:
+The six base file **variants** differ by two independent axes:
 
 | Suffix | Meaning |
 |---|---|
@@ -398,12 +398,12 @@ The six base-file **variants** differ by two independent axes:
 (`NO_UNDOC` combines with either key inversion, giving the two `.NO_UNDOC.*_INV`
 files.)
 
-> **You rarely need a pre-inverted base for the keys.** The `.SHIFT_INV` /
-> `.CTRL_INV` variants are a convenience — `mknexrom` can flip the boot keys on
-> the *default* (or `.NO_UNDOC`) base at ROM-assembly time with `/k:<hex>` (LSB =
-> byte 0, MSB = byte 1; e.g. `/k:1002` inverts SHIFT and "1"). The `NO_UNDOC`
-> axis is different: it changes the assembled code, so it genuinely requires its
-> own base file.
+**Note:** The `.SHIFT_INV` /
+`.CTRL_INV` variants are a convenience: `mknexrom` can flip the boot keys on
+the *default* (or `.NO_UNDOC`) base at ROM-assembly time with `/k:<hex>` (LSB =
+byte 0, MSB = byte 1; e.g. `/k:1002` inverts SHIFT and "1"). The `NO_UNDOC`
+axis is different: it changes the assembled code, so it genuinely requires its
+own base file.
 
 ### Naming conventions
 
@@ -444,17 +444,17 @@ docker/build.sh -t my-nextor:test     # pass your own tag and/or build flags
 docker/build.sh --no-cache --build-arg N80_VERSION=1.3.6
 ```
 
-> `docker/build.sh` builds a **single-arch** image for your host (handy for
-> local work). The multi-arch (amd64 + arm64) build lives in the publish
-> workflow — see *Publishing*.
+**Note:** `docker/build.sh` builds a **single-arch** image for your host (handy for
+local work). The multi-arch (amd64 + arm64) build lives in the publish
+workflow - see *Publishing*.
 
 It fills in `--build-arg NEXTOR_VERSION` from `sdk/nextor-kernel-version.txt`
 (the authoritative kernel version) and forwards everything else to
-`docker build`. The explicit equivalent — invoking `docker build` directly
+`docker build`. The explicit equivalent, invoking `docker build` directly
 against the
 [Dockerfile](https://docs.docker.com/build/concepts/dockerfile/)
 (the script in `docker/` that describes how the image is assembled, step by
-step) — is:
+step), is:
 
 ```sh
 docker build -f docker/Dockerfile \
@@ -503,7 +503,7 @@ installed compiler.)
 
 A **registry** is a server that hosts and distributes Docker images (Docker
 Hub, GitHub Container Registry, your own private one). You never need one to
-validate this image — it's the same artifact whether it lives only on your
+validate this image: it's the same artifact whether it lives only on your
 machine or on a registry. Three approaches, by goal:
 
 **1. Run it directly** - the image exists as soon as you `docker build`. Use the
@@ -519,7 +519,7 @@ runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), all six base
 variants are present, the baked `NEXTOR_VERSION` matches the built kernel and
 `manifest.json`, and both project templates (`driver`, `tool`) build
 end-to-end when copied verbatim. It
-exits non-zero on any failure, so it doubles as a CI gate — and indeed the
+exits non-zero on any failure, so it doubles as a CI gate - and indeed the
 **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this
 (`build.sh` → `test.sh`, no push) on every pull request that touches an image
 input, so the build and the 14 checks are verified before merge.
@@ -533,11 +533,12 @@ docker load < nextor-dev.tar.gz
 ```
 
 **3. Exercise the full push/pull round-trip** with a throwaway local registry -
-useful to rehearse publishing (and, later, the only way to load a multi-arch
-[manifest list](https://github.com/opencontainers/image-spec/blob/main/manifest.md#manifest-list)
-— an index that binds several platform-specific images under one tag — which
-[`docker buildx`](https://docs.docker.com/build/concepts/overview/)
-(Docker's modern, multi-platform-capable build tool) `--load` can't do):
+useful to rehearse publishing. It is also the only way to test a **multi-arch**
+build locally, because
+[`docker buildx`](https://docs.docker.com/build/concepts/overview/) (Docker's
+modern, multi-platform-capable build tool) can `--push` a multi-arch
+[manifest list](https://github.com/opencontainers/image-spec/blob/main/manifest.md#manifest-list) ( an index that binds several platform-specific images under one tag) to a
+registry, but cannot `--load` it into the local image store:
 
 ```sh
 docker run -d -p 5000:5000 --name reg registry:2
@@ -552,28 +553,27 @@ docker rm -f reg          # tear down when done
 ## Publishing the image
 
 The **official** image lives in Konamiman's account; anyone else can publish
-their own (for testing, forks, or private use) by pushing to their own account
-- the steps are identical, only the repository name changes.
+their own (for testing, forks, or private use) by pushing to their own account - the steps are identical, only the repository name changes.
 
 ### The automated way (GitHub Actions)
 
 The official publish is the **`Publish image`** workflow
 (`.github/workflows/publish.yaml`): in the repo's *Actions* tab, run it and give
-it the build revision (`r1`, `r2`, …). It builds the image, runs `docker/test.sh`
+it the build revision (`r1`, `r2`, ...). It builds the image, runs `docker/test.sh`
 as a gate, and pushes to `ghcr.io/<owner>/nextor-dev` only if the test passes,
 using the built-in `GITHUB_TOKEN` (no secrets to configure). Tags are derived
-from `sdk/nextor-kernel-version.txt` per the *Tag scheme* below — a prerelease
+from `sdk/nextor-kernel-version.txt` per the *Tag scheme* below: a prerelease
 publishes only its exact tags; a stable version also moves `major.minor` /
 `major` / `latest`. It's `workflow_dispatch`-only (no accidental publishes) and
 amd64-only for now. Forks get `ghcr.io/<their-owner>/nextor-dev` automatically.
 
-To avoid clobbering a build, the run **fails if the pinned `<version>-<rev>` tag
-already exists** unless you tick the **overwrite** checkbox — so re-running with
+To avoid corrupting a build, the run **fails if the pinned `<version>-<rev>` tag
+already exists** unless you tick the **overwrite** checkbox, so re-running with
 the same revision is a deliberate choice, while bumping the revision (or moving
 the always-advancing `latest` / `major.minor` tags) is unaffected.
 
-> The first publish creates a **private** package; flip it to public once in the
-> package's settings on GitHub if others should be able to pull it.
+**Note:** The first publish creates a **private** package; flip it to public once in the
+package's settings on GitHub if others should be able to pull it.
 
 ### The manual way
 
@@ -625,7 +625,7 @@ docker run --rm nextor-dev cat /opt/nextor/manifest.json
 The published image is a **manifest list** covering `linux/amd64` and
 `linux/arm64`; `docker pull` picks the right one automatically. The publish
 workflow builds and tests each arch (arm64 via QEMU) before pushing the
-manifest. The kernel base files are Z80 binaries — architecture-independent —
+manifest. The kernel base files are Z80 binaries (architecture-independent)
 so they're built once on the runner's native arch (the `kernelbuild` stage is
 pinned to `$BUILDPLATFORM`); only the host tools (N80/LK80/LB80/sdcc/mknexrom)
 are per-arch. To build a multi-arch image by hand:
@@ -662,27 +662,32 @@ Debian is the smallest of the one-command official WSL distros:
 wsl --install -d Debian            # in PowerShell
 ```
 
-You have two ways to make `docker` available inside it; either is fine, pick
-based on what you already have on the host.
-
-**Option A — use [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)'s WSL integration (easiest if you already have
-Docker Desktop installed on Windows).** Docker Desktop exposes its daemon and
-the `docker` CLI to selected WSL distros automatically. Open *Docker Desktop →
-Settings → Resources → WSL integration*, enable the new Debian distro, and
-apply. Then in Debian, install just git:
+Whichever way you set up Docker below, git is needed too and the fresh distro
+doesn't include it, so install it first (from inside the distro):
 
 ```sh
 sudo apt-get update && sudo apt-get install -y git
+```
+
+Then you have two ways to make `docker` available inside the distro; either is
+fine, pick based on what you already have on the host.
+
+**Option A - use [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)'s WSL integration (easiest if you already have
+Docker Desktop installed on Windows).** Docker Desktop exposes its daemon and
+the `docker` CLI to selected WSL distros automatically. Open *Docker Desktop →
+Settings → Resources → WSL integration*, enable the new Debian distro, and
+apply. Then verify from inside Debian:
+
+```sh
 docker run --rm hello-world        # daemon sanity check (via Docker Desktop)
 ```
 
-That's it — no systemd, no `usermod`, no in-distro Docker install. This is also
+That's it: no systemd, no `usermod`, no in-distro Docker install. This is also
 the simplest path for everyday use on Windows.
 
-**Option B — install Docker Engine directly inside the distro (no Docker
-Desktop needed).** Useful if you can't (or don't want to) run Docker Desktop —
-licensing, minimal install, faster startup, etc. Enable systemd (so Docker runs
-as a service) and install git + Docker:
+**Option B - install Docker Engine directly inside the distro (no Docker
+Desktop needed).** Useful if you can't (or don't want to) run Docker Desktop (because of licensing, minimal install, faster startup, etc). Enable systemd (so Docker runs
+as a service) and install Docker:
 
 ```sh
 sudo tee /etc/wsl.conf >/dev/null <<'EOF'
@@ -694,7 +699,6 @@ EOF
 wsl --shutdown                     # back in PowerShell, then reopen Debian
 ```
 ```sh
-sudo apt-get update && sudo apt-get install -y git
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"    # then reopen the shell
 docker run --rm hello-world        # daemon sanity check
@@ -705,18 +709,18 @@ manual `dockerd`/OpenRC setup.)
 
 ### 2. Get the image (you *pull* it, you don't build it)
 
-Most readers want the **official** image — same flow as section *Developing
+Most readers want the **official** image - same flow as section *Developing
 drivers and tools*. The "publish it yourself first" path below it is only
 relevant to image maintainers rehearsing the publishing workflow.
 
-**Pull the official image (what most readers want):**
+**Pull the official image (what you probably want):**
 
 ```sh
 docker pull ghcr.io/konamiman/nextor-dev:latest
 docker tag  ghcr.io/konamiman/nextor-dev:latest nextor-dev  # short local name for what follows
 ```
 
-Done — skip ahead to *3. Primary flow*.
+Done: skip ahead to *3. Primary flow*.
 
 ---
 

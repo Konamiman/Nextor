@@ -1,11 +1,9 @@
-; Nextor tool template — a Nextor-aware MSX-DOS command (.COM).
+; Nextor tool template - a Nextor-aware .COM program.
 ;
 ; A minimal .COM that prints a banner and exits cleanly. It builds as-is;
 ; make it yours by following the TODO comments. It is built against the
 ; Nextor SDK, so you can extend it with DOS / Nextor function calls using
 ; the constants in the SDK's asm/constants/ and the snippets in asm/code/.
-
-	.z80
 
 BDOS	equ	0005h		;MSX-DOS function dispatcher (.COM entry path)
 

@@ -17,7 +17,7 @@ run `make`.
 
 ### With the Nextor dev Docker image (no toolchain on your host)
 
-The image carries N80 and the SDK, preconfigured — and a copy of this
+The image carries N80 and the SDK, preconfigured - and a copy of this
 template at `$NEXTOR_SDK/templates/tool`:
 
 ```sh
@@ -47,12 +47,12 @@ its name.
 
 The SDK has everything you need:
 
-- `asm/constants/dos_calls.inc` — DOS/Nextor function numbers (`_STROUT`,
+- `asm/constants/dos_calls.inc`: DOS/Nextor function numbers (`_STROUT`,
   `_FOPEN`, `_TERM`, …).
-- `asm/constants/dos_errors.inc` — error codes.
-- `asm/constants/msx_bios.inc`, `msx_workarea.inc` — BIOS entry points and
+- `asm/constants/dos_errors.inc`: error codes.
+- `asm/constants/msx_bios.inc`, `msx_workarea.inc`: BIOS entry points and
   system work-area addresses.
-- `asm/code/` — drop-in routines: `chk_nextor.asm` (verify Nextor is running),
+- `asm/code/`: drop-in routines: `chk_nextor.asm` (verify Nextor is running),
   `output_string.asm`, `extpar.asm` (parse command-line parameters), and more.
 
 To make the tool refuse to run on a non-Nextor system, assemble in
