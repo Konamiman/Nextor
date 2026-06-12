@@ -8,8 +8,9 @@
 # QEMU, `--platform linux/amd64,linux/arm64 --push`).
 #
 # Contains the modern Nextor toolchain (N80/LK80/LB80, SDCC, mknexrom, make,
-# binutils), the baked SDK, the six kernel base-file variants built from this
-# repository's source, and the `nextor-init` project scaffolding command.
+# binutils), the baked SDK (including the driver/tool project templates under
+# sdk/templates), and the six kernel base-file variants built from this
+# repository's source.
 #
 # Nestor80 is the *framework-dependent* build (downloaded per target arch), so
 # the tools use the .NET runtime from the dotnet/runtime base. They target
@@ -141,11 +142,9 @@ RUN printf 'export PATH="/opt/nextor/bin:$PATH"\n' > /etc/profile.d/nextor.sh
 
 COPY --from=tools       /opt/nextor/bin       /opt/nextor/bin
 COPY --from=kernelbuild /staging/kernel_base  /opt/nextor/kernel_base
+# The SDK includes the driver/tool project templates (sdk/templates/), so
+# they are available in the image at $NEXTOR_SDK/templates.
 COPY sdk                                       /opt/nextor/sdk
-
-# Project scaffolding: the `nextor-init` command and its templates.
-COPY docker/templates                          /opt/nextor/templates
-COPY --chmod=0755 docker/tools/nextor-init     /opt/nextor/bin/nextor-init
 
 # Structured record of everything baked in, for CI/tooling that wants every
 # component version at once (the same data is also exposed as OCI labels below).
@@ -170,7 +169,6 @@ ENV NEXTOR_VERSION=${NEXTOR_VERSION} \
     NEXTOR_SDK=/opt/nextor/sdk \
     NEXTOR_SDK_ASM=/opt/nextor/sdk/asm \
     NEXTOR_SDK_C=/opt/nextor/sdk/C \
-    NEXTOR_TEMPLATES=/opt/nextor/templates \
     N80=/opt/nextor/bin/N80 \
     LK80=/opt/nextor/bin/LK80 \
     LB80=/opt/nextor/bin/LB80 \

@@ -26,3 +26,6 @@ LICENSE.md
 **/.build-variant*
 source/kernel/nextor_base.dat
 source/kernel/doshead.BIN
+sdk/templates/driver/*.bin
+sdk/templates/driver/*.ROM
+sdk/templates/tool/*.COM

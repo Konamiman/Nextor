@@ -52,9 +52,9 @@ t "6 kernel base variants"     'test "$(ls /opt/nextor/kernel_base/kernel_base*.
 t "env version = built kernel" '[ -n "$NEXTOR_VERSION" ] && [ "$NEXTOR_VERSION" = "$(cat "$NEXTOR_SDK/nextor-kernel-version.txt")" ]'
 t "manifest matches version"   '[ "$NEXTOR_VERSION" = "$(grep -o "\"kernel_version\": \"[^\"]*\"" /opt/nextor/manifest.json | cut -d\" -f4)" ]'
 
-# --- scaffolding end-to-end ----------------------------------------------
-t "scaffold+build driver -> ROM" 'cd /tmp && rm -rf _d && nextor-init driver _d >/dev/null && cd _d && make >/dev/null && test -s _d.ROM'
-t "scaffold+build tool -> COM"   'cd /tmp && rm -rf _t && nextor-init tool _t >/dev/null && cd _t && make >/dev/null && test -s _t.COM'
+# --- project templates end-to-end (copied verbatim, then make) ------------
+t "driver template -> ROM" 'cd /tmp && rm -rf _d && cp -R "$NEXTOR_SDK/templates/driver" _d && cd _d && make >/dev/null && test -s mydriver.ROM'
+t "tool template -> COM"   'cd /tmp && rm -rf _t && cp -R "$NEXTOR_SDK/templates/tool" _t && cd _t && make >/dev/null && test -s mytool.COM'
 
 echo "------------------------------------------------------------"
 if [ "$fails" -eq 0 ]; then

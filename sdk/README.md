@@ -25,11 +25,26 @@ sdk/
 │   │                     MSX BIOS / work area addresses, etc.
 │   └── macros/           The `const` and `var` macros used by the .inc
 │                         files in `constants/`.
-└── C/                    C language SDK (SDCC)
-    ├── code/             Reusable C and crt0 sources.
-    └── includes/         C header files (DOS function/error codes, the
-                          driver/device API, common data structures, etc.)
+├── C/                    C language SDK (SDCC)
+│   ├── code/             Reusable C and crt0 sources.
+│   └── includes/         C header files (DOS function/error codes, the
+│                         driver/device API, common data structures, etc.)
+└── templates/            Ready-to-copy starter projects (see below):
+    ├── driver/           a Nextor disk driver, built into a bootable ROM.
+    └── tool/             a Nextor-aware MSX-DOS command (.COM).
 ```
+
+## Project templates
+
+`templates/` contains complete starter projects meant to be copied as the
+beginning of your own driver or tool: each builds as-is with `make` and is
+annotated with `TODO` comments wherever you are expected to customize it
+(project name, driver strings, handler bodies, ...). See the `README.md`
+inside each template for details, including how to build with and without
+the Nextor dev Docker image (the image bakes the SDK in, templates included,
+at `$NEXTOR_SDK/templates`).
+
+## Bringing the SDK into your project
 
 The SDK is included in the main Nextor repository, there is no separate
 SDK-only repository. To bring it into your own project, pick one of the

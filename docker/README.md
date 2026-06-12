@@ -7,8 +7,9 @@ installing a Z80 toolchain on your host. It contains:
 - **SDCC** - the Z80 C compiler (Debian's `sdcc` 4.2.0).
 - **mknexrom** - combines a kernel base file with a driver into a ROM.
 - **make**, **binutils** (`objcopy`), **bash**.
-- The **Nextor SDK** (asm + C), the **six kernel base-file variants** built from
-  this repository's source, and the **`nextor-init`** project scaffolder.
+- The **Nextor SDK** (asm + C, including ready-to-copy **driver/tool project
+  templates**) and the **six kernel base-file variants** built from this
+  repository's source.
 
 > **Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64`
 > (native on Apple Silicon and arm64 servers). Everything below assumes you have
@@ -76,13 +77,14 @@ or build the image yourself — Docker pulls it on first use.
 
 ### Quick start
 
-Scaffold a new driver project and build it into a bootable ROM:
+Start a new driver project from the template baked into the image and build it
+into a bootable ROM:
 
 ```sh
 mkdir my-ide && cd my-ide
-docker run --rm -v "$PWD":/work ghcr.io/konamiman/nextor-dev nextor-init driver . --name my-ide
+docker run --rm -v "$PWD":/work ghcr.io/konamiman/nextor-dev sh -c 'cp -R "$NEXTOR_SDK"/templates/driver/. .'
 docker run --rm -v "$PWD":/work ghcr.io/konamiman/nextor-dev make
-# -> my-ide.ROM
+# -> mydriver.ROM   (rename it via NAME in the Makefile)
 ```
 
 The first `docker run` pulls the image automatically; subsequent runs reuse the
@@ -93,7 +95,7 @@ A shell alias makes day-to-day use feel native:
 ```sh
 alias nextor='docker run --rm -it -v "$PWD":/work ghcr.io/konamiman/nextor-dev'
 nextor make
-nextor nextor-init tool nxinfo
+nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/tool nxinfo'
 ```
 
 The rest of this section uses `nextor` for brevity; the full `docker run …`
@@ -114,9 +116,9 @@ form does exactly the same thing.
 > exit                                # the container is cleaned up on exit
 > ```
 >
-> The `.devcontainer/` config the scaffolder drops uses the same idea under
-> the hood: VS Code keeps one long-lived container running and `docker
-> exec`s into it for each build.
+> The `.devcontainer/` config included in the project templates uses the same
+> idea under the hood: VS Code keeps one long-lived container running and
+> `docker exec`s into it for each build.
 >
 > A related question: does dropping `--rm` keep the container "live" for
 > reuse? No — without `--rm` the container still stops as soon as its command
@@ -138,40 +140,40 @@ nextor make            # -> <name>.ROM (or <name>.COM for tools)
 
 No host toolchain required; the image supplies everything.
 
-### Scaffolding with `nextor-init`
+### Starting from a project template
 
-```sh
-nextor-init <template> [name] [--name NAME] [--force]
-```
+The SDK ships two ready-to-copy project templates, baked into the image at
+`$NEXTOR_SDK/templates` (and living at `sdk/templates/` in the Nextor
+repository, so they work without Docker too):
 
 | Template | Produces |
 |---|---|
 | `driver` | a Nextor disk driver, built into a bootable kernel ROM (`driver.asm`, ASCII8 `chgbnk.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
 | `tool` | a Nextor-aware MSX-DOS command `.COM` in Z80 asm (`tool.asm`, `Makefile`, `README.md`, `.devcontainer/`) |
 
-`name` is the target directory (default: the template name). The scaffolder
-fills in the project name, kernel version and image reference, and drops a
+There is no scaffolding step: copy the template directory, follow the `TODO`
+comments (project name, driver strings, handler bodies, ...), and `make`. Each
+template builds as-is before you touch anything, and includes a
 [VS Code **Dev Container**](https://containers.dev/) config (a `.devcontainer/`
 folder that tells VS Code to open the project inside a running container with
 the toolchain pre-installed) so "Reopen in Container" just works. The two
-reliable patterns:
+usual patterns:
 
 ```sh
-# A) named sub-directory (recommended): creates ./my-ide/, builds my-ide.ROM
-mkdir myproj && cd myproj
-nextor nextor-init driver my-ide
+# A) named sub-directory: creates ./my-ide/ from the template
+nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/driver my-ide'
 nextor sh -c 'cd my-ide && make'
 
-# B) in place: scaffold into the mounted directory itself
+# B) in place: copy into the mounted directory itself (note the /. — it also
+#    brings the hidden .devcontainer/ along)
 mkdir my-ide && cd my-ide
-nextor nextor-init driver . --name my-ide
-nextor make            # -> my-ide.ROM
+nextor sh -c 'cp -R "$NEXTOR_SDK"/templates/driver/. .'
+nextor make            # -> mydriver.ROM
 ```
 
-> **Why `--name` with `.`** - inside the container the mounted directory is
-> always `/work`, so without `--name` the in-place form would name the project
-> `work` (it can't see the host directory's name). The named sub-directory form
-> (A) doesn't have this issue.
+> The output name is **not** derived from the directory: it's the `NAME`
+> variable at the top of the template's `Makefile` (`mydriver` / `mytool`
+> until you change it — the first `TODO`).
 
 ### Running the tools from the CLI
 
@@ -201,11 +203,11 @@ nextor bash -lc 'N80 driver.asm driver.bin --include-directory "$NEXTOR_SDK"'
 ### How a driver Makefile is structured
 
 A driver ROM is built in two steps - **assemble**, then **combine with a kernel
-base file via `mknexrom`**. The generated `driver` Makefile is the canonical
+base file via `mknexrom`**. The `driver` template's Makefile is the canonical
 shape (trimmed):
 
 ```make
-NAME := my-ide
+NAME := mydriver
 ROM  := $(NAME).ROM
 
 NEXTOR_BASE ?= /opt/nextor/kernel_base/kernel_base.dat   # from the image env
@@ -230,13 +232,13 @@ Key points:
 
 - **`mknexrom <base> <out> /d:<driver.bin> /m:<chgbnk.bin>`** is the combine
   step. `/d:` is your assembled driver (which must begin with 256 dummy bytes -
-  the scaffold's `driver.asm` does this with `org 4000h` + `ds 4100h-$,0`),
+  the template's `driver.asm` does this with `org 4000h` + `ds 4100h-$,0`),
   `/m:` is the bank-switching module for your cartridge's mapper.
 - **`--include-directory $(NEXTOR_SDK)`** lets sources write `INCLUDE
   asm/constants/...` instead of long relative paths.
 - **Variants:** point `NEXTOR_BASE` at another base file to target a different
   kernel. For a `.NO_UNDOC.` base, also assemble the driver undoc-free
-  (`make NO_UNDOC=1 NEXTOR_BASE=…/kernel_base.NO_UNDOC.dat`); the scaffold wires
+  (`make NO_UNDOC=1 NEXTOR_BASE=…/kernel_base.NO_UNDOC.dat`); the template wires
   `NO_UNDOC=1` to `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS`.
 
 A **tool** Makefile is simpler - `tool.asm` uses `org 0100h`, so `N80` emits a
@@ -351,7 +353,7 @@ Everything lives under `/opt/nextor`:
 
 ```
 /opt/nextor/
-├── bin/            N80, LK80, LB80, mknexrom, nextor-init   (all on PATH)
+├── bin/            N80, LK80, LB80, mknexrom   (all on PATH)
 │                   (sdcc is Debian's apt package, at /usr/bin/sdcc)
 ├── kernel_base/
 │   ├── kernel_base.dat                       default variant
@@ -360,8 +362,8 @@ Everything lives under `/opt/nextor`:
 │   ├── kernel_base.CTRL_INV.dat
 │   ├── kernel_base.NO_UNDOC.SHIFT_INV.dat
 │   └── kernel_base.NO_UNDOC.CTRL_INV.dat
-├── sdk/            asm/ (constants, macros, code, chgbnk) and C/ (includes, code)
-├── templates/      driver/ and tool/ scaffolding templates
+├── sdk/            asm/ (constants, macros, code, chgbnk), C/ (includes, code)
+│                   and templates/ (the driver/ and tool/ project templates)
 └── manifest.json   every baked-in component version (JSON)
 ```
 
@@ -380,7 +382,6 @@ Recipes (and you) can rely on these being set inside the container:
 | `NEXTOR_KERNEL_BASE_DIR` | `…/kernel_base` | directory of the six base files |
 | `NEXTOR_SDK` | `…/sdk` | SDK root (pass to N80 as `--include-directory`) |
 | `NEXTOR_SDK_ASM` / `NEXTOR_SDK_C` | `…/sdk/asm`, `…/sdk/C` | asm / C subtrees |
-| `NEXTOR_TEMPLATES` | `…/templates` | where `nextor-init` reads templates |
 | `N80` `LK80` `LB80` `MKNEXROM` `SDCC` | absolute tool paths | for Makefiles that prefer explicit paths |
 
 ### Variants
@@ -419,7 +420,7 @@ files.)
   is the structured superset (kernel version + every tool version + variant
   list). That same `nextor-kernel-version.txt` is what non-Docker SDK consumers
   read straight from the repository.
-- **Driver ROMs:** the scaffold produces `<name>.ROM`. Official drivers follow
+- **Driver ROMs:** the template produces `<name>.ROM`. Official drivers follow
   `Nextor-<version>.<DriverName>[.<variant>].ROM`, deriving `<version>` from
   `$NEXTOR_SDK/nextor-kernel-version.txt` (or `$NEXTOR_VERSION`).
 - **SDK includes:** under `$NEXTOR_SDK`, reference as `asm/constants/*.inc`,
@@ -516,7 +517,8 @@ docker/test.sh my-other-tag    # or any explicit tag
 `test.sh` runs inside the container as a login shell and checks: every tool
 runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), all six base
 variants are present, the baked `NEXTOR_VERSION` matches the built kernel and
-`manifest.json`, and both scaffolds (`driver`, `tool`) build end-to-end. It
+`manifest.json`, and both project templates (`driver`, `tool`) build
+end-to-end when copied verbatim. It
 exits non-zero on any failure, so it doubles as a CI gate — and indeed the
 **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this
 (`build.sh` → `test.sh`, no push) on every pull request that touches an image
@@ -641,9 +643,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 A good way to confirm the "nothing but git and Docker" promise: spin up a fresh
 WSL distro and exercise the real workflows in it. In priority order:
 
-1. **Develop a driver or tool** - *pull* the image, scaffold a project, build it.
-   Needs only Docker (plus git for your own project); the Nextor sources are
-   **not** required.
+1. **Develop a driver or tool** - *pull* the image, copy a project template,
+   build it. Needs only Docker (plus git for your own project); the Nextor
+   sources are **not** required.
 2. **Develop Nextor itself** - clone the repo and rebuild a part. Needs git + the
    image.
 3. **Build the image** - rare, so just do it in your regular distro
@@ -758,12 +760,12 @@ No Nextor checkout, no toolchain - just the pulled image and your own project:
 
 ```sh
 mkdir my-ide && cd my-ide
-docker run --rm -v "$PWD":/work nextor-dev nextor-init driver . --name my-ide
-docker run --rm -v "$PWD":/work nextor-dev make                      # -> my-ide.ROM
+docker run --rm -v "$PWD":/work nextor-dev sh -c 'cp -R "$NEXTOR_SDK"/templates/driver/. .'
+docker run --rm -v "$PWD":/work nextor-dev make                      # -> mydriver.ROM
 
 # or a tool:
-docker run --rm -v "$PWD":/work nextor-dev nextor-init tool nxinfo
-docker run --rm -v "$PWD":/work nextor-dev sh -c 'cd nxinfo && make' # -> nxinfo.COM
+docker run --rm -v "$PWD":/work nextor-dev sh -c 'cp -R "$NEXTOR_SDK"/templates/tool nxinfo'
+docker run --rm -v "$PWD":/work nextor-dev sh -c 'cd nxinfo && make' # -> mytool.COM
 ```
 
 A `.ROM` (or `.COM`) out the other end means the driver-developer story holds on

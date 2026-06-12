@@ -576,6 +576,8 @@ READ_WRITE:
 
 	INCLUDE ../../sdk/asm/code/output_string.asm
 
-	ds 7ED0h-$,0FFh
+	;Pad up to the bank switching code area at 7FD0h; this also makes
+	;the assembly fail if the driver outgrows the bank.
+	ds 7FD0h-$,0FFh
 
 	end

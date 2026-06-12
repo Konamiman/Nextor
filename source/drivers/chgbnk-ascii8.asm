@@ -27,12 +27,15 @@ BNKID	equ	40FFh		;Where Bank ID is stored
 ;bank bit 1 -> register bit 6
 ;bank bit 2 -> register bit 5
 
-	org 7FD0h
-
-CHGBNK:
+	; The 3 byte header below is consumed by mknexrom (it doesn't end up
+	; in the ROM), so starting 3 bytes early makes the bank switching code
+	; itself assemble exactly at 7FD0h, the address it will run at.
+	org 7FD0h-3
 
 	db	0FFh	;Header for MKNEXROM
 	dw	6000h
+
+CHGBNK:
 
 	rlca
 	ld	(6000h),a
@@ -40,6 +43,6 @@ CHGBNK:
 	ld	(6800h),a
 	ret
 ;
-	defs	(8000h-7FD0h)-($-CHGBNK)+3,0FFh
+	defs	8000h-$,0FFh
 ;
 	end

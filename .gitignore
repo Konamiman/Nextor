@@ -3,6 +3,8 @@ syntax: glob
 .vs/
 .vscode/
 bin/**
+sdk/templates/driver/*.ROM
+sdk/templates/tool/*.COM
 *.sym
 *.SYM
 *.lst
