@@ -25,7 +25,7 @@
 #                                 the CTRL boot key.
 #
 # Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1 make`
-# produces Nextor-$(VERSION).base.NO_UNDOC.SHIFT_INV.dat.
+# produces Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.SHIFT_INV.dat.
 #
 # A single variant-specific stamp file (its filename encodes the active
 # variant signature) is listed as a prereq of every assembled .rel, so
@@ -43,7 +43,7 @@
 # N80=/path/to/N80 make
 
 
-VERSION := 3.0.0
+include ../version.mk
 
 ifeq ($(strip $(N80)),)
 N80=N80
@@ -119,7 +119,7 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-all: base
+all: base ../../sdk/nextor-kernel-version.txt
 
 # `everything` builds the kernel base file across all six variant
 # combinations (default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
@@ -165,6 +165,13 @@ prerequisites:
 
 base: nextor_base.dat
 
+# Publish the digested kernel version into the SDK, so driver developers (and
+# their makefiles) can read it without building anything or using Docker.
+# Regenerated whenever the version (version.inc) or its derivation (version.mk)
+# changes; it is committed, and CI fails if the committed copy drifts.
+../../sdk/nextor-kernel-version.txt: version.inc ../version.mk
+	echo "$(NEXTOR_KERNEL_VERSION)" > $@
+
 
 ########################################
 ###  RULES FOR THE KERNEL BASE FILE  ###
@@ -203,7 +210,7 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
 
-	$(call copy_to_bin,nextor_base.dat,Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat)
+	$(call copy_to_bin,nextor_base.dat,Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat)
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
@@ -246,6 +253,16 @@ dos_file_handles.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_file_handl
 data.rel: bank4/jtable.inc bank6/jtable.inc
 bank4/jump.rel: bank4/jtable.inc
 bank6/jump.rel: bank6/jtable.inc
+
+# version.inc (the kernel version + pre-release level) is INCLUDEd directly by
+# every file that references the version. The generic rule above only tracks
+# macros.inc/const.inc/condasm.inc, so declare these here or a version bump
+# wouldn't force a rebuild.
+bank0/init.rel: version.inc
+bank2/misc.rel: version.inc
+bank4/bootmenu.rel: version.inc
+bank4/partit.rel: version.inc
+bank6/bootmsg.rel: version.inc
 
 ###  Bank 0
 

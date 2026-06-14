@@ -6,6 +6,7 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE ../const.inc
+	INCLUDE ../version.inc
 	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 ;
@@ -1255,7 +1256,7 @@ PRINT_CENTERED_TITLE:
 	call COPY_STRING	;Copy "Nextor "
 
 	;Append major version digit
-	ld a,MAIN_NEXTOR_VERSION##
+	ld a,MAIN_NEXTOR_VERSION
 	add a,'0'
 	ld (de),a
 	inc de
@@ -1264,19 +1265,20 @@ PRINT_CENTERED_TITLE:
 	inc de
 
 	;Append minor version high digit
-	ld a,SEC_NEXTOR_VERSION_HIGH##
+	ld a,SEC_NEXTOR_VERSION_HIGH
 	add a,'0'
-	ld (de),a
-	inc de
-	ld a,'.'
 	ld (de),a
 	inc de
 
-	;Append minor version low digit
-	ld a,SEC_NEXTOR_VERSION_LOW##
+	if SEC_NEXTOR_VERSION_LOW gt 0
+	ld a,'.'
+	ld (de),a
+	inc de
+	ld a,SEC_NEXTOR_VERSION_LOW
 	add a,'0'
 	ld (de),a
 	inc de
+	endif
 
 	;Append " boot menu"
 	ld hl,STR_BOOT_MENU_SUFFIX

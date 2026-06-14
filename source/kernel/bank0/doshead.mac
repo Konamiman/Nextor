@@ -79,16 +79,13 @@ $DOSVER::	defw	_$DOSVER##	;DOS version string.
 		ex	af,af'
 		xor	a
 		call	CALBNK
-		exx
 		ex	af,af'
-		ld_	a,iyl
-		or	a
-		jr	z,EXTB_RET
-		exx
+		push	iy
+		pop	af	;Now IYl:0 is in the carry flag
+		jr	nc,EXTB_RET
 		ex	af,af'
 		jp	FCALSAV##
-EXTB_RET:	exx
-		ex	af,af'
+EXTB_RET:	ex	af,af'
 		ret
 
 ;

@@ -7,6 +7,7 @@
 	INCLUDE ../macros.inc
 	INCLUDE ../const.inc
 	INCLUDE ../condasm.inc
+	INCLUDE ../version.inc
 ;
 ;-----------------------------------------------------------------------------
 ;  Local EQUs
@@ -193,8 +194,12 @@ STR_3_DOTS:
 	db "...",0
 STR_NEXTOR_VERSION:
 	db "Nextor kernel version "
-	db MAIN_NEXTOR_VERSION##+"0", ".", SEC_NEXTOR_VERSION_HIGH##+"0"
-	db ".", SEC_NEXTOR_VERSION_LOW##+"0"
+	db MAIN_NEXTOR_VERSION+"0", ".", SEC_NEXTOR_VERSION_HIGH+"0"
+
+	if SEC_NEXTOR_VERSION_LOW gt 0
+	db ".", SEC_NEXTOR_VERSION_LOW+"0"
+	endif
+
 	INCLUDE ../bank0/betainfo.mac
 	db 13,10
 	db "https://github.com/konamiman/Nextor",13,10

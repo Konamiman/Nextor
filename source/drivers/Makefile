@@ -1,7 +1,7 @@
 # Makefile for the Nextor standalone ROM drivers and example RAM driver.
 #
 # Default target builds:
-#   - The kernel base file (Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat).
+#   - The kernel base file (Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat).
 #   - The Standalone ASCII8 ROM.
 #   - The Standalone ASCII16 ROM.
 #
@@ -35,7 +35,7 @@
 # NEXTOR_BASE is not set, the default target recurses into ../kernel to
 # build it.
 
-VERSION := 3.0.0
+include ../version.mk
 
 ifeq ($(strip $(N80)),)
 N80=N80
@@ -146,7 +146,7 @@ prerequisites:
 
 ifeq ($(strip $(NEXTOR_BASE)),)
 
-LOCAL_BASE := Nextor-$(VERSION).base$(_VARIANT_SUFFIX).dat
+LOCAL_BASE := Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
 
 base: $(LOCAL_BASE)
 
@@ -180,8 +180,8 @@ endif
 ###  STANDALONE ROMS ###
 ########################
 
-ROM_ASCII8  := Nextor-$(VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
-ROM_ASCII16 := Nextor-$(VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
+ROM_ASCII8  := Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
+ROM_ASCII16 := Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
 
 ascii8:  $(ROM_ASCII8)
 ascii16: $(ROM_ASCII16)

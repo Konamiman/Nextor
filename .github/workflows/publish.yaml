@@ -1,0 +1,162 @@
+name: Publish image
+
+# Manually-triggered publish of the Nextor development image to GHCR.
+#
+#   Guard (don't clobber an existing revision) -> build (docker/build.sh)
+#   -> acceptance test (docker/test.sh) -> push.
+#
+# The version comes from sdk/nextor-kernel-version.txt (the authoritative kernel
+# version); you supply the image build revision (rN). Tags are derived from the
+# version: the exact version and a pinned <version>-<rev> are always pushed, and
+# a STABLE (non-prerelease) version additionally moves major.minor / major /
+# latest. A prerelease such as 3.0.0-beta1 publishes only its exact tags.
+#
+# The pinned <version>-<rev> tag is meant to be immutable: if it already exists
+# the run fails unless you tick "overwrite". The moving tags (latest, major.minor,
+# exact version) are expected to advance on every publish and are not guarded.
+#
+# Multi-arch: builds and tests linux/amd64 and linux/arm64 (arm64 via QEMU on
+# the amd64 runner), then pushes a single manifest list.
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Image build revision (rN) - bump when republishing the same kernel with updated tools"
+        required: true
+        default: "r1"
+      overwrite:
+        description: "Overwrite if this revision (<version>-<rev>) is already published"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+# Serialize publishes that share a revision, so two simultaneous runs can't both
+# pass the overwrite guard and race to corrupt the immutable <version>-<rev> tag.
+concurrency:
+  group: publish-${{ github.repository }}-${{ inputs.revision }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image name, version and tags
+        id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REV: ${{ inputs.revision }}
+        run: |
+          set -eu
+          if ! [[ "$REV" =~ ^r[0-9]+$ ]]; then
+            echo "revision must look like r1, r2, ... (got '$REV')" >&2; exit 1
+          fi
+
+          owner="$(printf '%s' "$OWNER" | tr 'A-Z' 'a-z')"   # GHCR requires lowercase
+          image="ghcr.io/$owner/nextor-dev"
+          ver="$(cat sdk/nextor-kernel-version.txt)"
+          pinned="$ver-$REV"
+
+          # Always: the exact version, plus the pinned <version>-<rev>.
+          tags="$ver $pinned"
+          # Moving tags only for a stable version. A prerelease carries a suffix
+          # (e.g. 3.0.0-beta1) and must not move latest / major.minor / major.
+          case "$ver" in
+            *-*) : ;;
+            *)
+              major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"
+              tags="$tags $major.$minor $major latest"
+              ;;
+          esac
+
+          {
+            echo "image=$image"
+            echo "version=$ver"
+            echo "pinned=$pinned"
+            echo "tags=$tags"
+          } >> "$GITHUB_OUTPUT"
+          echo "Image:   $image"
+          echo "Version: $ver (revision $REV)"
+          echo "Tags:    $tags"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fail fast (before the long build) if this exact revision is already
+      # published and "overwrite" was not ticked. Only the immutable pinned tag
+      # is checked; the moving tags are meant to advance.
+      - name: Guard against overwriting an existing revision
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          PINNED: ${{ steps.meta.outputs.pinned }}
+          OVERWRITE: ${{ inputs.overwrite }}
+        run: |
+          set -eu
+          if docker buildx imagetools inspect "$IMAGE:$PINNED" >/dev/null 2>&1; then
+            if [ "$OVERWRITE" != "true" ]; then
+              echo "::error::$IMAGE:$PINNED is already published. Bump the revision, or re-run with 'overwrite' ticked." >&2
+              exit 1
+            fi
+            echo "::warning::$IMAGE:$PINNED already exists - overwriting (overwrite=true)."
+          else
+            echo "$IMAGE:$PINNED is not published yet - OK to publish."
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Gate: build each arch, load it, and run the acceptance suite. The kernel
+      # base files are built once (the kernelbuild stage is pinned to the runner
+      # arch and shared); arm64's tools/runtime and the test run under QEMU.
+      # Nothing is pushed here.
+      - name: Build and test each architecture
+        env:
+          VER: ${{ steps.meta.outputs.version }}
+          REV: ${{ inputs.revision }}
+        run: |
+          set -eu
+          for arch in amd64 arm64; do
+            echo "::group::build + test linux/$arch"
+            docker buildx build --platform "linux/$arch" --load \
+              -f docker/Dockerfile \
+              --build-arg NEXTOR_VERSION="$VER" \
+              --build-arg NEXTOR_IMAGE_REVISION="$REV" \
+              -t "nextor-dev:$arch" .
+            docker/test.sh "nextor-dev:$arch"
+            echo "::endgroup::"
+          done
+
+      # Both arches passed: build the multi-arch manifest and push it. Layers are
+      # reused from the per-arch builds above (same buildx builder/cache).
+      - name: Build and push multi-arch manifest
+        env:
+          VER: ${{ steps.meta.outputs.version }}
+          REV: ${{ inputs.revision }}
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -eu
+          tagargs=""
+          for t in $TAGS; do tagargs="$tagargs -t $IMAGE:$t"; done
+          # shellcheck disable=SC2086
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -f docker/Dockerfile \
+            --build-arg NEXTOR_VERSION="$VER" \
+            --build-arg NEXTOR_IMAGE_REVISION="$REV" \
+            $tagargs .
+          {
+            echo "### Published \`$IMAGE\` (linux/amd64, linux/arm64)"
+            for t in $TAGS; do echo "- \`$IMAGE:$t\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"

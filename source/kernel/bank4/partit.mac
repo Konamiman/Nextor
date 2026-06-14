@@ -6,6 +6,7 @@
 ;
 	INCLUDE ../macros.inc
 	INCLUDE	../const.inc
+	INCLUDE ../version.inc
 	INCLUDE ../bank0/b0labels.inc
 	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
@@ -4732,8 +4733,8 @@ IDRVR_RET:
 	cp	0CDh
 	jr	nz,DOSV1_2
 
-	ld	ix,256 + MAIN_NEXTOR_VERSION##
-	ld	iy,256*SEC_NEXTOR_VERSION_HIGH## + SEC_NEXTOR_VERSION_LOW##
+	ld	ix,256 + MAIN_NEXTOR_VERSION
+	ld	iy,256*SEC_NEXTOR_VERSION_HIGH + SEC_NEXTOR_VERSION_LOW
 	ld	bc,0100h
 	ld	a,1
 	ld	de,0

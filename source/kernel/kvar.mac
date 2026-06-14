@@ -21,12 +21,11 @@
 ;
 ;
 
+	; This is the legacy MSX-DOS version number, fixed to 2.31;
+	; the Nextor version number is in version.inc
 	const	MAIN_DOS_VERSION,2	;Major version number
 	const	SEC_DOS_VERSION_HIGH,3	;Minor version number, high nybble
 	const	SEC_DOS_VERSION_LOW,1	;Minor version number, low nybble
-	const	MAIN_NEXTOR_VERSION,3
-	const	SEC_NEXTOR_VERSION_HIGH,0
-	const	SEC_NEXTOR_VERSION_LOW,0
 ;
 ;
 	const	MIN_SECTOR_BUFFERS,2       ;Minimum number of sector buffers

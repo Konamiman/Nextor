@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'source/**'
+      - 'sdk/**'
       - 'buildtools/**'
       - '.github/workflows/**'
   push:
     paths:
       - 'source/**'
+      - 'sdk/**'
       - 'buildtools/**'
       - '.github/workflows/**'
     branches:
@@ -21,7 +23,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt update
@@ -64,3 +66,8 @@ jobs:
           done
       - name: Make all
         run: make -C source
+      - name: Verify sdk/nextor-kernel-version.txt is in sync
+        run: |
+          rm -f sdk/nextor-kernel-version.txt
+          make -C source/kernel ../../sdk/nextor-kernel-version.txt
+          git diff --exit-code -- sdk/nextor-kernel-version.txt

@@ -1,35 +1,47 @@
-	.z80
-	title	MSX-DOS 2 Copyright (1986)  IS Systems Ltd.
-	subttl	Dummy driver bank for standalone kernel
+; Nextor disk driver template.
+; See the TODO comments for implementation/customization points.
 
-;-----------------------------------------------------------------------------
+	;TODO: If this is a driver intended to be loaded in RAM, change to 1.
+	;If this is a ROM driver, see the Makefile for building; otherwise,
+	;assembling the file directly with N80 is enough:
+	;  N80 driver.asm mydriver.drv --include-directory <path to the Nextor SDK>
+RAM_DRIVER: equ 0
 
-; This is a dummy driver that allows using the kernel as a standalone cartridge
-; without any associated hardware.
-;
-
-;-----------------------------------------------------------------------------
-
-	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
+	;Note that these file paths are relative to the root of the Nextor SDK.
+	INCLUDE asm/macros/undoc.inc	;Use these instead of undocumented Z80 instructions
+	INCLUDE asm/constants/driver_result_codes.inc
+	INCLUDE asm/constants/dos_errors.inc
+	INCLUDE asm/constants/rom_bank_header.inc
 
 	module DRIVER_QUERY
-	INCLUDE ../../sdk/asm/constants/driver_driver_queries.inc
+	INCLUDE asm/constants/driver_driver_queries.inc
 	endmod
 
 	module DEVICE_QUERY
-	INCLUDE ../../sdk/asm/constants/driver_device_queries.inc
+	INCLUDE asm/constants/driver_device_queries.inc
 	endmod
-
-	INCLUDE ../../sdk/asm/constants/dos_errors.inc
-
-	INCLUDE ../../sdk/asm/constants/rom_bank_header.inc
 
 
 	;*********************
 	;***  DRIVER CODE  ***
 	;*********************
 
+	; mknexrom expects the driver file to start with 256 dummy bytes
+	; (it overwrites them with the kernel's common bank header code), so
+	; the actual driver code starts at 4100h. RAM drivers are loaded at
+	; 4100h directly, without the dummy area.
+
+	if RAM_DRIVER eq 0
+
+	org 4000h
+	ds 4100h-$,0
+
+	else
+
 	org 4100h
+
+	endif
+	
 
 DRIVER_START:
 
@@ -51,23 +63,35 @@ DRIVER_START:
 	jp	RESERVED_0
 	jp	RESERVED_1
 	jp	RESERVED_2
+
+	if RAM_DRIVER eq 0
+
 	jp	DIRECT_0
 	jp	DIRECT_1
 	jp	DIRECT_2
 	jp	DIRECT_3
 	jp	DIRECT_4
 
+	endif
+
 
 	;--- Timer interrupt routine
+	;
+	;    TODO: implement if your driver needs to run code on every VBLANK
+	;    interrupt; it is only called if you set the TIMER_INT flag in
+	;    driver query 3 ("get driver initialization parameters").
 
 TIMER_INT:
-	ret	;TIMER_INT	
+	ret	;TIMER_INT
 	ret
 	ret
 
 	;--- Handler for BASIC expanded statement ("CALL") handler.
 	;    Works the expected way, except that CALBAS in kernel page 0
 	;    must be called instead of CALBAS in MSX BIOS.
+	;
+	;    TODO: implement if your driver provides its own CALL commands;
+	;    otherwise leave as-is (Cy set = statement not recognized).
 
 OEMSTAT:
 	scf
@@ -77,6 +101,9 @@ OEMSTAT:
 
 	;--- Handler for BASIC expanded devices.
 	;    Works the expected way, but see CALBAS exception for STATEMENT.
+	;
+	;    TODO: implement if your driver provides BASIC expanded devices;
+	;    otherwise leave as-is.
 
 BASDEV:
 	scf
@@ -87,8 +114,11 @@ BASDEV:
 	;--- Extended BIOS hook.
 	;    Works the expected way, except that it must return
 	;    IYl=1 if the old hook must be called, IYl=0 otherwise.
-	;    Only called if the driver has returned EXTBIO flag set 
+	;    Only called if the driver has returned EXTBIO flag set
 	;    in the "get driver initialization parameters" query.
+	;
+	;    TODO: implement if your driver hooks the extended BIOS;
+	;    otherwise leave as-is.
 EXTBIO:
 	ret
 	ret
@@ -103,9 +133,14 @@ RESERVED_2:
 	ret
 
 
+	if RAM_DRIVER eq 0
+
 	;* Direct calls entry points.
 	;  There is a jump table at address 7850h in ROM banks 0 and 3,
 	;  that will be redirected here.
+	;
+	;  TODO: implement any driver-specific routines you want to expose
+	;  to external programs (your own configuration/flashing tools, etc).
 
 DIRECT_0:
 	ret
@@ -132,6 +167,8 @@ DIRECT_4:
 	ret
 	ret
 
+	endif
+
 
 	;--- Driver query
 	;    Input:  A = Query index
@@ -147,14 +184,27 @@ DRIVER_QUERY:
 	jp z,DO_DRVQ_GET_VERSION
 	dec a
 	jp z,DO_DRVQ_GET_STRING
-	dec a
-	jp z,DO_DRVQ_GET_INIT_PARAMS
-	dec a
-	jp z,DO_DRVQ_INIT
+
+	if RAM_DRIVER eq 0
+		dec a
+		jp z,DO_DRVQ_GET_INIT_PARAMS
+		dec a
+		jp z,DO_DRVQ_INIT
+	else
+		dec a
+		dec a
+	endif
+
 	dec a
 	jp z,DO_DRVQ_GET_MAX_DEVICE
-	;dec a
-	;jp z,DO_DRVQ_INIT_RAM
+	
+	if RAM_DRIVER eq 1
+		dec a
+		jp z,DO_DRVQ_INIT_RAM
+		dec a
+		jp z,DO_DRVQ_SHUTDOWN_RAM
+	endif
+
 	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
@@ -169,7 +219,7 @@ DRIVER_QUERY:
 ; in B.C.D instead of A.B.C, and an error code is returned in A.
 
 DO_DRVQ_GET_VERSION:
-	ld bc,0100h
+	ld bc,0100h	;TODO: your driver's version, B.C.D (this is 1.0.0)
 	ld d,0
 	xor a
 	ret
@@ -192,6 +242,8 @@ DO_DRVQ_GET_VERSION:
 ; String is always provided zero-terminated, so the max effective string length is 254.
 
 DO_DRVQ_GET_STRING:
+	;TODO: provide the other strings (hardware name, hardware author,
+	;serial number) if they make sense for your driver.
 	ld a,b
 	ld b,d
 	ex de,hl
@@ -204,6 +256,12 @@ DO_DRVQ_GET_STRING:
 	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
+;TODO: replace with your driver name and your name.
+STR_DRIVER_NAME: db "My driver",0
+STR_DRIVER_AUTHOR: db "Myself",0
+
+
+	if RAM_DRIVER eq 0
 
 ; Driver query 3: Get driver initialization parameters
 ;
@@ -229,6 +287,8 @@ DO_DRVQ_GET_STRING:
 ; and DE is passed at input.
 
 DO_DRVQ_GET_INIT_PARAMS:
+	;TODO: set B to request the TIMER_INT/EXTBIO hooks and HL to request
+	;page 3 work area if your driver needs them.
 	xor a
 	ld b,0
 	ld hl,0
@@ -251,37 +311,15 @@ DO_DRVQ_GET_INIT_PARAMS:
 ; allocated drives is not passed in B, DE is passed at input, and an error code can be returned.
 
 DO_DRVQ_INIT:
-	push de
-	ld de,0C300h
-	push de
-	ld ix,1
-	add ix,sp
-
+	;TODO: detect and initialize your hardware here; return RESULT_INIT_ERROR
+	;if it's absent or fails to initialize. As-is it just prints INIT_MSG
+	;using the print-character routine passed in DE.
 	ld hl,INIT_MSG
-	call PRINT_HL_USING_IX
-
-	pop de
-	pop de
-	xor a
+	call PRINT_WITH_DE
+	xor a	;RESULT_OK
 	ret
 
-PRINT_HL_USING_IX:
-	ld a,(hl)
-	or a
-	ret z
-	call JPIX
-	inc hl
-	jr 	PRINT_HL_USING_IX
-
-JPIX: jp (ix)
-
-	.stresc on
-
-STR_DRIVER_NAME: db "Dummy standalone driver",0
-STR_DRIVER_AUTHOR: db "Konamiman",0
-
-INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
-          db "by Konamiman\r\n",0
+	endif
 
 
 ; Driver query 5: Get maximum supported device number
@@ -293,13 +331,19 @@ INIT_MSG: db "\r\nDummy standalone driver for Nextor\r\n"
 ; RESULT_NOT_IMPLEMENTED is equivalent to returning RESULT_OK and B=4.
 
 DO_DRVQ_GET_MAX_DEVICE:
+	;TODO: return in B the highest device number your driver handles
+	;(devices are numbered starting at 1); as-is, 4 is assumed.
 	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
+	if RAM_DRIVER eq 1
+
 ;Driver query 6: Initialize RAM driver
 ;
 ;Input:  DE = Address of a routine for printing a character
+;        B  = RAM slot number where the driver is located
+;        C  = RAM segment number where the driver is located
 ;Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
 ;        B  = Flags
 ;             0: TIMER_INT should be hooked
@@ -307,16 +351,32 @@ DO_DRVQ_GET_MAX_DEVICE:
 ;             2-7: Must be zero
 ;
 ; If RESULT_NOT_IMPLEMENTED is returned, B=0 is assumed.
-;
-;
+
+DO_DRVQ_INIT_RAM:
+	;TODO: initialize your driver here (B and C tell you the slot and
+	;segment it was loaded in); return RESULT_INIT_ERROR on failure.
+	;As-is it just prints INIT_MSG using the print routine passed in DE.
+	ld hl,INIT_MSG
+	call PRINT_WITH_DE
+	xor a	;RESULT_OK
+	ld b,0	;no TIMER_INT/EXTBIO hooks
+	ret
+
+
 ; Driver query 7: Shutdown RAM driver
 ;
 ; Input:  DE = Address of a routine for printing a character
 ; Output: A  = RESULT_OK or RESULT_NOT_IMPLEMENTED
-;
-;
-; Queries 6 and 7 not implemented as this is a ROM driver,
-; these queries will never be invoked by the kernel.
+
+DO_DRVQ_SHUTDOWN_RAM:
+	;TODO: clean up here before the driver gets unloaded.
+	;As-is it just prints SHUTDOWN_MSG using the print routine passed in DE.
+	ld hl,SHUTDOWN_MSG
+	call PRINT_WITH_DE
+	xor a	;RESULT_OK
+	ret
+
+	endif
 
 
 	;--- Device query
@@ -369,6 +429,8 @@ DEVICE_QUERY:
 ; is passed in C instead of A, there's the buffer size parameter, and error codes differ.
 
 DO_DEVQ_GET_STRING:
+	;TODO: return the requested string for each of your devices
+	;(see DO_DRVQ_GET_STRING above for the OUTPUT_STRING pattern).
 	ld a,RESULT_INVALID_DEVICE
 	ret
 
@@ -409,6 +471,9 @@ DO_DEVQ_GET_STRING:
 ;Also HL=0 at input must be supported.
 
 DO_DEVQ_GET_PARAMS:
+	;TODO: fill the buffer at HL with each device's parameters. As-is
+	;(RESULT_INVALID_DEVICE for every device, like all the device queries
+	;in this dummy driver) the driver exposes no usable devices.
 	ld a,RESULT_INVALID_DEVICE
 	ret
 
@@ -438,6 +503,8 @@ DO_DEVQ_GET_PARAMS:
 ; Also the behavior when input is a non existing device is different (previously it would return a status of 0, now it returns RESULT_INVALID_DEVICE).
 
 DO_DEVQ_GET_STATUS:
+	;TODO: report status for each of your devices (for fixed devices,
+	;returning RESULT_NOT_IMPLEMENTED for existing devices is enough).
 	ld a,RESULT_INVALID_DEVICE
 	ret
 
@@ -453,12 +520,14 @@ DO_DEVQ_GET_STATUS:
 ;                (typically this means: removable device with no medium inserted)
 ;             1: The device is available
 ;
-; RESULT_NOT_IMPLEMENTED is interpreted as retruning B=1.
+; RESULT_NOT_IMPLEMENTED is interpreted as returning B=1.
 ;
 ; Note: this is the same as "Get device status" but it only returns B=0 or B=1,
 ; and it does not change the internal "changed" status of the device.
 
 DO_DEVQ_GET_AVAILABILITY:
+	;TODO: report availability for each of your devices (only meaningful
+	;for removable devices, same as "get device status").
 	ld a,RESULT_INVALID_DEVICE
 	ret
 
@@ -481,6 +550,8 @@ DO_DEVQ_GET_AVAILABILITY:
 ;
 
 DO_DEVQ_GET_FORMAT_CHOICES:
+	;TODO: implement only if your devices are formattable floppy disk
+	;drives; otherwise leave as-is (also queries 6 and 7 below).
 	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
@@ -570,14 +641,61 @@ CUSTOM_DEVICE_QUERY:
 	;               B = Sectors successfully transferred
 
 READ_WRITE:
+	;TODO: implement the actual sector transfer with your hardware.
+	;This is the heart of the driver: everything else describes devices,
+	;this routine moves the data.
 	ld a,.IDEVN
 	ret
 
 
-	INCLUDE ../../sdk/asm/code/output_string.asm
+	INCLUDE asm/code/output_string.asm
 
-	;Pad up to the bank switching code area at 7FD0h; this also makes
-	;the assembly fail if the driver outgrows the bank.
+
+	;--- Print a zero-terminated string via a character output routine
+	;    Input: HL = string, DE = character output routine address
+	;    Trashes: AF, HL, IX
+
+PRINT_WITH_DE:
+	push de
+	ld de,0C300h	;JP opcode + 00
+	push de
+	ld ix,1
+	add ix,sp	;IX -> JP <charout> trampoline on stack
+	call PRINT_HL
+	pop de
+	pop de
+	ret
+
+PRINT_HL:
+	ld a,(hl)
+	or a
+	ret z
+	call JP_IX
+	inc hl
+	jr PRINT_HL
+
+JP_IX: jp (ix)
+
+	.stresc on
+
+;TODO: replace with the message your driver prints when initialized.
+INIT_MSG: db "\r\nMy driver\r\n"
+          db "by Myself\r\n",0
+
+	if RAM_DRIVER eq 1
+
+;TODO: replace with the message your driver prints when unloaded.
+SHUTDOWN_MSG: db "My driver unloaded\r\n",0
+
+	endif
+
+	if RAM_DRIVER eq 0
+
+	;Pad the ROM driver up to the bank switching code area at 7FD0h
+	;(not needed for RAM drivers, which are plain loadable files).
+	;This also makes the assembly fail if the driver outgrows the bank.
 	ds 7FD0h-$,0FFh
+
+	endif
 
 	end

@@ -25,12 +25,15 @@ BNKREG_LO	equ	6000h	;ASCII8 bank register for 4000h-5FFFh
 BNKREG_HI	equ	6800h	;ASCII8 bank register for 6000h-7FFFh
 BNKID		equ	40FFh	;Address that holds the current bank ID
 
-	org 7FD0h
-
-CHGBNK:
+	; The 3 byte header below is consumed by mknexrom (it doesn't end up
+	; in the ROM), so starting 3 bytes early makes the bank switching code
+	; itself assemble exactly at 7FD0h, the address it will run at.
+	org 7FD0h-3
 
 	db	0FFh	;Header bytes consumed by mknexrom: marker
 	dw	BNKREG_LO	;and address of the bank register
+
+CHGBNK:
 
 	rlca			;A = N*2 (low ASCII8 bank)
 	ld	(BNKREG_LO),a
@@ -38,6 +41,6 @@ CHGBNK:
 	ld	(BNKREG_HI),a
 	ret
 ;
-	defs	(8000h-7FD0h)-($-CHGBNK)+3,0FFh
+	defs	8000h-$,0FFh
 ;
 	end
