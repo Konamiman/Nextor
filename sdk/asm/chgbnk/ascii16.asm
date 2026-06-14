@@ -28,6 +28,6 @@ CHGBNK:
 	ld	(BNKREG),a
 	ret
 ;
-	defs	(8000h-7FD0h)-($-CHGBNK),0FFh
+	defs	8000h-$,0FFh
 ;
 	end
