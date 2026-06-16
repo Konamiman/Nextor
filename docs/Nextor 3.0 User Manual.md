@@ -147,7 +147,7 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a description of the features that Nextor adds to MSX-DOS 2 and is intended primarily for end users, but it explains basic concepts that will be useful for developers as well. There are however two other documents aimed specifically at developers: _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ and _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_. The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level.
+This document provides a description of the features that Nextor adds to MSX-DOS 2 and is intended primarily for end users, but it explains basic concepts that will be useful for developers as well. There are however two other documents aimed specifically at developers: _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ and _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_. The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level.
 
 ### 1.1. Background
 
@@ -202,7 +202,7 @@ The driver main purpose is to enumerate and access storage devices, but it also 
 
 The following resources are available for Nextor device driver developers:
 
-*  The _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
+*  The _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
 
 *  A template driver file, DRIVER.ASM, that can be used as the skeleton for developing custom drivers.
 
@@ -247,7 +247,7 @@ Nextor introduces the _fast STROUT_ mode. When this mode is active, the string w
 
 ### 2.8. Extended mapper support routines
 
-MSX-DOS 2 provides a set mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides two new ones that allow allocating a contiguous block of memory (from 1 byte to 16K) inside a given segment. See the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ for details.
+MSX-DOS 2 provides a set mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides two new ones that allow allocating a contiguous block of memory (from 1 byte to 16K) inside a given segment. See the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ for details.
 
 ### 2.9. Boot keys
 
@@ -321,7 +321,7 @@ There's an alternative way to modify the Nextor booting procedure: the _one-time
 
 Being a RAM based mechanism, it's "one-time" in the sense that it won't work again on the next computer reset unless the signature and the key data is put on memory again. The signature is explicitly erased by Nextor after being read to make this behavior consistent.
 
-The [NEXBOOT.COM tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool) can be used to easily set this data and reset the computer, but all the tool does is writing to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
+The [NEXBOOT.COM tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool) can be used to easily set this data and reset the computer, but all the tool does is writing to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 ### 2.10. Built-in partitioning tool
 
@@ -493,7 +493,7 @@ Nextor is supplied with a set of tools that allow managing the new capabilities 
 
 This section explains how to use these tools. Note however that you can also get a summary of the parameters accepted by each tool by invoking it without parameters; more detailed help is available as well by displaying the desired file directly with the TYPE command (for example: TYPE MAPDRV.COM).
 
-All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
+All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 Please note that none of these tools work in MSX-DOS 1 mode. However there are equivalent BASIC CALL commands that provide equivalent functionality for most of the tools.
 
@@ -646,7 +646,7 @@ This tool can be used on any drive, even those attached to MSX-DOS drivers. Note
 
 Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (NEXTOR.SYS in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This is a problem since the current NEXTOR.SYS version number is 2.1.
 
-As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document for more details). A command line tool that allows to easily do this change has been created as well, its name is NSYSVER.COM and can be used as follows:
+As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document for more details). A command line tool that allows to easily do this change has been created as well, its name is NSYSVER.COM and can be used as follows:
 
 ```
 NSYSVER <major version number>.<secondary version number>
@@ -1043,7 +1043,7 @@ ATTRIB +R TOOLS.DSK --> Error
 
 Since version 2.1 Nextor allows to boot in disk emulation mode. In this mode Nextor uses a disk image file (or a set of swappable files) as the boot device instead of a regular device. This is ideal for playing disks that were released in floppy disk and can't be run from a modern storage device, because they don't have a filesystem or because they need to run in MSX-DOS 1 mode.
 
-The technical details about how the disk emulation mode works are in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document in case you are interested in building your own tool instead of using `EMUFILE.COM`.
+The technical details about how the disk emulation mode works are in the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document in case you are interested in building your own tool instead of using `EMUFILE.COM`.
 
 
 #### 3.9.1. Entering and exiting the disk emulation mode
@@ -1124,7 +1124,7 @@ Note that error messages will be displayed in English regardless of the variant 
 
 ## 5. Change history
 
-This section contains the change history for the different versions of Nextor. Changes that affect application or driver development are not listed here; instead, you should look at the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ and _[Nextor 2.1 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ documents for a list of changes of that type.
+This section contains the change history for the different versions of Nextor. Changes that affect application or driver development are not listed here; instead, you should look at the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ and _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ documents for a list of changes of that type.
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 User Manual](../../../blob/v2.0/docs/Nextor%202.0%20User%20Manual.md#5-change-history)_ document.
 

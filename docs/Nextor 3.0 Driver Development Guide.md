@@ -115,7 +115,7 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
+This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
 
 ## 2. The Nextor kernel architecture
 
@@ -391,7 +391,7 @@ _Device-based drivers_ use a completely different approach. They do not expose d
 
 In general it is recommended to develop device-based drivers, as the routines to implement are easier and the driver code needs to just read and write absolute device sectors without having to worry about partitions; also, the Nextor built-in device partitioning tool can be used to create partitions on devices controlled by device-based drivers only. Developing a drive-based driver may however be a good option to easily convert an existing MSX-DOS driver to Nextor.
 
-Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4151h)). More details are provided in the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_.
+Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4151h)). More details are provided in the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_.
 
 ### 4.2. Page 0 routines and data
 
@@ -893,7 +893,7 @@ The available sector numbers must range from zero to the number of available sec
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
-The error codes returned are the same used by MSX-DOS 2, as listed under the category "Disk errors" in the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ document. The .IDEVL error is new in Nextor and has a code of B5h; the complete list of new error codes defined by Nextor is in the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
+The error codes returned are the same used by MSX-DOS 2, as listed under the category "Disk errors" in the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ document. The .IDEVL error is new in Nextor and has a code of B5h; the complete list of new error codes defined by Nextor is in the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 #### 4.6.2. DEV_INFO (4163h)
 
@@ -964,7 +964,7 @@ This routine tells the media change status for a device. Nextor will normally ca
 
 In the current version of Nextor this routine will never be called with B=0 (check the status of the device itself). Support for hot-plug device systems such as the USB bus is planned for a future version.
 
-Nextor uses a boot sector checksum mechanism to manage device changes when drivers return A=3 in response to a call to DEV_STATUS (see _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_, section "Managing media changes", for details). In order to avoid boot sector reads and checksum calculations, drivers should return proper device change information (that is, DEV_STATUS should return A=1 or 2 instead of 3) whenever possible.
+Nextor uses a boot sector checksum mechanism to manage device changes when drivers return A=3 in response to a call to DEV_STATUS (see _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_, section "Managing media changes", for details). In order to avoid boot sector reads and checksum calculations, drivers should return proper device change information (that is, DEV_STATUS should return A=1 or 2 instead of 3) whenever possible.
 
 **Important note:** the status returned by this routine is always relative to the previous invocation of the same routine. Calls to DEV_RW must NOT cause the next call to DEV_STATUS to return A=1 if the device has changed. In other words, in the sequence of: media change – call to DEV_RW – call to DEV_STATUS, the last call must return A=2. This behavior is necessary for a proper operation of the Nextor drive mapping engine.
 
@@ -1040,7 +1040,7 @@ patch both banks if a data file for this area is supplied.
 
 ## 5. Change history
 
-This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 2.1 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 2.1 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
+This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
 
 This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Driver Development Guide](../../../blob/v2.0/docs/Nextor%202.0%20Driver%20Development%20Guide.md#5-change-history)_ document.
 
