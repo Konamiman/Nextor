@@ -1,11 +1,3 @@
-	.z80
-
-	name('dos_errors')
-	title	Nextor SDK - DOS error codes
-	subttl	Public constants for DOS / disk / command error codes
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; DOS, disk and command error codes.

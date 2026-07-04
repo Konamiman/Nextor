@@ -1,10 +1,3 @@
-	.z80
-
-	name('driver_device_queries')
-	title	Nextor SDK - Public constants for the DEVICE_QUERY driver routine
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Subfunction codes for the DEVICE_QUERY driver routine.

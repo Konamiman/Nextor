@@ -1,11 +1,3 @@
-	.z80
-
-	name('dos_calls')
-	title	Nextor SDK - DOS function call codes
-	subttl	Public constants for DOS function calls
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; DOS function call codes.

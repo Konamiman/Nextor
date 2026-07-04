@@ -1,11 +1,3 @@
-	.z80
-
-	name('dos_file_handles')
-	title	Nextor SDK - Standard file handles
-	subttl	Public constants for the standard DOS file handles
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Standard DOS file handle numbers.

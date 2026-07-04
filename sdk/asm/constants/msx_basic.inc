@@ -1,5 +1,3 @@
-	.z80
-
 ;-----------------------------------------------------------------------------
 ;
 ; MSX BASIC interpreter ROM routines that are useful when implementing

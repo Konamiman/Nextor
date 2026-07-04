@@ -1,10 +1,3 @@
-	.z80
-
-	name('driver_routines')
-	title	Nextor SDK - Public constants for the driver signature and jump table
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Nextor v3 driver header: signature and jump table.
