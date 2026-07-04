@@ -538,6 +538,7 @@ CUSTOM_DRIVER_QUERY:
 	;    Output: A = Error code:
 	;                RESULT_OK: success
 	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_INVALID_DEVICE: device does not exist
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 

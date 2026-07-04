@@ -252,9 +252,14 @@ DEVICE_IS_ONLINE:
 	ld	de,512
 	or	a
 	sbc	hl,de
-	jr	nz,NO_CAPACITY
+	jp	nz,NO_CAPACITY
 
 	ld	ix,BUF_INFO+3
+	ld	a,(ix)		;Total sectors = 0 means the capacity is
+	or	(ix+1)		;unknown/not available (e.g. floppy drives),
+	or	(ix+2)		;so skip printing it altogether.
+	or	(ix+3)
+	jp	z,NO_CAPACITY
 	ld	e,(ix)
 	ld	d,(ix+1)
 	ld	l,(ix+2)

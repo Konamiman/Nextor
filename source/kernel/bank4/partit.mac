@@ -45,7 +45,7 @@ DO_CHPUT:
 ; and location of a given partition on a disk.
 ;
 ; Entry:      C (A) = Driver slot
-;             B = Driver segment (FFh for ROM drivers), currently ignored
+;             B = Driver segment (FFh for ROM drivers)
 ;             D = Device number
 ;             H = Primary partition number (1 to 4)
 ;                 bit 7: 0 = Get partition information
@@ -2010,10 +2010,10 @@ CALC_NUMCLUS1:
 ;
 ;                     If extended driver name flag is 0:
 ;                     +8: Driver name, padded right with spaces up to 32 chars
-;                     +32-+64: zeros
+;                     +40-+64: zeros
 ;
 ;                     If extended driver name flag is 1:
-;                     +32-+64: Driver name, zero-terminated
+;                     +8: Driver name, zero-terminated (up to 56 bytes)
 ;
 ; The driver name and version number are not filled for legacy drivers.
 
@@ -2340,7 +2340,7 @@ GDRV_RAM_END:
 ;                +2 (1): Driver segment number (FFh if ROM driver)
 ;                +3 (1): Relative drive of the driver (FFh if Nextor driver)
 ;                +4 (1): Device number (0 if not a Nextor driver)
-;                +5 (1): Always 1 (was LUN index in Nextor 2)
+;                +5 (1): 1 for Nextor drivers, 0 for MSX-DOS drivers (was LUN index in Nextor 2)
 ;                +6 (4): First sector number
 ;                        (0 if not a Nextor driver)
 ;                        (-1 if partition assignment is pending)
@@ -2485,6 +2485,7 @@ NOMNT:
 	ld	(iy+3),0FFh
 	ld	a,(ix+UD_DEVICE_NUMBER##)
 	ld	(iy+4),a
+	ld	(iy+5),1	;Fake LUN index (always 1 for Nextor drivers)
 
     bit UF_PAP,(ix+UD_DFLAGS##)
 	jr z,NOPAP
