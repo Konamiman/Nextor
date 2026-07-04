@@ -1,4 +1,4 @@
-# Nextor 2.1 Driver Development Guide
+# Nextor 3.0 Driver Development Guide
 
 ## Index
 
@@ -115,7 +115,9 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
+This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other that the driver development.
+
+Nextor 3 uses a driver structure that's similar, but not identical, to the one used by Nextor 2: drivers developed for Nextor 2 will need to be adapted to the new structure before they can be used in Nextor 3. This process is detailed in the [Nextor 3 Driver Migration Guide](TODO: link).
 
 ## 2. The Nextor kernel architecture
 
@@ -255,7 +257,9 @@ _Figure 3 - Nextor kernel structure ("K" is the kernel common code bank count)_
 
 Nextor will use the same rule of MSX-DOS 2 to decide which kernel will be the master if more than one kernel is found (the kernel with the highest version number will win). However this applies to other Nextor kernels only; Nextor will always override other MSX-DOS 1 or 2 kernels present in the system, regardless of their version number.
 
-## 3. Creating a Nextor kernel with embedded driver
+In Nextor 2 the only way to use a device driver was to append it to a Nextor kernel ROM as explained above. Nextor 3 adds the ability to dynamically load drivers in RAM too. Except where otherwise noted, the information provided in this document applies to both drivers embedded in ROM and drivers loaded in RAM. See [the source of the example RAM driver](TODO: link) for a complete working example.
+
+## 3. Creating a Nextor kernel ROM with embedded driver
 
 In order to create a complete Nextor kernel ROM that can be used in a MSX computer, up to four components are needed:
 
@@ -305,7 +309,7 @@ The result of this procedure is a ready to use complete Nextor ROM file with you
 
 Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied MKNEXROM utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 1K areas present in banks 0 and 3.
 
-MKNEXROM is supplied as a command-line executable file for Windows only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms.
+MKNEXROM is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](TODO: link).
 
 The MKNEXROM tool usage syntax is as follows:
 
@@ -379,25 +383,17 @@ ret
 
 This section contains all the details needed in order to develop a device driver for Nextor. The necessary elements, their locations, and the required routine input and output parameters are explained.
 
-Note that [the source code of a dummy driver](DRIVER.ASM) (a valid driver that manages no devices) is supplied as well. You can use that file as the skeleton for developing your own driver.
+Note that [the source code of a dummy driver](TODO: link) is supplied as part of [the Nextor development SDK](TODO: link). You can use that file together with the supplied supporting files (the makefile and the bank switching code file) as the skeleton for developing your own driver.
 
-### 4.1. Drive-based and device-based drivers
-
-When developing a Nextor device driver, the developer must choose between two driver styles: **drive-based** and **device-based**.
-
-_Drive-based drivers_ have the same idiosyncrasy of MSX-DOS drivers for accessing the storage devices: they expose a set of driver units and Nextor assigns one fixed drive letter for each unit; any necessary drive to device or partition mapping must be performed by the driver itself. The set of routines for storage device access exposed by these drivers is the same that was used by MSX-DOS drivers (DSKIO, DSKCHG, GETDPB, CHOICE, DSKFMT and MTOFF).
-
-_Device-based drivers_ use a completely different approach. They do not expose driver units, but directly storage devices. Also, they expose routines for raw access to the devices, and it is the Nextor kernel itself who manages the drive to device and partition mapping.
-
-In general it is recommended to develop device-based drivers, as the routines to implement are easier and the driver code needs to just read and write absolute device sectors without having to worry about partitions; also, the Nextor built-in device partitioning tool can be used to create partitions on devices controlled by device-based drivers only. Developing a drive-based driver may however be a good option to easily convert an existing MSX-DOS driver to Nextor.
-
-Nextor will perform an automatic drive to device and partition mapping at boot time for the drives assigned to device-based drivers, this mapping can be later modified by using the MAPDRV utility (the driver can, however, bypass part of this automatic assignment by implementing [DRV_CONFIG](#448-drv_config-4151h)). More details are provided in the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_.
+Nextor 2 allowed two styles of drivers: "drive-based" and "device-based", each having a different structure. In Nextor 3 there's only one possible structure, which is equivalent to what was earlier called "device-based".
 
 ### 4.2. Page 0 routines and data
 
-This section explains the routines and data that are available at page 0 (addresses 4000h-40FFh) of all the Nextor banks, including the driver bank(s). These routines may be useful helpers for the driver code.
+This section explains the routines and data that are available at page 0 (addresses 4000h-40FFh) of all the Nextor banks, including the driver bank(s). These routines may be useful helpers for the driver code. These routines are only available for drivers embedded in ROM.
 
-Remember that as explained in _[3. Creating a Nextor kernel with embedded driver](#3-creating-a-nextor-kernel-with-embedded-driver)_, the page 0 code becomes part of all the driver banks when the complete Nextor kernel ROM is generated.
+Remember that as explained in ["Creating a Nextor kernel ROM with embedded driver"](TODO: link), the page 0 code becomes part of all the driver banks when the complete Nextor kernel ROM is generated.
+
+For drivers loaded in RAM the contents of this area are undefined as far as the kernel is concerned, but it can be used to pass initialization data when the driver is installed. See [the `_DRVROP` function call](TODO: link in the programmers reference) and [the "Initialize a RAM driver" query](TODO: link) for details.
 
 #### 4.2.1. GSLOT1 (402Dh)
 
@@ -436,9 +432,11 @@ Output: AF, BC, DE, HL, IX, IY returned from the called routine.
 
 Note: the address of CODE_ADD is F1D0h.
 
+See also: [`CALLB0_IX_IX`](TODO: link)
+
  #### 4.2.4. CALBNK (4042h)
 
-Calls a routine in another bank. This is useful if the driver spawns across two or more banks, and is needed for using the GSLOT1, GWORK and RDBANK routines.
+Calls a routine in another bank. This is useful if the driver spawns across two or more banks, and is needed for using the `GSLOT1`, `GWORK` and `RDBANK` routines.
 
 ```
 Input:   A  = Bank number
@@ -451,7 +449,7 @@ Output:  AF, BC, DE, HL, IX, IY = Output parameters from the called routine
 
 #### 4.2.5. GWORK (4045h)
 
-Gets the address of the 8 byte SLTWRK entry for the passed slot, or for the current slot in page 1. The first two bytes of this area will contain a pointer to the allocated page 3 work area for this driver (as requested in the DRV_INIT routine), or zero if no work area has been allocated.
+Gets the address of the 8 byte SLTWRK entry for the passed slot, or for the current slot in page 1. The first two bytes of this area will contain a pointer to the allocated page 3 work area for this driver (as requested in [the "Get initialization parameters" driver query](TODO: link)), or zero if no work area has been allocated.
 
 ```
 Input:    A  =  Slot number
@@ -474,17 +472,22 @@ LD IX,GWORK
 CALL CALBNK
 ```
 
-#### 4.2.6. K_SIZE (40FEh)
+#### 4.2.6. CALLB0_IX_IY (404Bh)
+
+This routine does the same as [`CALLB0`](TODO: link), but it reads the contents of registers IX and IY from `TMP_IX` (F1D2h) and `TMP_IY` (F1D4h) before invoking the routine at (CODE_ADD). Drivers loaded in RAM need to use this routine instead of `CALLB0` when invoking routines in the kernel ROM that make use of IX or IR; see for example how [the example RAM driver](../source/drivers/ram-driver-example.asm) uses it to invoke the `CALBAS` routine in BIOS.
+
+
+#### 4.2.7. K_SIZE (40FEh)
 
 This address contains one byte that tells how many banks form the Nextor kernel (or alternatively, the first bank number of the driver).
 
 When a driver spawns across more than one bank and needs to read data or call a routine in another driver bank (by using RDBANK and CALBNK), it should calculate the bank number by adding the appropriate offset to K_SIZE (or alternatively, to the value of CUR_BANK) instead of assuming a fixed bank number. When done this way, compiled drivers can still be used with future versions of the Nextor kernel even if they have more banks for the kernel common code.
 
-#### 4.2.7. CUR_BANK (40FFh)
+#### 4.2.8. CUR_BANK (40FFh)
 
 This address contains one byte with the current bank number. For the first driver bank this value is the same of K_SIZE, and it increases by one for each additional driver bank (if any).
 
-#### 4.2.8. CHGBNK (7FD0h)
+#### 4.2.9. CHGBNK (7FD0h)
 
 This is not strictly a page 0 routine, but is available on all banks as well. It will simply make the specified bank visible on Z80 page 1. Usually, driver code will not need to use this routine, but will use CALBNK instead.
 
@@ -494,380 +497,138 @@ Output:    -
 Corrupts:  AF
 ```
 
-#### 4.2.9 PROMPT (41E8h)
-
-Starting with Nextor kernel 2.1.0 you can call the PROMPT routine to display a "Insert disk for drive X: and strike a key when ready" message and wait for the user to press a key. This routine is available at address 41E8h in the main bank, and you can invoke it using [CALLB0](#423-callb0-403fh) as follows:
-
-```
-PROMPT:   equ 41E8h
-CODE_ADD: equ 0F1D0h
-CALLB0:   equ 403Fh
-
-    ld hl,PROMPT
-    ld (CODE_ADD),hl
-    call CALLB0
-```
-
-The following work area is used by this routine:
-
-* The zero-based drive number is taken from TARGET, at address F33Fh.
-* The H.PROMPT hook at address F24Fh is called with the zero-based drive number in A before the routine is executed.
-
 ### 4.3. The driver header
 
-The driver header is the first part of a Nextor driver. It contains some information that helps Nextor to identify the driver and determine its type.
+The real driver content (after the first 256 bytes provided by the kernel itself) starts at address 4100h and consists of a header that has two parts:
 
-This section explains the parts of the driver header. Addresses start at 4100h since this is the address at which the driver will be visible.
+1. A fixed driver signature: the verbatim ASCII string `NEXTORv3_DRIVER`, in uppercase, and zero-terminated.
+2. A jump table for a set of routines to be implemented by the driver.
 
-#### 4.3.1. DRV_SIGN (4100h)
-
-This is the valid driver signature, it is used by the kernel code at boot time to check that the driver bank effectively contains a valid driver. It consists of the verbatim string "NEXTOR_DRIVER" (without the quotes), zero-terminated, and uppercased.
-
-#### 4.3.2. DRV_FLAGS (410Eh)
-
-This is a flags byte that contains information about the driver:
+This is the complete code for the driver header. The label names referenced in the jump table are for the routines to be implemented by the driver, which are detailed in the next section:
 
 ```
-bit 0:  0 = the driver is a drive-base driver
-        1 = the driver is a device-based driver
-bit 1:  Reserved, must be zero
-bit 2:  1 if the driver implements the DRV_CONFIG routine
-bits 3-7: Reserved, must be zero
-````
+    org 4100h
 
-Note that [DRV_CONFIG](#448-drv_config-4151h) is used by Nextor starting at version 2.0.5.
+    db "NEXTORv3_DRIVER",0
 
-#### 4.3.3. RESERVED (410Fh)
+    jp TIMER_INT
+    jp OEMSTAT
+    jp BASDEV
+    jp EXTBIO
+    jp DRIVER_QUERY
+    jp DEVICE_QUERY
+    jp CUSTOM_DRIVER_QUERY
+    jp CUSTOM_DEVICE_QUERY
+    jp READ_WRITE
+    jp RESERVED_0
+    jp RESERVED_1
+    jp RESERVED_2
+    jp DIRECT_0
+    jp DIRECT_1
+    jp DIRECT_2
+    jp DIRECT_3
+    jp DIRECT_4
+```
 
-Reserved byte, must be zero.
+### 4.4. Driver routines
 
-#### 4.3.4. DRV_NAME (4110h)
+This section describes the routines that a driver must implement. The routine name presented is the label jumped to in the jump table above, and the provided address is the one of the corresponding entry in the jump table. How the routines are actually arranged in the driver memory space (in ROM or RAM) is up to the driver developer, as long as they are past the driver header.
 
-This is a string containing the driver name. It must consist of 32 printable ASCII characters (ASCII codes 32 to 126). The string must be left justified and padded at the right with spaces.
+Some of these routines return error codes that are referred to by name. For the corresponding numeric values see [the driver result codes file in the SDK](TODO: link).
 
-### 4.4. Common routines
+None of these routines need to preserve any of the registers not used to return data.
 
-The next part of the driver is a jump table to a set of routines that are mandatory for all drives regardless of its type (drive-based or device-based). Except for DRV_INIT, a driver does not need to provide a full implementation of all of these routines, and usually it will be enough a simple RET instruction, sometimes returning an error code.
-
-None of these routines need to preserve any of the registers not used to return data. The same applies to the drive-based a device-based specific routines. 
-
-#### 4.4.1. DRV_TIMI (4130h)
+#### 4.4.1. TIMER_INT (4110h)
 
 This is the entry point for the timer interrupt routine of the driver, it will be called 50 or 60 times per second depending on the VDP frequency selected. If the driver does not need to handle the timer interrupt, it should fill this entry with RETs.
 
-Note that this entry will only called if DRV_INIT returns Cy=1 on its first execution. See _4.4.3. DRV_INIT_ for more details.
+Note that this entry will only called if [the "Get initialization parameters" driver query](TODO: link) (for drivers in ROM) or [the "Initialize RAM driver" driver query](TODO: link) (for drivers in RAM) flags that the driver should be hooked to the timer interrupt.
 
-#### 4.4.2. DRV_VERSION (4133h)
+#### 4.4.2. OEMSTAT (4113h)
 
-This routine returns the driver version. Three version numbers must be returned, one byte each: main version number, secondary version number, and revision number.
-
-```
-Input:   -
-Output:  A = Main version number
-         B = Secondary version number 
-         C = Revision number
-```
-
-#### 4.4.3. DRV_INIT (4136h)
-
-This is the driver initialization routine. It will be called by the kernel twice:
-
-   1. First execution, for information gathering.
+This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2, "Expansion of CMD command"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), and [MSX2 Technical Handbook, chapter 5, "Developing Cartridge Software"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter5.md) for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 routine](#423-callb0-403fh) in kernel page 0:
 
 ```
-Input:   A  = 0
-         B  = Number of available drive letters
-         HL = Maximum size of allocatable work area in page 3
-         C  = Initialization flags
-              bit 5: User is requesting reduced drive count
-Output:  A  = Number of controlled drive units (for drive-based drivers only)
-         HL = Size of required work area in page 3
-         C  = Initialization flags
-              bit 5: User is requesting reduced drive count
-         Cy = 1 if DRV_TIMI must be hooked to the timer interrupt, 0 otherwise
+TODO: example
 ```
 
-   2. Second execution, for work area and hardware initialization.
-
-```
-Input:   A = 1
-         B = Number of drive letters actually allocated for this controller
-```
-
-Drive-based drivers must return the number of required drive units in the output of the the first execution of this routine.   Device-base drivers can optionally request an initial number of drives to be allocated at boot time by implementing [the DRV_CONFIG routine](#448-drv_config-4151h), thus overriding [the automatic mapping procedure](Nextor%202.1%20User%20Manual.md#32-booting-nextor).
-
-The "User is requesting reduced drive count" flag will be set if the user wants one single drive to be allocated per driver.
-In the current version of Nextor this happens when the user keeps the 5 key pressed at boot time, but this could change in future versions (a different key could be used or an alternative mechanism for the same function could be provided); therefore the driver should **not** scan the keyboard directly, instead it should just look at the supplied flag and act accordingly (if appropriate). Note also that the same flag is passed to [the DRV_CONFIG routine](#448-drv_config-4151h) as well.
-
-Starting at the second execution of this routine, the GWORK routine can be used at any time to obtain the address of the space reserved for the current slot at SLTWRK. The driver should act as follows regarding the page 3 work area:
-
-* If 8 bytes or less are required, this routine should return HL=0 on its first execution, and the 8 byte space reserved by the system for this slot at SLTWRK should be used as work area:
-
-```
-XOR A
-EX AF,AF'
-XOR A
-LD IX,GWORK
-CALL CALBNK
-;Use the 8 byte space pointed by IX as work area
-```
-
-
-* If more than 8 bytes are required, this routine should return the required space in HL, and should obtain the pointer to the allocated space from the first two bytes of the space reserved by the system for this slot at SLTWRK:
-
-```
-XOR A
-EX AF,AF'
-XOR A
-LD IX,GWORK
-CALL CALBNK
-LD L,(IX)
-LD H,(IX+1)
-;Use the space pointed by HL as work area
-```
-
-Please note also the following:
-
-* If the first execution requests more page 3 work area than available, the second execution will not be done, no drives will be allocated and DRV_TIMI will not be hooked to the timer interrupt; in other words, Nextor will ignore the involved controller. The size of the work area required should always be within the available limits.
-
-* For drive-based drivers, the operating system will assign to the driver as many drive letters as driver units are controlled. However, if there are more drive units than drive letters are available, then as many drives as possible will be allocated, and the initialization procedure will continue the normal way. This applies to device-based drivers too, except that Nextor will always try to allocate two drive letters for these drivers.
-
-* For drive-based drivers: unlike MSX-DOS, the timer interrupt routine will be executed (if requested) even if the driver has zero driver units.
-
-#### 4.4.4. DRV_BASSTAT (4139h)
-
-This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2, "Expansion of CMD command"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), and [MSX2 Technical Handbook, chapter 5, "Developing Cartridge Software"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter5.md) for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 entry](#423-callb0-403fh) in kernel page 0.
+For drivers loaded in RAM the process is a bit more convoluted and [the CALLB0_IX_IY routine](TODO: link) must be used instead. See [the code for the example RAM driver](TODO: link) for a working example.
 
 If the driver does not handle BASIC extended statements, it must simply set the carry flag and return.
 
-#### 4.4.5. DRV_BASDEV (413Ch)
+#### 4.4.3 BASDEV (4116h)
 
-This is the entry for the BASIC extended devices handler. It works the same way as the standard handlers  (see [MSX2 Technical Handbook, chapter 2](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), for details), but see the note about CALBAS on [DRV_BASSTAT](#444-drv_basstat-4139h).
+This is the entry for the BASIC devices (`OPEN "xyz:"`) handler. If the BASIC interpreter helper routines are needed, the same restrictions explained for `OEMSTAT` apply here.
 
-If the driver does not handle BASIC extended devices, it must simply set the carry flag and return.
+#### 4.4.4. EXTBIO (4119h)
 
-#### 4.4.6. DRV_EXTBIO (413Fh)
-
-This is the extended BIOS handler. It works the same way as the standard handlers, except that it must return a value in D' (D in the alternative registers set) that tells the kernel what to do after the driver handler has finished:
+This is the extended BIOS handler. It works the same way as the standard handlers, except that it must return a value in IYl (the lower byte of the IY register) that tells the kernel what to do after the driver handler has finished:
 
 ```
-D'=0: Return immediately.
-D'=1: Execute the kernel and/or the system extended BIOS handler.
+IYl=0: Return immediately.
+IYl=1: Execute the kernel and/or the system extended BIOS handler.
 ```
 
-The driver extended BIOS handler is always entered with D'=1. Therefore, if the driver does not handle extended BIOS at all, it can simply fill this entry point with RETs.
+This routine will only be invoked if [the "Get initialization parameters" driver query](TODO: link) (for drivers in ROM) or [the "Initialize RAM driver" driver query](TODO: link) (for drivers in RAM) flags that the driver handles extended BIOS calls.
 
-#### 4.4.7. DRV_DIRECT0/1/2/3/4 (4142h, 4145h, 4148h, 414Bh, 414Eh)
+#### 4.4.5. DRIVER_QUERY (411Ch)
 
-These are the entries for direct calls to the driver. Calls to any of the five entry points available at addresses 7850h to 785Ch in the kernel ROM (bank 0 or bank 3) will be mapped to a call to the corresponding DRV_DIRECT entry point. This is useful when the driver wants to provide extra functionality for configuration, returning information, or other purposes. When these routines are entered, paging state will be the same as when the bank 0/3 entry was invoked, except of course that the driver bank will be switched on page 1 instead of the kernel bank. All registers except IX and AF' are passed unmodified from the caller.
-
-If the driver does not implement any direct call code, it can simply fill these entry points with RETs.
-
-#### 4.4.8. DRV_CONFIG (4151h)
-
-This routine, introduced in Nextor 2.0.5, allows the driver to provide information about its preferred configuration at boot time. If this routine is implemented, the appropriate bit of [the driver flags](#432-drv_flags-410eh) must be set.
-
-Nextor will specify the required configuration type by passing a configuration index when invoking this routine. For compatibility with future versions of Nextor, which could define new configuration indexes, this routine should always return an error when an unknown configuration index is supplied (also when the configuration index is known but the driver is unable to supply meaningful configuration).
-
-All the configurations are optional: the driver may choose to implement all of them or only some. Nextor will always resort to default or automatically calculated values for the configuration indexes for which the driver returns an error.
-
-**Note:** Currently, all the defined configurations apply to device-based drivers only.
+This routine groups a series of queries (routines that don't have a dedicated entry in the main jump table) that target the driver itself. The signature of this routine is as follows:
 
 ```
-Input:
-  A = Configuration index
-  BC, DE, HL = Depends on the configuration
-
-Output:
-  A = 0: Ok
-      1: Configuration not available for the supplied index,
-         or unknown configuration index
-  BC, DE, HL = Depends on the configuration
-
-* Get number of drives at boot time
-  Input:
-    A = 1
-    B = 0 for DOS 2 mode, 1 for DOS 1 mode
-    C = Initialization flags
-        bit 5: User is requesting reduced drive count
-  Output:
-    B = number of drives
-
-* Get default configuration for drive
-  Input:
-    A = 2
-    B = 0 for DOS 2 mode, 1 for DOS 1 mode
-    C = Relative drive number at boot time
-  Output:
-    B = Device index
-    C = LUN index
+Input:  A = Query index
+        F, BC, DE, HL = Depends on the query
+Output: A = Error code:
+            RESULT_OK: success
+            RESULT_NOT_IMPLEMENTED: query not implemented
+            Others: depends on the query
+        F, BC, DE, HL = Depends on the query
 ```
 
-See [DRV_INIT](#443-drv_init-4136h) for an explanation about the "User is requesting reduced drive count" flag.
+Each query is described separately in [the Driver Queries section](TODO: link).
 
-For "Get default configuration for drive", Nextor will assign the specified device and LUN to the appropriate drive at boot time, and the partition will be selected automatically. If the device is not ready at boot time, the drive will still be assigned, and Nextor will try to search for a partition every time the drive is accessed until the device is available. This is useful for having drives assigned to removable devices even if they don't have a volume inserted at boot time.
+#### 4.4.6. DEVICE_QUERY (411Fh)
 
-Also, "Get default configuration for drive" will be invoked for relative units 0 to N-1, where N is either the value returned by "Get number of drives at boot time", or (if the routine returns an error for that configuration) the value calculated automatically by Nextor from the number of available devices.
-
-#### 4.4.9. RESERVED (4155h to 415Fh)
-
-This area is reserved for future expansion, it must be filled with zeros.
-
-### 4.5. Routines for drive-based drivers
-
-The next part of the driver after the common routines is jump table to a set of storage device access routines that are different for drive-based drivers and device-based drivers. This section explains the routines needed for drive-base drivers, which are actually a clone of the routines used by MSX-DOS drivers.
-
-Drive-based drivers are assumed to control N drive units, numbered from 0 to N-1, where N is returned by the driver when its DRV_INIT routine is invoked. The operating system will assign one drive letter directly to each drive unit, therefore drive units are expected to always hold a valid filesystem. It is the responsibility of the driver to perform the appropriate drive unit to device and partition mapping (perhaps with the help of external tools). 
-
-#### 4.5.1. DRV_DSKIO (4160h)
-
-Reads or writes sectors from the massive storage device associated to a given driver unit.
+This routine groups a series of queries (routines that don't have a dedicated entry in the main jump table) that target a specific device controlled by the driver. The signature of this routine is as follows:
 
 ```
-Input:  A  = Driver unit, starting at 0
-        Cy = 0 for reading sectors, 1 for writing sectors
-        B  = Number of sectors to read/write
-        C  = First sector number to read/write (bits 22-16) if bit 7 is not set
-             Media ID byte if bit 7 is set
-        DE = First sector number to read/write (bits 15-0)
-        HL = source/destination address for the transfer
-
-Output: Cy = 0 on success, 1 on error
-        A  = Error code (on error only):
-             0   Write protected
-             2   Not ready
-             4   Data (CRC) error
-             6   Seek error
-             8   Record not found
-             10  Write fault
-             12  Other errors
-        B = Number of sectors actually read (in case of error only)
+Input:  A = Query index
+        C = Device number
+        F, B, DE, HL = Depends on the query
+Output: A = Error code:
+            RESULT_OK: success
+            RESULT_INVALID_DEVICE: invalid device number
+            RESULT_NOT_IMPLEMENTED: query not implemented
+            Others: depends on the query
+        F, BC, DE, HL = Depends on the query
 ```
 
-Unlike the counterpart of this routine in the old MSX-DOS drivers, this routine will never receive a request to transfer data from/to page 1. If the kernel code requires data to be transferred to page 1, it will split the transfer in several 1 sector transfers and use a temporary buffer in page 3; the driver code does not need to worry about this and can do always direct transfers from/to memory.
+Each query is described separately in [the Device Queries section](TODO: link).
 
-If Nextor detects that the drive contains a FAT16 filesystem, then register C will be used to hold bits 22 to 16 of the sector number, thus the complete sector number will be a 23 bit value hold by registers CDE. Otherwise, register C will contain the device media ID (which will always have its MSB set), and the complete sector number will be a 16 bit value hold by registers DE.
+Note that this routine should first check if the supplied device number is valid, and if not, return `RESULT_INVALID_DEVICE`; only after the device number has been verified should the query index be verified and `RESULT_NOT_IMPLEMENTED` be returned for unsupported queries. A query index not described in this specification should always be treated as an unsupported query.
 
-#### 4.5.2. DRV_DSKCHG (4163h)
+#### 4.4.7. CUSTOM_DRIVER_QUERY (4122h)
 
-Returns information about the change status for the media associated to a given driver unit.
+This is an extensibility point that allows driver developers to offer additional, non-standard functionality related to the driver itself in an clean way. This routine works the same way as [`DRIVER_QUERY`](TODO: link) (same signature), the difference being that it's the driver developer who decides what the available queries are and what are their input and output parameters. 
 
-```
-Input:  A  = Driver unit, starting at 0
-        B  = C = Media descriptor
-        HL = Base address for DPB -1
+If the driver doesn't offer any custom driver query then it should just set A to `RESULT_NOT_IMPLEMENTED` and return.
 
-Output: Cy = 0 on success, 1 on error
-        A  = Error code (on error only)
-             The same codes of DRV_DSKIO are used
-        B  = Media status (on success only)
-             1  Media has NOT changed since the last time this routine was called
-             0  Unknown
-             -1  Media has changed since the last time this routine was called
-```
+#### 4.4.8. CUSTOM_DEVICE_QUERY (4125h)
 
-If the media status is "Changed" or "Unknown", the routine must generate a DPB for the disk and copy it to the address passed in HL plus one. See _4.5.3. DRV_GETDPB_ for the DPB format.
+This is an extensibility point that allows driver developers to offer additional, non-standard functionality related to a specific device in an clean way. This routine works the same way as [`DEVICE_QUERY`](TODO: link) (same signature), the difference being that it's the driver developer who decides what the available queries are and what are their input and output parameters.
 
-#### 4.5.3. DRV_GETDPB (4166h)
+If the driver doesn't offer any custom device query then it should just set A to `RESULT_NOT_IMPLEMENTED` and return. Otherwise, it should proceed as `DEVICE_QUERY` does: first check the device number, and then the query index.
 
-Gets a DPB (Drive Parameters Block) for the  media associated to a given driver unit.
+#### 4.4.7. READ_WRITE (4128h)
 
-```
-Input:  A  = Driver unit, starting at 0
-        B  = C = Media descriptor
-        HL = Base address for DPB -1
-Output:  -
-```
-
-The format of the 18 byte DPB is as follows:
-
-```
-+00:  Media descriptor byte (F0h to FFh)
-+01:  Sector size (2 bytes), must be a power of two
-+03:  Directory mask, it is calculated as (sector size /32)-1
-+04:  Directory shift, it is the number of one bits in the directory mask
-+05:  Cluster mask, it is calculated as (sectors per cluster)-1
-+06:  Cluster shift, it is calculated as (number of one bits in cluster mask)+1
-+07:  Sector number of the first FAT
-+08:  Number of FATs
-+0A:  Number of directory entries (maximum 254)
-+0B:  First data sector number (2 bytes)
-+0D:  Maximum cluster number, it is calculated as
-      (number of clusters +1) (2 bytes)
-+0F:  Total number of sectors
-+10:  First sector number of root directory
-```
-
-The DPB must be copied to the address passed in HL plus one.
-
-#### 4.5.4. DRV_CHOICE (4169h)
-
-Returns a format choice string for a disk.
-
-```
-Input:  -
-Output: HL = Address of the choice string in the kernel slot
-```
-
-This routine is called by the kernel code when a FORMAT command is executed, in order to show the formatting options to the user (in MSX-DOS 2 and Nextor, it is also called by the CHOICE function call). The value returned in HL is the address of a zero terminated string with formatting choice options to be shown to the user; this string must be present in the kernel slot and must be readable with the RDSLT routine or an equivalent method. There are three cases that are supported without any modification needed in the kernel base code:
-
-1.  If the disk supports only one kind of formatting (that is, there is actually no choice), it must return HL = 0.
-
-2.  If the disk does not support formatting (the most common case), it must return HL = 781Fh. This is the address of a null string available in the kernel banks 0 and 3.
-
-3.  If the device is a legacy MSX floppy disk drive that handles single sided and double sided disks, it must return HL = 7820h. This is the address of a "Single sided / Double sided" string available in the kernel banks 0 and 3.
-
-If any other string is to be returned, then it must be stored at the free 1K space that is available at kernel pages 0 and 3 (see _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for details).
-
-#### 4.5.5. DRV_FORMAT (416Ch)
-
-Formats a disk and initializes its boot sector, FAT and root directory.
-
-```
-Input:  A  = Formatting choice, from 1 to 9 (see DRV_CHOICE).
-        D  = Drive unit, starting at 0
-        HL = Address of work area in memory
-        DE = Size of work area
-
-Output: Cy = 0 on success, 1 on error
-        A  = Error code (on error only):
-             0   Write protected
-             2   Not ready
-             4   Data (CRC) error
-             6   Seek error
-             8   Record not found
-             10  Write fault
-             12  Bad parameter
-             14  Insufficient memory
-             16  Other errors
-```
-
-This routine performs the actual disk formatting according to the formatting choice passed in register A, which is assumed to have been selected by the user after the choice string returned by DRV_CHOICE has been displayed.
-
-The "work area" is a RAM space provided by the caller that can be freely used by the formatting routine if necessary.
-
-#### 4.5.6. DRV_MTOFF (416Fh)
-
-Stops the motor of all the managed drives. This routine makes sense for floppy disk drives only; for other types of devices it should do nothing. This routine has no input or output parameters.
-
-### 4.6. Routines for device-based drivers
-
-This section explains the driver routines that are needed for device-base drivers. Note that the jump table entries for these routines use the same addresses as the routines for drive-based drivers; this makes sense because a driver will only implement one of the two sets of routines.
-
-Device-based drivers do not use the concept of drive units mapped directly to drive letters; instead, these drivers provide raw access to storage devices, and it is the Nextor kernel itself who manages the drive to device and partition assignment, both automatically (at boot time) and manually (on behalf of the user, via tools that use the new Nextor function calls).
-
-Device-based drivers can control up to seven storage devices, identified with an index number that ranges from 1 to 7. Each device has in turn from one to seven logical units, identified too with an index number from 1 to 7 (for example, a multimedia card reader with several slots could expose each slot as a separate logical unit). Devices may not physically be divided in logical units (this will be actually the most common case), in this case the driver must expose the device as having one single logical unit with index number 1.
-
-#### 4.6.1. DEV_RW (4160h)
-
-Reads or writes absolute sectors from/to a device.
+Reads or writes absolute sectors from/to a device. This is the only device query that doesn't go through the `DEVICE_QUERY` routine. The signature of this routine is as follows:
 
 ```
 Input:  Cy  =  0 to read sectors
                1 to write sectors
-        A  = Device index, 1 to 7
+        A  = Device index
         B  = Number of sectors to read or write
-        C  = Logical unit index, 1 to 7
+        C  = Media ID byte (for floppy disks only)
         HL = Source or destination non-page 1 memory address for the transfer
         DE = Non-page 1 memory address where the 4 byte sector number is stored
 Output:  A = Error code:
@@ -889,133 +650,414 @@ This routine allows reading and writing sectors from/to a device. Note that what
 
 The number of the first sector to read or write is a 32 bit number which is supplied in a memory area whose address is pointed by DE. This address will never be on page 1, therefore the drivers does not need to worry about paging and can access this data directly. The same applies to the sectors data source or destination address.
 
-The available sector numbers must range from zero to the number of available sectors (as reported by LUN_INFO) minus one. If LUN_INFO reports zero available sectors, then the range of available sectors is undefined unless the driver developer explicitly documents it.
+The available sector numbers must range from zero to the number of available sectors (as reported by [the "Get device parameters" device query](TODO: link)) minus one. If zero available sectors are reported, then the range of available sectors is undefined unless the driver developer explicitly documents it.
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
-The error codes returned are the same used by MSX-DOS 2, as listed under the category "Disk errors" in the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ document. The .IDEVL error is new in Nextor and has a code of B5h; the complete list of new error codes defined by Nextor is in the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
+If the device is a floppy disk drive (as reported by the driver via [the "Get device parameters" device query](TODO: link)) then the routine should use the media ID byte passed in C in order to determine the correct disk geometry. This byte is obtained from the disk's boot sector itself, so before it's available this routine will be called with C=0; the driver should assume a sensible default disk geometry in this case. For any other kind of device the value passed in C should be ignored.
 
-#### 4.6.2. DEV_INFO (4163h)
+The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](TODO: link) and [the DOS errors SDK file](TODO: link).
 
-Returns information about a device.
+#### 4.4.8. RESERVED_0/1/2 (412Bh/412Eh/4131h)
 
-```
-Input:  A = Device index, 1 to 7
-        B = Information to return:
-            0: Basic information
-            1: Manufacturer name string
-            2: Device name string
-            3: Serial number string
-        HL = Pointer to a buffer in non-page 1 RAM
-Output: A = Error code:
-            0: Ok
-            1: Device not available, information not available,
-               or invalid information index
-```
+These three entries are reserved for future expansion and drivers should simply implement these as `RET` instructions. In fact, it's not even necessary to provide proper jump instructions for these entries: a simple `ds 3*3,0C9h` is enough.
 
-This routine is used by the kernel code to check the availability of storage devices and to get general information about them. The "Basic information" block is mandatory (it must be not available only when the device itself is not available), all other information blocks are optional and must return an error if not available.
+#### 4.4.9. DIRECT_0...4 (4134h...4140h)
 
-The address passed in HL will never be on page 1, therefore the drivers does not need to worry about paging and can generate the data directly at the specified address.
+These are the entries for direct calls to the driver. Calls to any of the five entry points available at addresses 7850h to 785Ch in the kernel ROM (bank 0 or bank 3) will be mapped to a call to the corresponding DRV_DIRECT entry point as follows:
 
-When basic information is requested, the buffer supplied in HL must be filled with the following information:
+| Main bank address | Driver address |
+|-------------------|----------------|
+| 7850h             | 4134h          |
+TODO: fill in the rest of the table
 
-```
-+0 (1): Number of logical units, from 1 to 8.
-　　　   1 if the device has no logical units
-　　　　 (which is functionally equivalent to having only one).
-+1 (1): Device features flags. This must be zero in current version.
-```
+The preferred extensibility mechanism for drivers is the [`CUSTOM_DRIVER_QUERY`](TODO: link) routine. These entries are provided for cases when the driver needs to expose entry points in the main bank, typically routines that are the targets of hooks other than the timer interrupt and the extended BIOS (which can then be set as interslot calls).
 
-All other information blocks have the form of text strings. These must be printable ASCII strings (containing ASCII codes 32 to 126 only), left justified and padded with spaces.
+When these routines are entered, paging state will be the same as when the bank 0/3 entry was invoked, except of course that the driver bank will be switched on page 1 instead of the kernel bank. All registers except IX and AF' are passed unmodified from the caller.
 
-If a string is provided by the device in binary format, the driver should return it as an hexadecimal, upper-cased string, preceded by the prefix "0x".
+If the driver does not implement any direct call code, it can simply fill these entry points with `RET` instructions, i.e. `ds 5*3,0C9h`.
 
-The maximum length for a string is 64 characters. If the string is actually longer, the leftmost 64 characters must be provided.
+These entries are only really useful for ROM drivers. Drivers loaded in RAM should always use `CUSTOM_DRIVER_QUERY` to implement custom extensibility.
 
-In the case of the serial number string, the same general rules for the strings apply, except that it must be provided right-justified, and if it is too long, the rightmost characters must be provided, not the leftmost.
 
-The driver must never provide the same combination of manufacturer name, device name and serial number for two different devices. Hard-coded serial numbers should never be returned; if the driver is not able to obtain a serial number from the device itself, it should return no serial number at all.
+### 4.5. Driver queries
 
-#### 4.6.3. DEV_STATUS (4166h)
+This section explains the queries defined for the [`DRIVER_QUERY`](TODO: link) routine. All of them are optional: a driver can return `RESULT_NOT_IMPLEMENTED` for any of them and then the kernel will use a sensible default (documented for each query). Other callers invoking these routines should assume the same defaults when the query is not implemented.
 
-Obtain the availability and change status for a device or logical unit.
+#### 4.5.1. Driver query 1: Get driver version number
 
 ```
-Input:  A = Device index, 1 to 7
-        B = Logical unit number, 1 to 7
-            0 to return the status of the device itself
-Output: A = Status for the specified logical unit, 
-            or for the whole device if 0 was specified:
-            0: The device or logical unit is not available, or the device 
-               or ogical unit number supplied is invalid.
-            1: The device or logical unit is available and has not changed
-               since the last status request.
-            2: The device or logical unit is available and has changed 
-               since the last status request.
-               (for devices, the device has been unplugged and a different
-                device has been plugged which has been assigned the same device index;
-                for logical units, the media has been changed).
-            3: The device or logical unit is available, but it is not possible
-               to determine whether it has been changed or not since the last
-               status request.
+Input:  A = 1
+Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
+        Version in B.C.D (if A=RESULT_OK)
 ```
 
-This routine tells the media change status for a device. Nextor will normally call this routine only for the logical units with the "removable" flag set in the information block returned by LUN_INFO; however the routine will be called for fixed logical units as well when running in MSX-DOS 1 mode (for fixed logical units, this routine should always return either 0 or 1 in A).
+Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and version 1.0.0.
 
-In the current version of Nextor this routine will never be called with B=0 (check the status of the device itself). Support for hot-plug device systems such as the USB bus is planned for a future version.
-
-Nextor uses a boot sector checksum mechanism to manage device changes when drivers return A=3 in response to a call to DEV_STATUS (see _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_, section "Managing media changes", for details). In order to avoid boot sector reads and checksum calculations, drivers should return proper device change information (that is, DEV_STATUS should return A=1 or 2 instead of 3) whenever possible.
-
-**Important note:** the status returned by this routine is always relative to the previous invocation of the same routine. Calls to DEV_RW must NOT cause the next call to DEV_STATUS to return A=1 if the device has changed. In other words, in the sequence of: media change – call to DEV_RW – call to DEV_STATUS, the last call must return A=2. This behavior is necessary for a proper operation of the Nextor drive mapping engine.
-
-The value returned by this routine at the first invocation at system boot (after DRV_INIT is invoked) is irrelevant, that is, if a device is available then either A=1 or A=2 may be returned.
-
-#### 4.6.4. LUN_INFO (4169h)
-
-Obtain information for a logical unit.
+#### 4.5.2. Driver query 2: Get driver information string
 
 ```
-Input:  A  = Device index, 1 to 7
-        B  = Logical unit index, 1 to 7
-        HL = Pointer to buffer in non-page 1 RAM
-Output: A = 0: Ok, buffer filled with information
-            1: Error, device or logical unit not available, or invalid
-               device index or logical unit number supplied
+Input: A  = 2
+       B  = String index:
+             1: Driver name
+             2: Driver author name
+             3: Hardware name
+             4: Hardware author name
+             5: Serial number
+       D  = Buffer size
+       HL = Buffer address
+Output: A = RESULT_OK: ok, full string provided
+            RESULT_TRUNCATED_STRING: string was truncated due to insufficient buffer size
+            RESULT_NOT_IMPLEMENTED: the requested string is not available
 ```
 
-This routine must return a certain information about the given logical unit for a device. The address passed in HL will never be on page 1, therefore the drivers does not need to worry about paging and can generate the data directly at the specified address.
+This query allows the driver to provide some textual information about itself. If the driver doesn't provide the requested string, or if a string index not documented above is requested, `RESULT_NOT_IMPLEMENTED` should be returned; the caller must then assume that the string is not available and if needed, use a placeholder like "(unknown)" or similar instead. It's recommended to at least provide a driver name.
 
-The information to be returned is a 12 byte block with the following structure:
+The returned string must be in ASCII and zero-terminated. The routine must return at most D bytes, this includes the terminating zero so actually D-1 characters will be returned. If the buffer is too small for the full string, `RESULT_TRUNCATED_STRING` must be returned. If D=0 is passed, nothing is copied to the buffer and `RESULT_TRUNCATED_STRING` is returned (callers can use this to check if a given string exists without actually retrieving it).
+
+Driver developers can use [the `OUTPUT_STRING` routine from the SDK](TODO: link) to easily implement this query.
+
+#### 4.5.3. Driver query 3: Get driver initialization parameters
 
 ```
-+0 (1): Medium type:
+Input:  A  = 3
+        HL = Amount of work area available to allocate
+        B  = Number of available drives in the system
+        C  = Flags:
+             5: set if user is requesting reduced drive count (by pressing the 5 key)
+             Others: 0
+        DE = Address of a routine for printing a character	 
+Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+        B  = Flags
+             0: TIMER_INT should be hooked
+             1: EXTBIO should be hooked
+             2-7: Must be zero
+        HL = Space required in page 3
+```
+
+This query is intended **only** for drivers in ROM. Drivers loaded in RAM must do nothing and return `RESULT_NOT_IMPLEMENTED` if they receive this query.
+
+The kernel will invoke this query at boot time, giving the driver an opportunity to provide information about its own memory and hooking requirements. If this routine returns `RESULT_OK` or `RESULT_NOT_IMPLEMENTED`, the kernel will later invoke [the "Intialize driver" query](TODO: link); if something would prevent the driver from functioning normally then it should return `RESULT_INIT_ERROR` so that the kernel skips the driver initialization.
+
+Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=0 and HL=0.
+
+The "User is requesting reduced drive count" flag will be set if the user wants one single drive to be allocated per driver.
+This happens when the user keeps the 5 key pressed at boot time, when the one-time boot keys mechanism is used (for example via teh `NEXBOOT.COM` tool), or when the 5 key is marked as active in [the boot menu](TODO: link in the user manual). The same flag is passed to [the "Initialize driver" query](TODO: link) as well.
+
+After this query returns the driver is free to use [`GWORK`](TODO: link) at any time to obtain the address of the space reserved for the current slot at SLTWRK. The driver should act as follows regarding the page 3 work area:
+
+* If 8 bytes or less are required, this routine should return HL=0 on its first execution, and the 8 byte space reserved by the system for this slot at SLTWRK should be used as work area:
+
+```
+TODO: Lowercase instructions (not labels), add 4 spaces indendation
+XOR A
+EX AF,AF'
+XOR A
+LD IX,GWORK
+CALL CALBNK
+;Use the 8 byte space pointed by IX as work area
+```
+
+* If more than 8 bytes are required, this routine should return the required space in HL, and should obtain the pointer to the allocated space from the first two bytes of the space reserved by the system for this slot at `SLTWRK`:
+
+```
+TODO: Lowercase instructions (not labels), add 4 spaces indendation
+XOR A
+EX AF,AF'
+XOR A
+LD IX,GWORK
+CALL CALBNK
+LD L,(IX)
+LD H,(IX+1)
+;Use the space pointed by HL as work area
+```
+
+Please note that if this query requests more page 3 work area than it's available, Nextor will skip this driver and won't further interact with it.
+
+This query **must not** initialize the screen or print any text directly. If the driver wants to show an initialization text (although it's recommended to do that in the "Initialize driver" query, and only show an error message here if `RESULT_INIT_ERROR` is returned), it must use the callback provided in register DE. This callback will have the same semantics as the BIOS routine `CHPUT`: it will print the character passed in A and can modify AF only. See [the "Intialize driver" query](TODO: link) for example code for printing text using this callback.
+
+#### 4.5.4. Driver query 4: Initialize driver
+
+```
+Input:  A  = 4
+        HL = Size of work area allocated for the driver in page 3
+        C  = Flags:
+             5: set if user is requesting reduced drive count (by pressing the 5 key)
+             Others: 0
+        DE = Address of a routine for printing a character
+Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+```
+
+This query is intended **only** for drivers in ROM. Drivers loaded in RAM must do nothing and return `RESULT_NOT_IMPLEMENTED` if they receive this query.
+
+The kernel will invoke this query at boot time after invoking [the "Get driver initialization parameters" query](TODO: link) and as long as that one didn't return an error. If something would prevent the driver from functioning normally then it should return `RESULT_INIT_ERROR` so that the kernel skips the driver registration. Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK`.
+
+This query **must not** initialize the screen or print any text directly. If the driver wants to show an initialization text, it must use the callback provided in register DE. This callback will have the same semantics as the BIOS routine `CHPUT`: it will print the character passed in A and can modify AF only. Here's an example of how to display a message using that callback:
+
+```
+    push de      ;Print character callback address
+    ld de,0C300h ;JP instruction
+    push de
+    ld ix,1
+    add ix,sp    ;IX points now to "JP callback" in the stack
+    
+    ld hl,INIT_MSG ;Pointer to zero-terminated initialization message
+    call PRINT_HL_USING_IX
+    
+    pop de ;Restore stack before returning
+    pop de
+    xor a  ;RESULT_OK
+    ret
+
+PRINT_HL_USING_IX:
+    ld a,(hl)
+    or a
+    ret z
+    call JPIX
+    inc hl
+    jr 	PRINT_HL_USING_IX
+
+JPIX: jp (ix)
+```
+
+#### 4.5.5. Driver query 5: Get maximum supported device number
+
+```
+Input:  A = 6
+Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
+        B = Maximum supported device number
+```
+
+Drivers can use this routine to inform the kernel about the maximum device number they support. There are times (for example, when automatically mapping drives to devices/partitions at boot time) when the kernel will ask the driver for information about all the possible device numbers starting with 1 and up to the value returned by this query; thus providing an accurate value helps improving the general system performance.
+
+Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and B=4.
+
+#### 4.5.6. Driver query 6: Initialize RAM driver
+
+```
+Input:  A  = 6
+        DE = Address of a routine for printing a character
+Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+        B  = Flags
+             0: TIMER_INT should be hooked
+             1: EXTBIO should be hooked
+             2-7: Must be zero
+```
+
+This query is intended **only** for drivers loaded in RAM. Drivers in ROM must do nothing and return `RESULT_NOT_IMPLEMENTED` if they receive this query.
+
+This query is the equivalent to [the "Intialize driver" query](TODO: link) for drivers loaded in RAM. These drivers are initialized after the system is fully operational and thus there's no way to request page 3 work area, therefore there's no previous "get initialization parameters" step. The returned flags have the same meaning.
+
+Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=0. Returning `RESULT_INIT_ERROR` will cause the kernel to skip the registration of this driver. 
+
+Drivers are loaded in RAM and initialized typically using either [the `CALL IDRVIER` command](TODO: link in the user manual) or [the `DRVROP.COM` tool](TODO: link in the user manual), but custom loaders could be used too. When using these standard tools the first 256 bytes of the corresponding RAM segment (addresses 4000h-40FFh) may contain user-provided initialization data for the driver: it's the responsibility of the driver developer to document which initialization data is supported or required by the driver, if any; if initialization data is required but not supplied, the driver should return `RESULT_INIT_ERROR`. See [the `_DRVROP` function call](TODO: link in the programmers reference) for details on the full process to load and initialize a driver in RAM.
+
+This query **must not** initialize the screen or print any text directly. If the driver wants to show an initialization text, it must use the callback provided in register DE. This callback will have the same semantics as the BIOS routine `CHPUT`: it will print the character passed in A and can modify AF only. See [the "Intialize driver" query](TODO: link) for example code for printing text using this callback.
+
+#### 4.5.7. Driver query 7: Shut down RAM driver
+
+```
+Input:  A  = 7
+        DE = Address of a routine for printing a character
+Output: A  = RESULT_OK or RESULT_NOT_IMPLEMENTED
+```
+
+This query is intended **only** for drivers loaded in RAM. Drivers in ROM must do nothing and return `RESULT_NOT_IMPLEMENTED` if they receive this query.
+
+This query will be invoked when the user requests to uninstall a driver installed in RAM, typically by using [the `CALL UDRVIER` command](TODO: link in the user manual) or [the `DRVROP.COM` tool](TODO: link in the user manual), but a custom loader could be used too.
+
+The kernel will invoke this routine as a "courtesy", but the driver can't return an error from this query and thus it can't abort the uninstall process: regardless of what this routine returns, the kernel will unregister the driver and then the tool doing the uninstall (if it follows the rules) will free the corresponding RAM segment. The driver should always return either `RESULT_OK` or `RESULT_NOT_IMPLEMENTED` (which are equivalent), though, for compatibility with possible changes to these mechanics in future versions of Nextor. See [the `_DRVROP` function call](TODO: link in the programmers reference) for details on the full uninstall process.
+
+This query **must not** initialize the screen or print any text directly. If the driver wants to show any informative text, it must use the callback provided in register DE. This callback will have the same semantics as the BIOS routine `CHPUT`: it will print the character passed in A and can modify AF only. See [the "Intialize driver" query](TODO: link) for example code for printing text using this callback.
+
+
+### 4.6. Driver queries
+
+This section explains the queries defined for the [`DEVICE_QUERY`](TODO: link) routine. All of them are optional: a driver can return `RESULT_NOT_IMPLEMENTED` for any of them and then the kernel will use a sensible default (documented for each query). Other callers invoking these routines should assume the same defaults when the query is not implemented. Note however that the driver must first check the device number supplied, and return `RESULT_INVALID_DEVICE` if the device doesn't exist. 
+
+Note that a query for a device that exists but it's not available for access (e.g. an SD card slot where no card is inserted) is **not** considered a non-existing device and thus no `RESULT_INVALID_DEVICE` should be returned for these; instead, either success or a dedicated error code should be returned instead, depending on the query.
+
+
+#### 4.6.1. Device query 1: Get device information string
+
+```
+Input:  A  = 1
+        C  = Device number
+        B  = String index:
+             1: Manufacturer name
+             2: Medium name
+             3: Serial number
+             4: Device name
+        D  = Buffer size
+        HL = Buffer address
+Output: A = RESULT_OK: ok, full string provided
+            RESULT_TRUNCATED_STRING: string was truncated due to insufficient buffer size
+            RESULT_INVALID_DEVICE: the device does not exist
+            RESULT_NOT_IMPLEMENTED: the requested string is not available
+```
+
+This query allows the driver to provide some textual information about a device. It can be fixed information provided by the driver itself or information obtained from the device hardware itself. If the driver can't provide the requested string, or if a string index not documented above is requested, `RESULT_NOT_IMPLEMENTED` should be returned; the caller must then assume that the string is not available and if needed, use a placeholder like "(unknown)" or similar instead.
+
+The returned string must be in ASCII and zero-terminated. The routine must return at most D bytes, this includes the terminating zero so actually D-1 characters will be returned. If the buffer is too small for the full string, `RESULT_TRUNCATED_STRING` must be returned. If D=0 is passed, and as long as the device and the string both actually exist, nothing is copied to the buffer and `RESULT_TRUNCATED_STRING` is returned (callers can use this to check if a given string exists without actually retrieving it).
+
+"Device name" and "Medium name" differ in that the former is a "conceptual" name provided by the driver itself, while the later is effectively retrieved from the device, when that's possible. For example, assume a driver that controls an SD card slot. Then the device name would always be the fixed string "SD card slot", and the medium name would be extracted from the inserted SD card (or of none is avalilable, `RESULT_NOT_IMPLEMENTED` would be returned for the medium name query - but the device name query would still succeed in this case).
+
+Driver developers can use [the `OUTPUT_STRING` routine from the SDK](TODO: link) to easily implement this query, at least for fixed strings.
+
+
+#### 4.6.2. Device query 2: Get device parameters
+
+```
+Input:  A  = 2
+        C  = Device number
+        HL = Buffer address, 0 for not returning information
+             (only return error code)
+Output: A =  RESULT_OK: ok, device information provided
+             RESULT_INVALID_DEVICE: the device does not exist
+             RESULT_NOT_IMPLEMENTED: query not implemented
+
+On success, buffer filled with the following information:
+
++0 (1): Device type:
         0: Block device
         1: CD or DVD reader or recorder
-        2-254: Unused (reserved for future use)
-        255: Other type
-+1 (2): Sector size, 0 if this information does not apply or is not available
-+3 (4): Total number of available sectors, 0 if this information does not apply
-        or is not available
-+7 (1): Logical unit features flags:
-        bit 0: 1 if the medium is removable
-        bit 1: 1 if the medium is read only
-        bit 2: 1 if the logical unit is a floppy disk drive
-        bit 3: 1 if the logical unit should not be used for automapping
-        bits 4-7: Unused, must be zero
+        2-254: Unused. Additional codes may be defined in the future.
+        255: Other
++1 (2): Sector size, 0 if this information does not apply or is
+        not available.
++3 (4): Total number of available sectors.
+        0 if this information does not apply or is not available.
++7 (1): Flags:
+        bit 0: 1 if the device is removable.
+        bit 1: 1 if the device is read only. A device that can dinamically
+                 be write protected or write enabled is not considered
+                 to be read-only.
+        bit 2: 1 if the device is a floppy disk drive.
+        bit 3: 1 if this device shouldn't be used for partition automapping.
+        bits 4-7: must be zero.
 +8 (2): Number of cylinders
 +10 (1): Number of heads
 +11 (1): Number of sectors per track
 ```
 
-"Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disk, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via the DEV_RW routine.
+This query returns detailed invariant information about a given device. Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and filling the information buffer with a value of 512 for the sector size field and all zeros for the rest of fields.
 
-In the current version Nextor will refuse to work with a device that is reported as a non-block device or having a sector size different from 512 bytes. Support for direct filesystem access is a planned feature for a future version.
+"Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disk, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via [the `READ_WRITE` routine](TODO: link).
 
-The information about cylinders, heads and sectors per tracks apply only for hard disk; for other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is not used by the Nextor kernel, but can be used by device partitioning tools in order to properly align partitions on the disk (in the current version of Nextor this information is not used by the built-in partitioning tool).
+In the current version Nextor will refuse to work with a device that is reported as a non-block device or having a sector size different from 512 bytes.
+
+The information about cylinders, heads and sectors per tracks apply only to floppy disks and hard disks; for other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is not used by the Nextor kernel, but can be used by device partitioning tools in order to properly align partitions on the disk (in the current version of Nextor this information is not used by the built-in partitioning tool).
 
 The "read only" flags should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dynamically write protected and write enabled should not be reported as a read-only device.
 
-In the current version of Nextor it is not possible to format devices controlled by Nextor device-based drivers. This is a planned feature for a future version, and it will be available only for devices that have the "floppy disk drive" flag set.
+If the "floppy disk drive" is set Nextor will treat the device differently in some aspects, see ["Support for floppy disks" in the user manual](TODO: link). If a driver reports a device as being a floppy disk it should implement the ["Get format choices for a floppy disk"](TODO: link) and ["Format floppy disk"](TODO: link) queries too.
+
+#### 4.6.3. Device query 3: Get device status
+
+```
+Input:  A  = 3
+        C  = Device number
+Output: A = RESULT_OK: ok, device status provided
+            RESULT_INVALID_DEVICE: the device does not exist
+            RESULT_NOT_IMPLEMENTED: query not implemented or device isn't removable
+        B = Status for the specified device:
+            0: The device exists but is not available at the moment
+               (typically this means: removable device with no medium inserted)
+            1: The device is available and has not
+               changed since the last status request.
+            2: The device is available and has changed
+               since the last status request
+            3: The device is available, but it is not
+               possible to determine whether it has been changed
+               or not since the last status request.
+```
+
+This query returns information about the current status of a given device. Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=1.
+
+This query is intended for removable devices. For fixed devices it should always return either `RESULT_NOT_IMPLEMENTED`, or `RESULT_OK` and B=1. For a removable device that exists but has no medium inserted `RESULT_OK` and B=0 should be returned; `RESULT_INVALID_DEVICE` **must not** be returned in this case.
+
+The driver must keep track of calls to this query in order to accurately reflect the status compared to the last invocation. For example, after a removable medium has been changed the first invocation should return "device has changed" and subsequent invocations (assuming there are no further changes) should return "not changed". If the driver is unable to do that then it should either always return "it's not possible to determine change status", or not flag the device as removable.
+
+#### 4.6.4. Device query 4: Get device availability
+
+```
+Input:  A  = 4
+        C  = Device number
+Output: A = RESULT_OK: ok, device availability provided
+            RESULT_INVALID_DEVICE: the device does not exist
+            RESULT_NOT_IMPLEMENTED: query not implemented or device isn't removable
+        B = Status for the specified device:
+            0: The device exists but is not available at the moment
+               (typically this means: removable device with no medium inserted)
+            1: The device is available
+```
+
+This routine is a simplified version of [the "Get device status" query](TODO: link). The difference is that it only returns either "not available" or "available", without any medium change information (and thus the driver doesn't need to keep tracking of calls to the routine). As in the "Get device status" query, returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=1, and one of these two should always returned for fixed devices.
+
+The invocation of this routine **must not** interfer with the status tracking for the "Get device status" query. For example, if a removable device is changed, and this query is invoked one or multiple times, the first invocation of "Get device status" after that must still report that the medium has changed.
+
+#### 4.6.5. Device query 5: Get format choices for a floppy disk device
+
+```
+Input:  A  = 5
+        C  = Device number
+        DE = Buffer size (used if B=255 is returned)
+        HL = Buffer address (used if B=255 is returned)
+Output: A = RESULT_OK: ok, format information provided
+            RESULT_INVALID_DEVICE: the device does not exist
+            RESULT_NOT_IMPLEMENTED: not a floppy disk, 
+                                    or formatting not supported
+            RESULT_TRUNCATED_STRING: string was truncated due to the buffer size 
+                                     being too short
+        B = Choices:
+            0: Only one format choice available
+            1: Single side / double side, double density
+            2: Single side / double side DD / double side HD
+            255: Driver has written a custom null-terminated choice
+                 string to the buffer at HL
+```
+
+This query is intended for floppy disk devices only. For any other device type (and for floppy disks if the driver doesn't support formatting) it should always return `RESULT_NOT_IMPLEMENTED`. If this query is implemented, ["Format a floppy disk device"](TODO: link) must be implemented too.
+
+If there's only one way of formatting the disk, B=0 should be returned. If the choices are _single side/double side_ or _single side/double side double density/double side high density_, it should return B=1 or B=2 respectively (note that this is true regarldess of the actual form factor or capacity of the disk). These are the most common options for formatting floppy disks so these return values should cover the majority of cases. [The `CALL FORMAT` command](TODO: link in the user manual) and [the `_FORMAT_` function call](TODO: link in the programmers reference) will use stock strings hardcoded in the Nextor kernel in these cases.
+
+If none of the built-in choice keys works for a given device, or if the driver wants to provide a custom choice string, the driver can copy a custom string (ASCII, zero-terminated) in the buffer provided in HL, constrained to the buffer length passed in DE (Note: currently the Nextor kernel will copy up to 512 bytes even if the reported buffer size is bigger and the choice string is longer). Driver developers can use [the `OUTPUT_STRING` routine from the SDK](TODO: link) to easily copy custom choice strings to the supplied buffer address.
+
+#### 4.6.6. Device query 6: Format a floppy disk device
+
+```
+Input:  A  = 6
+        C  = Device number
+        B  = Choice number (1-9, as chosen by user from choice string)
+Output: A = RESULT_OK: ok, disk has been formatted
+            RESULT_INVALID_DEVICE: the device does not exist
+            RESULT_NOT_IMPLEMENTED: the device is not a floppy disk,
+                                   formatting is not supported,
+                                   or the choice number is invalid.
+```
+
+This query is intended for floppy disk devices only. For any other device type (and for floppy disks if the driver doesn't support formatting) it should always return `RESULT_NOT_IMPLEMENTED`. If this query is implemented, ["Get format choices for a floppy disk device"](TODO: link) must be implemented too.
+
+The driver should format the floppy disk according to the selected choice. Choice numbers correspond to the format choices returned by "Get format choices for a floppy disk device"; if an unknown choice is supplied, `RESULT_NOT_IMPLEMENTED` should be returned.
+
+After the physical formatting completes, a MSX-DOS 1 compatible set of disk parameters (boot sector, empty FAT and empty root directory) appropriate for the disk geometry must be written to the disk. The source code of [the MSX Turbo-R FDD driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver/) contains these parameters for 3.5" single side and double side disks.
+
+There's no way to report progress on the formatting process back to the caller so this query must simply perform the formatting in a locking fashion until the process completes.
+
+#### 4.6.7. Device query 7: Stop the motor of a floppy disk drive
+
+```
+Input:  A  = 7
+        C  = Device number
+Output: RESULT_OK: ok, motor has been stopped
+        RESULT_INVALID_DEVICE: the device does not exist
+        RESULT_NOT_IMPLEMENTED: the device is not a floppy disk
+                                or stopping the drive motor is not supported
+```
+
+This query is intended for floppy disk devices only. For any other device type (and for floppy disks if the driver doesn't support stopping the motor) it should always return `RESULT_NOT_IMPLEMENTED`.
+
+This query is currently never invoked by the Nextor kernel, but this could change in future versions so drivers should implement it whenever possible.
 
 ### 4.7. Other
 
@@ -1025,37 +1067,12 @@ This section contains other useful information about the Nextor device driver st
 
 The Nextor kernel has a 1K unused space at the two main banks (bank 0 when running in normal mode, bank 3 when running in MSX-DOS 1 mode) that can be filled with any kind of data or code useful for the driver. The main bank is permanently switched on the Kernel slot in normal circumstances (other banks are switched only for temporary code calls), therefore this area can be accessed via the standard slot accessing mechanisms (such as inter-slot call via CALSLT, inter-slot read via RDSLT, etc) even by software that is not aware of the Nextor bank paging mechanism. This space is visible starting at address 7BD0h.
 
-There are three cases in which it may be necessary to add custom contents to this area:
-
-* When a format choice string other than a null string (for devices that can't be formatted) or the "Single side / Double side" string (in case of driving a legacy MSX floppy disk driver) is to be returned by the DRV_CHOICE or DRV_FORMAT routines. These two strings are already provided by the kernel, other strings must be explicitly placed in this available area.
+There are two main cases in which it may be necessary to add custom contents to this area:
 
 * When data that is to be read by user software by using RDSLT or an equivalent mechanism is needed (for example, an UNAPI implementation identifier).
 
 * When a hook other than the timer interrupt hook or the extended BIOS hook is to be patched. In this case, code that performs an inter-bank call to the driver code should be placed in this area, and the hook should be set to do an inter-slot call to this code in the kernel slot.
 
-The code at this area should use the CALBNK routine if it needs to invoke code in the driver bank, whose number can be read from the K_SIZE address. See _[4.2.6. K_SIZE (40FEh)](#426-k_size-40feh)_ for more details.
+The code at this area should use [the `CALBNK` routine](TODO: link) if it needs to invoke code in the driver bank, whose number can be read from [the `K_SIZE` address](TODO: link).
 
-Note that whatever is placed in this area, it must be identical in both banks 0 and 3, so that everything will work correctly in both the normal Nextor mode and the MSX-DOS 1 mode. The MKNEXROM tool will appropriately 
-patch both banks if a data file for this area is supplied.
-
-## 5. Change history
-
-This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the driver developer point of view are listed. For information on changes at the user level, please look at the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to application development, please look at the _[Nextor 3.0 Programmers Reference](Nextor%202.1%20Programmers%20Reference.md)_ document.
-
-This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Driver Development Guide](../../../blob/v2.0/docs/Nextor%202.0%20Driver%20Development%20Guide.md#5-change-history)_ document.
-
-### 5.1. v2.1.0 final
-
-- [LUN_INFO](#464-lun_info-4169h) can now return a flag indicating that the device/LUN should not be used for automapping.
-
-- Added the [PROMPT](#429-prompt-41e8h) routine.
-
-### 5.2. v2.1.0 beta 2
-
-- **BREAKING CHANGE:** The address of CODE_ADD, used by [the CALLB0 routine](#423-callb0-403fh), has changed to F1D0h (it was F84Ch).
-
-- Fix: there was Nextor kernel code in the 1K free area in pages 0 and 3, so putting anything here caused problems, e.g. DOS 1 mode didn't work.
-
-### 5.3. v2.1.0 beta 1
-
-Added the "User is requesting reduced drive count" flag to the input of [the DRV_INIT routine](#443-drv_init-4136h) and [the DRV_CONFIG routine](#448-drv_config-4151h). 
+Note that whatever is placed in this area, it must be identical in both banks 0 and 3, so that everything will work correctly in both the normal Nextor mode and the MSX-DOS 1 mode. The `mknexrom` tool will appropriately patch both banks if a data file for this area is supplied.

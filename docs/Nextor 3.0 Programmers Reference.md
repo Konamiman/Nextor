@@ -1,4 +1,4 @@
-# Nextor 2.1 Programmers Reference
+# Nextor 3.0 Programmers Reference
 
 ## Index
 
@@ -86,24 +86,26 @@
 
 [7.2.2. Entering disk emulation mode](#722-entering-disk-emulation-mode)
 
-[8. Change history](#8-change-history)
+[8. The Nextor SDK](#8-the-nextor-sdk)
 
-[8.1. v2.1.1 beta 2](#81-v211-beta-2)
+[8.1. Getting the SDK into your project](#81-getting-the-sdk-into-your-project)
 
-[8.2. v2.1.0 RC 1](#82-v210-rc-1)
+[8.2. Developing tools in assembler](#82-developing-tools-in-assembler)
 
-[8.3. v2.1.0 beta 2](#83-v210-beta-2)
+[8.3. Developing tools in C](#83-developing-tools-in-c)
 
-[8.4. v2.1.0 beta 1](#84-v210-beta-1)
+[8.4. Project templates and the development container](#84-project-templates-and-the-development-container)
 
 
 ## 1. Introduction
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view (basically the new function calls provided, but also some other useful information). The development of device drivers for Nextor is not covered in this document; this topic has a separate document devoted to itself, _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_.
+This document provides a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view (basically the new function calls provided, but also some other useful information). The development of device drivers for Nextor is not covered in this document; this topic has a separate document devoted to itself, _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_.
 
-The reader of this document is assumed to have experience developing applications for MSX in general and for MSX-DOS 2 in particular (specifically, the information covered by chapter 3 of _MSX2 Technical Handbook_ and the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ and _[MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)_ documents is assumed to be known). Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ prior to this document.
+The reader of this document is assumed to have experience developing applications for MSX in general and for MSX-DOS 2 in particular (specifically, the information covered by chapter 3 of _MSX2 Technical Handbook_ and the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ and _[MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)_ documents is assumed to be known). Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to this document.
+
+If you are already familiar developing for Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor%203.0%20What's%20New.md).
 
 ## 2. Changes in existing function calls
 
@@ -166,9 +168,30 @@ If an environment variable named ERRLANG exists with value EN (`SET ERRLANG=EN` 
 
 ### 2.7. _FORMAT (67h)
 
+This is the shape of this function in Nextor:
+
+```
+Entry:     A  = Choice number:
+                00h = get choice string pointer
+                      (deprecated, works on MSX-DOS drivers only)
+                80h = get choice string into buffer
+                01h..09h = do format with given choice
+                FBh..FFh = new boot sector / quick format
+           B  = Logical drive number
+           HL = Pointer to working buffer area (if A=01h..09h)
+           DE = Size of working buffer area (if A=01h..09h)
+           HL = Pointer for the choice string (if A=80h)
+           DE = Size of buffer for choice string (if A=80h, max 512)
+Returns:    A = Error code
+            B = Slot address of choice string (if A=0 on entry)
+           HL = Pointer to choice string (if A=0 on entry)
+```
+
+MSX-DOS drivers provide the choice string hardcoded in ROM, but Nextor drivers that support floppy disks (and formatting them) return the choice string into a buffer in RAM. Option 80h is added for that and this is the recommended approach to get format choice strings for floppy disk drives (it works on drives mapped to MSX-DOS drivers too). The original 00h option will work for MSX-DOS drivers only (it will always return an .IFORM error for drives mapped to Nextor drivers) and is considered deprecated.
+
 In MSX-DOS 2 this function accepts two special choice parameters, FFh and FEh, that do not actually format the disk but generate a MSX-DOS 2 boot sector, including the disk parameters, based on the media ID of the disk. This feature is used by the FIXDISK program to convert old MSX-DOS 1 disks into MSX-DOS 2 disks.
 
-Nextor adds three new choice parameters:
+Nextor adds three new similar choice parameters:
 
 * FDh: Assuming that the disk has a FAT12 or FAT16 filesystem with valid disk parameters on the boot sector (otherwise a "Not a DOS disk" will be returned), a standard boot sector will be composed for the disk by (1) setting the manufacturer name as "NEXTOR", and (2) generating an extended block (byte 29h, plus volume ID, plus volume name, plus "FAT12" or "FAT16" mark). The disk parameters will not be modified. If the disk contains an extended block already, only the manufacturer name will be changed (thus maintaining the existing volume ID). This choice is useful for using the dirty disk flag feature on disks already formatted by another system.
 
@@ -177,6 +200,8 @@ Nextor adds three new choice parameters:
 * FBh: Will perform a "quick format" on the disk, by simply clearing the FAT and root directory areas. As with the other two new choices, the disk must have a valid FAT12 or FAT16 boot sector, otherwise a "Not a DOS disk" error will be returned. 
 
 When the disk is actually formatted (choice 1..9), a MSX-DOS 2 boot sector will always be generated.
+
+See ["Floppy disks" in the user manual](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks) for details on support for floppy disks in Nextor.
 
 ### 2.8. _DOSVER (6Fh)
 
@@ -362,6 +387,7 @@ Locking feature must be used with care. Changing the device of a locked drive wi
 ```
 Parameters:  C = 78H (_GDRVR)
              A = Driver index, or 0 to specify slot and segment
+                 Bit 7 is the extended driver name flag
              D = Driver slot number (only if A=0)
              E = Driver segment number, FFh for drivers in ROM
                  (only if A=0)
@@ -393,20 +419,33 @@ The information returned in the data buffer is as follows:
            0 => the driver is a MSX-DOS driver
                 (embedded within a MSX-DOS kernel ROM)
     bits 6-3: Unused, always zero
-    bit 2: 1 if the driver implements the DRV_CONFIG routine
+    bit 2: Always 1 (was "the driver implements the DRV_CONFIG routine" in Nextor 2)
     bit 1: Unused, always zero
-    bit 0: 1 => the driver is a device-based driver
-           0 => the driver is a drive-based driver
+    bit 0: Always 1 (was "device-based driver" in Nextor 2)
 +5: Driver main version number
 +6: Driver secondary version number
 +7: Driver revision number
+
+If the extended driver name flag is 0:
+
 +8: Driver name, left justified, padded with spaces (32 bytes)
-+40..+63: Reserved (currently always zero)
++40-+63: Always zero
+
+If the extended driver name flag is 1:
++8-+63: Driver name, zero-terminated
 ```
 
 In the case of MSX-DOS drivers, the driver flags byte is always zero, and no information about driver version number or driver name is returned.
 
-Nextor uses the DRV_CONFIG routine starting at version 2.0.5. See  the _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document for details.
+For Nextor 3 drivers, bits 0 and 2 of the drivers flags will always be returned as set. In Nextor 2 a driver could be "drive-based" or "device-based" (in Nextor 3 all drivers are "device-based"), and implementing the DRV_CONFIG routine was optional in Nextor 2 (it's mandatory in Nextor 3).
+
+In Nextor 2 a driver name was at most 32 characters long, but in Nextor 3 it can be up to 255 bytes. The "extended driver name flag" determines how the driver name is returned:
+
+- If not set: if the driver name has 32 characters or less, its name is returned with spaces padding to the right up to 3 characters; otherwise, only the first 32 characters are returned (Nextor 2 compatible format).
+- If set: the full name of the driver if it has 55 characters or less, zero-terminated; otherwise, the first 55 characters of the driver name, plus a terminating zero.
+
+There's no way to know if the driver name returned by this function call is truncated (longer than 32 or 55 characters depending on the extended driver name flag value used). If you need to retrieve the full driver name you should use [_CDRVR](#311-call-a-routine-in-a-device-driver-_cdrvr-7bh) to invoke the "get string" driver query directly on the driver; see [the Nextor Driver Development Guide](TODO: link) for the details about this query.
+
 
 ### 3.9. Get information about a drive letter (_GDLI, 79h)
 
@@ -430,21 +469,21 @@ The information returned in the data buffer is as follows:
     2: Unused
     3: A file is mounted in the drive
     4: Assigned to the RAM disk (all other fields will be zero)
+    5: Assigned to a ghost drive    
 +1: Driver slot number
 +2: Driver segment number, FFh if the driver is embedded within a Nextor 
-    or MSX-DOS kernel ROM (always FFh in current version)
+    or MSX-DOS kernel ROM
 +3: Relative drive number within the driver 
-    (for drive-based drivers only; FFh if device-based driver)
-+4: Device index (for device-based drivers only; 
-    0 for drive-based drivers and MSX-DOS drivers)
-+5: Logical unit index (for device-based drivers only; 
-    0 for drive-based drivers and MSX-DOS drivers)
-+6..+9: First device sector number (for devices in device-based drivers only;
-        always zero for drive-based drivers and MSX-DOS drivers)
+    (for Nextor drivers only; FFh for legacy MSX-DOS drivers)
++4: Device index (for Nextor drivers only; 0 for MSX-DOS drivers)
++5: Always 1 for Nextor drivers (was "LUN index" in Nextor 2);
+    always 0 for MSX-DOS drivers.
++6..+9: First device sector number (for Nextor drivers only;
+        always zero for MSX-DOS drivers)
 +10..+63: Reserved (currently always zero)
 ```
 
-If a file is mounted in the drive, the information returned in the data buffer is instead as follows:
+If a file is mounted in the drive (status byte is 3), the information returned in the data buffer is instead as follows:
 
 ```
 +1: Drive where the mounted file is located (0 = A:, etc)
@@ -456,11 +495,19 @@ If a file is mounted in the drive, the information returned in the data buffer i
 +19: Start sector of the file, 4 bytes (0 if not available)
 ```
 
+If the drive is assigned to a ghost drive (status byte is 5), the information returned in the data buffer is instead as follows:
+
+```
++1: Main drive that's being ghosted (0 = A:, etc)
+```
+
 If a drive larger than the maximum drive number supported by the system is specified, an .IDRV error will be returned. Note that if a drive number is specified which is legal in Nextor, but is currently not assigned to any driver, then no error will be returned, but an empty information block will be returned (the drive status byte should be checked).
 
 The "first device sector number" is the absolute device sector number that is treated as the first logical sector for the drive; usually it is either the starting sector of a device partition, or the device absolute sector zero, if the device has no partitions. Note that you can't test this value against zero to check whether the drive is assigned to a block device on a device-based driver or not (use the “drive status” field for this purpose).
 
 The "start cluster" and "start sector" fields for mounted files were introduced in Nextor 2.1.1. Currently, they will always contain meaningful information, but in future versions of Nextor this could not be true (because non-FAT filesystems with no concept of "clusters" get supported, or for any other reason) and in these cases the fields will have a value of zero. These fields will also be returned as zero in versions of Nextor older than 2.1.1, therefore application programs using this function call should always verify that the values of these fields are non-zero before using them.
+
+When a driver is assigned to a "ghost drive", the corresponding main drive is always a floppy disk drive, and both drivers refer to the same actual device (accessing both drives in sequence will cause "Insert disk for drive..." messages to appear). Currently a ghost drive will always be the drive immediately following the main drive (e.g. the ghost drive of C: will always be D:) but this could change in future versions of Nextor so it shouldn't be assumed. See ["Ghost drives" in the user manual](Nextor%203.0%20User%20Manual.md#251-ghost-drives).
 
 
 ### 3.10. Get information about a device partition (_GPART, 7Ah)
@@ -469,9 +516,7 @@ The "start cluster" and "start sector" fields for mounted files were introduced 
 Parameters:  C = 7AH (_GPART)
              A = Driver slot number
              B = Driver segment number, FFh for drivers in ROM
-                 (must be always FFh in current version)
              D = Device index
-             E = Logical unit index
              H = Primary partition number (1 to 4)
              H:7 = 0: Get information about the partition
                    1: Get the device sector number that holds
@@ -491,7 +536,7 @@ Results:     A = Error code
 
 Returns information about a device partition. This function works in MSX-DOS 1 mode.
 
-This function only works on device-based drivers; if a non-existing driver, a drive-based driver, or a MSX-DOS driver is specified in A and B, then an .IDRVR error will be returned. If the specified device and/or logical unit do not exist in the driver, an .IDEVL error will be returned.
+This function only works on device-based drivers; if a non-existing driver, a drive-based driver, or a MSX-DOS driver is specified in A and B, then an .IDRVR error will be returned. If the specified device and/or logical unit do not exist in the driver, an .IDEVN error will be returned.
 
 Storage devices are usually divided in partitions, each one being an independent logical volume residing in a contiguous block of sectors in the media. This function allows finding the starting sector of a given partition in the media, usually in order to map it to a drive letter by using the MAPDRV function, so that the contained filesystem can be accessed by Nextor.
 
@@ -513,7 +558,7 @@ There are many more partition type codes defined, but they refer to filesystems 
 
 A device can have up to four primary partitions, numbered 1 to 4. In order to accommodate more than four partitions, partition number 2 may be of a special type named "Extended". An extended partition is actually a container for more partitions; there is no limit in the number of extra partitions that a partition of type "Extended" can contain. Primary partitions 3 and 4 do not exist when partition 2 is extended.
 
-In order to enumerate all the partitions existing in a device , the following procedure should be followed, to take in account the possible presence of extended partitions:
+In order to enumerate all the partitions existing in a device, the following procedure should be followed, to take in account the possible presence of extended partitions:
 
 1.  Search partition 1-0 (primary number 1, extended number 0).
 
@@ -542,9 +587,8 @@ For more information on the partition table structure see [Master Boot Record on
 
 ```
 Parameters:  C = 7BH (_CDRVR)
-             A = Driver slot number
+             A = Driver slot number, bits 6-4 must be 001
              B = Driver segment number, FFh for drivers in ROM
-                 (must be always FFh in current version)
              DE = Routine address
              HL = Address of a 8 byte buffer with the input register
                   values for the routine
@@ -556,13 +600,15 @@ Results:     A = Error code
 
 Allows direct invocation of a routine in a device driver. This function works in MSX-DOS 1 mode.
 
-Routines for any driver type (MSX-DOS, device-based and drive-based) can be invoked with this function, however it is intended primarily for device-based drivers, in order to enumerate devices (DEV_INFO and LUN_INFO) and directly access the device absolute sectors (DEV_RW routine), for example to develop device partitioning tools. The available routines for device drivers are enumerated and described in detail in the _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
+Routines for any driver type (MSX-DOS ans Nextor) can be invoked with this function, however it is intended primarily for Nextor drivers, in order to enumerate devices and to directly access the device absolute sectors, for example to develop device partitioning tools. The available routines for device drivers are enumerated and described in detail in the _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_ document.
 
 The input value of registers AF, BC, DE and HL for the routine must be provided in an 8 byte buffer pointed by HL. The order of the register values in the buffer is as follows: F, A, C, B, E, D, L, H. The output values of these registers, on the other hand, are returned directly in the registers themselves; except the output value of AF which is returned in IX.
 
 Some routines accept data from, or write data to, memory buffers supplied by the user. There are two limitations for exchanging data with the driver routines in this way: first, the buffer must be in the primary mapper slot; and second, the buffer may not be partially or totally in page-1. These limitations do not apply for the 8 byte register buffer (remember however that when invoking Nextor function calls via the F37Dh hook, no parameters can be passed in page-1). The register buffer is only used before effectively executing the driver routine, therefore there is no problem if it overlaps with any buffer used by the routine to return data.
 
 An .IDRVR error will be returned by this function call if a non-existing driver is supplied in A and B. Use the Nextor function _GDRVR to discover the location of the existing drivers.
+
+Note that bits 6-4 of the driver slot number passed in A must be set to `001`, so that the value has the form `x001sspp` (where `x` is the extended slot flag, `ss` is the secondary slot number, and `pp` is the primary slot number). If these bits hold any other value, the function returns an "Invalid driver" error. This check is a safeguard against using Nextor 2-aware tools unchanged under Nextor 3. The driver structure, and therefore the set of routines that a driver exposes, is different in Nextor 2 and Nextor 3; so a tool written for Nextor 2 that called `_CDRVR` on a Nextor 3 driver as if it were a Nextor 2 driver would misbehave, most likely crashing. Such tools must be adapted to the new driver structure before they can be used with Nextor 3.
 
 ### 3.12. Map a drive letter to a driver and device (_MAPDRV, 7Ch)
 
@@ -586,9 +632,9 @@ Allows mapping a drive number to a specific combination of device number, logica
 
 If B=0 at input, the drive will be unmapped. This means that the drive will be unavailable from that moment, and any attempt to access it will result in an "Invalid drive" error. If the drive is already unmapped, nothing will happen and no error will be returned.
 
-If B=1 at input, the drive will be reverted to its default state. If at boot time the drive was unmapped (not assigned to any driver), or was mapped to a drive on a MSX-DOS driver or on a drive-based driver, then the drive will be reverted to the same state. If at boot time the drive was assigned to a device-based driver, then an auto-assign procedure will be performed for this drive, using the same rules as the automatic mapping procedure performed at boot time (the automatic mapping procedure is described in the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ document) except that "active" partition flags file will not be checked. This may result or not on the drive having the same mapping as it had at boot time, depending on the presence of removable devices in the associated driver and the state of the other drives.
+If B=1 at input, the drive will be reverted to its default state. If at boot time the drive was unmapped (not assigned to any driver), or was mapped to a drive on a MSX-DOS driver or on a drive-based driver, then the drive will be reverted to the same state. If at boot time the drive was assigned to a device-based driver, then an auto-assign procedure will be performed for this drive, using the same rules as the automatic mapping procedure performed at boot time (the automatic mapping procedure is described in the _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ document) except that "active" partition flags file will not be checked. This may result or not on the drive having the same mapping as it had at boot time, depending on the presence of removable devices in the associated driver and the state of the other drives.
 
-If the automatic mapping procedure resulting from invoking this function with B=1 fails (because there are no suitable devices or partitions), the drive will be unmapped, regardless of its previous mapping state. An .IDEVL error will be returned in this case.
+If the automatic mapping procedure resulting from invoking this function with B=1 fails (because there are no suitable devices or partitions), the drive will be unmapped, regardless of its previous mapping state. An .IDEVN error will be returned in this case.
 
 If B=2 at input, the drive will be mapped according to the mapping data provided in the buffer pointer by HL. It is possible to map any system drive to any device-based driver by using this method, even drives that were unmapped or were mapped to a different driver at boot time. The contents of the mapping data buffer must be as follows:
 
@@ -596,13 +642,12 @@ If B=2 at input, the drive will be mapped according to the mapping data provided
 +0: Driver slot number
 +1: Driver segment number,
     FFh if the driver is embedded within a Nextor kernel ROM
-    (must be always FFh in current version)
 +2: Device number
-+3: Logical unit number
++3: Unused (was "LUN index" in Nextor 2)
 +4..+7: Starting sector
 ```
 
-An .IDRVR error will be returned if the specified driver does not exist or is not a device-based driver. An .IDEVL error will be returned if the device with the specified device and logical unit numbers does not exists in the driver. In these cases, the previous drive mapping will not be modified.
+An .IDRVR error will be returned if the specified driver does not exist or is not a device-based driver. An .IDEVN error will be returned if the device with the specified device and logical unit numbers does not exists in the driver. In these cases, the previous drive mapping will not be modified.
 
 A .RAMDX error will be returned if the drive specified is H: and a RAM disk exists.
 
@@ -610,7 +655,7 @@ The "starting sector" parameter is the device absolute sector number that will b
 
 Also, it is possible to map a drive to a removable device which has no media inserted. In this case, the _MAPDRV function will succeed, but the next access to the drive will return a "Disk offline" error.
 
-It is not possible to map two drives to the same combination of driver, device, logical unit, and start sector; this is to prevent data corruption resulting from dealing with unsynchronized sector buffers. An .IDEVL error will be returned in this case. In order to change the drive letter for a given mapping, the old drive letter must be first unmapped.
+It is not possible to map two drives to the same combination of driver, device, logical unit, and start sector; this is to prevent data corruption resulting from dealing with unsynchronized sector buffers. An .IDEVN error will be returned in this case. In order to change the drive letter for a given mapping, the old drive letter must be first unmapped.
 
 Also, note that it is not possible to explicitly map a drive to a MSX-DOS driver or a drive-based driver.
 
@@ -624,6 +669,17 @@ When invoked in MSX-DOS 1 mode, the following restrictions apply to this functio
 These restrictions are imposed by the Nextor architecture.
 
 If B=3 at input, the file whose name or FIB is passed in HL will be mounted in the drive; file mounting is available since Nextor 2.1.0, and since Nextor 2.1.1 a file needs to be stored across consecutive sectors in its host filesystem to be mountable. A .BFSZ error will be returned if the file is too small (less than 512 bytes) or too big (more than 32 MBytes). A .ICLUS error will be returned if the file is not stored across consecutive sectors.
+
+When mapping a drive to a device that's a floppy disk drive (flagged as such by the driver), the next drive will be mapped as its ghost drive if all of the following is true:
+
+- The drive being mapped is not H:.
+- The next drive letter is free (unassigned).
+- No other drive has been already assigned as ghost drive of a floppy disk (for any device on any driver).
+- (For DOS 1 mode only) The next drive letter is assigned to the same driver (but not assigned to any device).
+
+Unmapping a drive will also cause its associated ghost drive (if there's one) to be unmapped. Unmapping a ghost drive has no effect in the mapping of its main drive.
+
+See ["Floppy disks" in the user manual](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks) for more details on how Nextor handles floppy disk drives.
 
 
 ### 3.13. Enable or disable the Z80 access mode for a driver (_Z80MODE, 7Dh)
@@ -736,6 +792,54 @@ Note that if the offset in the FAT sector is 511, then the entry is split betwee
 This can happen on FAT12 only.
 
 
+### 3.15. Driver operations (_DRVROP, 7Fh)
+
+```
+Parameters:  C = 7FH (_DRVROP)
+             A = Driver slot number
+             B = Driver segment number (FFh for drivers in ROM)
+             H = Operation to perform:
+                 1: Initialize and register a driver loaded in RAM
+                 2: Shut down and unregister a driver loaded in RAM
+Results:     A = Error code
+```
+
+This function call is used to perform miscellaneous operations on Nextor drivers. Currently it's used only to initialize and shutdown drivers loaded in RAM, but additional operations could be added in future versions of Nextor. Consequently, specifying a valid the driver segment number is currently always mandatory.
+
+An `.ISBFN` error will be returned if an unsupported value is passed in H.
+
+#### 3.15.1 Initializing a driver loaded in RAM
+
+Before the functionality exposed by a driver loaded in RAM can be used, the driver needs to run its own initialization query and Nextor needs to register it in its own internal list of available drivers; this operation does both things.
+
+This function **only** initializes and registers the driver already placed in RAM: it is the caller's responsibility to allocate a RAM segment, to load the driver on it, and to free the segment if the function call reports an error. More precisely, this is the complete procedure to load and initialize a RAM driver:
+
+1. Allocate a RAM segment in system mode using the mapper support routines. Abort if no free segments are available.
+2. Map the RAM segment in page 1 or 2 and load the code of the RAM driver at offset 0100h (so address 4100h for page 1 and 8100h for page 2).
+3. Optional: setup initialization data for the driver, usually in the area at offset 0-FFh of the RAM segment but it can be at any address within the segment.
+4. Execute the `_DRVROP` function passing the driver slot and segment number and H=1.
+5. If an error was reported, free the RAM segment.
+
+The meaning and location of the initialization data (if any) depends on each driver. When [`DRVROP.COM`](TODO: link) or [`CALL IDRIVER`](TODO: link) is used to install a driver the supplied initialization data is copied to the RAM segment starting at offset 1 and the length of this data is put at offset 0, but note that this is exclusively a convention used by these tools and the kernel (and thus this function call) is completely unconcerned about how initialization data is passed to the driver. Driver developers can create their own driver install tools (making use of `_DRVROP` as explained above) if the standard tools (`DRVROP.COM` and `CALL IDRIVER`) don't suit their needs.
+
+WIP: A driver can't, in principle,  use more than one RAM segment. If a driver needs 
+
+This operation can return two errors: `.IDRVR` if the driver doesn't have the `NEXTORv3_DRIVER` signature at the expected address, and `.INITE` if the driver's initialization routine reports an error. In both cases the driver won't have been registered and thus its RAM segment should be freed.
+
+#### 3.15.2 Shutting down a driver loaded in RAM
+
+This function will invoke the shut down query of a driver loaded in RAM and then it will unregister it. The handling of the RAM segment freeing is the responsibility of the caller. Thus the usage sequence is:
+
+1. Execute the `_DRVROP` function passing the driver slot and segment number and H=2.
+2. If no error was reported, free the RAM segment of the driver.
+
+The function will invoke the "shut down driver" query on the driver and then it will unregister it. A driver can't report error on its shut down query and the unregistration will always happen; in other words, a driver can't prevent its own unregistration.
+
+Prior to invoking the "shut down driver" query the kernel will check if the `NEXTORv3_DRIVER` signature is still present at the expected address in the segment of the driver: if that's not the case, the shut down query won't be invoked (this is a lightweight way to check if the driver code has been corrupted). However, even in this case the driver will be unregistered.
+
+The only error this operation can return is `.IDRVR` when the combination of slot and segment passed doesn't correspond to any of the registered drivers loaded in RAM. The [`_GDRVR`](TODO: link) function can be used to list the registered drivers (both ROM and RAM) and their locations.
+
+
 ## 4. New error codes
 
 New error codes are defined to handle error conditions when managing the new features of Nextor. These errors are returned in MSX-DOS 1 mode as well by the new functions supported in this mode.
@@ -746,9 +850,9 @@ The error codes and descriptions are the following:
 
 An operation involving a device driver has been requested but the specified driver does not exist, or is not of the valid type (for example, the driver is a MSX-DOS or drive-based driver but a device-based driver is required).
 
-* Invalid device or LUN (.IDEVL, 0B5h)
+* Invalid device number (.IDEVN, 0B5h)
 
-An operation involving a device on a device-based driver has been requested but the specified device does not exist in the driver, or the specified logical unit does not exist in the specified device.
+An operation involving a device on a Nextor driver has been requested but the specified device does not exist in the driver.
 
 * Invalid partition number (.IPART, 0B4h)
 
@@ -769,6 +873,18 @@ Attempt to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 * Invalid cluster number or sequence (.ICLUS, 0B0h)
 
 The cluster number supplied to the [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function doesn't exist in the drive, or a file was supplied to [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) to be mounted but the file is not stored across consecutive sectors in its host filesystem.
+
+* Initialization error (.INITE, 0AFh)
+
+Returned by the _DRVROP function when the driver's initialization routine returns an error (and thus the driver install failed).
+
+* Command interpreter not found (.NOCMD, 0AEh)
+
+Used by NEXTOR.SYS to signal that COMMAND2.COM was not found and thus a jump to the BASIC environment was forced.
+
+* Incompatible DOS version (.IDOSV, 0ADh)
+
+Used by NEXTOR.SYS to signal that the kernel version is incompatible and thus a jump to the BASIC environment was forced.
 
 
 ## 5. Extended mapper support routines
@@ -903,7 +1019,7 @@ This bug is corrected in Nextor, so the ESC-Y escape sequence can be safely used
 
 Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (NEXTOR.SYS in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This is a problem since the current NEXTOR.SYS version number is 2.1.
 
-As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily. There is a command line tool, NSYSVER.COM, that allows to easily do this change (see the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ for more details) but if you want to do the change programmatically, here is the procedure:
+As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily. There is a command line tool, NSYSVER.COM, that allows to easily do this change (see the _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ for more details) but if you want to do the change programmatically, here is the procedure:
 
 1.  When in MSX-DOS mode (page 0 mapped to TPA RAM), read the 16 bit value stored at address 0001h.
 2.  Add 32h to the obtained value.
@@ -929,7 +1045,7 @@ This section details how some of the Nextor features work internally. This may b
 
 ## 7.1. One-time boot keys
 
-The [one-time boot keys mechanism](Nextor%202.1%20User%20Manual.md#292-one-time-boot-keys) kicks in at boot time when the zero-terminated signature string NEXTOR_BOOT_KEYS is found at address A100h. In that case, the status of the alphanumeric keys are taken from the bytes that follow the signature, instead of being read from the keyboard, as the following table shows; a bit set to 1 means that the key is considered to be pressed.
+The [one-time boot keys mechanism](Nextor%203.0%20User%20Manual.md#2102-one-time-boot-keys) kicks in at boot time when the zero-terminated signature string NEXTOR_BOOT_KEYS is found at address A100h. In that case, the status of the alphanumeric keys are taken from the bytes that follow the signature, instead of being read from the keyboard, as the following table shows; a bit set to 1 means that the key is considered to be pressed.
 
 | Address | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
 |:-------:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -943,7 +1059,7 @@ Note that currently not all keys are actually used by Nextor at boot time (e.g. 
 
 ## 7.2. Disk emulation mode
 
-This section explains some details about the [disk emulation mode](Nextor%202.1%20User%20Manual.md#39-disk-emulation-mode).
+This section explains some details about the [disk emulation mode](Nextor%203.0%20User%20Manual.md#39-disk-emulation-mode).
 
 ### 7.2.1. Disk emulation data file format
 
@@ -962,7 +1078,7 @@ Each entry in the disk image files table is as follows:
 | Offset | Meaning |
 |:------:|---------|
 |   +0   | Number of the device that contains the file (0 = same as emulation data file) |
-|   +1   | Number of the logical unit that contains the file (if device number is not 0)  |
+|   +1   | Unused, was "LUN number" in Nextor 2  |
 |   +2   | Absolute device sector number where the file starts (4 bytes, little endian) |
 |   +6   | Size of the file in sectors (2 bytes, little endian) |
 
@@ -974,7 +1090,7 @@ Any contents in the emulation data file past the last entry in the disk images f
 
 At boot time Nextor will enter disk emulation mode if it finds a pointer to the disk emulation data file. This pointer consists simply of a device+logical unit number and an absolute device sector number.
 
-Note that although this documentation and [the user manual](Nextor%202.1%20User%20Manual.md) use the term "emulation data file", an actual file isn't required - the Nextor kernel is only concerned about the sector number where the emulation data is located, regardless of whether this sector is part of a file or not. Using a file is usually the most convenient way to store this information, but a tool could be developed to use e.g. a reserved sector right before the FAT for this purpose.
+Note that although this documentation and [the user manual](Nextor%203.0%20User%20Manual.md) use the term "emulation data file", an actual file isn't required - the Nextor kernel is only concerned about the sector number where the emulation data is located, regardless of whether this sector is part of a file or not. Using a file is usually the most convenient way to store this information, but a tool could be developed to use e.g. a reserved sector right before the FAT for this purpose.
 
 Nextor will enter the one-time disk emulation mode if it finds the following information in RAM at boot time:
 
@@ -1007,32 +1123,14 @@ Note that the condition for Nextor entering emulation mode is that bit 0 of the 
 Also worth noting: Nextor will check that the emulation data actually starts with the `NEXTOR_EMU_DATA` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
 
 
-## 8. Change history
+## 8. Development helpers
 
-This section contains the change history for the different versions of Nextor. Only the changes that are meaningful from the application developer point of view are listed. For information on changes in general, please look at the _[Nextor 3.0 User Manual](Nextor%202.1%20User%20Manual.md)_ document. For information on changes related to driver development, please look at the _[Nextor 3.0 Driver Development Guide](Nextor%202.1%20Driver%20Development%20Guide.md)_ document.
+### 8.1. The Nextor SDK
 
-This list contains the changes for the 2.1 branch only. For the change history of the 2.0 branch see the _[Nextor 2.0 Programmers Reference](../../../blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#7-change-history)_ document.
+Nextor ships with a Software Development Kit (SDK): a collection of files containing constants, macros, data structure definitions and ready to use helper routines that make it easier to write Nextor-aware drivers and programs. It lives in the [`sdk`](../sdk) directory of the Nextor source repository, and it supports development in both assembler (for [Nestor80](https://github.com/Konamiman/Nestor80)) and C (for [SDCC](https://sdcc.sourceforge.net/)).
 
-### 8.1. v2.1.1 beta 2
+[`The sdk's README file`](../sdk/README.md) explains the general organization of the SDK files and how to bring it into your projects. You can look at the code comments in the SDK files themselves to know what kind if code, constants or macros each holds. Finally, if you are starting from scratch, [the `templates` directory in the SDK](../sdk/templates) can be useful for you in order to bootstrap your project.
 
-* [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h) returns two new fields, "start cluster" and "start sector", when a file is mounted.
+### 8.2. The Docker development image
 
-### 8.2. v2.1.0 RC 1
-
-* [_GETCLUS](#314-get-information-for-a-cluster-on-a-fat-drive-_getclus-7eh) function call introduced.
-* [UNAPI RAAM helper compatible routines](#5-extended-mapper-support-routines) have been added.
-* Extra mapper support routines `ALL_BK` and `FRE_BK` have been removed.
-
-### 8.3. v2.1.0 beta 2
-
-* [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah) now returns the status byte of the partition, and allows to retrieve the device sector number that holds the partition table entry instead of information about the partition.
-
-### 8.4. v2.1.0 beta 1
-
-* [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h) now returns an extra flag that tells if the driver implements the DRV_CONFIG routine.
-
-* [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) now allows to mount files.
-
-* [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h) returns a new set of information for drives where a file is mounted.
-
-* [Error codes](#4-new-error-codes) "File is mounted" (.FMNT) and "Bad file size" (.BFSZ) introduced.
+As an alternative to installing Nestor80 and SDCC in your machine, you can use the dedicated Nextor development Docker image. The image is published as `ghcr.io/konamiman/nextor-dev`. See [the README file in the `docker` directory](../docker/README.md) for usage details.
