@@ -10,7 +10,7 @@ PT_EXT_LBA: equ 15
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV v1.2 - map a drive to a driver, device, LUN and partition,",13,10
+	db	"MAPDRV v1.2 - map a drive to a driver, device and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
@@ -20,7 +20,7 @@ PT_EXT_LBA: equ 15
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device",13,10
-	db	"of the driver in the specified slot (must be a device-based driver).",13,10
+	db	"of the driver in the specified slot (must be a Nextor driver).",13,10
 	db	13,10
 	db	"/L locks the drive immediately after doing the mapping.",13,10
 	db	13,10
@@ -38,11 +38,11 @@ PT_EXT_LBA: equ 15
 	db	"If device information is provided but slot is omitted, the drive is mapped to",13,10
 	db	"the specified partition of the specified device in the driver already",13,10
 	db	"controlling the drive (this works only if the drive is currently mapped",13,10
-	db      "to a device-based driver).",13,10
+	db      "to a Nextor driver).",13,10
 	db	13,10
 	db	"If both device and slot information are omitted, the drive is mapped to the",13,10
 	db	"specified partition of the device it is already mapped to (this works only if",13,10
-	db	"the drive is currently mapped to a device-based driver).",13,10
+	db	"the drive is currently mapped to a Nextor driver).",13,10
 	db	13,10
 	db	"'d' will revert the drive to its default mapping (the mapping at boot time).",13,10
 	db	"'u' will leave the drive unmapped. Other parameters are ignored in both cases.",13,10
@@ -50,11 +50,11 @@ PT_EXT_LBA: equ 15
 	db	"If a valid filename is supplied after <drive>, the specified file will be",13,10
 	db      "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
 	db      "that contains a file that has been mapped. Prepend the filename with '/'",13,10
-	db	"if the first character of his name is a digit.",13,10
+	db	"if the first character of its name is a digit.",13,10
 	db	1Ah
 
 USAGE_S:
-	db	"MAPDRV - map a drive to a driver, device, LUN and partition",13,10
+	db	"MAPDRV - map a drive to a driver, device and partition",13,10
 	db  "         or mount a file on a drive",13,10
 	db	13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
@@ -234,7 +234,7 @@ OK_DEVICE:
 	and	1
 	ld	b,.IDRVR##
 	ld	c,_TERM##
-	jp	z,5		;Error if not assigned to a device-based driver
+	jp	z,5		;Error if not assigned to a Nextor driver
 
 	ld	a,(BUF_DRIVER)
 	ld	(SLOT),a

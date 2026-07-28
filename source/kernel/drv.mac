@@ -266,7 +266,7 @@ null_message:
 ;-----------------------------------------------------------------------------
 ;
 ; Entries for direct calls.
-; Calls to these addresses will be translated to calls to the DV_DIRECTx
+; Calls to these addresses will be translated to calls to the DIRECT_n
 ; entry points in the driver bank.
 
     ALIGN 7850h

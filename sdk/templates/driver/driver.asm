@@ -455,7 +455,7 @@ DO_DEVQ_GET_STRING:
 ;         0 if this information does not apply or is not available.
 ; +7 (1): Flags:
 ;         bit 0: 1 if the device is removable.
-;         bit 1: 1 if the device is read only. A device that can dinamically
+;         bit 1: 1 if the device is read only. A device that can dynamically
 ;                  be write protected or write enabled is not considered
 ;                  to be read-only.
 ;         bit 2: 1 if the device is a floppy disk drive.
@@ -628,13 +628,13 @@ CUSTOM_DEVICE_QUERY:
     ;              DE = Address where the 4 byte sector number is stored.
     ;    Output:   A = Error code (the same codes of MSX-DOS are used):
     ;                  0: Ok
-    ;                  .IDEVN: Invalid device or LUN
+    ;                  .IDEVN: Invalid device number
     ;                  .NRDY: Not ready
     ;                  .DISK: General unknown disk error
     ;                  .DATA: CRC error when reading
     ;                  .RNF: Sector not found
     ;                  .UFORM: Unformatted disk
-    ;                  .WPROT: Write protected media, or read-only logical unit
+    ;                  .WPROT: Write protected media, or read-only device
     ;                  .WRERR: Write error
     ;                  .NCOMP: Incompatible disk.
     ;                  .SEEK: Seek error.

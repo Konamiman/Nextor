@@ -44,7 +44,7 @@ NO_PRIMARY:
 	ld	a,b
 	ld	(SEGMENT),a
 
-	;--- Check that the driver exists and is a device-based driver
+	;--- Check that the driver exists and is a Nextor driver
 
 	;ld	a,(SEGMENT)
 	ld	e,a
@@ -449,11 +449,6 @@ Num4:
 
 DEV_MSG:
 	db	"Device number ",0
-DEVINDEX_MSG:
-	db	"0:",13,10
-	db	"  Number of logical units: "
-LUNS_MSG:
-	db	"0"
 CRLF:
 	db	13,10,0
 
@@ -484,11 +479,8 @@ CAPACITY_MSG:
 OFFLINE_MSG:
 	db  ", offline",0
 
-DEVINDEX:
-	db	1
 SLOT:	db	-1
 SEGMENT:	db	255
-LUNS:	db	0
 
 BUF: equ 2000h
 BUF_DEV_IS_ONLINE: equ BUF

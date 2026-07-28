@@ -10,7 +10,7 @@ Please visit [the releases section](https://github.com/Konamiman/Nextor/releases
 
 ## Looking for the drivers?
 
-As of Nextor 3.0 this repository no longer contains Nextor drivers for specific hardware. Drivers that were part of the repository in Nextor 2 now live in their own separate repositories, see [the known drivers document](docs/Nextor%203.0%20Known%20Drivers.md).
+As of Nextor 3.0 this repository no longer contains Nextor drivers for specific hardware. Drivers that were part of the repository in Nextor 2 now live in their own separate repositories; other drivers are distributed by their developers in whatever way they choose. See [the known drivers document](docs/Nextor%203.0%20Known%20Drivers.md) for the list of available drivers and where to get each of them.
 
 ## Repository structure
 
@@ -40,7 +40,7 @@ Note that additionally to the `master` branch there are `v2.0` and `v2.1` branch
 
 _For instructions on how to build Nextor using the Nextor development Docker image, see [README.md in the Docker directory](docker/README.md)_.
 
-Nextor requires Linux to be built. It should work on macOs too, but that hasn't been tested. If you are on Windows 10 or 11 you can use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
+Nextor requires Linux to be built. It should work on macOS too, but that hasn't been tested. If you are on Windows 10 or 11 you can use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
 
 To build Nextor you'll need:
 
@@ -54,7 +54,7 @@ Except for those obtained via `apt`, you'll need to place these tools at a suita
 
 There are a number of makefiles that will take care of building the different components of Nextor. Once the tools are in place you can just `cd` to the appropriate directory and run `make`:
 
-* `source/kernel`: builds the kernel ROM files and copies them to the `bin/kernels` directory. There are handy aliases for the different ROM files, so you can run e.g. `make ide`; see the `kernels` rule at the beginning of the file for the full list.
+* `source/kernel`: builds the kernel base file (the input for `mknexrom` to produce complete kernel ROMs) and copies it to the `bin/kernel-base` directory. Running `make everything` builds all six variant combinations (default, `INVERT_SHIFT` and `INVERT_CTRL`, each with and without `NO_UNDOC_CPU_INSTRUCTIONS`); see the comments at the beginning of the makefile for the details.
 * `source/nextor_sys`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
 * `source/tools`: builds the command line tools written in assembler and copies them to the `bin/tools` directory.
 * `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
@@ -62,5 +62,5 @@ There are a number of makefiles that will take care of building the different co
 
 There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too.
 
-You may want to take a look at [this now closed pull request from Dean Netherton](https://github.com/Konamiman/Nextor/pull/79) that contains a different attempt at writing makefiles for bulding Nextor. It even has some nice extra features like building FDD and HDD images with Nextor, and building the `mknexrom` tool itself. Note however that that pull request was created targetting Nextor 2 and thus many of the ideas it uses may no longer be relevant.
+You may want to take a look at [this now closed pull request from Dean Netherton](https://github.com/Konamiman/Nextor/pull/79) that contains a different attempt at writing makefiles for building Nextor. It even has some nice extra features like building FDD and HDD images with Nextor, and building the `mknexrom` tool itself. Note however that that pull request was created targeting Nextor 2 and thus many of the ideas it uses may no longer be relevant.
 
