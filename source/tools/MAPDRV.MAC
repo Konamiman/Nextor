@@ -60,7 +60,7 @@ USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device and partition",13,10
 	db  "         or mount a file on a drive",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<seg>]]",13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [0]",13,10
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10

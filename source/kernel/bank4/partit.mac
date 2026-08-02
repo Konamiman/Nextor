@@ -891,7 +891,6 @@ AAD_CURR_PART_INDEX equ 5 ;Bit 7 set when examining extended partitions, FFh whe
 AAD_CURR_PART_SECTOR equ 6
 AAD_CURR_PART_STATUS_BYTE equ 10
 AAD_CAND_PART_DEVNUM equ 11 ;bit 7: removable, bit 6: floppy
-AAD_SAW_VALID_PART equ 19
 AAD_CAND_PART_SECTOR equ 12
 AAD_FLAGS equ 16
 AAD_MAX_DEVICE_NUM equ 17

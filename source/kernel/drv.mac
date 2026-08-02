@@ -528,7 +528,7 @@ DIO_WR_LOOP:
 	pop	bc
 	pop	hl
 	pop	hl	;Not POP AF, to preserve error info
-	ret
+	jp	CONV_ERR
 
 DIO_WR_OK:
 	pop	de
