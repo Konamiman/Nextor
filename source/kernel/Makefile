@@ -451,6 +451,10 @@ bank5/fdisk.dat: \
 	sdcc -o bank5/ --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
 	     --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 -I../../sdk/C/includes -I../../sdk/C/code bank5/fdisk_crt0.rel bank5/asmcall.rel bank5/printf.rel $(patsubst %.dat,%.c,$@)
 	$(call hex2bin,$(patsubst %.dat,%.ihx,$@),$@)
+	@codesize=$$(printf "%d" 0x$$(grep 'l__CODE' $(patsubst %.dat,%.map,$@) | head -1 | awk '{print $$1}')); \
+	if [ $$codesize -gt 16048 ]; then \
+		echo "ERROR: FDISK code segment is $$codesize bytes; max is 16048 (4120h up to CHGBNK at 7FD0h), the excess would be silently truncated"; exit 1; \
+	fi
 
 bank5/fdisk_crt0.rel: \
 	bank5/fdisk_crt0.s
