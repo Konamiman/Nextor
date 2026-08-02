@@ -962,6 +962,17 @@ CONV_ERR:
 	ld	b,2
 	cp	.NRDY##
 	jr	z,CONV_ERR_END
+
+	;This case should never happen because READ_WRITE is supposed to
+	;never return .IDEVN for an existing device (if the device is offilne
+	;it should return .NRDY instead); however in Nextor 2 both cases
+	;were indistinguishable, so drivers not properly ported from Nextor 2
+	;will return .IDEVN instead of .NRDY. This is only relevant for DOS 1 mode
+	;(in DOS 2 mode the media check layer masks this driver defect,
+	;see mc_devcmd_err in val.mac)
+	cp	.IDEVN##
+	jr	z,CONV_ERR_END
+
 	ld	b,4
 	cp	.DATA##
 	jr	z,CONV_ERR_END
