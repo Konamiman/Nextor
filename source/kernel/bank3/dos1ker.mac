@@ -8648,6 +8648,12 @@ A72BD:	ld	a,(hl)
 	ld	l,a
 	jp	(hl)
 
+	; Note: T72C2 covers the classic DiskROM error codes 0-6 only
+	; (received doubled, with the write flag in bit 0), which is
+	; fine because this handler is used in DOS 1 mode only (in DOS 2 mode
+	; DISKVECT points to DBERR in bank 0 instead, see SET_DISKBASIC in
+	; init.mac) and the DOS 1 kernel never generates codes outside 0-6.
+
 T72C2:	defw	A71AE			; Write Protect error, disk write protect error
 	defw	A71B4			; Not Ready error, disk offline error
 	defw	A71B1			; Data/CRC error, disk i/o error

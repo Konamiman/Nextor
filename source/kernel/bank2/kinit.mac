@@ -117,6 +117,7 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 ; On error, returns Cy=1 and A=error code starting at 4.
 ;
 		ld	iy,RAM_BASE##		;Setup IY for addressability
+		ld	(iy+@RW_FLAGS##),0
 ;
 ;	+++++  SETUP RAMDISK UNIT DESCRIPTOR  +++++
 ;
