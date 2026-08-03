@@ -88,7 +88,7 @@ Pressing the N key while the machine boots opens the new boot menu, which lets y
 
 ### 2.5. One drive letter per active partition at boot
 
-At boot time Nextor 2 assigned one drive letter per storage device found, mapped to its first suitable partition. Nextor 3 instead assigns one drive letter to every active FAT12 or FAT16 partition of every device (in MSX-DOS 1 mode, to FAT12 partitions only). The handling of offline devices at boot has been revised too: removable devices get a drive letter even if no medium is inserted, while fixed devices that are offline don't get any. See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_.
+At boot time Nextor 2 assigned one drive letter per storage device found, mapped to its first suitable partition. Nextor 3 instead assigns one drive letter to every active FAT12 or FAT16 partition of every device (in MSX-DOS 1 mode, to FAT12 partitions only). The handling of offline devices at boot has been revised too: removable devices get a drive letter even if no medium is inserted, while fixed devices that are offline don't get any. Devices that are online but don't hold any mappable partition also get one drive letter. Drives assigned in these last two ways have no partition attached initially: accessing them returns an error, and a partition is searched automatically on each access until one is found (e.g. after the device is partitioned, or after a medium is inserted). See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_.
 
 ### 2.6. Medium names in the partitioning tool
 
@@ -111,6 +111,8 @@ When the DOS environment fails to load at boot time, Nextor no longer drops sile
 * New [`DRVROP.COM`](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool) command line tool, and new [`CALL IDRIVER`](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) and [`CALL UDRIVER`](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) BASIC commands: they install and uninstall drivers loaded in RAM (see _[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)_).
 
 * The `MAPDRV`, `DEVINFO` and `DRIVERS` command line tools, as well as the related `CALL` commands, now understand drivers loaded in RAM: wherever a driver is specified or displayed, a RAM segment number can accompany the driver slot number. See _[3.4. The command line tools](Nextor%203.0%20User%20Manual.md#34-the-command-line-tools)_ and _[3.6.10. The CALL MAPDRV command](Nextor%203.0%20User%20Manual.md#3610-the-call-mapdrv-command)_.
+
+* The `MAPDRV` tool and the `CALL MAPDRV` command can map a drive to a device while skipping the partition assignment (new "s" and -3 partition parameter values, respectively): the drive is attached to the device with no partition, and the first suitable partition is searched automatically on each access to the drive. This makes it possible to map a drive to an offline removable device, or to a device that hasn't been partitioned yet. See _[3.4.1. MAPDRV: the drive mapping tool](Nextor%203.0%20User%20Manual.md#341-mapdrv-the-drive-mapping-tool)_ and _[3.6.10. The CALL MAPDRV command](Nextor%203.0%20User%20Manual.md#3610-the-call-mapdrv-command)_.
 
 * Since logical units don't exist anymore, the tools and commands that used to take or display a logical unit number no longer do.
 
@@ -141,7 +143,7 @@ The new [`_DRVRO`](Nextor%203.0%20Programmers%20Reference.md#315-driver-operatio
 
 * [`_CDRVR`](Nextor%203.0%20Programmers%20Reference.md#311-call-a-routine-in-a-device-driver-_cdrvr-7bh) (7Bh): the driver slot byte must now have bits 6-4 set to 001. This is a deliberate incompatibility: the set of routines exposed by drivers has changed, and this safeguard prevents old Nextor 2 programs from unknowingly calling routines of a Nextor 3 driver.
 
-* [`_MAPDRV`](Nextor%203.0%20Programmers%20Reference.md#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (7Ch): the logical unit number byte of the mapping data buffer is now unused, and new rules govern the automatic mapping of ghost drives.
+* [`_MAPDRV`](Nextor%203.0%20Programmers%20Reference.md#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (7Ch): the logical unit number byte of the mapping data buffer is now unused, new rules govern the automatic mapping of ghost drives, and a starting sector of FFFFFFFFh in the mapping data attaches the drive to the device with no partition assigned (one is searched automatically on each access to the drive).
 
 ### 3.3. New error codes
 

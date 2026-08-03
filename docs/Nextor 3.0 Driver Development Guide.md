@@ -687,6 +687,8 @@ The available sector numbers must range from zero to the number of available sec
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
+The `.IDEVN` error must be returned only for device numbers that don't exist in the driver. For a device that exists but is currently unavailable (for example a removable device with no medium inserted, or an empty card slot) the routine must return `.NRDY` instead; otherwise, accessing a drive mapped to an offline device will report the wrong error. This distinction didn't exist in Nextor 2, so it deserves special attention when porting old driver code (see _[the driver migration guide](Nextor%203.0%20Driver%20Migration%20Guide.md)_).
+
 If the device is a floppy disk drive (as reported by the driver via _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_) then the routine should use the media descriptor byte passed in C in order to determine the correct disk geometry. This byte is obtained from the disk's boot sector itself, so before it's available this routine will be called with C=0; the driver should assume a sensible default disk geometry in this case. For any other kind of device the value passed in C will be zero and should be ignored.
 
 The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](Nextor%203.0%20Programmers%20Reference.md#4-new-error-codes) and [the DOS errors SDK file](../sdk/asm/constants/dos_errors.inc).
@@ -865,6 +867,8 @@ Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
 Drivers can use this routine to inform the kernel about the highest device number they support. This query exists purely as a performance improvement: there are times (for example, when automatically mapping drives to devices/partitions at boot time) when the kernel scans the devices of a driver by asking for information about every possible device number starting with 1; the value returned by this query caps that scan, which otherwise would have to go through all the possible device numbers up to 255.
 
 Note that the returned value is just an upper bound for the scan, not a device count: it isn't required that every device number up to the maximum corresponds to an existing device. For example, a driver could report a maximum device number of 10 while only devices 8, 9 and 10 actually exist — not recommended, but perfectly legal (the driver must return `RESULT_INVALID_DEVICE` for the device numbers that don't exist, as usual). This query has no effect on how drives are mapped to the devices at boot time.
+
+There is one real limit on device numbers, though: the automatic partition search (the procedure that maps drives to partitions at boot time, and again on the first access to a drive that is attached to a device with no partition assigned) only supports device numbers 1 to 63 (internally, the two high bits of the device number are used as temporary flags during the search). Devices with higher numbers work normally in every other way, including having drives explicitly mapped to their partitions, but they can't take part in the automatic search; therefore drivers are advised to simply number their devices sequentially starting at 1.
 
 Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and B=4.
 

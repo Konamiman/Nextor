@@ -483,7 +483,11 @@ After all drives have been assigned to drivers, a device and partition to drive 
 2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
 3. Is an active partition
 
-If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort before leaving the drive unmapped.
+If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort.
+
+If no suitable partition is found in any device, the drive remains attached to its device but with no partition assigned; a partition will then be searched again on the first access to the drive. This happens for devices that are offline at boot time (only if the driver declares them as removable), and for devices that are online but don't hold any valid filesystem (e.g. a brand new or not yet partitioned storage device, which this way keeps a drive attached so that it can be accessed right away after being partitioned).
+
+Note that the automatic mapping procedure only supports devices with numbers 1 to 63. In the unlikely case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
 
 Note that in order to speed up the booting procedure, only the first 9 partitions of each device are scanned during this procedure; consequently, FDISK (see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_) allows changing the "active" flag on these first 9 partitions only.
 
@@ -566,7 +570,7 @@ MAPDRV.COM is a tool that allows mapping a drive letter to a partition on a devi
 The usage syntax for MAPDRV is:
 
 ```
-MAPDRV [/L] <drive>: <partition>|d|u [<device index>
+MAPDRV [/L] <drive>: <partition>|d|u|s [<device index>
        [<driver main slot>[-<driver subslot>][:<driver segment>]]]
 ```
 
@@ -593,6 +597,8 @@ If "d" is specified instead of a partition number, then the drive will be mapped
 * If at boot time the drive was assigned to a Nextor driver, then an automatic mapping procedure (equal to the one performed at boot time, except that "active" partition flags are not checked) will be performed. This may or may not result in the drive having the same mapping it had at boot time, depending on the mapping state of the other drives.
 
 If "u" is specified instead of a partition number, then the drive will be left unmapped.
+
+If "s" ("skip partition assignment") is specified instead of a partition number, then the drive will be mapped to the device (specified as explained above) but no partition will be assigned: the first suitable partition will be searched automatically on each access to the drive until one is found. This is useful to map a drive to a removable device that is currently offline (with a regular partition number the mapping would fail with a "Disk offline" error), or to a device that will be partitioned later.
 
 The optional parameter "/L" locks the drive immediately after doing the mapping (recommended for removable devices that will not be changed).
 
@@ -777,7 +783,7 @@ DRVROP i <file> [/s] [/m] [/d <data>[,<data>...]]
 ```
 
 - `/s` is the silent mode flag, it skips the printing of initialization messages coming from the driver.
-- `/m` will automatically map the first available drive to the first available partition on the first available device controlled by the driver, but only if there's at least one unused drive available in the system and the driver provides at least one device with at least one valid partition (or has no partitions, e.g. a floppy disk).
+- `/m` will automatically map the first available drive to the first suitable device controlled by the driver (the first block device with a sector size of 512 bytes), but only if there's at least one unused drive available in the system. The drive is attached to the device with no partition assigned: the first suitable partition will be searched automatically on the first access to the drive (for devices without partitions, e.g. floppy disks, the whole device will be used).
 - `/d` allows passing initialization data bytes to the driver, comma separated, and with `#` allowed as a hexadecimal prefix (e.g. `/d 1,2,#8F`). Each driver must document the meaning of the initialization data it accepts, if any. The maximum length of initialization data is 255 bytes.
 
 To uninstall a driver already installed in RAM:
@@ -967,6 +973,14 @@ CALL MAPDRV(<drive>)
 
 Maps the specified drive to its default value. If at boot time the drive was unmapped or was mapped to an MSX-DOS driver, then the drive will be reverted to its original mapping state. Otherwise, an automatic mapping procedure will be performed (the procedure is equal to the one performed at boot time except that "active" partition flags will not be checked; see _[3.2. Booting Nextor](#32-booting-nextor)_ for more details); this may or may not result in the drive having the same mapping it had at boot time, depending on which devices are available and how the other drives are mapped.
 
+```
+CALL MAPDRV(<drive>, -3)
+CALL MAPDRV(<drive>, -3, <device>)
+CALL MAPDRV(<drive>, -3, <device>, <slot>[, <segment>]|0)
+```
+
+Maps the specified drive to the specified device (the device, slot and segment parameters are handled exactly as in the explicit partition mapping variants above), but skips the partition assignment: the drive is attached to the device with no partition, and the first suitable partition will be searched automatically on each access to the drive until one is found. This is useful to map a drive to a removable device that is currently offline (with a regular partition number the mapping would fail with a "Disk offline" error), or to a device that will be partitioned later.
+
 The command parameters syntax is as follows:
 
 * `<drive>` is a string with the drive letter followed by a colon (for example "A:") or a number, being 1 to 8 for drives A: to H:, or 0 for the current drive.
@@ -1020,7 +1034,7 @@ CALL IDRIVER(<filename>,<flags>,<data address>,<data length>)
 
 `<flags>` is the sum of zero or more of the following:
 
-1: Automatically map the first available drive to the first available partition on the first available device controlled by the driver, but only if there's at least one unused drive available in the system and the driver provides at least one device with at least one valid partition (or has no partitions, e.g. a floppy disk).
+1: Automatically map the first available drive to the first suitable device controlled by the driver (the first block device with a sector size of 512 bytes), but only if there's at least one unused drive available in the system. The drive is attached to the device with no partition assigned: the first suitable partition will be searched automatically on the first access to the drive (for devices without partitions, e.g. floppy disks, the whole device will be used).
 
 2: Silent mode (don't print initialization messages from the driver).
 
