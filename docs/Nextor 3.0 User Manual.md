@@ -483,7 +483,7 @@ After all drives have been assigned to drivers, a device and partition to drive 
 2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
 3. Is an active partition
 
-If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check. If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort.
+If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check; devices that already have one of their partitions mapped to another drive are skipped in this second pass, so that a device never gets more drives than the ones reserved for it (one per active partition, with a minimum of one). If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort.
 
 If no suitable partition is found in any device, the drive remains attached to its device but with no partition assigned; a partition will then be searched again on the first access to the drive. This happens for devices that are offline at boot time (only if the driver declares them as removable), and for devices that are online but don't hold any valid filesystem (e.g. a brand new or not yet partitioned storage device, which this way keeps a drive attached so that it can be accessed right away after being partitioned).
 
