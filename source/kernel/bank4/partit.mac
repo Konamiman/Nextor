@@ -2641,12 +2641,17 @@ GDLI_DOS1:
 	or	a
 	jr	z,GDLI_D1_POP_RETOK
 
-	;--- Check if this is a ghost drive
+	;--- Check if this is a ghost drive.
+	;    The ghost state bits exist in FDD entries only: for other entries
+	;    the checked byte is part of the partition first absolute sector.
 
+	bit	6,(ix+UD1_RELATIVE_DRIVE##)
+	jr	z,GDLI_D1_NOGHOST
 	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)
 	and	3
 	cp	2
 	jr	z,GDLI_D1_GHOST
+GDLI_D1_NOGHOST:
 
 	;--- Normal Nextor drive
 
@@ -4071,6 +4076,15 @@ GHOST_CLEANUP_DOS1:
 	ld	a,c
 	inc	a		;1-based
 	call	GET_KERNEX_ENTRY_HL
+
+	;The ghost state bits exist in FDD entries only: for other entries
+	;the checked byte is part of the partition first absolute sector
+	push	hl
+	ld	de,UD1_RELATIVE_DRIVE##
+	add	hl,de
+	bit	6,(hl)
+	pop	hl
+	ret	z		;Not a FDD drive: no ghost pair to clean up
 
 	;Check FAS byte 0 ghost state bits
 	push	hl
