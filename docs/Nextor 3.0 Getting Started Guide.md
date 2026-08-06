@@ -35,15 +35,13 @@ The reader of this document is assumed to have experience with MSX-DOS 2 at leas
 
 Note: in this guide the following Nextor tools will be used: MAPDRV.COM, LOCK.COM, RALLOC.COM, DRIVERS.COM and DRVROP.COM. The other tools are simple enough for not needing a step-by-step usage explanation; remember however that all the Nextor tools are explained in the _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ and that you can get help for any of the tools by invoking them without parameters or by issuing a TYPE command directly on the command file (for example `TYPE FASTOUT.COM`).
 
-Note also that Nextor 3 features full support for floppy disk drives handled by Nextor drivers, including ghost drives and disk formatting from BASIC. The scenario used in this guide doesn't involve any Nextor floppy disk driver (the floppy disk drive is handled by its own MSX-DOS driver), so these features are not covered here; see _[2.5. Support for floppy disks](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks)_ in the Nextor 3.0 User Manual, and try for example [the MSX Turbo-R FDD driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) if you own (or emulate) an MSX Turbo-R.
-
 ## 2. Setting up blueMSX
 
 This section explains the steps needed to set up blueMSX in order to follow this guide. The blueMSX emulator can be downloaded at http://www.bluemsx.com. 
 
 a. Download the following files:
 
-* The Nextor kernel with the Sunrise IDE driver, from [the latest release of the Sunrise IDE driver repository in GitHub](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest). Starting with Nextor 3.0, the kernel files with drivers are distributed by the developer of each driver (in the case of the Sunrise IDE driver, from the releases section of its GitHub repository); see _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_ for the complete list. Please choose the file with _.SunriseIDE.blueMSX.ROM_ extension (the _.SunriseIDE.ROM_ version works but only recognizes the slave IDE device in blueMSX), if you are using another emulator or a physical Sunrise IDE (or compatible) controller hardware you can use the file with _.SunriseIDE.ROM_ extension instead.
+* The Nextor kernel with the Sunrise IDE driver, from [the latest release of the Sunrise IDE driver repository in GitHub](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest). Please choose the file with _.SunriseIDE.blueMSX.ROM_ extension (the _.SunriseIDE.ROM_ version works but only recognizes the slave IDE device in blueMSX), if you are using another emulator or a physical Sunrise IDE (or compatible) controller hardware you can use the file with _.SunriseIDE.ROM_ extension instead.
 
 * The Nextor tools disk image (_tools.dsk.zip_), from [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest).
 
@@ -89,14 +87,17 @@ Please note that if you use an existing IDE device, **following the steps of thi
 
 Once all the hardware (real or emulated) is in place, now we'll see what happens when we try to boot without having defined any partition for the IDE device, then we'll create and prepare some partitions.
 
-a. Boot your MSX. You will see that you boot in the COMMAND2 prompt in drive B:, as in the following image:
+a. Boot your MSX. You will see a sequence of boot messages like this:
+
+![](img/gsg/KernelBootMessage.png)
+
+then after a few seconds you'll see that the computer boots in the COMMAND2 prompt in drive C:, as in the following image:
 
 ![](img/gsg/NextorPrompt.png)
  
+***What has happened?*** Nextor has assigned two drives to the Sunrise IDE driver: one for the master device (A:) and one for the slave device (B:), then it has assigned two drives to the floppy disk drive (C: and its ghost drive D:). Then it has attempted to search a suitable FAT12 or FAT16 partition in the hard disk attached to the master device in order to assign it to drive A:, but the hard disk has no partitions yet; as for the slave device, it's offline (not available). Therefore drive C:, assigned to the floppy disk, is the first "valid" drive, and so it is used as the boot drive.
 
-***What has happened?*** Nextor has assigned one drive to the Sunrise IDE driver (A:) and one drive to the floppy disk drive (B:). Then it has attempted to search a suitable FAT12 or FAT16 partition in the attached hard disk in order to assign it to drive A:, but since the hard disk has no partitions yet, drive A: has been left unassigned. Drive B:, assigned to the floppy disk, is the first valid drive, and so it is used as the boot drive.
-
-**Note:** You may be wondering why the floppy disk drive gets only one drive letter assigned, and not two as usual. That's because by default Nextor inverts the behavior of the CTRL key at boot time. There's a way to customize this, see ["Boot key inverters" in the Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md#2101-boot-key-inverters).
+**Note:** If you had chosen/flashed the _.SunriseIDE.blueMSX.CTRL\_INV.ROM_ variant of the ROM file you would have only drive C: assigned to the floppy disk drive (no ghost drive in D:). This variant inverts the meaning of the CTRL key at boot time. See ["Boot key inverters" in the Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md#2101-boot-key-inverters).
 
 b. Type BASIC and then CALL FDISK to invoke the device partitioning tool.
 
@@ -127,33 +128,33 @@ k. Reset your MSX. You will see that the computer boots in the BASIC prompt.
 l. Copy the Nextor system files from the floppy disk to drive A: by executing the following commands:
 
 ```
-COPY "B:NEXTOR.SYS" TO "A:"
-COPY "B:COMMAND2.COM" TO "A:"
+COPY "C:NEXTOR.SYS" TO "A:"
+COPY "C:COMMAND2.COM" TO "A:"
 ```
 
 m. Reset your computer and you will see that now it boots in the `COMMAND2.COM` prompt from drive A:. Issue a DIR command and you should see the following (notice the 50M free space):
 
 ![](img/gsg/DirTwoSystemFiles.png)
 
-**NOTE:** Please be patient with the DIR command, especially if you are not using an MSX Turbo-R computer. Calculating the free space of a 50MB partition will take quite some time on your MSX. If you are using an emulator, you can probably increase the speed of the emulated machine.
- 
 ## 4. Mapping partitions and changing the boot partition
 
 So far we have seen that Nextor has performed an automatic drive to partition mapping. Now we'll see how to instruct Nextor to select a different partition at boot time, and how to perform manual mapping after the system has booted.
 
-a. Assign partition 2 to drive D: by executing the following command:
-
-    B:MAPDRV D: 2 1 1
-
-("2" is the second partition, and "1 1" means "device index 1 controlled by driver in slot 1". Issue a `TYPE B:MAPDRV.COM` command for more details.)
-
-b. Perform a `DIR D:` command. Check that drive D: has indeed 25MB of free space.
-
-c. Copy the Nextor system files to drive D: with the following commands:
+a. Assign partition 2 to drive E: by executing the following command:
 
 ```
-COPY NEXTOR.SYS D:
-COPY COMMAND2.COM D:
+C:MAPDRV E: 2 1 0
+```
+
+("2" is the second partition, and "1 0" means "device index 1 controlled by driver in the primary Nextor controller". Issue a `TYPE C:MAPDRV.COM` command for more details.)
+
+b. Perform a `DIR E:` command. Check that drive E: has indeed 25MB of free space.
+
+c. Copy the Nextor system files to drive E: with the following commands:
+
+```
+COPY NEXTOR.SYS E:
+COPY COMMAND2.COM E:
 ```
 
 d. Type BASIC and then CALL FDISK to invoke the device partitioning tool.
@@ -166,58 +167,90 @@ g. Press "2" and then "y" to set the "active" flag for the second partition in t
 
 h. Reset your MSX, and when you are in the COMMAND2 prompt, perform a DIR command and check that this time drive A: is assigned to the second (25MB big) partition:
 
-![](img/gsg/DirWithNextorDat.png)
+![](img/gsg/DirInSecondPartition.png)
 
-***What has happened?*** When performing the automatic drive to device and partition mapping assignment at boot time, Nextor selects the first valid (FAT12 or FAT16) partition available that has the "active" flag set in the partition table. You can set and reset this flag for any of the first 9 partitions in the device using FDISK (either partitions that you are creating, or already existing partitions).
+***What has happened?*** When performing the automatic drive to device and partition mapping assignment at boot time, Nextor selects the first valid (FAT12 or FAT16) partition available that has the "active" flag set in the partition table (and has not been assigned to another drive already). You can set and reset this flag for any of the first 9 partitions in the device using FDISK (either partitions that you are creating, or already existing partitions).
 
 If none of the existing partitions has the "active" flag set in the partition table, then the first suitable partition found will be mapped. We'll see this in the next section.
+
+i. Type BASIC and then CALL FDISK again.
+
+j. Press "1" to select the Sunrise IDE driver, then "1" again to select the hard disk, then "S" to show the partitions list.
+
+k. Press "1" and then "y" to set the "active" partition flag for the first partition. Now both partitions 1 and 2 should have the flag set.
+
+l. Reset the computer and run `DIR A:` then `DIR B:`, you should see that A: is now mapped to the first partition and B: to the second one:
+
+![](img/gsg/DirAthenDirB.png)
+
+m. Run `BASIC` and once in the BASIC prompt run `CALL DRVINFO`, see how aside from A: and B: mapped to the master device, there's C: now mapped to the slave device, and D: and E: mapped to the internal floppy disk drive:
+
+![](img/gsg/DrvinfoABCDE.png)
+
+***What has happened?*** In Nextor 3 each existing partition having the "active" flag set will get a drive mapped at boot time; this is a change from Nextor 2 where only one drive would be mapped per device. The IDE master device has now two such partitions, so it gets A: and B:. The mapping process then continues as before: the slave device, being offline, gets one single drive, C:; and the internal floppy disk drive gets D: and E:.
  
 ## 5. Booting in MSX-DOS 1 mode
 
 Now we will see what happens with the automatic partition assignment process when we try to boot in MSX-DOS 1 mode.
 
-a. Map partition 3 to drive D: by executing the following:
-
-    B:MAPDRV D: 3 1 1
-
-b. Copy the MSX-DOS 1 system files to drive D: by executing the following:
+a. Go back to the DOS prompt (run `CALL SYSTEM`) and map partition 3 to drive F: by executing the following:
 
 ```
-COPY B:MSXDOS.SYS D:
-COPY B:COMMAND.COM D:
+D:MAPDRV F: 3 1 0
 ```
 
-c. Reset the computer while keeping pressed the "1" key. You will boot in MSX-DOS 1 mode and in the  COMMAND.COM prompt. Issue a DIR command and you should see the following (notice the 16M free space):
+b. Copy the MSX-DOS 1 system files to drive F: by executing the following:
+
+```
+COPY D:MSXDOS.SYS F:
+COPY D:COMMAND.COM F:
+```
+
+c. Reset the computer while keeping pressed the "1" key. You will boot in MSX-DOS 1 mode and in the COMMAND.COM prompt. Issue a DIR command and you should see the following (notice the 16M free space):
 
 ![](img/gsg/DirInDos1Mode.png)
 
-***What has happened?*** When booting in MSX-DOS 1 mode, Nextor assigns one drive to the IDE driver and performs an automatic drive to device and partition assignment, as when booting in normal mode. However, this time the partitions that can't be handled in MSX-DOS 1 mode are skipped during the assignment procedure; MSX-DOS 1 can handle only FAT12 partitions with three or less sectors per FAT. The first partition (50MB big) is skipped because it is FAT16. The second partition (25MB big) is skipped because it is FAT12 but has more than three sectors per FAT. Thus the third partition (16MB big) becomes the first one available, and it is then mapped to drive A:.
+***What has happened?*** When booting in MSX-DOS 1 mode, Nextor performs the automatic drive to device and partition assignment, as when booting in normal mode. However, this time the partitions that can't be handled in MSX-DOS 1 mode are skipped during the assignment procedure; MSX-DOS 1 can handle only FAT12 partitions with three or less sectors per FAT. The first partition (50MB big) is skipped because it is FAT16. The second partition (25MB big) is skipped because it is FAT12 but has more than three sectors per FAT. Thus the third partition (16MB big) becomes the first one available, and it is then mapped to drive A:.
 
 Remember that all partitions of 16MB or less created with the Nextor built-in partitioning tool are MSX-DOS 1 compatible.
 
-d. Reboot the computer in normal mode again.
+d. Reset the computer in normal mode again.
 
-e. Map partition 4 to drive D: by executing the following:
+e. Map partition 4 to drive F: by executing the following:
 
-    B:MAPDRV D: 4 1 1
+```
+D:MAPDRV F: 4 1 0
+```
 
-f. Copy the MSX-DOS 1 system files to drive D: as you did in step b
+f. Copy the MSX-DOS 1 system files to drive F: as you did in step b.
 
-g. Go to BASIC, run FDISK and go to the partitions list for the first device, as you did in the previous section. This time set the "active" flag for partition 4. You should see that both partitions 2 and 4 are active now:
+g. Go to BASIC, run FDISK and go to the partitions list for the first device, as you did in the previous section. This time set the "active" flag for partition 4. You should see that partitions 1, 2 and 4 are active now:
 
-![](img/gsg/Partitions2And4Active.png)
+![](img/gsg/Partitions124Active.png)
 
 h. Boot the computer while keeping pressed the "1" key. You will boot in MSX-DOS 1 mode and in the COMMAND.COM prompt again. Issue a DIR command and you should see the following (notice the 9M free space):
 
-![](img/gsg/DirInDos1ModeWithNextorDat.png)
+![](img/gsg/DirInDos1ModeWithPartition4Active.png)
 
 ***What has happened?*** The rule "give priority to partitions having the 'active' flag set during the automatic drive to device and partition assignment at boot time" is valid when booting in MSX-DOS 1 mode too, but this time only the MSX-DOS 1 compatible partitions are checked (partitions 3 and 4 in this case; partition 4 is the "winner").
 
+i. Go to BASIC, run FDISK and set partition 3 as active too.
+
+j. Reset the computer while keeping pressed the "1" key again. Run `DIR A:` and you'll see 16MB free (partition 3), then run `DIR B:` and you'll see 9MB free (partition 4).
+
+![](img/gsg/DirAthenDirBinDos1Mode.png)
+
+k. Go to BASIC and run `CALL DRVINFO`, you'll see A: and B: assigned to the master device, C: assigned to the slave device, and D: and E: assigned to the internal floppy disk drive, as when you booted in normal mode with only partitions 1 and 2 active.
+
+![](img/gsg/DrvinfoABCDE.png)
+
+***What has happened?*** The rule "each active partition gets a drive mapped at boot time" is valid when booting in MSX-DOS 1 mode too, but this time only the MSX-DOS 1 compatible partitions are checked (partitions 3 and 4 in this case).
+
 The remaining steps will leave the environment ready for the next section.
 
-i. Boot the computer in normal mode.
+l. Boot the computer in normal mode.
 
-j. Go to BASIC, run FDISK and reset the "active" flag of both partitions 2 and 4, so that none of the partitions has the flag set.
+m. Go to BASIC, run FDISK and reset the "active" flag of all four partitions, so that none of them has the flag set.
  
 ## 6. Using a second storage device
 
@@ -233,45 +266,49 @@ c. Partition the device as you did in [3. Booting and creating partitions](#3-bo
 
 d. Set the "active" flag on the first partition of the master device too: press ESC until you are back in the device selection screen, select device 1, press "S" to show its partitions, then press "1" and "y" to set the flag on the first (50M) partition.
 
-e. Reset the computer. Once in the COMMAND2 prompt, issue a _DIR_ command and check that drive A: has 50M free. Then issue a _DIR B:_ command and check that drive B: has 85M free (again, please be patient, especially with the second DIR command):
+e. Reset the computer. Once in the COMMAND2 prompt, issue a `DIR` command and check that drive A: has 50M free. Then issue a `DIR B:` command and check that drive B: has 85M free:
 
 ![](img/gsg/DirAAndDirB.png)
 
-***What has happened?*** This time, Nextor has assigned two drives (A: and B:) to the Sunrise IDE driver, and the floppy disk drive has now drive C: assigned. At boot time, Nextor assigns to each Nextor driver one drive per active partition found on each of the devices controlled by the driver (a device without any active partition still gets one drive); in our case each of the two devices has exactly one active partition, thus two drives. See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_ in the Nextor 3.0 User Manual for the details.
+***What has happened?*** Nextor has assigned drive A: to the master device and drive B: to the slave device, as in the previous cases; the difference is that the slave device is now present and has valid partitions, so it has assigned the drive to the first active partition found in that device, which is the 85M one (note that a device without any active partition still gets one drive).
 
-Then, when mapping the drives, active partitions get priority and the devices are scanned in order: drive A: has been mapped to the first active partition found (the 50M one on the master device), and drive B: to the next one (the 85M one on the slave device).
+f. Go to `BASIC`, run FDISK, and remove the "active" flag of the first partition in the slave device.
 
-**Note:** in Nextor 3, drives are mapped to partitions, not to whole devices, and nothing prevents two drives from being mapped to two partitions of the same device. If no partition had the "active" flag set, drive A: would have been mapped to the 50M partition and drive B: to the 25M partition — both on the master device!
+g. Reset the computer and run `DIR` and `DIR B:` again, you'll see the exact same result as before: A: holds the 50M partition of the master device and B: holds the 85M partition of the slave device.
 
-f. Copy the NEXTOR.SYS and COMMAND2.COM files to drive B:.
+![](img/gsg/DirAAndDirB.png)
 
-g. Go to BASIC, run FDISK and remove the "active" flag of partition 1 (50M) in the master device.
+***What has happened?*** When suitable partitions are present in the device but none is flagged as active at boot time, Nextor defaults to assigning one single drive and mapping it to the first suitable partition found.
 
-h. Reset your computer and issue a _DIR_ command, then a _DIR B:_ command. Notice that the mapping is reversed relative to the previous case (A: is mapped to the 85M partition on slave device, B: is mapped to the 50M partition on master device):
+h. Copy the `NEXTOR.SYS` and `COMMAND2.COM` files to drive B:.
 
-![](img/gsg/DirAAndDirBWithFiles.png)
+i. Go to BASIC, run FDISK and remove the "active" flag of partition 1 (50M) in the master device; also set it again in partition 1 (85M) of the slave device.
 
-***What has happened?*** The rule "give priority to partitions having the 'active' flag set during the automatic drive to device and partition assignment at boot time" applies to all partitions on all devices, not only to the first device. Taking into account both the master and the slave devices, the only partition having the "active" flag set is the first partition on the slave device, and therefore this one is assigned to drive A: (and since we copied the Nextor system files to it in step f, the system has booted from it). Drive B: has then been mapped to the first suitable partition still unassigned, which is the 50M one on the master device.
+j. Reset your computer and issue a `DIR` command, then a `DIR B:` command. Notice that the mapping is reversed relative to the previous case (A: is mapped to the 85M partition on slave device, B: is mapped to the 50M partition on master device):
 
-i. Map partition 2 of slave device to drive B: (`C:MAPDRV B: 2 2 1`). Copy the MSXDOS.SYS and COMMAND.COM files to drive B: (remember the floppy holding these files is now mapped in C:).
+![](img/gsg/DirAAndDirBReversed.png)
+
+***What has happened?*** The rule "give priority to partitions having the 'active' flag set during the automatic drive to device and partition assignment at boot time" applies to all partitions on all devices, not only to the first device. Taking into account both the master and the slave devices, the only partition having the "active" flag set is the first partition on the slave device, and therefore this one is assigned to drive A: (and since we copied the Nextor system files to it, the system has booted from it). Drive B: has then been mapped to the first suitable partition still unassigned, which is the 50M one on the master device.
+
+k. Map partition 2 of slave device to drive B: (`C:MAPDRV B: 2 2 0`). Copy the MSXDOS.SYS and COMMAND.COM files to drive B: (remember that the floppy holding these files is now mapped in C:).
  
-j. Go to BASIC, run FDISK, and set the "active" flag of partition 3 (16M) in the master device and of partition 2 (15M) in the slave device.
+l. Go to BASIC, run FDISK, and set the "active" flag of partition 3 (16M) in the master device and of partition 2 (15M) in the slave device.
 
-k. Reset the computer while keeping pressed the "1" key. You will boot in MSX-DOS 1 mode and in the `COMMAND.COM` prompt. Issue a `DIR` command, then a `DIR B:` command. Notice that in the first case you get 16M of free space, and in the second case you get 15M:
+m. Reset the computer while keeping pressed the "1" key. You will boot in MSX-DOS 1 mode and in the `COMMAND.COM` prompt. Issue a `DIR` command, then a `DIR B:` command. Notice that in the first case you get 16M of free space, and in the second case you get 15M:
 
 ![](img/gsg/DirAAndDirBDos1Mode.png)
 
 ***What has happened?*** When booting in MSX-DOS 1 mode only the MSX-DOS 1 compatible partitions are taken into account, both when assigning drives to the drivers and when mapping them. The active MSX-DOS 1 compatible partitions are partition 3 (16M) on the master device and partition 2 (15M) on the slave device, and they have been mapped in that order: drive A: to the 16M one, drive B: to the 15M one. The 85M partition on the slave device has the "active" flag set too, but being FAT16 it is completely ignored in MSX-DOS 1 mode. (By the way: if you now booted in normal mode, the IDE driver would get three drives, one per active partition.)
 
-l. Go to BASIC, run FDISK and remove the "active" flag of partition 3 (16M) in the master device.
+n. Go to BASIC, run FDISK and remove the "active" flag of partition 3 (16M) in the master device.
 
-m. Reset the computer while keeping pressed the "1" key. Once in the `COMMAND.COM` prompt, issue a `DIR` command, then a `DIR B:` command. Notice that the mapping is reversed relative to the previous case: A: is mapped to the 15M partition on the slave device, and B: is mapped to the 16M partition on the master device.
+o. Reset the computer while keeping pressed the "1" key. Once in the `COMMAND.COM` prompt, issue a `DIR` command, then a `DIR B:` command. Notice that the mapping is reversed relative to the previous case: A: is mapped to the 15M partition on the slave device, and B: is mapped to the 16M partition on the master device.
 
 ***What has happened?*** You should have guessed it already: the only active MSX-DOS 1 compatible partition is now the 15M one on the slave device, so it has been given priority and mapped to drive A:; drive B: has then been mapped to the first suitable partition still unassigned, the 16M one on the master device.
 
-n. Go to BASIC, run FDISK and remove the "active" flag from partitions 1 and 2 of the slave device, so that none of the partitions in either device has the flag set.
+p. Go to BASIC, run FDISK and remove the "active" flag from partitions 1 and 2 of the slave device, so that none of the partitions in either device has the flag set.
 
-o. Reset your computer in normal mode; you should be in the COMMAND2 prompt, with the 50M partition mapped to drive A: and the 25M partition mapped to drive B:.
+q. Reset your computer in normal mode; you should be in the COMMAND2 prompt, with the 50M partition of the master device mapped to drive A: and the 85M partition of the slave device mapped to drive B:.
  
 ## 7. Locking drives
 
@@ -283,7 +320,7 @@ b. Execute the following command: `C:LOCK C: ON`
 
 c. Execute the following: `TYPE C:TEST`. You will see the contents of the text file you just created.
 
-d. Remove the floppy disk from the drive (if you are using blueMSX, select the `File - Disk Drive A - Eject: nextor.dsk` menu option).
+d. Remove the floppy disk from the drive (if you are using blueMSX, select the `File - Disk Drive A - Eject: tools.dsk` menu option).
 
 e. Execute `TYPE C:TEST` again. You will see the file contents again instead of getting a "Not Ready" error, even though the disk has been removed from the drive.
 
@@ -301,11 +338,9 @@ f. Insert the Nextor tools floppy disk in its drive again.
 
 Now we will set the reduced allocation mode on the FAT16 partition available on each device and see what happens.
 
-a. Reset your computer. Drive A: will be mapped to the 50M partition on the master device, and drive B: to the 25M partition (also on the master device), so map drive B: to the 85M partition on the slave device by executing the following command:
+a. Reset your computer. Drive A: will be mapped to the 50M partition on the master device, and drive B: to the 85M partition on the slave device.
 
-    C:MAPDRV B: 1 2 1
-
-b. Issue a `VOL A:50M` command, then a `VOL B:85M` command, in order to help identifying the partitions without having to rely on their free size:
+b. Issue a `VOL A:50M` command, then a `VOL B:85M` command, in order to help identify the partitions without having to rely on their free size:
 
  ![](img/gsg/VolAndDir.png)
 
@@ -324,7 +359,9 @@ d. Issue a `DIR` command, then a `DIR B:` command. Notice that now the free spac
 
 e. Execute the following command:
 
-    SET ZALLOC = ON
+```
+SET ZALLOC = ON
+```
 
 f. Issue again the `DIR` and `DIR B:` commands. Notice that this time the free space reported is zero for both partitions, and the DIR commands finish immediately after displaying the last file name.
 
@@ -332,25 +369,25 @@ f. Issue again the `DIR` and `DIR B:` commands. Notice that this time the free s
 
 ## 9. Using the boot keys and the boot menu
 
-We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots, as well as the new boot menu; see _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for a full list of the available keys.
+We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots, as well as the boot menu; see _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for a full list of the available keys.
 
 a.	Reset your computer while keeping the "3" key pressed. You will see that the computer boots in the BASIC prompt.
 
-***What has happened?*** When the "3" key is kept pressed at boot time, Nextor ignores any NEXTOR.SYS, MSXDOS.SYS and AUTOEXEC.BAS files present in the boot drive, and boots in the MSX-BASIC prompt.
+***What has happened?*** When the "3" key is kept pressed at boot time, Nextor ignores any `NEXTOR.SYS`, `MSXDOS.SYS` and `AUTOEXEC.BAS` files present in the boot drive, and boots in the MSX-BASIC prompt.
 
 b.	Issue a `CALL SYSTEM` command.
 
 c.	Copy the DRIVERS tool to drive A: with the following command: `COPY C:DRIVERS.COM A:`
 
-d.	Execute the DRIVERS tool. You will see that the IDE controller has been assigned two drives at boot time, and the floppy disk controller has been assigned one:
+d.	Execute the DRIVERS tool. You will see that the IDE controller has been assigned two drives at boot time, and the floppy disk controller has been assigned another two:
 
 ![](img/gsg/DriversTwoDrives.png)
 
-e.	Reset your computer while keeping the "5" key pressed. Once in the COMMAND2.COM prompt, execute the DRIVERS tool again. You will see that both the IDE controller and the floppy disk drive have been assigned only one drive each:
+e.	Reset your computer while keeping the "5" key pressed. Once in the COMMAND2.COM prompt, execute the DRIVERS tool again. You will see that now the IDE controller has got only one drive, but the floppy disk drive still has two:
 
 ![](img/gsg/DriversOneDrive.png)
 
-***What has happened?*** When the "5" key is kept pressed at boot time, Nextor will assign one single drive to each Nextor driver, regardless of the number of attached devices and of how many partitions have the "active" flag set.
+***What has happened?*** When the "5" key is kept pressed at boot time, Nextor will assign one single drive to each Nextor driver, regardless of the number of attached devices and of how many partitions have the "active" flag set. Legacy MSX-DOS drivers are unaffected by this.
  
 f.	Reset your computer while keeping the "SHIFT" key pressed. Once in the COMMAND2.COM prompt, execute the DRIVERS tool again. You will see that no drives have been assigned to the floppy disk drive:
 
@@ -358,57 +395,61 @@ f.	Reset your computer while keeping the "SHIFT" key pressed. Once in the COMMAN
 
 ***What has happened?*** When the "SHIFT" key is kept pressed at boot time, all the storage controllers with an MSX-DOS kernel (including the floppy disk drive controller) will disable themselves, but Nextor will not. This is useful to maximize the amount of available memory, especially in MSX-DOS 1 mode, as shown in the next step. (There are boot keys to selectively disable the Nextor kernels as well, and the boot menu shown below can also be used for this; see _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for details)
 
-g.	Reset your computer while keeping the "1" and "3" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command. You will see that there are about 23K free for BASIC code.
+g.	Reset your computer while keeping the "1" and "3" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command. You will see that there are about 20K free for BASIC code.
 
-h.	Reset your computer while keeping the "1", "3", "5" and "SHIFT" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command again. You will see that now the free memory is about 25K. Also, if you execute a `CALL DRVINFO` command, you will see that indeed, there is only one drive assigned:
+h.	Reset your computer while keeping the "1", "3", "5" and "SHIFT" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command again. You will see that the free memory is now about 25K. Also, if you execute a `CALL DRVINFO` command, you will see that indeed, there is only one drive assigned:
 
 ![](img/gsg/DrvinfoInBasic.png)
 
-**Note:** of course, you do not need to keep the "5" key pressed while booting if only one drive would be assigned to your Nextor controller anyway.
-
 i.	Reset your computer while keeping the "N" key pressed. Instead of booting, the computer will display the Nextor boot menu:
 
-![](img/BootMenu.png)
+![](img/gsg/BootMenu.png)
 
-(The image shows a computer with two Nextor kernels; in the scenario of this guide only the Sunrise IDE one will be listed.)
+***What has happened?*** The boot menu, introduced in Nextor 3.0, allows you to configure how the system will boot without having to keep several keys pressed while the computer boots. The menu lists all the Nextor 3 kernels found in the system, and each one can be enabled or disabled for the current boot by pressing the key displayed next to it ("Q" in our case); it then lists a set of options equivalent to the boot keys we have seen in this section, which can be switched on and off by pressing the corresponding number key (an asterisk indicates the kernels and options that are currently switched on). Once you are done, press ENTER to boot applying your selection, ESC to cancel the menu and boot normally, or "N" to disable all the Nextor kernels and boot (this is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller). See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for the details.
 
-***What has happened?*** The boot menu, introduced in Nextor 3.0, allows to configure how the system will boot without having to keep several keys pressed while the computer boots. The menu lists all the Nextor 3 kernels found in the system, and each one can be enabled or disabled for the current boot by pressing the key displayed next to it ("Q" in our case); it then lists a set of options equivalent to the boot keys we have seen in this section, which can be switched on and off by pressing the corresponding number key (an asterisk indicates the kernels and options that are currently switched on). Once you are done, press ENTER to boot applying your selection, ESC to cancel the menu and boot normally, or "N" to disable all the Nextor kernels and boot (this is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller). See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for the details.
-
-j.	In the boot menu, press "1" and then "5" (an asterisk will appear next to the "Boot in MSX-DOS 1 mode" and "Reduced drive allocation mode" entries), then press ENTER. You will boot in MSX-DOS 1 mode with one single drive assigned per driver, exactly as if you had kept the "1" and "5" keys pressed while the computer was booting — but this time keeping your hands free.
+j.	In the boot menu, press "1" and then "5" (an asterisk will appear next to the "Boot in MSX-DOS 1 mode" and "Reduced drive allocation mode" entries), then press ENTER. You will boot in MSX-DOS 1 mode with one single drive assigned per driver, exactly as if you had kept the "1" and "5" keys pressed while the computer was booting - but this time keeping your hands free.
 
 ## 10. Installing drivers in RAM
 
 So far all the Nextor drivers we have used were embedded in a Nextor kernel ROM. Nextor 3 introduces a new type of driver: the RAM drivers, which are loaded from a file and installed in a RAM segment of a memory mapper — no flashing involved. To try this feature we'll use the example RAM driver that is developed as part of Nextor: it implements a tiny (14K) RAM disk and, just for demonstration purposes, it also makes the CAPS LED of the computer blink and adds a CALL PRINT command to BASIC.
 
-a. Get the example RAM driver file, _ram-driver-example.drv_ (available in [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest), it can also be built from the Nextor source code), rename it to RAMDRIVR.DRV (remember that Nextor uses 8.3 format file names), and copy it to drive A:. If you are using blueMSX you can put the file in an empty folder of your computer, select the _File - Disk Drive A - Insert Directory_ menu option to use that folder as the floppy disk, execute `COPY C:RAMDRIVR.DRV A:`, and then insert the Nextor tools disk again.
+a. Get the example RAM driver file, _ram-driver-example.drv_ (available in [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest), it can also be built from the Nextor source code), rename it to RAMDRIVR.DRV, and copy it to drive A:. If you are using blueMSX you can put the file in an empty folder of your computer, select the _File - Disk Drive A - Insert Directory_ menu option to use that folder as the floppy disk, execute `COPY C:RAMDRIVR.DRV A:`, and then insert the Nextor tools disk again.
 
 b. Install the driver by executing the following command:
 
-    C:DRVROP i RAMDRIVR.DRV /m
-
-You will see the initialization messages printed by the driver, the slot and segment number where it has been installed (take note of these, you'll need them later), and a message telling that a drive has been mapped (drive D: if you are following this guide step by step). You will also notice that the CAPS LED of your computer (or of the emulated machine) starts blinking.
-
-***What has happened?*** The DRVROP tool has allocated a segment from the memory mapper, loaded the driver file into it, and registered it in Nextor; from this point the driver works exactly like a driver embedded in ROM (it can even hook into the timer interrupt, hence the blinking CAPS LED). The `/m` flag has additionally mapped the first free drive letter to the first available device controlled by the new driver: a small RAM disk that lives in the driver's own RAM segment. See _[3.4.13. DRVROP: the driver operations tool](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool)_ in the Nextor 3.0 User Manual for the complete syntax of the tool.
-
-c. Issue a `DIR D:` command: you will see an empty drive with just a few kilobytes of free space. Copy a small file to it and verify that it is indeed a working drive, for example:
-
 ```
-COPY C:TEST D:
-DIR D:
-TYPE D:TEST
+C:DRVROP i RAMDRIVR.DRV /m
 ```
 
-d. Execute the DRIVERS tool (`C:DRIVERS`). The new driver ("Simple RAM disk driver") will be listed together with the drivers in ROM, showing the slot and the segment number where it is installed.
+You will see the initialization messages printed by the driver, the slot and segment number where it has been installed (take note of these, you'll need them later), and a message telling that a drive has been mapped (drive E: if you are following this guide step by step). You will also notice that the CAPS LED of your computer (or of the emulated machine) starts blinking:
 
-e. Type BASIC and execute `CALL PRINT("HELLO!")`: the string will be printed by the new command that the driver has added to BASIC. Go back to the DOS prompt with CALL SYSTEM.
+![](img/gsg/InstallingRamDriver.png)
 
-f. Uninstall the driver by executing the following command, replacing the slot and segment numbers with the values you took note of in step b (for example, if the driver was installed in slot 3-2 and segment 4):
+***What has happened?*** The `DRVROP.COM` tool has allocated a segment from the memory mapper, loaded the driver file into it, and registered it in Nextor; from this point the driver works exactly like a driver embedded in ROM (it can even hook into the timer interrupt, hence the blinking CAPS LED). The `/m` flag has additionally mapped the first free drive letter to the first available device controlled by the new driver: a small RAM disk that lives in the driver's own RAM segment. See _[3.4.13. DRVROP: the driver operations tool](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool)_ in the Nextor 3.0 User Manual for the complete syntax of the tool.
 
-    C:DRVROP u 3-2 4
+c. Issue a `DIR E:` command: you will see an empty drive with just a few kilobytes of free space. Copy a small file to it and verify that it is indeed a working drive, for example:
 
-You will see the shutdown message printed by the driver, and the CAPS LED will stop blinking. Drive D: is now unmapped, and the CALL PRINT command is gone.
+```
+COPY C:TEST E:
+DIR E:
+TYPE E:TEST
+```
 
-***What has happened?*** The driver has been asked to shut down (so that it could remove its hooks), all the drives mapped to it have been unmapped, and its RAM segment has been freed.
+d. Execute the DRIVERS tool (`C:DRIVERS`). The new driver ("Simple RAM disk driver") will be listed together with the drivers in ROM, showing the slot and the segment number where it is installed (the number after the slot is the RAM segment number):
+
+![](img/gsg/RamDriverInstalled.png)
+
+e. Go to BASIC and execute `CALL PRINT("HELLO!")`: the string will be printed. `CALL PRINT` is a new command that the driver has added to BASIC. Go back to the DOS prompt with CALL SYSTEM.
+
+f. Uninstall the driver by executing the following command, replacing the slot and segment numbers with the values you took note of in step b (if you didn't take note, run the DRIVERS tool as in step d); for example, if the driver was installed in slot 3-2 and segment 28:
+
+```
+C:DRVROP u 3-2 28
+```
+
+You will see the shutdown message printed by the driver, and the CAPS LED will stop blinking. Drive E: is now unmapped, and the `CALL PRINT` command is gone.
+
+***What has happened?*** The driver has been asked to shut down (so that it could remove its hooks), all the drives mapped to it have been unmapped, its RAM segment has been freed, and finally Nextor has unregistered the driver.
 
 **Notes:**
 
@@ -416,4 +457,4 @@ You will see the shutdown message printed by the driver, and the CAPS LED will s
 
 * RAM drivers don't work in MSX-DOS 1 mode, and they don't survive a computer reset. If you want a RAM driver to be always available, you can install it from your AUTOEXEC.BAT file.
 
-* The example RAM driver is not the only one available: for example, [the MSX Turbo-R FDD driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) is available in both ROM and RAM flavors.
+* [The MSX Turbo-R FDD driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) is available as a RAM driver also, in addition to the regular ROM driver variant.
