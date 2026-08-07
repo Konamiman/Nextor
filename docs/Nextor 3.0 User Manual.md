@@ -163,13 +163,13 @@ If you are already familiar with Nextor 2 you may want to take a look at [what's
 
 MSX-DOS is the only official disk operating system for MSX computers. The last version, labeled 2.31, appeared in 1990 accompanying MSX Turbo-R computers.
 
-MSX-DOS was developed in a time in which the only option for mass storage in MSX computers was the floppy disk, and when used as a "floppy disk only operating system" MSX-DOS works indeed just fine. Over the years, however, more modern mass storage options have appeared in the form of amateur-made hardware -- from the early 90's SCSI and IDE hard disk controllers to today's multimedia card readers. MSX-DOS has been used to manage these devices, but not without some problems:
+MSX-DOS was developed in a time in which the only option for mass storage in MSX computers was the floppy disk, and when used as a "floppy disk only operating system" MSX-DOS works indeed just fine. Over the years, however, more modern mass storage options have appeared in the form of amateur-made hardware: from the early 1990's SCSI and IDE hard disk controllers to today's multimedia card readers. MSX-DOS has been used to manage these devices, but not without some problems:
 
 *  MSX-DOS handles sector numbers as 16 bit entities, and the only filesystem it supports is FAT12. This limits the size of a single filesystem volume to 32MB. Unofficial patches have been developed to add support for the FAT16 filesystem.
 
-*  The actual device driver (the code that interacts with the mass storage controller hardware) is embedded within the operating system kernel ROM, present in computers with built-in floppy disk drives and in external floppy disk controllers. There is no officially documented way to embed a custom device driver within the kernel ROM; developers of custom storage controller hardware have to reverse-engineer the kernel code in order to embed a custom driver.
+*  The actual device driver (the code that interacts with the mass storage controller hardware) is embedded within the operating system kernel ROM, present in computers with built-in floppy disk drives and in external floppy disk controllers. There is no officially documented way (known to users and amateur developers) to embed a custom device driver within the kernel ROM; developers of custom storage controller hardware have to reverse-engineer the kernel code in order to embed a custom driver.
 
-*  There is a fixed direct, one-to-one correspondence between the drive letters as seen by the user and the device units exposed by the device driver API. For example, in order to access drive A:, MSX-DOS asks the driver to access its first device; while the second device is queried when accessing drive B:. This is OK for floppy disks, but when using more complex devices that have one or more partitions, it is up to the driver (and usually also to external tools made by the driver developer) to manage the drive to device and partition assignment.
+*  There is a fixed direct, one-to-one correspondence between the drive letters as seen by the user and the device units exposed by the device driver API. For example, in order to access drive A:, MSX-DOS asks the driver to access its first device; while the second device is queried when accessing drive B:. This is ok for floppy disks, but when using more complex devices that have one or more partitions, it is up to the driver (and usually also to external tools made by the driver developer) to manage the drive to device and partition assignment.
 
 *  Managing non-block devices (such as CD-ROMs) is extremely difficult, as it implies a hard work of reverse-engineering on the kernel code.
 
@@ -232,7 +232,7 @@ Nextor 2 allowed developing the so-called "drive-based drivers", which mimicked 
 
 ### 2.4. Drive lock
 
-Nextor allows marking drives as locked. When a drive is locked, the kernel code will not ask the driver if the media in the drive has changed; instead, it will assume that the user will never change the media. This is useful when a removable device such as a multimedia card is used as the main storage device, as it prevents the kernel from wasting time executing media verification code. Drives can be locked by using the supplied tool LOCK.COM or by invoking the CALL LOCKDRV command from within the BASIC prompt. All drives can be locked, even those belonging to MSX-DOS drivers (including floppy disk drives). See _[3.4.5. LOCK: the drive lock and unlock tool](#345-lock-the-drive-lock-and-unlock-tool)_, and _[3.6.9. The CALL LOCKDRV command](#369-the-call-lockdrv-command)_.
+Nextor allows marking drives as locked. When a drive is locked, the kernel code will not ask the driver if the media in the drive has changed; instead, it will assume that the user will never change the media. This is useful when a removable device such as a multimedia card is used as the main storage device, as it prevents the kernel from wasting time executing media verification code. Drives can be locked by using the supplied tool `LOCK.COM` or by invoking the `CALL LOCKDRV` command from within the BASIC prompt. All drives can be locked, even those belonging to MSX-DOS drivers (including floppy disk drives). See _[3.4.5. LOCK: the drive lock and unlock tool](#345-lock-the-drive-lock-and-unlock-tool)_, and _[3.6.9. The CALL LOCKDRV command](#369-the-call-lockdrv-command)_.
 
 ### 2.5. Support for floppy disks
 
@@ -269,15 +269,15 @@ Note that in the same way as for MSX-DOS drivers, no ghost drives will be assign
 
 **Assignment when mapping manually:** When you later map a drive letter to a device manually (for example with the MAPDRV tool or the CALL MAPDRV command, see _[3.6.10. The CALL MAPDRV command](#3610-the-call-mapdrv-command)_), the next drive letter is assigned as its ghost drive if all of the following are true:
 
-* The main drive is not H:.
+* The main drive (the one being manually mapped) is not H:.
 * The device is flagged as a floppy disk drive by the driver.
-* No other drive has been assigned as a ghost drive yet (to any device on any driver).
+* No other drive is currently assigned as a ghost drive (to any device on any driver).
 * The next drive letter is free (unassigned).
 * (When running in MSX-DOS 1 mode only) the next drive letter is assigned to the same driver, but not to any device.
 
 Unmapping the main drive automatically unmaps its ghost drive as well. Unmapping the ghost drive, on the other hand, has no effect on the main drive.
 
-The MAPDRV tool and the CALL MAPDRV command (see _[3.6.10. The CALL MAPDRV command](#3610-the-call-mapdrv-command)_) will show ghost drives identified as such.
+The `MAPDRV.COM` tool and the `CALL MAPDRV` command (see _[3.6.10. The CALL MAPDRV command](#3610-the-call-mapdrv-command)_) will show ghost drives identified as such.
 
 ### 2.6. Reduced and zero allocation information mode
 
@@ -285,9 +285,7 @@ Nextor allows setting drives in reduced allocation information mode. When in thi
 
 This feature is intended to avoid compatibility issues with applications that assume the underlying filesystem to be always FAT12 and therefore expect total or free space information of up to 32MB. 
 
-If an environment item named ZALLOC is created with a value (case insensitive) of ON (command `SET ZALLOC=ON` in the command interpreter prompt), the reduced allocation information mode becomes the zero allocation information mode. In this case, ALLOC will return a free space of zero for the drives that have this mode active. This is useful because calculating the free space on a device (at the end of a DIR command, for example) may take a somewhat long time on large devices (about 4 seconds in Z80 mode for a SD card, for example); when the zero allocation information mode is active, this time is reduced to zero.
-
-The zero allocation information mode is available since Nextor 2.0.3.
+If an environment item named `ZALLOC` is created with a value (case insensitive) of `ON` (command `SET ZALLOC=ON` in the command interpreter prompt), the reduced allocation information mode becomes the zero allocation information mode. In this case, ALLOC will return a free space of zero for the drives that have this mode active. This is useful because calculating the free space on a device (at the end of a DIR command, for example) may take a somewhat long time on slow and large devices (about 4 seconds in Z80 mode for an SD card, for example); when the zero allocation information mode is active, this time is reduced to zero.
 
 ### 2.7. Z80 access mode
 
@@ -297,13 +295,13 @@ The Z80 access mode is active by default for all MSX-DOS drivers. It is possible
 
 ### 2.8. Fast STROUT mode
 
-The MSX-DOS function STROUT prints a string terminated with a "$" character. What this function actually does is to perform one separate call to the CONOUT function (which prints one single character) for every character of the string.
+The MSX-DOS function `STROUT` prints a string terminated with a "$" character. What this function actually does is to perform one separate call to the `CONOUT` function (which prints one single character) for every character of the string.
 
-Nextor introduces the _fast STROUT_ mode. When this mode is active, the string will be copied to a 512 byte buffer in page 3 and then it will be printed in one single call to the kernel code, which increases the speed of the printing process. The drawback is that the string length is limited to 511 bytes when this mode is active; longer strings will be truncated before being displayed. See _[3.4.8. FASTOUT: the fast STROUT mode tool](#348-fastout-the-fast-strout-mode-tool)_.
+Nextor introduces the _fast STROUT_ mode. When this mode is active, the string will be copied to a 512 byte buffer in page 3 and then it will be printed in one single call to the kernel code, which increases the speed of the printing process. The drawback is that the string length is limited to 511 bytes when this mode is active; longer strings will be truncated before being printed. See _[3.4.8. FASTOUT: the fast STROUT mode tool](#348-fastout-the-fast-strout-mode-tool)_.
 
 ### 2.9. Extended mapper support routines
 
-MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides two new ones that allow allocating a contiguous block of memory (from 1 byte to 16K) inside a given segment. See the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ for details.
+MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides four new ones that allow reading data, writing data and calling routines with full slot and RAM segment number specification. See _[5. Extended mapper support routines](Nextor%203.0%20Programmers%20Reference.md#5-extended-mapper-support-routines)_ in the Nextor 3.0 Programmers Reference for details.
 
 ### 2.10. Boot keys and the boot menu
 
@@ -315,13 +313,13 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **2**: Force boot in MSX-DOS 1 mode. If the computer is an MSX Turbo-R, switches the CPU to R800-ROM mode. Note that in MSX-DOS 1 mode, the active CPU is never changed when accessing disk drives; this may cause some storage devices to not work properly, especially those mapped to MSX-DOS drivers such as floppy disk drives.
 
-*  **3**: Force boot to the BASIC prompt, ignoring any existing boot code (that is, do not try to load and run NEXTOR.SYS, AUTOEXEC.BAS or the code in the boot sector).
+*  **3**: Force boot to the BASIC prompt, ignoring any existing boot code (that is, do not try to load and run `NEXTOR.SYS`, `AUTOEXEC.BAS` or the code in the boot sector).
 
-*  **4**: (for MSX Turbo-R only) Boot in R800-ROM mode, assign the largest mapper found as the primary mapper (instead of the internal mapper), and free the 64K allocated for the R800-DRAM mode. This is useful for using software that requires a huge amount of mapped RAM and can work only with the primary mapper; note however that there is a big penalty in the system speed.
+*  **4**: (for MSX Turbo-R only) Boot in R800-ROM mode, assign the largest mapper found as the primary mapper (instead of the internal mapper), and free the 64K allocated for the R800-DRAM mode. This is useful for using software that requires a huge amount of mapped RAM and can work only with the primary mapper; note however that the R800 CPU in ROM mode is significantly slower than in DRAM mode.
 
 *  **5**: Make Nextor assign only one drive letter per Nextor driver, instead of the normal behavior of assigning one drive per suitable active partition found (see _[3.2. Booting Nextor](#32-booting-nextor)_). Drivers are informed of this request and could act on it, see _[4.5.3. Driver query 3: Get driver initialization parameters](Nextor%203.0%20Driver%20Development%20Guide.md#453-driver-query-3-get-driver-initialization-parameters)_.
 
-* **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable its second "ghost" drive, freeing some extra memory, especially in MSX-DOS 1 mode. Note that this key is inverted by default so you'll get the opposite behavior unless you customize the Nextor ROM (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_).
+* **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable its second "ghost" drive, freeing some extra memory, especially in MSX-DOS 1 mode. 
 
 *  **SHIFT**: Prevent MSX-DOS kernels from booting, but allow Nextor kernels to boot normally. This is useful to disable the internal floppy disk drive in order to get some extra TPA memory, especially in MSX-DOS 1 mode.
 
@@ -336,7 +334,7 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
     
 Example: if your Nextor kernel is in primary slot 1, press Q to prevent it from booting. If you have it in slot 2-3, press F.
 
-* **N**: Shows the boot menu. This menu was introduced in Nextor 3.0, and allows you to switch on and off any of the keys listed above and then proceed with the boot procedure, without having to keep keys pressed while the computer boots:
+* **N**: Shows the boot menu. This menu was introduced in Nextor 3.0, and allows you to switch on and off any of the keys listed above and then proceed with the boot, without having to keep keys pressed while the computer boots:
 
 ![Nextor boot menu](img/BootMenu.png)
 
@@ -344,7 +342,7 @@ If you want to completely disable all Nextor kernels, press N at boot time to sh
 
 #### 2.10.1. Boot key inverters
 
-The Nextor kernel has two bytes, at offsets 512 and 513 in the ROM that act as _boot key inverters_. There's one bit assigned to each of the keys that affect the booting process (not including the slot keys), and when that bit is set, then the meaning of the key is inverted. For example, if the bit for the SHIFT key is set, then MSX-DOS drivers will be disabled unless SHIFT is pressed while booting.
+The Nextor kernel has two bytes, at offsets 512 and 513 in the ROM, that act as _boot key inverters_. There's one bit assigned to each of the keys that affect the booting process (not including the slot keys and the 0 and N keys), and when that bit is set, then the meaning of the key is inverted. For example, if the bit for the SHIFT key is set, then MSX-DOS drivers will be disabled unless SHIFT is pressed while booting.
 
 Being hardcoded values, the only way to customize them is to modify the Nextor ROM file before flashing it into your device. The `mknexrom` tool can be used for that, or you can do it manually using a hexadecimal editor.
 
@@ -383,15 +381,15 @@ There's yet another way to modify the Nextor booting procedure: the _one-time bo
 
 Being a RAM based mechanism, it's "one-time" in the sense that it won't work again on the next computer reset unless the signature and the key data are put in memory again. The signature is explicitly erased by Nextor after being read to make this behavior consistent.
 
-The NEXBOOT.COM tool (see _[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
+The `NEXBOOT.COM` tool (see _[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
 
 ### 2.11. Built-in partitioning tool
 
-The Nextor kernel has a built-in device partitioning tool that can be started by just executing CALL FDISK in the BASIC prompt. It can be used to create partitions of any size between 100KB and 4GB on devices controlled by Nextor drivers. See _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_.
+The Nextor kernel has a built-in device partitioning tool that can be started by just executing `CALL FDISK` in the BASIC prompt. It can be used to create partitions of any size between 100KB and 4GB on devices controlled by Nextor drivers. See _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_.
 
 ### 2.12. Embedded MSX-DOS 1
 
-The Nextor kernel contains the MSX-DOS 1 kernel, so that it is possible to boot in this environment when necessary. The Nextor version of MSX-DOS 1 does not provide any additional functionality to users or developers relative to the original version, however it has been modified internally so that it can access devices attached to Nextor drivers. See _[3.2.1. Booting in DOS 1 mode](#321-booting-in-dos-1-mode)_.
+The Nextor kernel contains the MSX-DOS 1 kernel, so that it is possible to boot in this environment when necessary. The Nextor version of MSX-DOS 1 does not provide any additional functionality to users or developers relative to the original version (with a few exceptions, e.g. the `CALL FDISK` and `CALL MAPDRV` commands work); however it has been modified internally so that it can access devices attached to Nextor drivers. See _[3.2.1. Booting in DOS 1 mode](#321-booting-in-dos-1-mode)_.
 
 ### 2.13. Enhanced BASIC
 
@@ -399,11 +397,11 @@ The old Disk BASIC, now named simply Nextor BASIC, has been extended with new co
 
 ### 2.14. Enhanced NEXTOR.SYS
 
-The NEXTOR.SYS file has been improved in several ways in Nextor 3. To begin with, its version number is now 3.0 (or higher), matching the major version number of the Nextor kernel.
+The `NEXTOR.SYS` file has been improved in several ways in Nextor 3. To begin with, its version number is now 3.0 (or higher), matching the major version number of the Nextor kernel.
 
-Also, the resident code of NEXTOR.SYS is more compact than it was in Nextor 2, so slightly more free memory (TPA) is left for programs.
+Also, the resident code of `NEXTOR.SYS` is more compact than it was in Nextor 2, so slightly more free memory (TPA) is left for programs.
 
-Finally, when the DOS environment can't be loaded at boot time (because NEXTOR.SYS or COMMAND2.COM is missing or incompatible), Nextor will now print a proper error message (for example "Command interpreter not found" or "Incompatible DOS version") before falling back to the BASIC prompt, instead of failing silently.
+Finally, when the DOS environment can't be loaded at boot time (e.g. because `COMMAND2.COM` is missing or incompatible), Nextor will now print a proper error message (for example "Command interpreter not found" or "Incompatible DOS version") before falling back to the BASIC prompt, instead of repeatedly asking the user for another disk or failing silently.
 
 ### 2.15. File mounting and disk emulation mode
 
@@ -430,25 +428,25 @@ Nextor consists of the following components:
 
 * The Nextor kernel ROM. It must contain a device driver, although a "standalone" version is provided which contains a dummy driver exposing no devices.
 
-* The NEXTOR.SYS file, which is necessary in order to boot in the DOS prompt. This file has the role that MSXDOS2.SYS had in MSX-DOS 2 (in fact, NEXTOR.SYS is just an extended version of MSXDOS2.SYS).
+* The `NEXTOR.SYS` file, which is necessary in order to boot in the DOS prompt. This file has the role that `MSXDOS2.SYS` had in MSX-DOS 2 (in fact, `NEXTOR.SYS` is just an extended version of `MSXDOS2.SYS`).
 
-* The COMMAND2.COM file. There is no special command interpreter for Nextor; instead, the same command interpreter of MSX-DOS 2 is used (any version of COMMAND2.COM from 2.20 will do), and new features are handled by using external commands.
+* The `COMMAND2.COM` file. There is no special command interpreter for Nextor; instead, the same command interpreter of MSX-DOS 2 is used (any version of `COMMAND2.COM` from 2.20 will do), and new features are handled by using external commands.
 
 **Note:** two variants of the NEXTOR.SYS file exist. See _[4.3. Reduced NEXTOR.SYS without Japanese error messages](#43-reduced-nextorsys-without-japanese-error-messages)_.
 
-**Note:** starting with Nextor 2.1.0 beta 2, the kernel will try to load MSXDOS2.SYS if NEXTOR.SYS is not found. However in this case the Nextor command line tools won't work.
+**Note:** starting with Nextor 2.1.0, the kernel will try to load `MSXDOS2.SYS` if `NEXTOR.SYS` is not found. However in this case the Nextor command line tools won't work.
 
-**Note:** starting with Nextor 2.1.0 beta 2, the `CALL SYSTEM2` command (see _[3.6.15. The CALL SYSTEM2 command](#3615-the-call-system2-command)_) can be used in BASIC to force a reboot in the DOS environment using MSXDOS2.SYS, even if NEXTOR.SYS exists.
+**Note:** starting with Nextor 2.1.0, the `CALL SYSTEM2` command (see _[3.6.15. The CALL SYSTEM2 command](#3615-the-call-system2-command)_) can be used in BASIC to force a reboot in the DOS environment using `MSXDOS2.SYS`, even if `NEXTOR.SYS` exists.
 
-In order to boot in the MSX-DOS 1 prompt, you need the usual MSXDOS.SYS and COMMAND.COM files. Also, if you have just the kernel and no NEXTOR.SYS or MSXDOS.SYS files, Nextor will boot in the BASIC prompt (running AUTOEXEC.BAS if present).
+In order to boot in the MSX-DOS 1 prompt, you need the usual `MSXDOS.SYS` and `COMMAND.COM` files. Also, if you have just the kernel and no `NEXTOR.SYS` or `MSXDOS.SYS` files, Nextor will boot in the BASIC prompt (running `AUTOEXEC.BAS` if present).
 
 Therefore, in order to "install" Nextor, you have two options:
 
 1.  Burn a ROM with the appropriate Nextor driver directly in the storage device controller.
 
-2.  Burn a standalone version in a flash ROM cartridge, and use it together with your storage device controller in another slot.
+2.  Burn a standalone version in a flash ROM cartridge, and use it together with your (MSX-DOS based) storage device controller in another slot.
 
-Also, you need to copy at least NEXTOR.SYS and COMMAND2.COM to your boot device (it is recommended to have the associated utilities available as well) unless you are happy in the BASIC prompt. More details about the boot procedure follow.
+Also, you need to copy at least `NEXTOR.SYS` and `COMMAND2.COM` to your boot device (it is recommended to have the associated utilities available as well) unless you are happy in the BASIC prompt. More details about the boot procedure follow.
 
 
 ### 3.2. Booting Nextor
@@ -456,6 +454,8 @@ Also, you need to copy at least NEXTOR.SYS and COMMAND2.COM to your boot device 
 The Nextor booting procedure is similar to the one performed by MSX-DOS 2. However, things are a little different since it is necessary to perform a drive to device and partition mapping for all the drives attached to Nextor drivers (if you are using the standalone driver only, then the booting procedure is identical to MSX-DOS 2).
 
 At boot time, Nextor will perform a query to all the available Nextor drivers to find out how many devices are being controlled by these drivers, and will assign to each driver one drive per active partition found in each device controlled by the driver (if a device has no active partitions, it still gets one drive). If 5 is pressed at boot time, only one drive is assigned to each driver instead (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_).
+
+**Note:** An active partition is one that has the "active" partition flag set in its partition table entry (the most significant bit in the first byte of the partition table entry). This flag can be switched on and off for any existing partition using `FDISK`, see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_.
 
 For example, assume that you have two Nextor kernels attached. The kernel in slot 1 controls one device that has two active partitions, while the kernel in slot 2 controls three devices, each having either only one partition marked as active or no partitions marked as active. Then the initial drive assignment would be as follows:
 
@@ -473,21 +473,19 @@ B: for driver on slot 2
 C:, D: for the internal disk drive
 ```
 
-A partition is considered active if it has the "active" flag set in the partition table (the most significant bit in the first byte of the partition table entry); this can be set using FDISK (see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_).
-
 The internal disk drive would not have any drives attached if you pressed SHIFT while booting (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_) or if you use a Nextor kernel variant with the SHIFT key inverted.
 
 After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. Each drive is mapped to a device partition that meets the following conditions:
 
-1. The device doesn't have the "don't use for automapping" flag set (this flag is set by the driver)
-2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode)
-3. Is an active partition
+1. The device doesn't have the "don't use for automapping" flag set (this flag is set by the driver).
+2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode).
+3. Is an active partition.
 
 If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check; devices that already have one of their partitions mapped to another drive are skipped in this second pass, so that a device never gets more drives than the ones reserved for it (one per active partition, with a minimum of one). If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort.
 
 If no suitable partition is found in any device, the drive remains attached to its device but with no partition assigned; a partition will then be searched again on the first access to the drive. This happens for devices that are offline at boot time (only if the driver declares them as removable), and for devices that are online but don't hold any valid filesystem (e.g. a brand new or not yet partitioned storage device, which this way keeps a drive attached so that it can be accessed right away after being partitioned).
 
-Note that the automatic mapping procedure only supports devices with numbers 1 to 63. In the unlikely case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
+The automatic mapping procedure only supports devices with numbers 1 to 63: this is a current limitation of Nextor that could disappear in future versions. In the case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
 
 Note that in order to speed up the booting procedure, only the first 9 partitions of each device are scanned during this procedure; consequently, FDISK (see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_) allows changing the "active" flag on these first 9 partitions only.
 
@@ -495,15 +493,15 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if the NEXTOR.SYS (or MSXDOS2.SYS) and COMMAND2.COM files are present in the boot drive (the first drive that is not unmapped), the DOS prompt is shown after AUTOEXEC.BAT is executed (if present).
+2.  Otherwise, if the `NEXTOR.SYS` (or `MSXDOS2.SYS`) and `COMMAND2.COM` files are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present).
 
-3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause MSXDOS.SYS and COMMAND.COM to be loaded if present.
+3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
-4.  If the previous step returns, then the BASIC environment is activated, and AUTOEXEC.BAS is executed if present.
+4.  If the previous step returns, then the BASIC environment is activated, and `AUTOEXEC.BAS` is executed if present.
 
 Note that step 3 will not be done if the disk has a standard boot sector (not created by MSX-DOS 1 or MSX-DOS 2). The built-in disk partitioning tool will create MSX-DOS 2 boot sectors for all partitions of 32MB or less, and standard boot sectors for larger partitions.
 
-Starting with Nextor 2.1.0 beta 2, the Nextor kernel will load MSXDOS2.SYS if present when NEXTOR.SYS is not found, thus allowing booting from old MSX-DOS 2 disks. Note however that in this case the Nextor command line tools won't work.
+Starting with Nextor 2.1.0, the Nextor kernel will load `MSXDOS2.SYS` if present when `NEXTOR.SYS` is not found, thus allowing booting from old MSX-DOS 2 disks. Note however that in this case the Nextor command line tools won't work (`MSXDOS2.SYS` doesn't expose entry points for the new function calls added by Nextor).
 
 #### 3.2.1. Booting in DOS 1 mode
 
@@ -519,15 +517,15 @@ The boot procedure for MSX-DOS 1 mode is the same as for the normal (MSX-DOS 2 c
 
 * During the automatic mapping procedure, only the MSX-DOS 1 compatible partitions will be examined. These are FAT12 partitions with three or less sectors per FAT.
 
-* After the automatic mapping procedure, the NEXTOR.SYS and COMMAND2.COM search step is omitted.
+* After the automatic mapping procedure, the `NEXTOR.SYS` and `COMMAND2.COM` search step is omitted.
 
 Partitions of 16MB or less created with the built-in disk partitioning tool will have three sectors per FAT or less, so these can be used in MSX-DOS 1 mode.
 
-Remember that MSX-DOS 1 can boot the DOS environment (MSXDOS.SYS and COMMAND.COM) if the computer has 64K of RAM. Otherwise, only Disk BASIC can be used.
+Remember that MSX-DOS 1 can boot the DOS environment (`MSXDOS.SYS` and `COMMAND.COM`) if the computer has at least 64K of RAM. Otherwise, only Disk BASIC can be used.
 
 On MSX Turbo-R computers, the CPU mode will be switched to Z80 when booting in MSX-DOS 1 mode, unless the 2 key is pressed during boot (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_).
 
-Note: when booting directly in the BASIC prompt in MSX-DOS 1 mode, it is no longer necessary to execute "POKE &HF346,1" prior to CALL SYSTEM.
+Note: when booting directly in the BASIC prompt in MSX-DOS 1 mode, it is not necessary to execute `POKE &HF346,1` for `CALL SYSTEM` to work, as it was the case with the original MSX-DOS 1.
 
 ### 3.3. Managing media changes
 
@@ -535,7 +533,7 @@ Before trying to read or write data from a device, MSX-DOS asks the device drive
 
 When Nextor detects a media change in a drive mapped to a removable device on a Nextor driver, the following procedure is performed:
 
-* The drive is mapped to the first available valid primary partition found on the device. Valid partitions are FAT12 and FAT16 partitions. If the device has no partition table, the drive is mapped to its absolute sector zero.
+* The drive is mapped to the first available valid primary partition found on the device. Valid partitions are FAT12 and FAT16 partitions that aren't already mapped to other drives. If no suitable partition is found, the absolute sector zero of the device is tried as a last resort, and the drive is mapped to it if it holds a valid FAT12 or FAT16 filesystem. Otherwise the drive is left with no partition assigned: the access fails, and a new partition search is performed on each subsequent access to the drive.
 
 * All the other drives mapped to other partitions of the same device will be left unmapped.
 
@@ -553,28 +551,33 @@ When Nextor is running in MSX-DOS 1 mode, media changes are not managed for driv
 
 ### 3.4. The command line tools
 
-Nextor is supplied with a set of tools that allow managing the new capabilities available. All of these tools are .COM files intended to be executed from within the DOS prompt.
+Nextor is supplied with a set of tools that allow managing the new capabilities available. All of these tools are `.COM` files intended to be executed from within the DOS prompt.
 
-This section explains how to use these tools. Note however that you can also get a summary of the parameters accepted by each tool by invoking it without parameters; more detailed help is available as well by displaying the desired file directly with the TYPE command (for example: TYPE MAPDRV.COM).
+This section explains how to use these tools. Note however that you can also get a summary of the parameters accepted by each tool by invoking it without parameters; more detailed help is available as well by displaying the desired file directly with the TYPE command (for example: `TYPE MAPDRV.COM`).
 
 All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
 
 Please note that none of these tools work in MSX-DOS 1 mode; however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
 
-Some of the tools admit a `<driver slot>` parameter. In all of these, number 0 may be specified instead of a slot number, with the meaning of "the primary controller".
+Some of the tools admit a `<driver location>` parameter. The actual syntax for this parameter is `<slot>[-<subslot>][:<segment>]|0`, with the following meaning:
+
+- `<slot>` is the main slot number, and if the slot is extended, `<subslot>` must be provided too; e.g. `2-3` for main slot 2, subslot 3.
+- If the driver is loaded in RAM, `<segment>` must be provided; e.g. `2-3:34` for slot 2, subslot 3, segment 34.
+- Number 0 may be specified instead, with the meaning of "the primary Nextor controller" (which often will be the only controller present).
 
 #### 3.4.1. MAPDRV: the drive mapping tool
 
-MAPDRV.COM is a tool that allows mapping a drive letter to a partition on a device controlled by a Nextor driver. It is possible to map any drive, even those initially unmapped or associated with an MSX-DOS driver.
+`MAPDRV.COM` is a tool that allows mapping a drive letter to a partition on a device controlled by a Nextor driver. It is possible to map any drive, even those initially unmapped or associated with an MSX-DOS driver.
 
 The usage syntax for MAPDRV is:
 
 ```
-MAPDRV [/L] <drive>: <partition>|d|u|s [<device index>
-       [<driver main slot>[-<driver subslot>][:<driver segment>]]]
+MAPDRV [/L] <drive>:
+       <partition>|d|u|s
+       [<device index> [<driver location>]]
 ```
 
-Partition number 1 refers to the first primary partition on the device. Partitions 2 to 4 refer to extended partitions 2-1 to 2-4 if partition 2 of the device is extended, otherwise they refer to primary partitions 2 to 4. Partitions 5 onwards always refer to the extended partition 2-(P-1).
+Partition number 1 refers to the first primary partition on the device. Partitions 2 to 4 refer to extended partitions 2-1 to 2-3 if partition 2 of the device is extended, otherwise they refer to primary partitions 2 to 4. Partitions 5 onwards always refer to the extended partition 2-(P-1).
 
 The segment number is required only when referring to a driver loaded in RAM. The rest of this section uses the word "slot" with the meaning "main slot, plus subslot and/or segment where applicable".
 
@@ -584,9 +587,9 @@ There are three options for specifying the device where the partition is located
 
 * Do not supply any parameter after the partition number. In this case, the partition is assumed to be in the same device already mapped to the drive (this works only if the drive is currently mapped to a Nextor driver). 
 
-* Supply a device index, but not a slot number. In this case, the partition is assumed to be in the specified device, and the device is assumed to be controlled by the kernel on the same slot of the currently mapped device (this works only if the drive is currently mapped to a Nextor driver). 
+* Supply a device index, but not a driver location. In this case, the partition is assumed to be in the specified device, and the device is assumed to be controlled by the kernel at the same location as the currently mapped device (this works only if the drive is currently mapped to a Nextor driver). 
 
-* Supply a device index and a slot number. In this case, the slot corresponds to the Nextor kernel that contains the driver that handles the device.
+* Supply a device index and a driver location. In this case, the location corresponds to the Nextor kernel that contains the driver that handles the device.
 
 If "d" is specified instead of a partition number, then the drive will be mapped to its default state, which can be one of the following:
 
@@ -594,7 +597,7 @@ If "d" is specified instead of a partition number, then the drive will be mapped
 
 * If at boot time the drive was assigned to an MSX-DOS driver unit, then it is mapped to the same unit.
 
-* If at boot time the drive was assigned to a Nextor driver, then an automatic mapping procedure (equal to the one performed at boot time, except that "active" partition flags are not checked) will be performed. This may or may not result in the drive having the same mapping it had at boot time, depending on the mapping state of the other drives.
+* If at boot time the drive was assigned to a Nextor driver, then an automatic mapping procedure (equal to the one performed at boot time) will be performed. This may or may not result in the drive having the same mapping it had at boot time, depending on the mapping state of the other drives.
 
 If "u" is specified instead of a partition number, then the drive will be left unmapped.
 
@@ -615,31 +618,29 @@ There are some restrictions in place when mounting files to drives. See _[3.8. M
 
 #### 3.4.2. DRIVERS: the driver information tool
 
-The DRIVERS.COM utility, which is run without parameters, displays information about the available MSX-DOS and Nextor drivers. It will display the name and version (for Nextor drivers only), the slot number (with the RAM segment number for drivers loaded in RAM) and the assigned drives at boot time. MSX-DOS drivers will be identified as "Legacy driver".
+The `DRIVERS.COM` utility, which is run without parameters, displays information about the available MSX-DOS and Nextor drivers. It will display the name and version (for Nextor drivers only), the slot number (with the RAM segment number for drivers loaded in RAM) and the assigned drives at boot time. MSX-DOS drivers will be identified as "Legacy MSX-DOS driver".
 
 This tool is useful mainly to get the slot numbers of the drivers, in order to supply them as parameters to the other tools.
 
 #### 3.4.3. DEVINFO: the device information tool
 
-The DEVINFO.COM utility displays information about the devices controlled by a given Nextor driver. The information displayed includes the device name and manufacturer (when available), the device index, and the device type and size.
+The `DEVINFO.COM` utility displays information about the devices controlled by a given Nextor driver. The information displayed includes the device index, the device type and size, and (when available) the device name, the name of the medium currently inserted in the device, the manufacturer name and the serial number.
 
-The usage syntax for DEVINFO is:
+The usage syntax for this tool is:
 
 ```
-DEVINFO <driver slot>[-<driver subslot>][:<driver segment>]|0
+DEVINFO <driver location>
 ```
-
-where 0 instead of a driver slot number means "the primary Nextor controller". The segment number is required only when referring to a driver loaded in RAM.
 
 This tool is useful mainly to get the device indexes, in order to supply them as parameters to the MAPDRV tool.
 
 #### 3.4.4. DRVINFO: the drive information tool
 
-The DRVINFO.COM utility, which is run without parameters, displays information about all the available drive letters (those that are not unmapped). The displayed information includes the associated driver slot and other information that depends on the associated driver type (driver name and version, and device number, for Nextor drivers; relative unit for MSX-DOS drivers). MSX-DOS drivers are identified as "Legacy driver".
+The `DRVINFO.COM` utility, which is run without parameters, displays information about all the available drive letters (those that are not unmapped). The displayed information includes the associated driver location and other information that depends on the associated driver type (driver name and version, and device number, for Nextor drivers; relative unit for MSX-DOS drivers). MSX-DOS drivers are identified as "Legacy MSX-DOS driver".
 
 #### 3.4.5. LOCK: the drive lock and unlock tool
 
-The LOCK.COM utility allows locking and unlocking drive letters. The usage syntax for LOCK is:
+The `LOCK.COM` utility allows locking and unlocking drive letters. The usage syntax for LOCK is:
 
 ```
 LOCK [<drive letter>: [ON|OFF]]
@@ -653,7 +654,7 @@ Any disk error which is aborted will automatically unlock the involved drive; ot
 
 #### 3.4.6. RALLOC: the reduced/zero allocation information mode tool
 
-The RALLOC.COM utility allows activating or deactivating the reduced allocation information mode for a drive. The usage syntax for RALLOC is:
+The `RALLOC.COM` utility allows activating or deactivating the reduced allocation information mode for a drive. The usage syntax for RALLOC is:
 
 ```
 RALLOC [<drive letter>: ON|OFF]
@@ -661,19 +662,21 @@ RALLOC [<drive letter>: ON|OFF]
 
 If no parameters are specified, a list of drives currently in reduced allocation information mode will be shown.
 
-When a drive is in this mode, the ALLOC function, which returns information about the total and free space available in a drive, will return fake information if necessary, so that the calculated total or free sector count will always fit in 16 bits. In other words, on drives with the reduced allocation information mode active, when the total or free space is greater than 32MB (which is possible in FAT16 volumes), ALLOC will return 32MB.
+When a drive is in this mode, the `ALLOC` function, which returns information about the total and free space available in a drive, will return fake information if necessary, so that the calculated total or free sector count will always fit in 16 bits. In other words, on drives with the reduced allocation information mode active, when the total or free space is greater than 32MB (which is possible in FAT16 volumes), `ALLOC` will return 32MB.
 
-If an environment item named ZALLOC exists whose value (case insensitive) is ON (command `SET ZALLOC=ON` in the command interpreter), then the reduced allocation information mode becomes the zero allocation information mode (available since Nextor 2.0.3): the ALLOC function will return a free space of zero for the drives having this mode active. This makes the function return immediately, which may be useful on very large or very slow devices.
+If an environment item named ZALLOC exists whose value (case insensitive) is ON (command `SET ZALLOC=ON` in the command interpreter), then the reduced allocation information mode becomes the zero allocation information mode (available since Nextor 2.0.3): the `ALLOC` function will return a free space of zero for the drives having this mode active. This makes the function return immediately, which may be useful on very large or very slow devices.
 
 Nextor will never modify the reduced allocation information mode status for a drive automatically, it is the user who always controls this behavior. Disk errors or media changes do not modify the reduced allocation information mode status either.
 
 #### 3.4.7. Z80MODE: the Z80 access mode tool
 
-The Z80MODE.COM utility, which works on MSX Turbo-R computers only, allows activating or deactivating the Z80 access mode for an MSX-DOS driver. The usage syntax for Z80MODE is:
+The `Z80MODE.COM` utility, which works on MSX Turbo-R computers only, allows activating or deactivating the Z80 access mode for an MSX-DOS driver. The usage syntax for Z80MODE is:
 
 ```
 Z80MODE <driver slot>[-<driver subslot>] [ON|OFF]
 ```
+
+Note that the parameter is not a full `<driver location>` because this utility doesn't work on Nextor drivers (and thus you will never provide a RAM segment number).
 
 If only a driver slot is specified, the current Z80 access mode state for the driver will be shown. The Z80 access mode is set or unset on a per driver basis (it is not possible to change it for specific drive letters).
 
@@ -686,7 +689,7 @@ At boot time Nextor will activate the Z80 access mode for all MSX-DOS drivers. O
 
 #### 3.4.8. FASTOUT: the fast STROUT mode tool
 
-The FASTOUT.COM utility allows switching the fast STROUT mode on and off. The usage syntax for FASTOUT is:
+The `FASTOUT.COM` utility allows switching the fast STROUT mode on and off. The usage syntax is:
 
 ```
 FASTOUT [ON|OFF]
@@ -694,13 +697,13 @@ FASTOUT [ON|OFF]
 
 When invoked without parameters, it will show the current status of the FASTOUT mode.
 
-The MSX-DOS function STROUT prints a string terminated with a "$" character. What this function actually does is to perform one separate call to the CONOUT function (which prints one single character) for every character of the string.
+The MSX-DOS function `STROUT` prints a string terminated with a "$" character. What this function actually does is to perform one separate call to the CONOUT function (which prints one single character) for every character of the string.
 
 When the fast STROUT mode is active, the string will be copied to a 512 byte buffer in page 3 and then it will be printed in one single call to the kernel code, which increases the speed of the printing process. The drawback is that the string length is limited to 511 bytes when this mode is active; longer strings will be truncated (only the first 511 characters will be displayed).
 
 #### 3.4.9. DELALL: the partition quick format tool
 
-The DELALL.COM utility will perform a quick format on the filesystem visible on a given drive letter. The usage syntax for DELALL is:
+The `DELALL.COM` utility will perform a quick format on the filesystem visible on a given drive letter. The usage syntax for DELALL is:
 
 ```
 DELALL <drive letter>:
@@ -712,37 +715,37 @@ This tool can be used on any drive, even those attached to MSX-DOS drivers. Note
 
 #### 3.4.10. NSYSVER: the NEXTOR.SYS version changer
 
-Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (NEXTOR.SYS in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This was a problem in Nextor 2, in which the NEXTOR.SYS version number was 2.1; starting with Nextor 3 the NEXTOR.SYS version number is 3.0 or higher (see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_), so this check shouldn't be a problem anymore.
+**Note:** This tool is usually necessary only when using a `NEXTOR.SYS` file whose version is 2.0 or 2.1. Current version number is 3.0 or higher (see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_), so this tool shouldn't be needed anymore.
 
-As a workaround for this issue, starting at version 2.0 beta 2 the NEXTOR.SYS version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document for more details). A command line tool that allows you to easily do this change has been created as well, its name is NSYSVER.COM and can be used as follows:
+Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (`NEXTOR.SYS` in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This was a problem in Nextor 2, in which the `NEXTOR.SYS` version number was 2.0 or 2.1.
+
+As a workaround for this issue, the `NEXTOR.SYS` version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document for more details). A command line tool that allows you to easily do this change has been created as well, its name is `NSYSVER.COM` and can be used as follows:
 
 ```
 NSYSVER <major version number>.<secondary version number>
 ```
 
-For example: `NSYSVER 2.20`. Note that this will change only the value of the NEXTOR.SYS version number returned by the DOSVER function call; the VER command will still display the real file version number.
+For example: `NSYSVER 2.20`. Note that this will change only the value of the `NEXTOR.SYS` version number returned by the `DOSVER` function call; the VER command will still display the real file version number.
 
-Note: the version number change performed by this tool is temporary and it will cease to have effect (that is, the NEXTOR.SYS version number will revert to its real value) when NEXTOR.SYS is reloaded, either because the BASIC prompt is entered and exited via CALL SYSTEM, or because the computer is rebooted.
-
-Note: do not use this tool with NEXTOR.SYS versions older than 2.0 beta 2.
+Note: the version number change performed by this tool is temporary and it will cease to have effect (that is, the `NEXTOR.SYS` version number will revert to its real value) when `NEXTOR.SYS` is reloaded, either because the BASIC prompt is entered and exited via CALL SYSTEM, or because the computer is rebooted.
 
 #### 3.4.11. NEXBOOT: the one-time boot keys configuration tool
 
-The NEXBOOT.COM tool allows you to easily configure the keys to be used as one-time boot keys (see _[2.10.2. One-time boot keys](#2102-one-time-boot-keys)_) in the next reset. The syntax is:
+The `NEXBOOT.COM` tool allows you to easily configure the keys to be used as one-time boot keys (see _[2.10.2. One-time boot keys](#2102-one-time-boot-keys)_) in the next reset. The syntax is:
 
 ```
 NEXBOOT <boot keys>|. [*|<slot> [<slot>... ]]
 ```
 
-where the boot keys are the numeric keys, C for CTRL and S for shift, and `<slot>` are the slot numbers of the Nextor kernels to be disabled. For example `NEXBOOT 1C` will invert the CTRL and 1 keys, `NEXBOOT S 1 23` will invert the SHIFT key and disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
+where the boot keys are the numeric keys, C for CTRL and S for SHIFT, and `<slot>` are the slot numbers of the Nextor kernels to be disabled. The specified keys will be considered as pressed in the next boot. For example `NEXBOOT 1C` will make the 1 and CTRL keys be considered as pressed, `NEXBOOT S 1 23` will make the SHIFT key be considered as pressed and will disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
 
-When using version 1.1 or newer of NEXBOOT.COM you can also specify `*` to disable all the Nextor kernels, this is equivalent to pressing `N` while booting. Note however that this will only work with Nextor kernels whose version is 2.1 or newer.
+When using version 1.1 or newer of NEXBOOT.COM you can also specify `*` to disable all the Nextor kernels, this is equivalent to pressing `N` in the boot menu. Note however that this will only work with Nextor kernels whose version is 2.1 or newer.
 
 In all cases, the tool resets the computer immediately after appropriately setting the keys information in RAM.
 
 #### 3.4.12. EMUFILE: the disk emulation mode tool
 
-The EMUFILE.COM tool allows creating disk emulation mode data files and entering disk emulation mode. The syntax for creating an emulation data file is:
+The `EMUFILE.COM` tool allows creating disk emulation mode data files and entering disk emulation mode. The syntax for creating an emulation data file is:
 
 ```
 EMUFILE [<options>] <output file> <files> [<files> ...]
@@ -792,7 +795,7 @@ To uninstall a driver already installed in RAM:
 DRVROP u <slot>[-<subslot>] <segment> [/s]
 ```
 
-You can get the slot and segment a given driver is installed on by using the DRIVERS.COM tool or the BASIC command CALL DRIVERS.
+You can get the slot and segment a given driver is installed on by using the `DRIVERS.COM` tool or the BASIC command `CALL DRIVERS`.
 
 #### 3.4.14. One-time fix tools
 
@@ -801,11 +804,11 @@ There are a couple of extra tools that you will rarely use and are intended for 
 
 ### 3.5. The built-in partitioning tool
 
-The Nextor kernel has an embedded utility for partitioning storage devices attached to Nextor drivers. To start it, just invoke CALL FDISK from the BASIC prompt. It works properly in both 40-column and 80-column modes. Please note that starting the FDISK tool will delete the current BASIC program from memory.
+The Nextor kernel has an embedded utility for partitioning storage devices attached to Nextor drivers. To start it, just invoke `CALL FDISK` from the BASIC prompt. It works properly in both 40-column and 80-column modes. Please note that FDISK will refuse to work if there's a BASIC program in memory (the tool uses the BASIC RAM to store its own running data).
 
-The tool has a user interface based on menus, so anyone should be able to use it by just following the indications provided on the screen (when in doubt, look for an indication on what to do next in the lower line of the screen). There are however some points of interest to consider that are not mentioned in the tool itself:
+The tool has a user interface based on menus, so you should be able to use it by just following the indications provided on the screen (when in doubt, look for an indication on what to do next in the lower line of the screen). There are however some points of interest to consider that are not mentioned in the tool itself:
 
-* The tool allows creating up to 256 FAT12 and FAT16 partitions on any block device attached to a Nextor driver. MSX-DOS drivers are not supported.
+* The tool allows creating up to 256 FAT12 and FAT16 partitions on any block device (excluding floppy disks) attached to a Nextor driver. MSX-DOS drivers are not supported.
 
 * With this tool it is not possible to add new partitions to an already partitioned device. All existing partitions must be removed before defining new partitions.
 
@@ -831,21 +834,21 @@ Nextor adds some new commands to BASIC, mainly to ease the management of devices
 
 Some of the new CALL commands take parameters. These commands can be run without parameters in order to get help on how to use them. 
 
-Unless otherwise stated, the Nextor modifications made to the existing Disk BASIC commands are not available in MSX-DOS 1 mode. As for the new CALL commands, only FDISK, MAPDRV, USR, NEXTOR, CURDRV, CHDRV, DRVINFO and DRIVERS are available in MSX-DOS 1 mode.
+Unless otherwise stated, the Nextor modifications made to the existing Disk BASIC commands are not available in MSX-DOS 1 mode. As for the new CALL commands, only `FDISK`, `MAPDRV`, `USR`, `NEXTOR`, `CURDRV`, `CHDRV`, `DRVINFO` and `DRIVERS` are available in MSX-DOS 1 mode.
 
 #### 3.6.1. The DSKF command
 
-The DSKF command, which tells the free space available on a drive, returns a free cluster count in MSX-DOS. In Nextor the behavior of this command has been changed: now it returns a free KB count.
+The `DSKF` command, which tells the free space available on a drive, returns a free cluster count in MSX-DOS. In Nextor the behavior of this command has been changed: now it returns a free KB count.
 
 This behavior represents a breaking change relative to MSX-DOS. However, most of the existing programs that use this command do not actually calculate the free space count in KB, displaying the raw cluster count to the user instead. Also, for many years the most popular storage media for MSX computers has been the 2DD floppy disk, in which the cluster size is 1K, so many users were incorrectly assuming that the DSKF command was returning a KB count anyway.
 
 This modification does not apply to MSX-DOS 1 mode, in this mode the free space is still returned as a cluster count.
 
-The DSKF command will always return the real free space even if the drive has the reduced allocation information mode active. However, if the drive has the zero allocation information mode active, then the value returned will be zero.
+The `DSKF` command will always return the real free space even if the drive has the reduced allocation information mode active. However, if the drive has the zero allocation information mode active, then the value returned will be zero.
 
 #### 3.6.2. The DSKI$ and DSKO$ commands
 
-The DSKI$ function and the DSKO$ command, which allow reading and writing one disk sector respectively, now accept 32 bit sector numbers, therefore allowing access to any drive sector, not only the first 65536 sectors.
+The `DSKI$` function and the `DSKO$` command, which allow reading and writing one disk sector respectively, now accept 32 bit sector numbers, therefore allowing access to any drive sector, not only the first 65536 sectors.
 
 In order to access sectors with numbers over 32767, the sector number must be specified as a single or double precision constant, expression or variable. If a single precision value is specified and the number is so big that one or more of the least significant digits of the number are lost due to truncation, these commands will fail with an "Overflow" error. This is designed this way to prevent inadvertent access to the wrong sector. For example:
 
@@ -856,7 +859,7 @@ In order to access sectors with numbers over 32767, the sector number must be sp
 40 PRINT DSKI$(0, S) 'Throws "Overflow"
 ```
 
-The previous example will work (provided that the sector exists in the device) if line 10 is changed to DEFDBL S. Always use double precision variables if you are going to access arbitrary sector numbers in your BASIC code.
+The previous example will work (provided that the sector exists in the device) if line 10 is changed to `DEFDBL S`. Always use double precision variables if you are going to access arbitrary sector numbers in your BASIC code.
 
 An "Overflow" error will be thrown too if the sector number specified does not fit in 32 bits, that is, if it is greater than 4294967295.
 
@@ -880,9 +883,9 @@ None of this applies to MSX-DOS 1 mode, in this mode only integer (16 bit) secto
 
 #### 3.6.3. The CALL FORMAT command
 
-CALL FORMAT is the standard Disk BASIC command to format a floppy disk: it lists all the available floppy disk drives and, once a drive is selected, presents a numbered list of the available format choices (for example "single side / double side").
+`CALL FORMAT` is the standard Disk BASIC command to format a floppy disk: it lists all the available floppy disk drives and, once a drive is selected, presents a numbered list of the available format choices (for example "single side / double side").
 
-New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. Note that the `FORMAT` command of COMMAND2.COM still works only for drives controlled by MSX-DOS drivers.
+New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. Note that the `FORMAT` command of `COMMAND2.COM` still works only for drives controlled by MSX-DOS drivers.
 
 If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md#27-_format-67h)_ document for more details.
 
@@ -904,11 +907,11 @@ This command will simply display the current drive.
 
 #### 3.6.7. The CALL DRIVERS command
 
-This command is equivalent to the DRIVERS.COM tool, which displays information about the available MSX-DOS and Nextor drivers. It will display the name and version (for Nextor drivers only), the slot number (with the RAM segment number for drivers loaded in RAM) and the assigned drives at boot time. MSX-DOS drivers will be identified as "Legacy driver".
+This command is equivalent to the `DRIVERS.COM` tool, which displays information about the available MSX-DOS and Nextor drivers. It will display the name and version (for Nextor drivers only), the slot number (with the RAM segment number for drivers loaded in RAM) and the assigned drives at boot time. MSX-DOS drivers will be identified as "Legacy MSX-DOS driver".
 
 #### 3.6.8. The CALL DRVINFO command
 
-This command is equivalent to the DRVINFO.COM utility, which displays information about all the available drive letters (those that are not unmapped). The displayed information includes the associated driver slot and other information that depends on the associated driver type (driver name and version, and device number, for Nextor drivers; relative unit for MSX-DOS drivers). MSX-DOS drivers are identified as "Legacy driver".
+This command is equivalent to the `DRVINFO.COM` utility, which displays information about all the available drive letters (those that are not unmapped). The displayed information includes the associated driver slot and other information that depends on the associated driver type (driver name and version, and device number, for Nextor drivers; relative unit for MSX-DOS drivers). MSX-DOS drivers are identified as "Legacy MSX-DOS driver".
 
 #### 3.6.9. The CALL LOCKDRV command
 
@@ -940,7 +943,7 @@ This command is not available in MSX-DOS 1 mode, in which the concept of "drive 
 
 This command allows changing the drive to device and partition mapping from the BASIC environment. It is equivalent to the MAPDRV.COM tool.
 
-The CALL MAPDRV syntax is explained below. Some of the parameters are optional, therefore all the possible variations are explained, starting with the most complete (using all parameters) one. Details about the possible values for each parameter are explained later.
+The `CALL MAPDRV` syntax is explained below. Some of the parameters are optional, therefore all the possible variations are explained, starting with the most complete (using all parameters) one. Details about the possible values for each parameter are explained later.
 
 ```
 CALL MAPDRV(<drive>, <partition>, <device>, <slot>[, <segment>]|0)
@@ -971,7 +974,7 @@ CALL MAPDRV(<drive>, -2)
 CALL MAPDRV(<drive>)
 ```
 
-Maps the specified drive to its default value. If at boot time the drive was unmapped or was mapped to an MSX-DOS driver, then the drive will be reverted to its original mapping state. Otherwise, an automatic mapping procedure will be performed (the procedure is equal to the one performed at boot time except that "active" partition flags will not be checked; see _[3.2. Booting Nextor](#32-booting-nextor)_ for more details); this may or may not result in the drive having the same mapping it had at boot time, depending on which devices are available and how the other drives are mapped.
+Maps the specified drive to its default value. If at boot time the drive was unmapped or was mapped to an MSX-DOS driver, then the drive will be reverted to its original mapping state. Otherwise, an automatic mapping procedure will be performed (the procedure is equal to the one performed at boot time; see _[3.2. Booting Nextor](#32-booting-nextor)_ for more details); this may or may not result in the drive having the same mapping it had at boot time, depending on which devices are available and how the other drives are mapped.
 
 ```
 CALL MAPDRV(<drive>, -3)
@@ -1017,13 +1020,13 @@ There are some restrictions in place when mounting files to drives. See _[3.8. M
 
 #### 3.6.11. The CALL MAPDRVL command
 
-The CALL MAPDRVL command is identical to the CALL MAPDRV command, except that it will perform a drive lock (see _[2.4. Drive lock](#24-drive-lock)_ and _[3.4.5. LOCK: the drive lock and unlock tool](#345-lock-the-drive-lock-and-unlock-tool)_) immediately after changing the drive mapping.
+The `CALL MAPDRVL` command is identical to the `CALL MAPDRV` command, except that it will perform a drive lock (see _[2.4. Drive lock](#24-drive-lock)_ and _[3.4.5. LOCK: the drive lock and unlock tool](#345-lock-the-drive-lock-and-unlock-tool)_) immediately after changing the drive mapping.
 
 Note that this command is not available in MSX-DOS 1 mode, in which the concept of "drive lock" does not exist.
 
 #### 3.6.12. The CALL IDRIVER command
 
-The CALL IDRIVER command can be used to install Nextor drivers in RAM. These are the syntax variants:
+The `CALL IDRIVER` command can be used to install Nextor drivers in RAM. These are the syntax variants:
 
 ```
 CALL IDRIVER(<filename>[,<flags>[,<data>[,<data>...]]])
@@ -1046,25 +1049,25 @@ CALL IDRIVER(<filename>,<flags>,<data address>,<data length>)
 
 Each driver must document the meaning of the initialization data it accepts, if any. The maximum length of initialization data is 255 bytes.
 
-**Note:** This command is not available in MSX-DOS 1 mode; in fact, RAM drivers in general can't be used in MSX-DOS 1 mode.
+**Note:** This command is not available in MSX-DOS 1 mode, where RAM drivers aren't supported.
 
 #### 3.6.13. The CALL UDRIVER command
 
-The CALL UDRIVER command can be used to uninstall a Nextor driver that has been installed in RAM with CALL IDRIVER, with DRVROP.COM, or with a custom driver install tool. The syntax is as follows:
+The `CALL UDRIVER` command can be used to uninstall a Nextor driver that has been installed in RAM with `CALL IDRIVER`, with `DRVROP.COM`, or with a custom driver install tool. The syntax is as follows:
 
 ```
 CALL UDRIVER(<slot>,<segment>[,<flags>])
 ```
 
-`<slot>` and `<segment>` indicate the location of the driver. If the slot is expanded, use the formula `<main slot>+4*<subslot>` (e.g. `3+4*2` for slot 3-2); there's no need to add the "expanded slot" flag bit to the slot number, it is added automatically. You can get the slot and segment a given driver is installed on by using the DRIVERS.COM tool or the BASIC command CALL DRIVERS.
+`<slot>` and `<segment>` indicate the location of the driver. If the slot is expanded, use the formula `<main slot>+4*<subslot>` (e.g. `3+4*2` for slot 3-2); there's no need to add the "expanded slot" flag bit to the slot number, it is added automatically. You can get the slot and segment a given driver is installed on by using the `DRIVERS.COM` tool or the BASIC command `CALL DRIVERS`.
 
 `<flags>` must be either 0, or 2 for silent mode (don't print initialization messages from the driver).
 
-**Note:** Like CALL IDRIVER (and RAM drivers in general), this command is not available in MSX-DOS 1 mode.
+**Note:** Like `CALL IDRIVER` (and RAM drivers in general), this command is not available in MSX-DOS 1 mode.
 
 #### 3.6.14. The CALL USR command
 
-The CALL USR command allows the execution of assembler code from BASIC code. It is equivalent to the standard MSX-BASIC DEF USR command and the USR function, but with an added feature: it allows specifying the input values of the Z80 registers for the code to execute, and reading the output values after the execution.
+The `CALL USR` command allows the execution of assembler code from BASIC code. It is equivalent to the standard MSX-BASIC `DEF USR` command and the USR function, but with an added feature: it allows specifying the input values of the Z80 registers for the code to execute, and reading the output values after the execution.
 
 The syntax of the CALL USR command is as follows:
 
@@ -1072,7 +1075,7 @@ The syntax of the CALL USR command is as follows:
 CALL USR(<code address> [,<registers address>])
 ```
 
-`<code address>` is the address of the assembler code to be executed. Value -1 is treated as a special case: `_USR(-1)` will do nothing but will not throw an error. You can use this feature together with the ON ERROR GOTO command to detect the presence of Nextor from within a BASIC program.
+`<code address>` is the address of the assembler code to be executed. Value -1 is treated as a special case: `_USR(-1)` will do nothing but will not throw an error. You can use this feature together with the `ON ERROR GOTO` command to detect the presence of Nextor from within a BASIC program.
 
 `<registers address>` is the address of a 12 byte buffer for the Z80 registers values. If this parameter is specified, the registers will be loaded with the contents of this area before the code is invoked; after the code execution, the reverse process is performed: the buffer is updated with the values held by the registers. The order of the registers in the buffer is: F, A, C, B, E, D, L, H, IXl, IXh, IYl, IYh.
 
@@ -1099,16 +1102,16 @@ Here is a simple BASIC program to test the CALL USR command. Change the register
 
 #### 3.6.15. The CALL SYSTEM2 command
 
-Nextor 2.1.1 introduced a new `CALL SYSTEM2` command. This command works the same as `CALL SYSTEM`, but will always load MSXDOS2.SYS, even if a file named NEXTOR.SYS exists. This can be useful to get back some TPA space for applications, since MSXDOS2.SYS is smaller than NEXTOR.SYS.
+Nextor 2.1.1 introduced a new `CALL SYSTEM2` command. This command works the same as `CALL SYSTEM`, but will always load `MSXDOS2.SYS`, even if a file named `NEXTOR.SYS` exists. This can be useful to get back some TPA space for applications, since `MSXDOS2.SYS` is smaller than `NEXTOR.SYS`.
 
-Note however that the new function calls introduced by Nextor won't work if NEXTOR.SYS isn't loaded, this implies that the Nextor-specific command line tools (e.g. `MAPDRV.COM`) won't work if the DOS environment is entered via the `CALL SYSTEM2` command.
+Note however that the new function calls introduced by Nextor won't work if `NEXTOR.SYS` isn't loaded, this implies that the Nextor-specific command line tools (e.g. `MAPDRV.COM`) won't work if the DOS environment is entered via the `CALL SYSTEM2` command.
 
 
 ### 3.7. New BASIC error codes
 
-The following new BASIC error codes are defined to handle the possible errors of the new BASIC commands. Errors 76 to 80 are available in MSX-DOS 1 mode as well for the commands that work in this environment (errors 81 to 83 don't exist in MSX-DOS 1 mode). The numbers in parentheses are the error codes.
+The following new BASIC error codes are defined to handle the possible errors of the new BASIC commands. Errors 76 to 79 are available in MSX-DOS 1 mode as well for the commands that work in this environment; error 80 exists in MSX-DOS 1 mode too but with a different name and meaning (see below), and errors 81 to 83 don't exist in that mode. The numbers in parentheses are the error codes.
 
-* Invalid device driver (76), thrown by the CALL MAPDRV command in any of these events:
+* Invalid device driver (76), thrown by the `CALL MAPDRV` command in any of these events:
 
     * The specified slot number does not contain a Nextor driver.
 
@@ -1116,7 +1119,7 @@ The following new BASIC error codes are defined to handle the possible errors of
 
     * In MSX-DOS 1 mode, the drive was not originally mapped to a Nextor driver, or was mapped to a different driver.
 
-* Invalid device number (77), thrown by the CALL MAPDRV command in any of these events:
+* Invalid device number (77), thrown by the `CALL MAPDRV` command in any of these events:
 
     * The device with the specified number is not available on the specified or implicit driver.
 
@@ -1124,36 +1127,40 @@ The following new BASIC error codes are defined to handle the possible errors of
 
 * Invalid partition number (78)
 
-This error will be thrown by the CALL MAPDRV command if the specified partition does not exist on the specified or implicit device. 
+This error will be thrown by the `CALL MAPDRV` command if the specified partition does not exist on the specified or implicit device. 
 
 * Partition already in use (79)
 
-This error will be thrown by the CALL MAPDRV command if you try to map a combination of partition, device and driver that is already mapped on another drive. You can however map the same combination to the same drive again.
+This error will be thrown by the `CALL MAPDRV` command if you try to map a combination of partition, device and driver that is already mapped on another drive. You can however map the same combination to the same drive again.
 
 * File is mounted (80)
 
 An attempt to open or alter a mounted file, or to perform any other disallowed operation involving a mounted file, has been made.
 
+In MSX-DOS 1 mode this error code exists under the name "Illegal in emulation" and with a different meaning: an attempt has been made to change the mapping of a drive while running in disk emulation mode (files can't be mounted in MSX-DOS 1 mode at all, see _[3.8. Mounting files](#38-mounting-files)_).
+
 * Bad file size (81)
 
-Thrown by the CALL MAPDRV command when attempting to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
+Thrown by the `CALL MAPDRV` command when attempting to mount a file that is smaller than 512 bytes or larger than 32 MBytes.
 
-* Invalid cluster sequence (82)
+* Cluster sequence error (82)
 
-Thrown by the CALL MAPDRV command when attempting to mount a file that is not stored across consecutive sectors in its host filesystem.
+Thrown by the `CALL MAPDRV` command when attempting to mount a file that is not stored across consecutive sectors in its host filesystem.
 
 * Initialization error (83)
 
-Thrown by the CALL IDRIVER command when the driver's initialization routine returns an error (and thus the driver install failed).
+Thrown by the `CALL IDRIVER` command when the driver's initialization routine returns an error (and thus the driver install failed).
 
 
 ### 3.8. Mounting files
 
-Nextor 2.1 introduces the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools.
+Nextor 2.1 introduced the ability to mount disk image files on drive letters. When a disk image file is mounted, you can access its contained files and directories by using regular MSX-DOS/MSX BASIC commands and tools.
 
-To mount a file, use the MAPDRV tool (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_) with the `MAPDRV <drive> <file> [/ro]` syntax; or in the BASIC environment, the CALL MAPDRV command (see _[3.6.10. The CALL MAPDRV command](#3610-the-call-mapdrv-command)_) with the `CALL MAPDRV(<drive>, <file> [,0|1])` syntax. To unmount the file, change the mapping of the drive to anything else, or simply leave the drive unmapped (`MAPDRV <drive> U` or `CALL MAPDRV(<drive>, -1)`).
+To mount a file, use the MAPDRV tool (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_) with the `MAPDRV <drive> <file> [/ro]` syntax; or in the BASIC environment, the `CALL MAPDRV` command (see _[3.6.10. The CALL MAPDRV command](#3610-the-call-mapdrv-command)_) with the `CALL MAPDRV(<drive>, <file> [,0|1])` syntax. To unmount the file, change the mapping of the drive to anything else, or simply leave the drive unmapped (`MAPDRV <drive> U` or `CALL MAPDRV(<drive>, -1)`).
 
 This feature has some restrictions:
+
+* It is not available in MSX-DOS 1 mode.
 
 * The file must have a size of at least 512 bytes and at most 32 MBytes.
 
@@ -1216,7 +1223,7 @@ The technical details about how the disk emulation mode works are in the _[Nexto
 
 #### 3.9.1. Entering and exiting the disk emulation mode
 
-First of all, the data needed during a disk emulation mode session (which disk image files will be used and where they are located) must exist in a file with a certain format, the _disk emulation data file_. You can create these files using the `EMUFILE.COM` tool (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_). These files can have any name and will typically have the .EMU extension, but that's not mandatory.
+First of all, the data needed during a disk emulation mode session (which disk image files will be used and where they are located) must exist in a file with a certain format, the _disk emulation data file_. You can create these files using the `EMUFILE.COM` tool (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_). These files can have any name and will typically have the `.EMU` extension, but that's not mandatory.
 
 Second, in order to tell Nextor to boot in disk emulation mode, a pointer to the appropriate disk emulation data file must exist at a special location while the computer boots. There are two variants of the emulation mode, each requiring a different location for the emulation data file pointer:
 
@@ -1233,7 +1240,7 @@ Up to 32 disk image files can be specified for an emulation session, but only on
 
 For example, assume that you are playing a two-disk game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press the space key. Just press 2 (the key assigned to the second image file) and the space key at the same time and you're good to go.
 
-Alternatively, you can also press the GRAPH key when the computer is trying to read the file. The CAPS LED will light up and the computer will freeze until you release GRAPH and press the appropriate file key (or you can press GRAPH again if you change your mind and want to keep using the same disk). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
+Alternatively, you can also press the `GRAPH` key when the computer is trying to read the file. The CAPS lock LED will light up and the computer will freeze until you release `GRAPH` and press the appropriate file key (or you can press `GRAPH` again if you change your mind and want to keep using the same disk). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
 #### 3.9.3. Rules and restrictions
@@ -1246,27 +1253,27 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The emulation data file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to either generate the file immediately before using it, or have a partition reserved only for disk image files and their corresponding emulation data files (that is, a partition where you usually don't create or move files around).
 
-- The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem (the FORMAT command will not work in disk emulation mode).
+- The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem (the `FORMAT` command will not work in disk emulation mode).
 
 - The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
 
-- Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep GRAPH and 2 pressed while the computer boots, and when the CAPS LED lights up, release both keys and press 1.
+- Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep `GRAPH` and 2 pressed while the computer boots, and when the CAPS LED lights up, release both keys and press 1.
 
-- All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing SHIFT while booting; this is useful to free some memory.
+- All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing `SHIFT` while booting; this is useful to free some memory.
 
 
 #### 3.9.4. How to free some memory
 
 Some games will not work "out of the box" because they assume that only the floppy disk drive is present in the system, but now there are drives allocated for both Nextor and the floppy drive, and thus the amount of free memory is smaller. You can do the following in order to increase the amount of memory available for games:
 
-- Press SHIFT while booting to disable the internal floppy disk drive (and any other MSX-DOS kernel, for that matter).
+- Press `SHIFT` while booting to disable the internal floppy disk drive (and any other MSX-DOS kernel present).
 
-- Press 5 while booting to force Nextor to allocate only one drive for itself (useful only if you have more than one device connected to your Nextor controller). If your emulation session has five or more disk images, do the following instead: press GRAPH+5 until the CAPS LED lights up, then release both keys and press 1.
+- Press 5 while booting to force Nextor to allocate only one drive for itself (useful only if you have more than one device connected to your Nextor controller). If your emulation session has five or more disk images, do the following instead: press `GRAPH`+5 until the CAPS lock LED lights up, then release both keys and press 1 (otherwise the 5 key would also be read as a request to switch to the fifth disk image).
 
 
 #### 3.9.5. Known bugs
 
-* The current version of the `EMUFILE.COM` tool does not verify that the disk image files are not fragmented.
+* The current version of the `EMUFILE.COM` tool does not verify that the disk image files are not fragmented (but you can use the `CONCLUS.COM` tool for this).
 
 * If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers.
 
@@ -1275,16 +1282,16 @@ Some games will not work "out of the box" because they assume that only the flop
 
 ### 4.1. load" in F7
 
-Nextor will force the computer to boot with the `load"` string assigned to the F7 key, even on MSX1 and MSX2 computers, which have `cload"` assigned by default. Note however that any code that invokes the INIFNK BIOS routine will cause the key to be assigned to `cload"` again (you can try it yourself: `_USR(&H3E)`).
+Nextor will force the computer to boot with the `load"` string assigned to the F7 key, even on MSX1 and MSX2 computers, which have `cload"` assigned by default. Note however that any code that invokes the `INIFNK` BIOS routine will cause the key to be assigned to `cload"` again (you can try it yourself: `_USR(&H3E)`).
 
 ### 4.2. English error messages in kanji mode
 
-If an environment item named ERRLANG is created with a value (case insensitive) of EN (command `SET ERRLANG=EN` in the command interpreter prompt), error messages in the command interpreter will be displayed in English, instead of Japanese, when the kanji mode is active (`CALL KANJI` in the BASIC interpreter). This feature is available since Nextor 2.0.4.
+If an environment item named `ERRLANG` is created with a value (case insensitive) of `EN` (command `SET ERRLANG=EN` in the command interpreter prompt), error messages in the command interpreter will be displayed in English, instead of Japanese, when the kanji mode is active (`CALL KANJI` in the BASIC interpreter). This feature is available since Nextor 2.0.4.
 
 ### 4.3. Reduced NEXTOR.SYS without Japanese error messages
 
-Two variants of the NEXTOR.SYS file are offered. The full variant contains Japanese equivalents for part of the error messages (such as the "reading/writing" part or the "Abort, Retry, Ignore" string), while the reduced variant contains only the English versions. The advantage of the reduced variant is that it is smaller and using it saves 256 bytes of TPA space compared to the full version.
+Two variants of the `NEXTOR.SYS` file are offered. The full variant contains Japanese equivalents for part of the error messages (such as the "reading/writing" part or the "Abort, Retry, Ignore" string), while the reduced variant contains only the English versions. The advantage of the reduced variant is that it is smaller and using it saves 256 bytes of TPA space compared to the full version.
 
-These two variants are offered since NEXTOR.SYS version 2.01 (released together with kernel version 2.0.4). Note that version 2.00 was already reduced, but had a bug that caused garbage to be displayed instead of the proper error messages in kanji mode.
+These two variants are offered since `NEXTOR.SYS` version 2.01 (released together with kernel version 2.0.4). Note that version 2.00 was already reduced, but had a bug that caused garbage to be displayed instead of the proper error messages in kanji mode.
 
 Note that error messages will be displayed in English regardless of the variant used if the ERRLANG environment item exists with value EN (see _[4.2. English error messages in kanji mode](#42-english-error-messages-in-kanji-mode)_).
