@@ -2574,15 +2574,19 @@ NOMNT:
 	ld	(iy+3),0FFh
 	ld	a,(ix+UD_DEVICE_NUMBER##)
 	ld	(iy+4),a
+	ld	(iy+5),1	;Fake LUN index, for Nextor 2 aware applications
+				;(the DOS 1 version of this routine does the same)
+
+	;Partition assignment pending: report a first sector number of -1
 
     bit UF_PAP,(ix+UD_DFLAGS##)
 	jr z,NOPAP
 
 	ld a,0FFh
-    ld	(ix+UD_FIRST_DEVICE_SECTOR##),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
+	ld	(iy+6),a
+	ld	(iy+7),a
+	ld	(iy+8),a
+	ld	(iy+9),a
 	cpl
 	ret
 
