@@ -16,7 +16,7 @@
 
 [3.1. Manual creation](#31-manual-creation)
 
-[3.2. Using the MKNEXROM utility](#32-using-the-mknexrom-utility)
+[3.2. Using the mknexrom utility](#32-using-the-mknexrom-utility)
 
 [3.3. Rules for the bank switching code](#33-rules-for-the-bank-switching-code)
 
@@ -115,7 +115,7 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a complete guide for programmers willing to develop storage device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other than the driver development.
+This document provides a complete guide for programmers who want to develop device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other than driver development.
 
 Nextor 3 uses a driver structure that's similar, but not identical, to the one used by Nextor 2: drivers developed for Nextor 2 will need to be adapted to the new structure before they can be used in Nextor 3. This process is detailed in the _[Nextor 3.0 Driver Migration Guide](Nextor%203.0%20Driver%20Migration%20Guide.md)_.
 
@@ -161,7 +161,7 @@ MSX-DOS views the storage devices as drive letters, while the disk driver presen
 
 ### 2.2. The MSX-DOS 2 kernel
 
-The MSX-DOS 2 kernel first appeared as a cartridge with no associated storage hardware, and it was intended to be used together with existing storage controllers associated to MSX-DOS 1 kernel. Later it was included internally in MSX Turbo-R computers.
+The MSX-DOS 2 kernel first appeared as a cartridge with no associated storage hardware, and it was intended to be used together with existing storage controllers associated to an MSX-DOS 1 kernel. Later it was included internally in MSX Turbo-R computers.
 
 The MSX-DOS 2 kernel uses the page 1 address space of its slot, as the MSX-DOS 1 kernel does. However the MSX-DOS 2 kernel has a size of 64K. This space is divided in four 16K banks and a bank mapping mechanism is used so that only one of the banks is visible at the same time. The contents of the banks are as follows:
 
@@ -206,19 +206,19 @@ There are three parts that are common to all banks (bank 3 contains the bank swi
 
 When booting in DOS 2 mode, bank 0 is permanently switched, and other banks are only temporarily switched when bank 0 code needs to call a routine or access data on one of these banks. When booting in DOS 1 mode, bank 3 is switched at boot time, and it remains switched forever.
 
-As it was the case of the MSX-DOS 1 kernel, up to four MSX-DOS kernel ROMs can be active at the same time, one of them being the "master" and the others being the "slaves". However, this time the master will not be the kernel with the smallest slot number, but the kernel with the highest version number (the kernel with the smallest slot number is still selected as the master in case of two or more kernels having the same version number).
+As was the case with the MSX-DOS 1 kernel, up to four MSX-DOS kernel ROMs can be active at the same time, one of them being the "master" and the others being the "slaves". However, this time the master will not be the kernel with the smallest slot number, but the kernel with the highest version number (the kernel with the smallest slot number is still selected as the master in case of two or more kernels having the same version number).
 
 ### 2.3. The Nextor kernel
 
 The Nextor kernel has an architecture that is based on the one of the MSX-DOS 2 kernel, but introduces significant changes:
 
-* The number of banks has grown. In the current version there is one extra bank for partition management code, and two extra banks for the built-in partitioning tool.
+* The number of banks has grown. In the current version there are two extra banks for the code that implements the new features, including partition management; and one extra bank for the built-in partitioning tool.
 
 * The disk driver ("device driver" in Nextor terminology) code is no longer embedded at the end of the kernel banks 0 and 3. Instead, now the driver has a whole bank for itself, which is located immediately after the last bank of the kernel common code. If necessary, the driver can span across more than one bank.
 
 * The device driver structure is completely new. It of course contains routines to access storage devices, but it also contains extensibility points so that it is easy to add BASIC extended commands ("CALL" commands), extended BIOS commands, and a timer interrupt service routine.
 
-* The page 0 code has been modified to contain extra utility routines. These routines can be used by the driver code.
+* The page 0 code (the block of 255 bytes at the beginning of each ROM bank) has been modified to contain extra utility routines. These routines can be used by the driver code.
 
 * A new information byte is added at address 40FEh of all banks, which contains the size of the kernel common code in 16K banks (alternatively, this value can be seen as the bank number of the driver).
 
@@ -226,7 +226,7 @@ The Nextor kernel has an architecture that is based on the one of the MSX-DOS 2 
 
 * There is a 1K unused space at banks 0 and 3 (visible at addresses 7BD0h to 7FCFh). This space does not contain any kernel code and can be used to put any code or data that is required by the driver to be here. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
-* There are five entry points at kernel banks 0 and 3 (starting at addresses 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.11. DIRECT_0...4 (4134h...4140h)](#4411-direct_04-4134h4140h)_ for more details.
+* There are five entry points at kernel banks 0 and 3 (starting at address 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.11. DIRECT_0...4 (4134h...4140h)](#4411-direct_04-4134h4140h)_ for more details.
 
 Figure 3 shows a diagram with the structure of a Nextor kernel.
 
@@ -255,7 +255,7 @@ Figure 3 shows a diagram with the structure of a Nextor kernel.
 
 _Figure 3 - Nextor kernel structure ("K" is the kernel common code bank count)_
 
-Nextor will use the same rule of MSX-DOS 2 to decide which kernel will be the master if more than one kernel is found (the kernel with the highest version number will win). However this applies to other Nextor kernels only; Nextor will always override other MSX-DOS 1 or 2 kernels present in the system, regardless of their version number.
+Nextor will use the same rule as MSX-DOS 2 to decide which kernel will be the master if more than one kernel is found (the kernel with the highest version number will win). However this applies to other Nextor kernels only; Nextor will always override other MSX-DOS 1 or 2 kernels present in the system, regardless of their version number.
 
 In Nextor 2 the only way to use a device driver was to append it to a Nextor kernel ROM as explained below. Nextor 3 adds the ability to dynamically load drivers in RAM too. Except where otherwise noted, the information provided in this document applies to both drivers embedded in ROM and drivers loaded in RAM. See [the source of the example RAM driver](../source/drivers/ram-driver-example.asm) for a complete working example.
 
@@ -265,21 +265,21 @@ In order to create a complete Nextor kernel ROM that can be used in an MSX compu
 
 * The Nextor kernel base file. This file contains the kernel common code, that is, the "Banks 0-(K-1)" portion shown in Figure 3. Its bank switching code is for the ASCII16 mapper (the original mapper used by the MSX-DOS 2 kernel).
 
-* The device driver file. It must be created conforming to the rules and structure detailed in section 4. Its size must be exactly 16080 bytes (16K minus the size of the page 0 code minus the size of the bank switching code). If the driver spans across more than one bank, this applies to each bank.
+* The device driver file. It must be created conforming to the rules and structure detailed in _[4. Nextor driver structure](#4-nextor-driver-structure)_. Its size must be exactly 16080 bytes (16K minus the size of the page 0 code minus the size of the bank switching code). If the driver spans across more than one bank, this applies to each bank.
 
 * The bank switching code file (only if the mapper to be used by the target hardware is not ASCII16). This code depends on the mapping type supported by the ROM cartridge where the complete kernel will be burned. Compiled bank switching code files are provided for the ASCII8 and ASCII16 mappers; for other type of mappers, custom code files must be made, following the rules detailed in _[3.3. Rules for the bank switching code](#33-rules-for-the-bank-switching-code)_.
 
-NOTE: ROM mappers that work with 8K banks instead of 16K banks are supported only if it is possible to select the bank visible at the first half of page 1 (4000h-5FFFh) by writing a single byte in a memory mapped port with a LD(xxxx),A instruction. This is the case of ASCII8, for example.
+**Note:** ROM mappers that work with 8K banks instead of 16K banks are supported only if it is possible to select the bank visible at the first half of page 1 (4000h-5FFFh) by writing a single byte in a memory mapped port with a `LD(xxxx),A` instruction. This is the case of ASCII8, for example.
 
 * Optionally, the code that will be placed in the 1K unused space at banks 0 and 3 (see _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details).
 
-The procedure for creating the complete Nextor kernel ROM file consists basically of appending the driver code to the kernel base file, and then patching the resulting file with the appropriate bank switching code. This can be done manually, or by using the MKNEXROM utility. Both options are explained below.
+The procedure for creating the complete Nextor kernel ROM file consists basically of appending the driver code to the kernel base file, and then patching the resulting file with the appropriate bank switching code. This can be done manually, or by using the `mknexrom` utility. Both options are explained below.
 
 ### 3.1. Manual creation
 
 In order to manually create a complete Nextor ROM file, the following recipe must be followed. The file positions mentioned are zero based.
 
-1.  Create a copy of the kernel base file (NEXTOR.BASE.DAT).
+1.  Create a copy of the kernel base file, `Nextor-3.x.x-beta1.base.dat` or any of its variants (e.g. `Nextor-3.x.x-beta1.base.CTRL_INV.dat`).
 
 2.  Append the page 0 code at the end of the file. This code can be simply copied from the first 255 bytes of the kernel base file itself.
 
@@ -299,19 +299,19 @@ In order to manually create a complete Nextor ROM file, the following recipe mus
 
 10.  **Only** if the ROM mapper uses 8K banks: 
 
-  a. Write a LD(xxxxh),A instruction at position F7h of the generated file, where xxxx is the memory mapped port that selects the 8K bank visible in the first half of page 1 (4000h-5FFFh). This is a 32h byte followed by xxxxh itself in little-endian format.
+  a. Write a `LD(xxxxh),A` instruction at position 00F7h of the generated file, where xxxx is the memory mapped port that selects the 8K bank visible in the first half of page 1 (4000h-5FFFh). This is a 32h byte followed by xxxxh itself in little-endian format.
 
-  b. Repeat the previous step for all the 16K portions of the file. That is, you must write the LD(xxxxh),A instruction at file positions (4000h*n)+F7h, where n goes from zero to the number of 16K banks in the file minus one.
+  b. Repeat the previous step for all the 16K portions of the file. That is, you must write the `LD(xxxxh),A` instruction at file positions (4000h*n)+F7h, where n goes from zero to the number of 16K banks in the file minus one.
 
 The result of this procedure is a ready to use complete Nextor ROM file with your device driver properly embedded. There is no need to further patch or otherwise modify the generated ROM file.
 
-### 3.2. Using the MKNEXROM utility
+### 3.2. Using the mknexrom utility
 
-Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied MKNEXROM utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 1K areas present in banks 0 and 3.
+Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 1K areas present in banks 0 and 3.
 
-MKNEXROM is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](../docker/README.md).
+`mknexrom` is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](../docker/README.md).
 
-The MKNEXROM tool usage syntax is as follows:
+The `mknexrom` tool usage syntax is as follows:
 
 ```
 MKNEXROM <basefile> <newfile> [/d:<driverfile>] [/m:<mapperfile>]
@@ -324,7 +324,7 @@ _`<basefile>`_ can be one of the following:
 
 * A complete Nextor kernel ROM file with the driver bank(s) already appended.
 
-_<driverfile>_ is the file containing the driver code. It must be a valid driver according to the rules and structure explained in section 4. The contents of this file are expected to be as follows:
+_`<driverfile>`_ is the file containing the driver code. It must be a valid driver according to the rules and structure explained in section 4. The contents of this file are expected to be as follows:
 
 1.  256 dummy bytes.
 2.  The driver signature
@@ -343,9 +343,9 @@ _`<mapperfile>`_ is the file containing the bank switching code. If no mapper fi
 
 _`<extrafile>`_ is the file containing the extra code or data for the resulting ROM file. This extra data can be up to 1K long and will be placed at position 0x3BD0 of banks 0 and 3; this means that this code or data will be visible to applications via standard inter-slot calls (such as RDSLT or CALSLT) to the kernel slot, at address 0x7BD0. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
-/8 must be used only if the ROM mapper uses 8K banks. _`<8K bank selection port address>`_ is the memory mapped port address that selects the 8K bank visible in the first half of page 1 (4000h-5FFFh); for example 6000h for the ASCII8 mapper. This will appropriately patch the generated ROM boot code to support this kind of mapper.
+`/8` must be used only if the ROM mapper uses 8K banks. _`<8K bank selection port address>`_ is the memory mapped port address that selects the 8K bank visible in the first half of page 1 (4000h-5FFFh); for example 6000h for the ASCII8 mapper. This will appropriately patch the generated ROM boot code to support this kind of mapper.
 
-As an alternative to using the /8 parameter when using ROM mappers with 8K banks, MKNEXROM can be instructed to appropriately patch the generated ROM by adding a header to the mapper file itself. This header consists of a FFh byte followed by the bank selection port address in little-endian format. See below for an example.
+As an alternative to using the `/8` parameter when using ROM mappers with 8K banks, `mknexrom` can be instructed to appropriately patch the generated ROM by adding a header to the mapper file itself. This header consists of a FFh byte followed by the bank selection port address in little-endian format. See below for an example.
 
 
 ### 3.3. Rules for the bank switching code
@@ -367,7 +367,7 @@ ld (6800h),a
 ret
 ```
 
-If a file with the previous code is passed to MKNEXROM as the mapper file to be used, it is necessary to add a `/8:6000` parameter to the command line so that the generated ROM file includes the appropriate patch for 8K bank based ROM mappers. The same file with a header that renders the /8 parameter unnecessary would be as follows:
+If a file with the previous code is passed to `mknexrom` as the mapper file to be used, it is necessary to add a `/8:6000` parameter to the command line so that the generated ROM file includes the appropriate patch for 8K bank based ROM mappers. The same file with a header that renders the `/8` parameter unnecessary would be as follows:
 
 ```
 db 0FFh
@@ -401,7 +401,7 @@ For drivers loaded in RAM the contents of this area are undefined as far as the 
 
 #### 4.2.1. GSLOT1 (402Dh)
 
-Obtains in register A the slot currently switched on page 1 (that is, the slot of current driver code). Preserves all other registers except F.
+Obtains in register A the slot currently switched on page 1 (that is, the slot of the current driver code). Preserves all other registers except F.
 
 Note: This routine can't be called directly. It must be called via an inter-bank call to bank 0, in this way:
 
@@ -434,7 +434,7 @@ Input:  Address of code to invoke in (BK4_ADD).
 Output: AF, BC, DE, HL, IX, IY returned from the called routine.
 ```
 
-Note: the address of BK4_ADD (called CODE_ADD in Nextor 2) is F1D0h.
+Note: the address of `BK4_ADD` (called `CODE_ADD` in Nextor 2) is F1D0h.
 
 See also: _[4.2.7. CALLB0_IX_IY (404Bh)](#427-callb0_ix_iy-404bh)_
 
@@ -488,7 +488,7 @@ Input:  Address of the routine to call in (BK4_ADD).
 Output: AF, BC, DE, HL, IY returned from the called routine.
 ```
 
-Note: the address of BK4_ADD is F1D0h.
+Note: the address of `BK4_ADD` is F1D0h.
 
 This routine is useful for code placed in [the free space at kernel main bank](#471-the-free-space-at-kernel-main-bank) that needs to call code in the driver bank.
 
@@ -501,15 +501,15 @@ This routine does the same as [`CALLB0`](#423-callb0-403fh), but it reads the co
 
 This address contains one byte that tells how many banks form the Nextor kernel (or alternatively, the first bank number of the driver).
 
-When a driver spans across more than one bank and needs to read data or call a routine in another driver bank (by using RDBANK and CALBNK), it should calculate the bank number by adding the appropriate offset to K_SIZE (or alternatively, to the value of CUR_BANK) instead of assuming a fixed bank number. When done this way, compiled drivers can still be used with future versions of the Nextor kernel even if they have more banks for the kernel common code.
+When a driver spans across more than one bank and needs to read data or call a routine in another driver bank (by using `RDBANK` and `CALBNK`), it should calculate the bank number by adding the appropriate offset to `K_SIZE` (or alternatively, to the value of `CUR_BANK`) instead of assuming a fixed bank number. When done this way, compiled drivers can still be used with future versions of the Nextor kernel even if they have more banks for the kernel common code.
 
 #### 4.2.9. CUR_BANK (40FFh)
 
-This address contains one byte with the current bank number. For the first driver bank this value is the same of K_SIZE, and it increases by one for each additional driver bank (if any).
+This address contains one byte with the current bank number. For the first driver bank this value is the same of `K_SIZE`, and it increases by one for each additional driver bank (if any).
 
 #### 4.2.10. CHGBNK (7FD0h)
 
-This is not strictly a page 0 routine, but is available on all banks as well. It will simply make the specified bank visible on Z80 page 1. Usually, driver code will not need to use this routine, but will use CALBNK instead.
+This is not strictly a page 0 routine, but is available on all banks as well. It will simply make the specified bank visible on Z80 page 1. Usually, driver code will not need to use this routine, but will use `CALBNK` instead.
 
 ```
 Input:     A = Bank number
@@ -521,7 +521,7 @@ Corrupts:  AF
 
 The real driver content (after the first 256 bytes provided by the kernel itself) starts at address 4100h and consists of a header that has two parts:
 
-1. A fixed driver signature: the verbatim ASCII string `NEXTORv3_DRIVER`, in uppercase, and zero-terminated.
+1. A fixed driver signature: the verbatim ASCII string `NEXTORv3_DRIVER`, uppercased, and zero-terminated.
 2. A jump table for a set of routines to be implemented by the driver.
 
 This is the complete code for the driver header. The label names referenced in the jump table are for the routines to be implemented by the driver, which are detailed in the next section:
@@ -560,13 +560,13 @@ None of these routines need to preserve any of the registers not used to return 
 
 #### 4.4.1. TIMER_INT (4110h)
 
-This is the entry point for the timer interrupt routine of the driver, it will be called 50 or 60 times per second depending on the VDP frequency selected. If the driver does not need to handle the timer interrupt, it should fill this entry with RETs.
+This is the entry point for the timer interrupt routine of the driver, it will be called 50 or 60 times per second depending on the VDP frequency selected. If the driver does not need to handle the timer interrupt, it should fill this entry with `RET` instructions.
 
 Note that this entry will only be called if _[4.5.3. Driver query 3: Get driver initialization parameters](#453-driver-query-3-get-driver-initialization-parameters)_ (for drivers in ROM) or _[4.5.6. Driver query 6: Initialize RAM driver](#456-driver-query-6-initialize-ram-driver)_ (for drivers in RAM) flags that the driver should be hooked to the timer interrupt.
 
 #### 4.4.2. OEMSTAT (4113h)
 
-This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2, "Expansion of CMD command"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), and [MSX2 Technical Handbook, chapter 5, "Developing Cartridge Software"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter5.md) for details), except that if the handled statements have parameters, the MSX BIOS routine CALBAS (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 routine](#423-callb0-403fh) in kernel page 0:
+This is the entry for the BASIC extended statements ("CALLs") handler. It works the same way as the standard handlers (see [MSX2 Technical Handbook, chapter 2, "Expansion of CMD command"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter2.md), and [MSX2 Technical Handbook, chapter 5, "Developing Cartridge Software"](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter5.md) for details), except that if the handled statements have parameters, the MSX BIOS routine `CALBAS` (needed to invoke the MSX BASIC interpreter helper routines) can't be used directly; instead, it must be invoked via [the CALLB0 routine](#423-callb0-403fh) in kernel page 0:
 
 ```
 CALBAS: equ 0159h
@@ -581,7 +581,7 @@ CALLB0: equ 403Fh
 
 For drivers loaded in RAM the process is a bit more convoluted and [the CALLB0_IX_IY routine](#427-callb0_ix_iy-404bh) must be used instead. See [the code for the example RAM driver](../source/drivers/ram-driver-example.asm) for a working example.
 
-If the driver does not handle BASIC extended statements, it must simply set the carry flag and return.
+If the driver does not handle BASIC extended statements, this routine must simply set the carry flag and return.
 
 #### 4.4.3. BASDEV (4116h)
 
@@ -595,8 +595,6 @@ This is the extended BIOS handler. It works the same way as the standard handler
 IYl=0: Return immediately.
 IYl=1: Execute the kernel and/or the system extended BIOS handler.
 ```
-
-The handler is entered with IYl already set to 1, so a driver that never needs to prevent the execution of the kernel and system handlers can simply leave the value of IYl untouched.
 
 This routine will only be invoked if _[4.5.3. Driver query 3: Get driver initialization parameters](#453-driver-query-3-get-driver-initialization-parameters)_ (for drivers in ROM) or _[4.5.6. Driver query 6: Initialize RAM driver](#456-driver-query-6-initialize-ram-driver)_ (for drivers in RAM) flags that the driver handles extended BIOS calls.
 
@@ -681,13 +679,13 @@ Output:  A = Error code:
 
 Note that what this routine must access is the raw physical device sectors, not partition sectors. The driver does not need to know anything about device partitioning.
 
-The number of the first sector to read or write is a 32 bit number which is supplied in a memory area whose address is pointed by DE. This address will never be on page 1, therefore the driver does not need to worry about paging and can access this data directly. The same applies to the sectors data source or destination address.
+The number of the first sector to read or write is a 32 bit number which is supplied in a memory area whose address is passed in DE. This address will never be on page 1, therefore the driver does not need to worry about paging and can access this data directly. The same applies to the sectors data source or destination address.
 
 The available sector numbers must range from zero to the number of available sectors (as reported by _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_) minus one. If zero available sectors are reported, then the range of available sectors is undefined unless the driver developer explicitly documents it.
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
-The `.IDEVN` error must be returned only for device numbers that don't exist in the driver. For a device that exists but is currently unavailable (for example a removable device with no medium inserted, or an empty card slot) the routine must return `.NRDY` instead; otherwise, accessing a drive mapped to an offline device will report the wrong error. This distinction didn't exist in Nextor 2, so it deserves special attention when porting old driver code (see _[the driver migration guide](Nextor%203.0%20Driver%20Migration%20Guide.md)_).
+The `.IDEVN` error must be returned only for device numbers that don't exist in the driver. For a device that exists but is currently unavailable (for example a removable device with no medium inserted, or an empty card slot) the routine must return `.NRDY` instead; otherwise, accessing a drive mapped to an offline device will report the wrong error. This distinction didn't exist in Nextor 2, so it deserves special attention when porting old driver code (see [the driver migration guide](Nextor%203.0%20Driver%20Migration%20Guide.md)).
 
 If the device is a floppy disk drive (as reported by the driver via _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_) then the routine should use the media descriptor byte passed in C in order to determine the correct disk geometry. This byte is obtained from the disk's boot sector itself, so before it's available this routine will be called with C=0; the driver should assume a sensible default disk geometry in this case. For any other kind of device the value passed in C will be zero and should be ignored.
 
@@ -866,7 +864,7 @@ Output: A = RESULT_OK or RESULT_NOT_IMPLEMENTED
 
 Drivers can use this routine to inform the kernel about the highest device number they support. This query exists purely as a performance improvement: there are times (for example, when automatically mapping drives to devices/partitions at boot time) when the kernel scans the devices of a driver by asking for information about every possible device number starting with 1; the value returned by this query caps that scan, which otherwise would have to go through all the possible device numbers up to 255.
 
-Note that the returned value is just an upper bound for the scan, not a device count: it isn't required that every device number up to the maximum corresponds to an existing device. For example, a driver could report a maximum device number of 10 while only devices 8, 9 and 10 actually exist — not recommended, but perfectly legal (the driver must return `RESULT_INVALID_DEVICE` for the device numbers that don't exist, as usual). This query has no effect on how drives are mapped to the devices at boot time.
+Note that the returned value is just an upper bound for the scan, not a device count: it isn't required that every device number up to the maximum corresponds to an existing device. For example, a driver could report a maximum device number of 10 while only devices 8, 9 and 10 actually exist; not recommended, but perfectly legal (the driver must return `RESULT_INVALID_DEVICE` for the device numbers that don't exist, as usual). This query has no effect on how drives are mapped to the devices at boot time.
 
 There is one real limit on device numbers, though: the automatic partition search (the procedure that maps drives to partitions at boot time, and again on the first access to a drive that is attached to a device with no partition assigned) only supports device numbers 1 to 63 (internally, the two high bits of the device number are used as temporary flags during the search). Devices with higher numbers work normally in every other way, including having drives explicitly mapped to their partitions, but they can't take part in the automatic search; therefore drivers are advised to simply number their devices sequentially starting at 1.
 
@@ -984,13 +982,13 @@ On success, buffer filled with the following information:
 
 This query returns detailed invariant information about a given device. Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and filling the information buffer with a value of 512 for the sector size field and all zeros for the rest of the fields.
 
-"Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disk, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via [the `READ_WRITE` routine](#449-read_write-4128h).
+"Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disks, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via [the `READ_WRITE` routine](#449-read_write-4128h).
 
 In the current version Nextor will refuse to work with a device that is reported as a non-block device or having a sector size different from 512 bytes.
 
 The information about cylinders, heads and sectors per track applies only to floppy disks and hard disks; for other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is not used by the Nextor kernel, but can be used by device partitioning tools in order to properly align partitions on the disk (in the current version of Nextor this information is not used by the built-in partitioning tool).
 
-The "read only" flags should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dynamically write protected and write enabled should not be reported as a read-only device.
+The "read only" flag should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dynamically write protected and write enabled should not be reported as a read-only device.
 
 If the "floppy disk drive" flag is set Nextor will treat the device differently in some aspects, see ["Support for floppy disks" in the user manual](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks). If a driver reports a device as being a floppy disk it should implement the _[4.6.5. Device query 5: Get format choices for a floppy disk device](#465-device-query-5-get-format-choices-for-a-floppy-disk-device)_ and _[4.6.6. Device query 6: Format a floppy disk device](#466-device-query-6-format-a-floppy-disk-device)_ queries too.
 
@@ -1107,11 +1105,11 @@ This section contains other useful information about the Nextor device driver st
 
 #### 4.7.1. The free space at kernel main bank
 
-The Nextor kernel has a 1K unused space at the two main banks (bank 0 when running in normal mode, bank 3 when running in MSX-DOS 1 mode) that can be filled with any kind of data or code useful for the driver. The main bank is permanently switched on the Kernel slot in normal circumstances (other banks are switched only for temporary code calls), therefore this area can be accessed via the standard slot accessing mechanisms (such as inter-slot call via CALSLT, inter-slot read via RDSLT, etc) even by software that is not aware of the Nextor bank paging mechanism. This space is visible starting at address 7BD0h.
+The Nextor kernel has a 1K unused space at the two main banks (bank 0 when running in normal mode, bank 3 when running in MSX-DOS 1 mode) that can be filled with any kind of data or code useful for the driver. The main bank is permanently switched on the Kernel slot in normal circumstances (other banks are switched only for temporary code calls), therefore this area can be accessed via the standard slot accessing mechanisms (such as inter-slot call via `CALSLT`, inter-slot read via `RDSLT`, etc) even by software that is not aware of the Nextor bank paging mechanism. This space is visible starting at address 7BD0h.
 
 There are two main cases in which it may be necessary to add custom contents to this area:
 
-* When data that is to be read by user software by using RDSLT or an equivalent mechanism is needed (for example, an UNAPI implementation identifier).
+* When data that is to be read by user software by using `RDSLT` or an equivalent mechanism is needed (for example, an [UNAPI](https://github.com/Konamiman/MSX-UNAPI-specification) implementation identifier).
 
 * When a hook other than the timer interrupt hook or the extended BIOS hook is to be patched. In this case, code that performs an inter-bank call to the driver code should be placed in this area, and the hook should be set to do an inter-slot call to this code in the kernel slot.
 
