@@ -216,7 +216,7 @@ The following resources are available for Nextor device driver developers:
 
 *  [A template driver](../sdk/templates/driver) that can be used as the skeleton for developing custom drivers.
 
-*  A command line utility, `mknexrom`, that will do all the work of embedding a device driver within the Nextor kernel ROM. It is provided as a Linux executable and as a standard C source file, [`mknexrom.c`](../buildtools/sources/mknexrom.c).
+*  A command line utility, `mknexrom`, that will do all the work of embedding a device driver within the Nextor kernel ROM. It is provided as a standard C source file, [`mknexrom.c`](../buildtools/sources/mknexrom.c), and as a prebuilt Linux executable in [the releases section](https://github.com/Konamiman/Nextor/releases).
 
 * [A Docker image](../docker/README.md) with all the tools and kernel base files needed for generating fully usable Nextor ROM files.
 
