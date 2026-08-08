@@ -351,8 +351,23 @@ CUSTOM_DEVICE_QUERY:
     ret
 
 READ_WRITE:
+    push af                     ;Save Cy (0 = read, 1 = write) and device number
+    or a                        ;Device number 0 never exists
+    jr z,RW_BADDEV
+    cp 3                        ;Only devices 1 and 2 exist
+    jr nc,RW_BADDEV
+    pop af
     ld c,1
-    jp NEXTOR2_DEV_RW
+    call NEXTOR2_DEV_RW
+    cp _IDEVL                   ;The device number is valid, so an "invalid device"
+    ret nz                      ;error from the old driver code actually means
+    ld a,_NRDY                  ;"device currently absent": return "not ready",
+    ret                         ;as the Nextor 3 driver interface requires
+RW_BADDEV:
+    pop af
+    ld a,_IDEVL
+    ld b,0
+    ret
 
 RETURN_NOT_IMP:
     ld a,RESULT_NOT_IMPLEMENTED
@@ -367,7 +382,7 @@ Notes:
 
 * In `READ_WRITE`, register C changed meaning: it was the logical unit number, now it's the media descriptor byte for floppy disk drives and zero otherwise. For a non-floppy driver like this one, replacing it with the fake logical unit 1 is all the old `DEV_RW` needs; floppy disk drivers should instead pass C through and use it as described in _[4.4.9. READ_WRITE (4128h)](Nextor%203.0%20Driver%20Development%20Guide.md#449-read_write-4128h)_. The MSX-DOS error codes returned are unchanged, although the code formerly named `.IDEVL` ("invalid device or logical unit") is now `.IDEVN` ("invalid device number"), with the same value 0B5h.
 
-* **Watch out for the `.IDEVL` error in your old `DEV_RW`**: since Nextor 2 didn't distinguish nonexistent devices from devices that exist but are currently absent, old drivers commonly return `.IDEVL` for both; for example, for a card slot that was empty when the driver initialized. In Nextor 3 these are different results: `READ_WRITE` must return `.NRDY` ("not ready") when the device exists but is currently unavailable, reserving `.IDEVN` for device numbers that your driver never provides. The kernel is somewhat forgiving about this particular mistake (in MSX-DOS 1 mode it converts an `.IDEVN` result from `READ_WRITE` into the same "disk offline" error that `.NRDY` produces, and in MSX-DOS 2 mode the media change check reports an unavailable removable device as "not ready" before `READ_WRITE` is ever called), but don't rely on that: in MSX-DOS 2 mode, a device that isn't reported as removable, or a driver that doesn't implement the "get device status" query, will still surface `.IDEVN` ("Invalid device number") to the application instead of "Not ready". An easy way to get this right in the glue routine: validate the device number range yourself before calling the old `DEV_RW`, and afterwards translate an `.IDEVN` result to `.NRDY` (at that point the device number is known to be valid, so the old code can only mean "device absent").
+* **Watch out for the `.IDEVL` error in your old `DEV_RW`**: since Nextor 2 didn't distinguish nonexistent devices from devices that exist but are currently absent, old drivers commonly return `.IDEVL` for both; for example, for a card slot that was empty when the driver initialized. In Nextor 3 these are different results: `READ_WRITE` must return `.NRDY` ("not ready") when the device exists but is currently unavailable, reserving `.IDEVN` for device numbers that your driver never provides. The kernel is somewhat forgiving about this particular mistake (in MSX-DOS 1 mode it converts an `.IDEVN` result from `READ_WRITE` into the same "disk offline" error that `.NRDY` produces, and in MSX-DOS 2 mode the media change check reports an unavailable removable device as "not ready" before `READ_WRITE` is ever called), but don't rely on that: in MSX-DOS 2 mode, a device that isn't reported as removable, or a driver that doesn't implement the "get device status" query, will still surface `.IDEVN` ("Invalid device number") to the application instead of "Not ready". An easy way to get this right in the glue routine: validate the device number range yourself before calling the old `DEV_RW`, and afterwards translate an `.IDEVN` result to `.NRDY` (at that point the device number is known to be valid, so the old code can only mean "device absent"). That's exactly what the `READ_WRITE` routine quoted above does.
 
 * `CUSTOM_DRIVER_QUERY` and `CUSTOM_DEVICE_QUERY` are mandatory entries but a two-line stub satisfies them if you have nothing custom to offer.
 

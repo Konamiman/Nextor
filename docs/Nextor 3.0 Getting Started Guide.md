@@ -457,4 +457,4 @@ You will see the shutdown message printed by the driver, and the CAPS LED will s
 
 * RAM drivers don't work in MSX-DOS 1 mode, and they don't survive a computer reset. If you want a RAM driver to be always available, you can install it from your AUTOEXEC.BAT file.
 
-* [The MSX Turbo-R FDD driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) is available as a RAM driver also, in addition to the regular ROM driver variant.
+* [The MSX Turbo-R FDD driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) is available as a RAM driver also, in addition to the regular ROM driver variant.

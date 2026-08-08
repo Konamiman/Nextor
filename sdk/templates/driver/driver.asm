@@ -282,7 +282,7 @@ STR_DRIVER_AUTHOR: db "Myself",0
 ; RESULT_INIT_ERROR will cause the "initialize driver" call to be skipped
 ; and the driver to be ignored (not counted as an existing Nextor kernel).
 ;
-; Note: this is the same as Nextor 2 DV_INIT when called with A=0, except that
+; Note: this is the same as Nextor 2 DRV_INIT when called with A=0, except that
 ; TIMER_INT flag is returned in B, not in Cy; an error code is returned in A;
 ; and DE is passed at input.
 
@@ -307,7 +307,7 @@ DO_DRVQ_GET_INIT_PARAMS:
 ; RESULT_NOT_IMPLEMENTED is interpreted as equivalent to RESULT_OK.
 ; RESULT_INIT_ERROR will cause the driver to be ignored (not counted as an existing Nextor kernel).
 ;
-; Note: this is the same as Nextor 2 DV_INIT when called with A=1, except that number of
+; Note: this is the same as Nextor 2 DRV_INIT when called with A=1, except that number of
 ; allocated drives is not passed in B, DE is passed at input, and an error code can be returned.
 
 DO_DRVQ_INIT:

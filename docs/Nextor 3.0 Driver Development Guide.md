@@ -1080,7 +1080,7 @@ This query is intended for floppy disk devices only. For any other device type (
 
 The driver should format the floppy disk according to the selected choice. Choice numbers correspond to the format choices returned by "Get format choices for a floppy disk device"; if an unknown choice is supplied, `RESULT_NOT_IMPLEMENTED` should be returned.
 
-After the physical formatting completes, an MSX-DOS 1 compatible set of disk parameters (boot sector, empty FAT and empty root directory) appropriate for the disk geometry must be written to the disk. The source code of [the MSX Turbo-R FDD driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) contains these parameters for 3.5" single side and double side disks.
+After the physical formatting completes, an MSX-DOS 1 compatible set of disk parameters (boot sector, empty FAT and empty root directory) appropriate for the disk geometry must be written to the disk. The source code of [the MSX Turbo-R FDD driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) contains these parameters for 3.5" single side and double side disks.
 
 There's no way to report progress on the formatting process back to the caller so this query must simply perform the formatting in a blocking fashion until the process completes.
 

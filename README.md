@@ -62,5 +62,4 @@ There are a number of makefiles that will take care of building the different co
 
 There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too.
 
-You may want to take a look at [this now closed pull request from Dean Netherton](https://github.com/Konamiman/Nextor/pull/79) that contains a different attempt at writing makefiles for building Nextor. It even has some nice extra features like building FDD and HDD images with Nextor, and building the `mknexrom` tool itself. Note however that that pull request was created targeting Nextor 2 and thus many of the ideas it uses may no longer be relevant.
 

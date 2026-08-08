@@ -9,9 +9,9 @@ These are the known device drivers available for Nextor 3:
 | Driver | Hardware | Where to get it |
 | --- | --- | --- |
 | Sunrise IDE | Sunrise IDE cartridges and compatible storage controllers | [SunriseIDE-Nextor-driver](https://github.com/Konamiman/SunriseIDE-Nextor-driver) |
-| MegaFlashROM SCC+ SD | [MegaFlashROM SCC+ SD](https://www.msxcartridgeshop.com/) cartridges | [MegaFlashROM-SD-Nextor-driver](https://github.com/Konamiman/MegaFlashROM-SD-Nextor-driver) |
+| MegaFlashROM SCC+ SD | [MegaFlashROM SCC+ SD](https://www.msxcartridgeshop.com/) cartridges | [MegaFlashROM-SD-Nextor-driver](https://github.com/Konamiman/MegaFlashROM-SCC-SD-Nextor-driver) |
 | FlashJacks | FlashJacks IDE interface | [Flashjacks-Nextor-driver](https://github.com/Konamiman/Flashjacks-Nextor-driver) |
-| MSX Turbo-R FDD | The floppy disk controller built into the MSX Turbo-R computers (Panasonic FS-A1GT and FS-A1ST); can be built as a ROM kernel or as a RAM-loadable driver | [TurboR-FDD-Nextor-driver](https://github.com/Konamiman/TurboR-FDD-Nextor-driver) |
+| MSX Turbo-R FDD | The floppy disk controller built into the MSX Turbo-R computers (Panasonic FS-A1GT and FS-A1ST); can be built as a ROM kernel or as a RAM-loadable driver | [TurboR-FDD-Nextor-driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) |
 
 Additionally, the Nextor repository itself contains [the standalone ROM driver](../source/drivers/standalone-rom-driver.asm) (a dummy driver that doesn't handle any real hardware, used to build the standalone Nextor ROMs) and [an example RAM-loadable driver](../source/drivers/ram-driver-example.asm); both are useful as reference code when developing a new driver.
 
