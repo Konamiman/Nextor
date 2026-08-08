@@ -1,6 +1,6 @@
 # Nextor 3.0 Known Drivers
 
-As of Nextor 3.0 the device drivers for specific hardware no longer live in the Nextor repository: drivers are developed and distributed independently, producing a ready-to-use Nextor kernel ROM (and in some cases a RAM-loadable driver file too) by combining the Nextor kernel base file with the driver code. Each developer chooses how to distribute their work: a git repository, a dedicated web site, plain downloadable binaries, etc.
+As of Nextor 3.0 the device drivers for specific hardware no longer live in the Nextor repository: drivers are developed and distributed independently. A ready-to-use Nextor kernel ROM is produced by combining the Nextor kernel base file with the driver code; some drivers additionally provide a RAM-loadable driver file, which is a direct assembly of the driver code alone and doesn't involve the kernel base file. Each developer chooses how to distribute their work: a git repository, a dedicated web site, plain downloadable binaries, etc.
 
 The drivers that were part of Nextor 2 now live in their own dedicated GitHub repositories, which consume [the Nextor SDK](../sdk/README.md) and offer the downloadable ROM files in their releases sections; see the README file of each repository for the details and the build instructions.
 

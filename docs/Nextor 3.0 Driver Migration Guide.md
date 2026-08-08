@@ -384,6 +384,10 @@ Notes:
 
 * **Watch out for the `.IDEVL` error in your old `DEV_RW`**: since Nextor 2 didn't distinguish nonexistent devices from devices that exist but are currently absent, old drivers commonly return `.IDEVL` for both; for example, for a card slot that was empty when the driver initialized. In Nextor 3 these are different results: `READ_WRITE` must return `.NRDY` ("not ready") when the device exists but is currently unavailable, reserving `.IDEVN` for device numbers that your driver never provides. The kernel is somewhat forgiving about this particular mistake (in MSX-DOS 1 mode it converts an `.IDEVN` result from `READ_WRITE` into the same "disk offline" error that `.NRDY` produces, and in MSX-DOS 2 mode the media change check reports an unavailable removable device as "not ready" before `READ_WRITE` is ever called), but don't rely on that: in MSX-DOS 2 mode, a device that isn't reported as removable, or a driver that doesn't implement the "get device status" query, will still surface `.IDEVN` ("Invalid device number") to the application instead of "Not ready". An easy way to get this right in the glue routine: validate the device number range yourself before calling the old `DEV_RW`, and afterwards translate an `.IDEVN` result to `.NRDY` (at that point the device number is known to be valid, so the old code can only mean "device absent"). That's exactly what the `READ_WRITE` routine quoted above does.
 
+* The `_IDEVL` and `_NRDY` symbols in the code above are the driver's own `EQU`s, carried over from its Nextor 2 version (`_IDEVL equ 0B5h`, `_NRDY equ 0FCh`); the SDK instead defines these codes as `.IDEVN` and `.NRDY` in [`dos_errors.inc`](../sdk/asm/constants/dos_errors.inc). Keeping your old `EQU`s is perfectly fine, just don't get confused by the two spellings of the same 0B5h value.
+
+* "Get device status" and "get device availability" are served here by one single routine, which is safe only because the old Sunrise IDE `DEV_STATUS` always answers "available, not changed": it keeps no per-call state. If your old `DEV_STATUS` does track medium changes (that is, if it can answer "changed" once and "not changed" afterwards), then the two queries **must** be separated, because asking for availability is not allowed to consume the change flag: _[4.6.4. Device query 4: Get device availability](Nextor%203.0%20Driver%20Development%20Guide.md#464-device-query-4-get-device-availability)_ requires that the next "get device status" still reports the change. Serve the availability query with a presence test that doesn't touch the change tracking, or just return `RESULT_NOT_IMPLEMENTED` for it if the device is always present.
+
 * `CUSTOM_DRIVER_QUERY` and `CUSTOM_DEVICE_QUERY` are mandatory entries but a two-line stub satisfies them if you have nothing custom to offer.
 
 ### 3.6. Replace the direct BIOS CHPUT calls
@@ -445,13 +449,11 @@ DO_DEVQ_GET_STRING:
     cp 4
     jp z,DO_DEVQ_GET_DEV_NAME
 
-    ld a,d
-    or a
-    ret z      ;Buffer size=0: do nothing, no error
-    dec a
-    jr nz,DO_DEVQ_GET_STRING_2
-    ld (hl),0  ;Buffer size=1: just output terminating 0, no error
-    ret
+    ;Buffer sizes 0 and 1 are not special cased here: OUTPUT_STRING
+    ;already implements the required behavior for them (it returns
+    ;RESULT_TRUNCATED_STRING without writing anything when the size
+    ;is zero), and returning early would wrongly report success for
+    ;string indexes that this driver can't provide at all.
 
 DO_DEVQ_GET_STRING_2:
     ;HL=user buf, D=user size, B=substring code, C=device number
@@ -549,6 +551,8 @@ SLAVE_DEV_S:
 ```
 
 The exact offsets (20, 44, 54) are of course specific to the Sunrise IDE driver's `DEV_INFO` layout; adjust them to whatever fixed layout your own routine produces. If your `DEV_INFO` already wrote strings of known length, the wrapper gets simpler; the pattern to keep is: **scratch buffer, zero-terminate, `jp OUTPUT_STRING`**.
+
+Resist the temptation to shortcut the zero-length buffer case (`D=0`) at the top of the routine: the new API gives that case a specific meaning, namely "tell me whether this string exists without retrieving it", and the required answer is `RESULT_TRUNCATED_STRING` if it does exist and `RESULT_NOT_IMPLEMENTED` if it doesn't. An early `xor a / ret` would report success for strings the driver can't provide at all. Letting the request flow through the normal path gets this right for free, since `OUTPUT_STRING` returns `RESULT_TRUNCATED_STRING` for a zero-length buffer without writing anything to it (and, one byte later, it also returns it for `D=1`, where only the terminator fits).
 
 ### 3.9. Adapt the extended BIOS handler
 

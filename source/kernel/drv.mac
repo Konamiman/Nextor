@@ -713,13 +713,20 @@ _dpb_b0_done:
 	ret
 	
 	;--- Format choice
+	;
+	;    These are the disk ROM compatible CHOICE and DSKFMT entry points
+	;    for Nextor drives in DOS 1 mode; they always answer "can't format".
+	;    This is NOT the path used by the _FORMAT function call (nor by the
+	;    $FORMAT BIOS call, which is redirected too): formatting in DOS 1
+	;    mode is handled by F_FORMAT in bank 6, which does forward the
+	;    request to the driver for floppy disk devices.
 
 CHO_ENTRY::
 	;call	GET_KERNEX_DOS1_PNT
 	;jp	nc,CHO_ENTRY_CANTFORMAT
 
 CHO_ENTRY_CANTFORMAT:
-	ld	hl,781fh	;Formatting is no supported yet for Nextor drivers
+	ld	hl,781fh	;Formatting is not supported via this entry point
 	ret
 
 	;--- Format device
@@ -729,7 +736,7 @@ FMT_ENTRY::
 	;jp	nc,FMT_ENTRY_CANTFORMAT
 
 FMT_ENTRY_CANTFORMAT:
-	ld	a,16		;Formatting is no supported yet for Nextor drivers
+	ld	a,16		;Formatting is not supported via this entry point
 	scf
 	ret
 

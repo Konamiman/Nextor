@@ -92,7 +92,7 @@ The handling of offline devices at boot has been revised too: removable devices 
 
 ### 2.6. Drivers are now distributed separately
 
-The Nextor repository no longer contains the drivers for specific hardware, and no longer builds ready-to-use kernel ROMs for them: it builds only the Nextor kernel base file. Drivers are now developed and distributed independently, combining the driver code with the kernel base file to produce the final ROM (and a RAM-loadable driver file, when applicable).
+The Nextor repository no longer contains the drivers for specific hardware, and no longer builds ready-to-use kernel ROMs for them: it builds only the Nextor kernel base file. Drivers are now developed and distributed independently, combining the driver code with the kernel base file to produce the final ROM; a RAM-loadable driver file, when applicable, is instead obtained by assembling the driver code on its own.
 
 The drivers that were part of Nextor 2 now live in their own git repositories, but driver developers are free to distribute their work in any other way (a dedicated web site, plain downloadable binaries, etc.). The list of known drivers and where to get each of them is maintained in _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_.
 

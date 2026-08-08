@@ -681,7 +681,7 @@ A starting sector of FFFFFFFFh has a special meaning: the drive is attached to t
 
 Also, it is possible to map a drive to a removable device which has no media inserted. In this case, the `_MAPDRV` function will succeed, but the next access to the drive will return a "Disk offline" error.
 
-It is not possible to map two drives to the same combination of driver, device and start sector; this is to prevent data corruption resulting from dealing with unsynchronized sector buffers. An `.IDEVN` error will be returned in this case. In order to change the drive letter for a given mapping, the old drive letter must be first unmapped.
+It is not possible to map two drives to the same combination of driver, device and start sector; this is to prevent data corruption resulting from dealing with unsynchronized sector buffers. A `.PUSED` error will be returned in this case. In order to change the drive letter for a given mapping, the old drive letter must be first unmapped.
 
 Also, note that it is not possible to explicitly map a drive to an MSX-DOS driver.
 
@@ -821,6 +821,8 @@ This can happen on FAT12 only.
 Parameters:  C = 7FH (_DRVRO)
              A = Driver slot number
              B = Driver segment number (FFh for drivers in ROM)
+             DE = Address of a routine for printing a character,
+                  or 0 for no output
              H = Operation to perform:
                  1: Initialize and register a driver loaded in RAM
                  2: Shut down and unregister a driver loaded in RAM
@@ -828,6 +830,8 @@ Results:     A = Error code
 ```
 
 This function call is used to perform miscellaneous operations on Nextor drivers. Currently it's used only to initialize and shut down drivers loaded in RAM, but additional operations could be added in future versions of Nextor. Consequently, specifying a valid driver segment number is currently always mandatory.
+
+The routine whose address is passed in DE is handed over to the driver so that it can print its own initialization messages; it must have the same semantics as the BIOS routine `CHPUT` (print the character passed in A, modify AF only). Pass DE=0 if the operation must be silent. The routine may be located in the TPA, since Nextor pages the caller's TPA in before invoking the driver. See _[4.5.4. Driver query 4: Initialize driver](Nextor%203.0%20Driver%20Development%20Guide.md#454-driver-query-4-initialize-driver)_ in the driver development guide for the details.
 
 Note that this function is NOT available in MSX-DOS 1 mode.
 
@@ -849,7 +853,7 @@ The meaning and location of the initialization data (if any) depends on each dri
 
 A driver can't, in principle, use more than one RAM segment. If a driver needs more memory, additional RAM segments should be allocated by the driver installer tool, which can then pass the allocated segment numbers to the driver as initialization data. Note that only the segment containing the driver header is known to (and managed by) the kernel, so it's the installer tool's responsibility to free any extra segments after the driver is shut down.
 
-This operation can return two errors: `.IDRVR` if the driver doesn't have the `NEXTORv3_DRIVER` signature at the expected address, and `.INITE` if the driver's initialization routine reports an error. In both cases the driver won't have been registered and thus its RAM segment should be freed.
+This operation can return three errors: `.IDRVR` if the driver doesn't have the `NEXTORv3_DRIVER` signature at the expected address, or if a driver with the same slot and segment number is registered already; `.INITE` if the driver's initialization routine reports an error; and `.NORAM` if there isn't enough free memory in the kernel to register one more driver. In all these cases the driver won't have been registered and thus its RAM segment should be freed.
 
 #### 3.15.2. Shutting down a driver loaded in RAM
 

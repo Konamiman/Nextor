@@ -2071,7 +2071,7 @@ CALC_NUMCLUS1:
 ;
 ;                     If extended driver name flag is 0:
 ;                     +8: Driver name, padded right with spaces up to 32 chars
-;                     +40-+64: zeros
+;                     +40-+63: zeros
 ;
 ;                     If extended driver name flag is 1:
 ;                     +8: Driver name, zero-terminated (up to 56 bytes)
