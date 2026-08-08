@@ -10,13 +10,13 @@ PT_EXT_LBA: equ 15
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV v1.2 - map a drive to a driver, device and partition,",13,10
+	db	"MAPDRV v1.3 - map a drive to a driver, device and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [0]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<seg>]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [0]",13,10
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device",13,10
@@ -33,7 +33,7 @@ PT_EXT_LBA: equ 15
 	db	13,10
 	db	"<slot> and <subslot> must be a number from 0 to 3. If 0 is specified instead,",13,10
 	db	"the primary disk controller slot is assumed.",13,10
-	db  "<segment> must be a number from 0 to 255, only used for RAM drivers.",13,10
+	db  "<seg> (segment) must be a number from 0 to 255, only used for RAM drivers.",13,10
 	db	13,10
 	db	"If device information is provided but slot is omitted, the drive is mapped to",13,10
 	db	"the specified partition of the specified device in the driver already",13,10
@@ -46,6 +46,9 @@ PT_EXT_LBA: equ 15
 	db	13,10
 	db	"'d' will revert the drive to its default mapping (the mapping at boot time).",13,10
 	db	"'u' will leave the drive unmapped. Other parameters are ignored in both cases.",13,10
+	db	"'s' will map the drive to the device but skip the partition assignment;",13,10
+	db	"    a suitable partition will be searched on each access to the drive",13,10
+	db	"    (useful for removable devices that are currently offline).",13,10
 	db	13,10
 	db	"If a valid filename is supplied after <drive>, the specified file will be",13,10
 	db      "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
@@ -57,8 +60,8 @@ USAGE_S:
 	db	"MAPDRV - map a drive to a driver, device and partition",13,10
 	db  "         or mount a file on a drive",13,10
 	db	13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [<slot>[-<subslot>][:<segment>]]",13,10
-	db	"MAPDRV [/L] <drive>: <partition>|d|u [<device>] [0]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<seg>]]",13,10
+	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [0]",13,10
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
@@ -134,7 +137,7 @@ NO_LOCK:
 	ld	a,(BUF+1)
 	or	a
 	jp	nz,IS_FILE
-	ld	a,(BUF)		;Check fo special values "d" and "u"
+	ld	a,(BUF)		;Check fo special values "d", "u" and "s"
 	or	20h
 	cp	"d"
 	ld	b,1
@@ -142,10 +145,21 @@ NO_LOCK:
 	cp	"u"
 	ld	b,0
 	jp	z,DO_MAP_DU
+	cp	"s"
+	jr	z,IS_SKIP_PART
 	jp	IS_FILE
+
+	;* "s": skip the partition assignment,
+	;  then parse device and slot as for a partition number
+
+IS_SKIP_PART:
+	ld	a,-1
+	ld	(SKIP_PART),a
+	jr	IS_PART2
 
 IS_PART:
 	ld	(PARTITION),a
+IS_PART2:
 
 	;* Device
 
@@ -241,6 +255,20 @@ OK_DEVICE:
 	ld	a,(BUF_DRIVER+1)
 	ld	(SEGMENT),a
 OK_GETCURMAP:
+
+	;* If skipping the partition assignment ("s"), use mapping sector
+	;  FFFFFFFFh: the drive will be attached to the device with no
+	;  partition assigned, and a suitable partition will be searched
+	;  on the first access to the drive
+
+	ld	a,(SKIP_PART)
+	or	a
+	jr	z,NO_SKIP_PART
+	ld	hl,-1
+	ld	de,-1
+	jp	OK_PARTINFO
+
+NO_SKIP_PART:
 
 	;* Convert partition to primary or extended as appropriate
 
@@ -451,6 +479,7 @@ BADKER21_MSG:
 	db	"*** File mounting requires Nextor 2.1 or later",13,10,"$"
 
 PARTITION:	db	0
+SKIP_PART:	db	0
 DO_LOCK:	db	0
 DRIVE:	db	0
 PRIMARY:	db	0

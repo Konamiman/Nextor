@@ -844,14 +844,28 @@ SETNUMD_NOUD:
 ; If there is a device having a partition that is properly formatted in FAT12
 ; or FAT16 and has the "active" flag set (the MSB of the first byte
 ; of the partition table entry), then this device and that partition will be assigned
-; regardless of the device number. If there are more than one devices matching this, 
+; regardless of the device number. If there are more than one devices matching this,
 ; the one with the smallest device number will be assigned. If there are multiple
 ; active partitions in the same device, the first one found will be assigned.
 ;
+; If no device with a suitable partition is found, the drive is attached to
+; a fallback device, if one was found during the scan, with no partition
+; assigned (UF_FOK not set in DOS 2 mode, first absolute sector -1 in DOS 1
+; mode); a partition will then be searched on the first access to the drive.
+; A fallback device is one that is either offline and removable, or online
+; but without any valid filesystem on it (this honors the drive that
+; GET_BOOT_DRIVES_COUNT reserves for such devices). If there are multiple
+; fallback devices, the one with the smallest device number is chosen.
+;
 ; There is also a second entry point, AUTO_ASPART.
 ; The difference is that this one searches for a suitable partition,
-; but the device is fixed (passed as parameter).
-; This one is used if the device provides its own configuration.
+; but the device is fixed (passed as parameter). In this mode the
+; "online with no valid filesystem" fallback doesn't apply (an error is
+; returned instead), but the "offline and removable" one does.
+;
+; Note: candidate and fallback device numbers are stored in a byte whose
+; bits 6 and 7 hold the floppy and removable flags, so the automatic
+; search fully supports device numbers 1 to 63 only.
 ;
 ; Input:  HL = DOS 2 mode: 
 ;                  Address of unit descriptor, it must have UD_SLOT and UD_PHYSICAL_UNIT set
@@ -876,12 +890,15 @@ AAD_CURR_PART_DEVNUM equ 4
 AAD_CURR_PART_INDEX equ 5 ;Bit 7 set when examining extended partitions, FFh when examining the MBR
 AAD_CURR_PART_SECTOR equ 6
 AAD_CURR_PART_STATUS_BYTE equ 10
-AAD_CAND_PART_DEVNUM equ 11
+AAD_CAND_PART_DEVNUM equ 11 ;bit 7: removable, bit 6: floppy
 AAD_CAND_PART_SECTOR equ 12
 AAD_FLAGS equ 16
 AAD_MAX_DEVICE_NUM equ 17
+AAD_FALLBACK_DEVNUM equ 18 ;bit 7: removable, bit 6: floppy
+AAD_SAW_VALID_PART equ 19  ;Nonzero if the device currently being examined
+                           ;holds at least one valid filesystem
 
-AAD_SIZE equ 18
+AAD_SIZE equ 20
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_IS_AUTOASPART equ 7
@@ -961,11 +978,13 @@ AUTO_NOEMU:
 
     bit 7,d
 	jr z,AUTO_COMMON3
-	
+
 	ld (ix+AAD_LOOP_DEVICE_NUMBER),b
 	xor a
 	ld (ix+AAD_CAND_PART_DEVNUM),a
 	ld (ix+AAD_CURR_PART_DEVNUM),a
+	ld (ix+AAD_FALLBACK_DEVNUM),a
+	ld (ix+AAD_SAW_VALID_PART),a
 
 	jp AA_GET_DEVINFO
 
@@ -973,6 +992,7 @@ AUTO_COMMON3:
 	xor a
 	ld (ix+AAD_CAND_PART_DEVNUM),a
 	ld (ix+AAD_CURR_PART_STATUS_BYTE),a
+	ld (ix+AAD_FALLBACK_DEVNUM),a
 
 	;Start at device number = 1 (A=0 then INC A)
 AA_DLOOP:
@@ -981,6 +1001,7 @@ AA_DLOOP:
 
 	xor	a
 	ld	(ix+AAD_CURR_PART_DEVNUM),a
+	ld	(ix+AAD_SAW_VALID_PART),a
 
 	;--- Note: earlier there was a device-level duplicate check here, 
 	;    but that's no longer needed: the drive-per-partition feature allows multiple
@@ -1114,31 +1135,15 @@ AA_PX_1ST:
     jr z,AA_PX_POK
 
     ;F_GPART failed (device not ready):
-    ;Check if device is removable, if so, assign it anyway
-	;(if later the device becomes online a partition will be assigned on first access)
+    ;If the device is removable, record it as the fallback device:
+    ;it will be attached to the drive, with no partition assigned,
+    ;if no suitable partition is found in any device
+    ;(when the device becomes online a partition will be assigned on first access).
+    ;Note that we don't assign it right away: a device holding an actual
+    ;filesystem, even a not active one found later in the scan, takes precedence.
     bit 7,(ix+AAD_CURR_PART_DEVNUM)
     jp z,AA_LLOOP_NEXT	;Not removable: try next device
-
-    ;Check if this offline removable device is already assigned to another drive
-    push ix
-    push iy
-    ld h,(ix+AAD_DRIVER_SLOT)
-    ld l,0FFh
-    ld e,(ix+AAD_UNIT_DESCRIPTOR)
-    ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
-    push de
-    ld d,(ix+AAD_LOOP_DEVICE_NUMBER)
-    exx
-    ld de,0FFFFh
-    ld hl,0FFFFh
-    exx
-    pop ix
-    call CHECK_MAP_IN_USE
-    pop iy
-    pop ix
-    jp nz,AA_LLOOP_NEXT	;Already assigned: skip to next device
-
-    jp AA_ASSIGN_OFFLINE_REMOVABLE	;Removable: assign in offline mode
+    jp AA_RECORD_FALLBACK
 AA_PX_POK:
 
     ;--- If we are scanning the first partition and bit 0 of status byte is set, try to enter disk emulation mode
@@ -1243,7 +1248,7 @@ AA_PX_NOEX:
 AA_PLOOP_NEXT:
     ld a,(ix+AAD_CURR_PART_INDEX)
     inc a     ;FFh if no more partitions left (we were examining the MBR itself)
-    jp z,AA_LLOOP_NEXT
+    jp z,AA_DEV_EXHAUSTED
     cp 5    ;We examine the first 4 primary partitions only...
     jp c,AA_PXLOOP
     bit 7,a
@@ -1295,6 +1300,11 @@ AA_CHECK_BOOT2:
 	cp	4
 	jp	nc,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 AA_SPC_OK:
+
+	;* The device holds at least one valid filesystem:
+	;  it must not be considered for a fallback assignment
+
+	ld	(ix+AAD_SAW_VALID_PART),1
 
 	;* Check if the partition is already mapped to another drive
 
@@ -1356,6 +1366,53 @@ AA_NOT_ACTIVE:
 
     jp  AA_PLOOP_NEXT
 
+	;--- The current device has been scanned completely (including the MBR
+	;    itself as a last resort) and no mappable partition was found on it.
+	;    If it doesn't hold any valid filesystem at all (not even one already
+	;    mapped to another drive), record it as the fallback device: it will be
+	;    attached to the drive, with no partition assigned, if no suitable
+	;    partition is found in any device. This honors the drive that
+	;    GET_BOOT_DRIVES_COUNT reserves for partitionless devices, and a
+	;    partition will be searched on the first access to the drive
+	;    (e.g. after the device gets partitioned).
+
+AA_DEV_EXHAUSTED:
+	bit	AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
+	jp	nz,AA_LLOOP_NEXT	;Fixed device requested: keep the "no suitable partition" error
+
+AA_RECORD_FALLBACK:
+	ld	a,(ix+AAD_SAW_VALID_PART)
+	or	a
+	jp	nz,AA_LLOOP_NEXT	;The device holds some filesystem: don't use it as fallback
+
+	ld	a,(ix+AAD_FALLBACK_DEVNUM)
+	or	a
+	jp	nz,AA_LLOOP_NEXT	;We already have a fallback device
+
+	;Check if the device is already attached (with no partition) to another drive
+
+	push	ix
+	push	iy
+	ld	h,(ix+AAD_DRIVER_SLOT)
+	ld	l,0FFh
+	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
+	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
+	push	de
+	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
+	exx
+	ld	de,0FFFFh
+	ld	hl,0FFFFh
+	exx
+	pop	ix
+	call	CHECK_MAP_IN_USE
+	pop	iy
+	pop	ix
+	jp	nz,AA_LLOOP_NEXT	;Already attached to another drive: skip to next device
+
+	ld	a,(ix+AAD_CURR_PART_DEVNUM)
+	ld	(ix+AAD_FALLBACK_DEVNUM),a
+	jp	AA_LLOOP_NEXT
+
 	;--- No suitable partitions in the current device,
 	;    so jump to the next device
 
@@ -1369,16 +1426,51 @@ AA_LLOOP_NEXT:
 AA_LLOOP_END:
 
 	;--- No more devices found:
-	;    If a candidate device was identified, use it,
-	;    otherwise return an error
+	;    If a candidate device was identified, use it;
+	;    otherwise, if a fallback device was recorded, attach it
+	;    to the drive with no partition assigned;
+	;    otherwise return an error.
 
 	ld	a,(ix+AAD_CAND_PART_DEVNUM)
 	or	a
-	jr	z,AA_END_NOFOUND
+	jr	z,AA_TRY_FALLBACK
 
-	and	111b	;A=Device
+	and	111111b	;A=Device (bits 6-7 hold the removable and floppy flags)
 	ld	(ix+AAD_LOOP_DEVICE_NUMBER),a
 	jp	AA_DO_ASSIGN
+
+	;--- Attach the fallback device to the drive, with no partition assigned.
+	;    The device is either offline and removable, or online but without
+	;    any valid filesystem. Since UF_FOK won't be set (DOS 2 mode),
+	;    BUILD_UPB will search for a partition on the first access to the drive.
+
+AA_TRY_FALLBACK:
+	ld	a,(ix+AAD_FALLBACK_DEVNUM)
+	or	a
+	jr	z,AA_END_NOFOUND
+
+	ld	(ix+AAD_CAND_PART_DEVNUM),a	;So that AA_DO_ASSIGN retrieves the removable and floppy flags
+	and	111111b	;A=Device (bits 6-7 hold the removable and floppy flags)
+	ld	(ix+AAD_LOOP_DEVICE_NUMBER),a
+
+	;Set partition sector to -1.
+	;In DOS 1 mode this means "no partition assigned".
+	;Otherwise it doesn't matter since UF_FOK won't be set.
+	ld	a,0FFh
+	ld	(ix+AAD_CAND_PART_SECTOR),a
+	ld	(ix+AAD_CAND_PART_SECTOR+1),a
+	ld	(ix+AAD_CAND_PART_SECTOR+2),a
+	ld	(ix+AAD_CAND_PART_SECTOR+3),a
+
+	ld	l,(ix+AAD_UNIT_DESCRIPTOR)
+	ld	h,(ix+AAD_UNIT_DESCRIPTOR+1)
+	push	hl
+	pop	iy
+
+	ld	a,(DOS_VER##)
+	or	a
+	jp	z,AA_DO_ASSDOS1
+	jp	AA_DO_ASSIGN_NO_FOK
 
 AA_END_NOFOUND:
 	ld	a,1
@@ -1478,37 +1570,6 @@ AA_DO_ASSDOS1:
 
 	xor	a
 	ret
-
-
-	;--- Assign a removable device to the drive without partition info.
-	;    The partition will be assigned on first access (by BUILD_UPB).
-	;    This is used when a removable device is offline at boot time.
-	;    Reuses AA_DO_ASSIGN but skips setting UF_FOK for DOS 2 mode.
-
-AA_ASSIGN_OFFLINE_REMOVABLE:
-	ld a,(ix+AAD_CURR_PART_DEVNUM)
-	ld (ix+AAD_CAND_PART_DEVNUM),a
-
-	;Set partition sector to -1
-	;In DOS 1 mode this means "no partition assigned".
-	;Otherwise it doesn't matter since UF_FOK won't be set.
-	ld a,0FFh
-	ld (ix+AAD_CAND_PART_SECTOR),a
-	ld (ix+AAD_CAND_PART_SECTOR+1),a
-	ld (ix+AAD_CAND_PART_SECTOR+2),a
-	ld (ix+AAD_CAND_PART_SECTOR+3),a
-
-	ld l,(ix+AAD_UNIT_DESCRIPTOR)
-	ld h,(ix+AAD_UNIT_DESCRIPTOR+1)
-	push hl
-	pop iy
-
-	;Jump to AA_DO_ASSIGN but skip setting UF_FOK for DOS 2 mode
-	;(UF_FOK not set means BUILD_UPB will auto-assign partition on first access)
-	ld a,(DOS_VER##)
-	or a
-	jp z,AA_DO_ASSDOS1
-	jp AA_DO_ASSIGN_NO_FOK
 
 
     ;Try to enter emulation mode from data in RAM
@@ -2959,6 +3020,10 @@ UNMAP_NEXT2:
 ; media inserted. Also, no checking is done for the presence of
 ; an actual filesystem in the start sector specified.
 ;
+; A start sector of FFFFFFFFh has a special meaning: the drive is
+; attached to the device with no partition assigned, and one will be
+; searched automatically on the first access to the drive.
+;
 ; All file handles related to a given drive are closed prior to changing
 ; the mapping state of that drive.
 ;
@@ -3443,9 +3508,16 @@ MAPS_DONE_GS:
 	or	a
 	jp	nz,MAP_IDEVN_END
 
+	;Status 0 means "device exists but is currently not available"
+	;(e.g. an offline removable device). Mapping a drive to such a device
+	;is allowed (the access to the drive will throw a "not ready" error
+	;while the device remains offline), so treat it as unchanged media.
+	;Note that in Nextor 2 status 0 meant "invalid device or logical unit",
+	;which is why this case used to abort the mapping with a .NRDY error.
+
 	ld a,d
 	or a
-	jp z,MAP_IDEVN_NDRY
+	jr z,MAP_DRV_UNCH
 
 	dec	a
 	jr	z,MAP_DRV_UNCH
@@ -3508,13 +3580,27 @@ MAP_DRV_UNCH:
 	ld	a,(iy+7)
 	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
 
+	;Check if the requested start sector is FFFFFFFFh, meaning
+	;"no partition assigned": UF_FOK is not set in that case, so that
+	;a partition is searched on the first access to the drive
+
+	ld	a,(ix+UD_FIRST_DEVICE_SECTOR##)
+	and	(ix+UD_FIRST_DEVICE_SECTOR##+1)
+	and	(ix+UD_FIRST_DEVICE_SECTOR##+2)
+	and	(ix+UD_FIRST_DEVICE_SECTOR##+3)
+	inc	a
+	ld	e,UFM_DB+UFM_FO	;Nextor drive + first sector OK
+	jr	nz,MAP_SPEC_SETFLAGS
+	ld	e,UFM_DB	;Start sector is -1: first sector not OK
+MAP_SPEC_SETFLAGS:
+
 	ld	iy,($SECBUF##)
 	ld	a,(iy+7)
 	ld	d,a		;Save device flags
 	and	1		;Bit 0 = removable
 	rlca
 	rlca			;-> bit 2 = UF_RM
-	or	UFM_DB+UFM_FO	;Nextor drive + first sector OK
+	or	e		;Nextor drive, plus first sector OK unless sector is -1
 	bit	2,d		;FDD flag?
 	jr	z,MAP_SPEC_NOFDD
 	or	UFM_FD		;Set floppy disk flag
@@ -3527,10 +3613,6 @@ MAP_SPEC_NOFDD:
 
 MAP_IDEVN_END:
 	ld	a,.IDEVN##
-	jp	SETNUMDRV
-
-MAP_IDEVN_NDRY:
-	ld	a,.NRDY##
 	jp	SETNUMDRV
 
 
@@ -4763,6 +4845,11 @@ DOSV1_2:
 ; _MAPDRV("x:", -2)
 ;  Map drive to default value
 ;
+; _MAPDRV("x:", -3 [, device [, slot [, segment]]])
+;  Map drive to the device with no partition assigned (a suitable partition
+;  will be searched on the first access to the drive); device, slot and
+;  segment are handled as in the explicit partition mapping variants
+;
 ; _MAPDRV("x:", part)
 ;  Map drive to partition "part" on current driver and device
 ;
@@ -4985,12 +5072,30 @@ MAPDRV_NOUNMAP:
 
 MAPDRV_NODEF:
 
+	;* If partition number is -3, skip the partition assignment:
+	;  the drive will be mapped to the device with no partition assigned
+	;  (mapping sector FFFFFFFFh), and a suitable partition will be
+	;  searched on the first access to the drive.
+	;  Useful e.g. to map a drive to an offline removable device.
+
+	dec	de	;DE = -3
+	call	DCOMPR
+	jr	nz,MAPDRV_NOSKIP
+
+	ld	hl,-1
+	ld	(MAPDRV_SEC),hl
+	ld	(MAPDRV_SEC+2),hl
+	jr	MAPDRV_EXPLICIT
+
+MAPDRV_NOSKIP:
 	ld	a,(MAPDRV_PAR+1)
 	or	a
 	ld	e,78
 	jp	nz,BASIC_ERR	;"Invalid partition" error if >255
 
 	;>>> Explicit partition mapping requested
+
+MAPDRV_EXPLICIT:
 
 	;* If device or slot is 0, we need to get the current mapping status
 
@@ -5030,6 +5135,14 @@ MAPDRV_GOTDEV:
 MAPDRV_GOTSLT:
 
 MAPDRV_NOGETCUR:
+
+	;* If the partition assignment is being skipped (partition number -3),
+	;  the mapping sector is set already
+
+	ld	hl,(MAPDRV_PAR)
+	ld	de,-3
+	call	DCOMPR
+	jp	z,MAPDRV_GOT_PAR_SEC
 
 	ld	a,(MAPDRV_PAR)
 	cp	1
@@ -5146,6 +5259,7 @@ MAPDRV_HELP:
 	db  "             0: device sector zero",13,10
 	db  "             -1: unmap drive",13,10
 	db  "             -2: automatic mapping",13,10
+	db  "             -3: don't set partition",13,10
 	db	"<device>: device number (1-255)",13,10
 	db  "<slot>: of driver, main + 4*sub, or",1
 	db  "        0 for primary controller",13,10
@@ -6667,8 +6781,9 @@ DRVS1NX2:
 ;
 ;    Check if a given candidate partition assignment information is already
 ;    in use in any unit.
-;    Input: IX = Address of target unit descriptor
-;                (will be skipped in the check), DOS 2 mode only
+;    Input: IX = Address of the target unit descriptor (DOS 2 mode) or of the
+;                target entry in the Nextor drives table (DOS 1 mode);
+;                the target itself is skipped in the check
 ;           H  = Driver slot number
 ;           L  = Driver segment number
 ;           D  = Device number
@@ -6782,6 +6897,25 @@ CMIU_DOS1:
 	inc	iy
 
 CMIU1_LOOP:
+	;Skip the entry of the drive being mapped itself (pointed by IX),
+	;as the DOS 2 version does with the target unit descriptor.
+	;Otherwise a drive attached to a device with no partition assigned
+	;(first absolute sector FFFFFFFFh) would block its own re-assignment,
+	;e.g. the offline removable device fallback would fail and any access
+	;to the drive would report "disk i/o error" instead of "disk offline".
+
+	push	de
+	push	ix
+	pop	de
+	ld_	a,iyl
+	sub	e
+	jr	nz,CMIU1_NOTSELF
+	ld_	a,iyh
+	sub	d
+CMIU1_NOTSELF:
+	pop	de
+	jr	z,CMIU1_NEXT
+
 	ld	a,(iy+UD1_SLOT##)
 	cp	h
 	jr	nz,CMIU1_NEXT

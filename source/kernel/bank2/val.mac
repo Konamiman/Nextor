@@ -648,6 +648,9 @@ NEW_BOOT_SZ	equ	$-NEW_BOOT
         pop hl
 		or	a			; UPB for this unit.
         jr z,valfib2
+		call	HAS_UPB			;Don't take the shortcut if UD_TIME is set
+		jr	z,valfib2		; but no UPB was ever built (non-FAT disk
+						; previously seen by _RDDRV or _WRDRV)
 		call	IS_FIXED_OR_LOCKED		;Skip all if disk is fixed or locked
 		ld	a,0
         pop hl
@@ -767,6 +770,10 @@ if 1 ;900725	;Was "if 0" in DOS 2.3x
 		jr	z,got_new_volid		; to assume current disk.
 endif
 ;
+		call	HAS_UPB			;If UD_TIME is set but no UPB was ever
+		jr	z,no_curr_upb		; built (non-FAT disk previously seen by
+						; _RDDRV or _WRDRV), always get a new UPB
+;
 		dec	a			;If timeout is 1 then always
 		jr	z,no_curr_upb		; get a new UPB.
 		dec	a			;If timeout >2 then assume
@@ -791,6 +798,12 @@ no_curr_upd_done:
 		jr	z,ignore_wfile
 		call	SET_TIMEOUT		;Don't try to parse FAT boot sector
 		jr	no_dos_disk		;if the disk is not FAT at all
+		;Note: in this state ("valid but non-FAT disk", entered via _RDDRV
+		;or _WRDRV) UD_TIME is set but no UPB exists and the FAT12/FAT16
+		;flags in UD_FLAGS remain clear. The validation shortcut paths
+		;check those flags (via HAS_UPB) so that file operations on such
+		;a drive always retry BUILD_UPB and report "not a DOS disk"
+		;instead of silently working over an empty UPB.
 ;
 ignore_wfile:	call	NEW_UPB			;Set up the unit descriptor.
 		pcall	INV_UD			;Invalidate any old buffers
@@ -854,6 +867,30 @@ CHECK_MNT:
 		ex	(sp),ix
 		bit	UF_MNT,(ix+UD_FLAGS##)
 		ex	(sp),ix
+		pop	hl
+		ret
+
+
+; Check whether a unit descriptor holds a valid UPB: every UPB accepted by
+; the system is FAT12 or FAT16, so at least one of the corresponding flags
+; is set in UD_FLAGS whenever NEW_UPB has been run for the unit. A unit with
+; UD_TIME set but none of these flags set is a "valid but non-FAT disk" as
+; seen by _RDDRV or _WRDRV (see no_curr_upd_done above).
+;
+; Entry:     HL = Unit descriptor
+; Returns:   Z => no UPB, NZ => UPB exists
+; Preserves: A, BC, DE, HL
+
+HAS_UPB:
+		push	hl
+		push	de
+		ld	de,UD_FLAGS##
+		add	hl,de
+		ld	e,a		;Preserve A across the check
+		ld	a,(hl)
+		and	UFM_F2+UFM_F6
+		ld	a,e		;(doesn't affect the Z flag from the AND)
+		pop	de
 		pop	hl
 		ret
 ;

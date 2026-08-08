@@ -68,6 +68,7 @@ byte screenLinesCount;
 partitionInfo partitions[MAX_PARTITIONS_TO_HANDLE];
 int partitionsCount;
 bool partitionsExistInDisk;
+bool partitionsDeletedFromDisk;
 ulong unpartitionnedSpaceInSectors;
 bool canCreatePartitions;
 bool canDoDirectFormat;
@@ -594,6 +595,7 @@ void InitializePartitioningVariables(byte deviceIndex)
 	selectedDeviceParams = &selectedDevice->params;
 	partitionsCount = 0;
 	partitionsExistInDisk = true;
+	partitionsDeletedFromDisk = false;
 	canCreatePartitions = (selectedDeviceParams->sectorCount >= (MIN_DEVICE_SIZE_FOR_PARTITIONS_IN_K * 2));
 	canDoDirectFormat = (selectedDeviceParams->sectorCount <= MAX_DEVICE_SIZE_FOR_DIRECT_FORMAT_IN_K * 2);
 	unpartitionnedSpaceInSectors = selectedDeviceParams->sectorCount;
@@ -669,6 +671,7 @@ void GoPartitioningMainMenuScreen()
 	char key;
 	byte error;
 	bool canAddPartitionsNow;
+	bool canWrite;
 	bool mustRetrievePartitionInfo = true;
 
 	while(true) {
@@ -689,6 +692,7 @@ void GoPartitioningMainMenuScreen()
 					}
 				}
 				partitionsExistInDisk = (partitionsCount > 0);
+				partitionsDeletedFromDisk = false;
 			}
 			mustRetrievePartitionInfo = false;
 		}
@@ -733,15 +737,20 @@ void GoPartitioningMainMenuScreen()
 		if(canDoDirectFormat) {
 			print("F. Format device without partitions\r\n\r\n");
 		}
-		if(!partitionsExistInDisk && partitionsCount > 0) {
-			print("W. Write partitions to disk\r\n\r\n");
+		canWrite =
+			!partitionsExistInDisk &&
+			(partitionsCount > 0 || partitionsDeletedFromDisk);
+		if(canWrite) {
+			print(partitionsCount > 0 ?
+				"W. Write partitions to disk\r\n\r\n" :
+				"W. Write empty partition table\r\n\r\n");
 		}
 
 		PrintStateMessage("Select an option or press ESC to return");
 
 		while((key = WaitKey()) == 0);
 		if(key == ESC) {
-			if(partitionsExistInDisk || partitionsCount == 0) {
+			if(!canWrite) {
 				return;
 			}
 			PrintStateMessage("Discard changes and return? (y/n) ");
@@ -766,7 +775,7 @@ void GoPartitioningMainMenuScreen()
 			if(FormatWithoutPartitions()) {
 				mustRetrievePartitionInfo = true;
 			}
-		}else if(key == 'w' && !partitionsExistInDisk && partitionsCount > 0) {
+		}else if(key == 'w' && canWrite) {
 			if(WritePartitionTable()) {
 				mustRetrievePartitionInfo = true;
 			}
@@ -1013,6 +1022,11 @@ void DeleteAllPartitions()
 		return;
 	}
 
+	if(partitionsExistInDisk) {
+		//The deletion of the partitions that exist on disk can be
+		//committed later by writing an empty partition table with "W"
+		partitionsDeletedFromDisk = true;
+	}
 	partitionsCount = 0;
 	partitionsExistInDisk = false;
 	unpartitionnedSpaceInSectors = selectedDeviceParams->sectorCount;
@@ -1250,18 +1264,41 @@ bool WritePartitionTable()
 	//http://www.rayknights.org/pc_boot/ext_tbls.htm
 
 	int i;
-	//masterBootRecord* mbr = (masterBootRecord*)buffer + 80;
 	byte error;
 
-	sprintf(buffer, "Create %i partitions on device", partitionsCount);
+	if(partitionsCount != 0) {
+		sprintf(buffer, "Create %i partitions on device", partitionsCount);
+	}
 
-	if(!ConfirmDataDestroy(buffer)) {
+	//An empty partition list here means that a
+	//"delete all partitions" operation is being committed
+	if(!ConfirmDataDestroy(partitionsCount == 0 ? "Remove all partitions" : buffer)) {
 		return false;
 	}
 
 	ClearInformationArea();
 	PrintTargetInfo();
 	PrintStateMessage("Please wait...");
+
+	if(partitionsCount == 0) {
+		//Commit the deletion of the existing partitions by writing
+		//a master boot record with an empty partition table.
+		//Unlike the MBR written when partitions are created, this one
+		//must NOT begin with a x86-style jump instruction: the boot
+		//process probes the first sector of each drive and takes a
+		//leading EBh or E9h byte as "this drive holds a boot sector",
+		//which would hijack the boot drive selection. An all-zeros
+		//sector with just the boot signature is a valid empty MBR.
+
+		ClearSectorBuffer();
+		((masterBootRecord*)sectorBuffer)->mbrSignature = 0xAA55;
+
+		if((error = WriteSectorToDevice(0)) != 0) {
+			PrintDosErrorMessage(error, "Error when writing partition table:");
+			WaitKey();
+			return false;
+		}
+	} else {
 
 	Locate(0, MESSAGE_ROW);
 	PrintCentered("Preparing partitioning process...");
@@ -1280,9 +1317,11 @@ bool WritePartitionTable()
 			return false;
 		}
 
-		
+
 	}
-	
+
+	}
+
 	Locate(0, MESSAGE_ROW + 2);
 	PrintDone();
 	RequestPressKeyToReturn();

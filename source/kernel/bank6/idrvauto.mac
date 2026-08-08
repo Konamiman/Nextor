@@ -933,8 +933,9 @@ IAM_UTFOUND:
 	ld	(BUF+2),a	;+2 = device number
 	xor	a
 	ld	(BUF+3),a	;+3 = 0 (was LUN)
-	ld	(BUF+4),a	;+4..+7 = sector 0
-	ld	(BUF+5),a
+	ld	a,0FFh		;+4..+7 = sector FFFFFFFFh: attach the device with no
+	ld	(BUF+4),a	;partition assigned, so that a suitable partition is
+	ld	(BUF+5),a	;searched automatically on the first access to the drive
 	ld	(BUF+6),a
 	ld	(BUF+7),a
 
