@@ -1,10 +1,3 @@
-	.z80
-
-	name('driver_device_queries')
-	title	Nextor SDK - Public constants for the DEVICE_QUERY driver routine
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Subfunction codes for the DEVICE_QUERY driver routine.
@@ -25,3 +18,10 @@
 	const	GET_FORMAT_CHOICES, 5	;Get format choices
 	const	DO_FORMAT,          6	;Format the device
 	const	STOP_MOTOR,         7	;Stop the device motor
+
+;Sub-string codes for the GET_STRING query (in register B).
+
+	const	STR_MANUFACTURER,   1	;Manufacturer name
+	const	STR_MEDIUM_NAME,    2	;Medium name (obtained from the medium itself)
+	const	STR_SERIAL_NUMBER,  3	;Serial number
+	const	STR_DEVICE_NAME,    4	;Device name (provided by the driver)

@@ -1,5 +1,3 @@
-	.z80
-
 ;-----------------------------------------------------------------------------
 ;
 ; Standard MSX system work area addresses commonly accessed by Nextor drivers.

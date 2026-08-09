@@ -1,5 +1,3 @@
-	.z80
-
 ;-----------------------------------------------------------------------------
 ;
 ; Partition table layout, partition type codes, and FAT/filesystem

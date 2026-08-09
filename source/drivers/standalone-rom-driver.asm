@@ -538,6 +538,7 @@ CUSTOM_DRIVER_QUERY:
 	;    Output: A = Error code:
 	;                RESULT_OK: success
 	;                RESULT_NOT_IMPLEMENTED: query not implemented
+	;                RESULT_INVALID_DEVICE: device does not exist
 	;                Others: depends on the query
 	;            F, BC, DE, HL = Depends on the query
 
@@ -557,13 +558,13 @@ CUSTOM_DEVICE_QUERY:
     ;              DE = Address where the 4 byte sector number is stored.
     ;    Output:   A = Error code (the same codes of MSX-DOS are used):
     ;                  0: Ok
-    ;                  .IDEVN: Invalid device or LUN
+    ;                  .IDEVN: Invalid device number
     ;                  .NRDY: Not ready
     ;                  .DISK: General unknown disk error
     ;                  .DATA: CRC error when reading
     ;                  .RNF: Sector not found
     ;                  .UFORM: Unformatted disk
-    ;                  .WPROT: Write protected media, or read-only logical unit
+    ;                  .WPROT: Write protected media, or read-only device
     ;                  .WRERR: Write error
     ;                  .NCOMP: Incompatible disk.
     ;                  .SEEK: Seek error.

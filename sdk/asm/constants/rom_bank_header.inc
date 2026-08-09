@@ -1,11 +1,3 @@
-	.z80
-
-	name('rom_bank_header')
-	title	Nextor SDK - Page 1 ROM bank header entry points
-	subttl	Public constants for the routines and data items used by drivers
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Fixed-address entry points and data items in the Nextor ROM bank header

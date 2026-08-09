@@ -241,7 +241,7 @@ void CheckPrimaryControllerIsNextor()
     
     flags = ((byte*)MallocBase)[4];
     if((flags & (IS_NEXTOR | IS_DEVICE_BASED)) != (IS_NEXTOR | IS_DEVICE_BASED)) {
-        Terminate("The primary controller is not a Nextor kernel with a device-based driver.");
+        Terminate("The primary controller is not a Nextor kernel.");
     }
 }
 

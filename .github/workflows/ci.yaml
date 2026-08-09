@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y binutils make curl
+          sudo apt install -y binutils gcc make curl
           
           curl -Lo sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.2.0/sdcc-4.2.0-amd64-unknown-linux2.5.tar.bz2/download
           mkdir sdcc
@@ -59,11 +59,11 @@ jobs:
           sudo install -v LB80 /usr/local/bin
           rm LB80
           rm lb80.zip
-      - name: Add buildtools
+      - name: Build and install mknexrom
         run: |
-          for NAME in buildtools/linux/*; do
-            sudo install -v ${NAME} /usr/local/bin
-          done
+          gcc -O2 -o mknexrom buildtools/sources/mknexrom.c
+          sudo install -v mknexrom /usr/local/bin
+          rm mknexrom
       - name: Make all
         run: make -C source
       - name: Verify sdk/nextor-kernel-version.txt is in sync
