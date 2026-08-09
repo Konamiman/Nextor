@@ -89,9 +89,9 @@ endef
 ###  MAIN RULE  ###
 ###################
 
-.PHONY: all base ascii8 ascii16 ram-example clean FORCE
+.PHONY: all base ascii8 ascii16 tang ram-example clean FORCE
 
-all: base ascii8 ascii16
+all: base ascii8 ascii16 tang
 
 FORCE:
 
@@ -252,3 +252,30 @@ ram-driver-example.drv: \
 
 clean:
 	rm -f *.bin *.drv *.ROM *.dat 256.bytes _standalone-rom-driver.bin .build-variant*
+
+ROM_TANG := Nextor-$(NEXTOR_KERNEL_VERSION).WonderTANG$(_VARIANT_SUFFIX).ROM
+tang:  $(ROM_TANG)
+
+Tang/_driver.bin: Tang/driver.bin 256.bytes
+	cat 256.bytes Tang/driver.bin > $@
+
+
+$(ROM_TANG): \
+	$(NEXTOR_BASE) \
+	Tang/_driver.bin \
+	Tang/chgbnk.bin \
+	256.bytes
+
+	$(call mknexrom_rom,$@,Tang/_driver.bin,Tang/chgbnk.bin)
+
+Tang/chgbnk.bin: \
+	$(UNDOC_MODE_STAMP) \
+	Tang/chgbnk.asm
+
+	$(call assemble,Tang/chgbnk.asm,--build-type abs --output-file-extension bin)
+
+Tang/driver.bin: \
+	$(UNDOC_MODE_STAMP) \
+	Tang/driver.asm
+
+	$(call assemble,Tang/driver.asm,--build-type abs --output-file-extension bin -l list.txt)

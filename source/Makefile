@@ -49,3 +49,4 @@ clean:
 # generated outputs under <repo>/bin.
 distclean: clean
 	rm -rf ../bin/kernel-base ../bin/roms ../bin/ram-drivers ../bin/tools
+
