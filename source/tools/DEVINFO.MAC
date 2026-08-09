@@ -7,7 +7,7 @@ DEVINFO_STRLEN	equ	64
         ;        -------------------------------------------------------------------------------
 	db	13
 USAGE_S:
-	db	"DEVINFO v1.1- displays information about the devices handled by a disk driver",13,10
+	db	"DEVINFO v1.2 - displays information about the devices handled by a disk driver",13,10
 	db	13,10
 	db	"Usage: DEVINFO <slot>[-<subslot>][:<segment>]|0",13,10
 	db	13,10
@@ -83,7 +83,7 @@ DEV_LOOP:
 	;* Get and display manufacturer name
 
 GET_INFO_1:
-	ld	(iy+3),1
+	ld	(iy+3),DEVICE_QUERY.STR_MANUFACTURER##
 	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
@@ -122,7 +122,7 @@ GET_INFO_1:
 	;* Get and display device name
 
 GET_INFO_2:
-	inc	(iy+3)
+	ld	(iy+3),DEVICE_QUERY.STR_DEVICE_NAME##
 	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
@@ -138,19 +138,37 @@ GET_INFO_2:
 	ld	de,CRLF
 	ld	c,_ZSTROUT##
 	call	5
-	
-	;* Get and display serial number
 
-GET_INFO_3::
-	inc	(iy+3)
-	ld	hl,BUF_INFO
-	ld	(iy+6),l
-	ld	(iy+7),h
+	;* Get and display medium name
+	;  (only available when the driver can retrieve it from the medium itself)
+
+GET_INFO_3:
+	ld	(iy+3),DEVICE_QUERY.STR_MEDIUM_NAME##
 	call	CALL_DEV_QUERY
 	push	ix
 	pop	af
 	or	a
 	jr	nz,GET_INFO_4
+
+	ld	de,MEDIUM_MSG
+	ld	c,_ZSTROUT##
+	call	5
+	ld	hl,BUF_INFO
+	ld	bc,DEVINFO_STRLEN
+	call	PRPAD##
+	ld	de,CRLF
+	ld	c,_ZSTROUT##
+	call	5
+
+	;* Get and display serial number
+
+GET_INFO_4::
+	ld	(iy+3),DEVICE_QUERY.STR_SERIAL_NUMBER##
+	call	CALL_DEV_QUERY
+	push	ix
+	pop	af
+	or	a
+	jr	nz,GET_INFO_5
 
 
 	ld	de,SERIAL_MSG
@@ -163,7 +181,7 @@ GET_INFO_3::
 	ld	de,CRLF
 	ld	c,_ZSTROUT##
 	call	5
-GET_INFO_4:
+GET_INFO_5:
 
 	;--- Get and display device parameters
 
@@ -454,6 +472,8 @@ CRLF:
 
 NAME_MSG:
 	db	"  Device name: ",0
+MEDIUM_MSG:
+	db	"  Medium name: ",0
 MANUF_MSG:
 	db	"  Device manufacturer: ",0
 SERIAL_MSG:

@@ -16,10 +16,11 @@
 #define DEVICE_QUERY_STOP_MOTOR         7  /* Stop the device motor */
 
 
-/* Sub-string codes for the GET_STRING query (passed in register B).
- * No asm-side counterpart yet - currently C-only. */
+/* Sub-string codes for the GET_STRING query (passed in register B). */
 
-#define STRING_MEDIUM_NAME 2
-#define STRING_DEVICE_NAME 4
+#define STRING_MANUFACTURER 1  /* Manufacturer name */
+#define STRING_MEDIUM_NAME  2  /* Medium name (obtained from the medium itself) */
+#define STRING_SERIAL_NUMBER 3 /* Serial number */
+#define STRING_DEVICE_NAME  4  /* Device name (provided by the driver) */
 
 #endif   //__DRIVER_DEVICE_QUERIES_H

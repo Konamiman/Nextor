@@ -26,7 +26,7 @@ PT_EXT_LBA: equ 15
 	db	13,10
 	db	"<partition> can be any number starting at 1, or 0 to map the drive directly",13,10
 	db	"to the device (needed for partitionless devices such as floppy disks).",13,10
-	db	"Partition numbers 2 to 4 refer to extended partitions 2-1 to 2-4 if partition",13,10
+	db	"Partition numbers 2 to 4 refer to extended partitions 2-1 to 2-3 if partition",13,10
 	db	"2 of the device is extended, otherwise they refer to primary partitions.",13,10
         db	13,10
 	db	"<device> must be a number from 1 to 255.",13,10
