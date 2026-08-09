@@ -200,7 +200,11 @@ The routines whose contract is (almost) unchanged (`DRV_TIMI`, `DRV_BASSTAT`, `D
 
 ### 3.5. Add the query dispatchers and adapters
 
-This is the heart of the compatibility layer: two dispatcher routines that map each query index to a small adapter, and the adapters themselves, which adapt registers and then call the renamed Nextor 2 routines. Also include [the SDK's `OUTPUT_STRING` helper](../sdk/asm/code/output_string.asm), which all the string-serving adapters rely on:
+This is the heart of the compatibility layer: two dispatcher routines that map each query index to a small adapter, and the adapters themselves, which adapt registers and then call the renamed Nextor 2 routines.
+
+The code shown throughout this step is the actual Sunrise IDE implementation, presented as a working example rather than as a recipe to follow literally. Depending on how your driver is architected, you may find that following a different strategy (e.g. dispatching with a jump table instead of a chain of `dec a`, merging adapters that end up doing the same thing, or rewriting a routine outright instead of wrapping the old one) is more convenient, and that's fine as long as the end result (adapter code that allows using the old routines under the new driver conventions) is the same.
+
+Also include [the SDK's `OUTPUT_STRING` helper](../sdk/asm/code/output_string.asm), which all the string-serving adapters rely on:
 
 ```
     INCLUDE asm/code/output_string.asm
@@ -430,108 +434,56 @@ Nextor 2's `DEV_INFO` wrote fixed-size, space-padded strings to a caller buffer 
 
 Note how the indexes 1-3 conveniently line up: what the old IDE driver reported as "device name" read from the hardware (the disk model from the ATA IDENTIFY data) is, in Nextor 3 terms, the medium name; and the new index 4 (a "conceptual" device name) is best served by new static strings.
 
-The Sunrise IDE wrapper works by pointing the old `NEXTOR2_DEV_INFO` at a scratch buffer, zero-terminating the real content, and letting `OUTPUT_STRING` do the size-limited copy. First, a 65 byte scratch field is appended to the driver's work area (since the work area size returned by `NEXTOR2_DRV_INIT` is derived from the structure definition, the extra field is allocated automatically):
+How much work this step takes depends on how your old `DEV_INFO` produced its strings. The rule to satisfy is: copy at most D bytes to the buffer pointed to by HL, terminator included, and return `RESULT_TRUNCATED_STRING` if the whole string didn't fit. If the code that builds the string can be adjusted to take that limit into account, that's the end of it. But strings read from the hardware are usually assembled at fixed offsets within a fixed-size image, with no notion of a size limit, and that code is often the part you least want to touch.
 
-```
-field STRBUFF,65    ; Scratch buffer used by the DEVICE_QUERY GET_STRING
-                    ; compatibility wrapper (64 bytes of string content
-                    ; plus a trailing terminator).
-```
+The way out is to leave the old code alone and adapt around it:
 
-Then the adapter itself:
+1. Let the old routine write its image into a scratch buffer of the size it assumes, instead of into the caller's buffer.
+
+2. Put a zero at the end of the meaningful content of that image, which turns the fixed-size padded string into a zero-terminated one (and drops the padding).
+
+3. Copy the result to the caller's buffer with [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm), which does the size-limited copy and returns the appropriate result code.
+
+In skeleton form:
 
 ```
 DO_DEVQ_GET_STRING:
+    ;Input: B = string index, C = device number,
+    ;       D = buffer size, HL = buffer address
+
     ld a,b
     or a
-    jp z,RETURN_NOT_IMP
-
+    jp z,RETURN_NOT_IMP         ;Index 0 no longer exists
     cp 4
-    jp z,DO_DEVQ_GET_DEV_NAME
+    jp z,DO_DEVQ_GET_DEV_NAME   ;Index 4 is new, see below
 
-    ;Buffer sizes 0 and 1 are not special cased here: OUTPUT_STRING
-    ;already implements the required behavior for them (it returns
-    ;RESULT_TRUNCATED_STRING without writing anything when the size
-    ;is zero), and returning early would wrongly report success for
-    ;string indexes that this driver can't provide at all.
+    push hl                     ;Save the caller's buffer and size,
+    push de                     ;we'll need them for OUTPUT_STRING
 
-DO_DEVQ_GET_STRING_2:
-    ;HL=user buf, D=user size, B=substring code, C=device number
-    ;
-    ;Sunrise IDE NEXTOR2_DEV_INFO ignores the user buffer size and always
-    ;writes a fixed-layout 64-byte image to its HL argument:
-    ;
-    ;   substring 2 (device name): 20 chars at offsets  0..19, then spaces
-    ;   substring 3 (serial)     : spaces, 10 chars at offsets 44..53, then spaces
-    ;
-    ;The wrapper therefore points it at a scratch buffer in WRKAREA, then
-    ;writes a zero terminator at the end of the actual content and copies
-    ;the substring into the user buffer with OUTPUT_STRING (which handles
-    ;the truncation / RESULT_TRUNCATED_STRING accounting against D).
+    ;<-- Point HL to the scratch buffer and call the old DEV_INFO.
+    ;    If it reports an error: discard the two saved values
+    ;    and return RESULT_NOT_IMPLEMENTED.
 
-    push hl                     ;[SP+4] user buffer
-    push de                     ;[SP+2] user size (D=size)
-    push bc                     ;[SP+0] B=substring, C=device
+    ;<-- Write a zero at the end of the content, and leave HL
+    ;    pointing to where the content starts.
 
-    xor a
-    call MY_GWORK               ;IX = WRKAREA base, preserves BC/DE/HL
-
-    push ix
-    pop hl
-    ld bc,WRKAREA.STRBUFF
-    add hl,bc                   ;HL = STRBUFF base
-
-    pop bc                      ;Restore B=substring, C=device
-    push bc                     ;Re-save for after NEXTOR2_DEV_INFO
-    push hl                     ;Save STRBUFF for after NEXTOR2_DEV_INFO
-
-    ld a,c                      ;A = device number for NEXTOR2_DEV_INFO
-    call NEXTOR2_DEV_INFO       ;A = result code
-
-    pop hl                      ;HL = STRBUFF
-    pop bc                      ;B = substring, C = device
-
-    or a
-    jr nz,DO_DEVQ_GET_STRING_FAIL
-
-    ;Success. Place a 0 at the end of the actual content so OUTPUT_STRING
-    ;can detect the real string length:
-    ;  substring 2 (device name): terminator at STRBUFF+20
-    ;  substring 3 (serial)     : terminator at STRBUFF+54
-    push hl
-    ld de,20
-    ld a,b
-    cp 3
-    jr nz,DO_DEVQ_GET_STRING_TERM
-    ld de,54
-DO_DEVQ_GET_STRING_TERM:
-    add hl,de
-    ld (hl),0
-    pop hl                      ;HL = STRBUFF
-
-    ;For the serial number, point the source past the 44 bytes of left
-    ;padding sunride.asm writes before the content.
-    ld a,b
-    cp 3
-    jr nz,DO_DEVQ_GET_STRING_SRC
-    ld de,44
-    add hl,de                   ;HL = STRBUFF + 44
-DO_DEVQ_GET_STRING_SRC:
-
-    ;Stack: [user_size, user_buf]. HL is the zero-terminated source.
-    pop de                      ;D = user size
+    pop de                      ;D = caller's buffer size
     ld b,d                      ;B = max length for OUTPUT_STRING
-    pop de                      ;DE = user buffer (destination)
+    pop de                      ;DE = caller's buffer address
     jp OUTPUT_STRING
-
-DO_DEVQ_GET_STRING_FAIL:
-    ;Stack: [user_size, user_buf]
-    pop de                      ;Discard saved user size
-    pop hl                      ;Discard saved user buffer
-    jp RETURN_NOT_IMP
 ```
 
-Finally, the new device name strings (index 4), which are just static zero-terminated strings served with `OUTPUT_STRING`:
+The scratch buffer can be a new field appended to the driver work area, since the work area size returned by the old `DRV_INIT` is derived from the structure definition and thus the extra space is allocated automatically. In the Sunrise IDE driver that's a one-line addition to the work area structure:
+
+```
+field STRBUFF,65    ;64 bytes of string content plus a terminator
+```
+
+Note that `field` here is not an assembler directive: it's one of a small set of macros defined by that driver itself (together with `struct_start` and `struct_end`) to lay out a structure, declaring one `structname.fieldname` constant per field plus a `structname._SIZE` total. Your own driver will have its own way of declaring its work area, and any of them will do.
+
+Where the terminator goes, and where the content starts, is specific to each driver. In the Sunrise IDE driver, for example, `DEV_INFO` always writes a 64 byte image in which the device name occupies the first 20 characters, while the serial number sits at offset 44 and is 10 characters long; its wrapper therefore writes the terminator at offset 20 or 54 and hands `OUTPUT_STRING` a source address of offset 0 or 44 accordingly. See [the driver source](https://github.com/Konamiman/SunriseIDE-Nextor-driver) if you want to look at the complete routine.
+
+The string with index 4 has no Nextor 2 counterpart, so there's no old code to adapt: it's a name chosen by the driver itself, and serving it is a direct `OUTPUT_STRING` call. This is the Sunrise IDE implementation, which has one name per device:
 
 ```
 DO_DEVQ_GET_DEV_NAME:
@@ -550,9 +502,7 @@ SLAVE_DEV_S:
     db "IDE slave device",0
 ```
 
-The exact offsets (20, 44, 54) are of course specific to the Sunrise IDE driver's `DEV_INFO` layout; adjust them to whatever fixed layout your own routine produces. If your `DEV_INFO` already wrote strings of known length, the wrapper gets simpler; the pattern to keep is: **scratch buffer, zero-terminate, `jp OUTPUT_STRING`**.
-
-Resist the temptation to shortcut the zero-length buffer case (`D=0`) at the top of the routine: the new API gives that case a specific meaning, namely "tell me whether this string exists without retrieving it", and the required answer is `RESULT_TRUNCATED_STRING` if it does exist and `RESULT_NOT_IMPLEMENTED` if it doesn't. An early `xor a / ret` would report success for strings the driver can't provide at all. Letting the request flow through the normal path gets this right for free, since `OUTPUT_STRING` returns `RESULT_TRUNCATED_STRING` for a zero-length buffer without writing anything to it (and, one byte later, it also returns it for `D=1`, where only the terminator fits).
+One last thing: resist the temptation to shortcut the zero-length buffer case (`D=0`) at the top of the routine. The new API gives that case a specific meaning, namely "tell me whether this string exists without retrieving it", and the required answer is `RESULT_TRUNCATED_STRING` if it does exist and `RESULT_NOT_IMPLEMENTED` if it doesn't; an early `xor a / ret` would report success for strings the driver can't provide at all. Letting the request flow through the normal path gets this right for free, since `OUTPUT_STRING` returns `RESULT_TRUNCATED_STRING` for a zero-length buffer without writing anything to it (and also for `D=1`, where only the terminator fits).
 
 ### 3.9. Adapt the extended BIOS handler
 
