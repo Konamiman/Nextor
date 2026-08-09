@@ -271,7 +271,7 @@ DO_DRVQ_GET_MAX_DEVICE:
 ;           B  = RAM slot number where the driver is located
 ;           C  = RAM segment number where the driver is located
 ;   Output: A = RESULT_OK or RESULT_INIT_ERROR
-;           B = flags (bit 0 = timer hook requested)
+;           B = flags (bit 0 = timer hook requested, bit 2 = EXTBIO hook requested)
 
 MY_SEGMENT: equ 40FEh
 MY_SLOT: equ 40FFh

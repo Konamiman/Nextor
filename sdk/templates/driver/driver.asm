@@ -282,7 +282,7 @@ STR_DRIVER_AUTHOR: db "Myself",0
 ; RESULT_INIT_ERROR will cause the "initialize driver" call to be skipped
 ; and the driver to be ignored (not counted as an existing Nextor kernel).
 ;
-; Note: this is the same as Nextor 2 DV_INIT when called with A=0, except that
+; Note: this is the same as Nextor 2 DRV_INIT when called with A=0, except that
 ; TIMER_INT flag is returned in B, not in Cy; an error code is returned in A;
 ; and DE is passed at input.
 
@@ -307,7 +307,7 @@ DO_DRVQ_GET_INIT_PARAMS:
 ; RESULT_NOT_IMPLEMENTED is interpreted as equivalent to RESULT_OK.
 ; RESULT_INIT_ERROR will cause the driver to be ignored (not counted as an existing Nextor kernel).
 ;
-; Note: this is the same as Nextor 2 DV_INIT when called with A=1, except that number of
+; Note: this is the same as Nextor 2 DRV_INIT when called with A=1, except that number of
 ; allocated drives is not passed in B, DE is passed at input, and an error code can be returned.
 
 DO_DRVQ_INIT:
@@ -455,7 +455,7 @@ DO_DEVQ_GET_STRING:
 ;         0 if this information does not apply or is not available.
 ; +7 (1): Flags:
 ;         bit 0: 1 if the device is removable.
-;         bit 1: 1 if the device is read only. A device that can dinamically
+;         bit 1: 1 if the device is read only. A device that can dynamically
 ;                  be write protected or write enabled is not considered
 ;                  to be read-only.
 ;         bit 2: 1 if the device is a floppy disk drive.
@@ -628,13 +628,13 @@ CUSTOM_DEVICE_QUERY:
     ;              DE = Address where the 4 byte sector number is stored.
     ;    Output:   A = Error code (the same codes of MSX-DOS are used):
     ;                  0: Ok
-    ;                  .IDEVN: Invalid device or LUN
+    ;                  .IDEVN: Invalid device number
     ;                  .NRDY: Not ready
     ;                  .DISK: General unknown disk error
     ;                  .DATA: CRC error when reading
     ;                  .RNF: Sector not found
     ;                  .UFORM: Unformatted disk
-    ;                  .WPROT: Write protected media, or read-only logical unit
+    ;                  .WPROT: Write protected media, or read-only device
     ;                  .WRERR: Write error
     ;                  .NCOMP: Incompatible disk.
     ;                  .SEEK: Seek error.

@@ -46,9 +46,7 @@ at `$NEXTOR_SDK/templates`).
 
 ## Bringing the SDK into your project
 
-The SDK is included in the main Nextor repository, there is no separate
-SDK-only repository. To bring it into your own project, pick one of the
-two methods below.
+The SDK is included in the main Nextor repository itself. To bring it into your own project, pick one of the two methods below.
 
 ## Using the SDK as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules)
 
@@ -73,15 +71,14 @@ KERNEL_VERSION := $(shell cat $(NEXTOR_SDK)/nextor-kernel-version.txt)
 
 mydriver.bin: mydriver.asm
 	N80 $< $@ \
-	    --include-directory $(NEXTOR_SDK)/asm/constants \
-	    --include-directory $(NEXTOR_SDK)/asm/macros
+	    --include-directory $(NEXTOR_SDK)/asm
 ```
 
 From an assembly source assembled by N80:
 
 ```asm
   ; If you add --include-directory when assembling
-	include dos_calls.inc      ; brings in _CONOUT, _STROUT, ...
+	include constants/dos_calls.inc ;brings in _CONOUT, _STROUT...
 
   ; If you DON'T add --include-directory when assembling
   ; (assuming "external" and this source file are at the same directory level)
@@ -89,7 +86,7 @@ From an assembly source assembled by N80:
 
 	ld   c,_CONOUT
 	ld   e,'A'
-	call 5                      ; print 'A' via DOS
+	call 5                      ;print 'A' via DOS
 ```
 
 

@@ -1,10 +1,3 @@
-	.z80
-
-	name('driver_result_codes')
-	title	Nextor SDK - Public constants for query routine return codes
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Result codes returned by the DRIVER/DEVICE_QUERY driver routines (in register A).

@@ -1,5 +1,3 @@
-	.z80
-
 ;-----------------------------------------------------------------------------
 ;
 ; MSX BIOS entry points commonly used by Nextor drivers.

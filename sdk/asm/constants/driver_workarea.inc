@@ -1,11 +1,3 @@
-	.z80
-
-	name('driver_workarea')
-	title	Nextor SDK - Page 3 work area locations relevant to drivers
-	subttl	Public constants for kernel/system work area addresses
-
-	.sall
-
 ;-----------------------------------------------------------------------------
 ;
 ; Nextor page3 work area addresses that drivers are allowed (and sometimes need)

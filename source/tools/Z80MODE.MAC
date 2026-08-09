@@ -6,14 +6,14 @@
 	db	13
 	db	"Z80MODE - Enable or disable Z80 access mode for a legacy driver",13,10
 	db	13,10
-	db	"By default, MSX-DOS will enable the Z80 access mode for all legacy drivers",13,10
+	db	"By default, Nextor will enable the Z80 access mode for all legacy drivers",13,10
 	db	"when running on MSX Turbo-R computers. When this mode is enabled, Z80 CPU is",13,10
 	db  "switched prior to every access to any drive on the driver. This function",13,10
 	db  "allows to disable the Z80 access mode for any legacy driver, so drives on",13,10
 	db	"these drivers can be accessed in R800 mode; and to re-enable it.",13,10
 	db	13,10
-	db	"Z80 mode applies to legacy drivers only. MSX-DOS will never switch to Z80",13,10
-	db	"CPU when accessing MSX-DOS 2.50 drivers (both device-based and drive-based).",13,10
+	db	"Z80 mode applies to legacy drivers only. Nextor will never switch to Z80",13,10
+	db	"CPU when accessing Nextor drivers.",13,10
 	db	13,10
 	db	"Note that this program will work on MSX Turbo-R computers only.",13,10
 	db	13,10

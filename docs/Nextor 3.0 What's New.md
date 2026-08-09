@@ -1,0 +1,162 @@
+# Nextor 3.0 What's New
+
+## Index
+
+[1. Introduction](#1-introduction)
+
+[2. General information](#2-general-information)
+
+[2.1. The new driver system](#21-the-new-driver-system)
+
+[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)
+
+[2.3. Support for floppy disks](#23-support-for-floppy-disks)
+
+[2.4. The boot menu](#24-the-boot-menu)
+
+[2.5. One drive letter per active partition/offline device at boot](#25-one-drive-letter-per-active-partitionoffline-device-at-boot)
+
+[2.6. Drivers are now distributed separately](#26-drivers-are-now-distributed-separately)
+
+[2.7. Z180-compatible builds](#27-z180-compatible-builds)
+
+[2.8. Better boot error messages](#28-better-boot-error-messages)
+
+[2.9. New and changed tools and commands](#29-new-and-changed-tools-and-commands)
+
+[3. Information for application developers](#3-information-for-application-developers)
+
+[3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
+
+[3.2. Changed function calls](#32-changed-function-calls)
+
+[3.3. New error codes](#33-new-error-codes)
+
+[3.4. Nextor in MSX-DOS 1 mode](#34-nextor-in-msx-dos-1-mode)
+
+[3.5. The Nextor SDK and the Docker development image](#35-the-nextor-sdk-and-the-docker-development-image)
+
+[4. Information for driver developers](#4-information-for-driver-developers)
+
+
+## 1. Introduction
+
+Nextor 3.0 is the successor of Nextor 2.1. This document summarizes what has changed, aimed at people who are already familiar with Nextor 2 but new to Nextor 3. It doesn't go into full detail: each item links to the section of the appropriate document where the change is completely explained.
+
+The most important change in Nextor 3 is the completely new, and incompatible at the driver API level, device driver system: **Nextor 2 drivers do not work on Nextor 3**, and vice versa, so running a Nextor 3 kernel requires a Nextor 3 version of the driver for your storage hardware (see _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_ for the list of available drivers). Consistent with this, a Nextor 3 kernel deactivates any Nextor 2 kernels it finds at boot time; having both kernel versions in the same machine is expected to be a temporary situation only, e.g. for flashing purposes. See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_ in the user manual.
+
+Beyond that, the highlights of Nextor 3 are: proper support for floppy disk drives (including ghost drives and `CALL FORMAT`), drivers that can be loaded in RAM at any time without flashing anything, a boot menu, and one drive letter assigned per active partition (instead of one per device) at boot. The rest of this document covers these and the other changes: first the ones everybody should know about, then the ones relevant to application developers, and finally a short note for driver developers. Note that the "Change history" section that used to exist in the user manual is gone; this document supersedes it for the 3.0 release.
+
+
+## 2. General information
+
+### 2.1. The new driver system
+
+Nextor 3 device drivers follow a completely new structure, built around a query-based API. The full details are in the _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_; from the user's point of view the changes are:
+
+* There are no more logical units (LUNs): a driver now directly exposes up to 255 devices, and a device is identified everywhere by a single device number.
+
+* There are no more "drive-based" drivers: all Nextor 3 drivers are what was called a "device-based" driver in Nextor 2 (now simply "Nextor drivers").
+
+* Drivers can now tell the difference between a device that is offline (e.g. a removable device, like an SD card reader, with no medium inserted) and a device that doesn't exist at all.
+
+* Drivers can be loaded in RAM (see _[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)_) and can expose floppy disk drives (see _[2.3. Support for floppy disks](#23-support-for-floppy-disks)_).
+
+### 2.2. Drivers loadable in RAM
+
+Drivers no longer need to be embedded in a kernel ROM: a driver can be distributed as a file and installed into a mapped RAM segment at any time, then uninstalled when no longer needed. This is done with the new [`CALL IDRIVER`](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) and [`CALL UDRIVER`](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) commands in BASIC, or with the new [`DRVROP.COM`](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool) tool in the command line. Drivers loaded in RAM have full feature parity with ROM drivers: drive mapping, `CALL` commands, partitioning with FDISK, listing with `DRIVERS`, etc. They are not available in MSX-DOS 1 mode.
+
+### 2.3. Support for floppy disks
+
+Nextor 3 has first-class support for floppy disk drives, which in Nextor 2 could only be handled by legacy MSX-DOS drivers. See _[2.5. Support for floppy disks](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks)_ in the user manual for the whole story; in short:
+
+* A device is considered to be a floppy disk drive when the driver flags it as such; see _[4.6.2. Device query 2: Get device parameters](Nextor%203.0%20Driver%20Development%20Guide.md#462-device-query-2-get-device-parameters)_ in the driver development guide.
+
+* Floppy disks are assumed not to have partitions: drives are mapped directly to sector 0 of the device.
+
+* The kernel manages ghost drives: a single physical floppy disk drive can serve an additional drive letter, with the classic prompt asking to insert the disk for the other drive when needed. See _[2.5.1. Ghost drives](Nextor%203.0%20User%20Manual.md#251-ghost-drives)_.
+
+* Formatting works: see _[3.6.3. The CALL FORMAT command](Nextor%203.0%20User%20Manual.md#363-the-call-format-command)_.
+
+A brand new driver for the floppy disk controller built into the MSX Turbo-R computers is available, in both ROM and RAM-loadable flavors; see _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_.
+
+### 2.4. The boot menu
+
+Pressing the N key while the machine boots opens the new boot menu, which lets you enable or disable each of the Nextor 3 kernels present in the machine, and turn the numeric boot keys on or off, without having to keep the corresponding keys pressed while booting. See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_.
+
+### 2.5. One drive letter per active partition/offline device at boot
+
+At boot time Nextor 2 assigned one drive letter per storage device found, mapped to its first suitable partition. Nextor 3 instead assigns one drive letter to every FAT12 or FAT16 partition flagged as active on every device (in MSX-DOS 1 mode, only to MSX-DOS 1 compatible partitions: FAT12 with three or less sectors per FAT). A device that has suitable partitions but none of them flagged as active still gets one drive letter, mapped to its first suitable partition, as in Nextor 2.
+
+The handling of offline devices at boot has been revised too: removable devices get a drive letter even if no medium is inserted, while fixed devices that are offline don't get any. Devices that are online but don't hold any mappable partition also get one drive letter. Drives assigned in these last two ways have no partition attached initially: accessing them returns an error, and a partition is searched automatically on each access until one is found (e.g. after the device is partitioned, or after a medium is inserted). See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_.
+
+### 2.6. Drivers are now distributed separately
+
+The Nextor repository no longer contains the drivers for specific hardware, and no longer builds ready-to-use kernel ROMs for them: it builds only the Nextor kernel base file. Drivers are now developed and distributed independently, combining the driver code with the kernel base file to produce the final ROM; a RAM-loadable driver file, when applicable, is instead obtained by assembling the driver code on its own.
+
+The drivers that were part of Nextor 2 now live in their own git repositories, but driver developers are free to distribute their work in any other way (a dedicated web site, plain downloadable binaries, etc.). The list of known drivers and where to get each of them is maintained in _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_.
+
+### 2.7. Z180-compatible builds
+
+The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which avoids all the undocumented Z80 instructions so that the resulting kernel also works on machines with a Z180 processor. See [the main README file](../README.md) for how to build the kernel.
+
+### 2.8. Better boot error messages
+
+When the DOS environment fails to load at boot time, NEXTOR.SYS no longer keeps asking the user to insert the proper disk or drops silently into BASIC: a proper error message, such as "Command interpreter not found" or "Incompatible DOS version", is printed as part of the initial BASIC prompt. Application programs can take advantage of the underlying mechanism too; see _[7.3. DOS environment load errors](Nextor%203.0%20Programmers%20Reference.md#73-dos-environment-load-errors)_ in the programmers reference.
+
+### 2.9. New and changed tools and commands
+
+* New [`DRVROP.COM`](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool) ("driver operations") command line tool, and new [`CALL IDRIVER`](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) and [`CALL UDRIVER`](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) BASIC commands: they install and uninstall drivers loaded in RAM (see _[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)_).
+
+* The `MAPDRV`, `DEVINFO` and `DRIVERS` command line tools, as well as the related `CALL` commands, now understand drivers loaded in RAM: wherever a driver is specified or displayed, a RAM segment number can accompany the driver slot number. See _[3.4. The command line tools](Nextor%203.0%20User%20Manual.md#34-the-command-line-tools)_ and _[3.6.10. The CALL MAPDRV command](Nextor%203.0%20User%20Manual.md#3610-the-call-mapdrv-command)_.
+
+* The `MAPDRV` tool and the `CALL MAPDRV` command can map a drive to a device while skipping the partition assignment (new "s" and -3 partition parameter values, respectively): the drive is attached to the device with no partition, and the first suitable partition is searched automatically on each access to the drive. This makes it possible to map a drive to an offline removable device, or to a device that hasn't been partitioned yet. See _[3.4.1. MAPDRV: the drive mapping tool](Nextor%203.0%20User%20Manual.md#341-mapdrv-the-drive-mapping-tool)_ and _[3.6.10. The CALL MAPDRV command](Nextor%203.0%20User%20Manual.md#3610-the-call-mapdrv-command)_.
+
+* Since logical units don't exist anymore, the tools and commands that used to take or display a logical unit number no longer do.
+
+## 3. Information for application developers
+
+### 3.1. New function call: driver operations (_DRVRO, 7Fh)
+
+The new [`_DRVRO`](Nextor%203.0%20Programmers%20Reference.md#315-driver-operations-_drvro-7fh) function performs operations on device drivers; currently these are: initialize and register a driver loaded in RAM, and shut down and unregister it. It is the function behind `DRVROP.COM` and `CALL IDRIVER`/`CALL UDRIVER`, and what you would use to write a custom driver installer tool. It is not available in MSX-DOS 1 mode.
+
+### 3.2. Changed function calls
+
+* [`_FORMAT`](Nextor%203.0%20Programmers%20Reference.md#27-_format-67h): formatting now works for drives mapped to Nextor drivers (that support it), not only for MSX-DOS drivers. A new choice number, 80h, gets the format choice string into a RAM buffer and works for both driver types; the old choice 00h works for MSX-DOS drivers only and is deprecated. The documentation now also covers the special boot sector related choices dating back to the MSX-DOS 2 era (FEh, FFh) and to Nextor 2 (FBh-FDh), all of which work for both driver types as well.
+
+* [`_GDRVR`](Nextor%203.0%20Programmers%20Reference.md#38-get-information-about-a-device-driver-_gdrvr-78h): driver names can now be up to 255 characters long, and a new input flag requests the extended name (otherwise names are truncated as before). The returned driver flags always have the legacy "device-based driver" flag set for compatibility with Nextor 2-aware tools.
+
+* [`_GDLI`](Nextor%203.0%20Programmers%20Reference.md#39-get-information-about-a-drive-letter-_gdli-79h): a new drive status value identifies drives assigned to a ghost floppy disk drive, with an extra indication of which drive letter is the main one.
+
+* [`_GPART`](Nextor%203.0%20Programmers%20Reference.md#310-get-information-about-a-device-partition-_gpart-7ah): the logical unit number input parameter is gone, and the driver segment number (which was always FFh in Nextor 2) is now meaningful (for drivers loaded in RAM).
+
+* [`_CDRVR`](Nextor%203.0%20Programmers%20Reference.md#311-call-a-routine-in-a-device-driver-_cdrvr-7bh): the driver slot byte must now have bits 6-4 set to 001. This is a deliberate incompatibility: the set of routines exposed by drivers has changed, and this safeguard prevents old Nextor 2 programs from unknowingly calling routines of a Nextor 3 driver.
+
+* [`_MAPDRV`](Nextor%203.0%20Programmers%20Reference.md#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch): the logical unit number byte of the mapping data buffer is now unused, new rules govern the automatic mapping of ghost drives, and a starting sector of FFFFFFFFh in the mapping data attaches the drive to the device with no partition assigned (one is searched automatically on each access to the drive).
+
+### 3.3. New error codes
+
+The error codes are listed in _[4. New error codes](Nextor%203.0%20Programmers%20Reference.md#4-new-error-codes)_ in the programmers reference. Compared to Nextor 2.1:
+
+* `.IDEVN` ("Invalid device number") replaces `.IDEVL` ("Invalid device or logical unit number") with the same numeric error code, since logical units don't exist anymore; the matching BASIC error is renamed accordingly.
+
+* `.INITE` ("Initialization error") is returned by `_DRVRO` when the initialization routine of a driver loaded in RAM fails; it has a matching new BASIC error too. See _[3.7. New BASIC error codes](Nextor%203.0%20User%20Manual.md#37-new-basic-error-codes)_ in the user manual.
+
+* `.NOCMD` ("Command interpreter not found") and `.IDOSV` ("Incompatible DOS version") are used by NEXTOR.SYS to explain why a jump to the BASIC environment was forced. They work through the new `ERR_TO_BASIC` mechanism (a DOS error code stored at F245h is printed at the next entry to BASIC), which application programs can use as well; see _[7.3. DOS environment load errors](Nextor%203.0%20Programmers%20Reference.md#73-dos-environment-load-errors)_.
+
+### 3.4. Nextor in MSX-DOS 1 mode
+
+The Nextor-specific function calls available in MSX-DOS 1 mode are the same as in Nextor 2 (`_DOSVER`, `_GDRVR`, `_GPART`, `_CDRVR`, `_GDLI`, and `_MAPDRV` with restrictions), plus `_FORMAT`, which is newly available in this mode. `_DRVRO` is not available: drivers loaded in RAM don't work in MSX-DOS 1 mode, and neither do the new `CALL IDRIVER` and `CALL UDRIVER` commands. The usual restrictions for function calls in this mode still apply; see the introduction of _[3. New function calls](Nextor%203.0%20Programmers%20Reference.md#3-new-function-calls)_ in the programmers reference, and _[3.2.1. Booting in DOS 1 mode](Nextor%203.0%20User%20Manual.md#321-booting-in-dos-1-mode)_ in the user manual.
+
+### 3.5. The Nextor SDK and the Docker development image
+
+Nextor 3 ships with an SDK (Software Development Kit): a collection of assembler include files and C headers with the function call and error code constants, the driver structure definitions, helper macros and ready-to-use code snippets, plus project templates for drivers and for command line tools. It lives in the [`sdk`](../sdk) directory of the Nextor repository, and it is designed to be pulled into your own projects (e.g. as a git submodule); see [the SDK README file](../sdk/README.md) for the details.
+
+Additionally, a Docker image for Nextor development, with the required assembler and C compiler preinstalled, is published as `ghcr.io/konamiman/nextor-dev`. See _[8. Development helpers](Nextor%203.0%20Programmers%20Reference.md#8-development-helpers)_ in the programmers reference for an overview of both.
+
+
+## 4. Information for driver developers
+
+The driver structure of Nextor 3 is completely new and incompatible with Nextor 2: drivers have a new signature (`NEXTORv3_DRIVER`), the old fixed table of routines has been replaced by a query-based API (driver queries and device queries), logical units and drive-based drivers are gone, drivers can be loaded in RAM, and drivers can expose floppy disk drives, including support for formatting them. There are also new kernel entry points available to drivers, such as [`CALLB0_IX_IY`](Nextor%203.0%20Driver%20Development%20Guide.md#427-callb0_ix_iy-404bh).
+
+The good news is that the changes are mostly at the driver API level rather than at the driver functionality level, so most of the code of an existing Nextor 2 driver can be reused: it is mostly a matter of adding a compatibility layer that adapts it to the new structure. The _[Nextor 3.0 Driver Migration Guide](Nextor%203.0%20Driver%20Migration%20Guide.md)_ explains how to do exactly that. The complete reference for the new driver system is _[4. Nextor driver structure](Nextor%203.0%20Driver%20Development%20Guide.md#4-nextor-driver-structure)_ in the _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_; and once your driver is written, the new `DRVTEST.COM` tool will help you exercise it: see _[5. Testing drivers with DRVTEST.COM](Nextor%203.0%20Driver%20Development%20Guide.md#5-testing-drivers-with-drvtestcom)_.
