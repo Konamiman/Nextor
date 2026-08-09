@@ -897,8 +897,10 @@ AAD_MAX_DEVICE_NUM equ 17
 AAD_FALLBACK_DEVNUM equ 18 ;bit 7: removable, bit 6: floppy
 AAD_SAW_VALID_PART equ 19  ;Nonzero if the device currently being examined
                            ;holds at least one valid filesystem
+AAD_DEV_HAS_MAPPED equ 20  ;Nonzero if the device currently being examined
+                           ;has a valid partition already mapped to a drive
 
-AAD_SIZE equ 20
+AAD_SIZE equ 21
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_IS_AUTOASPART equ 7
@@ -985,6 +987,7 @@ AUTO_NOEMU:
 	ld (ix+AAD_CURR_PART_DEVNUM),a
 	ld (ix+AAD_FALLBACK_DEVNUM),a
 	ld (ix+AAD_SAW_VALID_PART),a
+	ld (ix+AAD_DEV_HAS_MAPPED),a
 
 	jp AA_GET_DEVINFO
 
@@ -1002,6 +1005,7 @@ AA_DLOOP:
 	xor	a
 	ld	(ix+AAD_CURR_PART_DEVNUM),a
 	ld	(ix+AAD_SAW_VALID_PART),a
+	ld	(ix+AAD_DEV_HAS_MAPPED),a
 
 	;--- Note: earlier there was a device-level duplicate check here, 
 	;    but that's no longer needed: the drive-per-partition feature allows multiple
@@ -1327,7 +1331,7 @@ AA_SPC_OK:
 	call CHECK_MAP_IN_USE
 	pop iy
 	pop ix
-	jp nz,AA_PLOOP_NEXT
+	jp nz,AA_PART_IN_USE
 
 	;* All checks ok, partition is good.
     ;  If it has the active flag set, go ahead and assign it.
@@ -1366,6 +1370,14 @@ AA_NOT_ACTIVE:
 
     jp  AA_PLOOP_NEXT
 
+	;--- The partition is valid but already mapped to another drive:
+	;    remember that the device has already consumed at least one
+	;    of the drives reserved for it, then continue with the next partition
+
+AA_PART_IN_USE:
+	ld	(ix+AAD_DEV_HAS_MAPPED),1
+	jp	AA_PLOOP_NEXT
+
 	;--- The current device has been scanned completely (including the MBR
 	;    itself as a last resort) and no mappable partition was found on it.
 	;    If it doesn't hold any valid filesystem at all (not even one already
@@ -1379,6 +1391,22 @@ AA_NOT_ACTIVE:
 AA_DEV_EXHAUSTED:
 	bit	AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
 	jp	nz,AA_LLOOP_NEXT	;Fixed device requested: keep the "no suitable partition" error
+
+	;If a valid partition of this device is already mapped to another drive,
+	;the device has already consumed the drive(s) that GET_BOOT_DRIVES_COUNT
+	;reserved for it (one per active partition, minimum one): discard the
+	;candidate partition if it belongs to this device, so that the drive
+	;can be assigned to a device found later in the scan instead.
+
+	ld	a,(ix+AAD_DEV_HAS_MAPPED)
+	or	a
+	jr	z,AA_RECORD_FALLBACK
+	ld	a,(ix+AAD_CAND_PART_DEVNUM)
+	cp	(ix+AAD_CURR_PART_DEVNUM)
+	jp	nz,AA_LLOOP_NEXT	;Candidate is from another device: keep it
+	xor	a
+	ld	(ix+AAD_CAND_PART_DEVNUM),a
+	jp	AA_LLOOP_NEXT
 
 AA_RECORD_FALLBACK:
 	ld	a,(ix+AAD_SAW_VALID_PART)
@@ -2546,15 +2574,19 @@ NOMNT:
 	ld	(iy+3),0FFh
 	ld	a,(ix+UD_DEVICE_NUMBER##)
 	ld	(iy+4),a
+	ld	(iy+5),1	;Fake LUN index, for Nextor 2 aware applications
+				;(the DOS 1 version of this routine does the same)
+
+	;Partition assignment pending: report a first sector number of -1
 
     bit UF_PAP,(ix+UD_DFLAGS##)
 	jr z,NOPAP
 
 	ld a,0FFh
-    ld	(ix+UD_FIRST_DEVICE_SECTOR##),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),a
-	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
+	ld	(iy+6),a
+	ld	(iy+7),a
+	ld	(iy+8),a
+	ld	(iy+9),a
 	cpl
 	ret
 
@@ -2613,12 +2645,17 @@ GDLI_DOS1:
 	or	a
 	jr	z,GDLI_D1_POP_RETOK
 
-	;--- Check if this is a ghost drive
+	;--- Check if this is a ghost drive.
+	;    The ghost state bits exist in FDD entries only: for other entries
+	;    the checked byte is part of the partition first absolute sector.
 
+	bit	6,(ix+UD1_RELATIVE_DRIVE##)
+	jr	z,GDLI_D1_NOGHOST
 	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)
 	and	3
 	cp	2
 	jr	z,GDLI_D1_GHOST
+GDLI_D1_NOGHOST:
 
 	;--- Normal Nextor drive
 
@@ -4043,6 +4080,15 @@ GHOST_CLEANUP_DOS1:
 	ld	a,c
 	inc	a		;1-based
 	call	GET_KERNEX_ENTRY_HL
+
+	;The ghost state bits exist in FDD entries only: for other entries
+	;the checked byte is part of the partition first absolute sector
+	push	hl
+	ld	de,UD1_RELATIVE_DRIVE##
+	add	hl,de
+	bit	6,(hl)
+	pop	hl
+	ret	z		;Not a FDD drive: no ghost pair to clean up
 
 	;Check FAS byte 0 ghost state bits
 	push	hl
