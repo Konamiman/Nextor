@@ -1,0 +1,22 @@
+;Standalone build of the MSX-DOS 2.20 style boot sector code that the
+;kernel's built-in FORMAT command puts on FDD disks (bank2/bootsect.mac,
+;included by val.mac as part of the kernel build).
+;
+;The tools-disk target assembles this file and links it with DATA.REL and
+;DOS_CALLS.REL (which provide the KBUF, BDOS and DOS function number
+;symbols) at address 0C01Eh, where boot sector code runs; the resulting
+;binary is then written at offset 1Eh of the generated disk image's boot
+;sector, right after the disk parameter block created by mformat, with the
+;rest of the sector zeroed beforehand (the boot code relies on the bytes
+;that follow it being zero, which is also what FORMAT does).
+;
+;This is what makes the disk image bootable in MSX-DOS 1 mode too.
+
+	name('tdboot')
+
+	INCLUDE	macros.inc
+	INCLUDE	const.inc
+
+	INCLUDE	bank2/bootsect.mac
+
+	end

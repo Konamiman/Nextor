@@ -8,9 +8,9 @@
 # QEMU, `--platform linux/amd64,linux/arm64 --push`).
 #
 # Contains the modern Nextor toolchain (N80/LK80/LB80, SDCC, mknexrom, make,
-# binutils), the baked SDK (including the driver/tool project templates under
-# sdk/templates), and the six kernel base-file variants built from this
-# repository's source.
+# binutils, mtools, zip), the baked SDK (including the driver/tool project
+# templates under sdk/templates), and the six kernel base-file variants built
+# from this repository's source.
 #
 # Nestor80 is the *framework-dependent* build (downloaded per target arch), so
 # the tools use the .NET runtime from the dotnet/runtime base. They target
@@ -130,10 +130,12 @@ ENV DOTNET_ROLL_FORWARD=LatestMajor
 
 # make drives the build, binutils provides objcopy (ihex->bin in the kernel
 # Makefile), bash is the shell, sdcc is Debian's 4.2.0 (multi-arch; the +dfsg
-# packaging already omits the non-free PIC support). No host C compiler:
-# mknexrom is shipped prebuilt and Z80 C goes through sdcc.
+# packaging already omits the non-free PIC support), mtools provides
+# mformat/mcopy (the tools-disk image target), zip serves the tools-zip
+# target. No host C compiler: mknexrom is shipped prebuilt and Z80 C goes
+# through sdcc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        make binutils bash sdcc \
+        make binutils bash sdcc mtools zip \
     && rm -rf /var/lib/apt/lists/*
 
 # Keep the toolchain on PATH for login shells too (Debian's /etc/profile resets

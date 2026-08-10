@@ -36,7 +36,40 @@ everything:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-.PHONY: all everything clean distclean
+# Build NEXTOR.SYS and all the command line tools, then pack them into the
+# bin/tools/nextor.dsk disk image (together with COMMAND2.COM if available).
+# The disk recipe itself lives in tools/Makefile (see its tools-disk target
+# for the details, including the EXTRA_FILES variable);
+# this wrapper just makes sure everything the disk needs is built first.
+# WORKING_DIR tells it the directory make was invoked from (against which
+# the file locations are resolved): $(PWD) is the invocation-time value
+# here, since the environment variable doesn't survive the recipe's
+# sub-shell.
+tools-disk:
+	$(MAKE) -C nextor_sys
+	$(MAKE) -C tools
+	$(MAKE) -C tools/C
+	$(MAKE) -C tools tools-disk WORKING_DIR="$(PWD)"
+
+# Build all the command line tools, then pack them into the
+# bin/tools/tools.zip archive (just the tools: no NEXTOR.SYS and no
+# COMMAND2.COM there, so no NEXTOR.SYS build either - see the tools-zip
+# target in tools/Makefile).
+tools-zip:
+	$(MAKE) -C tools
+	$(MAKE) -C tools/C
+	$(MAKE) -C tools tools-zip
+
+# Everything tools-related in one go: NEXTOR.SYS and all the command line
+# tools, the bin/tools/nextor.dsk disk image and the bin/tools/tools.zip
+# archive. Accepts the same EXTRA_FILES variable as tools-disk.
+tools-all:
+	$(MAKE) -C nextor_sys
+	$(MAKE) -C tools
+	$(MAKE) -C tools/C
+	$(MAKE) -C tools tools-disk tools-zip WORKING_DIR="$(PWD)"
+
+.PHONY: all everything tools-disk tools-zip tools-all clean distclean
 
 clean:
 	$(MAKE) -C kernel clean

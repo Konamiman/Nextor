@@ -49,6 +49,8 @@ To build Nextor you'll need:
 * [SDCC](http://sdcc.sourceforge.net/) **v4.2 or newer**, for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
 * `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
 * `mknexrom` to generate the ROM files with the drivers. You have it in [the releases section](https://github.com/Konamiman/Nextor/releases), but you can also build it from the source in the `buildtools/sources` directory.
+* `mformat` and `mcopy` from [the mtools package](https://www.gnu.org/software/mtools/), only if you want to build the tools disk image. On Debian/Ubuntu-ish systems you can just `apt-get install mtools`.
+* `zip`, only if you want to build the tools zip archive. On Debian/Ubuntu-ish systems you can just `apt-get install zip`.
 
 Except for those obtained via `apt`, you'll need to place these tools at a suitable location to be able to use them, e.g. `/usr/bin`.
 
@@ -60,6 +62,12 @@ There are a number of makefiles that will take care of building the different co
 * `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
 * `source/drivers`: builds the standalone Nextor ROM (a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware) in their ASCII8 and ASCII16 variants. It also allows building an example RAM-loadable driver.
 
-There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too.
+Additionally, `make tools-disk` in `source/tools` packs `NEXTOR.SYS` (plus its Japanese-messages variant, renamed to `NEXTORJ.SYS`) and all the command line tools present in the `bin/tools` directory, together with a `README.TXT` file and any files listed in the `EXTRA_FILES` variable, into `bin/tools/nextor.dsk`, a 360K FAT12 disk image; if `COMMAND2.COM` is included, the disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM. The image gets the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates, so it can also be booted in MSX-DOS 1 mode. This requires the `mformat` and `mcopy` tools, and expects everything to be already built. Files not built by this repository are added only through the `EXTRA_FILES` variable — most notably `COMMAND2.COM`, needed for the disk to be bootable, without which the image is created with a warning (e.g. use `EXTRA_FILES=COMMAND2.COM,MSXDOS.SYS,COMMAND.COM` for a disk that also boots to the DOS prompt in MSX-DOS 1 mode); relative paths are resolved against the current directory, the one you run `make` from. See the `tools-disk` target in the makefile for the details.
+
+Similarly, `make tools-zip` in `source/tools` packs just the command line tools (no `NEXTOR.SYS`, no `COMMAND2.COM`) into the `bin/tools/tools.zip` archive; this one requires the `zip` tool.
+
+The `source` makefile offers a `tools-all` target that builds `NEXTOR.SYS` and all the tools, then creates both the disk image and the zip archive, all in one go.
+
+There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too, and a `tools-disk` target that builds `NEXTOR.SYS` and all the tools before creating the disk image.
 
 

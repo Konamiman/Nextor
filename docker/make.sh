@@ -22,12 +22,19 @@ Usage: $prog <part> [make-args...]
   $prog all                 one variant of every part (umbrella Makefile)
   $prog all everything      the FULL matrix: every kernel + standalone-ROM
                             variant, plus NEXTOR.SYS and all tools
+  $prog all tools-disk      NEXTOR.SYS + all tools, packed into the
+                            bin/tools/nextor.dsk disk image
+  $prog all tools-zip       all tools, packed into the bin/tools/tools.zip
+                            archive
+  $prog all tools-all       the tools, the disk image and the zip archive,
+                            all in one go
   $prog all clean           remove source-tree intermediates
   $prog all distclean       clear everything, including bin/ outputs
 
 Parts (dirs under source/): kernel, drivers, nextor_sys, tools, tools/C.
 'tools' builds source/tools AND source/tools/C; 'tools/C' builds only the latter.
-'all' is the umbrella; pass it a target ('everything', 'clean', 'distclean').
+'all' is the umbrella; pass it a target ('everything', 'tools-disk',
+'tools-zip', 'tools-all', 'clean', 'distclean').
 Outputs are written back as your user (via --user), not root.
 
 Image resolution: \$NEXTOR_IMAGE if set, else a local 'nextor-dev' build if
