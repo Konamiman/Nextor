@@ -83,6 +83,7 @@ DOS_FILE_HANDLES.REL: ../../sdk/asm/constants/dos_file_handles.inc ../../sdk/asm
 DATA.REL: \
 	../kernel/data.mac \
 	$(INCS) \
+	../../sdk/asm/macros/const.inc \
 	../../sdk/asm/constants/driver_routines.inc \
 	../../sdk/asm/constants/driver_result_codes.inc \
 	../../sdk/asm/constants/driver_driver_queries.inc \

@@ -111,7 +111,7 @@ DRIVER_START:
 STR_DRIVER_NAME:
 	db	"WonderTANG! uSD Driver",0
 STR_DRIVER_AUTHOR:
-	db	"Felipe Antoniosi",0
+	db	"Luis Antoniosi",0
 
 ;-----------------------------------------------------------------------------
 ;
@@ -253,10 +253,6 @@ DO_DRVQ_GET_STRING:
 	jp	z,DRIVER_AUTHOR
 	dec	b
 	jp	z,DEVICE_NAME
-	dec	b
-	jp	z,MANUFACTURER
-	dec	b
-	jp	z,DEVICE_AUTHOR_NAME
 	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 DRIVER_NAME:
@@ -273,11 +269,6 @@ DEVICE_NAME:
 	ld	b,d
 	ex	de,hl
 	ld	hl,STR_DEVICE_NAME
-	jp	OUTPUT_STRING
-DEVICE_AUTHOR_NAME:
-	ld	b,d
-	ex	de,hl
-	ld	hl,STR_DRIVER_AUTHOR
 	jp	OUTPUT_STRING
 
 ; Driver query 3: Get driver initialization parameters
@@ -419,6 +410,13 @@ OVL:
 	ex	af,af'				; preserve msb
 	push	af
 
+	ld	a,(SDC_CTYPE)
+	cp	3
+; SDHC ignores c_size_mult and read_bl_len: each c_size unit is
+; 512 KiB, or 1024 fixed-size 512-byte sectors.
+	ld	b,10
+	jr	z,SHIFT_SIZE
+
 	ld	hl,SDC_C_SIZE_MULT
 	ld	b,(hl)				; b = c_size_mult
 	inc	hl
@@ -432,6 +430,7 @@ OVL:
 	jr	z,NO_SHIFT
 	ld	b,a				; b = read_bl_len + c_size_mult + 2 - 9
 
+SHIFT_SIZE:
 	pop	af
 	ex	af,af'				; restore msb
 CALC_SIZE:
@@ -633,8 +632,8 @@ STR_PAD_LOOP:
 	inc	hl
 	djnz	STR_PAD_LOOP
 DEV_INFO_OK:
-	ld	a,RESULT_OK
 	call	SDC_OFF
+	ld	a,RESULT_OK
 	ret
 SERIAL_NUMBER:
 	call	SDC_ON
@@ -695,8 +694,8 @@ COPNAME:
 	ld	a,(hl)
 	cp	32
 	jr	c,NONASC
-	or	128
-	jr	nz,NONASC
+	cp	128
+	jr	nc,NONASC
 	jr	STORASC
 NONASC:
 	ld	a,' '
@@ -1044,7 +1043,7 @@ R_ERR_LOOP:
 	ld	a,d
 	sub	b
 	ld	b,a				; sectors written
-	ld	e,a
+	ld	a,e
 	and	SDC_TIMEOUT
 	jr	nz,R_TIMEOUT
 	ld	a,.DISK
@@ -1065,7 +1064,7 @@ W_ERR_LOOP:
 	ld	a,d
 	sub	b
 	ld	b,a				; sectors written
-	ld	e,a
+	ld	a,e
 	and	SDC_CRC
 	jr	nz,W_WRERR
 	ld	a,.DISK
@@ -1095,7 +1094,8 @@ RW_BUSY:
 	ld	b,.NRDY
 	jr	RW_ERR
 RW_ERR1:
-
+	ld  b,.IDEVN
+	jr  RW_ERR
 ;	ld
 ;	call
 
@@ -1309,7 +1309,6 @@ MY_GWORK:
 ; Strings
 ;=======================
 
-INIT_MSG:
 INFO_S:
 	db	13,10,"WonderTANG! SMS v"
 	db	VER_MAIN+"0",".",VER_SEC+"0",".",VER_REV+"0",13,10
@@ -1330,7 +1329,7 @@ NODEVS_S:
 	db	"Not found",13,10,0
 
 STR_UNKNOWN:
-	db	"UNKOWN",0
+	db	"UNKNOWN",0
 SDV1:
 	db	"SDV1",0
 SDV2:

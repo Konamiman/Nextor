@@ -251,7 +251,7 @@ ram-driver-example.drv: \
 	dd if=/dev/zero of=256.bytes bs=1 count=256
 
 clean:
-	rm -f *.bin *.drv *.ROM *.dat 256.bytes _standalone-rom-driver.bin .build-variant*
+	rm -f *.bin *.drv *.ROM *.dat 256.bytes _standalone-rom-driver.bin .build-variant* Tang/*.bin
 
 ROM_TANG := Nextor-$(NEXTOR_KERNEL_VERSION).WonderTANG$(_VARIANT_SUFFIX).ROM
 tang:  $(ROM_TANG)
@@ -263,16 +263,9 @@ Tang/_driver.bin: Tang/driver.bin 256.bytes
 $(ROM_TANG): \
 	$(NEXTOR_BASE) \
 	Tang/_driver.bin \
-	Tang/chgbnk.bin \
-	256.bytes
+	chgbnk-ascii16.bin
 
-	$(call mknexrom_rom,$@,Tang/_driver.bin,Tang/chgbnk.bin)
-
-Tang/chgbnk.bin: \
-	$(UNDOC_MODE_STAMP) \
-	Tang/chgbnk.asm
-
-	$(call assemble,Tang/chgbnk.asm,--build-type abs --output-file-extension bin)
+	$(call mknexrom_rom,$@,Tang/_driver.bin,chgbnk-ascii16.bin)
 
 Tang/driver.bin: \
 	$(UNDOC_MODE_STAMP) \
