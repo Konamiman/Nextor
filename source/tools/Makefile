@@ -93,9 +93,10 @@ DATA.REL: \
 # FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
 # NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
 # .COM file present in bin/tools, a README.TXT (sourced from
-# tools-disk-readme.txt) and COMMAND2.COM if available. The image is
-# recreated from scratch on every run using mformat and mcopy from the
-# mtools package, plus dd to install the boot sector code.
+# tools-disk-readme.txt) and any files supplied via the EXTRA_FILES variable
+# (typically COMMAND2.COM). The image is recreated from scratch on every run
+# using mformat and mcopy from the mtools package, plus dd to install the
+# boot sector code.
 #
 # The image gets the same MSX-DOS 2.20 style boot sector that the kernel's
 # built-in FORMAT command creates (assembled standalone via
@@ -107,20 +108,17 @@ DATA.REL: \
 # if any is missing the build fails. Use the tools-disk target of ../Makefile
 # to build all of them and then create the disk in one go.
 #
-# COMMAND2.COM is not built by this repository: it is added only when the
-# COMMAND2_PATH variable points to it (a relative path is resolved against
-# the current directory, the one make was invoked from). If the variable is
-# not set the disk is created without COMMAND2.COM, with a warning since
-# such a disk is not bootable; if it is set but the file doesn't exist, the
-# build fails. A COMMAND2.COM supplied via EXTRA_FILES works just as well
-# (and silences the warning).
+# Files that are not built by this repository - most notably COMMAND2.COM -
+# can be added to the disk with the EXTRA_FILES variable: a comma (or space)
+# separated list of files, with relative paths resolved against the current
+# directory (the one make was invoked from), stored in the disk with their
+# names uppercased. Listed files that don't exist make the build fail.
 #
-# Additional files can be added to the disk with the EXTRA_FILES variable:
-# a comma (or space) separated list of files, also resolved against the
-# current directory, stored in the disk with their names uppercased. The
-# typical use is EXTRA_FILES=MSXDOS.SYS,COMMAND.COM to make the disk
-# bootable in MSX-DOS 1 mode too. Listed files that don't exist make the
-# build fail.
+# A disk without COMMAND2.COM is not bootable, so a warning is printed when
+# no COMMAND2.COM is present in EXTRA_FILES. Typical usage is
+# EXTRA_FILES=COMMAND2.COM for a Nextor/MSX-DOS 2 bootable disk, or
+# EXTRA_FILES=COMMAND2.COM,MSXDOS.SYS,COMMAND.COM for a disk that also
+# boots to the DOS prompt in MSX-DOS 1 mode.
 #
 # The current (invocation) directory is taken from the PWD environment
 # variable, which (unlike CURDIR) survives make -C. It does NOT survive the
@@ -131,11 +129,6 @@ BIN_TOOLS := ../../bin/tools
 TOOLS_DSK := $(BIN_TOOLS)/nextor.dsk
 
 WORKING_DIR ?= $(or $(PWD),$(CURDIR))
-
-COMMAND2_PATH ?=
-ifneq ($(strip $(COMMAND2_PATH)),)
-override COMMAND2_PATH := $(if $(filter /%,$(COMMAND2_PATH)),$(COMMAND2_PATH),$(WORKING_DIR)/$(COMMAND2_PATH))
-endif
 
 comma := ,
 EXTRA_FILES ?=
@@ -182,7 +175,6 @@ tools-disk: $(BOOTSECT_BIN)
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
 	$(if $(EXTRA_MISSING),$(error "ERROR: EXTRA_FILES not found: $(EXTRA_MISSING)"))
-	$(if $(COMMAND2_PATH),$(if $(wildcard $(COMMAND2_PATH)),,$(error "ERROR: COMMAND2.COM not found at $(COMMAND2_PATH)")))
 	@rm -f $(TOOLS_DSK)
 	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
 	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
@@ -192,11 +184,10 @@ tools-disk: $(BOOTSECT_BIN)
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
 	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
-	$(if $(COMMAND2_PATH),@mcopy -i $(TOOLS_DSK) "$(COMMAND2_PATH)" ::COMMAND2.COM)
 	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
 		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
 	done)
-	$(if $(or $(COMMAND2_PATH),$(EXTRA_HAS_COMMAND2)),,@echo "\nWARNING: COMMAND2.COM not added, disk won't be bootable")
+	$(if $(EXTRA_HAS_COMMAND2),,@echo "\nWARNING: COMMAND2.COM not added, disk won't be bootable")
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
 
 # ---------------------------------------------------------------------------
