@@ -4,89 +4,89 @@
 
 ;-----------------------------------------------------------------------------
 
-;Driver version
+; Driver version
 
-VER_MAIN	equ	1
-VER_SEC		equ	0
-VER_REV		equ	0
+VER_MAIN		equ	1
+VER_SEC			equ	0
+VER_REV			equ	0
 
 ;-----------------------------------------------------------------------------
 ;
 ; SD Controller registers and bit definitions
 
-SDC_ENABLE  	equ 7E00h		 		; wo: 1: enable SDC register, 0: disable
-SDC_CMD			equ SDC_ENABLE+1 		; wo: cmd to SDC fpga: 1=read, 2=write
-SDC_STATUS		equ SDC_CMD+1	 		; ro: SDC status bits
-SDC_SADDR		equ SDC_STATUS+1	 	; wo: 4 bytes: sector addr for read/write
-SDC_C_SIZE  	equ SDC_SADDR+4			; ro: 3 bytes: device size blocks
-SDC_C_SIZE_MULT	equ SDC_C_SIZE+3		; ro: 3 bits size multiplier
-SDC_RD_BL_LEN	equ SDC_C_SIZE_MULT+1	; ro: 4 bits block length
-SDC_CTYPE		equ SDC_RD_BL_LEN+1		; ro: SDC Card type: 0=unknown, 1=SDv1, 2=SDv2, 3=SDHCv2 
-SDC_MID			equ SDC_CTYPE+1
-SDC_OID			equ SDC_MID+1
-SDC_PNM			equ SDC_OID+2
-SDC_PSN			equ SDC_PNM+5
-SDC_CRC16		equ SDC_PSN+4
+SDC_ENABLE		equ	7E00h		; wo: 1: enable SDC register, 0: disable
+SDC_CMD			equ	SDC_ENABLE+1	; wo: cmd to SDC fpga: 1=read, 2=write
+SDC_STATUS		equ	SDC_CMD+1	; ro: SDC status bits
+SDC_SADDR		equ	SDC_STATUS+1	; wo: 4 bytes: sector addr for read/write
+SDC_C_SIZE		equ	SDC_SADDR+4	; ro: 3 bytes: device size blocks
+SDC_C_SIZE_MULT		equ	SDC_C_SIZE+3	; ro: 3 bits size multiplier
+SDC_RD_BL_LEN		equ	SDC_C_SIZE_MULT+1	; ro: 4 bits block length
+SDC_CTYPE		equ	SDC_RD_BL_LEN+1	; ro: SDC Card type: 0=unknown, 1=SDv1, 2=SDv2, 3=SDHCv2
+SDC_MID			equ	SDC_CTYPE+1
+SDC_OID			equ	SDC_MID+1
+SDC_PNM			equ	SDC_OID+2
+SDC_PSN			equ	SDC_PNM+5
+SDC_CRC16		equ	SDC_PSN+4
 
-SDC_SDATA		equ 7C00h		 		; rw: 7C00h-7Dff - sector transfer area
+SDC_SDATA		equ	7C00h		; rw: 7C00h-7Dff - sector transfer area
 
-SDC_BUSY		equ 080h
-SDC_CRC			equ 001h
-SDC_TIMEOUT		equ 002h
+SDC_BUSY		equ	080h
+SDC_CRC			equ	001h
+SDC_TIMEOUT		equ	002h
 
-SDC_READ		equ 001h
-SDC_WRITE		equ 002h
-SDC_INIT		equ 080h
+SDC_READ		equ	001h
+SDC_WRITE		equ	002h
+SDC_INIT		equ	080h
 
 ;-----------------------------------------------------------------------------
 ;
 ; Standard BIOS and work area entries
 
-CHPUT	equ	00A2h	;Character output
-CHGET	equ	009Fh
-INITXT	equ 006Ch
-CLS		equ 0848H
-MSXVER	equ 002DH
-LINL40	equ 0F3AEh		; Width
-LINLEN	equ 0F3B0h
+CHPUT			equ	00A2h		; Character output
+CHGET			equ	009Fh
+INITXT			equ	006Ch
+CLS			equ	0848H
+MSXVER			equ	002DH
+LINL40			equ	0F3AEh		; Width
+LINLEN			equ	0F3B0h
 ;------------------------------------------------------
 ;
 ; Work area definition
 ;
-;+0-3: Device size in sectors
-;+4-7: current sector r/w
+; +0-3: Device size in sectors
+; +4-7: current sector r/w
 ;-----------------------------------------------------------------------------
 
 ;-----------------------------------------------------------------------------
 
-	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
+	include	../../sdk/asm/constants/driver_result_codes.inc
 
-	module DRIVER_QUERY
-	INCLUDE ../../sdk/asm/constants/driver_driver_queries.inc
+	module	DRIVER_QUERY
+	include	../../sdk/asm/constants/driver_driver_queries.inc
 	endmod
 
-	module DEVICE_QUERY
-	INCLUDE ../../sdk/asm/constants/driver_device_queries.inc
+	module	DEVICE_QUERY
+	include	../../sdk/asm/constants/driver_device_queries.inc
 	endmod
 
-	INCLUDE ../../sdk/asm/constants/dos_errors.inc
+	include	../../sdk/asm/constants/dos_errors.inc
 
-	INCLUDE ../../sdk/asm/constants/rom_bank_header.inc
+	include	../../sdk/asm/constants/rom_bank_header.inc
 
 
-	;*********************
-	;***  DRIVER CODE  ***
-	;*********************
- 
-	org 4100h
+;*********************
+;***  DRIVER CODE  ***
+;*********************
+
+	org	4100h
 
 DRIVER_START:
 
-	;Driver signature
+; Driver signature
 
 	db	"NEXTORv3_DRIVER",0
 
-	;Jump table
+; Jump table
 
 	jp	TIMER_INT
 	jp	OEMSTAT
@@ -95,7 +95,7 @@ DRIVER_START:
 	jp	DRIVER_QUERY
 	jp	DEVICE_QUERY
 	jp	CUSTOM_DRIVER_QUERY
-	jp  CUSTOM_DEVICE_QUERY
+	jp	CUSTOM_DEVICE_QUERY
 	jp	READ_WRITE
 	jp	RESERVED_0
 	jp	RESERVED_1
@@ -108,8 +108,10 @@ DRIVER_START:
 
 	ds	4180h-$,0
 
-STR_DRIVER_NAME: db "WonderTANG! uSD Driver",0
-STR_DRIVER_AUTHOR: db "Felipe Antoniosi",0
+STR_DRIVER_NAME:
+	db	"WonderTANG! uSD Driver",0
+STR_DRIVER_AUTHOR:
+	db	"Felipe Antoniosi",0
 
 ;-----------------------------------------------------------------------------
 ;
@@ -143,23 +145,23 @@ BASDEV:
 ;--- Extended BIOS hook.
 ;    Works the expected way, except that it must return
 ;    IYl=1 if the old hook must be called, IYl=0 otherwise.
-;    Only called if the driver has returned EXTBIO flag set 
+;    Only called if the driver has returned EXTBIO flag set
 ;    in the "get driver initialization parameters" query.
 EXTBIO:
 	ret
 	ret
 	ret
 
-	;* Jump table entries reserved for future use.
+; * Jump table entries reserved for future use.
 
 RESERVED_0:
 RESERVED_1:
 RESERVED_2:
 	ret
 
-	;* Direct calls entry points.
-	;  There is a jump table at address 7850h in ROM banks 0 and 3,
-	;  that will be redirected here.
+; * Direct calls entry points.
+;  There is a jump table at address 7850h in ROM banks 0 and 3,
+;  that will be redirected here.
 
 DIRECT_0:
 	ret
@@ -196,19 +198,19 @@ DIRECT_4:
 ;            F, BC, DE, HL = Depends on the query
 
 DRIVER_QUERY:
-	dec a
-	jp z,DO_DRVQ_GET_VERSION
-	dec a
-	jp z,DO_DRVQ_GET_STRING
-	dec a
-	jp z,DO_DRVQ_GET_INIT_PARAMS
-	dec a
-	jp z,DO_DRVQ_INIT
-	dec a
-	jp z,DO_DRVQ_GET_MAX_DEVICE
-	;dec a
-	;jp z,DO_DRVQ_INIT_RAM
-	ld a,RESULT_NOT_IMPLEMENTED
+	dec	a
+	jp	z,DO_DRVQ_GET_VERSION
+	dec	a
+	jp	z,DO_DRVQ_GET_STRING
+	dec	a
+	jp	z,DO_DRVQ_GET_INIT_PARAMS
+	dec	a
+	jp	z,DO_DRVQ_INIT
+	dec	a
+	jp	z,DO_DRVQ_GET_MAX_DEVICE
+;	dec
+;	jp
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 ; Driver query 1: Get driver version number
@@ -221,10 +223,10 @@ DRIVER_QUERY:
 ; in B.C.D instead of A.B.C, and an error code is returned in A.
 
 DO_DRVQ_GET_VERSION:
-	ld b, VER_MAIN
-	ld c, VER_SEC
-	ld d, VER_REV
-	xor a
+	ld	b,VER_MAIN
+	ld	c,VER_SEC
+	ld	d,VER_REV
+	xor	a
 	ret
 
 ; Driver query 2: Get driver information string
@@ -244,39 +246,39 @@ DO_DRVQ_GET_VERSION:
 ; String is always provided zero-terminated, so the max effective string length is 254.
 
 DO_DRVQ_GET_STRING:
-	ld a,b
-	dec b
-	jp z,DRIVER_NAME
-	dec b
-	jp z,DRIVER_AUTHOR
-	dec b
-	jp z,DEVICE_NAME
-	dec b
-	jp z, MANUFACTURER
-	dec b
-	jp z,DEVICE_AUTHOR_NAME
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,b
+	dec	b
+	jp	z,DRIVER_NAME
+	dec	b
+	jp	z,DRIVER_AUTHOR
+	dec	b
+	jp	z,DEVICE_NAME
+	dec	b
+	jp	z,MANUFACTURER
+	dec	b
+	jp	z,DEVICE_AUTHOR_NAME
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 DRIVER_NAME:
-	ld b,d
-	ex de,hl
-	ld hl,STR_DRIVER_NAME
-	jp OUTPUT_STRING
+	ld	b,d
+	ex	de,hl
+	ld	hl,STR_DRIVER_NAME
+	jp	OUTPUT_STRING
 DRIVER_AUTHOR:
-	ld b,d
-	ex de,hl
-	ld hl,STR_DRIVER_AUTHOR
-	jp OUTPUT_STRING
+	ld	b,d
+	ex	de,hl
+	ld	hl,STR_DRIVER_AUTHOR
+	jp	OUTPUT_STRING
 DEVICE_NAME:
-	ld b,d
-	ex de,hl
-	ld hl,STR_DEVICE_NAME
-	jp OUTPUT_STRING
+	ld	b,d
+	ex	de,hl
+	ld	hl,STR_DEVICE_NAME
+	jp	OUTPUT_STRING
 DEVICE_AUTHOR_NAME:
-	ld b,d
-	ex de,hl
-	ld hl,STR_DRIVER_AUTHOR
-	jp OUTPUT_STRING
+	ld	b,d
+	ex	de,hl
+	ld	hl,STR_DRIVER_AUTHOR
+	jp	OUTPUT_STRING
 
 ; Driver query 3: Get driver initialization parameters
 ;
@@ -285,7 +287,7 @@ DEVICE_AUTHOR_NAME:
 ;         C  = Flags:
 ;              5: set if user is requesting reduced drive count (by pressing the 5 key)
 ;              Others: 0
-;         DE = Address of a routine for printing a character	 
+;         DE = Address of a routine for printing a character
 ; Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
 ;         B  = Flags
 ;              0: TIMER_INT should be hooked
@@ -302,9 +304,9 @@ DEVICE_AUTHOR_NAME:
 ; and DE is passed at input.
 
 DO_DRVQ_GET_INIT_PARAMS:
-	ld a,RESULT_OK
-	ld b,0
-	ld hl,0
+	ld	a,RESULT_OK
+	ld	b,0
+	ld	hl,0
 	ret
 
 ; Driver query 4: Initialize driver
@@ -323,176 +325,176 @@ DO_DRVQ_GET_INIT_PARAMS:
 ; allocated drives is not passed in B, DE is passed at input, and an error code can be returned.
 
 DO_DRVQ_INIT:
-	;ld		a,(MSXVER)
-	;cp		1			; > MSX 2
-	;jr		c,MSX1
-	;ld		a,80
-	;jr		SETSCRN
+;	ld
+;	cp
+;	jr
+;	ld
+;	jr
 ;MSX1:
-;	ld		a,40
+;	ld	a,40
 ;SETSCRN:
-	;ld		(LINL40),a
+;	ld
 ;	call	INITXT
 
-	ld		de,INFO_S
+	ld	de,INFO_S
 	call	PRINT
 
-	ld		de,SEARCH_S
+	ld	de,SEARCH_S
 	call	PRINT
 
 	call	MY_GWORK
 	call	SDC_ON
-	ld 		a,SDC_INIT
-	ld		(SDC_CMD),a
+	ld	a,SDC_INIT
+	ld	(SDC_CMD),a
 
-	ld		(ix),0		; clear device data
+	ld	(ix),0				; clear device data
 
 WAIT_RESET:
-	ld      de,2047			;Timeout 
+	ld	de,2047				; Timeout
 WAIT_RESET1:
-	ld      a,0
-	cp      e
-	jr      nz,WAIT_DOT		;Print dots while waiting
-;	ld      a,46
-;	call    CHPUT
+	ld	a,0
+	cp	e
+	jr	nz,WAIT_DOT			; Print dots while waiting
+;	ld	a,46
+;	call	CHPUT
 WAIT_DOT:
 	call	CHECK_ESC
-	jp		c,INIT_NO_DEV
-	ld      b,255
+	jp	c,INIT_NO_DEV
+	ld	b,255
 WAIT_RESET2:
-	ld      a,(SDC_STATUS)
-	and     SDC_BUSY
-	jr      z,WAIT_RESET_END        ;Wait for BSY to clear and DRDY to set          
-	djnz    WAIT_RESET2
-	dec     de
-	ld      a,d
-	or      e
-	jr      nz,WAIT_RESET1
-	jp      INIT_NO_DEV
+	ld	a,(SDC_STATUS)
+	and	SDC_BUSY
+	jr	z,WAIT_RESET_END		; Wait for BSY to clear and DRDY to set
+	djnz	WAIT_RESET2
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,WAIT_RESET1
+	jp	INIT_NO_DEV
 WAIT_RESET_END:
 
-	ld		a,(SDC_CTYPE)
-	or		a
-	jp		z,INIT_NO_DEV
+	ld	a,(SDC_CTYPE)
+	or	a
+	jp	z,INIT_NO_DEV
 
-	ld		de,SDV1
-	cp		1
-	jr		z,PRINT_CTYPE
-	ld		de,SDV2
-	cp		2
-	jr		z,PRINT_CTYPE
-	ld		de,SDHCV2
-	cp		3
-	jr		z,PRINT_CTYPE
-	ld		de,UNKNOWN
+	ld	de,SDV1
+	cp	1
+	jr	z,PRINT_CTYPE
+	ld	de,SDV2
+	cp	2
+	jr	z,PRINT_CTYPE
+	ld	de,SDHCV2
+	cp	3
+	jr	z,PRINT_CTYPE
+	ld	de,STR_UNKNOWN
 
 PRINT_CTYPE:					; print card type
 	call	PRINT
 
-	ld		de,CRLF_S
-    call    PRINT
+	ld	de,CRLF_S
+	call	PRINT
 
-	ld		hl,SDC_C_SIZE
-	ld		e,(hl)
-	inc		hl
-	ld		d,(hl)
-	inc 	hl
-	ld		c,(hl)		; c:de = c_size
-	inc		hl
+	ld	hl,SDC_C_SIZE
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	c,(hl)				; c:de = c_size
+	inc	hl
 
-	ld		hl,1
-	add		hl,de
-	ex		de,hl
+	ld	hl,1
+	add	hl,de
+	ex	de,hl
 
-	ld		a,0
-	adc		a,c			; c:de = c_size + 1
-	ld		c,a
-	jr		nc,NO_OVL
-	ld		a,1			; overflow
-	jr		OVL
+	ld	a,0
+	adc	a,c				; c:de = c_size + 1
+	ld	c,a
+	jr	nc,NO_OVL
+	ld	a,1				; overflow
+	jr	OVL
 NO_OVL:
-	xor		a
+	xor	a
 OVL:
 
-	ex		af,af'	; preserve msb
+	ex	af,af'				; preserve msb
 	push	af
 
-	ld		hl,SDC_C_SIZE_MULT
-	ld		b,(hl)	; b = c_size_mult
-	inc		hl
-	inc		b
-	inc		b		; b = c_size_mult + 2
+	ld	hl,SDC_C_SIZE_MULT
+	ld	b,(hl)				; b = c_size_mult
+	inc	hl
+	inc	b
+	inc	b				; b = c_size_mult + 2
 
-	ld		a,(hl)  ; a = read_bl_len
+	ld	a,(hl)				; a = read_bl_len
 
-	add		a,b
-	sub     9
-	jr		z,NO_SHIFT
-	ld		b,a		; b = read_bl_len + c_size_mult + 2 - 9
+	add	a,b
+	sub	9
+	jr	z,NO_SHIFT
+	ld	b,a				; b = read_bl_len + c_size_mult + 2 - 9
 
-	pop		af
-	ex		af,af'  ; restore msb
+	pop	af
+	ex	af,af'				; restore msb
 CALC_SIZE:
-	sla		e
-	rl		d
-	rl		c
-	rl		a
+	sla	e
+	rl	d
+	rl	c
+	rl	a
 	djnz	CALC_SIZE
-	jr		ST_SIZE
+	jr	ST_SIZE
 NO_SHIFT:
-	pop		af
-	ex		af,af'  ; restore msb
+	pop	af
+	ex	af,af'				; restore msb
 
 ST_SIZE:
 
-	ld		(ix+0),e	; store card size in sectors (512 bytes) in work area (32-bit)
-	ld		(ix+1),d
-	ld		(ix+2),c
-	ld		(ix+3),a
+	ld	(ix+0),e			; store card size in sectors (512 bytes) in work area (32-bit)
+	ld	(ix+1),d
+	ld	(ix+2),c
+	ld	(ix+3),a
 
-	ld		de,CRLF_S
-    call    PRINT
+	ld	de,CRLF_S
+	call	PRINT
 
 ;;;;
 
-	; wait some time
-	ld		b,0
+; wait some time
+	ld	b,0
 outer:
 	push	bc
-	ld		b,0
+	ld	b,0
 inner:
 	nop
 	push	ix
-	pop		ix
+	pop	ix
 	djnz	inner
-	pop		bc
+	pop	bc
 	djnz	outer
 
 	jr	DRV_INIT_END
 
 INIT_NO_DEV:
 	call	CHECK_ESC
-	jr		c,INIT_NO_DEV
+	jr	c,INIT_NO_DEV
 
-	ld      de,CRLF_S
-    call    PRINT
-	ld		de,NODEVS_S
+	ld	de,CRLF_S
 	call	PRINT
-	
-	xor		a
-	ld		(ix+0),a
-	ld		(ix+1),a
-	ld		(ix+2),a
-	ld		(ix+3),a
+	ld	de,NODEVS_S
+	call	PRINT
+
+	xor	a
+	ld	(ix+0),a
+	ld	(ix+1),a
+	ld	(ix+2),a
+	ld	(ix+3),a
 
 	call	SDC_OFF
-	ld a,RESULT_INIT_ERROR
+	ld	a,RESULT_INIT_ERROR
 	ret
 
-	;--- End of the initialization procedure
+;--- End of the initialization procedure
 DRV_INIT_END:
 	call	SDC_OFF
-	ld a,RESULT_OK
+	ld	a,RESULT_OK
 	ret
 
 ; Driver query 5: Get maximum supported device number
@@ -504,14 +506,14 @@ DRV_INIT_END:
 ; RESULT_NOT_IMPLEMENTED is equivalent to returning RESULT_OK and B=4.
 
 DO_DRVQ_GET_MAX_DEVICE:
-	ld a,RESULT_OK
-	ld b,1
+	ld	a,RESULT_OK
+	ld	b,1
 	ret
 
-;Driver query 6: Initialize RAM driver
+; Driver query 6: Initialize RAM driver
 ;
-;Input:  DE = Address of a routine for printing a character
-;Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
+; Input:  DE = Address of a routine for printing a character
+; Output: A  = RESULT_OK, RESULT_INIT_ERROR or RESULT_NOT_IMPLEMENTED
 ;        B  = Flags
 ;             0: TIMER_INT should be hooked
 ;             1: EXTBIO should be hooked
@@ -530,38 +532,38 @@ DO_DRVQ_GET_MAX_DEVICE:
 ; these queries will never be invoked by the kernel.
 
 
-	;--- Device query
-	;    Input:  A = Query index
-	;            C = Device number
-	;            F, B, DE, HL = Depends on the query
-	;    Output: A = Error code:
-	;                RESULT_OK: success
-	;                RESULT_INVALID_DEVICE: Invalid device number
-	;                RESULT_NOT_IMPLEMENTED: query not implemented
-	;                Others: depends on the query
-	;            F, BC, DE, HL = Depends on the query
+;--- Device query
+;    Input:  A = Query index
+;            C = Device number
+;            F, B, DE, HL = Depends on the query
+;    Output: A = Error code:
+;                RESULT_OK: success
+;                RESULT_INVALID_DEVICE: Invalid device number
+;                RESULT_NOT_IMPLEMENTED: query not implemented
+;                Others: depends on the query
+;            F, BC, DE, HL = Depends on the query
 
 DEVICE_QUERY:
-	dec c
+	dec	c
 	jr	nz,INVALID_DEVICE
-	dec a
-	jp z,DO_DEVQ_GET_STRING
-	dec a
-	jp z,DO_DEVQ_GET_PARAMS
-	dec a
-	jp z,DO_DEVQ_GET_STATUS
-	dec a
-	jp z,DO_DEVQ_GET_AVAILABILITY
-	dec a
-	jp z,DO_DEVQ_GET_FORMAT_CHOICES
-	dec a
-	jp z,DO_DEVQ_DO_FORMAT
-	dec a
-	jp z,DO_DEVQ_STOP_MOTOR
-	ld a,RESULT_NOT_IMPLEMENTED
+	dec	a
+	jp	z,DO_DEVQ_GET_STRING
+	dec	a
+	jp	z,DO_DEVQ_GET_PARAMS
+	dec	a
+	jp	z,DO_DEVQ_GET_STATUS
+	dec	a
+	jp	z,DO_DEVQ_GET_AVAILABILITY
+	dec	a
+	jp	z,DO_DEVQ_GET_FORMAT_CHOICES
+	dec	a
+	jp	z,DO_DEVQ_DO_FORMAT
+	dec	a
+	jp	z,DO_DEVQ_STOP_MOTOR
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 INVALID_DEVICE:
-	ld a,RESULT_INVALID_DEVICE
+	ld	a,RESULT_INVALID_DEVICE
 	ret
 
 ; Device query 1: Get device information string
@@ -584,130 +586,130 @@ INVALID_DEVICE:
 ; is passed in C instead of A, there's the buffer size parameter, and error codes differ.
 
 DO_DEVQ_GET_STRING:
-	dec b
-	jp z,MANUFACTURER
-	dec b
-	jp z,MEDIUM_NAME
-	dec b
-	jp z,SERIAL_NUMBER
-	dec b
-	jp z,DEVICE_NAME2
-	ld a,RESULT_NOT_IMPLEMENTED
+	dec	b
+	jp	z,MANUFACTURER
+	dec	b
+	jp	z,MEDIUM_NAME
+	dec	b
+	jp	z,SERIAL_NUMBER
+	dec	b
+	jp	z,DEVICE_NAME2
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 MANUFACTURER:
-	ld b,d
-	ex de,hl
-	ld hl,UNKNOWN
-	jp OUTPUT_STRING
+	ld	b,d
+	ex	de,hl
+	ld	hl,STR_UNKNOWN
+	jp	OUTPUT_STRING
 MEDIUM_NAME:
-	ld 		b,d
-	ex 		de,hl
-	call 	SDC_ON
-	ld		a,(SDC_CTYPE)
-	ex		af,af'
-	call 	SDC_OFF
-	ex		af,af'
-	ld		hl,SDV1
-	cp		1
-	jr		z,DEVDONE
-	ld		hl,SDV2
-	cp		2
-	jr		z,DEVDONE
-	ld		hl,SDHCV2
-	cp		3
-	jr		z,DEVDONE
+	ld	b,d
+	ex	de,hl
+	call	SDC_ON
+	ld	a,(SDC_CTYPE)
+	ex	af,af'
+	call	SDC_OFF
+	ex	af,af'
+	ld	hl,SDV1
+	cp	1
+	jr	z,DEVDONE
+	ld	hl,SDV2
+	cp	2
+	jr	z,DEVDONE
+	ld	hl,SDHCV2
+	cp	3
+	jr	z,DEVDONE
 DEVUNK:
-	ld		hl,UNKNOWN
+	ld	hl,STR_UNKNOWN
 DEVDONE:
-	jp OUTPUT_STRING
+	jp	OUTPUT_STRING
 
 STR_PAD:
-	xor a
-	or b
-	jr z, DEV_INFO_OK
+	xor	a
+	or	b
+	jr	z,DEV_INFO_OK
 STR_PAD_LOOP:
-	xor a
-	ld		(hl),a
-	inc		hl
+	xor	a
+	ld	(hl),a
+	inc	hl
 	djnz	STR_PAD_LOOP
 DEV_INFO_OK:
-	ld a,RESULT_OK
+	ld	a,RESULT_OK
 	call	SDC_OFF
 	ret
 SERIAL_NUMBER:
-	call SDC_ON
-	ld		a,(SDC_PSN+3)
+	call	SDC_ON
+	ld	a,(SDC_PSN+3)
 	call	BINTOHEX
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),b
-	inc		hl
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),c
-	inc		hl
-	ld		a,(SDC_PSN+2)
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),b
+	inc	hl
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),c
+	inc	hl
+	ld	a,(SDC_PSN+2)
 	call	BINTOHEX
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),b
-	inc		hl
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),c
-	inc		hl	
-	ld		a,(SDC_PSN+1)
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),b
+	inc	hl
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),c
+	inc	hl
+	ld	a,(SDC_PSN+1)
 	call	BINTOHEX
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),b
-	inc		hl
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),c
-	inc		hl
-	ld		a,(SDC_PSN+0)
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),b
+	inc	hl
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),c
+	inc	hl
+	ld	a,(SDC_PSN+0)
 	call	BINTOHEX
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),b
-	inc		hl
-	dec		d
-	jp		z,ERR_TRUNCATED
-	ld		(hl),c
-	inc		hl
-	ld		b,d
-	jp		STR_PAD	
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),b
+	inc	hl
+	dec	d
+	jp	z,ERR_TRUNCATED
+	ld	(hl),c
+	inc	hl
+	ld	b,d
+	jp	STR_PAD
 
 ERR_TRUNCATED:
-	call SDC_OFF
-	ld a,RESULT_TRUNCATED_STRING
+	call	SDC_OFF
+	ld	a,RESULT_TRUNCATED_STRING
 	ret
 DEVICE_NAME2:
-	call SDC_ON
-	ld		c,d		
-	ex		de,hl
-	ld		hl,SDC_OID
-	ld		b,7
+	call	SDC_ON
+	ld	c,d
+	ex	de,hl
+	ld	hl,SDC_OID
+	ld	b,7
 COPNAME:
-	ld		a,(hl)
-	cp		32
-	jr		c,NONASC
-	or		128
-	jr		nz,NONASC
-	jr		STORASC
+	ld	a,(hl)
+	cp	32
+	jr	c,NONASC
+	or	128
+	jr	nz,NONASC
+	jr	STORASC
 NONASC:
-	ld		a,' '
+	ld	a,' '
 STORASC:
-	dec		c
-	jr		z,ERR_TRUNCATED
-	ld		(de),a
-	inc		de
-	inc		hl
+	dec	c
+	jr	z,ERR_TRUNCATED
+	ld	(de),a
+	inc	de
+	inc	hl
 	djnz	COPNAME
-	ex		de,hl
-	ld		b,c
-	jp 		STR_PAD
+	ex	de,hl
+	ld	b,c
+	jp	STR_PAD
 
 ; Device query 2: Get device parameters
 ;
@@ -739,53 +741,53 @@ STORASC:
 ; +10 (1): Number of heads
 ; +11 (1): Number of sectors per track
 ;
-;RESULT_NOT_IMPLEMENTED is interpreted as a block device with 512 byte sectors, unknown total number of sectors, and flags equal to 0.
+; RESULT_NOT_IMPLEMENTED is interpreted as a block device with 512 byte sectors, unknown total number of sectors, and flags equal to 0.
 ;
-;This is the same as Nextor 2 LUN_INFO, but device id is passed in C instead of A, there's no LUN index, and error codes differ.
-;Also HL=0 at input must be supported.
+; This is the same as Nextor 2 LUN_INFO, but device id is passed in C instead of A, there's no LUN index, and error codes differ.
+; Also HL=0 at input must be supported.
 
 DO_DEVQ_GET_PARAMS:
 
-	ld a,h
-	or l
-	jr nz, FILL_INFO
-	ld a,RESULT_OK
+	ld	a,h
+	or	l
+	jr	nz,FILL_INFO
+	ld	a,RESULT_OK
 	ret
 
 FILL_INFO:
 	call	MY_GWORK
 
-	xor		a
-	ld		(hl), a ; block device
-	inc		hl
-	ld		(hl),0
-	inc		hl
-	ld		(hl),2	; sector size
-	inc		hl
-	ld		a,(ix+0)
-	ld		(hl),a
-	inc		hl
-	ld		a,(ix+1)
-	ld		(hl),a
-	inc		hl
-	ld		a,(ix+2)
-	ld		(hl),a
-	inc		hl
-	ld		a,(ix+3)
-	ld		(hl),a	; total of sectors
-	inc		hl
-	xor		a
-	ld		(hl),a  ; medium flags
-	inc		hl
-	ld		(hl),a   ; 
-	inc		hl
-	ld		(hl),a   ; num of cyls
-	inc		hl
-	ld		(hl),a   ; num of heads
-	inc		hl
-	ld		(hl),a   ; num of sectors per track 
+	xor	a
+	ld	(hl),a				; block device
+	inc	hl
+	ld	(hl),0
+	inc	hl
+	ld	(hl),2				; sector size
+	inc	hl
+	ld	a,(ix+0)
+	ld	(hl),a
+	inc	hl
+	ld	a,(ix+1)
+	ld	(hl),a
+	inc	hl
+	ld	a,(ix+2)
+	ld	(hl),a
+	inc	hl
+	ld	a,(ix+3)
+	ld	(hl),a				; total of sectors
+	inc	hl
+	xor	a
+	ld	(hl),a				; medium flags
+	inc	hl
+	ld	(hl),a				;
+	inc	hl
+	ld	(hl),a				; num of cyls
+	inc	hl
+	ld	(hl),a				; num of heads
+	inc	hl
+	ld	(hl),a				; num of sectors per track
 
-	ld 		a,RESULT_OK
+	ld	a,RESULT_OK
 	ret
 
 ; Device query 3: Get device status
@@ -814,26 +816,26 @@ FILL_INFO:
 
 DO_DEVQ_GET_STATUS:
 DEV_CHECK_SIZE:
-	call 	MY_GWORK
-	ld		a,(ix+0)
-	or		a
-	jr		nz,DEV_OK
-	ld		a,(ix+1)
-	or		a
-	jr		nz,DEV_OK
-	ld		a,(ix+2)
-	or		a
-	jr		nz,DEV_OK
-	ld		a,(ix+3)
-	or		a
-	jr		nz,DEV_OK
+	call	MY_GWORK
+	ld	a,(ix+0)
+	or	a
+	jr	nz,DEV_OK
+	ld	a,(ix+1)
+	or	a
+	jr	nz,DEV_OK
+	ld	a,(ix+2)
+	or	a
+	jr	nz,DEV_OK
+	ld	a,(ix+3)
+	or	a
+	jr	nz,DEV_OK
 DEV_STAT_ERR:
-	ld		a,RESULT_INVALID_DEVICE
+	ld	a,RESULT_INVALID_DEVICE
 	ret
 
 DEV_OK:
-	ld		a,RESULT_OK
-	ld		b,3
+	ld	a,RESULT_OK
+	ld	b,3
 	ret
 
 ; Device query 4: Get device availability
@@ -853,11 +855,11 @@ DEV_OK:
 ; and it does not change the internal "changed" status of the device.
 
 DO_DEVQ_GET_AVAILABILITY:
-	call DEV_CHECK_SIZE
-	ld b, 1
+	call	DEV_CHECK_SIZE
+	ld	b,1
 	cp	RESULT_OK
 	ret	z
-	ld b,0
+	ld	b,0
 	ret
 
 ; Device query 5: Get format choices for a floppy disk device
@@ -866,7 +868,7 @@ DO_DEVQ_GET_AVAILABILITY:
 ;         HL = Buffer address (used if B=255 is returned)
 ; Output: A = RESULT_OK: ok, format information provided
 ;             RESULT_INVALID_DEVICE: device does not exist
-;             RESULT_NOT_IMPLEMENTED: not a floppy disk, 
+;             RESULT_NOT_IMPLEMENTED: not a floppy disk,
 ;                                    or formatting not supported
 ;             RESULT_TRUNCATED_STRING: string was truncated due to buffer size too short
 ;         B = Choices:
@@ -878,7 +880,7 @@ DO_DEVQ_GET_AVAILABILITY:
 ;
 
 DO_DEVQ_GET_FORMAT_CHOICES:
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 ; Device query 6: Format a floppy disk device
@@ -897,7 +899,7 @@ DO_DEVQ_GET_FORMAT_CHOICES:
 ; must be initialized by this routine upon succesful formatting.
 
 DO_DEVQ_DO_FORMAT:
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 ; Device query 7: Stop the floppy disk drive motor
@@ -909,271 +911,271 @@ DO_DEVQ_DO_FORMAT:
 ;                                or stopping the drive motor is not supported
 
 DO_DEVQ_STOP_MOTOR:
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
-	;--- Custom driver query
-	;    Input:  A = Query index
-	;            F, BC, DE, HL = Depends on the query
-	;    Output: A = Error code:
-	;                RESULT_OK: success
-	;                RESULT_NOT_IMPLEMENTED: query not implemented
-	;                Others: depends on the query
-	;            F, BC, DE, HL = Depends on the query
+;--- Custom driver query
+;    Input:  A = Query index
+;            F, BC, DE, HL = Depends on the query
+;    Output: A = Error code:
+;                RESULT_OK: success
+;                RESULT_NOT_IMPLEMENTED: query not implemented
+;                Others: depends on the query
+;            F, BC, DE, HL = Depends on the query
 
 CUSTOM_DRIVER_QUERY:
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
-	;--- Custom device query
-	;    Input:  A = Query index
-	;            F, BC, DE, HL = Depends on the query
-	;    Output: A = Error code:
-	;                RESULT_OK: success
-	;                RESULT_NOT_IMPLEMENTED: query not implemented
-	;                Others: depends on the query
-	;            F, BC, DE, HL = Depends on the query
+;--- Custom device query
+;    Input:  A = Query index
+;            F, BC, DE, HL = Depends on the query
+;    Output: A = Error code:
+;                RESULT_OK: success
+;                RESULT_NOT_IMPLEMENTED: query not implemented
+;                Others: depends on the query
+;            F, BC, DE, HL = Depends on the query
 
 CUSTOM_DEVICE_QUERY:
-	ld a,RESULT_NOT_IMPLEMENTED
+	ld	a,RESULT_NOT_IMPLEMENTED
 	ret
 
 
-    ;--- Read or write logical sectors from/to a device
-    ;
-    ;    Input:    Cy=0 to read, 1 to write
-    ;              A = Device number, 1 to 255
-    ;              B = Number of sectors to read or write
-    ;              C = Media descriptor byte from the DPB if the device
-    ;                  is a floppy disk drive, zero otherwise
-    ;              HL = Source or destination memory address for the transfer
-    ;              DE = Address where the 4 byte sector number is stored.
-    ;    Output:   A = Error code (the same codes of MSX-DOS are used):
-    ;                  0: Ok
-    ;                  .IDEVN: Invalid device or LUN
-    ;                  .NRDY: Not ready
-    ;                  .DISK: General unknown disk error
-    ;                  .DATA: CRC error when reading
-    ;                  .RNF: Sector not found
-    ;                  .UFORM: Unformatted disk
-    ;                  .WPROT: Write protected media, or read-only logical unit
-    ;                  .WRERR: Write error
-    ;                  .NCOMP: Incompatible disk.
-    ;                  .SEEK: Seek error.
-	;               B = Sectors successfully transferred
+;--- Read or write logical sectors from/to a device
+;
+;    Input:    Cy=0 to read, 1 to write
+;              A = Device number, 1 to 255
+;              B = Number of sectors to read or write
+;              C = Media descriptor byte from the DPB if the device
+;                  is a floppy disk drive, zero otherwise
+;              HL = Source or destination memory address for the transfer
+;              DE = Address where the 4 byte sector number is stored.
+;    Output:   A = Error code (the same codes of MSX-DOS are used):
+;                  0: Ok
+;                  .IDEVN: Invalid device or LUN
+;                  .NRDY: Not ready
+;                  .DISK: General unknown disk error
+;                  .DATA: CRC error when reading
+;                  .RNF: Sector not found
+;                  .UFORM: Unformatted disk
+;                  .WPROT: Write protected media, or read-only logical unit
+;                  .WRERR: Write error
+;                  .NCOMP: Incompatible disk.
+;                  .SEEK: Seek error.
+;               B = Sectors successfully transferred
 
 READ_WRITE:
-	jp		c,WRSECT
+	jp	c,WRSECT
 RDSECT:
 
-	or		a	;Check device index
-	jp		z,RW_ERR1
-	cp		2
-	jp		nc,RW_ERR1
+	or	a				; Check device index
+	jp	z,RW_ERR1
+	cp	2
+	jp	nc,RW_ERR1
 
 	call	MY_GWORK
 
 	call	SDC_ON
 	call	WAIT_CMD_RDY
-	ld		a,(SDC_STATUS)
-	and		SDC_BUSY
-	jp		nz,RW_BUSY
+	ld	a,(SDC_STATUS)
+	and	SDC_BUSY
+	jp	nz,RW_BUSY
 
-	ld		a,(de)
-	inc		de
-	ld		(ix+4),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+5),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+6),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+7),a				; current sector
+	ld	a,(de)
+	inc	de
+	ld	(ix+4),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+5),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+6),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+7),a			; current sector
 
-	ex		de,hl					; de = destination
-	push	bc						; nr of sectors
+	ex	de,hl				; de = destination
+	push	bc				; nr of sectors
 
 RD_LOOP:
-	push	bc						; nr of sectors
-	ld		b,0
-	ld		a,(ix+4)
-	ld		(SDC_SADDR+0),a
-	add		1						; increment sector
-	ld		(ix+4),a				; store back incremented
-	ld		a,(ix+5)
-	ld		(SDC_SADDR+1),a
-	adc		b
-	ld		(ix+5),a
-	ld		a,(ix+6)
-	ld		(SDC_SADDR+2),a
-	adc		b
-	ld		(ix+6),a
-	ld		a,(ix+7)
-	ld		(SDC_SADDR+3),a
-	adc		b
-	ld		(ix+7),a
-	ld		a,SDC_READ
-	ld		(SDC_CMD),a
+	push	bc				; nr of sectors
+	ld	b,0
+	ld	a,(ix+4)
+	ld	(SDC_SADDR+0),a
+	add	1				; increment sector
+	ld	(ix+4),a			; store back incremented
+	ld	a,(ix+5)
+	ld	(SDC_SADDR+1),a
+	adc	b
+	ld	(ix+5),a
+	ld	a,(ix+6)
+	ld	(SDC_SADDR+2),a
+	adc	b
+	ld	(ix+6),a
+	ld	a,(ix+7)
+	ld	(SDC_SADDR+3),a
+	adc	b
+	ld	(ix+7),a
+	ld	a,SDC_READ
+	ld	(SDC_CMD),a
 	call	WAIT_CMD_RDY
-	jr		c,R_ERR_LOOP
-	ld		bc,512
-	ld		hl,SDC_SDATA			; src data
+	jr	c,R_ERR_LOOP
+	ld	bc,512
+	ld	hl,SDC_SDATA			; src data
 	ldir
-	pop		bc
+	pop	bc
 	djnz	RD_LOOP
-	pop		bc						; nr of sectors
+	pop	bc				; nr of sectors
 	call	SDC_OFF
 
-	ld		a,0
-	or		a
+	ld	a,0
+	or	a
 	ret
 
 
 R_ERR_LOOP:
-	ld		a,(SDC_STATUS)
-	ld		e,a						; save stat
+	ld	a,(SDC_STATUS)
+	ld	e,a				; save stat
 	call	SDC_OFF
-	pop		bc
-	ld		d,b
-	pop		bc
-	ld		a,d
-	sub		b
-	ld		b,a						; sectors written
-	ld		e,a
-	and		SDC_TIMEOUT
-	jr		nz,R_TIMEOUT
-	ld		a,.DISK
+	pop	bc
+	ld	d,b
+	pop	bc
+	ld	a,d
+	sub	b
+	ld	b,a				; sectors written
+	ld	e,a
+	and	SDC_TIMEOUT
+	jr	nz,R_TIMEOUT
+	ld	a,.DISK
 	scf
 	ret
 R_TIMEOUT:
-	ld		a,.NRDY
+	ld	a,.NRDY
 	scf
 	ret
 
 W_ERR_LOOP:
-	ld		a,(SDC_STATUS)
-	ld		e,a						; save stat
+	ld	a,(SDC_STATUS)
+	ld	e,a				; save stat
 	call	SDC_OFF
-	pop		bc
-	ld		d,b
-	pop		bc
-	ld		a,d
-	sub		b
-	ld		b,a						; sectors written
-	ld		e,a
-	and		SDC_CRC
-	jr		nz,W_WRERR
-	ld		a,.DISK
+	pop	bc
+	ld	d,b
+	pop	bc
+	ld	a,d
+	sub	b
+	ld	b,a				; sectors written
+	ld	e,a
+	and	SDC_CRC
+	jr	nz,W_WRERR
+	ld	a,.DISK
 	scf
 	ret
 W_WRERR:
 
-	;ld		a,0f3h
-	;call	SETBORDER
+;	ld
+;	call
 
-	ld		a,.WRERR
+	ld	a,.WRERR
 	scf
 	ret
 
 RW_DISK:
 
-	;ld		a,0fDh
-	;call	SETBORDER
+;	ld
+;	call
 
-	ld		b,.DISK
-	jr		RW_ERR
+	ld	b,.DISK
+	jr	RW_ERR
 RW_BUSY:
 
-	;ld		a,0f5h
-	;call	SETBORDER
+;	ld
+;	call
 
-	ld		b,.NRDY
-	jr		RW_ERR
+	ld	b,.NRDY
+	jr	RW_ERR
 RW_ERR1:
 
-	;ld		a,0f7h
-	;call	SETBORDER
+;	ld
+;	call
 
-	ld		b,.WRERR
+	ld	b,.WRERR
 RW_ERR:
 
-	;ld		a,0feh
-	;call	SETBORDER
+;	ld
+;	call
 
 	call	SDC_OFF
-	ld		a,b
-	ld		b,0
+	ld	a,b
+	ld	b,0
 	scf
 	ret
 
 WRSECT:
-	or		a	;Check device index
-	jr		z,RW_ERR1
-	cp		2
-	jr		nc,RW_ERR1
+	or	a				; Check device index
+	jr	z,RW_ERR1
+	cp	2
+	jr	nc,RW_ERR1
 
 	call	MY_GWORK
 
 	call	SDC_ON
 	call	WAIT_CMD_RDY
-	ld		a,(SDC_STATUS)
-	and		SDC_BUSY
-	jr		nz,RW_BUSY
+	ld	a,(SDC_STATUS)
+	and	SDC_BUSY
+	jr	nz,RW_BUSY
 
-	ld		a,(de)
-	inc		de
-	ld		(ix+4),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+5),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+6),a
-	ld		a,(de)
-	inc		de
-	ld		(ix+7),a				; current sector
+	ld	a,(de)
+	inc	de
+	ld	(ix+4),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+5),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+6),a
+	ld	a,(de)
+	inc	de
+	ld	(ix+7),a			; current sector
 
-	push	bc						; nr of sectors
+	push	bc				; nr of sectors
 
 WR_LOOP:
-	push	bc						; nr of sectors
-	ld		b,0
-	ld		a,(ix+4)
-	ld		(SDC_SADDR+0),a
-	add		1						; increment sector
-	ld		(ix+4),a
-	ld		a,(ix+5)
-	ld		(SDC_SADDR+1),a
-	adc		b
-	ld		(ix+5),a
-	ld		a,(ix+6)
-	ld		(SDC_SADDR+2),a
-	adc		b
-	ld		(ix+6),a
-	ld		a,(ix+7)
-	ld		(SDC_SADDR+3),a
-	adc		b
-	ld		(ix+7),a
+	push	bc				; nr of sectors
+	ld	b,0
+	ld	a,(ix+4)
+	ld	(SDC_SADDR+0),a
+	add	1				; increment sector
+	ld	(ix+4),a
+	ld	a,(ix+5)
+	ld	(SDC_SADDR+1),a
+	adc	b
+	ld	(ix+5),a
+	ld	a,(ix+6)
+	ld	(SDC_SADDR+2),a
+	adc	b
+	ld	(ix+6),a
+	ld	a,(ix+7)
+	ld	(SDC_SADDR+3),a
+	adc	b
+	ld	(ix+7),a
 
-	ld		bc,512
-	ld		de,SDC_SDATA			; hl = src data
+	ld	bc,512
+	ld	de,SDC_SDATA			; hl = src data
 	ldir
 
-	ld		a,SDC_WRITE
-	ld		(SDC_CMD),a
+	ld	a,SDC_WRITE
+	ld	(SDC_CMD),a
 	call	WAIT_CMD_RDY
-	jp		c,W_ERR_LOOP
+	jp	c,W_ERR_LOOP
 
-	pop		bc
+	pop	bc
 	djnz	WR_LOOP
-	pop		bc						; nr of sectors
+	pop	bc				; nr of sectors
 	call	SDC_OFF
 
-	ld		a,0
-	or		a
+	ld	a,0
+	or	a
 	ret
 
 
@@ -1182,25 +1184,25 @@ WR_LOOP:
 ;=======================
 
 BINTOHEX:
-	ld		c,a
-	srl 	a
-	srl 	a
-	srl 	a
-	srl 	a
+	ld	c,a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
 	call	HEXNIBLE
-	ld		b,a
-	ld		a,c
-	and		00fh
+	ld	b,a
+	ld	a,c
+	and	00fh
 	call	HEXNIBLE
-	ld		c,a
+	ld	c,a
 	ret
 HEXNIBLE:
-	cp		10
-	jr		c,ISDIGT
-	add		'A'-10
+	cp	10
+	jr	c,ISDIGT
+	add	'A'-10
 	ret
 ISDIGT:
-	add		'0'
+	add	'0'
 	ret
 
 ;-----------------------------------------------------------------------------
@@ -1208,13 +1210,13 @@ ISDIGT:
 ; Enable or disable the SPI registers
 
 SDC_ON:
-	ld		a,1
-	ld		(SDC_ENABLE),a
+	ld	a,1
+	ld	(SDC_ENABLE),a
 	ret
 
 SDC_OFF:
-	xor		a
-	ld		(SDC_ENABLE),a
+	xor	a
+	ld	(SDC_ENABLE),a
 	ret
 
 ;-----------------------------------------------------------------------------
@@ -1224,31 +1226,31 @@ SDC_OFF:
 ; if the soft reset didn't work after 30s return with error
 ;
 ; Input:  Nothing
-; Output: Cy=1 if timeout after soft reset 
+; Output: Cy=1 if timeout after soft reset
 ; Preserves: DE and BC
 
 WAIT_CMD_RDY:
 	push	de
 	push	bc
-	ld		de,2047 ;8142		;Limit the wait to 30s
+	ld	de,2047				; 8142		;Limit the wait to 30s
 WAIT_RDY1:
-	ld		b,255
+	ld	b,255
 WAIT_RDY2:
-	ld		a,(SDC_STATUS)
-	and		SDC_BUSY+SDC_TIMEOUT+SDC_CRC
-	or		a
-	jr		z,WAIT_RDY_END	
-	djnz	WAIT_RDY2	
-	dec		de
-	ld		a,d
-	or		e
-	jr		nz,WAIT_RDY1
+	ld	a,(SDC_STATUS)
+	and	SDC_BUSY+SDC_TIMEOUT+SDC_CRC
+	or	a
+	jr	z,WAIT_RDY_END
+	djnz	WAIT_RDY2
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,WAIT_RDY1
 	scf
 WAIT_RDY_END:
 	pop	bc
 	pop	de
-	ret	
-	
+	ret
+
 ;-----------------------------------------------------------------------------
 ;
 ; Read the keyboard matrix to see if ESC is pressed
@@ -1260,7 +1262,7 @@ CHECK_ESC:
 	and	11110000b
 	or	b
 	out	(0AAh),a
-	in	a,(0A9h)	
+	in	a,(0A9h)
 	bit	2,a
 	jr	nz,CHECK_ESC_END
 	scf
@@ -1291,10 +1293,10 @@ PRINT:
 
 MY_GWORK:
 	xor	a
-	EX AF,AF'
-	XOR A
-	LD IX,GWORK
-	call CALBNK
+	ex	af,af'
+	xor	a
+	ld	ix,GWORK
+	call	CALBNK
 	ret
 
 ;SETBORDER:
@@ -1311,15 +1313,15 @@ INIT_MSG:
 INFO_S:
 	db	13,10,"WonderTANG! SMS v"
 	db	VER_MAIN+"0",".",VER_SEC+"0",".",VER_REV+"0",13,10
-	db  "New juice for your MSX",13,10
+	db	"New juice for your MSX",13,10
 	db	"2026 Luis Antoniosi",13,10
-	db  "Beautiful British Columbia",13,10
-	db  "Canada",13,10
-	db  "SS0: Nextor BIOS + MicroSD",13,10
-	db  "SS1: FM ROM + OPLL + OPM",13,10
-	db  "SS2: Super MegaRAM SCC 2MB",13,10
-	db  "SS3: Memory Mapper 4MB",13,10
-	db  "---: SMS VDP 32KB ",13,10,0
+	db	"Beautiful British Columbia",13,10
+	db	"Canada",13,10
+	db	"SS0: Nextor BIOS + MicroSD",13,10
+	db	"SS1: FM ROM + OPLL + OPM",13,10
+	db	"SS2: Super MegaRAM SCC 2MB",13,10
+	db	"SS3: Memory Mapper 4MB",13,10
+	db	"---: SMS VDP 32KB ",13,10,0
 
 SEARCH_S:
 	db	"Searching: ",0
@@ -1327,25 +1329,25 @@ SEARCH_S:
 NODEVS_S:
 	db	"Not found",13,10,0
 
-UNKNOWN:
-	db  "UNKOWN",0
+STR_UNKNOWN:
+	db	"UNKOWN",0
 SDV1:
-	db  "SDV1",0
+	db	"SDV1",0
 SDV2:
-	db  "SDV2",0
+	db	"SDV2",0
 SDHCV2:
-	db  "SDHCV2",0
+	db	"SDHCV2",0
 STR_DEVICE_NAME:
-	db  "WonderTANG!",0
+	db	"WonderTANG!",0
 
 CRLF_S:
 	db	13,10,0
 
 
-	INCLUDE ../../sdk/asm/code/output_string.asm
+	include	../../sdk/asm/code/output_string.asm
 
-	;Pad up to the bank switching code area at 7FD0h; this also makes
-	;the assembly fail if the driver outgrows the bank.
-	ds 7FD0h-$,0FFh
+; Pad up to the bank switching code area at 7FD0h; this also makes
+; the assembly fail if the driver outgrows the bank.
+	ds	7FD0h-$,0FFh
 
 	end
