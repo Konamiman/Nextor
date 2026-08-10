@@ -278,4 +278,4 @@ Tang/driver.bin: \
 	$(UNDOC_MODE_STAMP) \
 	Tang/driver.asm
 
-	$(call assemble,Tang/driver.asm,--build-type abs --output-file-extension bin -l list.txt)
+	$(call assemble,Tang/driver.asm,--build-type abs --output-file-extension bin)
