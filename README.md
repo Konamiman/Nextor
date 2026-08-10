@@ -63,6 +63,8 @@ There are a number of makefiles that will take care of building the different co
 
 Additionally, `make tools-disk` in `source/tools` packs `NEXTOR.SYS` and all the command line tools present in the `bin/tools` directory (plus `COMMAND2.COM` if available) into `bin/tools/nextor.dsk`, a 360K FAT12 disk image; if `COMMAND2.COM` is included, the disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM. The image gets the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates, so it can also be booted in MSX-DOS 1 mode. This requires the `mformat` and `mcopy` tools, and expects everything to be already built; `COMMAND2.COM` is added only when the `COMMAND2_PATH` variable points to it, and additional files can be added with the `EXTRA_FILES` variable (e.g. `EXTRA_FILES=MSXDOS.SYS,COMMAND.COM` to make the disk bootable in MSX-DOS 1 mode too); relative paths are resolved against the current directory, the one you run `make` from. See the `tools-disk` target in the makefile for the details.
 
+Similarly, `make tools-zip` in `source/tools` packs just the command line tools (no `NEXTOR.SYS`, no `COMMAND2.COM`) into the `bin/tools/tools.zip` archive; this one requires the `zip` tool.
+
 There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too, and a `tools-disk` target that builds `NEXTOR.SYS` and all the tools before creating the disk image.
 
 

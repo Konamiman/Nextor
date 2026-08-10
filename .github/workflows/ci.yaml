@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y binutils gcc make curl mtools
+          sudo apt install -y binutils gcc make curl mtools zip
           
           curl -Lo sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.2.0/sdcc-4.2.0-amd64-unknown-linux2.5.tar.bz2/download
           mkdir sdcc
@@ -68,6 +68,8 @@ jobs:
         run: make -C source
       - name: Build tools disk
         run: make -C source tools-disk
+      - name: Build tools zip
+        run: make -C source tools-zip
       - name: Verify sdk/nextor-kernel-version.txt is in sync
         run: |
           rm -f sdk/nextor-kernel-version.txt

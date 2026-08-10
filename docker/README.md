@@ -5,7 +5,7 @@ A Docker image that bundles everything needed to build Nextor, develop Nextor dr
 - **[Nestor80](https://github.com/Konamiman/Nestor80)** - `N80` (assembler), `LK80` (linker), `LB80` (library manager).
 - **[SDCC](https://sdcc.sourceforge.net/)** - the Z80 C compiler (Debian's `sdcc` 4.2.0).
 - **mknexrom** - combines a kernel base file with a driver into a ROM.
-- **make**, **binutils** (`objcopy`), **bash**, **mtools** (`mformat`/`mcopy`, used to build the tools disk image).
+- **make**, **binutils** (`objcopy`), **bash**, **mtools** (`mformat`/`mcopy`, used to build the tools disk image), **zip** (used to build the tools zip archive).
 - The **Nextor SDK** (asm + C, including ready to copy **driver/tool project templates**) and the **six kernel base-file variants** built from this repository's source.
 
 **Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64` (native on Apple Silicon and arm64 servers). Everything below assumes you have Docker installed.
@@ -199,6 +199,7 @@ docker/make.sh nextor_sys          # build NEXTOR.SYS
 docker/make.sh all                 # one variant of every part
 docker/make.sh all everything      # the FULL matrix (see below)
 docker/make.sh all tools-disk      # NEXTOR.SYS + all tools, packed in a disk image
+docker/make.sh all tools-zip       # all tools, packed in a zip archive
 docker/make.sh all distclean       # remove every build artifact, incl. bin/
 ```
 
@@ -211,11 +212,13 @@ docker/make.sh all distclean       # remove every build artifact, incl. bin/
 | `tools` | all command-line `.COM` utilities - both the assembler tools (`source/tools`) and the C tools (`source/tools/C`) |
 | `tools/C` | just the C tools |
 | `drivers` | the standalone ROMs (ASCII8 + ASCII16); `everything` = all six variants of each; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/ram-drivers/`) |
-| `all` | the umbrella Makefile: bare = one variant of every part; `everything` = all kernel + standalone-ROM variants + NEXTOR.SYS + all tools; `tools-disk` = the tools disk image; `clean` / `distclean` |
+| `all` | the umbrella Makefile: bare = one variant of every part; `everything` = all kernel + standalone-ROM variants + NEXTOR.SYS + all tools; `tools-disk` = the tools disk image; `tools-zip` = the tools zip archive; `clean` / `distclean` |
 
 `make.sh all everything` builds the complete release matrix: all six kernel base variants, both standalone ROMs (ASCII8/ASCII16) for each of those six variants, NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of that plus the source-tree intermediates.
 
-`make.sh all tools-disk` builds NEXTOR.SYS and all the command line tools, then packs them into `bin/tools/nextor.dsk`, a 360K FAT12 disk image created with `mformat`/`mcopy`, carrying the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates (so it boots in MSX-DOS 1 mode too). `COMMAND2.COM` is included only when the `COMMAND2_PATH` variable points to it, and more files can be added with the `EXTRA_FILES` variable, e.g. `EXTRA_FILES=MSXDOS.SYS,COMMAND.COM`; relative paths are resolved against the repository root (see the `tools-disk` target in `source/tools/Makefile` for the details). Note that the disk recipe lives in `source/tools`, but `make.sh tools tools-disk` won't work: the `tools` part maps to *both* tool Makefiles, and only `source/tools` has that target. Go through `all`, which builds everything the disk needs first.
+`make.sh all tools-disk` builds NEXTOR.SYS and all the command line tools, then packs them into `bin/tools/nextor.dsk`, a 360K FAT12 disk image created with `mformat`/`mcopy`, carrying the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates (so it boots in MSX-DOS 1 mode too). `COMMAND2.COM` is included only when the `COMMAND2_PATH` variable points to it, and more files can be added with the `EXTRA_FILES` variable, e.g. `EXTRA_FILES=MSXDOS.SYS,COMMAND.COM`; relative paths are resolved against the repository root (see the `tools-disk` target in `source/tools/Makefile` for the details).
+
+`make.sh all tools-zip` builds all the command line tools and packs just them - no NEXTOR.SYS, no COMMAND2.COM - into the `bin/tools/tools.zip` archive. Note that the disk recipe lives in `source/tools`, but `make.sh tools tools-disk` won't work: the `tools` part maps to *both* tool Makefiles, and only `source/tools` has that target. Go through `all`, which builds everything the disk needs first.
 
 **Note:** the legacy `source/command/` suite (`COMMAND2.COM`, `MSXDOS2.SYS`, and the classic DOS utilities) is for now out of scope. It still builds with the CP/M-era Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`), which this image does **not** include - and the top-level `source/Makefile` doesn't build it either. Use the original vintage tools for that part of the repository.
 

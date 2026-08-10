@@ -199,6 +199,31 @@ tools-disk: $(BOOTSECT_BIN)
 	$(if $(or $(COMMAND2_PATH),$(EXTRA_HAS_COMMAND2)),,@echo "\nWARNING: COMMAND2.COM not added, disk won't be bootable")
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
 
+# ---------------------------------------------------------------------------
+# Tools zip archive.
+#
+# `make tools-zip` creates bin/tools/tools.zip with every .COM file present
+# in bin/tools (the same set of command line tools that goes in the disk
+# image), without NEXTOR.SYS and without COMMAND2.COM. As with tools-disk,
+# the tools are expected to have been built already: if any is missing the
+# build fails. Use the tools-zip target of ../Makefile to build the tools
+# and create the archive in one go. The archive is recreated from scratch
+# on every run.
+
+TOOLS_ZIP := $(BIN_TOOLS)/tools.zip
+
+ZIP_REQUIRED := $(COMS) $(C_COMS)
+ZIP_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(ZIP_REQUIRED)))),$(ZIP_REQUIRED))
+
+.PHONY: tools-zip
+
+tools-zip:
+	$(if $(shell which zip),,$(error "ERROR: can't execute zip, is it installed/in PATH?"))
+	$(if $(ZIP_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(ZIP_MISSING) - build the tools first, or use the tools-zip target of ../Makefile"))
+	@rm -f $(TOOLS_ZIP)
+	@cd $(BIN_TOOLS) && zip -q tools.zip $(notdir $(DISK_COMS))
+	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_ZIP)
+
 .PHONY: clean
 
 clean:
