@@ -107,27 +107,41 @@ DATA.REL: \
 # if any is missing the build fails. Use the tools-disk target of ../Makefile
 # to build all of them and then create the disk in one go.
 #
-# COMMAND2.COM is not built by this repository: it is taken from
-# $(COMMAND2_PATH) if that variable is set, or from a COMMAND2.COM file in
-# the current directory (the one make was invoked from) otherwise; a relative
-# COMMAND2_PATH is resolved against that directory too. If the file doesn't
-# exist the disk is created without it - unless COMMAND2_PATH was explicitly
-# set, in which case the build fails.
+# COMMAND2.COM is not built by this repository: it is added only when the
+# COMMAND2_PATH variable points to it (a relative path is resolved against
+# the current directory, the one make was invoked from). If the variable is
+# not set the disk is created without COMMAND2.COM, with a warning since
+# such a disk is not bootable; if it is set but the file doesn't exist, the
+# build fails. A COMMAND2.COM supplied via EXTRA_FILES works just as well
+# (and silences the warning).
 #
-# The invocation directory is taken from the PWD environment variable, which
-# (unlike CURDIR) survives make -C. It does NOT survive the sub-shell that
-# runs the recipes of ../Makefile, so its tools-disk target passes
-# COMMAND2_DIR explicitly instead.
+# Additional files can be added to the disk with the EXTRA_FILES variable:
+# a comma (or space) separated list of files, also resolved against the
+# current directory, stored in the disk with their names uppercased. The
+# typical use is EXTRA_FILES=MSXDOS.SYS,COMMAND.COM to make the disk
+# bootable in MSX-DOS 1 mode too. Listed files that don't exist make the
+# build fail.
+#
+# The current (invocation) directory is taken from the PWD environment
+# variable, which (unlike CURDIR) survives make -C. It does NOT survive the
+# sub-shell that runs the recipes of ../Makefile, so its tools-disk target
+# passes WORKING_DIR explicitly instead.
 
 BIN_TOOLS := ../../bin/tools
 TOOLS_DSK := $(BIN_TOOLS)/nextor.dsk
 
-COMMAND2_DIR ?= $(or $(PWD),$(CURDIR))
-COMMAND2_PATH ?= COMMAND2.COM
-ifeq ($(origin COMMAND2_PATH),file)
-COMMAND2_IS_OPTIONAL := yes
+WORKING_DIR ?= $(or $(PWD),$(CURDIR))
+
+COMMAND2_PATH ?=
+ifneq ($(strip $(COMMAND2_PATH)),)
+override COMMAND2_PATH := $(if $(filter /%,$(COMMAND2_PATH)),$(COMMAND2_PATH),$(WORKING_DIR)/$(COMMAND2_PATH))
 endif
-override COMMAND2_PATH := $(if $(filter /%,$(COMMAND2_PATH)),$(COMMAND2_PATH),$(COMMAND2_DIR)/$(COMMAND2_PATH))
+
+comma := ,
+EXTRA_FILES ?=
+EXTRA_FILES_ABS := $(foreach f,$(subst $(comma), ,$(EXTRA_FILES)),$(if $(filter /%,$(f)),$(f),$(WORKING_DIR)/$(f)))
+EXTRA_MISSING = $(filter-out $(wildcard $(EXTRA_FILES_ABS)),$(EXTRA_FILES_ABS))
+EXTRA_HAS_COMMAND2 := $(filter command2.com,$(shell echo $(notdir $(EXTRA_FILES_ABS)) | tr A-Z a-z))
 
 # The C tools list, derived from the .c files (it matches the COMS variable
 # in C/Makefile).
@@ -167,6 +181,8 @@ tools-disk: $(BOOTSECT_BIN)
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
+	$(if $(EXTRA_MISSING),$(error "ERROR: EXTRA_FILES not found: $(EXTRA_MISSING)"))
+	$(if $(COMMAND2_PATH),$(if $(wildcard $(COMMAND2_PATH)),,$(error "ERROR: COMMAND2.COM not found at $(COMMAND2_PATH)")))
 	@rm -f $(TOOLS_DSK)
 	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
 	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
@@ -176,13 +192,11 @@ tools-disk: $(BOOTSECT_BIN)
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
 	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
-	@if [ -f "$(COMMAND2_PATH)" ]; then \
-		mcopy -i $(TOOLS_DSK) "$(COMMAND2_PATH)" ::COMMAND2.COM; \
-	elif [ -n "$(COMMAND2_IS_OPTIONAL)" ]; then \
-		echo "Note: COMMAND2.COM not found, disk image created without it"; \
-	else \
-		echo "ERROR: COMMAND2.COM not found at $(COMMAND2_PATH)"; exit 1; \
-	fi
+	$(if $(COMMAND2_PATH),@mcopy -i $(TOOLS_DSK) "$(COMMAND2_PATH)" ::COMMAND2.COM)
+	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
+		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
+	done)
+	$(if $(or $(COMMAND2_PATH),$(EXTRA_HAS_COMMAND2)),,@echo "\nWARNING: COMMAND2.COM not added, disk won't be bootable")
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
 
 .PHONY: clean
