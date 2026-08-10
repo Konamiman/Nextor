@@ -264,6 +264,10 @@ bank4/bootmenu.rel: version.inc
 bank4/partit.rel: version.inc
 bank6/bootmsg.rel: version.inc
 
+# val.mac includes the FORMAT boot sector code from its own file (which the
+# tools-disk target of the tools Makefile also assembles standalone).
+bank2/val.rel: bank2/bootsect.mac
+
 ###  Bank 0
 
 bank6/b6.rel: bank2/b2labels.inc bank0/b0lab_b6.inc

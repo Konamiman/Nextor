@@ -1,0 +1,82 @@
+;MSX-DOS 2.20 style boot sector code for FAT12 disks: the "VOL_ID" block
+;followed by the boot code that loads MSXDOS.SYS when booting in MSX-DOS 1
+;mode (or starts Disk BASIC if that file is not present).
+;
+;This is what the built-in FORMAT command puts at offset 1Eh of the boot
+;sector, right after the disk parameters (see SET_BOOT_EX in val.mac, which
+;copies it to the freshly formatted disk; the rest of the sector, up to byte
+;511, is zeroed - the code relies on that, e.g. for the tail of the
+;MSXDOS.SYS FCB).
+;
+;It lives in its own file, included by val.mac, so that the tools Makefile
+;can also assemble it standalone to make the generated tools disk image
+;bootable: see the tools-disk target and tools-disk-bootsect.mac in
+;source/tools.
+;
+;Requirements for standalone assembly: CR, LF and ?????? must be textually
+;available (const.inc, macros.inc), and KBUF, BDOS and the _* DOS function
+;call numbers must be provided at link time (data.mac, dos_calls.inc).
+
+	.phase	0C01Eh
+;
+		jr	BOOT_BODY		;Skip over VOL_ID's etc.
+;
+		defb	"VOL_ID"		;Validity checking string
+		defb	0,0FFh,0FFh,0FFh,0FFh	;Dirty flag and vol_id
+		defs	5,0			;Reserved for future expansion
+;
+BOOT_BODY:	ret	nc			;If not called to invoke
+						; MSXDOS, just return.
+		ld	(DOSON+1),de
+		ld	(NOTFIRST+1),a
+		ld	de,BOOTERRVECT
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+;
+retry_boot:	ld	sp,KBUF##+100h
+		ld	de,SYSFCB
+		ld	c,_FOPEN##
+		call	BDOS##
+		inc	a
+		jr	z,NOFILE		;'MSXDOS.SYS' does not exist
+;
+		ld	de,100h
+		ld	c,_SETDTA##
+		call	BDOS##
+		ld	hl,1			;Set record size to 1
+		ld	(SYSFCB+14),hl
+		ld	hl,3F00h		;Read all into 100h..3FFFh
+		ld	de,SYSFCB
+		ld	c,_RDBLK##
+		call	BDOS##
+		jp	100h			;Jump to MSXDOS.SYS
+;
+BOOTERRVECT:	defw	BOOTERR
+;
+BOOTERR:
+DOSON:		call	??????
+		ld	a,c
+		and	0FEh			;Drive not ready is OK
+		sub	2			; nothing else is.
+NOFILE:
+NOTFIRST:	or	??????			;If we are at the first boot
+		jp	z,4022h			; start up Disk BASIC.
+;
+		ld	de,BOOTERR_MSG		;Prompt 'Boot error ...'
+		ld	c,_STROUT##		; message and wait for a
+		call	BDOS##			; user key in.
+		ld	c,_DIRIN##
+		call	BDOS##
+		jr	retry_boot
+;
+BOOTERR_MSG:	defb	'Boot error',CR,LF
+		defb	'Press any key for retry',CR,LF
+		defb	'$'
+;
+SYSFCB:
+		defb	0,'MSXDOS  SYS'
+;
+;	Rest of the FCB (25 bytes) will be initialized to zero.
+;
+	.dephase

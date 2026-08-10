@@ -90,12 +90,18 @@ DATA.REL: \
 # Tools disk image.
 #
 # `make tools-disk` creates bin/tools/nextor.dsk: a 360K single sided 3.5"
-# FAT12 disk image (bootable when a Nextor kernel is present) containing
-# NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to NEXTORJ.SYS, since its real
-# name doesn't fit the 8.3 convention), every .COM file present in bin/tools,
-# a README.TXT (sourced from tools-disk-readme.txt) and COMMAND2.COM if
-# available. The image is recreated from scratch on every run using mformat
-# and mcopy from the mtools package.
+# FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
+# NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
+# .COM file present in bin/tools, a README.TXT (sourced from
+# tools-disk-readme.txt) and COMMAND2.COM if available. The image is
+# recreated from scratch on every run using mformat and mcopy from the
+# mtools package, plus dd to install the boot sector code.
+#
+# The image gets the same MSX-DOS 2.20 style boot sector that the kernel's
+# built-in FORMAT command creates (assembled standalone via
+# tools-disk-bootsect.mac), so it boots both in Nextor/MSX-DOS 2 mode
+# (straight to the DOS prompt if COMMAND2.COM is present) and in MSX-DOS 1
+# mode (loading MSXDOS.SYS if present, or falling back to Disk BASIC).
 #
 # The files to put in the disk are expected to exist in bin/tools already:
 # if any is missing the build fails. Use the tools-disk target of ../Makefile
@@ -136,14 +142,34 @@ DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)
 
 MTOOLS := mformat mcopy
 
+# The boot sector code, assembled standalone from the kernel source (see
+# tools-disk-bootsect.mac) and linked at 0C01Eh, where boot sector code runs.
+# DOS_CALLS.REL and DATA.REL provide the kernel symbols it references.
+BOOTSECT_BIN := tools-disk-bootsect.bin
+
+$(BOOTSECT_BIN): \
+	tools-disk-bootsect.mac \
+	../kernel/bank2/bootsect.mac \
+	$(INCS) \
+	DOS_CALLS.REL \
+	DATA.REL
+
+	$(call assemble,tools-disk-bootsect.mac)
+	@$(LK80) --output-file $@ --code 0C01Eh DOS_CALLS.REL DATA.REL TOOLS-DISK-BOOTSECT.REL
+
 .PHONY: tools-disk
 
-tools-disk:
+# The two dd invocations zero the boot sector from offset 30 (1Eh, right
+# after the disk parameter block written by mformat) to the end of the
+# sector (30+482=512), then install the boot sector code at that offset.
+tools-disk: $(BOOTSECT_BIN)
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
 	@rm -f $(TOOLS_DSK)
 	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
+	@dd if=/dev/zero of=$(TOOLS_DSK) bs=1 seek=30 count=482 conv=notrunc status=none
+	@dd if=$(BOOTSECT_BIN) of=$(TOOLS_DSK) bs=1 seek=30 conv=notrunc status=none
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
@@ -160,4 +186,4 @@ tools-disk:
 .PHONY: clean
 
 clean:
-	for ext in REL rel SYM sym HEX COM; do find . -type f -name "*.$$ext" -delete; done
+	for ext in REL rel SYM sym HEX COM bin; do find . -type f -name "*.$$ext" -delete; done
