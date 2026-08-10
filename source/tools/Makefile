@@ -159,15 +159,17 @@ $(BOOTSECT_BIN): \
 
 .PHONY: tools-disk
 
-# The two dd invocations zero the boot sector from offset 30 (1Eh, right
-# after the disk parameter block written by mformat) to the end of the
-# sector (30+482=512), then install the boot sector code at that offset.
+# The dd invocations patch the boot sector created by mformat: they set the
+# OEM name (8 bytes at offset 3, "NEXTOR3" padded with a space), zero the
+# sector from offset 30 (1Eh, right after the disk parameter block) to the
+# end (30+482=512), and install the boot sector code at that offset.
 tools-disk: $(BOOTSECT_BIN)
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
 	@rm -f $(TOOLS_DSK)
 	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
+	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
 	@dd if=/dev/zero of=$(TOOLS_DSK) bs=1 seek=30 count=482 conv=notrunc status=none
 	@dd if=$(BOOTSECT_BIN) of=$(TOOLS_DSK) bs=1 seek=30 conv=notrunc status=none
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS
