@@ -44,6 +44,7 @@ t "sdcc compiles for z80"      'printf "unsigned char m(unsigned char x){return 
 t "mknexrom on PATH"           'command -v mknexrom'
 t "make on PATH"               'command -v make'
 t "objcopy on PATH"            'command -v objcopy'
+t "mtools roundtrip"           'echo test > /tmp/f.txt && mformat -C -i /tmp/d.dsk -t 80 -h 1 -n 9 :: && mcopy -i /tmp/d.dsk /tmp/f.txt ::F.TXT && mcopy -i /tmp/d.dsk ::F.TXT /tmp/f2.txt && cmp /tmp/f.txt /tmp/f2.txt'
 
 # --- baked content --------------------------------------------------------
 t "NEXTOR_BASE file exists"    'test -f "$NEXTOR_BASE"'

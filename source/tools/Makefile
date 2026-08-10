@@ -86,6 +86,77 @@ DATA.REL: \
 
 	$(call assemble,../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
+# ---------------------------------------------------------------------------
+# Tools disk image.
+#
+# `make tools-disk` creates bin/tools/nextor.dsk: a 360K single sided 3.5"
+# FAT12 disk image (bootable when a Nextor kernel is present) containing
+# NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to NEXTORJ.SYS, since its real
+# name doesn't fit the 8.3 convention), every .COM file present in bin/tools,
+# a README.TXT (sourced from tools-disk-readme.txt) and COMMAND2.COM if
+# available. The image is recreated from scratch on every run using mformat
+# and mcopy from the mtools package.
+#
+# The files to put in the disk are expected to exist in bin/tools already:
+# if any is missing the build fails. Use the tools-disk target of ../Makefile
+# to build all of them and then create the disk in one go.
+#
+# COMMAND2.COM is not built by this repository: it is taken from
+# $(COMMAND2_PATH) if that variable is set, or from a COMMAND2.COM file in
+# the current directory (the one make was invoked from) otherwise; a relative
+# COMMAND2_PATH is resolved against that directory too. If the file doesn't
+# exist the disk is created without it - unless COMMAND2_PATH was explicitly
+# set, in which case the build fails.
+#
+# The invocation directory is taken from the PWD environment variable, which
+# (unlike CURDIR) survives make -C. It does NOT survive the sub-shell that
+# runs the recipes of ../Makefile, so its tools-disk target passes
+# COMMAND2_DIR explicitly instead.
+
+BIN_TOOLS := ../../bin/tools
+TOOLS_DSK := $(BIN_TOOLS)/nextor.dsk
+
+COMMAND2_DIR ?= $(or $(PWD),$(CURDIR))
+COMMAND2_PATH ?= COMMAND2.COM
+ifeq ($(origin COMMAND2_PATH),file)
+COMMAND2_IS_OPTIONAL := yes
+endif
+override COMMAND2_PATH := $(if $(filter /%,$(COMMAND2_PATH)),$(COMMAND2_PATH),$(COMMAND2_DIR)/$(COMMAND2_PATH))
+
+# The C tools list, derived from the .c files (it matches the COMS variable
+# in C/Makefile).
+C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
+
+DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese $(COMS) $(C_COMS)
+DISK_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(DISK_REQUIRED)))),$(DISK_REQUIRED))
+
+# Everything with a .COM extension goes in the disk. $(sort ...) also removes
+# duplicates, in case the filesystem is case-insensitive.
+DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com))
+
+MTOOLS := mformat mcopy
+
+.PHONY: tools-disk
+
+tools-disk:
+	$(foreach exec,$(MTOOLS),\
+		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
+	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
+	@rm -f $(TOOLS_DSK)
+	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
+	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS
+	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
+	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
+	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
+	@if [ -f "$(COMMAND2_PATH)" ]; then \
+		mcopy -i $(TOOLS_DSK) "$(COMMAND2_PATH)" ::COMMAND2.COM; \
+	elif [ -n "$(COMMAND2_IS_OPTIONAL)" ]; then \
+		echo "Note: COMMAND2.COM not found, disk image created without it"; \
+	else \
+		echo "ERROR: COMMAND2.COM not found at $(COMMAND2_PATH)"; exit 1; \
+	fi
+	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
+
 .PHONY: clean
 
 clean:

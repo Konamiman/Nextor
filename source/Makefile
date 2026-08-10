@@ -36,7 +36,21 @@ everything:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-.PHONY: all everything clean distclean
+# Build NEXTOR.SYS and all the command line tools, then pack them into the
+# bin/tools/nextor.dsk disk image (together with COMMAND2.COM if available).
+# The disk recipe itself lives in tools/Makefile (see its tools-disk target
+# for the details, including the COMMAND2_PATH variable); this wrapper just
+# makes sure everything the disk needs is built first. COMMAND2_DIR tells it
+# the directory make was invoked from (the default location of COMMAND2.COM):
+# $(PWD) is the invocation-time value here, since the environment variable
+# doesn't survive the recipe's sub-shell.
+tools-disk:
+	$(MAKE) -C nextor_sys
+	$(MAKE) -C tools
+	$(MAKE) -C tools/C
+	$(MAKE) -C tools tools-disk COMMAND2_DIR="$(PWD)"
+
+.PHONY: all everything tools-disk clean distclean
 
 clean:
 	$(MAKE) -C kernel clean

@@ -49,6 +49,7 @@ To build Nextor you'll need:
 * [SDCC](http://sdcc.sourceforge.net/) **v4.2 or newer**, for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
 * `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
 * `mknexrom` to generate the ROM files with the drivers. You have it in [the releases section](https://github.com/Konamiman/Nextor/releases), but you can also build it from the source in the `buildtools/sources` directory.
+* `mformat` and `mcopy` from [the mtools package](https://www.gnu.org/software/mtools/), only if you want to build the tools disk image. On Debian/Ubuntu-ish systems you can just `apt-get install mtools`.
 
 Except for those obtained via `apt`, you'll need to place these tools at a suitable location to be able to use them, e.g. `/usr/bin`.
 
@@ -60,6 +61,8 @@ There are a number of makefiles that will take care of building the different co
 * `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
 * `source/drivers`: builds the standalone Nextor ROM (a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware) in their ASCII8 and ASCII16 variants. It also allows building an example RAM-loadable driver.
 
-There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too.
+Additionally, `make tools-disk` in `source/tools` packs `NEXTOR.SYS` and all the command line tools present in the `bin/tools` directory (plus `COMMAND2.COM` if available) into `bin/tools/nextor.dsk`, a 360K FAT12 disk image; if `COMMAND2.COM` is included, the disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM. This requires the `mformat` and `mcopy` tools, and expects everything to be already built; `COMMAND2.COM` is picked up from the current directory (the one you run `make` from), or from the location given in the `COMMAND2_PATH` variable. See the `tools-disk` target in the makefile for the details.
+
+There's also an "umbrella" makefile in `source` that just invokes all the others in sequence, so it builds pretty much everything. It supports `make clean` too, and a `tools-disk` target that builds `NEXTOR.SYS` and all the tools before creating the disk image.
 
 

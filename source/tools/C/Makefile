@@ -1,5 +1,7 @@
 # Makefile for the command line tools written in C.
-# The list of files to process is in the COMS variable.
+# The list of files to process is in the COMS variable: the generated .COM
+# files get uppercase names (as they will appear in a real MSX filesystem),
+# each built from the matching lowercase .c file.
 
 # The generated files are copied to the bin/tools directory.
 
@@ -11,7 +13,9 @@ define copy_to_bin
 	cp $(1) ../../../bin/tools/$(2)
 endef
 
-COMS := emufile.com fsize.com nexboot.com vsft.com eptcft.com drvrop.com drvtest.com
+lc = $(shell echo $(1) | tr A-Z a-z)
+
+COMS := EMUFILE.COM FSIZE.COM NEXBOOT.COM VSFT.COM EPTCFT.COM DRVROP.COM DRVTEST.COM
 
 c-tools: $(COMS)
 
@@ -28,16 +32,20 @@ prerequisites:
 
 SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
 
+# The trailing rm removes the lowercase-named copy that builds prior to the
+# uppercase renaming of the tools left in bin/tools, so that stale duplicates
+# don't end up in the tools disk image.
 .SECONDEXPANSION:
 $(COMS): \
-	$$(patsubst %.com,%.c,$$@) \
+	$$(call lc,$$(patsubst %.COM,%.c,$$@)) \
 	crt0_msxdos.rel \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
-	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(patsubst %.com,%.c,$@)
-	$(call hex2bin,$(patsubst %.com,%.ihx,$@),$@)
+	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(call lc,$(patsubst %.COM,%.c,$@))
+	$(call hex2bin,$(call lc,$(patsubst %.COM,%.ihx,$@)),$@)
 	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/$(call lc,$@)
 
 crt0_msxdos.rel: \
 	../../../sdk/C/code/crt0_msxdos.asm
@@ -60,4 +68,4 @@ strcmpi.rel: ../../../sdk/C/code/strcmpi.c ../../../sdk/C/includes/strcmpi.h
 .PHONY: clean
 
 clean:
-	for ext in asm hex ihx lk lst map noi sym rel com; do find . -type f -name "*.$$ext" -delete; done
+	for ext in asm hex ihx lk lst map noi sym rel com COM; do find . -type f -name "*.$$ext" -delete; done
