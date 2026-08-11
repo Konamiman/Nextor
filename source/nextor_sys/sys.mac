@@ -8,6 +8,7 @@
 
 	include ../../sdk/asm/constants/dos_calls.inc
 	include ../../sdk/asm/constants/dos_errors.inc
+	include ../../sdk/asm/constants/msx_workarea.inc
 	include ../kernel/do_strout.inc
 
 	;NO_J_MSG constant must be defined externally
@@ -126,9 +127,26 @@ STARTUP:LD	HL,P3BDOS	; Character outputs initially go through page 3
 	LD	C,_DOSVER	; Get the version number.
 	CALL	P3BDOS		; In case it's an old system.
 	LD	A,B
-	CP	2		; Check KBDOS is 2.00 or later.
-	LD	A,.IDOSV	; Hand "Incompatible DOS version" to the kernel
-	JP	C,LDERR		;   and drop to BASIC if the check fails.
+	CP	2		; If KBDOS is not 2.00 or later this can't be
+	JP	C,BAD_KERNEL	;   a Nextor kernel (and the internal KBDOS
+				;   entry point used below can't be assumed
+				;   to be set up).
+;
+	LD	B,5AH		; Nextor version query: with these magic
+	LD	HL,1234H	;   values _DOSVER returns IXh=1 (Nextor
+	LD	DE,0ABCDH	;   identifier) and IXl=Nextor major version.
+	LD	IX,0		; IX is preserved (stays 0) if the kernel is
+	LD	C,_DOSVER	;   a plain MSX-DOS 2.
+	CALL	KBDOS		; Internal KBDOS entry point: unlike the
+				;   page 3 BDOS entry, it passes IX back.
+	PUSH	IX
+	POP	HL
+	LD	A,H		; Running on a Nextor kernel...
+	CP	1
+	JP	NZ,BAD_KERNEL
+	LD	A,L		;   ...whose major version is 3 or higher?
+	CP	3
+	JP	C,BAD_KERNEL
 ;
 	LD	HL,SERIAL##	; Copy the serial number (will probably be
 	LD	DE,SERNO	;   wrong if this is entered a second time
@@ -389,6 +407,23 @@ LDERR_SAVE:
 	CALL	$DOSON##	; Restore BASIC ROM pages
 				;   (kernel also flushes ERR_TO_BASIC there).
 	JP	4022H		; Disk BASIC warm start (BASENT in NEXTOR cart).
+;
+;
+BAD_KERNEL:			; The kernel is not Nextor 3 or later.
+				; Print an informative message, wait for a
+				; key press and drop to disk BASIC. Nothing
+				; here relies on Nextor 3 kernel variables
+				; (unlike LDERR above), since the kernel may
+				; be Nextor 2 or a plain MSX-DOS 2.
+	LD	A,__BADKRNL##	; "This version of NEXTOR.SYS requires a
+	CALL	DMSG		;   Nextor 3 kernel. Press any key..."
+	LD	C,_INNOE	; Wait for a key press. The BDOS entry point
+	CALL	P3BDOS		;   is not set up yet, so use the page 3
+				;   entry point.
+	LD	SP,0F51FH	; Safe SP in MSX-BIOS scratch area.
+	CALL	$DOSON##	; Restore BASIC ROM pages.
+	JP	4022H		; Disk BASIC warm start (BASENT), same address
+				;   in MSX-DOS 2, Nextor 2 and Nextor 3 ROMs.
 ;
 ;
 ;
@@ -1622,7 +1657,9 @@ DERRM:	PUSH	DE		; Save message pointer.
 	    ;
 ;
 ;        DMSG below takes a message number in A  and  prints  the  appropriate
-; message. DSTR prints the 0 terminated string at (DE).
+; message. DSTR prints the 0 terminated string at (DE). A 1 character in the
+; string is a conditional line break: it is printed as a CRLF if the current
+; screen width is 40 characters or less, or as a single space otherwise.
 ;
 ;
 DMSG:	CALL	MESSAGE		; Point DE at message whose code is in A.
@@ -1632,7 +1669,16 @@ DSTR:	LD	A,(DE)		; Get character from message.
 	OR	A
 	RET	Z		; Return if end of string.
 ;
-	CALL	OUTCH		; Print character.
+	CP	1		; A 1 character is a conditional line break:
+	JR	NZ,DSTR10	;   printed as a CRLF if the screen is 40
+	LD	A,(LINLEN)	;   columns or less, as a single space
+	CP	40+1	;   otherwise.
+	LD	A,' '
+	JR	NC,DSTR10
+	CALL	CRLF
+	JR	DSTR
+;
+DSTR10:	CALL	OUTCH		; Print character.
 	JR	DSTR
 ;
 ;
