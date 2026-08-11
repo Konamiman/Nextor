@@ -1,8 +1,8 @@
 # Top level makefile for Nextor.
 # It builds the kernel base file, the standalone ROM drivers, NEXTOR.SYS
 # and the command line tools. The generated files are copied under bin/:
-# kernel-base (kernel base files), roms (standalone ROMs), ram-drivers (the
-# example RAM driver) and tools (the command-line tools AND NEXTOR.SYS). The
+# kernel-base (kernel base files), drivers (standalone ROMs and the example
+# RAM driver) and tools (the command-line tools AND NEXTOR.SYS). The
 # makefiles in each subdirectory can be used independently as well.
 #
 # Set NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180-compatible kernel
@@ -81,4 +81,4 @@ clean:
 # Clear everything: the source-tree intermediates (via `clean`) plus the
 # generated outputs under <repo>/bin.
 distclean: clean
-	rm -rf ../bin/kernel-base ../bin/roms ../bin/ram-drivers ../bin/tools
+	rm -rf ../bin/kernel-base ../bin/drivers ../bin/tools

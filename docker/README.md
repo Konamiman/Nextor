@@ -212,7 +212,7 @@ docker/make.sh all distclean       # remove every build artifact, incl. bin/
 | `nextor_sys` | `NEXTOR.SYS` (+ `.japanese`) |
 | `tools` | all command-line `.COM` utilities - both the assembler tools (`source/tools`) and the C tools (`source/tools/C`) |
 | `tools/C` | just the C tools |
-| `drivers` | the standalone ROMs (ASCII8 + ASCII16); `everything` = all six variants of each; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/ram-drivers/`) |
+| `drivers` | the standalone ROMs (ASCII8 + ASCII16) → `bin/drivers/`; `everything` = all six variants of each; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/drivers/`) |
 | `all` | the umbrella Makefile: bare = one variant of every part; `everything` = all kernel + standalone-ROM variants + NEXTOR.SYS + all tools; `tools-disk` = the tools disk image; `tools-zip` = the tools zip archive; `tools-all` = both; `clean` / `distclean` |
 
 `make.sh all everything` builds the complete release matrix: all six kernel base variants, both standalone ROMs (ASCII8/ASCII16) for each of those six variants, NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of that plus the source-tree intermediates.
