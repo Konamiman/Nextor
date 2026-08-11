@@ -1102,8 +1102,8 @@ PRINT_ERR_TO_BASIC:
 	call	BDOS##
 	pop	af
 	ld	b,a			;B = error code for _EXPLAIN.
-	ld	de,BUF			;Reuse the BASIC line buffer as scratch
-	ld	c,_EXPLAIN##		;  (BASIC will overwrite it shortly anyway).
+	ld	de,KBUF			;Scratch. BUF would cause "Syntax error" (used for BASIC startup command).
+	ld	c,_EXPLAIN##
 	call	BDOS##			;DE preserved, buffer holds ASCIIZ text.
 	ld	h,d
 	ld	l,e			;HL = DE = buffer start.
