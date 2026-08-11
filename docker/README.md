@@ -10,9 +10,40 @@ A Docker image that bundles everything needed to build Nextor, develop Nextor dr
 
 **Platform:** the image is **multi-arch** - `linux/amd64` and `linux/arm64` (native on Apple Silicon and arm64 servers). Everything below assumes you have Docker installed.
 
-> **How this document is organised.** The first three sections cover what most readers come here for: a quick intro to Docker, and how to use the official image to develop drivers, tools, and Nextor itself. The remaining sections are reference material for image internals, building the image yourself, and publishing it - useful for maintainers and advanced users.
+**_How this document is organised:_** The first three sections cover what most readers come here for: a quick intro to Docker, and how to use the official image to develop drivers, tools, and Nextor itself. The remaining sections are reference material for image internals, building the image yourself, and publishing it - useful for maintainers and advanced users.
 
----
+
+## Table of contents
+
+- [What's Docker?](#whats-docker)
+  - [Installing Docker](#installing-docker)
+- [Developing drivers and tools](#developing-drivers-and-tools)
+  - [Quick start](#quick-start)
+  - [Working on an existing driver or tool](#working-on-an-existing-driver-or-tool)
+  - [Starting from a project template](#starting-from-a-project-template)
+  - [Running the tools from the CLI](#running-the-tools-from-the-cli)
+  - [How a driver Makefile is structured](#how-a-driver-makefile-is-structured)
+  - [File ownership (mounted volumes)](#file-ownership-mounted-volumes)
+- [Developing Nextor itself](#developing-nextor-itself)
+- [Image internals](#image-internals)
+  - [What's inside](#whats-inside)
+  - [Environment variables](#environment-variables)
+  - [Variants](#variants)
+  - [Naming conventions](#naming-conventions)
+- [Building the image locally](#building-the-image-locally)
+  - [Build arguments](#build-arguments)
+- [Testing the image locally (no registry needed)](#testing-the-image-locally-no-registry-needed)
+- [Publishing the image](#publishing-the-image)
+  - [The automated way (GitHub Actions)](#the-automated-way-github-actions)
+  - [The manual way](#the-manual-way)
+  - [Tag scheme](#tag-scheme)
+  - [Multi-arch](#multi-arch)
+- [Appendix: trying it in a clean WSL distro](#appendix-trying-it-in-a-clean-wsl-distro)
+  - [1. A minimal Docker-capable distro](#1-a-minimal-docker-capable-distro)
+  - [2. Get the image (you *pull* it, you don't build it)](#2-get-the-image-you-pull-it-you-dont-build-it)
+  - [3. Primary flow - develop a driver or tool](#3-primary-flow---develop-a-driver-or-tool)
+  - [4. Secondary flow - develop Nextor itself](#4-secondary-flow---develop-nextor-itself)
+
 
 ## What's Docker?
 
