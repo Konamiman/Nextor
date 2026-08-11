@@ -10,80 +10,96 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
-DMESSCR:	CALL	GETMSG
-DMSCR:	CALL	PRTSTR
+DMESSCR:	CALL	GETMSG	; Print message no. A, then a CR/LF.
+DMSCR:	CALL	PRTSTR	; Print string at (DE), then a CR/LF.
 
+;        Console output with column and page counting (2.31's CRLF and
+; OUCH). LPRINT prints a CR/LF pair; PRCHAR outputs the character in A,
+; keeping the cursor column in COLCNT (CR resets it, TAB advances to the
+; next multiple of 8, and reaching the screen width COLMAX wraps it to
+; 0). On every line feed, and whenever a TAB or an ordinary character
+; runs into the right margin, CHKPAUSE counts the line off ROWMAX and,
+; once a whole screenful has been printed, prompts 'Press any key to
+; continue' and starts a new count. With ROWMAX = 0 (no /P paging, the
+; default) characters are simply output. Preserves all registers except
+; AF; returns A = 0.
+;
 LPRINT:	LD	A,#0D
 	CALL	PRCHAR
-	LD	A,#0A
+	LD	A,#0A	; LF falls through into PRCHAR.
 PRCHAR:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
 	LD	E,A
-	LD	A,(ROWMAX)
+	LD	A,(ROWMAX)	; Paging off (ROWMAX=0) ?
 	AND	A
-	JR	Z,NPA10
+	JR	Z,NPA10	; Then just output the character.
 	LD	A,E
-	CP	#0D
+	CP	#0D	; carriage return?
 	JR	NZ,OUCHNCR
-	XOR	A
+	XOR	A	; Back to column 0, no line counted.
 	LD	(COLCNT),A
 	JR	NPA10
 
-OUCHNCR:	CP	#0A
+OUCHNCR:	CP	#0A	; line feed?
 	JR	Z,OUCHPAU	; yes
 	CP	#09	; tab?
 	JR	NZ,OUCHK2	; no
 	LD	A,(COLMAX)
 	LD	D,A
 	LD	A,(COLCNT)
-	OR	#07
-	INC	A
+	OR	#07	; Advance the column to the next
+	INC	A	;   multiple of 8.
 	LD	(COLCNT),A
-	CP	D
-	JR	C,NPA10
+	CP	D	; Still within the screen width ?
+	JR	C,NPA10	; Then no line is counted.
 	LD	A,(COLCNT)
-OUCHSUB:	SUB	D
-	JR	NC,OUCHSUB
+OUCHSUB:	SUB	D	; Wrapped: reduce the column modulo
+	JR	NC,OUCHSUB	;   the width, and count a line.
 	ADD	A,D
 	LD	(COLCNT),A
 	JR	OUCHPAU
 
-OUCHK2:	LD	A,(COLCNT)
-	INC	A
+OUCHK2:	LD	A,(COLCNT)	; Ordinary character: advance the
+	INC	A	;   column.
 	LD	(COLCNT),A
 	LD	D,A
-	LD	A,(COLMAX)
+	LD	A,(COLMAX)	; Reached the right margin ?
 	CP	D
 	JR	NZ,NPA10
-	XOR	A
-	LD	(COLCNT),A
+	XOR	A	; Then wrap to column 0 and count a
+	LD	(COLCNT),A	;   line.
 OUCHPAU:	CALL	CONOUT
-	CALL	CHKPAUSE
-NPAUS:	XOR	A
-	POP	BC
+	CALL	CHKPAUSE	; Count the line, pause if screenful.
+NPAUS:	XOR	A	; No error.
+	POP	BC	; Restore registers.
 	POP	DE
 	POP	HL
 	RET
 
-NPA10:	CALL	CONOUT
+NPA10:	CALL	CONOUT	; Output with no line accounting.
 	JR	NPAUS
 
-CHKPAUSE:	LD	A,(ROWMAX)
+CHKPAUSE:	LD	A,(ROWMAX)	; Count this line off the screenful.
 	DEC	A
 	LD	(ROWMAX),A
 	RET	NZ
-	CALL	PAUSE
-	CALL	SETP
+	CALL	PAUSE	; 'Press any key to continue', then
+	CALL	SETP	;   reset the /P line count.
 	RET
 
-CONOUT:	LD	C,_CONOUT
+CONOUT:	LD	C,_CONOUT	; Output the character in E.
 	JP	BDOS
 
-SPACE?:	JP	NZ,PRCHAR
-SPACE:	LD	A," "
+SPACE?:	JP	NZ,PRCHAR	; Print the character in A, or a
+SPACE:	LD	A," "	;   space if Z / always.
 	JP	PRCHAR
 
+;        Buffer-writing counterpart of SPACE?: store the character in A
+; (or a space, if Z) at (IX) and advance IX. The number/date/time
+; renderers use this to build their text in a buffer instead of
+; printing it directly.
+;
 PRDIG2:	JR	Z,PRSPC2
 PRD10:	LD	(IX),A
 	INC	IX
@@ -91,6 +107,11 @@ PRD10:	LD	(IX),A
 PRSPC2:	LD	A," "
 	JR	PRD10
 
+;        (Re-)initialise the paging from the screen size, obtained with
+; the screen size IOCTL on the standard output: COLMAX = width, ROWMAX =
+; height-1 = lines to print before the next 'Press any key' pause.
+; Called when a /P option is given, and after every pause.
+;
 SETP:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
@@ -128,202 +149,265 @@ MSG20:	LD	A,(DE)
 	JR	NZ,MSG20
 	JR	MSG10
 
-FNDALIAS:	PUSH	DE
+;******************************************************************************
+;
+;        Alias storage (new in 2.40). The alias list lives in COMMAND2's
+; private 16K mapper segment, together with the command history buffer
+; and the variable swap area (see command.inc for the segment's header
+; words). Each alias is a record: a length word (the total record
+; length, counting the word itself), the name (ASCIIZ) and the value
+; (ASCIIZ); a record of length 0 terminates the list. The area starts
+; at the offset held in the ALIADDR header word and may grow up to the
+; one in ALIEND (the HISTORY command moves these boundaries when the
+; history buffer is resized).
+;        The three routines below switch the segment into page 2 with
+; SETPG2 while they work (the SET 7,H turns a segment offset into a
+; page-2 address) and restore the previous segment before returning.
+;
+;******************************************************************************
+;
+;        Find an alias by position, for enumerating the list (the ALIAS
+; command with no arguments).
+;
+; On entry, BC = index of the alias wanted (0 = first), or, with bit 7
+;               of B set, the page-2 address of a record as returned in
+;               BC by a previous call (which makes walking the whole
+;               list linear instead of quadratic).
+;           HL -> buffer for the name, DE -> buffer for the value.
+; On exit,  the name and value are copied to (HL) and (DE) as ASCIIZ
+;               strings and BC = address of the next record, ready for
+;               the next call. If there is no such alias, null strings
+;               are returned and BC = 0.
+;           HL and DE are preserved.
+;
+FNDALIAS:	PUSH	DE	; Save the two buffer pointers.
 	PUSH	HL
-	CALL	SETPG2
-	CALL	GETALIADDR
-	SET	7,H
-	BIT	7,B
-	JR	Z,FND110
-	LD	H,B
+	CALL	SETPG2	; Alias segment into page 2.
+	CALL	GETALIADDR	; HL = alias area offset, made into
+	SET	7,H	;   a page-2 address.
+	BIT	7,B	; BC a record address from a
+	JR	Z,FND110	;   previous call ?
+	LD	H,B	; Then go straight to it.
 	LD	L,C
 	JR	FND130
 
-FND110:	LD	A,B
+FND110:	LD	A,B	; Skipped BC records yet ?
 	OR	C
-	JR	Z,FND130
-	LD	E,(HL)
+	JR	Z,FND130	; Yes: this is the record wanted.
+	LD	E,(HL)	; DE = record length.
 	INC	HL
 	LD	D,(HL)
 	DEC	HL
-	ADD	HL,DE
+	ADD	HL,DE	; Advance to the next record.
 	DEC	BC
-	LD	A,D
-	OR	E
+	LD	A,D	; Stop if that length was the zero
+	OR	E	;   terminator (end of the list).
 	JR	NZ,FND110
-FND120:	POP	HL
-	LD	(HL),A
+FND120:	POP	HL	; No such alias: return null name
+	LD	(HL),A	;   and value strings (A=0),
 	POP	DE
 	LD	(DE),A
-	LD	B,A
+	LD	B,A	;   and BC = 0.
 	LD	C,A
 	CALL	RSTPG2
 	RET
 
-FND130:	LD	E,(HL)
+FND130:	LD	E,(HL)	; DE = record length.
 	INC	HL
 	LD	D,(HL)
 	INC	HL
-	LD	A,D
+	LD	A,D	; Zero length: end of the list.
 	OR	E
 	JR	Z,FND120
-	POP	DE
-	PUSH	DE
+	POP	DE	; Copy the name to the caller's name
+	PUSH	DE	;   buffer...
 	CALL	NCOPY
 	POP	BC
-	POP	DE
-	PUSH	DE
-	PUSH	BC
+	POP	DE	;   ...and the value (NCOPY left HL
+	PUSH	DE	;   just past the name's null) to
+	PUSH	BC	;   the value buffer.
 	CALL	NCOPY
-	LD	B,H
-	LD	C,L
+	LD	B,H	; BC = address of the next record,
+	LD	C,L	;   for the next call.
 	POP	HL
 	POP	DE
-	CALL	RSTPG2
+	CALL	RSTPG2	; Previous page-2 segment back.
 	RET
 
-GETALIAS:	PUSH	DE
-	PUSH	HL
-	CALL	SETPG2
-	CALL	GETALIADDR
-	SET	7,H
-GET60:	LD	E,(HL)
+;        Get the value of the alias whose name is at (HL) (ASCIIZ). The
+; name match is an exact string compare, so command names must have
+; been upper-cased first.
+;
+; On entry, HL -> name, DE -> buffer for the value.
+; On exit,  the value is copied to (DE) as an ASCIIZ string - a null
+;               string if the alias is not defined - with DE preserved.
+;               Returns Z (there is no failure path).
+;
+GETALIAS:	PUSH	DE	; Save value buffer pointer.
+	PUSH	HL	; Save name pointer.
+	CALL	SETPG2	; Alias segment into page 2.
+	CALL	GETALIADDR	; HL = alias area offset, made into
+	SET	7,H	;   a page-2 address.
+GET60:	LD	E,(HL)	; DE = record length.
 	INC	HL
 	LD	D,(HL)
 	INC	HL
-	POP	BC
-	LD	A,D
-	OR	E
+	POP	BC	; BC = the name wanted.
+	LD	A,D	; Zero length record: end of the
+	OR	E	;   list, alias not defined.
 	JR	Z,GET90
 	PUSH	BC
 	PUSH	HL
-	CALL	STRCMP
+	CALL	STRCMP	; Name matches ?
 	JR	Z,GET70
-	POP	HL
-	ADD	HL,DE
+	POP	HL	; No: skip to the next record (HL
+	ADD	HL,DE	;   was already 2 past its start).
 	DEC	HL
 	DEC	HL
 	JR	GET60
 
-GET70:	POP	BC
-	POP	BC
-	POP	DE
-	PUSH	DE
+GET70:	POP	BC	; Found: HL is just past the name's
+	POP	BC	;   null, ie. at the value.
+	POP	DE	; DE = the caller's value buffer:
+	PUSH	DE	;   copy the value there.
 	CALL	NCOPY
-GET80:	CALL	RSTPG2
-	POP	DE
+GET80:	CALL	RSTPG2	; Previous page-2 segment back.
+	POP	DE	; DE preserved.
 	RET
 
-GET90:	POP	DE
-	XOR	A
+GET90:	POP	DE	; Not defined: return a null string
+	XOR	A	;   as the value.
 	LD	(DE),A
 	PUSH	DE
 	JR	GET80
 
-SETALIAS:	PUSH	DE
-	PUSH	HL
-	CALL	SETPG2
-	CALL	GETALIADDR
-	SET	7,H
-SET20:	LD	E,(HL)
+;        Set, replace or delete an alias. Any existing record with the
+; given name is deleted by copying the records after it down over it;
+; then, if the new value is not null, a new record is appended at the
+; end of the list and a fresh zero terminator record written after it.
+;
+; On entry, HL -> name (ASCIIZ), DE -> new value (ASCIIZ); a null value
+;               just deletes the alias.
+; On exit,  Z => done. NZ with A = .NORAM => the alias space is full;
+;               the half-written record is harmless (its length word
+;               was never set so the list still ends before it), but a
+;               replaced alias has already been deleted by then.
+;
+SETALIAS:	PUSH	DE	; Save value pointer.
+	PUSH	HL	; Save name pointer.
+	CALL	SETPG2	; Alias segment into page 2.
+	CALL	GETALIADDR	; HL = alias area offset, made into
+	SET	7,H	;   a page-2 address.
+SET20:	LD	E,(HL)	; DE = record length.
 	INC	HL
 	LD	D,(HL)
 	DEC	HL
-	POP	BC
-	LD	A,D
-	OR	E
-	EX	DE,HL
+	POP	BC	; BC = the name.
+	LD	A,D	; Zero length: end of the list, no
+	OR	E	;   old record to delete.
+	EX	DE,HL	; (DE = record pointer now)
 	PUSH	BC
 	JR	Z,SET50
 	EX	DE,HL
-	PUSH	HL
-	INC	HL
-	INC	HL
+	PUSH	HL	; Save the record start; point past
+	INC	HL	;   the length word and compare the
+	INC	HL	;   names.
 	CALL	STRCMP
 	JR	Z,SET30
-	POP	HL
+	POP	HL	; No match: on to the next record.
 	ADD	HL,DE
 	JR	SET20
 
-SET30:	POP	HL
-	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)
+SET30:	POP	HL	; Old record found: delete it by
+	LD	C,(HL)	;   copying all the following
+	INC	HL	;   records down over it.
+	LD	B,(HL)	; BC = its length.
 	DEC	HL
-	LD	D,H
+	LD	D,H	; DE = where the records land,
 	LD	E,L
-	ADD	HL,BC
-SET40:	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)
+	ADD	HL,BC	; HL = the next record.
+SET40:	LD	C,(HL)	; BC = length of the record to move;
+	INC	HL	;   the zero terminator record ends
+	LD	B,(HL)	;   the copying.
 	DEC	HL
 	LD	A,B
 	OR	C
 	JR	Z,SET50
-	LDIR
+	LDIR	; Copy one whole record down.
 	JR	SET40
 
-SET50:	LD	B,D
-	LD	C,E
-	POP	HL
-	POP	DE
-	LD	A,(DE)
-	OR	A
+SET50:	LD	B,D	; BC = end of the list = where the
+	LD	C,E	;   new record goes.
+	POP	HL	; HL = name.
+	POP	DE	; DE = value.
+	LD	A,(DE)	; Null value: nothing to add, just
+	OR	A	;   write a fresh terminator record.
 	JR	Z,SET110
-	PUSH	BC
-	PUSH	DE
-	LD	D,B
+	PUSH	BC	; Save the new record's address: its
+	PUSH	DE	;   length word is filled in at the
+	LD	D,B	;   end. DE = past the length word.
 	LD	E,C
 	INC	DE
 	INC	DE
-	LD	BC,#02
-SET60:	LD	A,(HL)
-	LD	(DE),A
+	LD	BC,#02	; Record length so far (the length
+SET60:	LD	A,(HL)	;   word counts itself). Copy the
+	LD	(DE),A	;   name...
 	INC	HL
 	PUSH	HL
-	LD	HL,(ALIEND)
-	SET	7,H
-	SBC	HL,DE
-	POP	HL
+	LD	HL,(ALIEND)	; Hit the end of the alias space ?
+	SET	7,H	;   (2.41 quirk: this reads TPA
+	SBC	HL,DE	;   address ALIEND = #0C, not the
+	POP	HL	;   header word at ALIEND+#8000)
 	JR	Z,SET90
 	INC	DE
 	INC	BC
-	OR	A
+	OR	A	; ...up to and including the null.
 	JR	NZ,SET60
-	POP	HL
-SET70:	LD	A,(HL)
-	LD	(DE),A
-	INC	HL
+	POP	HL	; HL = the value.
+SET70:	LD	A,(HL)	; Copy the value likewise, giving up
+	LD	(DE),A	;   if DE runs off the top of page 2
+	INC	HL	;   (#C000).
 	BIT	6,D
 	JR	NZ,SET100
 	INC	DE
 	INC	BC
 	OR	A
 	JR	NZ,SET70
+	LD	(DE),A	; Write the new zero terminator
+	INC	DE	;   record after the value,
 	LD	(DE),A
-	INC	DE
-	LD	(DE),A
-	POP	HL
-	LD	(HL),C
+	POP	HL	;   and fill in the length word at
+	LD	(HL),C	;   the start of the new record.
 	INC	HL
 	LD	(HL),B
-SET80:	CALL	RSTPG2
+SET80:	CALL	RSTPG2	; Previous page-2 segment back.
 	RET
 
-SET90:	POP	HL
-SET100:	POP	HL
+SET90:	POP	HL	; Out of alias space: give up and
+SET100:	POP	HL	;   return 'Not enough memory'.
 	CALL	RSTPG2
 	LD	A,.NORAM
 	OR	A
 	RET
 
-SET110:	LD	(BC),A
-	INC	BC
+SET110:	LD	(BC),A	; Delete only: write a terminator
+	INC	BC	;   record at the end of the list.
 	LD	(BC),A
 	JR	SET80
 
-SETLANG:	PUSH	AF
-	PUSH	BC
+;        Locate the mapper support routines (new in 2.40): the extended
+; BIOS is asked for the DOS 2 mapper support jump table (MAPADDR, used
+; by the trampolines below) and for the mapper variable table (MAPTAB,
+; used by the MEMORY command), and the MSX version byte is read from
+; the main ROM into MSXVER. Called once, from the startup code.
+;        Every register, including the alternate set and IX/IY, is
+; preserved; the calls are made on the page-3 stack, which stays
+; addressable while EXTBIO/RDSLT switch slots and pages about.
+;        (2.31's SETLANG had this same skeleton but queried the Kanji
+; mode here; 2.40 replaced the query and the port kept the label.)
+;
+SETLANG:	PUSH	AF	; Save every register, including the
+	PUSH	BC	;   alternate set and IX/IY.
 	PUSH	DE
 	PUSH	HL
 	EXX
@@ -339,20 +423,20 @@ SETLANG:	PUSH	AF
 	XOR	A
 	LD	H,A
 	LD	L,A
-	ADD	HL,SP
-	LD	SP,#F51F
-	PUSH	HL
-	LD	DE,#0402
-	CALL	EXTBIO
-	LD	(MAPADDR),HL
-	LD	DE,#0401
-	CALL	EXTBIO
+	ADD	HL,SP	; Switch to the page-3 stack at
+	LD	SP,#F51F	;   #F51F, saving the current SP
+	PUSH	HL	;   on it.
+	LD	DE,#0402	; Extended BIOS, device 4 (memory
+	CALL	EXTBIO	;   mapper), function 2: HL = the
+	LD	(MAPADDR),HL	;   mapper support jump table.
+	LD	DE,#0401	; Function 1: HL = the mapper
+	CALL	EXTBIO	;   variable table.
 	LD	(MAPTAB),HL
-	LD	A,(EXPTBL)
-	LD	HL,#2D
-	CALL	RDSLT
-	LD	(MSXVER),A
-	POP	HL
+	LD	A,(EXPTBL)	; Read the MSX version byte from
+	LD	HL,#2D	;   main ROM address #002D
+	CALL	RDSLT	;   (0=MSX1, 1=MSX2, 2=MSX2+,
+	LD	(MSXVER),A	;   3=turbo R).
+	POP	HL	; Normal stack back.
 	LD	SP,HL
 	EXX
 	EX	AF,AF'
@@ -370,60 +454,94 @@ SETLANG:	PUSH	AF
 	POP	AF
 	RET
 
-ALL_SEG:	PUSH	DE
+;******************************************************************************
+;
+;        Mapper support (new in 2.40). These are trampolines into the
+; DOS 2 mapper support routines, whose jump table was located through
+; the extended BIOS by SETLANG above (MAPADDR). The entries used are:
+;
+;          ALL_SEG (+#00): allocate a 16K segment. A=0/1 => user/system
+;                          segment, B=0 => from any mapper slot.
+;                          Returns the segment number in A, or Cy set
+;                          if no free segment is left.
+;          FRE_SEG (+#03): free segment A.
+;          RD_SEG  (+#06): read the byte at offset HL of segment A into
+;                          A (the top two address bits are ignored, and
+;                          the paging is unchanged on return).
+;          WR_SEG  (+#09): write E to offset HL of segment A.
+;          PUT_P2  (+#24): switch page 2 (#8000-#BFFF) to segment A.
+;          GET_P2  (+#27): return in A the segment now in page 2.
+;
+;        XCAL makes the actual call: the routine offset (in DE) is
+; added to the table address and patched into the CALL instruction at
+; JMPADDR, which is zeroed again afterwards so that the resident image
+; always checksums the same. The call runs on the page-3 stack at
+; #F51F, which stays addressable whatever the routine does to the
+; paging. BC, DE and HL are preserved; A and the flags are those of the
+; mapper routine.
+;
+;******************************************************************************
+ALL_SEG:	PUSH	DE	; Allocate a 16K segment.
 	LD	DE,#00
 	JR	XCAL
 
-FRE_SEG:	PUSH	DE
+FRE_SEG:	PUSH	DE	; Free segment A.
 	LD	DE,#03
 	JR	XCAL
 
-RD_SEG:	PUSH	DE
+RD_SEG:	PUSH	DE	; A = byte at offset HL of segment A.
 	LD	DE,#06
 	JR	XCAL
 
-WR_SEG:	PUSH	DE
+WR_SEG:	PUSH	DE	; Write E at offset HL of segment A.
 	LD	DE,#09
 	JR	XCAL
 
-PUT_P2:	PUSH	DE
+PUT_P2:	PUSH	DE	; Switch page 2 to segment A.
 	LD	DE,#24
 	JR	XCAL
 
-GET_P2:	PUSH	DE
+GET_P2:	PUSH	DE	; A = segment now in page 2.
 	LD	DE,#27
 XCAL:	PUSH	HL
-	LD	HL,(MAPADDR)
-	ADD	HL,DE
+	LD	HL,(MAPADDR)	; Point the CALL below at the mapper
+	ADD	HL,DE	;   routine wanted.
 	LD	(JMPADDR+1),HL
 	POP	HL
-	POP	DE
+	POP	DE	; Caller's DE back.
 	PUSH	BC
 	PUSH	HL
 	PUSH	DE
 	EXX
-	LD	HL,#00
-	ADD	HL,SP
-	LD	SP,#F51F
-	PUSH	HL
+	LD	HL,#00	; Switch to the page-3 stack at
+	ADD	HL,SP	;   #F51F, saving the current SP
+	LD	SP,#F51F	;   on it (uses HL' to leave the
+	PUSH	HL	;   main registers for the routine).
 	EXX
-JMPADDR:	CALL	#00
-	POP	HL
-	LD	SP,HL
-	POP	DE
-	LD	HL,#00
-	LD	(JMPADDR+1),HL
+JMPADDR:	CALL	#00	; (address patched in above)
+	POP	HL	; Get the old SP back
+	LD	SP,HL	;   and restore it.
+	POP	DE	; Restore the caller's registers.
+	LD	HL,#00	; Re-zero the patched address, to
+	LD	(JMPADDR+1),HL	;   keep the image checksum stable.
 	POP	HL
 	POP	BC
 	RET
 
-SETPG2:	CALL	GET_P2
-	LD	(TMPPAGE),A
+;        SETPG2 switches page 2 to COMMAND2's private mapper segment
+; (MAPPAGE, the history/alias segment), first saving the number of the
+; segment that was there in TMPPAGE; RSTPG2 puts that one back. Every
+; SETPG2 must be paired with an RSTPG2 before anything else runs: there
+; is a single TMPPAGE cell (also used by OPENBTM and GETBATCHR), so the
+; pair does not nest.
+;
+SETPG2:	CALL	GET_P2	; Save the current page-2 segment
+	LD	(TMPPAGE),A	;   and switch to COMMAND2's own.
 	LD	A,(MAPPAGE)
 	CALL	PUT_P2
 	RET
 
-RSTPG2:	LD	A,(TMPPAGE)
+RSTPG2:	LD	A,(TMPPAGE)	; Switch the saved segment back in.
 	CALL	PUT_P2
 	RET
 

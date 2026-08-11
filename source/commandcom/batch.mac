@@ -11,84 +11,123 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
-INBAT:	LD	DE,BATERR
+;
+;        Reads a line of input from the current batch file into ENVDATA
+; (a length byte followed by the text, null terminated). Line feeds are
+; ignored, a carriage return ends the line, and a ^Z gives a .EOF error.
+; Used by the main command loop, and by GOTO/GOSUB/RETURN to search for
+; labels.
+;
+;        During the routine, a disk error routine is defined which turns
+; .WDISK and .WFILE errors into 'Insert batch file disk...' prompts
+; (BATERR below). The disk error routine is set back to 0 before
+; returning.
+;
+; On exit, HL -> the length byte of the line read.
+;          Cy => the line is a .BTM ~label line (the main loop skips
+;                these; GOTO and GOSUB search for them).
+;          Else Z => line read OK, NZ => A = error code (.EOF at the end
+;          of the batch file, .BUFUL if the line exceeds 127 characters).
+;
+INBAT:	LD	DE,BATERR	; Define disk error routine.
 	LD	C,_DEFER
-	CALL	BDOS
-	LD	A,#3B
+	CALL	BDOS	; (error ignored)
+	LD	A,#3B	; Error type = batch file error.
 	LD	(STRCODE),A
-	LD	HL,ENVDATA
-	LD	(HL),#00
-	CALL	IB10
+	LD	HL,ENVDATA	; HL -> start of input buffer.
+	LD	(HL),#00	; Zero no. characters got so far.
+	CALL	IB10	; Input stuff from batch file.
 	PUSH	AF
 	PUSH	HL
-	LD	DE,#00
+	LD	DE,#00	; Undefine disk error routine.
 	LD	C,_DEFER
-	CALL	BDOS
+	CALL	BDOS	; (error ignored)
 	POP	HL
 	POP	AF
+	RET	NZ	; Return with error code if error.
+	DEC	A	; Else reset error type (A was 0,
+	LD	(STRCODE),A	;   so FF => no error type).
+	BIT	7,(HL)	; Return 'command too long' if buffer
+	LD	A,.BUFUL	;   is full.
 	RET	NZ
-	DEC	A
-	LD	(STRCODE),A
-	BIT	7,(HL)
-	LD	A,.BUFUL
-	RET	NZ
-	LD	A,(BATHNDL)
-	CP	#FE
+	LD	A,(BATHNDL)	; If this is a .BTM file, check
+	CP	#FE	;   whether the line is a ~label.
 	JR	NZ,INB10
 	PUSH	HL
 	LD	HL,ENVDATA+1
-	CALL	GETCH
+	CALL	GETCH	; Find first non-blank character.
 	LD	A,(HL)
 	POP	HL
-	CP	"~"
-	SCF
+	CP	"~"	; A label line: return it with carry
+	SCF	;   set so that it is skipped.
 	RET	Z
-INB10:	XOR	A
+INB10:	XOR	A	; Else no error.
 	RET
 
+;        Assemble one line in ENVDATA from the characters that GETBATCHR
+; delivers, per the rules described above. Characters beyond the 127th
+; are gobbled up but not stored (the length byte reaching 128 makes
+; INBAT report .BUFUL).
+;
 IB10:	INC	HL
 	LD	(HL),#00	; Terminate line so far with a null.
-IB15:	CALL	GETBATCHR
-	LD	HL,ENVDATA
-	RET	NZ
-	LD	D,A
+IB15:	CALL	GETBATCHR	; Get a character from batch file.
+	LD	HL,ENVDATA	; Return with HL -> start of buffer.
+	RET	NZ	; Ret if error.
+	LD	D,A	; D=0 for later.
 	LD	A,C
-	CP	#0A
+	CP	#0A	; Ignore line feeds.
 	JR	Z,IB15
-	CP	#1A
+	CP	#1A	; Treat ^Z as a .EOF error.
 	JR	Z,IBB10
-	SUB	#0D
+	SUB	#0D	; End on CR (no error).
 	RET	Z
-	BIT	7,(HL)
-	JR	NZ,IB15
-	INC	(HL)
-	LD	E,(HL)
-	ADD	HL,DE
-	LD	(HL),C
+	BIT	7,(HL)	; Ignore character if buffer full
+	JR	NZ,IB15	;   (gobble chars until end of line).
+	INC	(HL)	; Inc length byte.
+	LD	E,(HL)	; DE = length (D=0 from above).
+	ADD	HL,DE	; Point to next free byte in buffer.
+	LD	(HL),C	; Put character in buffer.
 	JR	IB10
 
-IBB10:	LD	A,.EOF
-	OR	A
+IBB10:	LD	A,.EOF	; End of batch file.
+	OR	A	; Set flags (NZ).
 	RET
 
+;        Get the next batch file character in C, with A = error code (0
+; and Z if none). For a .BAT file (BATHNDL = its file handle) the
+; character comes from the file, buffered 256 bytes at a time in BATBUF
+; by INBCHAR below; for a .BTM file (BATHNDL = #FE) it is read directly
+; out of the mapper segment that OPENBTM loaded the whole file into, at
+; offset (BATLINADDR) - GOTO/GOSUB/RETURN/END work simply by moving
+; BATLINADDR. When the ^Z that ends a .BTM is read, the 16K segment is
+; given back to the mapper.
+;
 GETBATCHR:	LD	A,(BATHNDL)
-	CP	#FE
-	JR	NZ,INBCHAR
-	CALL	GET_P2
-	LD	(TMPPAGE),A
+	CP	#FE	; Reading from a .BTM ?
+	JR	NZ,INBCHAR	; No: read from the .BAT file buffer.
+	CALL	GET_P2	; Save page-2 segment (precaution
+	LD	(TMPPAGE),A	;   only: RD_SEG leaves page 2 alone).
 	LD	A,(BATPAGE)
-	LD	HL,(BATLINADDR)
-	CALL	RD_SEG
+	LD	HL,(BATLINADDR)	; Read the next character out of the
+	CALL	RD_SEG	;   .BTM segment.
 	LD	C,A
 	INC	HL
-	LD	(BATLINADDR),HL
-	CP	#1A
+	LD	(BATLINADDR),HL	; Bump the read position.
+	CP	#1A	; End of the .BTM ?
 	JR	NZ,GET100
-	LD	A,(BATPAGE)
+	LD	A,(BATPAGE)	; Yes: release its mapper segment.
 	CALL	FRE_SEG
-GET100:	XOR	A
+GET100:	XOR	A	; No error.
 	RET
 
+;        Get the next character of a .BAT file through the 256-byte
+; buffer at BATBUF, reading a new buffer full when it runs dry. When a
+; read returns less than a full buffer the end of the file has been
+; reached: a ^Z is placed after the last byte read and the file is
+; closed, so that no further disk access happens once the tail of the
+; file is in the buffer.
+;
 INBCHAR:	LD	HL,(BATLINLEN)	; Return A=error, C=char.
 	LD	A,H
 	OR	L
@@ -125,85 +164,116 @@ BUFOK:	DEC	HL	; Dec. count after reading character.
 	XOR	A	; No error.
 	RET
 
+;        The disk error handler active while a batch file line is being
+; read (installed by INBAT via _DEFER). If the disk holding the batch
+; file has been changed (.WFILE / .WDISK errors), the user is prompted
+; to put it back and press a key, and the failing operation is then
+; retried; any other disk error gets the normal disk error handling.
+;
+; On entry, A = disk error code, B = drive (1=A:).
+; On exit,  A = 2 => retry the operation.
+;           A = 0 => let the system do its usual error prompting.
+;
 BATERR:	CP	.WFILE	; Return with A=0 if .WFILE or .WDISK.
 	JR	Z,WFILE
 	CP	.WDISK
 	LD	A,#00
 	RET	NZ
-WFILE:	PUSH	BC
+WFILE:	PUSH	BC	; Save drive in B.
 	CALL	LPRINT
-	LD	A,#37
-	CALL	DMESS
-	POP	AF
-	ADD	A,"@"
+	LD	A,#37	; Print 'Insert batch file disk in
+	CALL	DMESS	;   drive '.
+	POP	AF	; A = drive number.
+	ADD	A,"@"	; Convert to ASCII drive letter.
 	CALL	PRCHAR
-	LD	A,#38
+	LD	A,#38	; Print ':'.
 	CALL	DMESS
 	CALL	LPRINT
-	CALL	PAUSE
-	LD	A,#02
+	CALL	PAUSE	; Do 'Press any key' prompting.
+	LD	A,#02	; Return A=2 for 'retry'.
 	RET
 
+;        Open a .BTM batch file (new in 2.40): the whole file is loaded
+; into a freshly allocated 16K mapper segment, a ^Z is put after it, and
+; it is then executed from memory (GETBATCHR reads it back byte by
+; byte). This is what makes GOTO/GOSUB/RETURN/END possible: the read
+; position (BATLINADDR) can be moved freely without re-reading the disk.
+;        The file size field of the FIB is checked first: a file of 16K
+; or more does not fit (the ^Z needs one byte too) and gives a 'Not
+; enough memory' error, as does failing to get a segment.
+;
+; On entry, FIB1 = File Info Block of the .BTM file (from FNDCMD).
+; On exit,  A = 0 => file loaded; BATPAGE = the segment number and
+;               BATLINADDR = 0 (the read position).
+;           A = error otherwise (.NORAM, or a BDOS error from the open/
+;               read/close). The 'file too big' case returns .NORAM with
+;               Z set: the caller then records it in ERRCODE as if the
+;               file had opened, and the top of the command loop reports
+;               the error and ends the batch file.
+;
 OPENBTM:	LD	HL,FIB1+#18
-	LD	D,(HL)
+	LD	D,(HL)	; File size bytes 2 and 3:
 	DEC	HL
-	LD	A,(HL)
+	LD	A,(HL)	;   64K or more is certainly too big.
 	OR	D
 	JR	Z,OPE20
-OPE10:	LD	A,.NORAM
-	CP	A
+OPE10:	LD	A,.NORAM	; Too big: return .NORAM, but with Z
+	CP	A	;   set (see above).
 	RET
 
 OPE20:	DEC	HL
-	LD	A,(HL)
-	CP	#40
+	LD	A,(HL)	; File size byte 1: only less than
+	CP	#40	;   #4000 bytes fits.
 	JR	NC,OPE10
 	XOR	A
-	LD	B,A
-	INC	A
+	LD	B,A	; Allocate one 16K segment: A=1 =>
+	INC	A	;   system segment, B=0 => any slot.
 	CALL	ALL_SEG
-	LD	(BATPAGE),A
+	LD	(BATPAGE),A	; Remember the segment number.
 	LD	A,.NORAM
-	RET	C
+	RET	C	; No free segment => .NORAM error.
 	LD	DE,FIB1
-	LD	A,#01
+	LD	A,#01	; Open the file, read only.
 	LD	C,_OPEN
 	CALL	BDOS
-	RET	NZ
-	PUSH	BC
-	CALL	GET_P2
-	LD	(TMPPAGE),A
+	RET	NZ	; Return if error.
+	PUSH	BC	; Save file handle (B).
+	CALL	GET_P2	; Save the current page-2 segment
+	LD	(TMPPAGE),A	;   and switch page 2 to the new one.
 	LD	A,(BATPAGE)
 	CALL	PUT_P2
-	LD	DE,#8000
-	LD	HL,#3FFF
+	LD	DE,#8000	; Read the whole file (at most 16K-1
+	LD	HL,#3FFF	;   bytes) into the segment.
 	POP	BC
 	PUSH	BC
 	PUSH	DE
 	LD	C,_READ
-	CALL	BDOS
+	CALL	BDOS	; Leaves HL = no. of bytes read.
 	POP	DE
-	PUSH	AF
-	ADD	HL,DE
-	LD	(HL),#1A
-	LD	A,(TMPPAGE)
-	CALL	PUT_P2
-	POP	DE
-	POP	BC
+	PUSH	AF	; Save the read error, if any.
+	ADD	HL,DE	; Put a ^Z after the last byte read,
+	LD	(HL),#1A	;   as the end-of-file marker.
+	LD	A,(TMPPAGE)	; Restore the original page-2 segment
+	CALL	PUT_P2	;   before touching the disk again.
+	POP	DE	; D = the read error code.
+	POP	BC	; B = file handle.
 	PUSH	DE
-	LD	C,_CLOSE
+	LD	C,_CLOSE	; Close the file.
 	CALL	BDOS
 	POP	DE
-	RET	NZ
-	LD	H,A
-	LD	L,A
+	RET	NZ	; Return if close error.
+	LD	H,A	; A=0: start reading the .BTM at
+	LD	L,A	;   offset 0.
 	LD	(BATLINADDR),HL
-	OR	D
+	OR	D	; Return the read error, if any.
 	RET
 
+;        Release the mapper segment holding the current .BTM file, and
+; record that there is none. Returns A=0 and Z set.
+;
 FREEBTM:	LD	A,(BATPAGE)
 	CALL	FRE_SEG
 	XOR	A
-	LD	(BATPAGE),A
+	LD	(BATPAGE),A	; 0 => no .BTM segment allocated.
 	RET
 

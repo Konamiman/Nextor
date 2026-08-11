@@ -11,26 +11,44 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
+;        All four tables share one format and lookup scheme: each entry
+; starts with a length byte followed by the name text, and the entries are
+; stored in ascending order of name length. The searchers all use COMPARE
+; (cli.mac), which matches case-insensitively and stops the scan at the
+; first entry whose length byte is bigger than that of the name looked up.
+;
+;        The TABORDER value table, tried against the value of the TABORDER
+; environment item by the TAB filename completion (TAB30 in editor.mac).
+;        Each entry is a length byte, the item text and one flag byte, the
+; FDFLAGS value to use: b0 => complete files, b1 => complete directories,
+; b2 => switch to the other kind when the first one has no more matches.
+;        The table has no terminator of its own: the scan relies on the
+; ascending length order to give up before running into CMDTAB. When no
+; entry matches (or TABORDER is not set) the default is %00000011.
 ORDTAB:	DEFB	3
 	DEFB	"DIR"
-	DEFB	%00000010
+	DEFB	%00000010	; Directories only.
 
 	DEFB	4
 	DEFB	"BOTH"
-	DEFB	%00000011
+	DEFB	%00000011	; Files and directories mixed.
 
 	DEFB	4
 	DEFB	"FILE"
-	DEFB	%00000001
+	DEFB	%00000001	; Files only.
 
 	DEFB	8
 	DEFB	"DIR,FILE"
-	DEFB	%00000110
+	DEFB	%00000110	; Directories first, then files.
 
 	DEFB	8
 	DEFB	"FILE,DIR"
-	DEFB	%00000101
+	DEFB	%00000101	; Files first, then directories.
 
+;        The internal command table, scanned by the command dispatcher
+; (DC10 in cli.mac) against the first word of the command line.
+;        Each entry is a length byte, the command name and a DEFW with the
+; handler address. The zero length byte at CMDTEND terminates the table.
 CMDTAB:	DEFB	2
 	DEFB	"IF"
 	DEFW	@IF
@@ -275,8 +293,17 @@ CMDTAB:	DEFB	2
 	DEFB	"RAMDISK"
 	DEFW	@RAMDISK
 
-CMDTEND:	DEFB	0
+;        The terminating zero also doubles as the shared empty string: the
+; %var% expander and the variable functions return DE -> CMDTEND for a null
+; value (RPC90 in cli.mac, FND90 in intvar.mac).
+CMDTEND:	DEFB	0	; End of table.
 
+;        The internal variable table, scanned by the %var% expander (RPC80
+; in cli.mac) when a variable name starts with "_"; the names are stored
+; without the underscore, which the expander skips before searching.
+;        Each entry is a length byte, the name and a DEFW with the handler
+; address (see intvar.mac; the handler is called with no arguments and
+; returns DE -> ASCIIZ value). Terminated by a zero length byte.
 IVTAB:	DEFB	2
 	DEFB	"BG"
 	DEFW	IV_BG
@@ -377,8 +404,16 @@ IVTAB:	DEFB	2
 	DEFB	"FILECOUNT"
 	DEFW	IV_FILECOUNT
 
-	DEFB	0
+	DEFB	0	; End of table.
 
+;        The variable function table, scanned by the %var% expander (RPC170
+; in cli.mac) when a variable name starts with "@"; the name is matched up
+; to the opening "[".
+;        Each entry is a length byte, the name and a DEFW with the handler
+; address (see intvar.mac; the handler is called with HL -> the ASCIIZ
+; argument text from between the brackets, with nested constructs already
+; expanded, and returns DE -> ASCIIZ result). Terminated by a zero length
+; byte.
 FNTAB:	DEFB	3
 	DEFB	"EXT"
 	DEFW	FN_EXT
@@ -503,5 +538,5 @@ FNTAB:	DEFB	3
 	DEFB	"FILETOTAL"
 	DEFW	FN_FILETOTAL
 
-	DEFB	0
+	DEFB	0	; End of table.
 

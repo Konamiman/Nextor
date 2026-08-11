@@ -10,21 +10,45 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
+;        Handler conventions (see the dispatcher at RPC60/RPC100 in
+; cli.mac): an IV_* routine implements the internal variable %_NAME% and is
+; called with no arguments; an FN_* routine implements the variable
+; function %@NAME[args]% and is called with HL -> the ASCIIZ argument text
+; from between the brackets (nested %..% constructs already expanded). Both
+; return DE -> the ASCIIZ result, usually built in ENVNAME or XBUF1; on an
+; error DE is returned pointing to the empty string at CMDTEND (see FND90)
+; so the construct expands to nothing. IX is preserved by the dispatcher;
+; IY must be kept pointing at REDIRST.
+
+;        %_DIRBUFFER%: the directory currently stored in the directory
+; buffer, which the CD - and CDD - commands return to. Case as per the
+; LOWER environment item.
 IV_DIRBUFFER:	LD	DE,DIRBUF
 	JR	CHKLOW
 
+;        %_BOOT%: the boot drive letter, without a colon. Case as per the
+; LOWER environment item.
+;        IVB10 is a common tail: it builds a one letter ASCIIZ string at
+; ENVNAME from the 1-based drive number in A and falls into CHKLOW.
 IV_BOOT:	LD	A,(BOOTDRV)
 IVB10:	LD	HL,ENVNAME+1
 	LD	(HL),#00
 	DEC	HL
-	ADD	A,"@"
+	ADD	A,"@"	; 1 => "A" etc.
 	LD	(HL),A
-	EX	DE,HL
+	EX	DE,HL	; DE -> the string.
+
+;        Applies the LOWER environment item to a result string: when LOWER
+; is set to ON, the ASCIIZ string at (DE) is lower-cased in place. Also
+; used by the TAB filename completion in editor.mac; FN_LOWER enters the
+; loop at CHK10 to lower-case unconditionally (string pointer pushed).
+; On entry, DE points to the ASCIIZ string.
+; On exit,  DE is preserved; AF and HL are corrupted.
 CHKLOW:	PUSH	DE
 	LD	HL,LOWER$
 	CALL	ON?
 	POP	DE
-	RET	C
+	RET	C	; Return unchanged if LOWER not ON.
 	PUSH	DE
 CHK10:	LD	A,(DE)
 	CALL	MKLOWER
@@ -35,9 +59,15 @@ CHK10:	LD	A,(DE)
 	POP	DE
 	RET
 
+;        %_DISK%: the current drive letter, without a colon. Case as per
+; the LOWER environment item.
 IV_DISK:	LD	A,(CURDRIVE)
 	JR	IVB10
 
+;        %_COLUMN%: the current cursor column, from the BIOS variable CSRX
+; (1 = leftmost).
+;        IVC10 is a common tail: it returns the 8-bit value in A as a
+; decimal ASCIIZ string at ENVNAME.
 IV_COLUMN:	LD	A,(CSRX)
 IVC10:	LD	IX,ENVNAME
 	PUSH	IX
@@ -45,53 +75,73 @@ IVC10:	LD	IX,ENVNAME
 	POP	DE
 	RET
 
+;        %_COLUMNS%: the screen width in columns, from the BIOS variable
+; LINLEN.
 IV_COLUMNS:	LD	A,(LINLEN)
 	JR	IVC10
 
+;        %_BG%: the current screen background colour number.
 IV_BG:	LD	A,(BAKCLR)
 	JR	IVC10
 
+;        %_FG%: the current screen foreground colour number.
 IV_FG:	LD	A,(FORCLR)
 	JR	IVC10
 
+;        %_ROW%: the current cursor row, from the BIOS variable CSRY
+; (1 = top).
 IV_ROW:	LD	A,(CSRY)
 	JR	IVC10
 
+;        %_ROWS%: the number of screen rows, from the BIOS variable CRTCNT.
 IV_ROWS:	LD	A,(CRTCNT)
 	JR	IVC10
 
+;        %_ERROR%: the error code left by the previous command (0 = no
+; error).
 IV_ERROR:	LD	A,(ABORTERR)
 	JR	IVC10
 
+;        %_DRIVEMAP%: the available drives as eight "0"/"1" digits, from
+; the _LOGIN login vector; drive H: is the leftmost digit, drive A: the
+; rightmost one.
 IV_DRIVEMAP:	LD	C,_LOGIN
-	CALL	BDOS
+	CALL	BDOS	; L = login vector, b0 = A: etc.
 	LD	C,L
-	JP	FNP10
+	JP	FNP10	; Render C as binary digits.
 
-IV_SHELL:	CALL	SETPG2
+;        %_SHELL%: the shell nesting level, "0" for the original COMMAND2.
+; Whenever a transient command is run, the region EXITADDR to BUFFER1-1 is
+; saved in the mapper segment below the save pointer kept at VAREND (see
+; cli.mac); the level is recovered by dividing the amount of space in use
+; by the size of one saved image.
+IV_SHELL:	CALL	SETPG2	; Map the mapper segment at page 2.
 	LD	HL,#3FFF
-	LD	DE,(VAREND+#8000)
-	RES	7,D
+	LD	DE,(VAREND+#8000)	; Saved state stack pointer.
+	RES	7,D	; Strip the page 2 address bit.
 	OR	A
-	SBC	HL,DE
+	SBC	HL,DE	; HL = bytes of saved state in use.
 	CALL	RSTPG2
-	LD	DE,BUFFER1-EXITADDR
+	LD	DE,BUFFER1-EXITADDR	; Size of one saved image.
 	XOR	A
 IVS10:	INC	A
 	SBC	HL,DE
 	JR	NC,IVS10
-	DEC	A
+	DEC	A	; A = number of saved images.
 	JR	IVC10
 
+;        %_CPU%: the CPU type, "Z80" or "R800". On a Turbo-R the current
+; mode is obtained from the BIOS GETCPU routine, on other machines it is
+; always the Z80.
 IV_CPU:	LD	A,(MSXVER)
 	LD	DE,Z80$
-	CP	3
-	RET	C
-	LD	IX,#0183
-	CALL	CALLSLOT
+	CP	3	; Turbo-R ?
+	RET	C	; "Z80" if not.
+	LD	IX,#0183	; GETCPU.
+	CALL	CALLSLOT	; E = CPU mode.
 	LD	A,E
 	LD	DE,Z80$
-	OR	A
+	OR	A	; 0 => Z80 mode.
 	RET	Z
 	LD	DE,R800$
 	RET
@@ -99,6 +149,8 @@ IV_CPU:	LD	A,(MSXVER)
 Z80$:	DEFB	"Z80",0
 R800$:	DEFB	"R800",0
 
+;        %_MSXVER%: the machine type as a string, from the MSX version byte
+; (1 = MSX2, 2 = MSX2+, anything else = Turbo-R).
 IV_MSXVER:	LD	A,(MSXVER)
 	LD	DE,MSX2$
 	DEC	A
@@ -113,13 +165,19 @@ MSX2$:	DEFB	"MSX-2",0
 MSX2P$:	DEFB	"MSX-2+",0
 TURBOR$:	DEFB	"Turbo-R",0
 
-IV_CWDS:	SCF
-IV_CWD:	EX	AF,AF'
+;        %_CWD% and %_CWDS%: the current directory as "D:\PATH", %_CWDS%
+; with a trailing backslash. Built at ENVNAME: "D:\" from the current
+; drive, then the path from a guarded _GETCD call (a disk error truncates
+; the value). For %_CWDS% the result is parsed to locate its end and a "\"
+; is appended unless already there (root directory). Case as per the LOWER
+; environment item.
+IV_CWDS:	SCF	; Cy => append a trailing "\".
+IV_CWD:	EX	AF,AF'	; Save it.
 	CALL	SETABT
 	LD	HL,ENVNAME
 	LD	A,(CURDRIVE)
-	LD	B,A
-	ADD	A,"@"
+	LD	B,A	; B = drive for _GETCD.
+	ADD	A,"@"	; 1 => "A" etc.
 	LD	(HL),A
 	INC	HL
 	LD	(HL),":"
@@ -127,20 +185,20 @@ IV_CWD:	EX	AF,AF'
 	LD	(HL),"\"
 	INC	HL
 	LD	(HL),#00
-	EX	DE,HL
+	EX	DE,HL	; Path goes after the "D:\".
 	LD	C,_GETCD
 	CALL	BDOS
 	OR	A
 	LD	DE,ENVNAME
 	PUSH	DE
-	JR	NZ,IVC20
+	JR	NZ,IVC20	; Error => truncate the value.
 	EX	AF,AF'
-	JR	NC,IVC30
+	JR	NC,IVC30	; Plain %_CWD% is complete now.
 	LD	BC,_PARSE
-	CALL	BDOS
+	CALL	BDOS	; DE -> end of the string.
 	DEC	DE
 	LD	A,(DE)
-	CP	"\"
+	CP	"\"	; Root directory ?
 	INC	DE
 	JR	Z,IVC30
 	LD	A,"\"
@@ -152,101 +210,123 @@ IVC30:	CALL	RSTABT
 	POP	DE
 	JP	CHKLOW
 
+;        %_CWP% and %_CWPS%: as %_CWD%/%_CWDS% but without the leading
+; "D:", i.e. "\PATH": the first two characters of the %_CWD% result are
+; skipped (unless it was truncated by an error).
 IV_CWPS:	SCF
 IV_CWP:	CALL	IV_CWD
 	INC	DE
 	LD	A,(DE)
 	OR	A
-	RET	Z
+	RET	Z	; Truncated by an error.
 	INC	DE
 	RET
 
-IV_DATEF:	SCF
-IV_DATE:	EX	AF,AF'
-	CALL	DFORM
+;        %_DATE% and %_DATEF%: the current date, in the format set by the
+; DATE environment item (DFORM); %_DATEF% with a four digit year. The
+; _GDATE result is packed into a directory format date word at ENVNAME+0/1
+; and rendered by DDATE from ENVNAME+2 on; DE returns ENVNAME+3, past the
+; leading space that DDATE emits.
+IV_DATEF:	SCF	; Cy => print the century.
+IV_DATE:	EX	AF,AF'	; Save it.
+	CALL	DFORM	; Set DATEFORM from the environment.
 	LD	C,_GDATE
-	CALL	BDOS
+	CALL	BDOS	; HL = year, D = month, E = day.
 	LD	BC,#F844
-	ADD	HL,BC
-	LD	A,D
-	ADD	A,A
-	ADD	A,A
-	ADD	A,A
+	ADD	HL,BC	; L = year - 1980.
+	LD	A,D	; Pack year/month/day into a
+	ADD	A,A	;   directory format date word:
+	ADD	A,A	;   b0-4 day, b5-8 month,
+	ADD	A,A	;   b9-15 year-1980.
 	ADD	A,A
 	ADD	A,A
 	RL	L
 	OR	E
 	LD	D,L
 	LD	HL,ENVNAME+1
-	LD	(HL),D
+	LD	(HL),D	; MSB.
 	DEC	HL
-	LD	(HL),A
+	LD	(HL),A	; LSB.
 	EX	AF,AF'
 	SBC	A,A
-	LD	C,A
-	LD	IX,ENVNAME+2
+	LD	C,A	; C = FF => DDATE prints century.
+	LD	IX,ENVNAME+2	; Text goes here.
 	PUSH	IX
 	CALL	DDATE
 	POP	DE
-	INC	DE
+	INC	DE	; Skip the leading space.
 	RET
 
+;        %_DOSVER%: the COMMAND2.COM version, as a fixed string.
 IV_DOSVER:	LD	DE,DOSVER$
 	RET
 
 DOSVER$:	DEFB	"2.41",0
 
+;        %_DOW%: the current day of the week as a full English name: _GDATE
+; returns the day of the week in A (0 = Sunday); messages #17-#1D are the
+; stems "Sun" to "Satur", to which message #1E ("day") is appended.
 IV_DOW:	LD	C,_GDATE
-	CALL	BDOS
-	ADD	A,#17
+	CALL	BDOS	; A = day of week, 0 = Sunday.
+	ADD	A,#17	; Messages #17-#1D = "Sun".."Satur".
 	CALL	GETMSG
 	EX	DE,HL
 	LD	DE,ENVNAME
 	CALL	NCOPY
-	DEC	DE
+	DEC	DE	; Back onto the null.
 	PUSH	DE
-	LD	A,#1E
+	LD	A,#1E	; Message #1E = "day".
 	CALL	GETMSG
 	EX	DE,HL
 	POP	DE
-	CALL	NCOPY
+	CALL	NCOPY	; Append it.
 	LD	DE,ENVNAME
 	RET
 
-IV_TIME:	CALL	TFORM
+;        %_TIME%: the current time as "HH:MM:SS", in 12 or 24 hour format
+; as per the TIME environment item (TFORM); in 12 hour format an "a" or "p"
+; is appended. Hours and minutes are packed into a directory format time
+; word at ENVNAME+0/1 and rendered by DTIME, then the seconds from _GTIME
+; are appended by hand. DE returns ENVNAME+3, past DTIME's leading space.
+IV_TIME:	CALL	TFORM	; Set TIMEFORM from the environment.
 	LD	C,_GTIME
-	CALL	BDOS
-	PUSH	DE
-	LD	A,L
-	ADD	A,A
-	ADD	A,A
+	CALL	BDOS	; H = hours, L = mins, D = secs.
+	PUSH	DE	; Save seconds.
+	LD	A,L	; Pack hours/minutes into a
+	ADD	A,A	;   directory format time word:
+	ADD	A,A	;   b5-10 minutes, b11-15 hours.
 	LD	B,#03
 IVT10:	ADD	A,A
 	RL	H
 	DJNZ	IVT10
 	LD	C,H
 	LD	HL,ENVNAME
-	LD	(HL),A
+	LD	(HL),A	; LSB.
 	INC	HL
-	LD	(HL),C
-	LD	IX,ENVNAME+2
+	LD	(HL),C	; MSB.
+	LD	IX,ENVNAME+2	; Text goes here.
 	CALL	DTIME
-	POP	BC
-	PUSH	AF
+	POP	BC	; B = seconds.
+	PUSH	AF	; Save trailing "a"/"p"/space.
 	LD	(IX),":"
 	INC	IX
 	LD	A,B
-	LD	D,#FF
+	LD	D,#FF	; Always two digits.
 	CALL	PRFIG2
 	POP	AF
 	CP	" "
-	JR	Z,IVT20
+	JR	Z,IVT20	; No am/pm indicator.
 	LD	(IX),A
 	INC	IX
 IVT20:	LD	(IX),#00
 	LD	DE,ENVNAME+3
 	RET
 
+;        SETABT and RSTABT bracket a "guarded" BDOS call. SETABT installs
+; DSKERR as the disk error handler and ABRT as the abort routine (both in
+; cli.mac), so that a disk error or abort condition during the call makes
+; it return to its caller with A = #FF instead of aborting COMMAND2. Both
+; routines preserve all the main registers.
 SETABT:	PUSH	BC
 	PUSH	DE
 	PUSH	HL
@@ -263,6 +343,8 @@ SETABT:	PUSH	BC
 	POP	BC
 	RET
 
+;        Restores the default disk error handling and the normal CLI_ABORT
+; abort routine; see SETABT above.
 RSTABT:	PUSH	BC
 	PUSH	DE
 	PUSH	HL
@@ -279,22 +361,28 @@ RSTABT:	PUSH	BC
 	POP	BC
 	RET
 
+;        %_FNEXT%: the name of the next file matching the search started by
+; %@FFIRST[filespec]%, continued with _FNEXT on the same FIB (FIB3). The
+; file's size and count are added to the @FILETOTAL and %_FILECOUNT%
+; accumulators. A null string is returned when no more files match.
 IV_FNEXT:	CALL	SETABT
-	LD	IX,FIB3
+	LD	IX,FIB3	; The FIB set up by @FFIRST.
 	LD	C,_FNEXT
 	CALL	BDOS
 	CALL	RSTABT
 	OR	A
-	JP	NZ,FND90
-	LD	HL,FIB3+#15
-	LD	DE,FILETOT1
+	JP	NZ,FND90	; No more files => null string.
+	LD	HL,FIB3+#15	; Add the 32-bit file size to
+	LD	DE,FILETOT1	;   the running total.
 	CALL	ADD32
 	LD	HL,(FILECNT)
 	INC	HL
 	LD	(FILECNT),HL
-	LD	DE,FIB3+1
+	LD	DE,FIB3+1	; Return the ASCIIZ filename.
 	RET
 
+;        %_FILECOUNT%: the number of files found so far by the
+; @FFIRST/_FNEXT walk, in decimal.
 IV_FILECOUNT:	LD	HL,(FILECNT)
 	LD	IX,ENVNAME
 	PUSH	IX
@@ -302,10 +390,15 @@ IV_FILECOUNT:	LD	HL,(FILECNT)
 	POP	DE
 	RET
 
+	SUBTTL	Variable functions
+;        %@ALIAS[name]%: the value of the given alias, or a null string if
+; it is not defined; GETALIAS (io.mac) copies it to ENVNAME.
 FN_ALIAS:	LD	DE,ENVNAME
 	CALL	GETALIAS
 	RET
 
+;        %@ASCII[c]%: the ASCII value of the first argument character, in
+; decimal.
 FN_ASCII:	LD	A,(HL)
 	LD	IX,ENVNAME
 	PUSH	IX
@@ -313,32 +406,37 @@ FN_ASCII:	LD	A,(HL)
 	POP	DE
 	RET
 
+;        %@ATTRIB[filespec,attribs]%: "1" if the file's attribute byte is
+; exactly equal to the given combination (both set and reset bits must
+; match), else "0". The letters R, H, S, D and A are OR-ed together via
+; ATTRTAB, "N" (normal) resets the combination to no bits at all, and
+; unknown letters are ignored. An inaccessible file never matches.
 FN_ATTRIB:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; HL -> filespec terminator.
 	XOR	A
-	LD	(HL),A
-	LD	(ATTRIB1),A
+	LD	(HL),A	; Cut the filespec there.
+	LD	(ATTRIB1),A	; No attribute bits yet.
 FNA10:	INC	HL
-	CALL	GETCH
-	JR	Z,FNA40
+	CALL	GETCH	; Next attribute letter.
+	JR	Z,FNA40	; End of the argument.
 	CALL	UC
 	CP	"N"
 	LD	B,A
 	LD	A,#00
-	JR	Z,FNA30
+	JR	Z,FNA30	; "N" => reset to no bits.
 	LD	DE,ATTRTAB
 FNA20:	LD	A,(DE)
 	OR	A
-	JR	Z,FNA10
+	JR	Z,FNA10	; Unknown letter, ignore it.
 	CP	B
 	INC	DE
 	LD	A,(DE)
 	INC	DE
 	JR	NZ,FNA20
-	LD	B,A
+	LD	B,A	; B = the attribute bit.
 	LD	A,(ATTRIB1)
 	OR	B
 FNA30:	LD	(ATTRIB1),A
@@ -347,30 +445,35 @@ FNA30:	LD	(ATTRIB1),A
 FNA40:	CALL	SETABT
 	POP	DE
 	LD	C,_ATTR
-	XOR	A
+	XOR	A	; Get attributes; L = result.
 	CALL	BDOS
 	OR	A
 	JR	Z,FNA50
-	LD	L,#FF
+	LD	L,#FF	; Error => match nothing.
 FNA50:	CALL	RSTABT
 	LD	DE,ENVNAME+1
-	LD	(DE),A
+	LD	(DE),A	; Terminator (A = 0 if no error).
 	DEC	DE
 	LD	A,"0"
 	LD	(DE),A
 	LD	A,(ATTRIB1)
-	CP	L
+	CP	L	; Exact match of all bits ?
 	RET	NZ
 	LD	A,"1"
 	LD	(DE),A
 	RET
 
+;        Attribute letter/attribute bit pairs for @ATTRIB. There is no
+; explicit terminator: the FNA20 scan stops at the first zero byte after
+; the table.
 ATTRTAB:	DEFB	"R",#01
 	DEFB	"H",#02
 	DEFB	"S",#04
 	DEFB	"D",#10
 	DEFB	"A",#20
 
+;        %@CHAR[n]%: a one character string containing the character with
+; ASCII value n. A null string if n is not a valid number below 256.
 FN_CHAR:	CALL	GET8
 	JP	NZ,FND90
 	LD	HL,ENVNAME+1
@@ -380,6 +483,8 @@ FN_CHAR:	CALL	GET8
 	EX	DE,HL
 	RET
 
+;        %@HEX[n]%: the value of n as four hexadecimal digits (two per
+; byte, via MKBYTE). A null string if n is not a valid 16-bit number.
 FN_HEX:	CALL	GET16
 	JP	NZ,FND90
 	LD	HL,ENVNAME
@@ -392,25 +497,32 @@ FN_HEX:	CALL	GET16
 	POP	DE
 	RET
 
-FN_DISKFREE:	CALL	GETALLOC
-FND20:	JR	C,FND90
-	DEFB	#3E
+;        %@DISKFREE[d:,b|k|m]%: the free space on a drive ("@:" = current
+; drive) in bytes, kilobytes or megabytes.
+;        FND20-FND80 are shared by the disk and file size functions: the
+; cluster count in HL is multiplied by B = sectors per cluster and by the
+; sector size (512) into a 32-bit byte count, which is then divided by 1024
+; once for "K" or twice for "M" (unit letter in AF') and rendered in
+; decimal at ENVNAME. FND50 enters with a byte count in HL:DE directly.
+FN_DISKFREE:	CALL	GETALLOC	; HL = free clusters.
+FND20:	JR	C,FND90	; Bad argument => null string.
+	DEFB	#3E	; "LD A,n": skips one ADD HL,HL.
 FND30:	ADD	HL,HL
-FND40:	SRL	B
+FND40:	SRL	B	; HL = clusters * sectors/cluster.
 	JR	NZ,FND30
-	LD	E,#00
+	LD	E,#00	; HL:DE = HL * 512 (sector size).
 	LD	D,L
 	LD	L,H
 	LD	H,E
 	SLA	D
 	ADC	HL,HL
-FND50:	LD	(VALUEL),DE
+FND50:	LD	(VALUEL),DE	; Store the 32-bit byte count.
 	LD	(VALUEH),HL
-	EX	AF,AF'
+	EX	AF,AF'	; Get the unit letter.
 	CP	"B"
-	JR	Z,FND80
+	JR	Z,FND80	; Bytes.
 	LD	B,10
-FND60:	SRL	H
+FND60:	SRL	H	; Divide by 1024 => kilobytes.
 	RR	L
 	RR	D
 	RR	E
@@ -418,9 +530,9 @@ FND60:	SRL	H
 	LD	(VALUEL),DE
 	LD	(VALUEH),HL
 	CP	"K"
-	JR	Z,FND80
+	JR	Z,FND80	; Kilobytes.
 	LD	B,10
-FND70:	SRL	H
+FND70:	SRL	H	; Divide by 1024 => megabytes.
 	RR	L
 	RR	D
 	RR	E
@@ -428,41 +540,53 @@ FND70:	SRL	H
 	LD	(VALUEL),DE
 	LD	(VALUEH),HL
 FND80:	LD	DE,VALUEL
-	XOR	A
-	LD	IX,ENVNAME
+	XOR	A	; No leading characters.
+	LD	IX,ENVNAME	; Render in decimal here.
 	PUSH	IX
 	CALL	D32
 	POP	DE
 	XOR	A
 	RET
 
+;        Shared error exit: return a null string (CMDTEND is a zero byte,
+; see tables.mac).
 FND90:	LD	DE,CMDTEND
 	RET
 
+;        %@FILETOTAL[b|k|m]%: the accumulated size of the files returned by
+; the @FFIRST/_FNEXT walk, scaled by the unit letter.
 FN_FILETOTAL:	LD	A,(HL)
 	CALL	MKUPPER
-	EX	AF,AF'
+	EX	AF,AF'	; Unit letter for FND50.
 	LD	DE,(FILETOT1)
 	LD	HL,(FILETOT2)
 	JR	FND50
 
+;        Parses the "d:,b|k|m" argument of the @DISK* functions and gets
+; the drive's allocation information with a guarded _ALLOC call.
+; On entry, HL points to the argument; the drive letter may be "@" for the
+;               current drive and must be followed by ":".
+; On exit,  Cy set => bad argument or invalid drive. Otherwise HL = free
+;               clusters, DE = total clusters, B = sectors per cluster and
+;               AF' holds the upper-cased unit letter. IY is reloaded with
+;               REDIRST.
 GETALLOC:	LD	A,(HL)
 	CALL	UC
-	SUB	"@"
+	SUB	"@"	; "@" => 0 = current drive.
 	RET	C
-	CP	9
+	CP	9	; Only drives up to H: are valid.
 	CCF
 	RET	C
-	LD	E,A
+	LD	E,A	; E = drive for _ALLOC.
 	INC	HL
 	LD	A,(HL)
 	CP	":"
 	SCF
-	RET	NZ
+	RET	NZ	; The colon is mandatory.
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH	; Skip the separator.
 	SCF
-	RET	Z
+	RET	Z	; Unit letter is missing.
 	CALL	UC
 	CP	"B"
 	JR	Z,GET10
@@ -470,123 +594,140 @@ GETALLOC:	LD	A,(HL)
 	JR	Z,GET10
 	CP	"M"
 	SCF
-	RET	NZ
-GET10:	EX	AF,AF'
+	RET	NZ	; Not a valid unit letter.
+GET10:	EX	AF,AF'	; Save the unit letter.
 	CALL	SETABT
 	LD	C,_ALLOC
 	CALL	BDOS
 	CALL	RSTABT
 	LD	IY,REDIRST
-	LD	B,A
+	LD	B,A	; B = sectors per cluster.
 	INC	A
 	SCF
-	RET	Z
+	RET	Z	; A was FF => invalid drive.
 	OR	A
 	RET
 
+;        %@DISKTOTAL[d:,b|k|m]%: the total size of a drive, from the total
+; cluster count.
 FN_DISKTOTAL:	CALL	GETALLOC
-	EX	DE,HL
+	EX	DE,HL	; HL = total clusters.
 	JP	FND20
 
+;        %@DISKUSED[d:,b|k|m]%: the space in use on a drive: total minus
+; free clusters.
 FN_DISKUSED:	CALL	GETALLOC
 	JP	C,FND90
 	EX	DE,HL
 	OR	A
-	SBC	HL,DE
+	SBC	HL,DE	; HL = total - free clusters.
 	JP	FND40
 
-FN_FILEDATE:	SCF
-FN_FILETIME:	EX	AF,AF'
+;        %@FILEDATE[filespec]% and %@FILETIME[filespec]%: the date or time
+; of last modification of a file (one shared body; Cy in AF' selects the
+; date). The guarded _FTIME call returns DE = time and HL = date in
+; directory format; the selected word is stored at ENVNAME+0/1 and rendered
+; from ENVNAME+2 on by DTIME (seconds appended by hand, "a"/"p" in 12 hour
+; format) or by DDATE (two digit year, format as per the DATE environment
+; item). A null string is returned when the filespec is followed by garbage
+; or the file is not accessible.
+FN_FILEDATE:	SCF	; Cy => return the date.
+FN_FILETIME:	EX	AF,AF'	; Save it.
 	EX	DE,HL
 	PUSH	DE
-	CALL	DFORM
-	CALL	TFORM
+	CALL	DFORM	; Set the date and time formats
+	CALL	TFORM	;   from the environment.
 	POP	DE
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; HL -> filespec terminator.
 	POP	DE
 	PUSH	HL
 	CALL	GETCH
 	POP	HL
-	JP	NZ,FND90
-	LD	(HL),A
+	JP	NZ,FND90	; Garbage after the filespec.
+	LD	(HL),A	; Terminate the filespec.
 	CALL	SETABT
 	LD	C,_FTIME
-	CALL	BDOS
+	CALL	BDOS	; DE = time, HL = date.
 	CALL	RSTABT
 	OR	A
 	JP	NZ,FND90
 	EX	AF,AF'
 	JR	NC,FNF10
-	EX	DE,HL
+	EX	DE,HL	; Date wanted => DE = date.
 FNF10:	EX	AF,AF'
 	LD	HL,ENVNAME
-	LD	(HL),E
+	LD	(HL),E	; Store the word for DTIME/DDATE.
 	INC	HL
 	LD	(HL),D
-	LD	IX,ENVNAME+2
+	LD	IX,ENVNAME+2	; Text goes here.
 	EX	AF,AF'
 	JR	C,FNF40
 	PUSH	DE
 	CALL	DTIME
 	POP	BC
-	PUSH	AF
+	PUSH	AF	; Save trailing "a"/"p"/space.
 	LD	(IX),":"
 	INC	IX
 	LD	A,C
-	AND	%00011111
-	ADD	A,A
-	LD	D,#FF
+	AND	%00011111	; b0-4 of the word = seconds/2,
+	ADD	A,A	;   so times two.
+	LD	D,#FF	; Always two digits.
 	CALL	PRFIG2
 	POP	AF
 	CP	" "
-	JR	Z,FNF20
+	JR	Z,FNF20	; No am/pm indicator.
 	LD	(IX),A
 	INC	IX
 FNF20:	LD	(IX),#00
-FNF30:	LD	DE,ENVNAME+3
+FNF30:	LD	DE,ENVNAME+3	; Past DTIME/DDATE's lead space.
 	RET
 
-FNF40:	DEC	HL
-	LD	C,#00
+FNF40:	DEC	HL	; HL -> the date word (LSB).
+	LD	C,#00	; Two digit year.
 	CALL	DDATE
 	JR	FNF30
 
+;        %@FILESIZE[filespec,b|k|m]%: the size of a file, scaled by the
+; unit letter. The filespec must not be ambiguous nor "." or ".."; the file
+; is located with a guarded _FFIRST (attributes #16, so hidden and system
+; files and directories are found too) and its 32-bit size is taken from
+; the FIB. A null string is returned on any error.
 FN_FILESIZE:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; HL -> filespec terminator.
 	XOR	A
-	LD	(HL),A
+	LD	(HL),A	; Cut the filespec there.
 	POP	DE
 	LD	A,B
-	AND	%01100000
+	AND	%01100000	; Reject ambiguous, "." and "..".
 	JP	NZ,FND90
 	INC	HL
 	CALL	GETCH
-	JP	Z,FND90
+	JP	Z,FND90	; Unit letter is missing.
 	CALL	UC
 	CP	"B"
 	JR	Z,FNF50
 	CP	"K"
 	JR	Z,FNF50
 	CP	"M"
-	JP	NZ,FND90
-FNF50:	EX	AF,AF'
+	JP	NZ,FND90	; Not a valid unit letter.
+FNF50:	EX	AF,AF'	; Unit letter for FND50.
 	CALL	SETABT
 	LD	C,_FFIRST
-	LD	B,#16
+	LD	B,#16	; Include hidden/system/dirs.
 	LD	IX,FIB1
 	CALL	BDOS
 	CALL	RSTABT
 	OR	A
 	JR	Z,FNF60
-	JP	FND90
+	JP	FND90	; Not found => null string.
 
-FNF60:	LD	HL,FIB1+#15
+FNF60:	LD	HL,FIB1+#15	; 32-bit file size from the FIB.
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
@@ -595,22 +736,26 @@ FNF60:	LD	HL,FIB1+#15
 	INC	HL
 	LD	H,(HL)
 	LD	L,A
-	JP	FND50
+	JP	FND50	; Scale and render it.
 
+;        %@FILEATTR[filespec]%: the attributes of a file or directory as
+; letters from ATTRLST$, scanning the guarded _ATTR result from bit 7
+; down; only the letters of set bits appear, so the order is A D V S H R.
+; A null string is returned on error or if garbage follows the filespec.
 FN_FILEATTR:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; HL -> filespec terminator.
 	POP	DE
 	PUSH	HL
 	CALL	GETCH
 	POP	HL
-	JP	NZ,FND90
-	LD	(HL),A
+	JP	NZ,FND90	; Garbage after the filespec.
+	LD	(HL),A	; Terminate the filespec.
 	CALL	SETABT
 	LD	C,_ATTR
-	CALL	BDOS
+	CALL	BDOS	; A = 0: get; L = attributes.
 	CALL	RSTABT
 	OR	A
 	JP	NZ,FND90
@@ -618,11 +763,11 @@ FN_FILEATTR:	EX	DE,HL
 	LD	DE,ENVNAME
 	PUSH	DE
 	LD	HL,ATTRLST$
-	LD	B,#08
-FNF70:	RLA
+	LD	B,#08	; 8 attribute bits.
+FNF70:	RLA	; Attribute bit set ?
 	JR	NC,FNF80
 	PUSH	AF
-	LD	A,(HL)
+	LD	A,(HL)	; Yes, emit its letter.
 	LD	(DE),A
 	POP	AF
 	INC	DE
@@ -633,11 +778,17 @@ FNF80:	INC	HL
 	POP	DE
 	RET
 
+;        Attribute letters for @FILEATTR, bit 7 first; bits 7 and 6 are
+; not used.
 ATTRLST$:	DEFB	"--ADVSHR"
 
+;        %@LABEL[d:]%: the volume label of the drive (the current drive if
+; omitted), found with a guarded volume name _FFIRST. A null string is
+; returned for an invalid drive, when there is no label, or on a disk
+; error (#FF from the guarded call).
 FN_LABEL:	EX	DE,HL
 	CALL	SETABT
-	LD	BC,#0840
+	LD	BC,#0840	; _FFIRST, volume name bit set.
 	LD	IX,FIB1
 	CALL	BDOS
 	CALL	RSTABT
@@ -647,27 +798,31 @@ FN_LABEL:	EX	DE,HL
 	JP	Z,FND90
 	CP	#FF
 	JP	Z,FND90
-	LD	DE,FIB1+1
+	LD	DE,FIB1+1	; Return the label from the FIB.
 	RET
 
+;        %@READY[d:]%: "1" if the drive is ready, "0" if not. Probed with a
+; guarded volume name _FFIRST: success or "no files" mean the disk could
+; be read, #FF (disk error) means not ready, and any other error (e.g. an
+; invalid drive) yields a null string.
 FN_READY:	PUSH	HL
 	CALL	PARSDR
 	POP	DE
-	LD	B,#00
-	JR	NZ,FNR10
+	LD	B,#00	; Default: return a null string.
+	JR	NZ,FNR10	; Not a valid drive letter.
 	CALL	SETABT
-	LD	BC,#0840
+	LD	BC,#0840	; _FFIRST, volume name bit set.
 	LD	IX,FIB1
 	CALL	BDOS
 	CALL	RSTABT
 	LD	B,"1"
 	OR	A
-	JR	Z,FNR10
+	JR	Z,FNR10	; Found a label => ready.
 	CP	.NOFIL
-	JR	Z,FNR10
+	JR	Z,FNR10	; No label but readable => ready.
 	LD	B,"0"
 	CP	#FF
-	JR	Z,FNR10
+	JR	Z,FNR10	; Disk error => not ready.
 	LD	B,#00
 FNR10:	LD	HL,ENVNAME
 	PUSH	HL
@@ -677,102 +832,123 @@ FNR10:	LD	HL,ENVNAME
 	POP	DE
 	RET
 
+;        %@EXT[filespec]%: the filename extension, without the dot. The
+; last item of the filespec is expanded by _PFILE into the 11 byte
+; blank-padded upper case form at ENVNAME; DE returns the 3 extension
+; characters, null-terminated by _PFILE's A = 0 result.
 FN_EXT:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; DE -> last item of the filespec.
 	LD	HL,ENVNAME
 	LD	C,_PFILE
-	CALL	BDOS
-	LD	(ENVNAME+11),A
-	LD	DE,ENVNAME+8
+	CALL	BDOS	; Expand it at ENVNAME.
+	LD	(ENVNAME+11),A	; A = 0: terminator.
+	LD	DE,ENVNAME+8	; The 3 extension characters.
 	RET
 
+;        %@LEN[string]%: the length of the argument string, in decimal.
 FN_LEN:	LD	B,#FF
 FNL10:	LD	A,(HL)
 	INC	B
 	INC	HL
 	OR	A
 	JR	NZ,FNL10
-	LD	A,B
+	LD	A,B	; B = length.
 	JP	IVC10
 
+;        %@INSTR[n,string1,string2]%: the position of string2 inside
+; string1, 1-based, "0" if it is not found; the search starts at position
+; n (n and its comma may be omitted). String1 may be quoted to protect
+; commas and is copied to XBUF1 by PRSSTR; the comparison (CHKEQ, cmd.mac)
+; is case sensitive. A null string results if string2 is missing or n lies
+; beyond the end of string1.
 FN_INSTR:	LD	E,#00
 	CALL	GETDIG
-	JR	C,FNI10
-	CALL	GET8
+	JR	C,FNI10	; No digit => n omitted.
+	CALL	GET8	; E = n.
 	JP	NZ,FND90
 FNI10:	PUSH	DE
 	CALL	GETCH
-	CALL	PRSSTR
+	CALL	PRSSTR	; String1 to XBUF1.
 	POP	DE
-	JP	Z,FND90
-	CALL	STRIP
+	JP	Z,FND90	; No comma => string2 missing.
+	CALL	STRIP	; HL -> string2.
 	PUSH	HL
-	LD	B,E
-	LD	E,#00
+	LD	B,E	; B = start position.
+	LD	E,#00	; E = position counter.
 	LD	HL,XBUF1-1
 	DEC	B
 	INC	B
-	JR	Z,FNI30
-FNI20:	INC	HL
+	JR	Z,FNI30	; n = 0 => start at position 1.
+FNI20:	INC	HL	; Advance to position n;
 	INC	E
 	LD	A,(HL)
 	OR	A
-	JR	Z,FNI60
+	JR	Z,FNI60	;   past the end => null string.
 	DJNZ	FNI20
 	DEC	HL
 	DEC	E
 FNI30:	LD	B,H
 	LD	C,L
-	POP	HL
-FNI40:	INC	BC
+	POP	HL	; HL -> string2.
+FNI40:	INC	BC	; Try a match at each position.
 	INC	E
 	LD	A,(BC)
 	OR	A
-	JR	Z,FNI50
+	JR	Z,FNI50	; End of string1 => not found.
 	PUSH	BC
 	PUSH	HL
-	CALL	CHKEQ
+	CALL	CHKEQ	; String2 matches here ?
 	POP	HL
 	POP	BC
 	JR	NZ,FNI40
-	LD	A,E
+	LD	A,E	; Found: the 1-based position.
 	JP	IVC10
 
-FNI50:	XOR	A
+FNI50:	XOR	A	; Not found => "0".
 	JP	IVC10
 
 FNI60:	POP	HL
 	JP	FND90
 
+;        Parses one string argument for the functions that take a
+; "string," parameter: copies characters from (HL) up to a comma or the
+; end of the line into XBUF1 as an ASCIIZ string. Quote characters (" or
+; ') make enclosed commas literal (RDCHAR in cli.mac keeps the quoting
+; state in C).
+; On exit,  Z => no comma was found (this was the last argument);
+;           NZ => a comma was found and HL points just past it.
 PRSSTR:	EX	DE,HL
 	LD	HL,XBUF1
-	LD	C,#00
+	LD	C,#00	; No quote pending.
 PRS20:	CALL	RDCHAR
 	JR	C,PRS30
-	CP	","
+	CP	","	; Unquoted comma ends the argument.
 	JR	Z,PRS50
 	OR	A
 PRS30:	JR	NC,PRS40
-	CP	C
+	CP	C	; Skip the opening quote itself.
 	JR	Z,PRS20
 PRS40:	LD	(HL),A
 	INC	HL
 	OR	A
-	RET	Z
+	RET	Z	; End of line => Z.
 	JR	PRS20
 
-PRS50:	XOR	A
+PRS50:	XOR	A	; Comma found: terminate the copy,
 	LD	(HL),A
-	EX	DE,HL
-	INC	A
+	EX	DE,HL	;   HL -> after the comma,
+	INC	A	;   return NZ.
 	RET
 
+;        %@LOWER[string]%: the argument string lower-cased in place, via
+; the CHKLOW loop.
 FN_LOWER:	EX	DE,HL
 	PUSH	DE
 	JP	CHK10
 
+;        %@UPPER[string]%: the argument string upper-cased in place.
 FN_UPPER:	EX	DE,HL
 	PUSH	DE
 FNU10:	LD	A,(DE)
@@ -784,70 +960,88 @@ FNU10:	LD	A,(DE)
 	POP	DE
 	RET
 
+;        %@NAME[filespec]%: the base name of the file, without path or
+; extension, as the 8 character blank-padded upper case field produced by
+; _PFILE at ENVNAME.
 FN_NAME:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; DE -> last item of the filespec.
 	LD	HL,ENVNAME
 	LD	C,_PFILE
-	CALL	BDOS
-	LD	(ENVNAME+8),A
+	CALL	BDOS	; Expand it at ENVNAME.
+	LD	(ENVNAME+8),A	; A = 0: terminator.
 	LD	DE,ENVNAME
 	RET
 
+;        %@FILE[filespec]%: the filename and extension part of the
+; filespec: _PARSE returns the start of the last item in HL, which is
+; returned as is.
 FN_FILE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
-	EX	DE,HL
+	EX	DE,HL	; DE -> last item of the filespec.
 	RET
 
+;        %@PATH[filespec]%: the path part of the filespec, including the
+; drive letter and the trailing backslash: the argument is truncated in
+; place at the start of the last item found by _PARSE.
 FN_PATH:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
-	LD	(HL),#00
+	LD	(HL),#00	; Cut at the last item.
 	POP	DE
 	RET
 
-FN_MID:	CALL	PRSSTR
+;        %@MID[string,start,length]%: the substring of "length" characters
+; from the 1-based position "start". The string (which may be quoted to
+; protect commas) is copied to XBUF1 by PRSSTR; when the length is omitted
+; the rest of the string is returned. A start position past the end of the
+; string, or a missing or invalid number, yields a null string.
+FN_MID:	CALL	PRSSTR	; String to XBUF1.
 	CALL	NZ,GETCH
-	JP	Z,FND90
-	CALL	GET8
+	JP	Z,FND90	; Start position is missing.
+	CALL	GET8	; E = start.
 	JP	NZ,FND90
 	LD	A,E
 	PUSH	AF
 	CALL	GETCH
 	LD	E,A
-	JR	Z,FNM10
-	CALL	GET8
-FNM10:	POP	BC
+	JR	Z,FNM10	; Length omitted => E = 0, which
+	CALL	GET8	;   takes the rest of the string.
+FNM10:	POP	BC	; B = start.
 	LD	HL,XBUF1-1
-FNM20:	INC	HL
+FNM20:	INC	HL	; Advance to the start position;
 	LD	A,(HL)
 	OR	A
-	JP	Z,FND90
+	JP	Z,FND90	;   past the end => null string.
 	DJNZ	FNM20
 	PUSH	HL
-	LD	B,E
-FNM30:	INC	HL
-	LD	A,(HL)
+	LD	B,E	; B = length.
+FNM30:	INC	HL	; Advance to the substring end
+	LD	A,(HL)	;   or the end of the string.
 	OR	A
 	JR	Z,FNM40
 	DJNZ	FNM30
-FNM40:	LD	(HL),#00
+FNM40:	LD	(HL),#00	; Cut the substring there.
 	POP	DE
 	RET
 
-FN_LEFT:	CALL	PRSSTR
+;        %@LEFT[string,n]%: the first n characters of the string. A
+; negative n (leading "-") is relative to the end: length-n characters are
+; kept, none if n exceeds the length. Ends by re-using the @MID truncation
+; loop.
+FN_LEFT:	CALL	PRSSTR	; String to XBUF1.
 	CALL	NZ,GETCH
-	JP	Z,FND90
+	JP	Z,FND90	; n is missing.
 	LD	A,(HL)
-	CP	"-"
+	CP	"-"	; Negative count ?
 	JR	NZ,FNL30
 	INC	HL
 	PUSH	HL
 	LD	HL,XBUF1
-	LD	B,#FF
+	LD	B,#FF	; Compute the string length in B.
 FNL20:	LD	A,(HL)
 	INC	B
 	INC	HL
@@ -855,30 +1049,32 @@ FNL20:	LD	A,(HL)
 	JR	NZ,FNL20
 	POP	HL
 	PUSH	BC
-	CALL	GET8
+	CALL	GET8	; E = n.
 	POP	BC
 	JP	NZ,FND90
 	LD	A,B
-	SUB	E
+	SUB	E	; Keep length-n characters,
 	LD	E,A
 	JR	NC,FNL40
-	LD	E,#00
+	LD	E,#00	;   none if n > length.
 	JR	FNL40
 
-FNL30:	CALL	GET8
+FNL30:	CALL	GET8	; E = n.
 	JP	NZ,FND90
 FNL40:	LD	HL,XBUF1
 	PUSH	HL
 	LD	B,E
-	JR	FNM30
+	JR	FNM30	; Cut after E characters.
 
-FN_RIGHT:	CALL	PRSSTR
+;        %@RIGHT[string,n]%: the last n characters of the string; the
+; whole string when n is larger than its length.
+FN_RIGHT:	CALL	PRSSTR	; String to XBUF1.
 	CALL	NZ,GETCH
-	JP	Z,FND90
-	CALL	GET8
+	JP	Z,FND90	; n is missing.
+	CALL	GET8	; E = n.
 	JP	NZ,FND90
 	LD	HL,XBUF1
-	LD	D,#FF
+	LD	D,#FF	; Compute the string length in D.
 FNR20:	LD	A,(HL)
 	INC	HL
 	INC	D
@@ -886,32 +1082,36 @@ FNR20:	LD	A,(HL)
 	JR	NZ,FNR20
 	LD	A,D
 	SUB	E
-	LD	B,A
+	LD	B,A	; B = characters to skip.
 	LD	HL,XBUF1
 	JR	NC,FNR40
-FNR30:	EX	DE,HL
+FNR30:	EX	DE,HL	; DE -> the resulting string.
 	RET
 
 FNR40:	INC	B
-	DEC	B
+	DEC	B	; Nothing to skip ?
 	JR	Z,FNR30
-FNR50:	INC	HL
+FNR50:	INC	HL	; Skip B characters.
 	LD	A,(HL)
 	OR	A
 	JR	Z,FNR30
 	DJNZ	FNR50
 	JR	FNR30
 
+;        %@PARSE[filespec]%: the _PARSE flag byte of the filespec as eight
+; "0"/"1" digits, bit 7 leftmost (see the bit list in HELP ENV).
+;        FNP10 renders the byte in C as binary digits at XBUF1 and is
+; shared with %_DRIVEMAP%.
 FN_PARSE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
-	LD	C,B
+	LD	C,B	; C = parse flags.
 FNP10:	LD	HL,XBUF1
 	PUSH	HL
 	LD	B,#08
 	XOR	A
-FNP20:	SLA	C
-	ADC	A,"0"
+FNP20:	SLA	C	; Next bit to Cy,
+	ADC	A,"0"	;   "0" or "1".
 	LD	(HL),A
 	INC	HL
 	XOR	A
@@ -920,98 +1120,114 @@ FNP20:	SLA	C
 	POP	DE
 	RET
 
+;        %@NEWFILE[filename1,filename2]%: filename2 with each "?" (or "*"
+; expanded to "?"s) replaced by the corresponding character of filename1,
+; returned as an upper case "NAME.EXT" string. Both names are expanded
+; into 11 byte form by _PFILE at XBUF1 and XBUF1+11, merged in place, and
+; the text is rebuilt at XBUF1+22 skipping the padding blanks. (This
+; function is documented as @NEWNAME in the version 2.44 help.)
 FN_NEWFILE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	A,(DE)
 	CALL	SEP?
-	JP	NZ,FND90
+	JP	NZ,FND90	; A "," must follow filename1.
 	EX	DE,HL
-	LD	(HL),#00
+	LD	(HL),#00	; Cut filename1 there.
 	INC	HL
 	PUSH	HL
 	LD	HL,XBUF1
 	LD	C,_PFILE
-	CALL	BDOS
+	CALL	BDOS	; Expand filename1 at XBUF1.
 	POP	HL
 	CALL	GETCH
-	JP	Z,FND90
+	JP	Z,FND90	; Filename2 is missing.
 	EX	DE,HL
 	LD	HL,XBUF1+11
 	LD	C,_PFILE
-	CALL	BDOS
+	CALL	BDOS	; Expand filename2 at XBUF1+11.
 	LD	DE,XBUF1
 	LD	B,11
 FNN10:	LD	A,(DE)
 	LD	C,A
 	LD	A,(HL)
-	CP	"?"
-	JR	NZ,FNN20
+	CP	"?"	; Wildcard => take filename1's
+	JR	NZ,FNN20	;   character.
 	LD	(HL),C
 FNN20:	INC	HL
 	INC	DE
 	DJNZ	FNN10
-	PUSH	HL
-	LD	B,8
+	PUSH	HL	; HL = XBUF1+22: text goes here,
+	LD	B,8	;   DE = the merged name.
 FNN30:	LD	A,(DE)
-	CP	" "
+	CP	" "	; Skip padding blanks.
 	JR	Z,FNN40
 	LD	(HL),A
 	INC	HL
 FNN40:	INC	DE
 	DJNZ	FNN30
 	LD	A,(DE)
-	CP	" "
+	CP	" "	; Any extension ?
 	JR	Z,FNN60
 	LD	(HL),"."
 	INC	HL
 	LD	B,3
 FNN50:	LD	A,(DE)
-	CP	" "
+	CP	" "	; Skip padding blanks.
 	JR	Z,FNN60
 	LD	(HL),A
 	INC	HL
 	INC	DE
 	DJNZ	FNN50
 FNN60:	LD	(HL),#00
-	POP	DE
+	POP	DE	; DE -> the "NAME.EXT" string.
 	RET
 
+;        %@FFIRST[filespec]%: the name of the first file matching the
+; filespec, found with a guarded _FFIRST on FIB3 (attributes #16: hidden
+; and system files and directories are found too). The @FILETOTAL and
+; %_FILECOUNT% accumulators are reset and then updated with this first
+; match; %_FNEXT% continues the walk on the same FIB. A null string is
+; returned when nothing matches.
 FN_FFIRST:	CALL	SETABT
 	EX	DE,HL
 	LD	HL,#0000
-	LD	(FILETOT1),HL
-	LD	(FILETOT2),HL
+	LD	(FILETOT1),HL	; Reset the @FILETOTAL and
+	LD	(FILETOT2),HL	;   %_FILECOUNT% accumulators.
 	LD	(FILECNT),HL
 	LD	C,_FFIRST
-	LD	B,#16
+	LD	B,#16	; Include hidden/system/dirs.
 	LD	IX,FIB3
 	CALL	BDOS
 	CALL	RSTABT
 	OR	A
-	JP	NZ,FND90
-	LD	HL,FIB3+#15
-	LD	DE,FILETOT1
+	JP	NZ,FND90	; Nothing found => null string.
+	LD	HL,FIB3+#15	; Add the 32-bit file size to
+	LD	DE,FILETOT1	;   the running total.
 	CALL	ADD32
 	LD	HL,(FILECNT)
 	INC	HL
 	LD	(FILECNT),HL
-	LD	DE,FIB3+1
+	LD	DE,FIB3+1	; Return the ASCIIZ filename.
 	RET
 
+;        %@FULL[filespec]%: the full pathname of the file: the drive
+; letter from the FIB filled in by a guarded _FFIRST (on FIB3, so a
+; pending %_FNEXT% walk is disturbed), then ":\" and the whole path from
+; _WPATH. A null string is returned when the file does not exist.
 FN_FULL:	CALL	SETABT
 	EX	DE,HL
 	LD	C,_FFIRST
-	LD	B,#16
+	LD	B,#16	; Include hidden/system/dirs.
 	LD	IX,FIB3
 	CALL	BDOS
 	CALL	RSTABT
 	OR	A
-	JP	NZ,FND90
+	JP	NZ,FND90	; Not found => null string.
 	LD	HL,ENVNAME
 	PUSH	HL
-	LD	A,(FIB3+#19)
-	ADD	A,"@"
+	LD	A,(FIB3+#19)	; Logical drive of the file.
+	ADD	A,"@"	; 1 => "A" etc.
 	LD	(HL),A
 	INC	HL
 	LD	(HL),":"
@@ -1020,16 +1236,18 @@ FN_FULL:	CALL	SETABT
 	INC	HL
 	EX	DE,HL
 	LD	C,_WPATH
-	CALL	BDOS
+	CALL	BDOS	; Append the whole path string.
 	POP	DE
 	RET
 
+;        %@DRIVE[filespec]%: the drive letter of the filespec, with a
+; colon; _PARSE returns the current drive when the filespec has none.
 FN_DRIVE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	HL,ENVNAME
 	PUSH	HL
-	LD	A,C
+	LD	A,C	; C = logical drive, 1 = A:.
 	ADD	A,"@"
 	LD	(HL),A
 	INC	HL

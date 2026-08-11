@@ -81,7 +81,7 @@ VAR_OFFSET DEFL	0
 	VAR	UNKNOWN2, 2
 	VAR	FILEDATE, 2
 	VAR	FILETIME, 2
-	VAR	FDFLAGS, 1	; b3 = gevonden; b2=mag wisselen; b1=dirs; b0=files
+	VAR	FDFLAGS, 1	; b3 = match found; b2 = may switch file/dir; b1 = dirs; b0 = files
 	VAR	REDIRST, 1	; IY+#00
 	VAR	XTRACRLF, 1
 	VAR	UNUSED2, 1

@@ -12,13 +12,19 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
-@REM:	XOR	A
+;        The REM command does nothing, so that remark lines in batch files
+; parse as valid commands.
+@REM:	XOR	A	; Return with no error.
 	RET
 
-@BEEP:	AND	(HL)
+		SUBTTL	BEEP
+;        The BEEP command just prints a BEL control character. Note that on
+; entry to an internal command handler HL points to the parameter text and
+; A=FF, so the initial AND (HL) sets Z when there are no parameters.
+@BEEP:	AND	(HL)	; No parameters allowed.
 	LD	A,.INP
 	RET	NZ
-	LD	A,#07
+	LD	A,#07	; Print BEL.
 	JP	PRCHAR
 
 ;        This module contains the command routines for the  assorted  commands
@@ -88,8 +94,8 @@ IDRV:	LD	A,.IDRV
 @BASIC:	CALL	LDCOME
 	RET	NZ
 	LD	HL,VAREND	; Release variable memory
-	LD	A,#FF
-	CALL	WRCHR
+	LD	A,#FF	;   (reset VAREND to BFFFh, the
+	CALL	WRCHR	;   segment top: nothing swapped).
 	INC	HL
 	LD	A,#BF
 	CALL	WRCHR
@@ -129,51 +135,63 @@ SETBUF:	CALL	GET8	; Get the number specified into E.
 	LD	A,#0C
 	JP	PRCHAR
 
-@CPU:	AND	(HL)
+		SUBTTL	CPU
+;        The CPU command (new in 2.40) displays or sets the CPU mode of an
+; MSX turbo R: 0 = Z80, 1 = R800 ROM, 2 = R800 DRAM. It uses the CHGCPU and
+; GETCPU BIOS entries, which exist from MSX version 3 upwards; on older
+; machines setting the mode is silently ignored and the mode is always
+; reported as Z80.
+@CPU:	AND	(HL)	; Display the mode if no parameter.
 	JR	Z,CAL20
-	LD	A,(HL)
+	LD	A,(HL)	; Get the mode: a digit 0..2.
 	INC	HL
 	SUB	"0"
 	JR	C,CAL10
 	CP	3
 	JR	NC,CAL10
-	EX	AF,AF'
-	CALL	GETCH
+	EX	AF,AF'	; Save the mode.
+	CALL	GETCH	; No further parameters allowed.
 	LD	A,.INP
 	RET	NZ
-	LD	A,(MSXVER)
-	CP	3
+	LD	A,(MSXVER)	; Return quietly, doing nothing, on
+	CP	3	;   machines below MSX turbo R.
 	LD	A,0
 	RET	C
-	EX	AF,AF'
-	OR	%10000000
-	LD	IX,#0180
+	EX	AF,AF'	; Get mode; set b7 to also update
+	OR	%10000000	;   the CPU LED.
+	LD	IX,#0180	; CHGCPU BIOS entry.
 
-CALLSLOT:	LD	IY,(EXPTBL-1)
-	LD	HL,#00
-	ADD	HL,SP
+;        Call the main BIOS ROM routine whose address is in IX, via CALSLT.
+; The stack is first moved to free RAM in page 3, where it remains visible
+; whatever slots the inter-slot call switches in.
+; On exit, E = A as returned by the BIOS routine, A = 0 with Z set, and IY
+; is restored to the base of the IY-addressed variables (CALSLT corrupts
+; it).
+CALLSLOT:	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
+	LD	HL,#00	; Switch to a stack in page 3,
+	ADD	HL,SP	;   saving the current one.
 	LD	SP,#F51F
 	PUSH	HL
 	CALL	CALSLT
-	POP	HL
+	POP	HL	; Restore the original stack.
 	LD	SP,HL
-	LD	E,A
+	LD	E,A	; Return the BIOS result in E.
 	XOR	A
-	LD	IY,REDIRST
+	LD	IY,REDIRST	; Restore the variables base.
 	RET
 
-CAL10:	LD	A,.BADNO
+CAL10:	LD	A,.BADNO	; 'Invalid number' unless 0..2.
 	OR	A
 	RET
 
-CAL20:	LD	A,#43
-	CALL	DMESS
+CAL20:	LD	A,#43	; Print 'CPU mode is ', then 'Z80'
+	CALL	DMESS	;   if not a turbo R,
 	LD	A,(MSXVER)
 	CP	3
 	LD	A,#44
 	JP	C,DMESSCR
-	LD	IX,#0183
-	CALL	CALLSLOT
+	LD	IX,#0183	;   else ask GETCPU: message #44+n
+	CALL	CALLSLOT	;   = 'Z80'/'R800-ROM'/'R800-RAM'.
 	LD	A,E
 	ADD	A,#44
 	JP	DMESSCR
@@ -507,8 +525,8 @@ FMT_1DRIVE:	INC	B	;Always comes here with B=0.
 	JR	NC,FMT_1DRIVE
 	JR	NFDRV
 
-FMT_HAS_ARG:	INC	HL
-	LD	A,(HL)
+FMT_HAS_ARG:	INC	HL	; A drive letter plus a colon must
+	LD	A,(HL)	;   have been given.
 	CP	":"
 	LD	A,.IPARM
 	RET	NZ
@@ -517,8 +535,8 @@ FMT_HAS_ARG:	INC	HL
 	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
-	LD	A,B
-	CALL	UC
+	LD	A,B	; Convert the letter to a drive
+	CALL	UC	;   number, 1..26.
 	CP	"Z"+1
 	JR	NC,NCIDRV
 	SUB	"A"
@@ -527,12 +545,12 @@ FMT_HAS_ARG:	INC	HL
 NCIDRV:	LD	A,.IDRV
 	RET	NC
 	INC	B
-	CALL	GETCH
-	JR	Z,NFDRV
-	CP	"/"
+	CALL	GETCH	; No format choice given: use the
+	JR	Z,NFDRV	;   _FORMAT prompt.
+	CP	"/"	; An option cannot come first.
 	LD	A,.IOPT
 	RET	Z
-	PUSH	BC
+	PUSH	BC	; Get the format choice, 1..9.
 	CALL	GET8
 	POP	BC
 	RET	NZ
@@ -543,15 +561,15 @@ NCIDRV:	LD	A,.IDRV
 	CP	#0A
 	LD	A,.IPARM
 	RET	NC
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; Go if anything follows the
+	OR	A	;   choice.
 	JR	NZ,NCI10
 	LD	A,E
 	EXX
 	JR	NSTR
 
-NCI10:	CP	"/"
-	JR	Z,NCI20
+NCI10:	CP	"/"	; Only the /X option may follow
+	JR	Z,NCI20	;   the choice number.
 	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
@@ -562,8 +580,8 @@ NCI10:	CP	"/"
 NCI20:	INC	HL
 	LD	A,(HL)
 	CALL	MKUPPER
-	CP	"X"
-	LD	A,.IOPT
+	CP	"X"	; /X: format at once, skipping the
+	LD	A,.IOPT	;   warning prompt.
 	RET	NZ
 	INC	HL
 	CALL	CHKEOL
@@ -631,35 +649,45 @@ NSTR:	INC	A
 	CALL	PAUSE
 	POP	AF
 	EXX
-NST10:	LD	DE,ENVDATA
-	LD	HL,(EXITADDR)
-	OR	A
+NST10:	LD	DE,ENVDATA	; Format, using all memory from
+	LD	HL,(EXITADDR)	;   BUFF up to the resident code as
+	OR	A	;   the work buffer.
 	SBC	HL,DE
 	EX	DE,HL
 	LD	C,_FORMAT
 	JP	BDOS
 
-@MEMORY:	AND	(HL)
-	LD	A,#00
+		SUBTTL	MEMORY
+;        The MEMORY command (new in 2.40) displays the state of the system
+; RAM: for every memory mapper the total RAM and the amounts free, in use
+; by the system and in use by the user (from the mapper table provided by
+; the DOS 2 mapper support routines); the TPA size available to a transient
+; program; and the total and free sizes of the three areas carved out of
+; COMMAND2's private mapper segment: the command history buffer, the alias
+; area and the variable swap space used for running nested COMMAND2's.
+;        /K prints figures of 1K and over in kilobytes, /P pages the
+; output.
+@MEMORY:	AND	(HL)	; Parse options first if present.
+	LD	A,#00	; Default is to print byte counts.
 	LD	(OPTFLAG1),A
 	JP	NZ,MEM60
-MEM10:	LD	HL,(MAPTAB)
-MEM20:	LD	A,(HL)
-	OR	A
-	JR	Z,MEM40
-	PUSH	AF
-	INC	HL
-	LD	B,(HL)
-	CALL	MUL16
-	LD	A,#49
+MEM10:	LD	HL,(MAPTAB)	; Walk the mapper table: per mapper
+MEM20:	LD	A,(HL)	;   +0 = slot address (0 ends the
+	OR	A	;   table), +1 = total segments,
+	JR	Z,MEM40	;   +2 = free, +3 = used by system,
+	PUSH	AF	;   +4 = used by user, +5..+7 not
+	INC	HL	;   used here.
+	LD	B,(HL)	; Print total segments as a byte
+	CALL	MUL16	;   (or K) count, then ' total RAM
+	LD	A,#49	;   in Slot '.
 	CALL	DMESS
 	POP	AF
 	LD	B,A
-	AND	%00000011
+	AND	%00000011	; Print the primary slot number,
 	ADD	A,"0"
 	CALL	PRCHAR
-	BIT	7,B
-	JR	Z,MEM30
+	BIT	7,B	;   plus '-' and the subslot number
+	JR	Z,MEM30	;   if the slot is expanded.
 	LD	A,"-"
 	CALL	PRCHAR
 	LD	A,B
@@ -670,68 +698,68 @@ MEM20:	LD	A,(HL)
 	CALL	PRCHAR
 MEM30:	CALL	LPRINT
 	INC	HL
-	LD	B,(HL)
+	LD	B,(HL)	; Free segments,
 	CALL	MUL16
-	LD	A,#06
+	LD	A,#06	;   as bytes/K plus ' free'.
 	CALL	DMESSCR
 	INC	HL
-	LD	B,(HL)
+	LD	B,(HL)	; Segments used by the system.
 	CALL	MUL16
-	LD	A,#4A
+	LD	A,#4A	; ' used by system'.
 	CALL	DMESSCR
 	INC	HL
-	LD	B,(HL)
+	LD	B,(HL)	; Segments used by the user.
 	CALL	MUL16
-	LD	A,#4B
+	LD	A,#4B	; ' used by user'.
 	CALL	DMESSCR
 	CALL	LPRINT
-	INC	HL
+	INC	HL	; Advance to the next table entry.
 	INC	HL
 	INC	HL
 	INC	HL
 	JR	MEM20
 
-MEM40:	LD	HL,(EXITADDR)
-	LD	DE,#FFD8
-	ADD	HL,DE
-	LD	L,#08
-	LD	DE,#09
+MEM40:	LD	HL,(EXITADDR)	; Compute the TPA available to a
+	LD	DE,#FFD8	;   transient program: the bottom
+	ADD	HL,DE	;   of the resident code less a
+	LD	L,#08	;   margin for the program loader,
+	LD	DE,#09	;   rounded down.
 	OR	A
 	SBC	HL,DE
 	LD	L,#06
 	DEC	H
 	LD	(VALUEL),HL
-	LD	HL,#00
+	LD	HL,#00	; (32-bit high word = 0.)
 	LD	(VALUEH),HL
 	CALL	PRINT32
-	LD	A,#4C
+	LD	A,#4C	; ' total TPA memory'.
 	CALL	DMESSCR
 	CALL	LPRINT
-	CALL	GETBUFLEN
+	CALL	GETBUFLEN	; Total size of the history buffer.
 	PUSH	HL
 	LD	(VALUEL),HL
 	CALL	PRINT32
-	LD	A,#4D
+	LD	A,#4D	; ' total history buffer'.
 	CALL	DMESSCR
-	CALL	GETENDADDR
-	EX	DE,HL
-	POP	HL
-	SBC	HL,DE
+	CALL	GETENDADDR	; Free history bytes = size minus
+	EX	DE,HL	;   what is in use, i.e. from the
+	POP	HL	;   buffer start to the end
+	SBC	HL,DE	;   pointer.
 
 	LD	DE,BUFADDR
 	ADD	HL,DE
 	DEC	HL
 	LD	(VALUEL),HL
 	CALL	PRINT32
-	LD	A,#06
+	LD	A,#06	; ' free'.
 	CALL	DMESSCR
 	CALL	LPRINT
-	CALL	SETPG2
-	LD	HL,(ALIEND+#8000)
-	CALL	RSTPG2
-	SET	7,H
-	PUSH	HL
-	CALL	GETALIADDR
+	CALL	SETPG2	; Total alias memory: from the
+	LD	HL,(ALIEND+#8000)	;   start of the alias area to its
+	CALL	RSTPG2	;   end, both kept in the mapper
+	SET	7,H	;   segment. SET 7,H turns a
+	PUSH	HL	;   segment offset into a page 2
+	CALL	GETALIADDR	;   address.
 	SET	7,H
 	EX	DE,HL
 	POP	HL
@@ -740,48 +768,48 @@ MEM40:	LD	HL,(EXITADDR)
 	SBC	HL,DE
 	LD	(VALUEL),HL
 	CALL	PRINT32
-	LD	A,#4E
+	LD	A,#4E	; ' total alias memory'.
 	CALL	DMESSCR
 	CALL	SETPG2
 	POP	HL
-MEM50:	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)
-	DEC	HL
+MEM50:	LD	C,(HL)	; Find the end of the alias
+	INC	HL	;   records: each starts with its
+	LD	B,(HL)	;   total length, a zero length
+	DEC	HL	;   ends the list.
 	ADD	HL,BC
 	LD	A,B
 	OR	C
 	JR	NZ,MEM50
 	CALL	RSTPG2
-	EX	DE,HL
-	POP	HL
+	EX	DE,HL	; Free alias memory = area end
+	POP	HL	;   minus end of the records.
 	SBC	HL,DE
 	LD	(VALUEL),HL
 	CALL	PRINT32
-	LD	A,#06
+	LD	A,#06	; ' free'.
 	CALL	DMESSCR
 	CALL	LPRINT
-	CALL	SETPG2
-	LD	DE,(ALIEND+#8000)
-	PUSH	DE
+	CALL	SETPG2	; Total variable swap memory: from
+	LD	DE,(ALIEND+#8000)	;   the end of the alias area to
+	PUSH	DE	;   the top of the 16K segment.
 	LD	HL,#3FFF
 	SBC	HL,DE
 	LD	(VALUEL),HL
 	CALL	PRINT32
-	LD	A,#4F
+	LD	A,#4F	; ' total variable swap memory'.
 	CALL	DMESSCR
-	LD	HL,(VAREND+#8000)
-	RES	7,H
-	POP	DE
-	SBC	HL,DE
+	LD	HL,(VAREND+#8000)	; Free = the bottom of the in-use
+	RES	7,H	;   swap area (it grows downwards)
+	POP	DE	;   minus the end of the alias
+	SBC	HL,DE	;   area.
 	LD	(VALUEL),HL
 	CALL	RSTPG2
 	CALL	PRINT32
-	LD	A,#06
+	LD	A,#06	; ' free'.
 	JP	DMESSCR
 
-MEM60:	LD	A,(HL)
-	CP	"/"
+MEM60:	LD	A,(HL)	; Options: /P pages the output, /K
+	CP	"/"	;   prints in kilobyte units.
 	LD	A,.IPARM
 	RET	NZ
 	INC	HL
@@ -794,49 +822,58 @@ MEM60:	LD	A,(HL)
 	LD	A,.IOPT
 	RET
 
-MEM70:	CALL	SETP
+MEM70:	CALL	SETP	; /P: set up the pause line count.
 MEM80:	INC	HL
-	CALL	GETCH
+	CALL	GETCH	; More options may follow.
 	JR	NZ,MEM60
 	JP	MEM10
 
-MEM90:	LD	A,#01
+MEM90:	LD	A,#01	; /K: flag kilobyte units.
 	LD	(OPTFLAG1),A
 	JR	MEM80
 
+;        MUL16 computes B (a number of 16K mapper segments) times 16384
+; into the 32-bit number at VALUEL/VALUEH, then falls through into PRINT32
+; to print it.
 MUL16:	PUSH	HL
 	PUSH	DE
-	LD	HL,#00
+	LD	HL,#00	; Zero the 32-bit accumulator,
 	LD	(VALUEL),HL
 	LD	(VALUEH),HL
-	LD	DE,#4000
-	INC	B
+	LD	DE,#4000	;   then add 16384 B times.
+	INC	B	; (B may be 0.)
 	DEC	B
 	JR	Z,MUL60
 MUL40:	LD	HL,(VALUEL)
 	ADD	HL,DE
 	LD	(VALUEL),HL
-	JR	NC,MUL50
+	JR	NC,MUL50	; Carry into the high word.
 	LD	HL,(VALUEH)
 	INC	HL
 	LD	(VALUEH),HL
 MUL50:	DJNZ	MUL40
 MUL60:	POP	DE
 	POP	HL
+;        PRINT32 prints the 32-bit number at VALUEL/VALUEH, preserving HL
+; and DE. Normally D32 renders it as eight space-padded decimal characters
+; in BUFF3, two more spaces are inserted to group the digits in thousands,
+; and ' bytes' is printed after the number. When /K is in effect (OPTFLAG1
+; bit 0), PRLEN2 is used instead: it prints values of 1K and over as 'nK'
+; and smaller ones as 'n byte(s)'.
 PRINT32:	LD	A,(OPTFLAG1)
-	BIT	0,A
+	BIT	0,A	; /K in effect ?
 	JR	NZ,PRI10
 	PUSH	HL
 	PUSH	DE
-	LD	IX,XBUF1
-	PUSH	IX
+	LD	IX,XBUF1	; Render the number in BUFF3 as 8
+	PUSH	IX	;   space-padded decimal digits.
 	LD	DE,VALUEL
-	LD	A," "
+	LD	A," "	; ' ' = padding character.
 	CALL	D32
 	POP	HL
 	PUSH	HL
-	INC	HL
-	INC	HL
+	INC	HL	; Insert two spaces to group the
+	INC	HL	;   digits in thousands.
 	LD	C," "
 	CALL	INSBYTE
 	INC	HL
@@ -844,241 +881,293 @@ PRINT32:	LD	A,(OPTFLAG1)
 	INC	HL
 	INC	HL
 	CALL	INSBYTE
-	POP	DE
+	POP	DE	; Print the number,
 	CALL	PRTSTR
-	LD	A,#48
+	LD	A,#48	;   then ' bytes'.
 	CALL	DMESS
 	POP	DE
 	POP	HL
 	RET
 
-PRI10:	PUSH	HL
-	PUSH	DE
-	LD	A," "
+PRI10:	PUSH	HL	; /K: print as 'nK', or as 'n
+	PUSH	DE	;   byte(s)' if less than 1K.
+	LD	A," "	; ' ' = padding character.
 	CALL	PRLEN2
 	POP	DE
 	POP	HL
 	RET
 
-@GOTO:	LD	A,(BATHNDL)
+		SUBTTL	GOTO, GOSUB, RETURN, END
+;        The batch file flow control commands (all new in 2.40). They work
+; only in .BTM batch files, which are loaded whole into a mapper segment
+; (batch handle FE); anywhere else they give 'Unrecognized command'.
+;        GOTO searches the batch file from the start for a line equal to
+; the '~label' given as its parameter and continues execution from the line
+; after it. If the label is not found, the batch file is ended and 'Invalid
+; parameter' given.
+@GOTO:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
-	LD	A,(HL)
+	LD	A,(HL)	; A label must be given.
 	OR	A
 	LD	A,.NOPAR
 	RET	Z
-	PUSH	HL
-GOT80:	LD	HL,#00
-	LD	(BATLINADDR),HL
-GOT90:	CALL	INBAT
-	JR	Z,GOT100
+	PUSH	HL	; Save pointer to the label.
+GOT80:	LD	HL,#00	; Rewind the batch file to the
+	LD	(BATLINADDR),HL	;   start.
+GOT90:	CALL	INBAT	; Read the next batch line: Cy set
+	JR	Z,GOT100	;   if it is a '~label' line.
 	POP	HL
-	CP	.EOF
-	RET	NZ
-	CALL	END10
-	LD	A,#FF
-	LD	(STRCODE),A
-	LD	A,.IPARM
+	CP	.EOF	; Errors other than end of file are
+	RET	NZ	;   returned as they are.
+	CALL	END10	; Label not found: end the batch
+	LD	A,#FF	;   file and give 'Invalid
+	LD	(STRCODE),A	;   parameter', without a 'Batch
+	LD	A,.IPARM	;   file error:' prefix.
 	RET
 
-GOT100:	JR	NC,GOT90
-	LD	HL,ENVDATA+1
-	CALL	GETCH
+GOT100:	JR	NC,GOT90	; Skip lines that are not labels.
+	LD	HL,ENVDATA+1	; Compare the line with the given
+	CALL	GETCH	;   label, case sensitively.
 	POP	BC
 	PUSH	BC
 	CALL	STRCMP
-	JR	NZ,GOT90
+	JR	NZ,GOT90	; Keep searching if no match.
 	POP	HL
 	RET
 
-@END:	LD	A,(BATHNDL)
+;        END terminates the batch file: the read pointer is rewound and an
+; EOF mark is written at the very start of the batch segment, so the next
+; attempt to read a line ends the batch file.
+@END:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
-	LD	A,(HL)
+	LD	A,(HL)	; No parameters allowed.
 	OR	A
 	LD	A,.INP
 	RET	NZ
-END10:	LD	HL,#00
-	LD	(BATLINADDR),HL
+END10:	LD	HL,#00	; Rewind to the start of the file
+	LD	(BATLINADDR),HL	;   and write a ^Z there.
 	LD	A,(BATPAGE)
 	LD	E,#1A
 	JP	WR_SEG
 
-@GOSUB:	LD	A,(BATHNDL)
+;        GOSUB pushes the current batch file position onto the GOSUB list
+; (up to 8 levels) and then does a GOTO to the given label.
+@GOSUB:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
-	LD	A,(HL)
+	LD	A,(HL)	; A label must be given.
 	OR	A
 	LD	A,.NOPAR
 	RET	Z
 	PUSH	HL
-	LD	HL,(GOSUBADDR)
-	LD	DE,GOSUBLIST+16
+	LD	HL,(GOSUBADDR)	; 'Too many parameters' when eight
+	LD	DE,GOSUBLIST+16	;   GOSUBs are already active.
 	OR	A
 	SBC	HL,DE
 	POP	HL
 	LD	A,.INP
 	RET	Z
 	PUSH	HL
-	LD	HL,(GOSUBADDR)
-	LD	DE,(BATLINADDR)
+	LD	HL,(GOSUBADDR)	; Push the current batch position
+	LD	DE,(BATLINADDR)	;   onto the GOSUB list,
 	LD	(HL),E
 	INC	HL
 	LD	(HL),D
 	INC	HL
 	LD	(GOSUBADDR),HL
-	JR	GOT80
+	JR	GOT80	;   and do the GOTO.
 
-@RETURN:	LD	A,(BATHNDL)
+;        RETURN pops the position saved by GOSUB and continues the batch
+; file there; if a '~label' parameter is given, it continues at that label
+; instead.
+@RETURN:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
 	PUSH	HL
-	LD	HL,(GOSUBADDR)
-	LD	DE,GOSUBLIST
+	LD	HL,(GOSUBADDR)	; Nothing to pop if the GOSUB list
+	LD	DE,GOSUBLIST	;   is empty.
 	PUSH	HL
 	SBC	HL,DE
 	POP	HL
 	JR	Z,RET10
-	DEC	HL
-	LD	D,(HL)
+	DEC	HL	; Pop the saved batch position into
+	LD	D,(HL)	;   BATLINADDR.
 	DEC	HL
 	LD	E,(HL)
 	LD	(GOSUBADDR),HL
 	EX	DE,HL
 	LD	(BATLINADDR),HL
 RET10:	POP	HL
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; If a label was given, then GOTO
+	OR	A	;   it rather than just returning.
 	RET	Z
 	PUSH	HL
 	JP	GOT80
 
-@IF:	CALL	COND2
+		SUBTTL	IF
+;        The IF command, much extended in 2.40: the condition is evaluated
+; by COND2 and, when it is true, the rest of the line is executed as a
+; command. An optional THEN needs no handling here, because THEN is itself
+; an internal command which just executes the rest of its own line.
+@IF:	CALL	COND2	; Evaluate the condition.
 	RET	NZ
-	JR	C,EXEC2
+	JR	C,EXEC2	; Execute the command if true.
 	XOR	A
 	RET
 
-EXEC2:	LD	DE,ENVDATA
+;        Execute the command line at (HL) as a new command: it is copied to
+; BUFF, alias expanded, split at a '^' separator (unless a following
+; command is already pending), stripped of quotes and handed back to the
+; dispatcher. Used by IF, IFF, THEN, ELSE and ENDIFF.
+EXEC2:	LD	DE,ENVDATA	; Copy the command to BUFF.
 	PUSH	DE
 	CALL	NCOPY
 	POP	DE
-	CALL	ALIASING
+	CALL	ALIASING	; Expand aliases in it.
 	RET	NZ
-	LD	HL,(NEXTADDR)
-	LD	A,H
+	LD	HL,(NEXTADDR)	; Split at '^', unless a next
+	LD	A,H	;   command is already pending.
 	OR	L
 	CALL	Z,MULTICMD
 	EX	DE,HL
 	PUSH	HL
-	CALL	UNQUOTE
+	CALL	UNQUOTE	; Remove quote characters.
 	POP	HL
-	JP	DO_CMD
+	JP	DO_CMD	; Dispatch it.
 
-COND2:	CALL	COND
-	RET	NZ
-	CCF
-	SBC	A,A
+;        COND2 evaluates a complete IF/IFF condition, including AND, OR and
+; XOR combinations of elementary conditions. After the first condition is
+; evaluated by COND, the following word is examined: if it is AND, OR or
+; XOR then the rest of the line is evaluated by a recursive call - which is
+; why chained conditions combine last-to-first - and the two truth values
+; are combined. A truth value is kept as a mask in A (bit 0 set => true) so
+; that the combining operation works directly on it.
+;        The line pointer is duplicated into the other register set before
+; the look-ahead word is consumed; when that word turns out not to be a
+; combining operator, CON30 switches register sets, so the caller sees HL
+; still pointing at the word: the command to be executed.
+; On entry, HL points to the condition text.
+; On exit,  Z & Cy => condition true.
+;           Z & NC => condition false.
+;           NZ     => error, code in A.
+;           HL points to the rest of the line (the command).
+COND2:	CALL	COND	; Evaluate one condition: COND
+	RET	NZ	;   returns NC for true; turn that
+	CCF	;   into the mask FF (true) / 00
+	SBC	A,A	;   (false) and save it in AF'.
 	EX	AF,AF'
-	PUSH	HL
-	EXX
+	PUSH	HL	; Duplicate the line pointer into
+	EXX	;   the other register set.
 	POP	HL
 	CALL	STRIP
-	LD	BC,ENVDATA
+	LD	BC,ENVDATA	; Fetch the next word.
 	PUSH	BC
 	CALL	CPYSTR
 	POP	BC
 	RET	NZ
-	PUSH	HL
+	PUSH	HL	; Is it AND ?
 	PUSH	BC
 	LD	HL,$AND
 	CALL	COMPARE3
 	POP	BC
 	POP	HL
 	JR	NZ,CON10
-	CALL	STRIP
-	EX	AF,AF'
+	CALL	STRIP	; Evaluate the rest of the line,
+	EX	AF,AF'	;   then AND the two truth masks.
 	PUSH	AF
 	CALL	COND2
 	POP	BC
 	RET	NZ
 	AND	B
-	CP	A
+	CP	A	; Z, and Cy = bit 0 of the result.
 	RRA
 	RET
 
-CON10:	PUSH	HL
+CON10:	PUSH	HL	; Is it OR ?
 	PUSH	BC
 	LD	HL,$OR
 	CALL	COMPARE3
 	POP	BC
 	POP	HL
 	JR	NZ,CON20
-	CALL	STRIP
-	EX	AF,AF'
+	CALL	STRIP	; Evaluate the rest of the line,
+	EX	AF,AF'	;   then OR the two truth masks.
 	PUSH	AF
 	CALL	COND2
 	POP	BC
 	RET	NZ
 	OR	B
-	CP	A
+	CP	A	; Z, and Cy = bit 0 of the result.
 	RRA
 	RET
 
-CON20:	PUSH	HL
+CON20:	PUSH	HL	; Is it XOR ?
 	PUSH	BC
 	LD	HL,$XOR
 	CALL	COMPARE3
 	POP	BC
 	POP	HL
 	JR	NZ,CON30
-	CALL	STRIP
-	EX	AF,AF'
+	CALL	STRIP	; Evaluate the rest of the line,
+	EX	AF,AF'	;   then XOR the two truth masks.
 	PUSH	AF
 	CALL	COND2
 	POP	BC
 	RET	NZ
 	XOR	B
-	CP	A
+	CP	A	; Z, and Cy = bit 0 of the result.
 	RRA
 	RET
 
-CON30:	EXX
-	EX	AF,AF'
-	CP	A
-	RRA
+CON30:	EXX	; No combining word: restore the
+	EX	AF,AF'	;   pointer to it, get the truth
+	CP	A	;   mask and return Z with Cy =
+	RRA	;   bit 0.
 	RET
 
+		SUBTTL	IFF, THEN, ELSE, ENDIFF
+;        The IFF command (new in 2.40) turns "command mode" on or off
+; depending on its condition. Command mode is a stack of state bytes in
+; IFFLIST, with IFFADDR pointing at the current level: 00 => commands are
+; executed, FF => commands are skipped, and 9F marks a level opened while
+; the enclosing level was already skipping, so that ELSE must leave it off.
+; While the current state is odd, the dispatcher executes only IFF, ELSE
+; and ENDIFF (see DO_CMD).
+;        IFF opens a new level (16 maximum), ELSE toggles the current level
+; and ENDIFF closes it. All three execute the rest of their command line,
+; so for example 'ENDIFF command' works.
 @IFF:	PUSH	HL
-	LD	HL,(IFFADDR)
-	LD	DE,IFFLIST+16
+	LD	HL,(IFFADDR)	; 'Too many parameters' when 16
+	LD	DE,IFFLIST+16	;   levels are already open.
 	CALL	COMPARE4
 	JR	Z,IFF20
-	LD	A,(HL)
-	INC	HL
+	LD	A,(HL)	; Get the enclosing state and open
+	INC	HL	;   a new level.
 	LD	(IFFADDR),HL
 	LD	(HL),A
-	EX	DE,HL
+	EX	DE,HL	; DE -> the new state byte.
 	POP	HL
-	LD	B,A
+	LD	B,A	; B = enclosing state.
 	PUSH	BC
 	PUSH	DE
-	CALL	COND2
-	CCF
+	CALL	COND2	; Evaluate the condition;
+	CCF	;   Cy now set => false.
 	POP	DE
 	POP	BC
 	RET	NZ
-	BIT	0,B
-	JR	Z,IFF10
+	BIT	0,B	; New state: if the enclosing level
+	JR	Z,IFF10	;   is skipping, A = 9F ('LD A,n'
 	DEFB	#3E
-IFF10:	SBC	A,A
+IFF10:	SBC	A,A	;   eats this opcode); else FF/00.
 	LD	(DE),A
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; Execute the rest of the line, if
+	OR	A	;   any.
 	RET	Z
 	JP	EXEC2
 
@@ -1086,46 +1175,62 @@ IFF20:	POP	HL
 	LD	A,.INP
 	RET
 
-@THEN:	AND	(HL)
+;        THEN executes the rest of its line as a command: after 'IF cond
+; THEN cmd' the IF executes 'THEN cmd', which in turn executes 'cmd'. When
+; command mode is off, a THEN is simply never dispatched.
+@THEN:	AND	(HL)	; Nothing to do for THEN alone.
 	RET	Z
 	JP	EXEC2
 
+;        ELSE inverts the command mode of the current IFF level.
 @ELSE:	PUSH	HL
-	LD	HL,(IFFADDR)
-	LD	DE,IFFLIST
+	LD	HL,(IFFADDR)	; Nothing to toggle when not within
+	LD	DE,IFFLIST	;   an IFF.
 	CALL	COMPARE4
 	JR	Z,ELS10
-	LD	A,(HL)
-	CP	#9F
+	LD	A,(HL)	; Don't toggle a level that was
+	CP	#9F	;   opened while skipping.
 	JR	Z,ELS10
-	CPL
+	CPL	; Toggle 00 <-> FF.
 	LD	(HL),A
 ELS10:	POP	HL
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; Execute the rest of the line, if
+	OR	A	;   any.
 	RET	Z
 	JP	EXEC2
 
+;        ENDIFF closes the current IFF level.
 @ENDIFF:	PUSH	HL
-	LD	HL,(IFFADDR)
-	LD	DE,IFFLIST
+	LD	HL,(IFFADDR)	; Close the current level, unless
+	LD	DE,IFFLIST	;   already at the outermost one.
 	CALL	COMPARE4
 	JR	Z,END20
 	DEC	HL
 	LD	(IFFADDR),HL
 END20:	POP	HL
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; Execute the rest of the line, if
+	OR	A	;   any.
 	RET	Z
 	JP	EXEC2
 
-COND:	LD	BC,ENVDATA
+		SUBTTL	COND
+;        COND evaluates one elementary condition:
+;            [NOT] EXIST filespec
+;            [NOT] expr1 ==|EQ|GT|LT expr2
+; The words are fetched with MKPATH2, so an expression containing spaces or
+; other separator characters can be enclosed in { and }. NOT evaluates the
+; rest of the condition and inverts its result.
+; On entry, HL points to the condition text.
+; On exit,  Z & NC => condition true    (note that this is the opposite
+;           Z & Cy => condition false    convention to COND2's exit!)
+;           NZ     => error, code in A.
+COND:	LD	BC,ENVDATA	; Fetch the first word to BUFF.
 	PUSH	BC
 	CALL	MKPATH2
 	POP	BC
 	RET	NZ	; Return if error
-	EX	DE,HL
-	LD	HL,$NOT
+	EX	DE,HL	; NOT prefix: evaluate the rest of
+	LD	HL,$NOT	;   the condition and invert it.
 	CALL	COMPARE3
 	EX	DE,HL
 	JR	NZ,EXIST?
@@ -1133,28 +1238,28 @@ COND:	LD	BC,ENVDATA
 	CCF	; Reverse GO condition
 	RET
 
-COND10:	CALL	GETCH
+COND10:	CALL	GETCH	; Fetch the word after NOT.
 	LD	BC,ENVDATA
 	CALL	MKPATH2
 	RET	NZ
-EXIST?:	LD	BC,ENVDATA
-	EX	DE,HL
+EXIST?:	LD	BC,ENVDATA	; EXIST keyword: the condition is
+	EX	DE,HL	;   whether the given file exists.
 	LD	HL,$EXIST
 	CALL	COMPARE3
 	EX	DE,HL
-	JR	NZ,EQUAL?
+	JR	NZ,EQUAL?	; Else it must be a comparison.
 	CALL	GETCH
 	CALL	PRS	; Get path string.
 	RET	NZ	; Return if error.
-	BIT	3,B
-	LD	A,.NOFIL
+	BIT	3,B	; 'Not found' at once if no
+	LD	A,.NOFIL	;   filename was given.
 	JR	Z,EX10
 	LD	C,(HL)	; Save terminating char.
 	LD	(HL),#00	; Terminate path.
 	PUSH	HL
 	PUSH	BC
-	LD	IX,FIB1
-	LD	BC,#0640
+	LD	IX,FIB1	; Search the first matching file,
+	LD	BC,#0640	;   hidden and system ones too.
 	CALL	BDOS
 	POP	BC	; Restore terminating char.
 	POP	HL	;   in case this was the end of line.
@@ -1168,8 +1273,13 @@ EX10:	OR	A
 	SCF	; Z & C => if file not found,
 	RET	; NZ otherwise.
 
+;        Comparison condition: expr1 ==|EQ|GT|LT expr2. The relational
+; operator is decoded into a code (1 = equal, 2 = greater than, 3 = less
+; than) which is kept in AF' while the second expression is fetched to
+; BUFF+128; then the expressions are compared as strings, strictly and
+; case sensitively.
 EQUAL?:	CALL	STRIP
-	LD	A,(HL)
+	LD	A,(HL)	; '==' ?
 	CALL	MKUPPER
 	CP	"="
 	JR	NZ,EQU10
@@ -1180,7 +1290,7 @@ EQUAL?:	CALL	STRIP
 	LD	A,#01
 	JR	EQU40
 
-EQU10:	CP	"E"
+EQU10:	CP	"E"	; 'EQ' ?
 	JR	NZ,EQU20
 	INC	HL
 	LD	A,(HL)
@@ -1190,7 +1300,7 @@ EQU10:	CP	"E"
 	LD	A,#01
 	JR	EQU40
 
-EQU20:	CP	"G"
+EQU20:	CP	"G"	; 'GT' ?
 	JR	NZ,EQU30
 	INC	HL
 	LD	A,(HL)
@@ -1200,7 +1310,7 @@ EQU20:	CP	"G"
 	LD	A,#02
 	JR	EQU40
 
-EQU30:	CP	"L"
+EQU30:	CP	"L"	; 'LT' ?
 	JR	NZ,EQU80
 	INC	HL
 	LD	A,(HL)
@@ -1208,50 +1318,53 @@ EQU30:	CP	"L"
 	CP	"T"
 	JR	NZ,EQU80
 	LD	A,#03
-EQU40:	EX	AF,AF'
+EQU40:	EX	AF,AF'	; Save the operator code.
 	INC	HL
 	CALL	STRIP
-	LD	BC,ENVDATA+#80
-	PUSH	BC
+	LD	BC,ENVDATA+#80	; Fetch the second expression to
+	PUSH	BC	;   BUFF+128.
 	CALL	MKPATH2
 	POP	BC
 	RET	NZ
 	EX	DE,HL
-	LD	HL,ENVDATA
-	CALL	STRCMP
+	LD	HL,ENVDATA	; Compare the strings: Z => equal,
+	CALL	STRCMP	;   Cy => expr1 > expr2.
 	EX	DE,HL
-	EX	AF,AF'
-	DEC	A
-	JR	Z,EQU70
+	EX	AF,AF'	; Dispatch on the operator, with
+	DEC	A	;   the string comparison flags
+	JR	Z,EQU70	;   saved in AF'.
 	DEC	A
 	JR	Z,EQU60
-	DEC	A
-	EX	AF,AF'
-	JR	NZ,EQU50
+	DEC	A	; LT: equal strings => false (Cy);
+	EX	AF,AF'	;   else Cy (=> false) exactly
+	JR	NZ,EQU50	;   when expr1 > expr2.
 	SCF
 	RET
 
-EQU50:	LD	A,#00
-	BIT	0,A
+EQU50:	LD	A,#00	; Force Z, keeping the carry: NC
+	BIT	0,A	;   means condition true here.
 	RET
 
-EQU60:	EX	AF,AF'
-	LD	A,#00
-	BIT	0,A
-	CCF
+EQU60:	EX	AF,AF'	; GT: true (NC) exactly when
+	LD	A,#00	;   expr1 > expr2; equal strings
+	BIT	0,A	;   give false. Force Z, keep the
+	CCF	;   carry, invert it.
 	RET
 
-EQU70:	EX	AF,AF'
-	RET	Z
+EQU70:	EX	AF,AF'	; ==: equal => Z & NC (true), else
+	RET	Z	;   force Z and Cy (false).
 	CP	A
 	SCF
 	RET
 
-EQU80:	POP	HL
-	LD	A,.IPARM
-	OR	A
+EQU80:	POP	HL	; Invalid operator: drop one return
+	LD	A,.IPARM	;   level (skips NOT's inversion)
+	OR	A	;   and give 'Invalid parameter'.
 	RET
 
+;        Compare the ASCIIZ strings at (BC) and (HL): Z => they are equal.
+; Otherwise Cy set => the (BC) string is the lower one; this ordering is
+; what the GT/LT conditions use.
 STRCMP:	LD	A,(BC)
 	CP	(HL)
 	RET	NZ
@@ -1261,6 +1374,9 @@ STRCMP:	LD	A,(BC)
 	JR	NZ,STRCMP
 	RET
 
+;        Like STRCMP, but returns Z as soon as the (HL) string ends, i.e.
+; Z => the string at (HL) is a leading substring of the one at (BC). Used
+; by the @INSTR function (intvar.mac).
 CHKEQ:	LD	A,(HL)
 	OR	A
 	RET	Z
@@ -1273,6 +1389,8 @@ CHKEQ:	LD	A,(HL)
 	JR	NZ,CHKEQ
 	RET
 
+;        Compare the string at (BC), upper-cased, against the upper case
+; keyword at (HL): Z => equal.
 COMPARE3:	LD	A,(BC)
 	CALL	MKUPPER
 	CP	(HL)
@@ -1283,6 +1401,8 @@ COMPARE3:	LD	A,(BC)
 	JR	NZ,COMPARE3
 	RET
 
+;        16-bit compare of HL against DE: Z => equal, Cy => HL < DE. Only
+; AF is corrupted.
 COMPARE4:	LD	A,H
 	SUB	D
 	RET	NZ
@@ -1290,16 +1410,22 @@ COMPARE4:	LD	A,H
 	SUB	E
 	RET
 
+; The condition keywords.
 $NOT:	DEFB	"NOT",0
 $EXIST:	DEFB	"EXIST",0
 $AND:	DEFB	"AND",0
 $OR:	DEFB	"OR",0
 $XOR:	DEFB	"XOR",0
 
-@COLOR:	AND	(HL)
+		SUBTTL	COLOR
+;        The COLOR command (new in 2.40) sets the foreground and optionally
+; the background and border colours (each 0..15). They are stored in the
+; BIOS variables FORCLR/BAKCLR/BDRCLR and made effective with the CHGCLR
+; BIOS routine.
+@COLOR:	AND	(HL)	; At least one colour is required.
 	LD	A,.NOPAR
 	RET	Z
-	CALL	GET8
+	CALL	GET8	; Get the foreground colour, 0..15.
 	RET	NZ
 	LD	A,E
 	CP	#10
@@ -1307,7 +1433,7 @@ $XOR:	DEFB	"XOR",0
 	LD	(FORCLR),A
 	CALL	GETCH
 	JR	Z,COL10
-	CALL	GET8
+	CALL	GET8	; Get the background colour, 0..15.
 	RET	NZ
 	LD	A,E
 	CP	#10
@@ -1315,28 +1441,34 @@ $XOR:	DEFB	"XOR",0
 	LD	(BAKCLR),A
 	CALL	GETCH
 	JR	Z,COL10
-	CALL	GET8
-	CALL	Z,CHKNO
+	CALL	GET8	; Get the border colour, 0..15;
+	CALL	Z,CHKNO	;   nothing may follow it.
 	CALL	Z,CHKEOL
 	RET	NZ
 	LD	A,E
 	CP	#10
 	JR	NC,GOT120
 	LD	(BDRCLR),A
-COL10:	LD	IX,#62
-	JR	GOT110
+COL10:	LD	IX,#62	; Set the new colours with the
+	JR	GOT110	;   CHGCLR BIOS routine.
 
-@MODE:	AND	(HL)
+		SUBTTL	MODE
+;        The MODE command sets the number of columns (1..80) and, new in
+; 2.40, optionally the number of rows (1..26) on the screen. With 33 or
+; more columns the text screen is selected via LINL40 and the INITXT BIOS
+; routine, with fewer the 32-column screen via LINL32 and INIT32; the
+; screen is cleared by the re-initialisation.
+@MODE:	AND	(HL)	; At least the columns required.
 	LD	A,.NOPAR
 	RET	Z
-	LD	A,(CRTCNT)
+	LD	A,(CRTCNT)	; Default rows = current rows.
 	LD	(XBUF1),A
-	CALL	GET8
+	CALL	GET8	; Get the number of columns.
 	RET	NZ
 	CALL	GETCH
 	JR	Z,MOD10
-	PUSH	DE
-	CALL	GET8
+	PUSH	DE	; Get the number of rows; nothing
+	CALL	GET8	;   may follow it.
 	LD	C,E
 	POP	DE
 	CALL	Z,CHKNO
@@ -1345,42 +1477,50 @@ COL10:	LD	IX,#62
 	LD	A,C
 	LD	(XBUF1),A
 	XOR	A
-MOD10:	OR	E
+MOD10:	OR	E	; Columns must be 1..80.
 	JR	Z,GOT120
 	CP	#51
 	JR	NC,GOT120
-	LD	IX,#6C
-	LD	HL,LINL40
+	LD	IX,#6C	; 33..80 columns: text screen via
+	LD	HL,LINL40	;   LINL40 and INITXT;
 	CP	#21
 	JR	NC,GOTCOLS
-	LD	IX,#6F
-	INC	HL
+	LD	IX,#6F	;   1..32 columns: via LINL32 and
+	INC	HL	;   INIT32.
 GOTCOLS:	LD	(HL),A
-	LD	A,(XBUF1)
+	LD	A,(XBUF1)	; Rows must be 1..26.
 	OR	A
 	JR	Z,GOT120
 	CP	#1B
 	JR	NC,GOT120
 	LD	(CRTCNT),A
-GOT110:	JP	CALLSLOT
+GOT110:	JP	CALLSLOT	; Re-init (and clear) the screen.
 
-GOT120:	LD	A,.IPARM
+GOT120:	LD	A,.IPARM	; Parameter out of range.
 	RET
 
-@INKEY:	SCF
-@INPUT:	EX	AF,AF'
+		SUBTTL	INKEY, INPUT
+;        INKEY and INPUT (new in 2.40) read a keystroke or a line of input
+; into an environment item:
+;            INKEY [prompt text] %name      INPUT [prompt text] %name
+; (the name is typed as %%name; parameter expansion reduces it to %name).
+; The prompt text, if present, is printed first. INKEY reads a single key,
+; INPUT a line with all the editing facilities that _BUFIN provides. The
+; two entries share their code: the carry kept in AF' tells them apart.
+@INKEY:	SCF	; Cy => INKEY.
+@INPUT:	EX	AF,AF'	; Save the INKEY/INPUT flag.
 	XOR	A
-	LD	(ENVNAME),A
-	OR	(HL)
+	LD	(ENVNAME),A	; No name seen yet.
+	OR	(HL)	; A parameter must be given.
 	LD	A,.NOPAR
 	RET	Z
-	CALL	PRSENV
+	CALL	PRSENV	; A '%name' with no prompt text ?
 	JR	NZ,INP10
-	CALL	GETCH
+	CALL	GETCH	; Yes if the line ends after it.
 	JR	Z,INP30
-INP10:	LD	DE,ENVDATA
-INP20:	LD	A,(HL)
-	OR	A
+INP10:	LD	DE,ENVDATA	; Copy the prompt text to BUFF, up
+INP20:	LD	A,(HL)	;   to a '%' or the end of the
+	OR	A	;   line.
 	JR	Z,INP30
 	CP	"%"
 	JR	Z,INP30
@@ -1389,41 +1529,41 @@ INP20:	LD	A,(HL)
 	INC	HL
 	JR	INP20
 INP30:	PUSH	AF
-	XOR	A
+	XOR	A	; Terminate the prompt text.
 	LD	(DE),A
 	POP	AF
-	OR	A
-	CALL	NZ,PRSENV
+	OR	A	; Parse the '%name' if the text
+	CALL	NZ,PRSENV	;   ended with '%'.
 	LD	A,.INP
 	RET	NZ
-	CALL	GETCH
+	CALL	GETCH	; No garbage after the name.
 	LD	A,.INP
 	RET	NZ
-	LD	A,(ENVNAME)
+	LD	A,(ENVNAME)	; A '%name' must have been given.
 	OR	A
 	LD	A,.NOPAR
 	RET	Z
-	LD	DE,ENVDATA
+	LD	DE,ENVDATA	; Print the prompt text.
 	CALL	PRTSTR
 	EX	AF,AF'
-	JR	NC,INP40
-	CALL	INCH
-	LD	A,L
-	LD	HL,ENVDATA
+	JR	NC,INP40	; Go if INPUT.
+	CALL	INCH	; INKEY: read one key (returned in
+	LD	A,L	;   L) and make a one-character
+	LD	HL,ENVDATA	;   string of it in BUFF.
 	LD	(HL),A
 	INC	HL
 	LD	(HL),0
 	DEC	HL
 	EX	DE,HL
 	JR	INP50
-INP40:	LD	HL,ENVDATA
-	LD	(HL),#7F
+INP40:	LD	HL,ENVDATA	; INPUT: read a line of up to 127
+	LD	(HL),#7F	;   characters into BUFF,
 	EX	DE,HL
 	LD	C,_BUFIN
 	CALL	BDOS
 	CALL	LPRINT
-	LD	HL,ENVDATA+1
-	PUSH	HL
+	LD	HL,ENVDATA+1	;   null-terminate it and point DE
+	PUSH	HL	;   at the typed text.
 	LD	C,(HL)
 	LD	B,0
 	INC	HL
@@ -1431,10 +1571,15 @@ INP40:	LD	HL,ENVDATA
 	LD	(HL),0
 	POP	DE
 	INC	DE
-INP50:	LD	HL,ENVNAME
-	LD	C,_SENV
+INP50:	LD	HL,ENVNAME	; Set the environment item named at
+	LD	C,_SENV	;   BUFF2 to the value at (DE).
 	JP	BDOS
 
+;        Parse a '%name' argument: if (HL) does not point at a '%' then NZ
+; is returned with nothing done. Otherwise the name after the '%' is copied
+; to BUFF2, terminated at a space or the end of the line, and Z is returned
+; with HL on the terminating character and DE pointing at the null after
+; the name.
 PRSENV:	LD	A,(HL)
 	CP	"%"
 	RET	NZ
@@ -1452,36 +1597,50 @@ PRS70:	XOR	A
 	LD	(DE),A
 	RET
 
-@RESET:	AND	(HL)
+		SUBTTL	RESET
+;        The RESET command (new in 2.40) resets the machine by calling
+; address 0 of the main BIOS ROM. The stack is moved to page 3 first, as in
+; CALLSLOT; there is no return.
+@RESET:	AND	(HL)	; No parameters allowed.
 	LD	A,.INP
 	RET	NZ
-	LD	IY,(EXPTBL-1)
+	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
 	LD	SP,#F51F
-	LD	IX,#00
+	LD	IX,#00	; Call the reset entry point.
 	JP	CALSLT
 
-@CDPATH:	PUSH	HL
+		SUBTTL	PATH, CDPATH
+;        PATH displays or sets the command search path, and CDPATH (new in
+; 2.40) the directory search path used by CHDIR and friends. Both are kept
+; as environment items and share all of this code; only the item name
+; differs, and it is kept in HL' throughout.
+;        With no parameters the current value is printed. A parameter list
+; starting with '-' deletes each given item from the path ('Invalid path'
+; if one of them is not there), one starting with '+' appends each item
+; (deleting it first if already present, so items can be re-ordered), and
+; a plain list replaces the whole path.
+@CDPATH:	PUSH	HL	; CDPATH works on the CDPATH item,
 	LD	HL,CDPATH$
 	JR	PAT10
 
-@PATH:	PUSH	HL
+@PATH:	PUSH	HL	;   PATH on the PATH item.
 	LD	HL,PATH$
-PAT10:	PUSH	HL
-	EXX
+PAT10:	PUSH	HL	; Keep the item name pointer in
+	EXX	;   HL'.
 	POP	HL
 	EXX
-	CALL	GENV2
+	CALL	GENV2	; Get the current value into BUFF.
 	POP	HL
 	RET	NZ
-	OR	(HL)
-	JP	Z,?DMSCR
+	OR	(HL)	; If no parameters, then just print
+	JP	Z,?DMSCR	;   the current value.
 	INC	HL
-	CP	"-"
+	CP	"-"	; '-' => delete items;
 	JR	Z,DELP
-	CP	"+"
+	CP	"+"	; '+' => append items;
 	JR	Z,ADDP
-	XOR	A
-	LD	(DE),A
+	XOR	A	;   else replace: clear the current
+	LD	(DE),A	;   value, then append to that.
 	DEC	HL
 ADDP:	EX	DE,HL	; HL -> current PATH string.
 	PUSH	HL	; If only separators there, then set
@@ -1518,9 +1677,9 @@ AP30:	INC	DE
 	JR	NZ,AP30
 	JR	AP10
 
-APC10:	EXX
-	PUSH	HL
-	EXX
+APC10:	EXX	; Set the new path: recover the
+	PUSH	HL	;   item name pointer from HL' and
+	EXX	;   set the value built in BUFF.
 	POP	HL
 	JP	SENV2
 
@@ -1536,6 +1695,10 @@ DELP:	CALL	GETCH	; Skip separators.
 	RET	Z
 	JR	DELP	; Repeat for next item.
 
+;        Delete the item at BUFF3 from the path string in BUFF. Each item
+; of the path in turn is copied to BUFF3+128 and compared with it; when a
+; match is found, the rest of the path string is copied down over the item.
+; On exit, Cy => error, Z => item not found, NZ => item deleted.
 DELSTR:	LD	HL,ENVDATA
 DS5:	PUSH	HL	; Save start of this item.
 	POP	IX
@@ -1556,49 +1719,58 @@ DS10:	LD	A,(BC)
 	INC	BC
 	OR	A
 	JR	NZ,DS10
-	PUSH	IX
-	POP	DE
+	PUSH	IX	; Found: copy the rest of the path
+	POP	DE	;   down over this item,
 	CALL	NCOPY
-	INC	A
+	INC	A	;   and return NZ.
 	RET
 
+;        Copy one item from the command line at (HL) to the buffer at (BC),
+; stopping at a separator or the end of the line and null-terminating the
+; copy. Every character is passed through the DOS check character function
+; so that double byte (Kanji) characters are handled properly.
+; On exit, HL points to the terminating character; Cy set => error.
 CPYSTR:	LD	D,#00	; Zero character flags.
-CS10:	LD	E,(HL)
+CS10:	LD	E,(HL)	; Check the character.
 	PUSH	BC
 	PUSH	HL
 	LD	C,_CHKCHR
 	CALL	BDOS
 	POP	HL
 	POP	BC
-	SCF
+	SCF	; Cy => error from the check.
 	RET	NZ
-	LD	(BC),A
-	OR	E
-	RET	Z
+	LD	(BC),A	; Terminate the copy (A is 0):
+	OR	E	;   done if at the end of the line
+	RET	Z	;   or at a separator,
 	CALL	SEP?
 	RET	Z
-	LD	A,E
-	LD	(BC),A
+	LD	A,E	;   else overwrite the null with
+	LD	(BC),A	;   the character and carry on.
 	INC	BC
 	INC	HL
 	JR	CS10
 
-MKPATH2:	LD	D,#01
-	XOR	A
+;        MKPATH2 is CPYSTR's brace-aware variant, used to fetch IF/IFF
+; condition words: between { and } separator characters lose their special
+; meaning, and the braces themselves are not copied. VALUEL holds the
+; "inside braces" state.
+MKPATH2:	LD	D,#01	; Initialise character flags.
+	XOR	A	; Not inside braces.
 	LD	(VALUEL),A
-MKP10:	LD	A,(HL)
-	CP	"{"
+MKP10:	LD	A,(HL)	; '{' : set the brace flag and
+	CP	"{"	;   skip the character.
 	JR	NZ,MKP20
 	LD	(VALUEL),A
 	INC	HL
 	JR	MKP10
-MKP20:	CP	"}"
-	JR	NZ,MKP30
+MKP20:	CP	"}"	; '}' : clear the brace flag and
+	JR	NZ,MKP30	;   skip the character.
 	XOR	A
 	LD	(VALUEL),A
 	INC	HL
 	JR	MKP10
-MKP30:	LD	E,(HL)
+MKP30:	LD	E,(HL)	; The rest is as CPYSTR,
 	PUSH	BC
 	PUSH	HL
 	LD	C,_CHKCHR
@@ -1610,8 +1782,8 @@ MKP30:	LD	E,(HL)
 	LD	(BC),A
 	OR	E
 	RET	Z
-	LD	A,(VALUEL)
-	OR	A
+	LD	A,(VALUEL)	;   except that separators end the
+	OR	A	;   item only outside braces.
 	LD	A,E
 	CALL	Z,SEP?
 	RET	Z
@@ -1793,14 +1965,14 @@ NXTCHR:	INC	HL
 DSTR:	POP	HL	; HL -> start of name.
 	CALL	GENV2
 	RET	NZ
-?DMSCR:	LD	A,(DE)
-	OR	A
+?DMSCR:	LD	A,(DE)	; Print the string at (DE) plus a
+	OR	A	;   CRLF, unless it is null.
 	RET	Z
 	JP	DMSCR
 
-DST10:	LD	A,(HL)
-	CP	"/"
-	JR	NZ,SETNAME
+DST10:	LD	A,(HL)	; An option must be /P, which pages
+	CP	"/"	;   the environment listing;
+	JR	NZ,SETNAME	;   anything else is a name.
 	INC	HL
 	LD	A,(HL)
 	CALL	MKUPPER
@@ -1809,21 +1981,32 @@ DST10:	LD	A,(HL)
 	RET	NZ
 	CALL	SETP
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH	; List all if nothing follows /P.
 	JR	NZ,SETNAME
 	JR	SET10
 
-@ALIAS:	AND	(HL)
+		SUBTTL	ALIAS
+;        The ALIAS command (new in 2.40) maintains the alias list, which
+; lives in the private mapper segment between the command history buffer
+; and the variable swap area (see FNDALIAS and friends in io.mac). It is
+; structured like SET: no parameters lists all aliases as 'name = value', a
+; name alone prints that alias's value, and 'name value' defines an alias
+; ('Not enough memory' when the alias space is full) while a name with an
+; empty value deletes it. In addition, /P pages the listing, /R clears the
+; whole list, /S file saves the alias area to a file and /L file loads such
+; a file back, replacing all current aliases. An alias file starts with the
+; 12-byte signature 'Alias File'+^Z, which /L checks.
+@ALIAS:	AND	(HL)	; No parameters => list all.
 	JR	NZ,ALI180
-ALI130:	LD	BC,#00
-ALI140:	LD	HL,ENVNAME
-	LD	DE,ENVDATA
-	CALL	FNDALIAS
-	LD	A,(HL)
+ALI130:	LD	BC,#00	; Start with the first alias.
+ALI140:	LD	HL,ENVNAME	; Get the name and value of the
+	LD	DE,ENVDATA	;   next alias; BC advances through
+	CALL	FNDALIAS	;   the list.
+	LD	A,(HL)	; A null name ends the list.
 	OR	A
 	RET	Z
 	PUSH	BC
-	EX	DE,HL
+	EX	DE,HL	; Print 'name = value'.
 	CALL	PRTSTR
 	LD	A,#41
 	CALL	DMESS
@@ -1832,78 +2015,78 @@ ALI140:	LD	HL,ENVNAME
 	POP	BC
 	JR	ALI140
 
-ALI150:	PUSH	HL
-	LD	D,#00
+ALI150:	PUSH	HL	; HL -> start of the alias name.
+	LD	D,#00	; Zero character flags.
 	DEC	HL
-ALI160:	INC	HL
-	LD	E,(HL)
+ALI160:	INC	HL	; Scan the name for a separator or
+	LD	E,(HL)	;   the end of the line, checking
 	PUSH	HL
 	LD	C,_CHKCHR
 	CALL	BDOS
 	POP	HL
-	LD	(HL),E
+	LD	(HL),E	;   each character and storing it
 	POP	BC
 	RET	NZ
 	PUSH	BC
 	OR	E
-	JR	Z,ALI170
+	JR	Z,ALI170	;   back. End of line: query it.
 	CALL	SEP?
 	JR	NZ,ALI160
-	PUSH	HL
-	CALL	STRIP
+	PUSH	HL	; Separator: if only blanks follow,
+	CALL	STRIP	;   query the alias, else define it
 	POP	HL
-	LD	(HL),#00
-	JR	Z,ALI170
+	LD	(HL),#00	;   with the rest of the line as
+	JR	Z,ALI170	;   its value.
 	INC	HL
 	CALL	GETCH
-	EX	DE,HL
-	POP	HL
+	EX	DE,HL	; DE -> value.
+	POP	HL	; HL -> name.
 	JP	SETALIAS
 
-ALI170:	POP	HL
-	LD	DE,ENVDATA
+ALI170:	POP	HL	; Print the value of the alias, if
+	LD	DE,ENVDATA	;   it is defined.
 	CALL	GETALIAS
 	JP	?DMSCR
 
-ALI180:	LD	A,(HL)
+ALI180:	LD	A,(HL)	; Check for an option:
 	CP	"/"
 	JR	NZ,ALI150
 	INC	HL
 	LD	A,(HL)
 	CALL	MKUPPER
-	CP	"S"
+	CP	"S"	;   /S file = save the aliases,
 	JR	Z,ALI200
-	CP	"L"
+	CP	"L"	;   /L file = load an alias file,
 	JR	Z,ALI250
-	CP	"R"
+	CP	"R"	;   /R = remove all aliases,
 	JP	Z,ALI260
-	CP	"P"
+	CP	"P"	;   /P = page the listing,
 	JR	Z,ALI190
-	DEC	HL
+	DEC	HL	;   anything else is a name.
 	JR	ALI150
 
-ALI190:	CALL	SETP
+ALI190:	CALL	SETP	; /P: set up the pause line count;
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH	;   list all if nothing follows.
 	JR	NZ,ALI150
 	JR	ALI130
 
-ALI200:	CALL	PRSPATH
-	OR	A
+ALI200:	CALL	PRSPATH	; /S: parse the file name and
+	OR	A	;   create the file.
 	RET	NZ
 	LD	BC,_CREATE
 	CALL	BDOS
 	RET	NZ
-	PUSH	BC
-	LD	C,_WRITE
-	LD	DE,TALIAS$
+	PUSH	BC	; B = file handle.
+	LD	C,_WRITE	; Write the 12-byte 'Alias File'
+	LD	DE,TALIAS$	;   signature.
 	LD	HL,#0C
 	CALL	BDOS
 	POP	BC
 	RET	NZ
 	PUSH	BC
-	CALL	SETPG2
-	CALL	GETALIADDR
+	CALL	SETPG2	; Find the end of the alias records
+	CALL	GETALIADDR	;   in the mapper segment.
 	SET	7,H
 ALI210:	LD	E,(HL)
 	INC	HL
@@ -1915,10 +2098,10 @@ ALI210:	LD	E,(HL)
 	ADD	HL,DE
 	JR	ALI210
 
-ALI220:	PUSH	HL
-	CALL	GETALIADDR
-	SET	7,H
-	DEC	HL
+ALI220:	PUSH	HL	; Compute the used length of the
+	CALL	GETALIADDR	;   alias area, including the zero
+	SET	7,H	;   terminator record, and write
+	DEC	HL	;   the whole area to the file.
 	DEC	HL
 	EX	DE,HL
 	POP	HL
@@ -1928,9 +2111,9 @@ ALI220:	PUSH	HL
 	POP	BC
 	PUSH	BC
 	LD	C,_WRITE
-ALI230:	CALL	BDOS
-	LD	E,A
-	POP	BC
+ALI230:	CALL	BDOS	; Read or write the alias area,
+	LD	E,A	;   then close the file, restore
+	POP	BC	;   page 2 and return any error.
 ALI240:	PUSH	DE
 	LD	C,_CLOSE
 	CALL	BDOS
@@ -1942,16 +2125,16 @@ ALI240:	PUSH	DE
 	LD	A,E
 	RET
 
-ALI250:	CALL	PRSPATH
-	OR	A
+ALI250:	CALL	PRSPATH	; /L: parse the file name and open
+	OR	A	;   the file.
 	RET	NZ
 	LD	C,_OPEN
 	CALL	BDOS
 	RET	NZ
 	PUSH	BC
-	LD	C,_READ
-	LD	DE,ENVNAME
-	LD	HL,#0C
+	LD	C,_READ	; Read the 12-byte signature and
+	LD	DE,ENVNAME	;   check that this really is an
+	LD	HL,#0C	;   alias file.
 	CALL	BDOS
 	POP	BC
 	RET	NZ
@@ -1960,12 +2143,12 @@ ALI250:	CALL	PRSPATH
 	LD	BC,TALIAS$
 	CALL	STRCMP
 	POP	BC
-	LD	E,.IFNM
+	LD	E,.IFNM	; 'Invalid filename' if it is not.
 	JR	NZ,ALI240
 	PUSH	BC
-	CALL	SETPG2
-	POP	BC
-	PUSH	BC
+	CALL	SETPG2	; Read the file straight into the
+	POP	BC	;   alias area (at most its full
+	PUSH	BC	;   size), replacing all aliases.
 	LD	HL,(ALIADDR+#8000)
 	SET	7,H
 	EX	DE,HL
@@ -1976,10 +2159,10 @@ ALI250:	CALL	PRSPATH
 	LD	C,_READ
 	JR	ALI230
 
-ALI260:	INC	HL
-	CALL	GETCH
-	LD	A,.INP
-	RET	NZ
+ALI260:	INC	HL	; /R: no more parameters allowed;
+	CALL	GETCH	;   empty the list by writing a
+	LD	A,.INP	;   zero length record at the start
+	RET	NZ	;   of the alias area.
 	CALL	GETALIADDR
 	XOR	A
 	CALL	WRCHR
@@ -1987,171 +2170,185 @@ ALI260:	INC	HL
 	CALL	WRCHR
 	RET
 
+; The signature written at the start of an alias file.
 TALIAS$:	DEFB	"Alias File",26,0
 
-PRSPATH:	INC	HL
-	CALL	GETCH
+;        Parse a single file name given after an option letter, for the
+; ALIAS /S and /L options. On entry HL points at the option letter.
+; On exit,  Z & A=0 => OK, DE -> null-terminated file name.
+;           NZ => error: .NOPAR if no name given, .IPATH if it does not
+;           end cleanly, .INP if anything follows it.
+PRSPATH:	INC	HL	; Skip the option letter and any
+	CALL	GETCH	;   separators; a name must follow.
 	LD	A,.NOPAR
 	RET	Z
-	LD	BC,_PARSE
+	LD	BC,_PARSE	; Parse the file name.
 	EX	DE,HL
 	PUSH	DE
 	CALL	BDOS
 	POP	HL
 	RET	NZ
-	EX	DE,HL
-	LD	A,(HL)
+	EX	DE,HL	; HL -> terminating character,
+	LD	A,(HL)	;   DE -> start of the name.
 	OR	A
 	JR	Z,PRS80
-	CP	" "
-	LD	A,.IPATH
+	CP	" "	; The name must end at a space or
+	LD	A,.IPATH	;   at the end of the line.
 	RET	NZ
-	LD	(HL),#00
-	INC	HL
+	LD	(HL),#00	; Null-terminate the name; nothing
+	INC	HL	;   may follow it.
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 PRS80:	XOR	A
 	RET
 
-@HISTORY:	AND	(HL)
-	JP	Z,HIS30
-	LD	A,(HL)
+		SUBTTL	HISTORY
+;        The HISTORY command (new in 2.40) handles the command history that
+; the line editor keeps in a circular buffer at the start of the private
+; mapper segment. With no parameters the whole history is printed, oldest
+; command first; /P pages the output and /D clears the history.
+;        A number (128..4095) sets a new size for the history buffer. The
+; alias area, which follows the history buffer in the segment, is moved up
+; or down to make this possible, and the history itself is cleared.
+@HISTORY:	AND	(HL)	; Print the history if no
+	JP	Z,HIS30	;   parameters.
+	LD	A,(HL)	; Check for /D or /P.
 	CP	"/"
 	JP	Z,CHECKP
-	CALL	GET16
-	CALL	Z,GCHKEOL
+	CALL	GET16	; Else it is a new history buffer
+	CALL	Z,GCHKEOL	;   size, 128..4095 bytes.
 	RET	NZ
 	EX	DE,HL
-	LD	DE,(MAXBUFLEN)
-	CALL	COMPARE4
+	LD	DE,(MAXBUFLEN)	; 'Invalid number' unless below
+	CALL	COMPARE4	;   4096...
 	LD	A,.BADNO
 	RET	NC
-	LD	DE,128
+	LD	DE,128	;   ...and at least 128.
 	CALL	COMPARE4
 	LD	A,.BADNO
 	RET	C
-	CALL	SETBUFLEN	; stel nieuwe bufferlengte in
-	LD	DE,BUFADDR	; start van buffer
-	ADD	HL,DE	; tel lengte erbij
-	PUSH	HL	; dit is start van aliasbuffer
-	CALL	GETALIADDR	; haal huidige aliasbuffer
-	POP	DE	; nieuw start adres
-	CALL	COMPARE4	; zijn die gelijk?
-	RET	Z	; ja, dan zijn we klaar
-	EX	AF,AF'                  ; bewaar vergelijking voor later
-	SET	7,H	; echte adres in geheugen
-	PUSH	HL	; bewaar dit
-	CALL	SETPG2	; schakel pagina 2 permanent in
-HIS10:	LD	C,(HL)	; lengte van deze alias
+	CALL	SETBUFLEN	; Set the new buffer length.
+	LD	DE,BUFADDR	; Start of the history buffer.
+	ADD	HL,DE	; Add the new length to it:
+	PUSH	HL	;   this is the new alias area start.
+	CALL	GETALIADDR	; Get the current alias area start.
+	POP	DE	; New start address.
+	CALL	COMPARE4	; Are they equal?
+	RET	Z	; Yes, then we are done.
+	EX	AF,AF'                  ; Save the comparison for later.
+	SET	7,H	; Real address in memory (page 2).
+	PUSH	HL	; Save it.
+	CALL	SETPG2	; Page 2 switched for the duration.
+HIS10:	LD	C,(HL)	; Length of this alias record.
 	INC	HL
 	LD	B,(HL)
 	DEC	HL
-	ADD	HL,BC	; tel bij adres op
-	LD	A,B	; is lengte nul?
+	ADD	HL,BC	; Add it to the address.
+	LD	A,B	; Is the length zero?
 	OR	C
-	JR	NZ,HIS10	; nee, dan volgende
+	JR	NZ,HIS10	; No, then the next record.
 	INC	HL
-	INC	HL	; eind adres aliasbuffer
-	PUSH	HL	; bewaar dit in HL'
+	INC	HL	; End address of the alias area.
+	PUSH	HL	; Save it in HL'.
 	EXX
 	POP	HL
 	EXX
-	POP	DE	; haal startadres aliasbuffer
-	PUSH	DE	; en bewaar weer
-	SBC	HL,DE	; trek van eindadres af
-	LD	B,H	; dit is dus de lengte
+	POP	DE	; Get the alias area start address
+	PUSH	DE	;   and save it again.
+	SBC	HL,DE	; Subtract it from the end address:
+	LD	B,H	;   so this is the length.
 	LD	C,L
-	PUSH	BC	; bewaar de lengte
+	PUSH	BC	; Save the length.
 	EXX
 	PUSH	HL
 	EXX
-	CALL	GETBUFLEN	; haal lengte van buffer
-	LD	DE,BUFADDR	; startadres van buffer
-	ADD	HL,DE	; tel op
-	EX	DE,HL	; naar DE
+	CALL	GETBUFLEN	; Get the new history buffer length.
+	LD	DE,BUFADDR	; Start address of the buffer.
+	ADD	HL,DE	; Add them: the new alias start.
+	EX	DE,HL	; To DE.
 	PUSH	DE
 	EXX
-	POP	HL	; en terug in HL'
-	POP	DE	; ook DE' terug
-	POP	BC	; en BC'
-	ADD	HL,BC	; tel lengte bij startadres aliasbuffer
+	POP	HL	; And back into HL'.
+	POP	DE	; DE' restored too.
+	POP	BC	; And BC'.
+	ADD	HL,BC	; Add the length to the alias start.
 	EX	DE,HL
 	EXX
-	POP	HL	; startadres aliasbuffer terug
-	EX	AF,AF'                  ; resultaat van vergelijking
-	JR	C,HIS20	; C betekent achteruit kopieren
-	PUSH	DE	; bewaar nieuwe startadres
-	SET	7,D	; maak echte adres
-	LDIR		; kopieer
-	CALL	RSTPG2	; zet pagina 2 terug
-	POP	HL	; haal nieuwe startadres terug
-	CALL	SETALIADDR	; en stel dit in
-	JR	CHE10	; wis history buffer
+	POP	HL	; Old alias area start back.
+	EX	AF,AF'                  ; Result of the comparison:
+	JR	C,HIS20	;   Cy means copy backwards.
+	PUSH	DE	; Save the new start address.
+	SET	7,D	; Make the real (page 2) address.
+	LDIR		; Copy (forwards).
+	CALL	RSTPG2	; Restore page 2.
+	POP	HL	; Get the new start address back
+	CALL	SETALIADDR	;   and set it.
+	JR	CHE10	; Clear the history buffer.
 
-HIS20:	EXX		; haal alternatieve registers
+HIS20:	EXX		; Get the alternate registers.
 	DEC	HL
 	DEC	DE
-	SET	7,D	; maak echte adres
-	LDDR		; en kopieer achteruit
-	CALL	GETBUFLEN	; lengte buffer
-	LD	DE,BUFADDR	; start buffer
-	ADD	HL,DE	; tel op
-	PUSH	HL	; bewaar start aliasbuffer
-	CALL	RSTPG2	; zet pagina 2 terug
-	POP	HL	; haal terug
-	CALL	SETALIADDR	; dit is nieuwe startadres aliasbuffer
-	JR	CHE10	; wis history buffer
+	SET	7,D	; Make the real (page 2) address.
+	LDDR		; And copy backwards.
+	CALL	GETBUFLEN	; New buffer length.
+	LD	DE,BUFADDR	; Buffer start.
+	ADD	HL,DE	; Add them: the new alias start.
+	PUSH	HL	; Save the alias area start.
+	CALL	RSTPG2	; Restore page 2.
+	POP	HL	; Get it back
+	CALL	SETALIADDR	;   and set the new alias start.
+	JR	CHE10	; Clear the history buffer.
 
-HIS30:	CALL	GETRDADDR
+HIS30:	CALL	GETRDADDR	; Save the editor's read pointer.
 	LD	(VALUEL),HL
-	CALL	GETPUTADDR
-	LD	DE,BUFADDR
+	CALL	GETPUTADDR	; Nothing to print if the buffer is
+	LD	DE,BUFADDR	;   still empty.
 	CALL	COMPARE4
 	RET	Z
-	CALL	SETRDADDR
-	CALL	HISPREV
-	CALL	GETRDADDR
+	CALL	SETRDADDR	; Start at the write pointer and
+	CALL	HISPREV	;   step back one character: that
+	CALL	GETRDADDR	;   is where the dump must stop.
 	LD	D,H
 	LD	E,L
-HIS40:	CALL	HISNEXT
-	JR	NZ,HIS60
-HIS50:	CALL	GETRDADDR
-	CALL	COMPARE4
-	JR	NZ,HIS40
-	LD	HL,(VALUEL)
-	CALL	SETRDADDR
+HIS40:	CALL	HISNEXT	; Get the next character, moving
+	JR	NZ,HIS60	;   circularly through the buffer.
+HIS50:	CALL	GETRDADDR	; At the end of a command: done
+	CALL	COMPARE4	;   when the whole buffer has been
+	JR	NZ,HIS40	;   walked.
+	LD	HL,(VALUEL)	; Restore the editor's read
+	CALL	SETRDADDR	;   pointer.
 	XOR	A
 	RET
 
-HIS60:	CALL	Z,LPRINT
+HIS60:	CALL	Z,LPRINT	; CRLF at the end of each command,
 	JR	Z,HIS50
-	CALL	PRCHAR
+	CALL	PRCHAR	;   else print the character.
 	CALL	HISNEXT
 	JR	HIS60
 
-CHECKP:	INC	HL
+CHECKP:	INC	HL	; Get the option letter:
 	LD	A,(HL)
 	CALL	MKUPPER
-	CP	"D"
+	CP	"D"	;   /D clears the history,
 	JR	Z,CHECKD
-	CP	"P"
+	CP	"P"	;   /P pages the listing.
 	LD	A,.IOPT
 	RET	NZ
 	INC	HL
 	CALL	SETP
-	CALL	GETCH
+	CALL	GETCH	; Nothing may follow /P.
 	JR	Z,HIS30
 	LD	A,.INP
 	RET
 
-CHECKD:	INC	HL
+CHECKD:	INC	HL	; Nothing may follow /D.
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-CHE10:	LD	HL,BUFADDR
-	CALL	SETPUTADDR
-	CALL	SETRDADDR
+CHE10:	LD	HL,BUFADDR	; Empty the history: read and write
+	CALL	SETPUTADDR	;   pointers to the buffer start,
+	CALL	SETRDADDR	;   end pointer just before it.
 	DEC	HL
 	CALL	SETENDADDR
 	XOR	A
@@ -2325,17 +2522,22 @@ VER10:	CALL	NC,PRCHAR	; Print character from message.
 	LD	DE,VERMSG	; Finally print COMMAND.COM's message.
 	JP	DMSCR
 
-_RDSLT:	LD	A,(#F348)
+;        Read the byte at address (HL) from the master disk ROM (entry
+; _RDSLT) or from the slot given in A (entry RDSLOT), with the RDSLT BIOS
+; routine. As in CALLSLOT, the stack is moved to page 3 around the
+; inter-slot call.
+; On exit, A = the byte read; HL is preserved.
+_RDSLT:	LD	A,(#F348)	; A = slot of the master DiskROM.
 RDSLOT:	EX	DE,HL
-	PUSH	DE
-	LD	HL,#00
-	ADD	HL,SP
+	PUSH	DE	; Save the address to read.
+	LD	HL,#00	; Switch to a stack in page 3,
+	ADD	HL,SP	;   saving the current one.
 	LD	SP,#F51F
 	PUSH	HL
-	EX	DE,HL
+	EX	DE,HL	; HL = address to read.
 	CALL	RDSLT
-	POP	HL
-	LD	SP,HL
+	POP	HL	; Restore the original stack
+	LD	SP,HL	;   and the address in HL.
 	POP	HL
 	RET
 
@@ -2373,62 +2575,67 @@ SETVFY:	EX	DE,HL	; DE -> parameter.
 	CALL	C,COMPARE	; Check for OFF if not ON.
 	LD	A,.IPARM	; 'Invalid parameter' if not ON or OFF.
 	RET	C
-VFY10:	INC	DE
+VFY10:	INC	DE	; Skip DE past the matched word.
 	DJNZ	VFY10
 	INC	DE
 	EX	DE,HL
-	LD	A,(HL)
-	CALL	SEP?
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?	;   follow it.
 	LD	A,.IPARM
 	RET	NZ
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-	LD	E,C
+	LD	E,C	; Set the new verify state.
 	LD	C,_VERIFY
 	JP	BDOS
 
-@DSKCHK:	AND	(HL)
+		SUBTTL	DSKCHK
+;        The DSKCHK command (new in 2.40) displays or sets the disk check
+; state, using the DSKCHK function that MSX-DOS 2 always had but COMMAND
+; 2.31 never exposed. The code mirrors VERIFY, except that for the DSKCHK
+; function B=0 means checking enabled.
+@DSKCHK:	AND	(HL)	; Go & set the state if parameters.
 	JR	NZ,DSK20
-	LD	C,_DSKCHK
-	XOR	A
+	LD	C,_DSKCHK	; Else get the current state:
+	XOR	A	;   B = 0 => checking is on.
 	CALL	BDOS
-	LD	HL,ONWORD$+1
+	LD	HL,ONWORD$+1	; Assume enabled.
 	INC	B
 	DEC	B
 	JR	Z,DSK10
 	LD	HL,OFFWORD$+1
-DSK10:	LD	A,#47
-	CALL	DMESS
+DSK10:	LD	A,#47	; Print 'DiskCheck is ' and the
+	CALL	DMESS	;   state.
 	EX	DE,HL
 	JP	DMSCR
 
-DSK20:	EX	DE,HL
-	DEC	DE
-	LD	HL,ONWORD$
-	LD	B,(HL)
-	LD	C,#00
+DSK20:	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#00	; 0 => ON.
 	CALL	COMPARE
 	JR	NC,DSK30
-	INC	B
-	DEC	C
-	INC	HL
-	CALL	C,COMPARE
-	LD	A,.IPARM
+	INC	B	; Ready for OFF check.
+	DEC	C	; FF => OFF.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE	; Check for OFF if not ON.
+	LD	A,.IPARM	; 'Invalid parameter' if neither.
 	RET	C
-DSK30:	INC	DE
+DSK30:	INC	DE	; Skip DE past the matched word.
 	DJNZ	DSK30
 	INC	DE
 	EX	DE,HL
-	LD	A,(HL)
-	CALL	SEP?
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?	;   follow it.
 	LD	A,.IPARM
 	RET	NZ
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-	LD	B,C
-	LD	A,#01
+	LD	B,C	; Set the new state.
+	LD	A,#01	; A = 1 => set.
 	LD	C,_DSKCHK
 	JP	BDOS
 
