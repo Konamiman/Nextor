@@ -1,8 +1,9 @@
+	name('copy')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	HELP, CONCAT, COPY and TYPE commands
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
 ;
 ;
 ;        This module contains the command routines for the HELP, CONCAT,  COPY
@@ -521,7 +522,7 @@ CPYFORK:	LD	C,_FORK##	; Do a 'fork' so that all files can be
 		LD	A,B
 		LD	(COPYID##),A	; Save returned id for doing a join.
 ;
-OPNUL:		LD	DE,NUL		; Open a dummy handle to the NUL device
+OPNUL:		LD	DE,NULDEV	; Open a dummy handle to the NUL device
 		LD	C,_OPEN##	;   to 'reserve' a handle for the
 		LD	A,3		;   destination file.
 		CALL	_BDOS##
@@ -583,7 +584,7 @@ CPYSRCE:	LD	A,(BC)
 		JP	_BDOS##
 ;
 ;
-NUL:		DEFB	'NUL'		; Name of NUL device for dummy dest.
+NULDEV:		DEFB	'NUL'		; Name of NUL device for dummy dest.
 NULL:		DEFB	0
 ;
 ;
@@ -691,7 +692,7 @@ CPYHLP:		LD	A,(BC)		; Copy command name to end of HELP
 ;
 		EX	DE,HL		; HL -> start of HELP drive/path/file.
 		LD	DE,HLPOPTS	; DE -> table of options for HELP.
-		CALL	TYPE		; TYPE the help file (NC, A=0).
+		CALL	TYPFIL		; TYPE the help file (NC, A=0).
 		OR	A
 		RET	Z
 ;
@@ -704,7 +705,7 @@ CPYHLP:		LD	A,(BC)		; Copy command name to end of HELP
 		CP	.NODIR##
 		JR	Z,NOHELP
 ;
-		CP	.NOFILE##
+		CP	.NOFIL##
 		RET	NZ
 ;
 NOHELP:		LD	A,.NOHELP##
@@ -722,7 +723,7 @@ NOHELP:		LD	A,.NOHELP##
 ;
 ;
 @TYPE::		LD	DE,TYPOPTS	; DE -> table of valid / options.
-TYPE:		PUSH	AF		; Save HELP/TYPE flag (NZ => TYPE).
+TYPFIL:		PUSH	AF		; Save HELP/TYPE flag (NZ => TYPE).
 		CALL	PARSE##		; Parse source filename.
 		CALL	Z,CHKPAR##	; Check that something was parsed.
 		CALL	Z,CHKEOL##	; Check for garbage on the end of line.
@@ -819,7 +820,7 @@ endif
 ;
 		LD	A,B		; Get parse flags for destination.
 		AND	$ODRV OR $DRV	; 'Missing parameter' if nothing
-		LD	A,.NOPARM##	;   parsed.
+		LD	A,.NOPAR##	;   parsed.
 		RET	Z
 ;
 		EX	DE,HL		; DE -> terminating character.

@@ -92,33 +92,30 @@ DATA.REL: \
 # `make tools-disk` creates bin/tools/nextor.dsk: a 360K single sided 3.5"
 # FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
 # NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
-# .COM file present in bin/tools, a README.TXT (sourced from
-# tools-disk-readme.txt) and any files supplied via the EXTRA_FILES variable
-# (typically COMMAND2.COM). The image is recreated from scratch on every run
+# .COM file present in bin/tools (which includes COMMAND2.COM), a README.TXT
+# (sourced from tools-disk-readme.txt) and any files supplied via the
+# EXTRA_FILES variable. The image is recreated from scratch on every run
 # using mformat and mcopy from the mtools package, plus dd to install the
 # boot sector code.
 #
 # The image gets the same MSX-DOS 2.20 style boot sector that the kernel's
 # built-in FORMAT command creates (assembled standalone via
 # tools-disk-bootsect.mac), so it boots both in Nextor/MSX-DOS 2 mode
-# (straight to the DOS prompt if COMMAND2.COM is present) and in MSX-DOS 1
-# mode (loading MSXDOS.SYS if present, or falling back to Disk BASIC).
+# (straight to the DOS prompt) and in MSX-DOS 1 mode (loading MSXDOS.SYS
+# if present, or falling back to Disk BASIC).
 #
 # The files to put in the disk are expected to exist in bin/tools already:
 # if any is missing the build fails. Use the tools-disk target of ../Makefile
 # to build all of them and then create the disk in one go.
 #
-# Files that are not built by this repository - most notably COMMAND2.COM -
-# can be added to the disk with the EXTRA_FILES variable: a comma (or space)
-# separated list of files, with relative paths resolved against the current
-# directory (the one make was invoked from), stored in the disk with their
-# names uppercased. Listed files that don't exist make the build fail.
-#
-# A disk without COMMAND2.COM is not bootable, so a warning is printed when
-# no COMMAND2.COM is present in EXTRA_FILES. Typical usage is
-# EXTRA_FILES=COMMAND2.COM for a Nextor/MSX-DOS 2 bootable disk, or
-# EXTRA_FILES=COMMAND2.COM,MSXDOS.SYS,COMMAND.COM for a disk that also
-# boots to the DOS prompt in MSX-DOS 1 mode.
+# Files that are not built by this repository can be added to the disk with
+# the EXTRA_FILES variable: a comma (or space) separated list of files, with
+# relative paths resolved against the current directory (the one make was
+# invoked from), stored in the disk with their names uppercased. Listed
+# files that don't exist make the build fail. Typical usage is
+# EXTRA_FILES=MSXDOS.SYS,COMMAND.COM for a disk that also boots to the DOS
+# prompt in MSX-DOS 1 mode (in Nextor/MSX-DOS 2 mode the disk is already
+# bootable thanks to the COMMAND2.COM built by this repository).
 #
 # The current (invocation) directory is taken from the PWD environment
 # variable, which (unlike CURDIR) survives make -C. It does NOT survive the
@@ -134,13 +131,12 @@ comma := ,
 EXTRA_FILES ?=
 EXTRA_FILES_ABS := $(foreach f,$(subst $(comma), ,$(EXTRA_FILES)),$(if $(filter /%,$(f)),$(f),$(WORKING_DIR)/$(f)))
 EXTRA_MISSING = $(filter-out $(wildcard $(EXTRA_FILES_ABS)),$(EXTRA_FILES_ABS))
-EXTRA_HAS_COMMAND2 := $(filter command2.com,$(shell echo $(notdir $(EXTRA_FILES_ABS)) | tr A-Z a-z))
 
 # The C tools list, derived from the .c files (it matches the COMS variable
 # in C/Makefile).
 C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
 
-DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese $(COMS) $(C_COMS)
+DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND2.COM $(COMS) $(C_COMS)
 DISK_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(DISK_REQUIRED)))),$(DISK_REQUIRED))
 
 # Everything with a .COM extension goes in the disk. $(sort ...) also removes
@@ -187,7 +183,6 @@ tools-disk: $(BOOTSECT_BIN)
 	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
 		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
 	done)
-	$(if $(EXTRA_HAS_COMMAND2),,@echo "\nWARNING: COMMAND2.COM not added, disk won't be bootable")
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
 
 # ---------------------------------------------------------------------------
@@ -206,13 +201,18 @@ TOOLS_ZIP := $(BIN_TOOLS)/tools.zip
 ZIP_REQUIRED := $(COMS) $(C_COMS)
 ZIP_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(ZIP_REQUIRED)))),$(ZIP_REQUIRED))
 
+# The .COM files to pack: everything that goes in the disk image except
+# COMMAND2.COM (in either letter case, in case the filesystem preserved a
+# lowercase copy).
+ZIP_COMS = $(filter-out $(BIN_TOOLS)/COMMAND2.COM $(BIN_TOOLS)/command2.com,$(DISK_COMS))
+
 .PHONY: tools-zip
 
 tools-zip:
 	$(if $(shell which zip),,$(error "ERROR: can't execute zip, is it installed/in PATH?"))
 	$(if $(ZIP_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(ZIP_MISSING) - build the tools first, or use the tools-zip target of ../Makefile"))
 	@rm -f $(TOOLS_ZIP)
-	@cd $(BIN_TOOLS) && zip -q tools.zip $(notdir $(DISK_COMS))
+	@cd $(BIN_TOOLS) && zip -q tools.zip $(notdir $(ZIP_COMS))
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_ZIP)
 
 .PHONY: clean

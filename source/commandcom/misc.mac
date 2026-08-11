@@ -1,8 +1,9 @@
+	name('misc')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Miscellaneous Routines
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
 ;
 ;
 ;
@@ -329,7 +330,7 @@ CHKPAR::	LD	A,B		; Get parse flags.
 		AND	$ODRV OR $DRV
 		SUB	1		; C => nothing parsed.
 		SBC	A,A		; FF => nothing parsed, else 0.
-		AND	.NOPARM##	; NOPARM if nothing parsed, else 0.
+		AND	.NOPAR##	; NOPARM if nothing parsed, else 0.
 		RET
 ;
 ;
@@ -415,7 +416,7 @@ endif
 		.BIT	ATDIR,(IY+@FLAGS##)	; Return with error code if a
 		JR	NZ,ORET			;   'directory only' command.
 ;
-		CP	.NOFILE##	; If file not found, then check for
+		CP	.NOFIL##	; If file not found, then check for
 		JR	Z,NDIR		;   DIR defaulting the extension.
 ;
 		OR	A
@@ -439,7 +440,7 @@ if 1	;(Hal_F)
 		PUSH	DE		; Pointer to start of item.
 DFLTE:
 else
-		CODE	MVI A
+		DEFB	LDA_OPC
 DFLTE:		POP	HL		; Balance stack.
 endif
 		LD	HL,(BUFF2##+2)	; Else get pointer to end of filename
@@ -504,7 +505,7 @@ INS10:		LD	A,(HL)		; Find end of string.
 ; On exit, NC => a file was found, else Z => no more files, NZ => error.
 ;	   BC is not corrupte.
 ;
-NEXT::		LD	A,.NOFILE##
+NEXT::		LD	A,.NOFIL##
 		.BIT	$AMBIG,(IY+@PARSF##)	; Don't bother doing another
 		JR	Z,NXT			;   search if not ambiguous.
 ;
@@ -525,7 +526,7 @@ NXT:		OR	A		; Set flags (NXT entered from FIRST).
 		LD	(FILES##),HL	;   and return with no error & NC.
 		RET
 ;
-NXT30:		CP	.NOFILE##	; Return error if not .NOFILE.
+NXT30:		CP	.NOFIL##	; Return error if not .NOFILE.
 		SCF
 		RET	NZ
 ;
@@ -548,7 +549,7 @@ NOFILE:		LD	A,(FLAGS##)	; Return .NODIR if a directory command,
 		RET	NZ		; With NZ and C.
 ;
 		SBC	A,A
-		LD	A,.NOFILE##
+		LD	A,.NOFIL##
 		RET			; With NZ and C.
 ;
 ;

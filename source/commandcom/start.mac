@@ -1,8 +1,9 @@
+	name('start')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Startup and initialisation
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
 ;
 ;
 ;
@@ -214,7 +215,7 @@ if 0
 	CALL	ENASLT##
 endif
 ;
-	CODE	LXI H		; Switch to CLI's stack. Top two bytes point to
+	DEFB	LDHL_OPC			; Switch to CLI's stack. Top two bytes point to
 CLIPAT:	 DEFW	0
 	DEC	HL		;   bottom of saved CLI.
 	DEC	HL
@@ -272,8 +273,8 @@ if 1	;v230
 ;
 endif
 	LD	HL,START	; Set up jump at start since this is not
-	CODE	MVI M		;   included in the checksum (and neither is
-	CODE	JMP		;   the message but that doesn't matter)
+	DEFB	LDM_OPC			;   included in the checksum (and neither is
+	DEFB	JP_OPC			;   the message but that doesn't matter)
 	INC	HL
 	LD	(HL),LOW INIT
 	INC	HL
@@ -369,7 +370,7 @@ LDAB:	LD	SP,(PTR_SAVE##)	; Reset SP to a stack out of the way.
 	LD	A,B
 	JR	NZ,LDERR	; Print error message & prompt if not.
 ;
-JPCLI:	CODE	MVI B		; Restore the redirection flags.
+JPCLI:	DEFB	LDB_OPC		; Restore the redirection flags.
 REDFLG:	 DEFB	0
 	LD	C,_REDIR##
 	LD	A,1
@@ -399,9 +400,9 @@ if 1
 	LD	(EXEFLG##),A	; Say CRLF necessary before prompt.
 endif
 ;
-	CODE	MVI A		; Get error code from program.
+	DEFB	LDA_OPC			; Get error code from program.
 ERR:	 DEFB	0
-	CODE	MVI B		; Get secondary error code.
+	DEFB	LDB_OPC			; Get secondary error code.
 ERR2:	 DEFB	0
 	JP	CLI_ABORT##	; Jump to CLI's abort routine with error codes.
 ;
@@ -420,7 +421,7 @@ if 1	;(Hal_F)
 	CALL	_BDOS## 	;   (error ignored)
 	POP	AF
 endif
-	CP	.NOFILE##	; If 'file not found', then suppress error
+	CP	.NOFIL##	; If 'file not found', then suppress error
 	JR	Z,NOCOM 	;   message & just prompt for COMMAND disk.
 ;
 	LD	DE,BUFF##	; Point DE to buffer for message.
@@ -539,7 +540,7 @@ DMS:	LD	A,(DE)		; Get character.
 	JR	DMS
 ;
 ;
-GETRMSG:CODE	LXI D
+GETRMSG:DEFB	LDDE_OPC
 MSGPAT:	 DEFW	0		; Address of messages patched here.
 	LD	B,A		; Save message count.
 	INC	B

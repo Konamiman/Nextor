@@ -1,8 +1,9 @@
+	name('io')
 	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL  CLI I/O Routines
 ;
 ;
-	INCLUDE COMMAND.INC
+	INCLUDE command.inc
 ;
 ;
 ;       This module contains various miscellaneous routines which perform
@@ -802,7 +803,7 @@ D32.40:         LD      A,(DE)          ; Subtract no. in table.
 ;
 		ADD     A,D             ; Else convert to ASCII.
 		LD      E,D             ; Set leading char to '0'.
-		CODE    MVI L           ; Skip to print char.
+		DEFB    LDL_OPC		; Skip to print char.
 ;
 D32.60:         OR      E               ; Leading char required ?
 		CALL    NZ,OUCH         ; Print it if yes.

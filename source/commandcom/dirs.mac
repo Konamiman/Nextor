@@ -1,8 +1,9 @@
-	SUBTTL  Directory Commands
+	name('dirs')
+	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL  Directory Commands
 ;
 ;
-	INCLUDE COMMAND.INC
+	INCLUDE command.inc
 ;
 ;        This module contains the command routines for the commands which deal
 ; with  sub-directories  on  the  disk, such as CHDIR, RMDIR, RNDIR, MVDIR and
@@ -36,7 +37,7 @@ if 1    ;(Hal_F)
 ;
 		LD      A,C             ; Give error if no attributes
 		OR      (HL)            ;   specified to set or reset.
-		LD      A,.NOPARM##
+		LD      A,.NOPAR##
 		RET     Z
 ;
 		LD      A,(HL)          ; Convert '-' flags into mask.
@@ -68,7 +69,7 @@ else
 ;
 		LD      A,C             ; Give error if no attributes
 		OR      (HL)            ;   specified to set or reset.
-		LD      A,.NOPARM##
+		LD      A,.NOPAR##
 		RET     Z
 ;
 		LD      A,(HL)          ; Convert '-' flags into mask.
@@ -116,7 +117,7 @@ GOTPL:          INC     HL              ; Point to letter.
 		EX      AF,AF'
 		POP     AF
 		SBC     A,A
-		AND     .IATTRS##
+		AND     .IATTR##
 		RET     NZ
 ;
 		LD      A,(BC)
@@ -279,7 +280,7 @@ DBADF::         CALL    DMS##
 ;
 @MVDIR::        SCF                     ; C => find directories, else files.
 @MOVE::         INC     A               ; Z => move, else rename.
-		CODE    MVI B           ; Skip RNDIR entry point.
+		DEFB    LDB_OPC		; Skip RNDIR entry point.
 @RNDIR::        SCF
 @RENAME::       PUSH    AF              ; Save RENAME/RNDIR/MOVE/MVDIR flags.
 		LD      DE,RNOPTS##
@@ -297,7 +298,7 @@ DBADF::         CALL    DMS##
 		LD      A,_RENAME##     ; Else RENAME or RNDIR.
 		EX      AF,AF'
 		OR      (HL)            ; Else check that the second parameter
-		LD      A,.NOPARM##     ;   to rename was given.
+		LD      A,.NOPAR##     ;   to rename was given.
 		RET     Z
 ;
 		EX      AF,AF'

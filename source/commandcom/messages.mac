@@ -1,3 +1,4 @@
+	name('messages')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Sample Messages File (English)
 ;
@@ -524,7 +525,7 @@ endif
 ;
 	MSG	INSERT, <Insert COMMAND2.COM disk in drive >	; One trailing
 								; space.
-	MSG	INSDSK, <:>
+	MSG	INSDRV, <:>
 ;
 ;
 ;

@@ -1,3 +1,4 @@
+	name('jtext')
 CR		EQU	0DH			; Carriage Return.
 LF		EQU	0AH			; Line Feed.
 ;

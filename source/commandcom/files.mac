@@ -1,8 +1,9 @@
+	name('files')
 	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL  Miscellaneous Disk and File Commands
 ;
 ;
-		INCLUDE COMMAND.INC
+		INCLUDE command.inc
 ;
 ;
 ;        This  module  contains  the  command  routines   for   the   assorted
@@ -170,7 +171,7 @@ DIR20:          .SET    DIR,(IY+@FLAGS##)       ; Set flag => DIR command.
 		CALL    FIRST##         ; Find first match.
 		JR      Z,DIR25         ; Go if no error.
 ;
-		CP      .NOFILE##
+		CP      .NOFIL##
 		RET     NZ              ; Return error if not .NOFILE.
 ;
 		XOR     A               ; Else prevent 'file not found' error.
@@ -351,7 +352,7 @@ FILE:           CALL    DMESS##
 		CALL    _BDOS##
 ;
 		LD      B,A             ; B=sectors/cluster, HL=clusters free.
-		CODE    MVI A
+		DEFB    LDA_OPC
 DD10:           ADD     HL,HL           ; Calculate HL*B for the number of
 		SRL     B               ;   free bytes (B is always a power
 		JR      NZ,DD10         ;   of 2) so HL = no. free sectors.
@@ -463,7 +464,7 @@ RNOPTS::
 ;
 ;
 @MKDIR::        AND     (HL)
-		LD      A,.NOPARM##     ; 'Missing parameter' if no parameters
+		LD      A,.NOPAR##     ; 'Missing parameter' if no parameters
 		RET     Z               ;   given.
 ;
 		CALL    PRS             ; Parse directory path.
@@ -518,7 +519,7 @@ VOL:
 		CALL    _BDOS##         ; Look for volume name.
 		JR      Z,DVOL          ; OK if no error or file not found.
 ;
-		CP      .NOFILE##
+		CP      .NOFIL##
 		RET     NZ
 ;
 DVOL:           PUSH    AF              ; Save volume name found flag.

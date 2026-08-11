@@ -1,8 +1,9 @@
+	name('cli')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Command Decoding and Program Loading
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
 ;
 ;
 TEST	EQU	FALSE			; TRUE for testing version.
@@ -326,7 +327,7 @@ CLI_ABORT::	CP	.INERR##	; Error on standard input ?
 		JR	NZ,ERROR	; Give error if not.
 ;
 		LD	A,__OUTER##	; Error type = output error.
-		CODE	LXI H
+		DEFB	LDHL_OPC
 INERR:		LD	A,__INPER##	; Error type = input error.
 		LD	(ERRTYPE##),A
 		LD	A,(REDID##)	; If not forked, then exit with error
@@ -350,7 +351,7 @@ ERROR:		LD	SP,CLI_STACK##	; Set up SP again in case an abort.
 ;
 		LD	C,_EXPLAIN##	; Get message to (DE) from system.
 		CALL	_BDOS
-		CODE	LXI H
+		DEFB	LDHL_OPC
 ;
 NOERR:		XOR	A		; No message.
 		LD	(DE),A
@@ -780,7 +781,7 @@ NXTRED:		CALL	WRCHAR		; Put character in buffer.
 		LD	A,6		; Inheritable, not read.
 		CALL	_BDOS
 		POP	HL		; Get back filename pointer in case it
-		CP	.NOFILE##	;   needs creating.
+		CP	.NOFIL##	;   needs creating.
 		JR	Z,CRTOUT	; Create file if it does not exist.
 ;
 		OR	A		; Return any other error.
@@ -1287,7 +1288,7 @@ DC10:		JR	NZ,NOTINT	; Go if command not in table.
 		JR	NC,NSKIP
 ;
 		INC	HL		; Cy => don't skip separators.
-		CODE	MVI B
+		DEFB	LDB_OPC
 NSKIP:		OR	A		; NC => skip separators.
 		CALL	NC,GETCH##	; Skip separators.
 		XOR	A
@@ -1365,7 +1366,7 @@ NFN:		LD	(DE),A		; Terminate with a null.
 GOTEXT:		CALL	FNDCMD		; Look for command.
 		JR	Z,EXECMD	; Execute command if file found.
 ;
-		CP	.NOFILE##
+		CP	.NOFIL##
 		RET	NZ		; Return error if not 'file not found'.
 ;
 		LD	A,(PARSF##)	; Get parse flags for command.
@@ -1815,14 +1816,14 @@ ADDFN:		LD	A,(HL)		; Copy filename to end of path string
 FCMD10:		CALL	_BDOS		; Search for file.
 		JR	Z,GOTFIL	; Go if file found.
 ;
-		CP	.NOFILE##
+		CP	.NOFIL##
 		SCF			; Return C and NZ if error not
 		RET	NZ		;   'file not found'.
 ;
 		EX	AF,AF'		; Return error if batch file not found.
 		CCF
 		SBC	A,A		; FF => batch file not found.
-		AND	.NOFILE##	; Return .NOFILE, NZ and C if batch
+		AND	.NOFIL##	; Return .NOFILE, NZ and C if batch
 		SCF			;   file not found, else Z and C.
 		RET
 ;
@@ -1983,10 +1984,13 @@ DEFA		MACRO	ADDR
 		ENDM
 ;
 CMD		MACRO	TEXT,ADDR
-		 LOCAL	MS,ME
-		 DEFB	ME-MS
-MS:		 DEFB	'&TEXT'
-ME:		 IFB	<ADDR>
+CMDTLEN		 DEFL	0		;; Compute the length of TEXT.
+		 IRPC	X,TEXT
+CMDTLEN		  DEFL	CMDTLEN+1
+		 ENDM
+		 DEFB	CMDTLEN
+		 DEFB	'&TEXT'
+		 IFB	<ADDR>
 		  DEFA	@&TEXT
 		 ELSE
 		  DEFA	@&ADDR

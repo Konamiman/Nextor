@@ -1,8 +1,9 @@
+	name('var')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Transient CLI Variables
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
 ;
 ;
 ;        This module  contains  the  variables  for  COMMAND.COM.   The  first

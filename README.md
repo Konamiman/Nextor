@@ -26,7 +26,9 @@ Note that additionally to the `master` branch there are `v2.0` and `v2.1` branch
 
     * [**drivers**](source/drivers): The standalone ROM driver and an example RAM driver.
 
-    * [**command**](source/command): `COMMAND2.COM` and the command line tools that were originally supplied with MSX-DOS. These aren't currently included in the build pipeline.
+    * [**commandcom**](source/commandcom): `COMMAND2.COM`, the command interpreter.
+
+    * [**command**](source/command): The command line tools that were originally supplied with MSX-DOS. These aren't currently included in the build pipeline.
 
 * [**sdk**](/sdk): Z80 assembler and C include files, helper routines and driver templates, intended to be used when developing Nextor drivers and Nextor-aware tools.
 
@@ -58,11 +60,12 @@ There are a number of makefiles that will take care of building the different co
 
 * `source/kernel`: builds the kernel base file (the input for `mknexrom` to produce complete kernel ROMs) and copies it to the `bin/kernel-base` directory. Running `make everything` builds all six variant combinations (default, `INVERT_SHIFT` and `INVERT_CTRL`, each with and without `NO_UNDOC_CPU_INSTRUCTIONS`); see the comments at the beginning of the makefile for the details.
 * `source/nextor_sys`: builds `NEXTOR.SYS` and copies it to the `bin/tools` directory.
+* `source/commandcom`: builds `COMMAND2.COM` and copies it to the `bin/tools` directory.
 * `source/tools`: builds the command line tools written in assembler and copies them to the `bin/tools` directory.
 * `source/tools/C`: builds the command line tools written in C and copies them to the `bin/tools` directory.
 * `source/drivers`: builds the standalone Nextor ROM (a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware) in their ASCII8 and ASCII16 variants. It also allows building an example RAM-loadable driver.
 
-Additionally, `make tools-disk` in `source/tools` packs `NEXTOR.SYS` (plus its Japanese-messages variant, renamed to `NEXTORJ.SYS`) and all the command line tools present in the `bin/tools` directory, together with a `README.TXT` file and any files listed in the `EXTRA_FILES` variable, into `bin/tools/nextor.dsk`, a 360K FAT12 disk image; if `COMMAND2.COM` is included, the disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM. The image gets the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates, so it can also be booted in MSX-DOS 1 mode. This requires the `mformat` and `mcopy` tools, and expects everything to be already built. Files not built by this repository are added only through the `EXTRA_FILES` variable — most notably `COMMAND2.COM`, needed for the disk to be bootable, without which the image is created with a warning (e.g. use `EXTRA_FILES=COMMAND2.COM,MSXDOS.SYS,COMMAND.COM` for a disk that also boots to the DOS prompt in MSX-DOS 1 mode); relative paths are resolved against the current directory, the one you run `make` from. See the `tools-disk` target in the makefile for the details.
+Additionally, `make tools-disk` in `source/tools` packs `NEXTOR.SYS` (plus its Japanese-messages variant, renamed to `NEXTORJ.SYS`), `COMMAND2.COM` and all the command line tools present in the `bin/tools` directory, together with a `README.TXT` file and any files listed in the `EXTRA_FILES` variable, into `bin/tools/nextor.dsk`, a 360K FAT12 disk image that boots straight to the DOS prompt on a computer with a Nextor kernel ROM. The image gets the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates, so it can also be booted in MSX-DOS 1 mode. This requires the `mformat` and `mcopy` tools, and expects everything to be already built. Files not built by this repository can be added through the `EXTRA_FILES` variable (e.g. use `EXTRA_FILES=MSXDOS.SYS,COMMAND.COM` for a disk that also boots to the DOS prompt in MSX-DOS 1 mode); relative paths are resolved against the current directory, the one you run `make` from. See the `tools-disk` target in the makefile for the details.
 
 Similarly, `make tools-zip` in `source/tools` packs just the command line tools (no `NEXTOR.SYS`, no `COMMAND2.COM`) into the `bin/tools/tools.zip` archive; this one requires the `zip` tool.
 

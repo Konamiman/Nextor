@@ -1,3 +1,4 @@
+	name('ver')
 	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL  Version number
 ;

@@ -1,8 +1,11 @@
+	name('cmd')
 	TITLE	MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
 	SUBTTL	Non-disk Commands
 ;
 ;
-	INCLUDE	COMMAND.INC
+	INCLUDE	command.inc
+	INCLUDE	../../sdk/asm/constants/msx_bios.inc
+	INCLUDE	../../sdk/asm/constants/msx_workarea.inc
 ;
 ;
 ;        This module contains the command routines for the  assorted  commands
@@ -311,7 +314,7 @@ ADD1980:	LD	B,0		; BC=offset from 1980.
 		ADD	HL,BC		; HL=new date.
 		LD	B,D		; Skip to DAT50.
 DAT30:		LD	D,B		; Save month.
-		CODE	MVI B
+		DEFB	LDB_OPC
 DAT40:		LD	E,B		; Save day.
 DAT50:		EXX			; Save new date, get line ptr.
 		DJNZ	DAT10		; Get separator & next digit.
@@ -616,7 +619,7 @@ NFDRV:		LD	A,B
 ;
 GETCHR:		LD	A,B		; Get slot number.
 		PUSH	BC
-		CALL	RDSLT##		; A=character from string.
+		CALL	RDSLT		; A=character from string.
 		POP	BC
 		OR	A
 		JR	Z,DONSTR	; Go if string has been printed.
@@ -809,7 +812,7 @@ $EXIST:		DB	"EXIST",0
 ;
 ;
 @MODE::		AND	(HL)
-		LD	A,.NOPARM##
+		LD	A,.NOPAR##
 		RET	Z
 ;
 		CALL	GET8##		; Get numbere of columns.
@@ -831,12 +834,12 @@ $EXIST:		DB	"EXIST",0
 		LD	IX,INIT32	; Else lo-res text mode.
 		INC	HL
 GOTCOLS:	LD	(HL),A		; Save no. columns required.
-		LD	IY,(EXPTBL##-1)	; Get slot address of main ROM.
+		LD	IY,(EXPTBL-1)	; Get slot address of main ROM.
 		LD	HL,0
 		ADD	HL,SP		; Save SP.
 		LD	SP,P3_STACK##	; Use a tempory stack in
 		PUSH	HL		;   page 3.
-		CALL	CALSLT##	; Call main ROM to change screen mode.
+		CALL	CALSLT	; Call main ROM to change screen mode.
 		POP	HL
 		LD	SP,HL
 		XOR	A		; No error.
@@ -1361,7 +1364,7 @@ TIM35:		CALL	GETCH##		; Strip spaces etc.
 		EXX
 		JR	Z,SETIME	; Set new time if yes.
 ;
-		CODE	MVI A		; Else give error.
+		DEFB	LDA_OPC			; Else give error.
 PBADTIM:	POP	AF		; Balance stack.
 BADTIM:		LD	B,.ITIME##
 		JR	TIM60		; Print error & re-prompt.
@@ -1382,7 +1385,7 @@ TIM40:		PUSH	AF		; Save am/pm indicator.
 		JR	Z,TIM45		; Go if yes.
 		JR	NC,BADTIM	; Else error if 24 hour number given.
 ;
-		CODE	JNC		; Skip to SETIME.
+		DEFB	JPNC_OPC		; Skip to SETIME.
 TIM45:		LD	H,0		; 12:xx am in 12 hour = 00:xx in 24 hr.
 		JR	SETIME		; Set the time.
 ;
@@ -1452,7 +1455,7 @@ VER10:		CALL	NC,OUCH##	; Print character from message.
 ;
 ;
 _RDSLT:		LD	A,(MASTER_SLOT##)
-		JP	RDSLT##		; Read byte.
+		JP	RDSLT		; Read byte.
 ;
 ;
 VERMSG:		DEFB	'COMMAND2.COM version '

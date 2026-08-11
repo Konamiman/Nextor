@@ -11,6 +11,8 @@
 FALSE   EQU     0
 TRUE    EQU     NOT FALSE
 ;
+TEST    EQU     FALSE           ; NZ => include the MZ debug command in CLI.
+;
 ;
 ;
 ;------- ASCII Characters
@@ -100,24 +102,32 @@ GLOBAL   NAME
 	ENDM
 ;
 ;
-CODE    MACRO   OPCODE, ARG
-	 .8080
-	 DB     (OPCODE ARG)
-	 .Z80
-	ENDM
+;        Opcode byte values used to embed the byte(s) that follow  them  as
+; the  operand of a dummy instruction: either to skip those bytes when execu-
+; tion falls through from above, or to give the operand of a patchable  inst-
+; ruction  a  label  of its own.  These EQUs replace the original "CODE"
+; macro, which relied on the 8080 opcode-as-value feature of M80.
+;
+LDA_OPC  EQU    3EH             ; LD A,n
+LDB_OPC  EQU    06H             ; LD B,n
+LDL_OPC  EQU    2EH             ; LD L,n
+LDM_OPC  EQU    36H             ; LD (HL),n
+LDHL_OPC EQU    21H             ; LD HL,nn
+LDDE_OPC EQU    11H             ; LD DE,nn
+JP_OPC   EQU    0C3H            ; JP nn
+JPNC_OPC EQU    0D2H            ; JP NC,nn
 ;
 ;
 .BSR    MACRO   OP, MASK, REG   ;; Support macro for .BIT, .SET and .RES below.
-	 LOCAL  BIT
-BIT      DEFL   0
-	 IRP    M,<1,2,4,8,16,32,64,128>
-	  IF    M EQ MASK
-	   EXITM
-	  ELSE
-BIT        DEFL BIT+1
+BSRNUM   DEFL   0
+BSRMSK   DEFL   MASK
+	 REPT   7               ;; Convert the bit mask to a bit number.
+	  IF    BSRMSK GT 1
+BSRNUM     DEFL BSRNUM+1
+BSRMSK     DEFL BSRMSK SHR 1
 	  ENDIF
 	 ENDM
-	 OP     BIT, REG        ;; Actual instruction, using bit number.
+	 OP     BSRNUM, REG     ;; Actual instruction, using bit number.
 	ENDM
 ;
 ;
