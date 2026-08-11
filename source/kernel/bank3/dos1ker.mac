@@ -4597,6 +4597,58 @@ DRIVER_STAT:
 ;
 ; End of moved code.
 
+;	Subroutine	check if a drive is the ghost half of a ghost drive pair
+;			(see UD1_FIRST_ABSOLUTE_SECTOR in kvar.mac). Used by the
+;			bootsector scan in A5AE7: reading the ghost half would
+;			trigger the "insert disk" prompt and then re-read the
+;			same physical disk that its master half already provided.
+;	Inputs		A = drive (0 based)
+;	Outputs		Cy set if the drive is the ghost half of a pair
+;	Remark		A preserved, corrupts DE and HL. Assumes that the drives
+;			in the KERNEX_DOS1 table are the first ones in the system
+;			(true when this kernel is the master disk ROM); drives
+;			past the table (other disk interfaces) are never ghosts.
+
+IS_GHOST:
+	push	af
+	ld	e,a			; E = drive
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	jr	z,ISGH_NO		; no table
+	bit	7,(hl)			; disk emulation mode?
+	jr	nz,ISGH_NO
+	ld	a,(hl)
+	and	3Fh			; number of entries in the table
+	ld	d,a
+	ld	a,e
+	cp	d
+	jr	nc,ISGH_NO		; not a Nextor drive
+	inc	hl			; skip the entries count byte
+	add	a,a
+	add	a,a
+	add	a,a
+	sub	e			; * 7 = UD1_SIZE
+	ld	e,a
+	ld	d,0
+	add	hl,de			; HL = entry for the drive
+	inc	hl			; HL = UD1_RELATIVE_DRIVE
+	bit	6,(hl)			; FDD?
+	jr	z,ISGH_NO
+	inc	hl
+	inc	hl			; HL = UD1_FIRST_ABSOLUTE_SECTOR byte 0
+	ld	a,(hl)
+	and	3
+	cp	2			; 10 = ghost half of a pair
+	jr	nz,ISGH_NO
+	pop	af
+	scf
+	ret
+ISGH_NO:
+	pop	af
+	or	a
+	ret
+
 	ALIGN	5897h
 
 ;	Subroutine	H.RUNC interceptor
@@ -4809,11 +4861,9 @@ A59F3:	ld	hl,A5B3A
 
 ; MSXDOS requirement are met, try starting it
 
-A5A11:	XOR	A
-	CALL	A609A			; invalidate FAT buffer drive 0
-	LD	HL,(YF349)
+A5A11:	LD	HL,(YF349)
 	LD	(YF34B),HL		; bottom MSX-DOS system
-	CALL	A5AE7			; try reading bootsector of drive 0
+	CALL	A5AE7			; try reading a bootsector from some drive
 	JP	C,A5B3A			; error, start diskbasic
 	LD	(YF346),A		; flag bootable disk
 	LD	A,(RAMAD0##)
@@ -4920,36 +4970,65 @@ A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 	LD	A,(YF340)		; coldboot flag
 	JP	YC000+01EH		; start bootloader
 
-;	Subroutine	read bootsector of drive 0 and validate
+;	Subroutine	read a bootsector and validate. All drives are scanned
+;	in order (skipping the ghost halves of ghost drive pairs, see
+;	IS_GHOST) and the first one holding a valid bootsector wins; that
+;	drive becomes the default drive, so that the bootsector code (see
+;	bank2/bootsect.mac) loads MSXDOS.SYS from it. Originally only
+;	drive 0 was tried, which prevented booting in MSX-DOS 1 mode
+;	when the bootable disk was in any other drive (relevant in Nextor,
+;	where unlike in MSX-DOS the internal FDD isn't necessarily drive 0).
 ;	Inputs		________________________
-;	Outputs		________________________
+;	Outputs		Cy reset: bootsector copied to YC000, A = nonzero,
+;			          boot drive is the new default drive
+;			Cy set:   no drive holds a valid bootsector
 
-A5AE7:	;LD	A,(DEFDPB##+1)
-	;LD	C,A			; default mediadescriptor
-	call	TO_BASIC_REQUIRED	
+A5AE7:	call	TO_BASIC_REQUIRED	; also flags the dirsector buffer invalid
 	ret	c
 
+	xor	a			; start scanning at drive 0
+BSCAN_LOOP:
+	call	IS_GHOST		; ghost half of a ghost drive pair?
+	jr	c,BSCAN_SKIP		; yep: same physical drive as its master, skip it
+	call	A609A			; invalidate FAT buffer of the drive
+					;  (its disk may have been changed)
+	push	af
+	LD	A,(DEFDPB##+1)
+	LD	C,A			; default mediadescriptor
+	pop	af
+	push	af			; save the drive
 	LD	B,1			; 1 sector
+	ld	de,0			; sector 0
 	LD	HL,(YF351)		; use the dir sectorbuffer
 	PUSH	HL
-	XOR	A			; drive 0, read
-	LD	E,A
-	LD	D,A			; sector 0
+	or	a			; read
 	CALL	PHYDIO			; read sector
-	LD	A,0FFH
-	LD	(YF246),A		; dirsector buffer is invalid
 	POP	HL
-	RET	C			; error, quit
+	jr	c,BSCAN_NEXT		; error, try next drive
 	LD	A,(HL)
 	LD	DE,YC000
 	LD	BC,256
 	LDIR				; copy bootloader to C000
 	CP	0EBH
-	RET	Z			; valid bootloader, quit
+	jr	z,BSCAN_OK		; valid bootloader, quit
 	CP	0E9H
-	RET	Z			; valid bootloader, quit
-	SCF
-	RET
+	jr	z,BSCAN_OK		; valid bootloader, quit
+BSCAN_NEXT:
+	pop	af
+BSCAN_SKIP:
+	inc	a
+	ld	hl,YF347
+	cp	(hl)			; more drives to try?
+	jr	c,BSCAN_LOOP
+	scf				; no bootable disk found
+	ret
+
+BSCAN_OK:
+	pop	af
+	LD	(YF247),a		; boot drive becomes the default drive
+	ld	a,(YC000)
+	or	a			; Cy reset, A nonzero (as the old code did)
+	ret
 
 I5B0F:	DEFB	LOW RDSLT,C63F4-C63F4
 	DEFB	LOW WRSLT,C6415-C63F4

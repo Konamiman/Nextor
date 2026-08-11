@@ -22,7 +22,9 @@
 
 [2.8. Better boot error messages](#28-better-boot-error-messages)
 
-[2.9. New and changed tools and commands](#29-new-and-changed-tools-and-commands)
+[2.9. MSX-DOS 1 mode can boot from any drive](#29-msx-dos-1-mode-can-boot-from-any-drive)
+
+[2.10. New and changed tools and commands](#210-new-and-changed-tools-and-commands)
 
 [3. Information for application developers](#3-information-for-application-developers)
 
@@ -104,7 +106,11 @@ The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which a
 
 When the DOS environment fails to load at boot time, NEXTOR.SYS no longer keeps asking the user to insert the proper disk or drops silently into BASIC: a proper error message, such as "Command interpreter not found" or "Incompatible DOS version", is printed as part of the initial BASIC prompt. Application programs can take advantage of the underlying mechanism too; see _[7.3. DOS environment load errors](Nextor%203.0%20Programmers%20Reference.md#73-dos-environment-load-errors)_ in the programmers reference.
 
-### 2.9. New and changed tools and commands
+### 2.9. MSX-DOS 1 mode can boot from any drive
+
+The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the disk in A: wasn't bootable the system dropped to Disk BASIC, and `CALL SYSTEM` behaved the same way. When booting in MSX-DOS 1 mode, Nextor 3 instead scans all the drives in order and boots from the first one holding a disk with a valid boot sector; that drive becomes the default drive, so `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. This matters in Nextor because the internal floppy disk drive isn't necessarily drive A:, e.g. when other storage devices take the first drive letters. See _[3.2.1. Booting in DOS 1 mode](Nextor%203.0%20User%20Manual.md#321-booting-in-dos-1-mode)_ in the user manual.
+
+### 2.10. New and changed tools and commands
 
 * New [`DRVROP.COM`](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool) ("driver operations") command line tool, and new [`CALL IDRIVER`](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) and [`CALL UDRIVER`](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) BASIC commands: they install and uninstall drivers loaded in RAM (see _[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)_).
 
