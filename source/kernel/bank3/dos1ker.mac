@@ -5139,7 +5139,7 @@ A5BA0:	ld	sp,0C200H		; switch to a temporary stack
 	call	CALBAS			; display BASIC startscreen
 	call	A5F86
 	defb	13,10
-	defb	"Disk BASIC version 1.0",13,10
+	defb	"Nextor Disk BASIC v1.0",13,10
 	defb	0
 	ld	hl,M4173
 	push	hl			; execute RUN command
