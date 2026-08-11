@@ -152,8 +152,12 @@ Z80$:	DEFB	"Z80",0
 R800$:	DEFB	"R800",0
 
 ;        %_MSXVER%: the machine type as a string, from the MSX version byte
-; (1 = MSX2, 2 = MSX2+, anything else = Turbo-R).
+; (0 = MSX, 1 = MSX2, 2 = MSX2+, anything else = Turbo-R). The first
+; generation MSX value is reported since 2.44.
 IV_MSXVER::	LD	A,(MSXVER##)
+	LD	DE,MSX1$
+	OR	A
+	RET	Z
 	LD	DE,MSX2$
 	DEC	A
 	RET	Z
@@ -163,6 +167,7 @@ IV_MSXVER::	LD	A,(MSXVER##)
 	LD	DE,TURBOR$
 	RET
 
+MSX1$:	DEFB	"MSX",0
 MSX2$:	DEFB	"MSX-2",0
 MSX2P$:	DEFB	"MSX-2+",0
 TURBOR$:	DEFB	"Turbo-R",0
@@ -485,6 +490,36 @@ FN_CHAR::	CALL	GET8##
 	EX	DE,HL
 	RET
 
+;        %@STRING[n,string]%: a string made of n copies of the first
+; character of string, with n between 1 and 122 (so that the result fits
+; in the expansion buffers). A null string if n is out of range, no comma
+; follows it, or string is empty. New in 2.44.
+FN_STRING::	CALL	GET8##	; E = repeat count.
+	JP	NZ,FND90
+	LD	A,(HL)
+	CP	","	; A comma must follow the count.
+	JP	NZ,FND90
+	INC	HL
+	LD	A,E
+	DEC	A	; Reject 0 and anything above 122.
+	CP	122
+	JP	NC,FND90
+	PUSH	DE
+	CALL	PRSSTR	; Copy the string argument to XBUF1
+	POP	BC	;   (unquoting it), C = repeat count.
+	LD	A,(XBUF1##)
+	OR	A
+	JP	Z,FND90	; Null result if string is empty.
+	LD	B,C
+	LD	HL,ENVNAME##
+	PUSH	HL
+FNS10:	LD	(HL),A	; Store n copies of the first character
+	INC	HL	;   of the string, plus the terminator.
+	DJNZ	FNS10
+	LD	(HL),#00
+	POP	DE
+	RET
+
 ;        %@HEX[n]%: the value of n as four hexadecimal digits (two per
 ; byte, via MKBYTE). A null string if n is not a valid 16-bit number.
 FN_HEX::	CALL	GET16##
@@ -508,14 +543,16 @@ FN_HEX::	CALL	GET16##
 ; decimal at ENVNAME. FND50 enters with a byte count in HL:DE directly.
 FN_DISKFREE::	CALL	GETALLOC	; HL = free clusters.
 FND20:	JR	C,FND90	; Bad argument => null string.
-	DEFB	#3E	; "LD A,n": skips one ADD HL,HL.
-FND30:	ADD	HL,HL
-FND40:	SRL	B	; HL = clusters * sectors/cluster.
-	JR	NZ,FND30
-	LD	E,#00	; HL:DE = HL * 512 (sector size).
-	LD	D,L
+FND40:	XOR	A	; A:HL = cluster count (24 bits).
+FND42:	SRL	B	; A:HL = clusters * sectors/cluster:
+	JR	Z,FND44	;   double once per power of two in B,
+	ADD	HL,HL	;   keeping the overflow in A (a FAT16
+	ADC	A,A	;   drive can exceed 65535 sectors).
+	JR	FND42
+FND44:	LD	D,L	; HL:DE = A:HL * 512 (the sector size)
+	LD	E,#00	;   = the size in bytes.
 	LD	L,H
-	LD	H,E
+	LD	H,A
 	SLA	D
 	ADC	HL,HL
 FND50:	LD	(VALUEL##),DE	; Store the 32-bit byte count.

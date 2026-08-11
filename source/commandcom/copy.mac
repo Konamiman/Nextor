@@ -779,7 +779,7 @@ NODEL:	CALL	NZ,BDOS
 	POP	BC	; Get possible secondary error code.
 	RET	; Return with command's error.
 
-		SUBTTL	PRS##
+		SUBTTL	PRS
 ;------------------------------------------------------------------------------
 ;        This little routine is called from  COPY  and  CONCAT  to  parse  the
 ; destination filename.

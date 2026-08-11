@@ -639,16 +639,29 @@ TAB90:	LD	(HL),"*"	; (Yes: append just "*".)
 	PUSH	DE
 	CALL	NCOPY##	; Save the filespec in XBUF1 for the
 	POP	DE	;   wraparound searches.
-TAB100:	CALL	TABFIRST	; Search the first match.
+TAB100:	XOR	A	; Fresh cycle: reset the skip count.
+	LD	(TABSKIP##),A
+	CALL	TABFIRST	; Search the first match.
 	POP	HL
 	JP	NZ,ERRBEEP	; Error or nothing found: beep.
 	PUSH	HL
-;        Names starting with "." ("." and "..") are never offered. Note: in
-; a directory that contains nothing else this search never terminates
-; (fixed in 2.44).
+;        Names starting with "." ("." and "..") are never offered, but only
+; up to two can be skipped in a row: a third one in a row means the search
+; has wrapped around without finding anything else (a directory with no
+; other entries), so the completion ends with a beep. (Before 2.44 this
+; case hung the editor; 2.44 fixes it with a wrap flag instead.)
 TAB110:	LD	A,(FIB1##+1)
 	CP	"."
-	JP	Z,NEXTTAB2	; Skip "." and "..": get the next match.
+	JR	NZ,TAB115
+	LD	HL,TABSKIP##
+	INC	(HL)
+	LD	A,(HL)
+	CP	3
+	JP	C,NEXTTAB2	; Skip it and get the next match.
+	POP	HL
+	JP	ERRBEEP	; Only "." and ".." here: give up.
+TAB115:	XOR	A
+	LD	(TABSKIP##),A	; A real name: reset the skip count.
 	LD	A,(INSPOS##)
 	LD	B,A
 	LD	A,(APPENDF##)

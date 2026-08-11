@@ -305,14 +305,16 @@ FRE20:	ADD	A,"@"
 	LD	A,#40
 	JP	DMESSCR##
 
-COMPUTE:	DEFB	#3E
-COM10:	ADD	HL,HL
-	SRL	B
-	JR	NZ,COM10
-	LD	E,#00
-	LD	D,L
+COMPUTE:	XOR	A	; A:HL = cluster count (24 bits).
+COM10:	SRL	B	; A:HL = clusters * sectors/cluster:
+	JR	Z,COM20	;   double once per power of two in B,
+	ADD	HL,HL	;   keeping the overflow in A (a FAT16
+	ADC	A,A	;   drive can exceed 65535 sectors).
+	JR	COM10
+COM20:	LD	D,L	; HL:DE = A:HL * 512 (the sector size)
+	LD	E,#00	;   = the size in bytes.
 	LD	L,H
-	LD	H,E
+	LD	H,A
 	SLA	D
 	ADC	HL,HL
 	LD	(VALUEL##),DE

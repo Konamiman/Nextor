@@ -2,12 +2,10 @@
 #
 # The generated COMMAND2.COM file is copied to the bin/tools directory.
 #
-# Current state (2.41 porting phase): the modules hold the COMMAND2.COM 2.41
-# code, restyled to the conventions of this repository, and are assembled
-# as separate REL modules linked with LK80 (same scheme as NEXTOR.SYS).
-# The "verify" target checks that the binary is byte-identical to
-# command241.com, the reference build of the unmodified 2.41 source; run it
-# after every change while the porting work continues.
+# The modules are assembled as separate REL modules linked with LK80 (same
+# scheme as NEXTOR.SYS). The code base is the COMMAND2.COM 2.41 port,
+# restyled to the conventions of this repository and now diverging from
+# 2.41 as the 2.44 features and the Nextor 3.0 changes are implemented.
 
 ifeq ($(strip $(N80)),)
 N80=N80
@@ -37,7 +35,7 @@ endef
 
 commandcom: COMMAND2.COM
 
-.PHONY: commandcom prerequisites verify clean
+.PHONY: commandcom prerequisites clean
 
 TOOLS := N80 LK80
 
@@ -73,12 +71,6 @@ dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
 dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-# Compare the built binary against the reference build of the original
-# 2.41 source (useful while the code base is being restyled and must stay
-# functionally identical to version 2.41)
-verify: COMMAND2.COM
-	cmp COMMAND2.COM command241.com
-	@echo "OK: COMMAND2.COM is byte-identical to the 2.41 reference binary"
 
 clean:
 	for ext in BIN HEX REL rel SYM COM; do find . -type f -name "*.$$ext" -delete; done

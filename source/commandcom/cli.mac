@@ -149,10 +149,33 @@ PROMPT:	PUSH	AF
 	CALL	GENV2##
 	LD	A,(DE)
 	OR	A
-	JR	NZ,PRO10
-	LD	HL,DPROMPT$
-	LD	BC,8
+	JR	Z,PRO6	; Use the default prompt if not set.
+	LD	B,#FF	; Else get the length of the value, to
+	PUSH	DE	;   compare it against the special
+PRO2:	INC	B	;   values "ON" and "OFF" (restored in
+	LD	A,(DE)	;   2.44 for compatibility with the
+	INC	DE	;   original COMMAND.COM).
+	OR	A
+	JR	NZ,PRO2
+	POP	DE
 	PUSH	DE
+	DEC	DE
+	LD	HL,ONWORD$##
+	CALL	COMPARE	; "ON" (however cased) selects the
+	POP	DE	;   default prompt, "%_CWD%>".
+	JR	NC,PRO6
+	PUSH	DE
+	DEC	DE
+	LD	HL,OFFWORD$##
+	CALL	COMPARE	; "OFF" selects the drive letter only,
+	POP	DE	;   "%_DISK%>".
+	JR	C,PRO10
+	LD	HL,OPROMPT$
+	LD	BC,9
+	JR	PRO8
+PRO6:	LD	HL,DPROMPT$
+	LD	BC,8
+PRO8:	PUSH	DE
 	LDIR
 	POP	DE
 PRO10:	LD	HL,BUFFER1##
@@ -2114,5 +2137,6 @@ EXPAND$::	DEFB	"EXPAND",0
 PUSHD$::	DEFB	"PUSHD",0
 TEMPFN:	DEFB	"%PIPE00.$$$"
 DPROMPT$::	DEFB	"%_CWD%>",0
+OPROMPT$:	DEFB	"%_DISK%>",0
 DTABORD$::	DEFB	"BOTH",0
 

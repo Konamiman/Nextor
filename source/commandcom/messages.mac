@@ -72,6 +72,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"ATTRIB ... changes the attributes of files",13,10
 	DEFB	"BASIC .... goes into MSX disk BASIC",13,10
 	DEFB	"BEEP ..... makes beeping sound",13,10
+	DEFB	"BOOT ..... assigns a new MSX-DOS boot drive",13,10
 	DEFB	"BUFFERS .. displays/sets the number of disk buffers",13,10
 	DEFB	"CD ....... see CHDIR",13,10
 	DEFB	"CDD ...... displays/sets the current directory and drive",13,10
@@ -84,7 +85,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"COPY ..... copies files",13,10
 	DEFB	"CPU ...... displays/sets the CPU mode",13,10
 	DEFB	"DATE ..... displays/sets the current date",13,10
-	DEFB	"DEL ...... deletes files",13,10
+	DEFB	"DEL ...... see ERASE",13,10
 	DEFB	"DIR ...... displays the file names on a disk",13,10
 	DEFB	"DISKCOPY . copies a whole disk to another",13,10
 	DEFB	"DSKCHK ... displays/sets the current disk check status",13,10
@@ -93,6 +94,8 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"ELSE ..... toggles Command Mode",13,10
 	DEFB	"END ...... ends batch file execution [.BTM]",13,10
 	DEFB	"ENDIFF ... restores Command Mode",13,10
+	DEFB	"ERA ...... see ERASE",13,10
+	DEFB	"ERASE .... deletes files",13,10
 	DEFB	"EXIT ..... exits COMMAND2.COM",13,10
 	DEFB	"FIXDISK .. updates MSX-DOS 1 disks to MSX-DOS 2",13,10
 	DEFB	"FORMAT ... formats a disk",13,10
@@ -100,6 +103,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"GOSUB .... calls a batch file sub-routine [.BTM]",13,10
 	DEFB	"GOTO ..... continues batch file from label [.BTM]",13,10
 	DEFB	"HELP ..... gives help information on a command",13,10
+	DEFB	"HERTZ .... sets the VDP VBlank refresh speed",13,10
 	DEFB	"HISTORY .. displays the command history list or resizes the history buffer",13,10
 	DEFB	"IF ....... executes command if equation is true",13,10
 	DEFB	"IFF ...... sets Command Mode ON if equation is true",13,10
@@ -110,6 +114,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
 	DEFB	"MKDIR .... creates a new sub-directory",13,10
 	DEFB	"MODE ..... changes the screen mode",13,10
+	DEFB	"MORE ..... pipelining command pausing output per screen",13,10
 	DEFB	"MOVE ..... moves files on a disk",13,10
 	DEFB	"MVDIR .... moves sub-directories",13,10
 	DEFB	"PATH ..... displays/sets the command search path",13,10
@@ -119,17 +124,20 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"RAMDISK .. displays/sets the size of the RAM disk",13,10
 	DEFB	"RD ....... see RMDIR",13,10
 	DEFB	"REM ...... remark... Ignores the following text.",13,10
-	DEFB	"REN ...... renames files",13,10
+	DEFB	"REN ...... see RENAME",13,10
+	DEFB	"RENAME ... renames files",13,10
 	DEFB	"RESET .... resets system",13,10
 	DEFB	"RETURN ... returns from a batch file sub-routine [.BTM]",13,10
 	DEFB	"RMDIR .... removes empty sub-directories",13,10
 	DEFB	"RNDIR .... renames sub-directories",13,10
 	DEFB	"SET ...... displays/sets environment strings",13,10
+	DEFB	"SHIFT .... shifts arguments for a batch file one step to the left",13,10
 	DEFB	"THEN ..... executes the following command",13,10
 	DEFB	"TIME ..... displays/sets the current time",13,10
 	DEFB	"TO ....... changes to another directory",13,10
 	DEFB	"TREE ..... displays directories in a tree format",13,10
 	DEFB	"TYPE ..... displays the contents of files",13,10
+	DEFB	"TYPEWW ... displays the contents of files with long lines wordwrapped",13,10
 	DEFB	"UNDEL .... recovers deleted files",13,10
 	DEFB	"VER ...... displays MSX-DOS version numbers",13,10
 	DEFB	"VERIFY ... displays/sets the current verify state",13,10

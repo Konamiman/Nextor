@@ -19,7 +19,7 @@
 @REM::	XOR	A	; Return with no error.
 	RET
 
-		SUBTTL	BEEP##
+		SUBTTL	BEEP
 ;        The BEEP command just prints a BEL control character. Note that on
 ; entry to an internal command handler HL points to the parameter text and
 ; A=FF, so the initial AND (HL) sets Z when there are no parameters.
@@ -28,6 +28,75 @@
 	RET	NZ
 	LD	A,#07	; Print BEL.
 	JP	PRCHAR##
+
+		SUBTTL	BOOT
+;        The BOOT command (new in 2.44) sets the drive that MSX-DOS will
+; boot from the next time it starts up, for example when coming back from
+; BASIC: the validated drive number is stored in the BOOTDRV variable of
+; the DOS kernel. Only existing drives from A: to H: are accepted.
+@BOOT::	AND	(HL)
+	LD	A,.NOPAR##
+	JR	Z,BOOERR	; The drive letter is mandatory.
+	CALL	PARSDR	; D = drive number (1 = A:).
+	CALL	Z,GCHKEOL##	; Nothing may follow it.
+	RET	NZ
+	LD	A,D
+	CP	9
+	JR	NC,BOODRV	; Only drives A: to H: can be set.
+	PUSH	DE
+	LD	C,_LOGIN##
+	CALL	BDOS	; L = bit map of existing drives.
+	POP	DE
+	LD	B,D
+BOO10:	RR	L	; Move the drive's bit into Cy.
+	DJNZ	BOO10
+	JR	NC,BOODRV	; The drive does not exist.
+	LD	A,D
+	LD	(BOOTDRV),A	; Set the new boot drive.
+	XOR	A
+	RET
+
+BOODRV:	LD	A,.IDRV##	; 'Invalid drive'.
+BOOERR:	OR	A
+	RET
+
+		SUBTTL	HERTZ
+;        The HERTZ command (new in 2.44) sets the VDP interrupt frequency:
+; HERTZ 50 or HERTZ 60. Bit 1 of VDP register 9 is updated through the
+; WRTVDP BIOS routine, which keeps the register shadow in sync, skipping
+; the call when the bit already has the wanted value. On a first
+; generation MSX, whose VDP has no such register, the command does
+; nothing at all.
+@HERTZ::	AND	(HL)
+	LD	A,.NOPAR##
+	JR	Z,HRTERR	; The frequency is mandatory.
+	LD	A,(MSXVER##)
+	OR	A
+	RET	Z	; First generation MSX: do nothing.
+	CALL	GET8##	; E = the frequency.
+	RET	NZ
+	LD	A,E
+	LD	B,#00	; Frequency bit: 0 => 60Hz,
+	CP	60
+	JR	Z,HRT10
+	LD	B,#02	;   1 => 50Hz.
+	CP	50
+	JR	Z,HRT10
+	LD	A,.IPARM##	; Anything else is an error.
+HRTERR:	OR	A
+	RET
+HRT10:	LD	A,(RG9SAV)	; Nothing to do if the bit already
+	LD	C,A	;   has the wanted value.
+	AND	#02
+	CP	B
+	RET	Z
+	LD	A,C	; Else update bit 1, preserving the
+	AND	#FD	;   other bits.
+	OR	B
+	LD	B,A
+	LD	C,#09
+	LD	IX,WRTVDP
+	JP	CALLSLOT	; WRTVDP updates the shadow too.
 
 ;        This module contains the command routines for the  assorted  commands
 ; which are not directly related to the disk system eg. CLS and DATE.
@@ -1011,6 +1080,61 @@ RET10:	POP	HL
 	RET	Z
 	PUSH	HL
 	JP	GOT80
+
+		SUBTTL	SHIFT
+;        The SHIFT command (new in 2.44) shifts the batch file parameters
+; one position to the left: %1 becomes %0, %2 becomes %1 and so on. With
+; SHIFT /n the shift starts at parameter n instead, leaving the parameters
+; below n untouched. Nothing happens when there is nothing to shift. Only
+; useful inside batch files, where the parameter line at (LINEADDR) is the
+; line that invoked the batch file.
+@SHIFT::	AND	(HL)
+	LD	E,#00	; Default: start the shift at %0.
+	JR	Z,SHF10
+	LD	A,(HL)
+	INC	HL
+	CP	"/"	; Only a /n option may be given.
+	LD	A,.NOPAR##
+	JR	NZ,SHFERR
+	CALL	GET8##	; E = first parameter to shift.
+	RET	NZ
+SHF10:	LD	HL,(LINEADDR##)
+SHF20:	LD	A,E	; Advance to the parameter where the
+	OR	A	;   shift starts.
+	JR	Z,SHF30
+	DEC	E
+	CALL	SHFSKP
+	JR	NZ,SHF20
+	RET	; End of line first: nothing to do.
+SHF30:	PUSH	HL	; Destination: the parameter to be
+	CALL	SHFSKP	;   replaced. The source is the next
+	JR	Z,SHF50	;   one; if there is none, there is
+	PUSH	HL	;   nothing to shift.
+	LD	BC,#00
+SHF40:	INC	BC	; Measure the rest of the line,
+	LD	A,(HL)	;   terminator included.
+	INC	HL
+	OR	A
+	JR	NZ,SHF40
+	POP	HL	; Move it one parameter down.
+	POP	DE
+	LDIR
+	RET
+SHF50:	POP	HL
+	RET
+
+;        Skip one parameter word and the separator that follows it.
+; On exit, HL points past the separator and Z is set if the end of the
+; line was reached instead.
+SHFSKP:	LD	A,(HL)
+	INC	HL
+	CALL	SEP?##
+	JR	NZ,SHFSKP
+	OR	A
+	RET
+
+SHFERR:	OR	A	; NZ and the error code in A.
+	RET
 
 		SUBTTL	IF
 ;        The IF command, much extended in 2.40: the condition is evaluated
