@@ -1,150 +1,142 @@
-	.XLIST
 ;
+; COMMAND2.COM - BIOS/DOS workarea addresses, DOS function and error codes
 ;
-;        This file is included by all the major COMMAND.COM source files,  and
-; defines some constants and macros that are useful to the files.
+; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
+; in 2003), split mechanically; to be restyled to the conventions of this
+; repository. Do not reformat or reorganize while the build is verified
+; byte-identical against command241.com (see Makefile, target "verify").
 ;
-;
-	.Z80
-;
-;
-FALSE   EQU     0
-TRUE    EQU     NOT FALSE
-;
-TEST    EQU     FALSE           ; NZ => include the MZ debug command in CLI.
-;
-;
-;
-;------- ASCII Characters
-;
-TAB     EQU     9
-LF      EQU     0AH
-FF      EQU     0CH
-CR      EQU     0DH
-EOF     EQU     1AH
-ESC     EQU     1BH
-RUB	EQU	7FH
-;
-;
-;
-;------- Parse Path flags
-;
-$ODRV   EQU     1               ; Bit 0=0 => only drive name parsed.
-$PATH   EQU     2               ; Bit 1=1 => directory path specified.
-$DRV    EQU     4               ; Bit 2=1 => drive name specified.
-$FN     EQU     8               ; Bit 3=1 => filename specified in last item.
-$EXT    EQU     10H             ; Bit 4=1 => extension specified in last item.
-$AMBIG  EQU     20H             ; Bit 5=1 => last item is ambiguous.
-$DOTS   EQU     40H             ; Bit 6=1 => '.' or '..' given as last item.
-;
-;
-;------- Offsets to Interesting Bits of File Info Blocks
-;
-FIB_FN  EQU     1               ; Start of ASCIZ filename string.
-FIB_AT  EQU     FIB_FN+13       ; Attributes byte.
-FIB_TM  EQU     FIB_AT+1        ; Time of last modification.
-FIB_DT  EQU     FIB_TM+2        ; Date of last modification.
-FIB_CL  EQU     FIB_DT+2
-FIB_FS  EQU     FIB_CL+2        ; File size.
-FIB_DR  EQU     FIB_FS+4        ; Drive, 1 => drive A: etc.
-;
-;
-;------- Directory Entry Attribute Bits
-;
-ATRO    EQU     1               ; Set => file is read only.
-ATHID   EQU     2               ; Set => only accessed if /H option given.
-ATSYS   EQU     4               ; Set => system file, difficult to get at.
-ATVOL   EQU     8               ; Set => volume name.
-ATDIR   EQU     10H             ; Set => sub-directory.
-ATARC   EQU     20H             ; Set => file updated.
-ATDEV   EQU     80H             ; Set => character device (eg. CON, PRN).
-;
-;
-;------- Bits in ATTRS and SWITCHES (mostly / options)
-;
-OPTP    EQU     1               ; /P option in 'DIR', 'TYPE' etc.
-OPTH    EQU     ATHID           ; /H option, applies to many commands.
-OPTT    EQU     4               ; /T in COPY.
-OPTW    EQU     4               ; /W option in 'DIR'.
-OPTV    EQU     8               ; /V in COPY and CONCAT.
-				; 10H used for 'find only directories' flag.
-OPTA    EQU     20H             ; /A in COPY.
-OPTB    EQU     40H             ; /B in CONCAT.
-				; 80H used for 'find character devices' flag.
-;
-;
-;------- Flag bits in FLAGS
-;
-DIR     EQU     2               ; Bit DIR=NZ => 'DIR' command (used by FIRST).
-				; Bit ATDIR=NZ => 'directory only' command.
-;
-;
-;------- Very MSX-y things
-;
-INITXT  EQU     6CH             ; Main MSX ROM routine for hi-res text.
-INIT32  EQU     6FH             ; Main MSX ROM routine for lo-res text.
-LINL40  EQU     0F3AEH          ; No. columns for hi-res text.
-LINL32  EQU     0F3AFH          ; No. columns for lo-res text.
-;
-;
-;------- Miscellaneous Constants
-;
-CPYMEM  EQU     2*1024          ; COPY requires at least 2K free.
-USERR   EQU     32              ; Errors 0..31 do not generate a message.
-;
-;
-;
-;------- Macro Definitions
-;
-CONST   MACRO   NAME, VALUE
-NAME     EQU    VALUE
-GLOBAL   NAME
-	ENDM
-;
-;
-;        Opcode byte values used to embed the byte(s) that follow  them  as
-; the  operand of a dummy instruction: either to skip those bytes when execu-
-; tion falls through from above, or to give the operand of a patchable  inst-
-; ruction  a  label  of its own.  These EQUs replace the original "CODE"
-; macro, which relied on the 8080 opcode-as-value feature of M80.
-;
-LDA_OPC  EQU    3EH             ; LD A,n
-LDB_OPC  EQU    06H             ; LD B,n
-LDL_OPC  EQU    2EH             ; LD L,n
-LDM_OPC  EQU    36H             ; LD (HL),n
-LDHL_OPC EQU    21H             ; LD HL,nn
-LDDE_OPC EQU    11H             ; LD DE,nn
-JP_OPC   EQU    0C3H            ; JP nn
-JPNC_OPC EQU    0D2H            ; JP NC,nn
-;
-;
-.BSR    MACRO   OP, MASK, REG   ;; Support macro for .BIT, .SET and .RES below.
-BSRNUM   DEFL   0
-BSRMSK   DEFL   MASK
-	 REPT   7               ;; Convert the bit mask to a bit number.
-	  IF    BSRMSK GT 1
-BSRNUM     DEFL BSRNUM+1
-BSRMSK     DEFL BSRMSK SHR 1
-	  ENDIF
-	 ENDM
-	 OP     BSRNUM, REG     ;; Actual instruction, using bit number.
-	ENDM
-;
-;
-.BIT    MACRO   MASK, REG       ;; BIT instruction using a bit mask.
-	 .BSR   BIT, MASK, REG
-	ENDM
-;
-;
-.SET    MACRO   MASK, REG       ;; SET instruction using a bit mask.
-	 .BSR   SET, MASK, REG
-	ENDM
-;
-;
-.RES    MACRO   MASK, REG       ;; RES instruction using a bit mask.
-	 .BSR   RES, MASK, REG
-	ENDM
-;
-;
-;
-	.LIST
+
+; DOS Variabelen
+
+BDOS:	EQU	#05
+RDSLT:	EQU	#0C
+CALSLT:	EQU	#1C
+BootDrive:	EQU	#F2FD
+DateFormat:	EQU	#F30E
+LINL40:	EQU	#F3AE
+LINLEN:	EQU	#F3B0
+CRTCNT:	EQU	#F3B1
+CSRY:	EQU	#F3DC
+CSRX:	EQU	#F3DD
+FORCLR:	EQU	#F3E9
+BAKCLR:	EQU	#F3EA
+BDRCLR:	EQU	#F3EB
+RTYCNT:	EQU	#FC9A
+EXPTBL:	EQU	#FCC1
+SLTWRK:	EQU	#FD88
+EXTBIO:	EQU	#FFCA
+
+; DOS Routines
+
+_CONIN:	EQU	#01
+_CONOUT:	EQU	#02
+_INNOE:	EQU	#08
+_BUFIN:	EQU	#0A
+_CONST:	EQU	#0B
+_SELDSK:	EQU	#0E
+_LOGIN:	EQU	#18
+_CURDRV:	EQU	#19
+_SETDMA:	EQU	#1A
+_ALLOC:	EQU	#1B
+_GDATE:	EQU	#2A
+_SDATE:	EQU	#2B
+_GTIME:	EQU	#2C
+_STIME:	EQU	#2D
+_VERIFY:	EQU	#2E
+_DPARM:	EQU	#31
+_FFIRST:	EQU	#40
+_FNEXT:	EQU	#41
+_FNEW:	EQU	#42
+_OPEN:	EQU	#43
+_CREATE:	EQU	#44
+_CLOSE:	EQU	#45
+_ENSURE:	EQU	#46
+_DUP:	EQU	#47
+_READ:	EQU	#48
+_WRITE:	EQU	#49
+_SEEK:	EQU	#4A
+_IOCTL:	EQU	#4B
+_HTEST:	EQU	#4C
+_DELETE:	EQU	#4D
+_RENAME:	EQU	#4E
+_MOVE:	EQU	#4F
+_ATTR:	EQU	#50
+_FTIME:	EQU	#51
+_HDELETE:	EQU	#52
+_HFTIME:	EQU	#56
+_GETVFY:	EQU	#58
+_GETCD:	EQU	#59
+_CHDIR:	EQU	#5A
+_PARSE:	EQU	#5B
+_PFILE:	EQU	#5C
+_CHKCHR:	EQU	#5D
+_WPATH:	EQU	#5E
+_FORK:	EQU	#60
+_JOIN:	EQU	#61
+_TERM:	EQU	#62
+_DEFAB:	EQU	#63
+_DEFER:	EQU	#64
+_ERROR:	EQU	#65
+_EXPLAIN:	EQU	#66
+_FORMAT:	EQU	#67
+_RAMDISK:	EQU	#68
+_BUFFER:	EQU	#69
+_ASSIGN:	EQU	#6A
+_GENV:	EQU	#6B
+_SENV:	EQU	#6C
+_FENV:	EQU	#6D
+_DSKCHK:	EQU	#6E
+_DOSVER:	EQU	#6F
+_REDIR:	EQU	#70
+
+; DOS Foutmeldingen
+
+.OVDEST:	EQU	#81
+.COPY:	EQU	#82
+.BADEST:	EQU	#83
+.NOCAT:	EQU	#84
+.BADVER:	EQU	#85
+.NOHELP:	EQU	#86
+.BADNO:	EQU	#87
+.IOPT:	EQU	#88
+.NOPAR:	EQU	#89
+.INP:	EQU	#8A
+.IPARM:	EQU	#8B
+.OKCMD:	EQU	#8C
+.BUFUL:	EQU	#8D
+.BADCM:	EQU	#8E
+.BADCOM:	EQU	#8F
+.INERR:	EQU	#9B
+.OUTERR:	EQU	#9C
+.ABORT:	EQU	#9D
+.CTRLC:	EQU	#9E
+.STOP:	EQU	#9F
+.NRAMD:	EQU	#BB
+.ITIME:	EQU	#BD
+.IDATE:	EQU	#BE
+.EOF:	EQU	#C7
+.FOPEN:	EQU	#CA
+.FILEX:	EQU	#CB
+.DIRX:	EQU	#CC
+.IATTR:	EQU	#CF
+.NODIR:	EQU	#D6
+.NOFIL:	EQU	#D7
+.IPATH:	EQU	#D9
+.IFNM:	EQU	#DA
+.IDRV:	EQU	#DB
+.NORAM:	EQU	#DE
+.WFILE:	EQU	#F4
+.WDISK:	EQU	#F5
+
+; Programma variabelen
+
+ReadAdres:	EQU	#0000
+PutAdres:	EQU	ReadAdres+#02
+EndAdres:	EQU	PutAdres+#02
+BufferLengte:	EQU	EndAdres+#02
+VariableEnd:	EQU	BufferLengte+#02
+AliasAdres:	EQU	VariableEnd+#02
+AliasEnd:	EQU	AliasAdres+#02
+BufferAdres:	EQU	AliasEnd+#02
+

@@ -1,0 +1,21 @@
+;
+; COMMAND2.COM - Master file: includes all the modules in link order.
+; Assembled as a single absolute program at 0100h.
+;
+	org	0100h
+	include	command.inc
+	include	start.mac
+	include	cli.mac
+	include	tables.mac
+	include	intvar.mac
+	include	cmd.mac
+	include	files.mac
+	include	dirs.mac
+	include	copy.mac
+	include	io.mac
+	include	batch.mac
+	include	misc.mac
+	include	editor.mac
+	include	messages.mac
+	include	var.mac
+	end

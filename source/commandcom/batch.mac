@@ -1,0 +1,204 @@
+;
+; COMMAND2.COM - Batch file line reader, .BTM loading, disk error handler
+;
+; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
+; in 2003), split mechanically; to be restyled to the conventions of this
+; repository. Do not reformat or reorganize while the build is verified
+; byte-identical against command241.com (see Makefile, target "verify").
+;
+ReadBatLine:	LD	DE,ErrorHand2
+	LD	C,_DEFER
+	CALL	BDOS
+	LD	A,#3B
+	LD	(StringCode),A
+	LD	HL,BufEnvData
+	LD	(HL),#00
+	CALL	GetBatLine
+	PUSH	AF
+	PUSH	HL
+	LD	DE,#00
+	LD	C,_DEFER
+	CALL	BDOS
+	POP	HL
+	POP	AF
+	RET	NZ
+	DEC	A
+	LD	(StringCode),A
+	BIT	7,(HL)
+	LD	A,.BUFUL
+	RET	NZ
+	LD	A,(BatchHandle)
+	CP	#FE
+	JR	NZ,Next_0630
+	PUSH	HL
+	LD	HL,BufEnvData+1
+	CALL	FndFirstChr
+	LD	A,(HL)
+	POP	HL
+	CP	"~"
+	SCF
+	RET	Z
+Next_0630:	XOR	A
+	RET
+
+GetBatLine:	INC	HL
+	LD	(HL),#00
+Next_0307:	CALL	GetBatChar
+	LD	HL,BufEnvData
+	RET	NZ
+	LD	D,A
+	LD	A,C
+	CP	#0A
+	JR	Z,Next_0307
+	CP	#1A
+	JR	Z,Next_0308
+	SUB	#0D
+	RET	Z
+	BIT	7,(HL)
+	JR	NZ,Next_0307
+	INC	(HL)
+	LD	E,(HL)
+	ADD	HL,DE
+	LD	(HL),C
+	JR	GetBatLine
+
+Next_0308:	LD	A,.EOF
+	OR	A
+	RET
+
+GetBatChar:	LD	A,(BatchHandle)
+	CP	#FE
+	JR	NZ,Next_0632
+	CALL	GET_P2
+	LD	(TemporaryPage),A
+	LD	A,(BatchPage)
+	LD	HL,(BatLineAdr)
+	CALL	RD_SEG
+	LD	C,A
+	INC	HL
+	LD	(BatLineAdr),HL
+	CP	#1A
+	JR	NZ,Next_0631
+	LD	A,(BatchPage)
+	CALL	FRE_SEG
+Next_0631:	XOR	A
+	RET
+
+Next_0632:	LD	HL,(BatLineLen)
+	LD	A,H
+	OR	L
+	JR	NZ,Next_0309
+	LD	HL,#0100
+	LD	DE,BatchBuffer
+	LD	(BatLineAdr),DE
+	LD	A,(BatchHandle)
+	LD	B,A
+	LD	C,_READ
+	CALL	BDOS
+	RET	NZ
+	PUSH	HL
+	LD	DE,#0100
+	SBC	HL,DE
+	POP	HL
+	JR	Z,Next_0309
+	PUSH	HL
+	LD	DE,BatchBuffer
+	ADD	HL,DE
+	LD	(HL),#1A
+	LD	A,(BatchHandle)
+	LD	B,A
+	LD	C,_CLOSE
+	CALL	BDOS
+	POP	HL
+	INC	HL
+Next_0309:	DEC	HL
+	LD	(BatLineLen),HL
+	LD	HL,(BatLineAdr)
+	LD	C,(HL)
+	INC	HL
+	LD	(BatLineAdr),HL
+	XOR	A
+	RET
+
+ErrorHand2:	CP	.WFILE
+	JR	Z,Next_0310
+	CP	.WDISK
+	LD	A,#00
+	RET	NZ
+Next_0310:	PUSH	BC
+	CALL	LPrint
+	LD	A,#37
+	CALL	PrintCode
+	POP	AF
+	ADD	A,"@"
+	CALL	PrintChar
+	LD	A,#38
+	CALL	PrintCode
+	CALL	LPrint
+	CALL	AskAnyKey
+	LD	A,#02
+	RET
+
+OpenBTM:	LD	HL,FIB1+#18
+	LD	D,(HL)
+	DEC	HL
+	LD	A,(HL)
+	OR	D
+	JR	Z,Next_0634
+Next_0633:	LD	A,.NORAM
+	CP	A
+	RET
+
+Next_0634:	DEC	HL
+	LD	A,(HL)
+	CP	#40
+	JR	NC,Next_0633
+	XOR	A
+	LD	B,A
+	INC	A
+	CALL	ALL_SEG
+	LD	(BatchPage),A
+	LD	A,.NORAM
+	RET	C
+	LD	DE,FIB1
+	LD	A,#01
+	LD	C,_OPEN
+	CALL	BDOS
+	RET	NZ
+	PUSH	BC
+	CALL	GET_P2
+	LD	(TemporaryPage),A
+	LD	A,(BatchPage)
+	CALL	PUT_P2
+	LD	DE,#8000
+	LD	HL,#3FFF
+	POP	BC
+	PUSH	BC
+	PUSH	DE
+	LD	C,_READ
+	CALL	BDOS
+	POP	DE
+	PUSH	AF
+	ADD	HL,DE
+	LD	(HL),#1A
+	LD	A,(TemporaryPage)
+	CALL	PUT_P2
+	POP	DE
+	POP	BC
+	PUSH	DE
+	LD	C,_CLOSE
+	CALL	BDOS
+	POP	DE
+	RET	NZ
+	LD	H,A
+	LD	L,A
+	LD	(BatLineAdr),HL
+	OR	D
+	RET
+
+ReleaseBTM:	LD	A,(BatchPage)
+	CALL	FRE_SEG
+	XOR	A
+	LD	(BatchPage),A
+	RET
+

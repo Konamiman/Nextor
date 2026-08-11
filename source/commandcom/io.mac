@@ -1,859 +1,454 @@
-	name('io')
-	TITLE   MSX-DOS 2 - COMMAND.COM copyright (1986) IS Systems Ltd
-	SUBTTL  CLI I/O Routines
 ;
+; COMMAND2.COM - Console and printer output, alias storage management, mapper segment access, key/line input
 ;
-	INCLUDE command.inc
+; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
+; in 2003), split mechanically; to be restyled to the conventions of this
+; repository. Do not reformat or reorganize while the build is verified
+; byte-identical against command241.com (see Makefile, target "verify").
 ;
-;
-;       This module contains various miscellaneous routines which perform
-; various I/O tasks for the CLI.
-;
-;
-;
-		SUBTTL  OUCH
-;******************************************************************************
-;
-DMESSCR::
-;       Prints the message for the number in A, followed by a CRLF.
-;
-;
-		CALL    GETMSG          ; DE -> message.
-;
-;
-DMSCR::
-;        Prints the message at (DE), followed by a CRLF.
-;
-;
-		CALL    DMS             ; Print a message first.
-;
-CRLF::
-;
-;       Prints a CRLF.
-;
-;
-		LD      A,CR
-		CALL    OUCH
-		LD      A,LF
-		    ;
-		    ;
-		    ;
-;
-;
-;
-;        Outputs the character in A. Preserves all registers except AF,  which
-; returns  an  error  code  (normally 0). LINES is decremented whenever a line
-; feed is printed. If it decrements to 0, then the PAUSE command is called  to
-; print  a message (recursively) and wait for a keypress. If LINES was already
-; 0 then it is not changed.
-;
-if	1
-OUCH::          PUSH    HL
-		PUSH    DE
-		PUSH    BC
+LPrintCode:	CALL	GetAdres
+LPrintString:	CALL	PrintString
 
-		ld	e,a
-		ld	a,(lines##)	; pager enabled?
-		and	a
-		jr	z,ouch_ret	; no
-		ld	a,e
-		PUSH    AF              ; Save character.
-		ld	a,(chrflg##)
-		ld	d,a
-		ld	c,_chkchr##
-		call	_bdos##
-		ld	a,d
-		ld	(chrflg##),a
-		pop	af		; restore character
-		ld	e,a
-		bit	1,d		; 1st byte of kanji?
-		jr	nz,ouch_k1st	; yes
-		bit	2,d		; 2nd byte of kanji?
-		jr	nz,ouch_k2nd	; yes
-;
-;	Here when we're outputing ANK
-;
-		cp	0dh		; cr?
-		jr	nz,ouch_nocr	; no
-		xor	a
-		ld	(csrx##),a
-		jr	ouch_ret
+LPrint:	LD	A,#0D
+	CALL	PrintChar
+	LD	A,#0A
+PrintChar:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A
+	LD	A,(RowMax)
+	AND	A
+	JR	Z,Next_0301
+	LD	A,E
+	CP	#0D
+	JR	NZ,Next_0297
+	XOR	A
+	LD	(ColumnCount),A
+	JR	Next_0301
 
-ouch_nocr:
-		cp	0ah		; lf?
-		jr	z,ouch_chkpause	; yes
-		cp	09h		; tab?
-		jr	nz,ouch_notab	; no
-		ld	a,(width##)
-		ld	d,a
-		ld	a,(csrx##)
-		or	7
-		inc	a
-		ld	(csrx##),a
-		cp	d
-		jr	c,ouch_ret
-		ld	a,(csrx##)
-ouch_subloop:
-		sub	d
-		jr	nc,ouch_subloop
-		add	a,d
-		ld	(csrx##),a
-		jr	ouch_chkpause
+Next_0297:	CP	#0A
+	JR	Z,Next_0302
+	CP	#09
+	JR	NZ,Next_0299
+	LD	A,(ColumnMax)
+	LD	D,A
+	LD	A,(ColumnCount)
+	OR	#07
+	INC	A
+	LD	(ColumnCount),A
+	CP	D
+	JR	C,Next_0301
+	LD	A,(ColumnCount)
+Next_0298:	SUB	D
+	JR	NC,Next_0298
+	ADD	A,D
+	LD	(ColumnCount),A
+	JR	Next_0302
 
-ouch_k2nd:
-ouch_notab:
-		ld	a,(csrx##)
-		inc	a
-		ld	(csrx##),a
-		ld	d,a
-		ld	a,(width##)
-		cp	d
-		jr	nz,ouch_ret
-		xor	a
-		ld	(csrx##),a
-		jr	ouch_chkpause
+Next_0299:	LD	A,(ColumnCount)
+	INC	A
+	LD	(ColumnCount),A
+	LD	D,A
+	LD	A,(ColumnMax)
+	CP	D
+	JR	NZ,Next_0301
+	XOR	A
+	LD	(ColumnCount),A
+Next_0302:	CALL	ConsoleOutput
+	CALL	LineCount
+Next_0303:	XOR	A
+	POP	BC
+	POP	DE
+	POP	HL
+	RET
 
-ouch_k1st:
-		ld	a,(width##)
-		ld	d,a
-		ld	a,(csrx##)
-		inc	a
-		ld	(csrx##),a
-		cp	d		; outputing to the last column?
-		jr	nz,ouch_ret	; no
-		xor	a
-		ld	(csrx##),a
-		push	de
-		call	chkpause
-		pop	de
-ouch_ret:
-		call	conout
-		jr	npaus
+Next_0301:	CALL	ConsoleOutput
+	JR	Next_0303
 
-ouch_chkpause:
-		call	conout
-		call	chkpause
-NPAUS:
-		XOR     A               ; No error.
-		POP     BC              ; Restore registers.
-		POP     DE
-		POP     HL
-		RET
+LineCount:	LD	A,(RowMax)
+	DEC	A
+	LD	(RowMax),A
+	RET	NZ
+	CALL	AskAnyKey
+	CALL	FindScrSize
+	RET
 
-chkpause:
-		LD      A,(LINES##)     ; Whole screenfull done ?
-		DEC     A
-		LD      (LINES##),A
-		RET     NZ              ; Go if not time to pause.
-		CALL    PAUSE##         ; Else call the PAUSE command to wait.
-		CALL    SETP            ; Reset the /P line count.
-		RET
+ConsoleOutput:	LD	C,_CONOUT
+	JP	BDOS
 
-conout:
-		ld	c,_CONOUT##
-		jp	_bdos##
-;
-;
-SPACE?::        JP      NZ,OUCH
-SPACE::         LD      A,' '
-		JP      OUCH
+PrintDigit:	JP	NZ,PrintChar
+PrintSpace:	LD	A," "
+	JP	PrintChar
 
-else
-OUCH::          PUSH    HL
-		PUSH    DE
-		PUSH    BC
-		PUSH    AF              ; Save character.
-		LD      E,A
-		LD      C,_CONOUT##
-		CALL    _BDOS##         ; Output character.
-		POP     AF              ; Get character again.
-		CP      LF              ; New line ?
-		JR      NZ,NPAUS        ; Go if not.
-;
-		LD      A,(LINES##)     ; Whole screenfull done ?
-		DEC     A
-		JP      M,NPAUS         ; Go if not.
-;
-		LD      (LINES##),A
-		JR      NZ,NPAUS        ; Go if not time to pause.
-;
-		CALL    PAUSE##         ; Else call the PAUSE command to wait.
-		CALL    SETP            ; Reset the /P line count.
-;
-NPAUS:          XOR     A               ; No error.
-		POP     BC              ; Restore registers.
-		POP     DE
-		POP     HL
-		RET
-;
-;
-SPACE?::        JR      NZ,OUCH
-SPACE::         LD      A,' '
-		JR      OUCH
-endif
-;
-;
-SETP::          PUSH    HL
-		PUSH    DE
-		PUSH    BC
-		LD      BC,1*256+_IOCTL##       ; Get the output height.
-		LD      A,4                     ;   (0 => 'infinite').
-		CALL    _BDOS##
-if	1
-		LD	A,E		; Get width.
-		LD	(WIDTH##),A
-endif
-		LD      A,D             ; Get height.
-		POP     BC
-		POP     DE
-		POP     HL
-		RET     NZ              ; Ignore it if error (shouldn't occur).
-;
-		DEC     A
-		LD      (LINES##),A     ; Save height in /P line count.
-		RET
-;
-;
-;
-		SUBTTL  DMESS
-;******************************************************************************
-;
-DMESS::
-;
-;        Displays  the  message from the message token number in A, preserving
-; HL and BC.
-;
-		CALL    GETMSG          ; DE -> message.
-;
-;
-DMS::
-;
-;       Prints the zero-terminated string pointed to by DE.
-;
-		LD      A,(DE)          ; Get current character from string.
-		OR      A
-		RET     Z               ; Return if done.
-;
-		INC     DE
-		CALL    OUCH            ; Else output the character.
-		JR      DMS
-;
-;
-GETMSG::                                ; A=number, returns DE -> message.
-					; AF, DE, B corrupted.
-		LD      B,A             ; Save message number.
-		LD      DE,MESSAGES##
-if 1	;ver230
-		LD	A,(LANG##)	; Use alternate language messages
-		OR	A		;   if current mode is not default.
-		JR	Z,default_lang	;   Only Japanese is supported
-		LD      DE,JMESSAGES##	;   now.
-default_lang:
-endif
-		INC     B
-;
-MSG10:          DEC     B
-		RET     Z               ; Return with DE -> message if found.
-;
-MSG20:          LD      A,(DE)          ; Else find end of string, leave DE ->
-		INC     DE              ;   start of next string.
-		OR      A
-		JR      NZ,MSG20
-;
-		JR      MSG10
-;
-;
-;
-		SUBTTL	SETLANG
-;
-; Set language type. Only Default/Japanese is supported.
-;
-SETLANG::
-		push	af
-		push	bc
-		push	de
-		push	hl
-		exx
-		ex	af,af'
-		push	af
-		push	bc
-		push	de
-		push	hl
-		push	ix
-		push	iy
-		ex	af,af'
-		exx
-;
-		xor	a
-		ld	h,a
-		ld	l,a
-		add	hl,sp
-		ld	sp,P3_STACK##
-		push	hl
-		ld	de,1100h	; A=0, DE=1100 ==> get KMODE
-		call	0FFCAh		; Call extended BIOS
-		ld	(LANG##),a	; NZ ==> Kanji mode is active
-		pop	hl
-		ld	sp,hl
-;
-		exx
-		ex	af,af'
-		pop	iy
-		pop	ix
-		pop	hl
-		pop	de
-		pop	bc
-		pop	af
-		ex	af,af'
-		exx
-		pop	hl
-		pop	de
-		pop	bc
-		pop	af
-		ret
-;
-;
-;
-		SUBTTL  INCH
-;******************************************************************************
-;
-;        This  routine  waits  for  a  key  to  be  pressed and then echos the
-; character and prints a CR,LF, returning the character in L.  Before  reading
-; the  character,  a  loop  is  entered  which  ensures that no characters are
-; immediately waiting to be read, thus flushing the keyboard buffer first.
-;
-; On exit, C contains the character.
-;
-;
-IC0:            LD      C,_INNOE##      ; Get character with no echo.
-		CALL    _BDOS##
-;
-INCH::          LD      C,_CONST##      ; Console status.
-		CALL    _BDOS##
-		JR      NZ,IC0          ; If key pressed, then read it.
-;
-		LD      C,_CONIN##      ; Wait for, read & echo another key.
-		CALL    _BDOS##         ; Character in L.
-		JP      CRLF
-;
-;
-;
-		SUBTTL  INLI
-;******************************************************************************
-;
-;        This  routine inputs a line from the console, and returns HL pointing
-; to the length byte.  The line  has  been  terminated  by  a  null.  On  exit
-; AF=error code although this is currently always 0.
-;
-;
-INLI::          LD      DE,BUFF##       ; Point to input buffer.
-		LD      A,127
-		LD      (DE),A          ; Maximum number of chars to input.
-		LD      C,_BUFIN##
-		CALL    _BDOS
-		CALL    CRLF
-		LD      HL,BUFF##+1
-		PUSH    HL
-		LD      E,(HL)
-		XOR     A
-		LD      D,A
-		ADD     HL,DE
-		INC     HL
-		LD      (HL),D
-		POP     HL
-		RET
-;
-;
-;
-		SUBTTL  INBAT
-;******************************************************************************
-;
-;        This is similar to INLI above, but reads a line of input from a batch
-; file. HL is returned pointing to the length byte of the  command  line,  and
-; AF=error code.
-;
-;        If  a ^Z is read then this is treated as a .EOF error. If a line feed
-; is read, then this is ignored. If a carriage return is read then  this  ends
-; the line.
-;
-;        During the routine, a disk error is defined which  turns  .WDISK  and
-; .WFILE  errors  into 'Insert disk for batch file...' prompts. The disk error
-; routine ius set back to 0 before returing.
-;
-;
-INBAT::         LD      DE,BATERR       ; Define disk error routine.
-		LD      C,_DEFER##
-		CALL    _BDOS##         ; (error ignored).
-;
-		LD      A,__BATER##     ; Error type = batch file error.
-		LD      (ERRTYPE##),A
-;
-		LD      HL,BUFF##       ; HL -> start of input buffer.
-		LD      (HL),0          ; Zero no. characters got so far.
-		CALL    IB10            ; Input stuff from batch file.
-		PUSH    AF
-		PUSH    HL
-		LD      DE,0            ; Undefine disk error routine.
-		LD      C,_DEFER##
-		CALL    _BDOS##         ; (error ignored)
-		POP     HL
-		POP     AF
-		RET     NZ              ; Return with error code if error.
-;
-		DEC     A               ; Else reset error type.
-		LD      (ERRTYPE##),A
-		BIT     7,(HL)          ; Return 'command too long' if buffer
-		LD      A,.BUFUL##      ;   is full.
-		RET     NZ
-;
-		XOR     A               ; Else no error.
-		RET
-;
-IB10:           INC     HL
-		LD      (HL),0          ; Terminate line so far with a null.
-IB15:           CALL    INBCHAR         ; Get a character from batch file.
-		LD      HL,BUFF##       ; Return with HL -> start of buffer.
-		RET     NZ              ; Ret if error.
-;
-		LD      D,A             ; D=0 for later.
-		LD      A,C
-		CP      LF              ; Ignore line feeds.
-		JR      Z,IB15
-;
-		CP      EOF             ; Treat ^Z as a .EOF error.
-		JR      Z,GOTEOF
-;
-		SUB     CR              ; End on CR (no error).
-		RET     Z
-;
-		BIT     7,(HL)          ; Ignore character if buffer full.
-		JR      NZ,IB15         ;   (gobble chars until end of line)
-;
-		INC     (HL)            ; Inc length byte.
-		LD      E,(HL)          ; DE = length (D=0 from above).
-		ADD     HL,DE           ; Point to next free byte in buffer.
-		LD      (HL),C          ; Put character in buffer.
-		JR      IB10
-;
-GOTEOF:         LD      A,.EOF##
-		OR      A               ; Set flags.
-		RET
-;
-;
-INBCHAR:                                ; Return A=error, C=char.
-		LD      HL,(BATC##)     ; Get no. chars left in buffer.
-		LD      A,H
-		OR      L
-		JR      NZ,BUFOK        ; Go if some left.
-;
-		LD      HL,BATCS##      ; No. bytes to read = size of buffer.
-		LD      DE,BATBUF##     ; Try to read another buffer full.
-		LD      (BATPTR##),DE   ; Save pointer to current character.
-		LD      A,(BATFIL##)    ; Get file handle for batch file.
-		LD      B,A
-		LD      C,_READ##
-		CALL    _BDOS##         ; Leaves HL=no. bytes read into buffer.
-		RET     NZ              ; Return if error.
-;
-if 1 ;v2.30
-		PUSH	HL
-		LD	DE,BATCS##	; If we read buffer full
-		SBC	HL,DE		;   it may not the end of batch file.
-		POP	HL
-		JR	Z,BUFOK
-		PUSH	HL
-		LD	DE,BATBUF##	; Put ^Z at the buffer end
-		ADD	HL,DE		;   to avoid further reading.
-		LD	(HL),EOF
-		LD	A,(BATFIL##)	; Close batch file.
-		LD	B,A
-		LD	C,_CLOSE##
-		CALL	_BDOS##		; (error ignored)
-		POP	HL
-		INC	HL
-endif
-BUFOK:          DEC     HL              ; Dec. count after reading character.
-		LD      (BATC##),HL     ; Save new count.
-		LD      HL,(BATPTR##)   ; Get pointer to current character.
-		LD      C,(HL)          ; Return it in C.
-		INC     HL              ; Ready for next character.
-		LD      (BATPTR##),HL
-		XOR     A               ; No error.
-		RET
-;
-;
-BATERR:         CP      .WFILE##        ; Return with A=0 if .WFILE or .WDISK.
-		JR      Z,WFILE
-;
-		CP      .WDISK##
-		LD      A,0
-		RET     NZ
-;
-WFILE:          PUSH    BC              ; Save drive in B:.
-		CALL    CRLF
-		LD      A,__INSBAT##    ; Print 'Insert batch file disk in
-		CALL    DMESS           ;   drive '.
-		POP     AF
-		ADD     A,'A'-1         ; Convert to ASCII.
-		CALL    OUCH
-		LD      A,__BATDRV##    ; Print rest of message.
-		CALL    DMESS
-		CALL    CRLF
-		CALL    PAUSE##         ; Do 'Press any key' prompting.
-		LD      A,2             ; Return A=2 for 'retry'.
-		RET
-;
-;
-;
-		SUBTTL  DDATE
-;******************************************************************************
-;
-;        Displays the date in the FIB date field pointed to by HL. The date is
-; output in the format specified by the bottom 6 bits of DT-FORM. On entry, if
-; C is FF then the century (19 or 20) is printed in from of the year (as  from
-; the DATE command) else just the year is printed.
-;
-;
-DDATE::         LD      A,(HL)          ; Get LSB.
-		AND     1FH             ; Bits 0-4 are the day.
-		LD      B,A
-		LD      A,(HL)
-		INC     HL
-		LD      H,(HL)
-		SRL     H               ; H=year (bits 9 to 15).
-		RLA
-		RLA
-		RLA
-		RLA
-		AND     0FH
-		LD      L,A             ; L=month (bits 5-8).
-;
-		LD      A,H             ; Get year.
-		CP      20              ; If C=FF, then print 19 or 20 as the
-		LD      A,20            ;   century followed by the year, else
-		SBC     A,0             ;   just print the year.
-		AND     C               ; NZ => print century.
-		LD      C,A             ; In main loop, C printed if non-zero.
-;
-		LD      A,(DT_FORM##)   ; Get format variable.
-		ADD     A,A             ; Top two bits not used for date.
-		ADD     A,A
-		JR      NZ,DD10         ; If zero, then default to UK format.
-;                                       ;   (should never occur).
-		LD      A,6CH
-DD10:           LD      D,3             ; Output 3 parts of the date.
-		LD      E,' '           ; Print a leading space.
-DD20:           RLCA
-		RLCA
-		PUSH    AF              ; Save format.
-		PUSH    DE              ; Save count.
-		AND     11B             ; Get format for this field & set NC.
-		JR      Z,DD30          ; Print 0 if field undefined.
-;
-		SUB     2               ; Cy=>1, Z=>2, else 3.
-		LD      A,L
-		JR      Z,DD30          ; Go with NC if month.
-;
-		LD      A,B
-		CCF
-		JR      NC,DD30         ; Go with NC if day.
-;
-		LD      A,H             ; Else year.
-		ADD     A,80
-		SCF                     ; Cy => printing year.
-DD30:           PUSH    AF              ; Save number to print & year flag.
-		LD      A,E             ; Print leading character.
-		CALL    OUCH
-		POP     AF              ; Get year flag.
-		PUSH    AF
-		SBC     A,A             ; FF => printing year, else 0.
-		AND     C               ; NZ => print century before year.
-		CALL    NZ,DDT
-		POP     AF              ; Get number to print.
-		CP      100
-		JR      C,DD40          ; Go if >100.
-;
-		SUB     100             ; Else limit to two digits.
-DD40:           LD      D,0FFH          ; D<>0 => print leading 0.
-		CALL    DDT             ; Print digits.
-		POP     DE              ; Get back count & format variable.
-		POP     AF
-		LD      E,'-'           ; Separate numbers by '-'.
-		DEC     D
-		JR      NZ,DD20
-		RET
-;
-;
-;
-		SUBTTL  DTIME
-;******************************************************************************
-;
-;        Displays the time in the FIB time field pointed to by HL  (MSB).  The
-; time  is  displayed  in  12  or 24 hour format depending on the state of the
-; variable TM_FORM (0 => 24 hour, else 12 hour). On exit, A=last character to
-; print, which is either space, 'a' or 'p'.
-;
-;
-DTIME::         CALL    SPACE           ; Print a space.
-		LD      B,0             ; Zero 24 hour flag.
-		LD      A,(HL)          ; Get hours (bits 11-15).
-		RRA
-		RRA
-		RRA
-		AND     1FH
-		LD      D,A             ; Save hours.
-		LD      B,' '           ; In case 24 hour.
-		LD      A,(TM_FORM##)
-		OR      A               ; 24 hour format ?
-		LD      A,D
-		JR      Z,DT10          ; Go if yes.
-;
-		LD      B,'a'           ; In case am.
-		CP      12
-		JR      C,DT5           ; Go if am.
-;
-		SUB     12              ; Else pm.
-		LD      B,'p'
-DT5:            OR      A
-		JR      NZ,DT10
-;
-		LD      A,12
-DT10:           LD      D,'0'           ; D=0 => supress leading zero.
-		CALL    DDT             ; Print hours.
-		LD      A,':'
-		CALL    OUCH
-		LD      A,(HL)          ; Get minutes.
-		DEC     HL
-		RL      (HL)
-		RLA
-		RL      (HL)
-		RLA
-		RL      (HL)
-		RLA
-		AND     3FH
-		LD      D,0FFH          ; D<>0 => print leading zeros.
-		CALL    DDT             ; Display minutes.
-		LD      A,B             ; Return last character to print.
-		RET
-;
-;
-;
-;------------------------------------------------------------------------------
-;
-DDT::
-;
-;        Prints the date/time digit pair in A. If D='0' then a  leading  0  is
-; replaced by a space, else must not = '0'-'9'. BC is not corrupted.
-;
-;
-		LD      E,'0'-1         ; Initialise division count.
-DDT10:          SUB     10
-		INC     E
-		JR      NC,DDT10
-;
-		PUSH    AF              ; Save LSD.
-		LD      A,E             ; Get MSB.
-		CP      D               ; Z => print a space instead of zero.
-		CALL    SPACE?          ; Print digit or space.
-		POP     AF
-		ADD     A,'0'+10        ; Print LSB.
-		JP      OUCH
-;
-;
-;
-		SUBTTL  DSIZE
-;******************************************************************************
-;
-DSIZE::
-;
-;       Prints the 32-bit number at SIZE in bytes or Ks.
-;
-;
-		LD      HL,SIZE##       ; Point to number to print.
-		LD      D,__BYT##       ; Assume bytes, not Ks, will be
-		LD      E,__BYTS##      ;   printed.
-;                LD     DE,__BYT*256+__BYTS     ; L80 can't do this !
-		LD      C,(HL)          ; Get least significant word, point HL
-		INC     HL              ;   to MSB.
-		LD      B,(HL)
-		INC     HL
-		LD      A,(HL)
-		INC     HL
-		OR      (HL)
-		JR      NZ,DK           ; Print in Ks if top word is non-zero.
-;
-		LD      A,B
-		AND     0FCH
-		JR      Z,DBYTES        ; Print in bytes if <1K.
-;
-DK:             LD      D,__K##         ; Print in Ks, not bytes.
-		LD      E,__KS##
-;                LD     DE,__K##*256+__KS##     ; L80 can't do this !
-		LD      C,10            ; Shift 10 times to divide by 1024.
-DK10:           PUSH    HL              ; Save ptr to last digit.
-		LD      B,4             ; Shift 4 bytes.
-		OR      A               ; Clear carry.
-DK20:           RR      (HL)
-		DEC     HL
-		DJNZ    DK20
-;
-		POP     HL              ; Restore ptr to last byte.
-		DEC     C
-		JR      NZ,DK10         ; Shift again if necessary.
-;
-DBYTES:         LD      A,(HL)          ; See if singular message needed.
-		DEC     HL
-		OR      (HL)
-		DEC     HL
-		OR      (HL)
-		DEC     HL
-		LD      C,(HL)
-		DEC     C
-		OR      C               ; Z => singular, else plural.
-		LD      A,D
-		JR      Z,DPLUR
-;
-		LD      A,E
-DPLUR:          PUSH    AF              ; Save message number.
-		EX      DE,HL           ; DE -> start of number.
-		XOR     A               ; No lead char.
-		CALL    D32             ; Display number.
-		POP     AF
-		JP      DMESS           ; Print message afterwards.
-;
-;
-;
-		SUBTTL  D16
-;******************************************************************************
-;
-;       Displays the 16-bit number in HL.
-;
-;
-D8::            LD      L,A
-		LD      H,0
-D16::           XOR     A               ; No leading characters.
-		LD      (SIZE##),HL     ; Save number in buffer.
-		LD      H,A
-		LD      L,A
-		LD      (SIZE##+2),HL   ; Turn it into a 32 bit number.
-		LD      DE,SIZE##
-		    ;
-		    ;
-		    ;
-;
-;
-;
-		SUBTTL  D32
-;******************************************************************************
-D32::
-;
-;        Displays a 32-bit number at (DE) in up to  8  characters,  using  the
-; character in A as the leading character, or A=0 if none required. The number
-; at (DE) is corrupted, as are HL, BC, HL', DE' and AF'.
-;
-;        The number is displayed by subtracting reducing powers of ten from  a
-; table.  This avoids a 32 by 16 divide by ten, and produces the digits in the
-; required order.
-;
-;        This routine is used from the DIR command to print the file sizes. In
-; this  case,  the numbers are always less than 9 decimal digits, so the power
-; of ten table starts with 10,000,000. In other cases,  the  routine  is  used
-; from D16, to print a 16-bit number without leading characters. Thus a larger
-; power of ten table is not needed.
-;
-;
-		EXX
-		LD      E,A             ; E=lead char.
-		LD      D,'0'           ; D='0' to save bytes.
-		EXX
-		LD      HL,P10TAB       ; Giant 32-bit power-of-ten table.
-;
-D32.10:         LD      A,(HL)          ; LSB from table.
-		DEC     A               ; Last entry ?
-		JR      NZ,D32.20       ; Go if not.
-;
-		EXX                     ; Else force leading char to '0'.
-		LD      E,D
-		EXX
-;
-D32.20:         XOR     A               ; Divide by subtraction, Cy clear.
-		LD      C,A             ; Subtraction count.
-;
-D32.30:         PUSH    HL              ; Save table pointer.
-		PUSH    DE              ; Save number pointer.
-		LD      B,4             ; Iteration count.
-;
-D32.40:         LD      A,(DE)          ; Subtract no. in table.
-		SBC     A,(HL)
-		LD      (DE),A
-		INC     HL
-		INC     DE
-		DJNZ    D32.40
-;
-		POP     DE
-		POP     HL
-		INC     C
-		JR      NC,D32.30
-;
-		CALL    ADD32           ; Add back last iteration.
-		LD      A,C             ; Get iteration count.
-		EXX
-		DEC     A               ; Adjust for last iteration.
-		JR      Z,D32.60        ; Go if possible leading zero.
-;
-		ADD     A,D             ; Else convert to ASCII.
-		LD      E,D             ; Set leading char to '0'.
-		DEFB    LDL_OPC		; Skip to print char.
-;
-D32.60:         OR      E               ; Leading char required ?
-		CALL    NZ,OUCH         ; Print it if yes.
-;
-		EXX
-		LD      A,(HL)          ; End of table (FF) ?
-		INC     A
-		JR      NZ,D32.10       ; Print next digit if not.
-		RET                     ; With A=0.
-;
-;
-P10TAB:         DEFW    9680H,98H       ; 10,000,000
-		DEFW    4240H,0FH       ; 1,000,000
-		DEFW    86A0H,1         ; 100,000
-		DEFW    2710H,0         ; 10,000
-		DEFW    3E8H,0          ; 1,000
-		DEFW    64H,0           ; 100
-		DEFW    0AH,0           ; 10
-		DEFW    1,0             ; 1
-		DEFB    0FFH            ; End of table.
+PrintDigit2:	JR	Z,PrintSpace2
+Next_0612:	LD	(IX),A
+	INC	IX
+	RET
+PrintSpace2:	LD	A," "
+	JR	Next_0612
 
-;
-;
-;
-		SUBTTL  ADD32
-;******************************************************************************
-ADD32::
-;
-;        Adds the 32-bit number at (DE) to that at (HL), leaving the result at
-; (DE). DE is not corrupted, and HL points to the first byte beyond the number
-; orig- inally at (HL). This routine is used from the DIR  command  to  add  a
-; file  size  on  to  the  total  file size and from D32 above to add a 32 bit
-; number back to another when a subtract produced a carry.
-;
-;
-		PUSH    DE              ; Save no. ptr.
-		LD      B,4
-		OR      A               ; Clear cy for first iteration.
-;
-AD10:           LD      A,(DE)          ; Add back last iteration.
-		ADC     A,(HL)
-		LD      (DE),A
-		INC     HL              ; Leave HL->next table entry.
-		INC     DE
-		DJNZ    AD10
-;
-		POP     DE
-		RET
-;
-;
-;
-		SUBTTL
-		END
+FindScrSize:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	BC,#014B
+	LD	A,#04
+	CALL	BDOS
+	LD	A,E
+	LD	(ColumnMax),A
+	LD	A,D
+	POP	BC
+	POP	DE
+	POP	HL
+	RET	NZ
+	DEC	A
+	LD	(RowMax),A
+	RET
+
+PrintCode:	CALL	GetAdres
+PrintString:	LD	A,(DE)
+	OR	A
+	RET	Z
+	INC	DE
+	CALL	PrintChar
+	JR	PrintString
+
+GetAdres:	LD	B,A
+	LD	DE,StrAdr_Norm
+	INC	B
+Next_0305:	DEC	B
+	RET	Z
+Next_0306:	LD	A,(DE)
+	INC	DE
+	OR	A
+	JR	NZ,Next_0306
+	JR	Next_0305
+
+FindAlias:	PUSH	DE
+	PUSH	HL
+	CALL	SetPage2
+	CALL	GetAliasAdres
+	SET	7,H
+	BIT	7,B
+	JR	Z,Next_0613
+	LD	H,B
+	LD	L,C
+	JR	Next_0615
+
+Next_0613:	LD	A,B
+	OR	C
+	JR	Z,Next_0615
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	DEC	HL
+	ADD	HL,DE
+	DEC	BC
+	LD	A,D
+	OR	E
+	JR	NZ,Next_0613
+Next_0614:	POP	HL
+	LD	(HL),A
+	POP	DE
+	LD	(DE),A
+	LD	B,A
+	LD	C,A
+	CALL	RestorePage2
+	RET
+
+Next_0615:	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	LD	A,D
+	OR	E
+	JR	Z,Next_0614
+	POP	DE
+	PUSH	DE
+	CALL	NCopy
+	POP	BC
+	POP	DE
+	PUSH	DE
+	PUSH	BC
+	CALL	NCopy
+	LD	B,H
+	LD	C,L
+	POP	HL
+	POP	DE
+	CALL	RestorePage2
+	RET
+
+GetAlias:	PUSH	DE
+	PUSH	HL
+	CALL	SetPage2
+	CALL	GetAliasAdres
+	SET	7,H
+Next_0616:	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	POP	BC
+	LD	A,D
+	OR	E
+	JR	Z,Next_0619
+	PUSH	BC
+	PUSH	HL
+	CALL	Compare
+	JR	Z,Next_0617
+	POP	HL
+	ADD	HL,DE
+	DEC	HL
+	DEC	HL
+	JR	Next_0616
+
+Next_0617:	POP	BC
+	POP	BC
+	POP	DE
+	PUSH	DE
+	CALL	NCopy
+Next_0618:	CALL	RestorePage2
+	POP	DE
+	RET
+
+Next_0619:	POP	DE
+	XOR	A
+	LD	(DE),A
+	PUSH	DE
+	JR	Next_0618
+
+SetAlias:	PUSH	DE
+	PUSH	HL
+	CALL	SetPage2
+	CALL	GetAliasAdres
+	SET	7,H
+Next_0620:	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	DEC	HL
+	POP	BC
+	LD	A,D
+	OR	E
+	EX	DE,HL
+	PUSH	BC
+	JR	Z,Next_0623
+	EX	DE,HL
+	PUSH	HL
+	INC	HL
+	INC	HL
+	CALL	Compare
+	JR	Z,Next_0621
+	POP	HL
+	ADD	HL,DE
+	JR	Next_0620
+
+Next_0621:	POP	HL
+	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)
+	DEC	HL
+	LD	D,H
+	LD	E,L
+	ADD	HL,BC
+Next_0622:	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)
+	DEC	HL
+	LD	A,B
+	OR	C
+	JR	Z,Next_0623
+	LDIR
+	JR	Next_0622
+
+Next_0623:	LD	B,D
+	LD	C,E
+	POP	HL
+	POP	DE
+	LD	A,(DE)
+	OR	A
+	JR	Z,Next_0629
+	PUSH	BC
+	PUSH	DE
+	LD	D,B
+	LD	E,C
+	INC	DE
+	INC	DE
+	LD	BC,#02
+Next_0624:	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	PUSH	HL
+	LD	HL,(AliasEnd)
+	SET	7,H
+	SBC	HL,DE
+	POP	HL
+	JR	Z,Next_0627
+	INC	DE
+	INC	BC
+	OR	A
+	JR	NZ,Next_0624
+	POP	HL
+Next_0625:	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	BIT	6,D
+	JR	NZ,Next_0628
+	INC	DE
+	INC	BC
+	OR	A
+	JR	NZ,Next_0625
+	LD	(DE),A
+	INC	DE
+	LD	(DE),A
+	POP	HL
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+Next_0626:	CALL	RestorePage2
+	RET
+
+Next_0627:	POP	HL
+Next_0628:	POP	HL
+	CALL	RestorePage2
+	LD	A,.NORAM
+	OR	A
+	RET
+
+Next_0629:	LD	(BC),A
+	INC	BC
+	LD	(BC),A
+	JR	Next_0626
+
+GetMapSupport:	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	EXX
+	EX	AF,AF'
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	PUSH	IX
+	PUSH	IY
+	EX	AF,AF'
+	EXX
+	XOR	A
+	LD	H,A
+	LD	L,A
+	ADD	HL,SP
+	LD	SP,#F51F
+	PUSH	HL
+	LD	DE,#0402
+	CALL	EXTBIO
+	LD	(MapperAdres),HL
+	LD	DE,#0401
+	CALL	EXTBIO
+	LD	(MapperTable),HL
+	LD	A,(EXPTBL)
+	LD	HL,#2D
+	CALL	RDSLT
+	LD	(MSXVersion),A
+	POP	HL
+	LD	SP,HL
+	EXX
+	EX	AF,AF'
+	POP	IY
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	EX	AF,AF'
+	EXX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+ALL_SEG:	PUSH	DE
+	LD	DE,#00
+	JR	XCAL
+
+FRE_SEG:	PUSH	DE
+	LD	DE,#03
+	JR	XCAL
+
+RD_SEG:	PUSH	DE
+	LD	DE,#06
+	JR	XCAL
+
+WR_SEG:	PUSH	DE
+	LD	DE,#09
+	JR	XCAL
+
+PUT_P2:	PUSH	DE
+	LD	DE,#24
+	JR	XCAL
+
+GET_P2:	PUSH	DE
+	LD	DE,#27
+XCAL:	PUSH	HL
+	LD	HL,(MapperAdres)
+	ADD	HL,DE
+	LD	(JumpAdres+1),HL
+	POP	HL
+	POP	DE
+	PUSH	BC
+	PUSH	HL
+	PUSH	DE
+	EXX
+	LD	HL,#00
+	ADD	HL,SP
+	LD	SP,#F51F
+	PUSH	HL
+	EXX
+JumpAdres:	CALL	#00
+	POP	HL
+	LD	SP,HL
+	POP	DE
+	LD	HL,#00
+	LD	(JumpAdres+1),HL
+	POP	HL
+	POP	BC
+	RET
+
+SetPage2:	CALL	GET_P2
+	LD	(TemporaryPage),A
+	LD	A,(MapperPage)
+	CALL	PUT_P2
+	RET
+
+RestorePage2:	LD	A,(TemporaryPage)
+	CALL	PUT_P2
+	RET
+
+GetKey:	LD	C,_INNOE
+	CALL	BDOS
+WaitKey:	LD	C,_CONST
+	CALL	BDOS
+	JR	NZ,GetKey
+	LD	C,_CONIN
+	CALL	BDOS
+	JP	LPrint
+
+GetLine:	LD	DE,BufEnvData
+	LD	A,#7F
+	LD	(DE),A
+	LD	HL,Env_Expand
+	CALL	Check_OFF
+	SBC	A,A
+	LD	C,_BUFIN
+	CALL	Z,BDOS
+	CALL	NZ,BufInput
+	CALL	LPrint
+	LD	HL,BufEnvData+1
+	PUSH	HL
+	LD	E,(HL)
+	XOR	A
+	LD	D,A
+	ADD	HL,DE
+	INC	HL
+	LD	(HL),D
+	POP	HL
+	RET
+

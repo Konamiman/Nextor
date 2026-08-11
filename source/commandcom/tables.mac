@@ -1,0 +1,502 @@
+;
+; COMMAND2.COM - TABORDER values, internal command table, internal variable table, variable function table
+;
+; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
+; in 2003), split mechanically; to be restyled to the conventions of this
+; repository. Do not reformat or reorganize while the build is verified
+; byte-identical against command241.com (see Makefile, target "verify").
+;
+Orders:	DEFB	3
+	DEFB	"DIR"
+	DEFB	%00000010
+
+	DEFB	4
+	DEFB	"BOTH"
+	DEFB	%00000011
+
+	DEFB	4
+	DEFB	"FILE"
+	DEFB	%00000001
+
+	DEFB	8
+	DEFB	"DIR,FILE"
+	DEFB	%00000110
+
+	DEFB	8
+	DEFB	"FILE,DIR"
+	DEFB	%00000101
+
+Commands:	DEFB	2
+	DEFB	"IF"
+	DEFW	Cmd_If
+
+	DEFB	2
+	DEFB	"CD"
+	DEFW	Cmd_Chdir
+
+	DEFB	2
+	DEFB	"RD"
+	DEFW	Cmd_Rmdir
+
+	DEFB	2
+	DEFB	"MD"
+	DEFW	Cmd_Mkdir
+
+	DEFB	3
+	DEFB	"CDD"
+	DEFW	Cmd_Cdd
+
+	DEFB	3
+	DEFB	"CLS"
+	DEFW	Cmd_Cls
+
+	DEFB	3
+	DEFB	"CPU"
+	DEFW	Cmd_Cpu
+
+	DEFB	3
+	DEFB	"DEL"
+	DEFW	Cmd_Delete
+
+	DEFB	3
+	DEFB	"DIR"
+	DEFW	Cmd_Dir
+
+	DEFB	3
+	DEFB	"END"
+	DEFW	Cmd_End
+
+	DEFB	3
+	DEFB	"IFF"
+	DEFW	Cmd_Iff
+
+	DEFB	3
+	DEFB	"REM"
+	DEFW	Cmd_Rem
+
+	DEFB	3
+	DEFB	"REN"
+	DEFW	Cmd_Rename
+
+	DEFB	3
+	DEFB	"SET"
+	DEFW	Cmd_Set
+
+	DEFB	3
+	DEFB	"VER"
+	DEFW	Cmd_Ver
+
+	DEFB	3
+	DEFB	"VOL"
+	DEFW	Cmd_Vol
+
+	DEFB	4
+	DEFB	"BEEP"
+	DEFW	Cmd_Beep
+
+	DEFB	4
+	DEFB	"COPY"
+	DEFW	Cmd_Copy
+
+	DEFB	4
+	DEFB	"DATE"
+	DEFW	Cmd_Date
+
+	DEFB	4
+	DEFB	"ECHO"
+	DEFW	Cmd_Echo
+
+	DEFB	4
+	DEFB	"ELSE"
+	DEFW	Cmd_Else
+
+	DEFB	4
+	DEFB	"EXIT"
+	DEFW	Cmd_Exit
+
+	DEFB	4
+	DEFB	"FREE"
+	DEFW	Cmd_Free
+
+	DEFB	4
+	DEFB	"GOTO"
+	DEFW	Cmd_Goto
+
+	DEFB	4
+	DEFB	"HELP"
+	DEFW	Cmd_Help
+
+	DEFB	4
+	DEFB	"MODE"
+	DEFW	Cmd_Mode
+
+	DEFB	4
+	DEFB	"MOVE"
+	DEFW	Cmd_Move
+
+	DEFB	4
+	DEFB	"PATH"
+	DEFW	Cmd_Path
+
+	DEFB	4
+	DEFB	"POPD"
+	DEFW	Cmd_Popd
+
+	DEFB	4
+	DEFB	"THEN"
+	DEFW	Cmd_Then
+
+	DEFB	4
+	DEFB	"TIME"
+	DEFW	Cmd_Time
+
+	DEFB	4
+	DEFB	"TYPE"
+	DEFW	Cmd_Type
+
+	DEFB	5
+	DEFB	"ALIAS"
+	DEFW	Cmd_Alias
+
+	DEFB	5
+	DEFB	"ATDIR"
+	DEFW	Cmd_Atdir
+
+	DEFB	5
+	DEFB	"BASIC"
+	DEFW	Cmd_Basic
+
+	DEFB	5
+	DEFB	"CHDIR"
+	DEFW	Cmd_Chdir
+
+	DEFB	5
+	DEFB	"COLOR"
+	DEFW	Cmd_Color
+
+	DEFB	5
+	DEFB	"ECHOS"
+	DEFW	Cmd_Echos
+
+	DEFB	5
+	DEFB	"GOSUB"
+	DEFW	Cmd_Gosub
+
+	DEFB	5
+	DEFB	"INKEY"
+	DEFW	Cmd_Inkey
+
+	DEFB	5
+	DEFB	"INPUT"
+	DEFW	Cmd_Input
+
+	DEFB	5
+	DEFB	"MKDIR"
+	DEFW	Cmd_Mkdir
+
+	DEFB	5
+	DEFB	"MVDIR"
+	DEFW	Cmd_Mvdir
+
+	DEFB	5
+	DEFB	"PAUSE"
+	DEFW	Cmd_Pause
+
+	DEFB	5
+	DEFB	"PUSHD"
+	DEFW	Cmd_Pushd
+
+	DEFB	5
+	DEFB	"RESET"
+	DEFW	Cmd_Reset
+
+	DEFB	5
+	DEFB	"RMDIR"
+	DEFW	Cmd_Rmdir
+
+	DEFB	5
+	DEFB	"RNDIR"
+	DEFW	Cmd_Rndir
+
+	DEFB	6
+	DEFB	"ASSIGN"
+	DEFW	Cmd_Assign
+
+	DEFB	6
+	DEFB	"ATTRIB"
+	DEFW	Cmd_Attrib
+
+	DEFB	6
+	DEFB	"CDPATH"
+	DEFW	Cmd_Cdpath
+
+	DEFB	6
+	DEFB	"CONCAT"
+	DEFW	Cmd_Concat
+
+	DEFB	6
+	DEFB	"DSKCHK"
+	DEFW	Cmd_Dskchk
+
+	DEFB	6
+	DEFB	"ENDIFF"
+	DEFW	Cmd_Endiff
+
+	DEFB	6
+	DEFB	"FORMAT"
+	DEFW	Cmd_Format
+
+	DEFB	6
+	DEFB	"MEMORY"
+	DEFW	Cmd_Memory
+
+	DEFB	6
+	DEFB	"RETURN"
+	DEFW	Cmd_Return
+
+	DEFB	6
+	DEFB	"VERIFY"
+	DEFW	Cmd_Verify
+
+	DEFB	7
+	DEFB	"BUFFERS"
+	DEFW	Cmd_Buffers
+
+	DEFB	7
+	DEFB	"HISTORY"
+	DEFW	Cmd_History
+
+	DEFB	7
+	DEFB	"RAMDISK"
+	DEFW	Cmd_Ramdisk
+
+Null:	DEFB	0
+
+Internals:	DEFB	2
+	DEFB	"BG"
+	DEFW	Int_Bg
+
+	DEFB	2
+	DEFB	"FG"
+	DEFW	Int_Fg
+
+	DEFB	3
+	DEFB	"CPU"
+	DEFW	Int_Cpu
+
+	DEFB	3
+	DEFB	"CWD"
+	DEFW	Int_Cwd
+
+	DEFB	3
+	DEFB	"CWP"
+	DEFW	Int_Cwp
+
+	DEFB	3
+	DEFB	"DOW"
+	DEFW	Int_Dow
+
+	DEFB	3
+	DEFB	"ROW"
+	DEFW	Int_Row
+
+	DEFB	4
+	DEFB	"BOOT"
+	DEFW	Int_Boot
+
+	DEFB	4
+	DEFB	"CWDS"
+	DEFW	Int_Cwds
+
+	DEFB	4
+	DEFB	"CWPS"
+	DEFW	Int_Cwps
+
+	DEFB	4
+	DEFB	"DATE"
+	DEFW	Int_Date
+
+	DEFB	4
+	DEFB	"DISK"
+	DEFW	Int_Disk
+
+	DEFB	4
+	DEFB	"ROWS"
+	DEFW	Int_Rows
+
+	DEFB	4
+	DEFB	"TIME"
+	DEFW	Int_Time
+
+	DEFB	5
+	DEFB	"DATEF"
+	DEFW	Int_Datef
+
+	DEFB	5
+	DEFB	"ERROR"
+	DEFW	Int_Error
+
+	DEFB	5
+	DEFB	"FNEXT"
+	DEFW	Int_Fnext
+
+	DEFB	5
+	DEFB	"SHELL"
+	DEFW	Int_Shell
+
+	DEFB	6
+	DEFB	"COLUMN"
+	DEFW	Int_Column
+
+	DEFB	6
+	DEFB	"DOSVER"
+	DEFW	Int_Dosver
+
+	DEFB	6
+	DEFB	"MSXVER"
+	DEFW	Int_Msxver
+
+	DEFB	7
+	DEFB	"COLUMNS"
+	DEFW	Int_Columns
+
+	DEFB	8
+	DEFB	"DRIVEMAP"
+	DEFW	Int_Drivemap
+
+	DEFB	9
+	DEFB	"DIRBUFFER"
+	DEFW	Int_Dirbuffer
+
+	DEFB	9
+	DEFB	"FILECOUNT"
+	DEFW	Int_Filecount
+
+	DEFB	0
+
+Functions:	DEFB	3
+	DEFB	"EXT"
+	DEFW	Fun_Ext
+
+	DEFB	3
+	DEFB	"HEX"
+	DEFW	Fun_Hex
+
+	DEFB	3
+	DEFB	"LEN"
+	DEFW	Fun_Len
+
+	DEFB	3
+	DEFB	"MID"
+	DEFW	Fun_Mid
+
+	DEFB	4
+	DEFB	"CHAR"
+	DEFW	Fun_Char
+
+	DEFB	4
+	DEFB	"FILE"
+	DEFW	Fun_File
+
+	DEFB	4
+	DEFB	"FULL"
+	DEFW	Fun_Full
+
+	DEFB	4
+	DEFB	"LEFT"
+	DEFW	Fun_Left
+
+	DEFB	4
+	DEFB	"NAME"
+	DEFW	Fun_Name
+
+	DEFB	4
+	DEFB	"PATH"
+	DEFW	Fun_Path
+
+	DEFB	5
+	DEFB	"ALIAS"
+	DEFW	Fun_Alias
+
+	DEFB	5
+	DEFB	"ASCII"
+	DEFW	Fun_Ascii
+
+	DEFB	5
+	DEFB	"DRIVE"
+	DEFW	Fun_Drive
+
+	DEFB	5
+	DEFB	"INSTR"
+	DEFW	Fun_Instr
+
+	DEFB	5
+	DEFB	"LABEL"
+	DEFW	Fun_Label
+
+	DEFB	5
+	DEFB	"LOWER"
+	DEFW	Fun_Lower
+
+	DEFB	5
+	DEFB	"PARSE"
+	DEFW	Fun_Parse
+
+	DEFB	5
+	DEFB	"READY"
+	DEFW	Fun_Ready
+
+	DEFB	5
+	DEFB	"RIGHT"
+	DEFW	Fun_Right
+
+	DEFB	5
+	DEFB	"UPPER"
+	DEFW	Fun_Upper
+
+	DEFB	6
+	DEFB	"ATTRIB"
+	DEFW	Fun_Attrib
+
+	DEFB	6
+	DEFB	"FFIRST"
+	DEFW	Fun_Ffirst
+
+	DEFB	7
+	DEFB	"NEWFILE"
+	DEFW	Fun_Newfile
+
+	DEFB	8
+	DEFB	"DISKFREE"
+	DEFW	Fun_Diskfree
+
+	DEFB	8
+	DEFB	"DISKUSED"
+	DEFW	Fun_Diskused
+
+	DEFB	8
+	DEFB	"FILEATTR"
+	DEFW	Fun_Fileattr
+
+	DEFB	8
+	DEFB	"FILEDATE"
+	DEFW	Fun_Filedate
+
+	DEFB	8
+	DEFB	"FILESIZE"
+	DEFW	Fun_Filesize
+
+	DEFB	8
+	DEFB	"FILETIME"
+	DEFW	Fun_Filetime
+
+	DEFB	9
+	DEFB	"DISKTOTAL"
+	DEFW	Fun_Disktotal
+
+	DEFB	9
+	DEFB	"FILETOTAL"
+	DEFW	Fun_Filetotal
+
+	DEFB	0
+

@@ -1,0 +1,899 @@
+;
+; COMMAND2.COM - Command line editor: input, TAB completion, history buffer
+;
+; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
+; in 2003), split mechanically; to be restyled to the conventions of this
+; repository. Do not reformat or reorganize while the build is verified
+; byte-identical against command241.com (see Makefile, target "verify").
+;
+BufInput:	PUSH	IY
+	LD	A,(InsertFlag)
+	AND	4
+	LD	(InsertFlag),A
+	XOR	A
+	LD	(Toevoeg),A
+	LD	(Invul),A
+	LD	(MinInvul),A
+	EX	DE,HL
+	INC	HL
+	LD	(HL),0
+ReadLine:	CALL	ReadKey
+	CP	9
+	JP	Z,Tab
+	PUSH	AF
+	LD	A,(InsertFlag)
+	RES	1,A
+	LD	(InsertFlag),A
+	POP	AF
+	CP	13
+	JP	Z,Return
+	CP	30
+	JP	Z,CursorUp
+	CP	31
+	JP	Z,CursorDown
+	CP	28
+	JP	Z,CursorRight
+	CP	29
+	JP	Z,CursorLeft
+	CP	11
+	JP	Z,Home
+	CP	127
+	JP	Z,Delete
+	CP	8
+	JP	Z,BackSpace
+	CP	18
+	JP	Z,Ins
+	CALL	Reset
+	CP	27
+	JP	Z,Select
+	CP	24
+	JP	Z,Select
+	CP	21
+	JP	Z,Select
+	CP	32
+	JR	C,ReadLine
+	CALL	PutLine
+	CALL	PrintChar
+	JR	ReadLine
+
+ReadKey:	PUSH	HL
+	LD	C,_INNOE
+	CALL	BDOS
+	POP	HL
+	RET
+
+PutLine:	EX	AF,AF'
+	LD	A,(InsertFlag)
+	BIT	0,A
+	JR	NZ,Insert
+	DEC	HL
+	LD	A,(Invul)
+	CP	(HL)
+	INC	HL
+	JR	Z,Beep
+	INC	A
+	LD	(Invul),A
+	LD	C,A
+	LD	B,#00
+	ADD	HL,BC
+	EX	AF,AF'
+	LD	(HL),A
+	OR	A
+	SBC	HL,BC
+	LD	C,A
+	LD	A,(Invul)
+	CP	(HL)
+	LD	A,C
+	RET	C
+	RET	Z
+	INC	(HL)
+	RET
+
+Insert:	LD	A,(HL)
+	DEC	HL
+	CP	(HL)
+	INC	HL
+	JR	Z,Beep
+	PUSH	HL
+	LD	A,(Invul)
+	CP	(HL)
+	JR	Z,Next_0639
+	LD	C,A
+	LD	A,(HL)
+	SUB	C
+	LD	C,A
+	LD	B,#00
+	INC	BC
+	PUSH	BC
+	LD	C,(HL)
+	INC	BC
+	ADD	HL,BC
+	LD	E,L
+	LD	D,H
+	INC	DE
+	POP	BC
+	LDDR
+	INC	HL
+Next_0638:	EX	AF,AF'
+	LD	(HL),A
+	POP	HL
+	INC	(HL)
+	INC	(HL)
+	CALL	PrintLine
+	DEC	(HL)
+	LD	A,(Invul)
+	INC	A
+	LD	(Invul),A
+	LD	A,28
+	RET
+
+Next_0639:	LD	C,A
+	LD	B,#00
+	INC	BC
+	ADD	HL,BC
+	JR	Next_0638
+
+Beep:	LD	A,7
+	RET
+
+ReadLine2:	XOR	A
+	LD	(MinInvul),A
+	JP	ReadLine
+
+CursorLeft:	LD	A,(#FBEB)
+	BIT	1,A
+	JP	Z,Home
+	BIT	0,A
+	JP	Z,WordLeft
+	LD	A,(Invul)
+	OR	A
+	JP	Z,ReadLine2
+	CALL	MoveLeft
+	JP	ReadLine2
+
+MoveLeft:	LD	A,(Invul)
+	DEC	A
+	LD	(Invul),A
+	LD	A,29
+	CALL	PrintChar
+	RET
+
+CursorRight:	LD	A,(#FBEB)
+	BIT	1,A
+	JP	Z,Eind
+	BIT	0,A
+	JP	Z,WordRight
+	LD	A,(Invul)
+	CP	(HL)
+	JP	Z,ReadLine2
+	CALL	MoveRight
+	JP	ReadLine2
+
+MoveRight:	LD	A,(Invul)
+	INC	A
+	LD	(Invul),A
+	LD	A,28
+	CALL	PrintChar
+	RET
+
+BackSpace:	LD	A,(HL)
+	OR	A
+	JP	Z,ReadLine2
+	LD	A,(Invul)
+	OR	A
+	JR	Z,Next_0640
+	DEC	A
+	LD	(Invul),A
+	LD	A,29
+	CALL	PrintChar
+	CALL	Reset
+Next_0640:	PUSH	HL
+	LD	A,(Invul)
+	LD	C,A
+	LD	A,(HL)
+	SUB	C
+	JR	Z,Next_0641
+	LD	C,A
+	LD	B,0
+	PUSH	BC
+	LD	A,(Invul)
+	LD	C,A
+	LD	B,#00
+	INC	BC
+	ADD	HL,BC
+	LD	E,L
+	LD	D,H
+	INC	HL
+	POP	BC
+	LDIR
+Next_0641:	POP	HL
+	CALL	PrintLine
+	DEC	(HL)
+	JP	ReadLine2
+
+Delete:	LD	A,(#FBEB)
+	BIT	1,A
+	JR	Z,Ctrl_Del
+	BIT	0,A
+	JP	Z,Ctrl_E
+	LD	A,(HL)
+	OR	A
+	JP	Z,ReadLine2
+	CALL	Reset
+	LD	B,A
+	LD	A,(Invul)
+	CP	B
+	JP	Z,ReadLine2
+	JR	Next_0640
+
+Reset:	PUSH	AF
+	LD	A,(InsertFlag)
+	RES	2,A
+	LD	(InsertFlag),A
+	POP	AF
+	RET
+
+Ctrl_Del:	PUSH	HL
+	LD	HL,BufferAdres
+	CALL	SetPutAdres
+	CALL	SetReadAdres
+	DEC	HL
+	CALL	SetEndAdres
+	POP	HL
+	LD	A,7
+	CALL	PrintChar
+	JP	ReadLine2
+
+PrintLine:	PUSH	HL
+	LD	A,(Invul)
+	LD	C,A
+	LD	A,(HL)
+	SUB	C
+	LD	B,#00
+	ADD	HL,BC
+	DEC	A
+	LD	B,A
+	PUSH	BC
+	OR	A
+	JR	Z,Next_0643
+Next_0642:	INC	HL
+	LD	A,(HL)
+	CALL	PrintChar
+	DJNZ	Next_0642
+Next_0643:	LD	A," "
+	CALL	PrintChar
+	POP	BC
+	INC	B
+Next_0644:	LD	A,29
+	CALL	PrintChar
+	DJNZ	Next_0644
+	POP	HL
+	RET
+
+Home:	LD	A,(Invul)
+	OR	A
+	JP	Z,ReadLine2
+	DEC	A
+	LD	(Invul),A
+	LD	A,29
+	CALL	PrintChar
+	JR	Home
+
+Eind:	LD	A,(Invul)
+	CP	(HL)
+	JP	Z,ReadLine2
+	INC	A
+	LD	(Invul),A
+	LD	A,28
+	CALL	PrintChar
+	JR	Eind
+
+WordLeft:	CALL	WordLeftC
+	JP	Z,ReadLine2
+	CP	" "
+	JR	NZ,WordLeft2
+	CALL	MoveLeft
+	JR	WordLeft
+WordLeft2:	CALL	WordLeftC
+	JP	Z,ReadLine2
+	CP	" "
+	JP	Z,ReadLine2
+	CALL	MoveLeft
+	JR	WordLeft2
+WordLeftC:	LD	A,(Invul)
+	OR	A
+	RET	Z
+	LD	C,A
+	LD	B,#00
+	ADD	HL,BC
+	LD	A,(HL)
+	SBC	HL,BC
+	OR	A
+	RET
+
+WordRight:	CALL	WordRightC
+	JP	Z,ReadLine2
+	CP	" "
+	JR	Z,WordRight2
+	CALL	MoveRight
+	JR	WordRight
+WordRight2:	CALL	WordRightC
+	JP	Z,ReadLine2
+	CP	" "
+	JP	NZ,ReadLine2
+	CALL	MoveRight
+	JR	WordRight2
+
+WordRightC:	LD	A,(Invul)
+	CP	(HL)
+	RET	Z
+	LD	C,A
+	LD	B,#00
+	INC	BC
+	ADD	HL,BC
+	LD	A,(HL)
+	SBC	HL,BC
+	OR	A
+	RET
+
+Select:	CALL	Wis
+	CALL	BlockCursor
+	JP	ReadLine2
+
+Wis:	PUSH	HL
+	LD	HL,MinInvul
+Next_0645:	LD	A,(Invul)
+	CP	(HL)
+	JR	Z,Next_0646
+	DEC	A
+	LD	(Invul),A
+	LD	A,29
+	CALL	PrintChar
+	JR	Next_0645
+Next_0646:	POP	HL
+	JR	S_Delete
+
+Ins:	LD	A,(#FBEB)
+	BIT	1,A
+	JR	Z,Ctrl_Ins
+	LD	A,(InsertFlag)
+	XOR	#01
+	LD	(InsertFlag),A
+	BIT	0,A
+	JR	Z,Next_0648
+	LD	A,27
+	CALL	PrintChar
+	LD	A,"y"
+	CALL	PrintChar
+	LD	A,"4"
+	CALL	PrintChar
+	LD	A,(Invul)
+	LD	(MinInvul),A
+Next_0647:	JP	ReadLine
+Next_0648:	CALL	BlockCursor
+	JR	Next_0647
+
+Ctrl_Ins:	PUSH	HL
+	CALL	Zet
+	CALL	Less
+	POP	HL
+	CALL	Wis
+	CALL	Reset
+	JP	ReadLine2
+
+BlockCursor:	LD	A,(InsertFlag)
+	RES	0,A
+	LD	(InsertFlag),A
+	LD	A,27
+	CALL	PrintChar
+	LD	A,"x"
+	CALL	PrintChar
+	LD	A,"4"
+	CALL	PrintChar
+	XOR	A
+	LD	(MinInvul),A
+	RET
+
+Ctrl_E:	CALL	S_Delete
+	JP	ReadLine2
+
+S_Delete:	LD	A,(Invul)
+	CP	(HL)
+	RET	Z
+	CALL	Reset
+	LD	A,(Invul)
+	LD	B,A
+	LD	A,(HL)
+	LD	(HL),B
+	SUB	B
+	LD	B,A
+	PUSH	BC
+Next_0649:	LD	A," "
+	CALL	PrintChar
+	DJNZ	Next_0649
+	POP	BC
+Next_0650:	LD	A,29
+	CALL	PrintChar
+	DJNZ	Next_0650
+	RET
+
+Tab:	PUSH	HL
+	LD	A,(InsertFlag)
+	BIT	1,A
+	JP	NZ,Next_Tab
+	SET	1,A
+	RES	2,A
+	LD	(InsertFlag),A
+	LD	HL,Env_TabOrder
+	LD	DE,BufExtra2
+	CALL	GetEnvData3
+	PUSH	DE
+	LD	B,#00
+Next_0651:	LD	A,(DE)
+	OR	A
+	JR	Z,Next_0652
+	INC	B
+	INC	DE
+	JR	Next_0651
+
+Next_0652:	POP	DE
+	DEC	DE
+	LD	HL,Orders-1
+	XOR	A
+Next_0653:	JR	NZ,Next_0654
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JR	Z,Next_0654
+	CALL	Compare_DEHL
+	JR	C,Next_0653
+	LD	A,(HL)
+	DEFB	#21
+Next_0654:	LD	A,%00000011
+	LD	(FileOrDir),A
+	POP	HL
+	PUSH	HL
+	CALL	S_Delete
+	LD	C,(HL)
+	LD	B,0
+	INC	BC
+	ADD	HL,BC
+	LD	(HL),0
+	POP	HL
+	PUSH	HL
+	LD	A,(Invul)
+	OR	A
+	JR	Z,Next_0658
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC
+Next_0655:	LD	DE,StopList
+Next_0656:	LD	A,(DE)
+	OR	A
+	JR	Z,Next_0657
+	CP	(HL)
+	JR	Z,Next_0658
+	INC	DE
+	JR	Next_0656
+Next_0657:	DEC	HL
+	DEC	C
+	JR	NZ,Next_0655
+Next_0658:	EX	DE,HL
+	INC	DE
+	PUSH	DE
+	LD	BC,_PARSE
+	CALL	BDOS
+	EX	DE,HL
+	BIT	4,B
+	JR	NZ,Next_0659
+	LD	(HL),"*"
+	INC	HL
+	LD	(HL),"."
+	INC	HL
+Next_0659:	LD	(HL),"*"
+	INC	HL
+	LD	(HL),0
+	POP	BC
+	POP	HL
+	PUSH	HL
+	PUSH	BC
+	EX	DE,HL
+	SBC	HL,DE
+	LD	A,L
+	DEC	A
+	LD	(Toevoeg),A
+	LD	DE,ErrorHand1
+	LD	C,_DEFER
+	CALL	BDOS
+	LD	DE,AbortExit7
+	LD	C,_DEFAB
+	CALL	BDOS
+	POP	HL
+	LD	DE,BufExtra
+	PUSH	DE
+	CALL	NCopy
+	POP	DE
+Next_0660:	CALL	FFirst
+	POP	HL
+	JP	NZ,Fout
+	PUSH	HL
+Next_0661:	LD	A,(FIB1+1)
+	CP	"."
+	JP	Z,Next_Tab2
+	LD	A,(Invul)
+	LD	B,A
+	LD	A,(Toevoeg)
+	LD	(Invul),A
+	LD	C,A
+	LD	A,B
+	SUB	C
+	JR	Z,Next_0663
+	LD	B,A
+Next_0662:	LD	A,29
+	CALL	PrintChar
+	DJNZ	Next_0662
+Next_0663:	POP	HL
+	PUSH	HL
+	CALL	S_Delete
+	PUSH	HL
+	LD	DE,FIB1+1
+	CALL	Lower
+	POP	HL
+Next_0664:	LD	A,(DE)
+	OR	A
+	JR	Z,Next_0665
+	CALL	PutLine
+	CALL	PrintChar
+	INC	DE
+	JR	Next_0664
+
+Next_0665:	LD	A,(FIB1+14)
+	BIT	4,A
+	JR	Z,Next_0666
+	LD	A,"\"
+	CALL	PutLine
+	CALL	PrintChar
+Next_0666:	LD	DE,0
+	LD	C,_DEFER
+	CALL	BDOS
+	LD	DE,AbortExit2
+	LD	C,_DEFAB
+	CALL	BDOS
+	POP	HL
+	JP	ReadLine2
+
+StopList:	DEFB	" +^<>|['",#22,0
+
+FFirst:	LD	B,#06
+	LD	A,(FileOrDir)
+	BIT	1,A
+	JR	Z,Next_0667
+	SET	4,B
+Next_0667:	LD	IX,FIB1
+	LD	C,_FFIRST
+	CALL	BDOS
+Next_0668:	JR	Z,Next_0669
+	CP	.NOFIL
+	CALL	Z,CheckNext
+	RET	NZ
+Next_0669:	LD	A,(FileOrDir)
+	BIT	0,A
+	JR	Z,Next_0671
+Next_0670:	XOR	A
+	RET
+
+Next_0671:	LD	A,(FIB1+14)
+	BIT	4,A
+	JR	NZ,Next_0670
+	LD	IX,FIB1
+	LD	C,_FNEXT
+	CALL	BDOS
+	JR	Next_0668
+
+FNext:	LD	IX,FIB1
+	LD	C,_FNEXT
+	CALL	BDOS
+	JR	Z,Next_0700
+	CP	.NOFIL
+	RET	NZ
+	CALL	CheckNext
+	JR	Z,Next_0700
+	CP	.NOFIL
+	RET	NZ
+	LD	DE,BufExtra
+	JR	FFirst
+
+Next_0700:	LD	A,(FileOrDir)
+	BIT	0,A
+	JR	NZ,Next_0670
+	LD	A,(FIB1+14)
+	BIT	4,A
+	JR	NZ,Next_0670
+	JR	FNext
+
+CheckNext:	LD	A,(FileOrDir)
+	BIT	2,A
+	JR	NZ,Next_0672
+	LD	A,.NOFIL
+	OR	A
+	RET
+
+Next_0672:	XOR	%00000011
+	LD	(FileOrDir),A
+	LD	DE,BufExtra
+	LD	B,#06
+	BIT	1,A
+	JR	Z,Next_0673
+	SET	4,B
+Next_0673:	LD	IX,FIB1
+	LD	C,_FFIRST
+	CALL	BDOS
+	RET
+
+Next_Tab:	LD	A,(#FBEB)
+	BIT	1,A
+	JR	NZ,Next_Tab2
+	LD	A,"+"
+	CALL	PutLine
+	CALL	PrintChar
+	LD	A,(Invul)
+	LD	(Toevoeg),A
+Next_Tab2:	LD	DE,ErrorHand1
+	LD	C,_DEFER
+	CALL	BDOS
+	LD	DE,AbortExit7
+	LD	C,_DEFAB
+	CALL	BDOS
+	CALL	FNext
+	JP	Z,Next_0661
+	POP	HL
+Fout:	LD	A,7
+	CALL	PrintChar
+	LD	A,(InsertFlag)
+	RES	1,A
+	RES	2,A
+	LD	(InsertFlag),A
+	PUSH	HL
+	LD	DE,#00
+	LD	C,_DEFER
+	CALL	BDOS
+	LD	DE,AbortExit2
+	LD	C,_DEFAB
+	CALL	BDOS
+	POP	HL
+	JP	ReadLine2
+
+PutCircle:	PUSH	HL
+	PUSH	DE
+	LD	A,(HL)
+	EX	DE,HL
+	EX	AF,AF'
+	CALL	Rd_Char
+	OR	A
+	EX	AF,AF'
+	CALL	Wr_Char
+	POP	DE
+	INC	DE
+	PUSH	DE
+	PUSH	HL
+	CALL	GetBufferLeng
+	PUSH	DE
+	LD	DE,BufferAdres
+	ADD	HL,DE
+	POP	DE
+	CALL	Compare4
+	POP	HL
+	POP	DE
+	JR	NZ,Next_0674
+	LD	DE,BufferAdres
+Next_0674:	CALL	GetEndAdres
+	INC	HL
+	PUSH	DE
+	PUSH	HL
+	EX	DE,HL
+	CALL	GetBufferLeng
+	PUSH	DE
+	LD	DE,BufferAdres
+	ADD	HL,DE
+	POP	DE
+	CALL	Compare4
+	POP	HL
+	POP	DE
+	JR	Z,Next_0675
+	CALL	SetEndAdres
+	XOR	A
+	EX	AF,AF'
+Next_0675:	POP	HL
+	EX	AF,AF'
+	RET
+
+Return:	LD	A,(InsertFlag)
+	BIT	2,A
+	JR	NZ,Next_0676
+	LD	A,(#FBEB)
+	BIT	1,A
+	CALL	NZ,Zet
+	JR	Next_0677
+
+Next_0676:	CALL	More
+Next_0677:	CALL	BlockCursor
+	POP	IY
+	RET
+
+Zet:	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	B,A
+	PUSH	HL
+	CALL	GetPutAdres
+	INC	HL
+	CALL	SetReadAdres
+	DEC	HL
+	EX	DE,HL
+	POP	HL
+Next_0678:	INC	HL
+	CALL	PutCircle
+	DJNZ	Next_0678
+	INC	HL
+	LD	(HL),0
+	CALL	PutCircle
+	JR	Z,Next_0680
+	PUSH	DE
+Next_0679:	CALL	PutCircle
+	JR	NZ,Next_0679
+	POP	DE
+Next_0680:	EX	DE,HL
+	CALL	SetPutAdres
+	RET
+
+Less:	PUSH	HL
+	PUSH	DE
+	CALL	GetReadAdres
+	LD	DE,BufferAdres
+	CALL	Compare4
+	DEC	HL
+	CALL	SetReadAdres
+	JR	NZ,Next_0682
+	CALL	GetEndAdres
+Next_0681:	CALL	SetReadAdres
+Next_0682:	CALL	Rd_Char
+	OR	A
+	POP	DE
+	POP	HL
+	RET
+
+More:	PUSH	HL
+	PUSH	DE
+	CALL	GetReadAdres
+	PUSH	HL
+	CALL	GetEndAdres
+	EX	DE,HL
+	POP	HL
+	OR	A
+	SBC	HL,DE
+	CALL	GetReadAdres
+	INC	HL
+	CALL	SetReadAdres
+	JR	C,Next_0682
+	JR	NZ,Next_0682
+	LD	HL,BufferAdres
+	JR	Next_0681
+
+Rd_Char:	LD	A,(MapperPage)
+	CALL	RD_SEG
+	RET
+
+Wr_Char:	PUSH	DE
+	PUSH	AF
+	LD	E,A
+	LD	A,(MapperPage)
+	CALL	WR_SEG
+	POP	AF
+	POP	DE
+	RET
+
+CursorUp:	PUSH	HL
+	CALL	GetEndAdres
+	LD	DE,BufferAdres
+	CALL	Compare4
+	POP	HL
+	JP	C,ReadLine
+	PUSH	HL
+Next_0683:	CALL	Less
+	JR	Z,Next_0683
+Next_0684:	CALL	Less
+	JR	NZ,Next_0684
+	CALL	More
+Next_0685:	POP	HL
+	CALL	Wis
+	PUSH	HL
+	CALL	GetReadAdres
+	EX	DE,HL
+	POP	HL
+	PUSH	DE
+	CALL	Less
+Next_0686:	CALL	More
+	OR	A
+	JR	Z,Next_0687
+	CALL	PutLine
+	CALL	PrintChar
+	JR	Next_0686
+Next_0687:	POP	DE
+	EX	DE,HL
+	CALL	SetReadAdres
+	EX	DE,HL
+	LD	A,(InsertFlag)
+	SET	2,A
+	LD	(InsertFlag),A
+	JP	ReadLine
+
+CursorDown:	PUSH	HL
+	CALL	GetEndAdres
+	LD	DE,BufferAdres
+	CALL	Compare4
+	POP	HL
+	JP	C,ReadLine
+	PUSH	HL
+	CALL	Less
+Next_0688:	CALL	More
+	JR	NZ,Next_0688
+Next_0689:	CALL	More
+	JR	Z,Next_0689
+	JR	Next_0685
+
+AbortExit7:	POP	DE
+	OR	#01
+	RET
+
+GetAliasAdres:	LD	HL,AliasAdres
+	JR	Next_0690
+GetBufferLeng:	LD	HL,BufferLengte
+	JR	Next_0690
+GetReadAdres:	LD	HL,ReadAdres
+	JR	Next_0690
+GetPutAdres:	LD	HL,PutAdres
+	JR	Next_0690
+GetEndAdres:	LD	HL,EndAdres
+Next_0690:	CALL	Rd_Char
+	PUSH	AF
+	INC	HL
+	CALL	Rd_Char
+	LD	H,A
+	POP	AF
+	LD	L,A
+	RET
+
+SetAliasEnd:	PUSH	DE
+	PUSH	HL
+	LD	HL,AliasEnd
+	JR	Next_0691
+SetAliasAdres:	PUSH	DE
+	PUSH	HL
+	LD	HL,AliasAdres
+	JR	Next_0691
+SetBufferLeng:	PUSH	DE
+	PUSH	HL
+	LD	HL,BufferLengte
+	JR	Next_0691
+SetReadAdres:	PUSH	DE
+	PUSH	HL
+	LD	HL,ReadAdres
+	JR	Next_0691
+SetPutAdres:	PUSH	DE
+	PUSH	HL
+	LD	HL,PutAdres
+	JR	Next_0691
+SetEndAdres:	PUSH	DE
+	PUSH	HL
+	LD	HL,EndAdres
+Next_0691:	POP	DE
+	PUSH	DE
+	LD	A,E
+	CALL	Wr_Char
+	INC	HL
+	LD	A,D
+	CALL	Wr_Char
+	POP	HL
+	POP	DE
+	RET
+
