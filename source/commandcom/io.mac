@@ -6,8 +6,8 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-LPrintCode:	CALL	GetAdres
-LPrintString:	CALL	PrintString
+DMESSCR:	CALL	GETMSG
+DMSCR:	CALL	PrintString
 
 LPrint:	LD	A,#0D
 	CALL	PrintChar
@@ -21,15 +21,15 @@ PrintChar:	PUSH	HL
 	JR	Z,Next_0301
 	LD	A,E
 	CP	#0D
-	JR	NZ,Next_0297
+	JR	NZ,ouch_nocr
 	XOR	A
 	LD	(ColumnCount),A
 	JR	Next_0301
 
-Next_0297:	CP	#0A
-	JR	Z,Next_0302
-	CP	#09
-	JR	NZ,Next_0299
+ouch_nocr:	CP	#0A
+	JR	Z,ouch_chkpause	; yes
+	CP	#09	; tab?
+	JR	NZ,ouch_k2nd	; no
 	LD	A,(ColumnMax)
 	LD	D,A
 	LD	A,(ColumnCount)
@@ -39,13 +39,13 @@ Next_0297:	CP	#0A
 	CP	D
 	JR	C,Next_0301
 	LD	A,(ColumnCount)
-Next_0298:	SUB	D
-	JR	NC,Next_0298
+ouch_subloop:	SUB	D
+	JR	NC,ouch_subloop
 	ADD	A,D
 	LD	(ColumnCount),A
-	JR	Next_0302
+	JR	ouch_chkpause
 
-Next_0299:	LD	A,(ColumnCount)
+ouch_k2nd:	LD	A,(ColumnCount)
 	INC	A
 	LD	(ColumnCount),A
 	LD	D,A
@@ -54,30 +54,30 @@ Next_0299:	LD	A,(ColumnCount)
 	JR	NZ,Next_0301
 	XOR	A
 	LD	(ColumnCount),A
-Next_0302:	CALL	ConsoleOutput
-	CALL	LineCount
-Next_0303:	XOR	A
+ouch_chkpause:	CALL	conout
+	CALL	chkpause
+NPAUS:	XOR	A
 	POP	BC
 	POP	DE
 	POP	HL
 	RET
 
-Next_0301:	CALL	ConsoleOutput
-	JR	Next_0303
+Next_0301:	CALL	conout
+	JR	NPAUS
 
-LineCount:	LD	A,(RowMax)
+chkpause:	LD	A,(RowMax)
 	DEC	A
 	LD	(RowMax),A
 	RET	NZ
-	CALL	AskAnyKey
-	CALL	FindScrSize
+	CALL	PAUSE
+	CALL	SETP
 	RET
 
-ConsoleOutput:	LD	C,_CONOUT
+conout:	LD	C,_CONOUT
 	JP	BDOS
 
-PrintDigit:	JP	NZ,PrintChar
-PrintSpace:	LD	A," "
+SPACE?:	JP	NZ,PrintChar
+SPACE:	LD	A," "
 	JP	PrintChar
 
 PrintDigit2:	JR	Z,PrintSpace2
@@ -87,41 +87,42 @@ Next_0612:	LD	(IX),A
 PrintSpace2:	LD	A," "
 	JR	Next_0612
 
-FindScrSize:	PUSH	HL
+SETP:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
-	LD	BC,#014B
-	LD	A,#04
+	LD	BC,#014B	; Get the output height.
+	LD	A,#04	;   (0 => 'infinite').
 	CALL	BDOS
-	LD	A,E
+	LD	A,E	; Get width.
 	LD	(ColumnMax),A
-	LD	A,D
+	LD	A,D	; Get height.
 	POP	BC
 	POP	DE
 	POP	HL
-	RET	NZ
+	RET	NZ	; Ignore it if error (shouldn't occur).
 	DEC	A
-	LD	(RowMax),A
+	LD	(RowMax),A	; Save height in /P line count.
 	RET
 
-PrintCode:	CALL	GetAdres
+		SUBTTL  DMESS
+DMESS:	CALL	GETMSG
 PrintString:	LD	A,(DE)
 	OR	A
-	RET	Z
+	RET	Z	; Return if done.
 	INC	DE
-	CALL	PrintChar
+	CALL	PrintChar	; Else output the character.
 	JR	PrintString
 
-GetAdres:	LD	B,A
-	LD	DE,StrAdr_Norm
+GETMSG:	LD	B,A
+	LD	DE,MESSAGES
 	INC	B
-Next_0305:	DEC	B
-	RET	Z
-Next_0306:	LD	A,(DE)
+MSG10:	DEC	B
+	RET	Z	; Return with DE -> message if found.
+MSG20:	LD	A,(DE)
 	INC	DE
 	OR	A
-	JR	NZ,Next_0306
-	JR	Next_0305
+	JR	NZ,MSG20
+	JR	MSG10
 
 FindAlias:	PUSH	DE
 	PUSH	HL
@@ -192,7 +193,7 @@ Next_0616:	LD	E,(HL)
 	JR	Z,Next_0619
 	PUSH	BC
 	PUSH	HL
-	CALL	Compare
+	CALL	STRCMP
 	JR	Z,Next_0617
 	POP	HL
 	ADD	HL,DE
@@ -234,7 +235,7 @@ Next_0620:	LD	E,(HL)
 	PUSH	HL
 	INC	HL
 	INC	HL
-	CALL	Compare
+	CALL	STRCMP
 	JR	Z,Next_0621
 	POP	HL
 	ADD	HL,DE
@@ -317,7 +318,7 @@ Next_0629:	LD	(BC),A
 	LD	(BC),A
 	JR	Next_0626
 
-GetMapSupport:	PUSH	AF
+SETLANG:	PUSH	AF
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
@@ -422,20 +423,27 @@ RestorePage2:	LD	A,(TemporaryPage)
 	CALL	PUT_P2
 	RET
 
-GetKey:	LD	C,_INNOE
+		SUBTTL  INCH
+;******************************************************************************
+;        This  routine  waits  for  a  key  to  be  pressed and then echos the
+; character and prints a CR,LF, returning the character in L.  Before  reading
+; the  character,  a  loop  is  entered  which  ensures that no characters are
+; immediately waiting to be read, thus flushing the keyboard buffer first.
+; On exit, C contains the character.
+IC0:	LD	C,_INNOE	; Get character with no echo.
 	CALL	BDOS
-WaitKey:	LD	C,_CONST
+INCH:	LD	C,_CONST	; Console status.
 	CALL	BDOS
-	JR	NZ,GetKey
-	LD	C,_CONIN
-	CALL	BDOS
+	JR	NZ,IC0	; If key pressed, then read it.
+	LD	C,_CONIN	; Wait for, read & echo another key.
+	CALL	BDOS	; Character in L.
 	JP	LPrint
 
-GetLine:	LD	DE,BufEnvData
+INLI:	LD	DE,BufEnvData
 	LD	A,#7F
 	LD	(DE),A
 	LD	HL,Env_Expand
-	CALL	Check_OFF
+	CALL	OFF?
 	SBC	A,A
 	LD	C,_BUFIN
 	CALL	Z,BDOS

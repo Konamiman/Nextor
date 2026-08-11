@@ -6,18 +6,18 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-Start2:	LD	HL,#80
+CLI:	LD	HL,#80
 	LD	C,(HL)
 	LD	B,#00
 	ADD	HL,BC
 	INC	HL
 	LD	(HL),B
 	SBC	HL,BC
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	(ComlinChar1),A
 	LD	(ComlinChar2),A
 	EXX
-	LD	HL,Data_Pipe
+	LD	HL,TEMPFN
 	LD	DE,PipeFileName
 	LD	BC,#07
 	LDIR
@@ -53,7 +53,7 @@ Start2:	LD	HL,#80
 	LD	BC,15
 	LD	(HL),#00
 	LDIR
-	LD	DE,AbortExit2
+	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
 Next_0026:	LD	IY,RedirState
@@ -69,38 +69,38 @@ Next_0026:	LD	IY,RedirState
 	LD	DE,(PipeAdres)
 	LD	A,D
 	OR	E
-	JP	NZ,Next_0038
+	JP	NZ,REPIPE
 	LD	DE,(NextAdres)
 	LD	A,D
 	OR	E
 	JP	NZ,Next_0403
-	LD	HL,Env_Redir
-	CALL	Check_OFF
+	LD	HL,REDIR$
+	CALL	OFF?
 	CCF
 	SBC	A,A
 	LD	(RedirState),A
 	LD	HL,Env_Alias
-	CALL	Check_OFF
+	CALL	OFF?
 	CCF
 	SBC	A,A
 	LD	(AliasState),A
 	LD	HL,Env_Separ
-	CALL	Check_OFF
+	CALL	OFF?
 	CCF
 	SBC	A,A
 	LD	(SeparState),A
 	EXX
 	LD	A,(HL)
 	OR	A
-	JP	NZ,Next_0037
+	JP	NZ,CMD
 	LD	A,(BatchHandle)
 	INC	A
-	JR	Z,Next_0029
+	JR	Z,NOBAT
 	LD	HL,ErrorCode
 	LD	A,(HL)
 	LD	(HL),#00
 	OR	A
-	JR	Z,Next_0028
+	JR	Z,NOTEND
 	PUSH	AF
 	LD	A,(ID_Redir2)
 	LD	(ID_Redir),A
@@ -113,32 +113,32 @@ Next_0026:	LD	IY,RedirState
 	CALL	NZ,ReleaseBTM
 	POP	AF
 	CP	.OKCMD
-	JR	NZ,Next_0027
+	JR	NZ,JERROR
 	XOR	A
-Next_0027:	JP	Next_0040
+JERROR:	JP	ERROR
 
-Next_0028:	CALL	CheckEcho
-	JR	C,Next_0033
+NOTEND:	CALL	ECHO?	; Batch file ECHO ON ?
+	JR	C,Next_0033	; Go & read command if not.
 	SCF
-	JR	Next_0031
+	JR	PROMPT	; Else print prompt & get command.
 
-Next_0029:	LD	A,(ComlinChar2)
-	OR	A
-	JR	Z,Next_0031
-	LD	A,(AbortError)
-	OR	A
-	JR	NZ,Next_0030
-	LD	A,.OKCMD
-Next_0030:	JP	AbortExit1
+NOBAT:	LD	A,(ComlinChar2)	; If EXITF is NZ, then exit COMMAND.COM
+	OR	A	;   with the error code from the last
+	JR	Z,PROMPT	;   command, which is in ERR (NC).
+	LD	A,(AbortError)	; If no error, then return .OKCMD,
+	OR	A	;   which does not produce an error
+	JR	NZ,JEXIT	;   but which is used by MSX-DOS.SYS to
+	LD	A,.OKCMD	;   prevent a spurious re-load of
+JEXIT:	JP	EXIT
 
-Next_0031:	PUSH	AF
+PROMPT:	PUSH	AF
 	LD	HL,ExtraCRLF
 	XOR	A
 	CP	(HL)
 	LD	(HL),A
 	CALL	NZ,LPrint
-	LD	HL,Env_Prompt
-	CALL	GetEnvData2
+	LD	HL,PROMPT$
+	CALL	GENV2
 	LD	A,(DE)
 	OR	A
 	JR	NZ,Next_0032
@@ -155,48 +155,48 @@ Next_0032:	LD	HL,Buffer1
 	INC	DE
 	CALL	PrintString
 	POP	AF
-	JR	NC,Next_0036
-Next_0033:	CALL	ReadBatLine
+	JR	NC,GETCON
+Next_0033:	CALL	INBAT
 	JR	C,Next_0033
-	JR	Z,Next_0035
+	JR	Z,GOTBAT
 	CP	.EOF
-	JR	Z,Next_0034
+	JR	Z,BATEOF
 	PUSH	AF
 	CALL	LPrint
 	POP	AF
-	JP	Next_0040
+	JP	ERROR
 
-Next_0034:	LD	A,.OKCMD
-Next_0035:	LD	(ErrorCode),A
-	SCF
-Next_0036:	CALL	NC,GetLine
+BATEOF:	LD	A,.OKCMD	; OKCMD => return no error.
+GOTBAT:	LD	(ErrorCode),A
+	SCF	; Skip console read.
+GETCON:	CALL	NC,INLI	; Read from console if not batch file.
 	INC	HL
-Next_0037:	EX	DE,HL
+CMD:	EX	DE,HL
 	CALL	Aliasing
-	JP	NZ,Next_0040
+	JP	NZ,ERROR
 Next_0403:	CALL	MultiComm
 	LD	HL,Buffer1
 	LD	IX,BufExtra3
 	LD	(IX),#00
 	CALL	ParseLine
-	JR	NZ,Next_0040
+	JR	NZ,ERROR
 	EX	DE,HL
 	INC	DE
 	PUSH	DE
 	LD	A,(BatchHandle)
 	INC	A
 	SCF
-	CALL	NZ,CheckEcho
-	CALL	NC,LPrintString
+	CALL	NZ,ECHO?
+	CALL	NC,DMSCR
 	LD	C,_FORK
 	CALL	BDOS
 	POP	DE
-	JR	NZ,Next_0040
+	JR	NZ,ERROR
 	LD	A,B
 	LD	(ID_Redir),A
 	LD	HL,Buffer2
-	CALL	Redirecting
-	JR	NZ,Next_0040
+	CALL	REDIRECT
+	JR	NZ,ERROR
 	EX	DE,HL
 	INC	DE
 	XOR	A
@@ -205,156 +205,156 @@ Next_0403:	CALL	MultiComm
 	LD	H,A
 	LD	L,A
 	LD	(PipeAdres),HL
-Next_0038:	PUSH	DE
-	CALL	Pipelining
+REPIPE:	PUSH	DE
+	CALL	PIPE
 	POP	HL
-	JR	NZ,Next_0040
+	JR	NZ,ERROR
 	PUSH	HL
 	CALL	RemoveQuote
 	POP	HL
-	CALL	Executing
+	CALL	DO_CMD
 	CP	.BADCM
-	JR	NZ,Next_0040
+	JR	NZ,ERROR
 	LD	HL,Txt_Unknown
 	LD	DE,BufEnvData
 	CALL	GetAlias
-	JR	NZ,Next_0040
+	JR	NZ,ERROR
 	LD	A,(DE)
 	OR	A
 	JR	NZ,Next_0403
 	LD	A,.BADCM
-	JR	Next_0040
+	JR	ERROR
 
 Txt_Unknown:	DEFB	"UNKNOWN_CMD",0
 
-AbortExit2:	CP	.INERR
-	JR	Z,Next_0039
-	CP	.OUTERR
-	JR	NZ,Next_0040
-	LD	A,#3D
+CLI_ABORT:	CP	.INERR	; Error on standard input ?
+	JR	Z,Next_0039	; Go if yes.
+	CP	.OUTERR	; Error on standard output ?
+	JR	NZ,ERROR	; Give error if not.
+	LD	A,#3D	; Error type = output error.
 	DEFB	#21
 Next_0039:	LD	A,#3C
 	LD	(StringCode),A
-	LD	A,(ID_Redir)
-	OR	A
-	LD	A,B
-	JP	Z,AbortExit1
-Next_0040:	LD	SP,BootStrap
-	LD	(AbortError),A
-	LD	B,A
-	PUSH	BC
-	LD	DE,BufEnvName
-	CP	" "
-	JR	C,Next_0041
-	CP	.OKCMD
-	JR	Z,Next_0041
-	CP	#80
-	JR	Z,Next_0041
-	LD	C,_EXPLAIN
+	LD	A,(ID_Redir)	; If not forked, then exit with error
+	OR	A	;   code since there's no way of recov-
+	LD	A,B	;   ering from this situation.
+	JP	Z,EXIT	; Else give error.
+ERROR:	LD	SP,BootStrap	; Set up SP again in case an abort.
+	LD	(AbortError),A	; Save error for terminating COMMAND2.
+	LD	B,A	; B=error code.
+	PUSH	BC	; Save it for later.
+	LD	DE,BufEnvName	; DE -> buffer to get message into.
+	CP	" "	; User error ?
+	JR	C,Next_0041	; Go if yes (no message required).
+	CP	.OKCMD	; Means command executed OK from
+	JR	Z,Next_0041	;   COMMAND, so no msg for this either.
+	CP	#80	; Means 'Y' response from 'Terminate
+	JR	Z,Next_0041	;   batch file ?' so no message.
+	LD	C,_EXPLAIN	; Get message to (DE) from system.
 	CALL	BDOS
 	DEFB	#21
 Next_0041:	XOR	A
 	LD	(DE),A
-	LD	BC,#FF5F
-	LD	D,#00
-	CALL	BDOS
-	POP	BC
-	LD	C,B
+	LD	BC,#FF5F	; Flush buffers for all drives.
+	LD	D,#00	; Flush but don't invalidate.
+	CALL	BDOS	;   (error ignored)
+	POP	BC	; B=error code.
+	LD	C,B	; And C.
 	LD	HL,ComlinChar1
-	LD	A,(HL)
-	LD	(HL),#00
+	LD	A,(HL)	; Suppress error message (<>0 => yes) ?
+	LD	(HL),#00	;   (reset again for next time round)
 	OR	A
-	JR	NZ,Next_0043
-	LD	A,B
-	CP	.BADCM
-	CALL	NZ,Next_0049
-	JR	NZ,Next_0042
+	JR	NZ,TSTBAT	; Test for ending batch file if yes.
+	LD	A,B	; Get error code.
+	CP	.BADCM	; Turn off redirection if command abort
+	CALL	NZ,ABORT?	;   error or 'Unrecognized command'.
+	JR	NZ,NABERR
 	PUSH	BC
 	LD	BC,_REDIR
-	LD	A,#01
-	CALL	BDOS
+	LD	A,#01	; No redirection of error messages if
+	CALL	BDOS	;   command aborted prematurely.
 	POP	BC
 	LD	A,B
-	CP	.ABORT
-	JR	Z,Next_0042
+	CP	.ABORT	; Extra CR,LF if command aborted, but
+	JR	Z,NABERR	;   not if .ABORT or if .BADCMD.
 	CP	.BADCM
 	CALL	NZ,LPrint
-Next_0042:	LD	A,(BufEnvName)
-	OR	A
-	JR	Z,Next_0043
-	CALL	LPrint
-	LD	A,#0D
-	CALL	PrintCode
-	LD	A,(StringCode)
-	ADD	A,#01
+NABERR:	LD	A,(BufEnvName)
+	OR	A	; Message given ?
+	JR	Z,TSTBAT	; Go if not.
+	CALL	LPrint	; CR, LF before error message.
+	LD	A,#0D	; Three stars before message.
+	CALL	DMESS
+	LD	A,(StringCode)	; Get error type.
+	ADD	A,#01	; Print type message if not FF.
 	DEC	A
 	PUSH	AF
-	CALL	NC,PrintCode
+	CALL	NC,DMESS
 	LD	DE,BufEnvName
-	CALL	PrintString
-	LD	A,#0E
-	CALL	LPrintCode
+	CALL	PrintString	; Print actual error message.
+	LD	A,#0E	; Followed by message after error.
+	CALL	DMESSCR
 	POP	AF
-	CP	#3B
-	JR	Z,Next_0045
-	CP	#3A
-	JR	Z,Next_0044
-Next_0043:	LD	A,C
-	CP	#80
-	JR	Z,Next_0046
-	OR	A
-	JR	Z,Next_0047
-	CALL	Next_0049
-	JR	NZ,Next_0047
-Next_0044:	CALL	Rejoin
-Next_0045:	LD	BC,_REDIR
-	LD	A,#01
-	CALL	BDOS
+	CP	#3B	; If error from reading batch file,
+	JR	Z,TBF	;   then issue 'Terminate' prompt.
+	CP	#3A	; If piping error, then cancel all
+	JR	Z,NOPIPE	;   piping and issue prompt.
+TSTBAT:	LD	A,C	; Get error code.
+	CP	#80	; If it's .BATEND, then immediately
+	JR	Z,ENDBAT	;   terminate any executing batch file.
+	OR	A	; If it's a command abort error, then
+	JR	Z,NABORT	;   issue 'Terminate batch file' prompt
+	CALL	ABORT?	;   but only if the secondary error
+	JR	NZ,NABORT	;   code is non-zero.
+NOPIPE:	CALL	DELPIPE
+TBF:	LD	BC,_REDIR	; Turn off redirection to
+	LD	A,#01	;   do 'Terminate batch file'
+	CALL	BDOS	;   prompting.
 	LD	A,(BatchHandle)
 	INC	A
-	LD	A,#36
-	CALL	NZ,Find_YyNn
-	JR	Z,Next_0047
-Next_0046:	LD	HL,ErrorCode
-	LD	(HL),#80
-Next_0047:	LD	A,#3A
+	LD	A,#36	; Prompt 'Terminate batch file (Y/N)?'
+	CALL	NZ,YN	;   and get response if in batch file.
+	JR	Z,NABORT	; Don't abort if response was 'N'.
+ENDBAT:	LD	HL,ErrorCode	; BATEND=NZ => end batch file, if any.
+	LD	(HL),#80	; Error for 'batch file terminated'.
+NABORT:	LD	A,#3A	; Set error type to piping error.
 	LD	(StringCode),A
-	CALL	Rejoin2
-	JP	NZ,Next_0040
-	DEC	A
+	CALL	UNPIPE	; Tidy up if command was piped.
+	JP	NZ,ERROR
+	DEC	A	; Clear ERRTYPE.
 	LD	(StringCode),A
 	LD	DE,(PipeAdres)
-	LD	A,D
+	LD	A,D	; Another command in pipe to execute ?
 	OR	E
-	JR	NZ,Next_0048
-	LD	HL,ID_Redir
-	LD	B,(HL)
+	JR	NZ,DONE	; Execute it if yes.
+	LD	HL,ID_Redir	; If forked, then do a join to cancel
+	LD	B,(HL)	;   redirection.
 	XOR	A
-	LD	(HL),A
+	LD	(HL),A	; 0 => not forked.
 	OR	B
 	LD	C,_JOIN
-	CALL	NZ,BDOS
-	JP	NZ,Next_0040
-	LD	HL,Null
+	CALL	NZ,BDOS	; Join, and give error if any (should
+	JP	NZ,ERROR	;   not normally occur).
+	LD	HL,Null	; No command to execute.
 	EXX
-Next_0048:	JP	Next_0026
+DONE:	JP	Next_0026
 
-Next_0049:	CP	.ABORT
+ABORT?:	CP	.ABORT	; Return Z if command abort error.
 	RET	Z
 	CP	.STOP
 	RET	Z
 	CP	.CTRLC
 	RET	Z
-	LD	A,(StringCode)
-	CP	#3C
-	RET	Z
+	LD	A,(StringCode)	; Get error type.
+	CP	#3C	; If an input or output error then
+	RET	Z	;   command was aborted.
 	CP	#3D
 	RET
 
-ErrorHand1:	LD	A,#01
-	RET
+DSKERR:	LD	A,#01	; Disk error routine for printing
+	RET	;   prompt just auto-aborts.
 
-AbortExit3:	POP	HL
+ABRT:	POP	HL
 	LD	A,#FF
 	RET
 
@@ -396,7 +396,7 @@ Next_0406:	LD	(HL),A
 	JR	NZ,Next_0406
 Next_0407:	LD	(HL),#00
 	EX	DE,HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	PUSH	HL
 	LD	HL,BufEnvName
 	PUSH	HL
@@ -460,7 +460,7 @@ Next_0411:	LD	C,_CONST
 	POP	DE
 	JP	Next_0404
 
-Next_0412:	CALL	CheckChar
+Next_0412:	CALL	RDCHAR
 	JR	Z,Next_0413
 	JR	C,Next_0412
 	CP	"^"
@@ -490,7 +490,7 @@ MultiComm:	PUSH	DE
 	BIT	7,(IY+#2A)
 	JR	NZ,Next_0417
 	LD	C,#00
-Next_0416:	CALL	CheckChar
+Next_0416:	CALL	RDCHAR
 	JR	Z,Next_0417
 	JR	C,Next_0416
 	CP	"^"
@@ -499,7 +499,7 @@ Next_0416:	CALL	CheckChar
 	DEC	HL
 	LD	(HL),#00
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	NZ,Next_0418
 Next_0417:	LD	H,A
 	LD	L,A
@@ -544,31 +544,31 @@ ParseLine:	XOR	A
 	LD	(HL),A
 	LD	C,A
 	LD	(FIB2),A
-Next_0050:	CALL	CheckChar
-	JP	C,Next_0056
+Next_0050:	CALL	RDCHAR
+	JP	C,RP30
 	CP	"%"
-	JP	NZ,Next_0056
+	JP	NZ,RP30
 	LD	A,(DE)
 	INC	DE
 	CP	"&"
 	JR	Z,Next_0423
 	CP	"0"
-	JR	C,Next_0051
+	JR	C,RP20
 	CP	"9"+1
-	JR	NC,Next_0051
+	JR	NC,RP20
 	DEC	DE
 	PUSH	BC
 	PUSH	HL
 	PUSH	DE
 	EX	DE,HL
-	CALL	GetValue_8
+	CALL	GET8
 	JR	Z,Next_0424
 	POP	DE
 	POP	HL
 	POP	BC
 	LD	A,(DE)
 	INC	DE
-	JR	Next_0051
+	JR	RP20
 
 Next_0423:	PUSH	BC
 	PUSH	HL
@@ -593,14 +593,14 @@ Next_0424:	LD	A,E
 	INC	DE
 Next_0425:	POP	AF
 	PUSH	DE
-	CALL	MakeComLin
+	CALL	EXPAND
 	POP	DE
 	POP	BC
 	RET	NZ
 	JR	Next_0050
 
-Next_0051:	CP	"%"
-	JP	Z,Next_0056
+RP20:	CP	"%"
+	JP	Z,RP30
 	DEC	DE
 	PUSH	BC
 	PUSH	HL
@@ -639,34 +639,34 @@ Next_0428:	INC	D
 	JP	Z,Next_0435
 	LD	BC,#FF6B
 	CALL	BDOS
-	JR	NZ,Next_0054
+	JR	NZ,RP28
 	PUSH	IX
 Next_0429:	POP	IX
 	POP	HL
 	POP	HL
 	EX	(SP),HL
-Next_0052:	LD	A,(DE)
+RP22:	LD	A,(DE)
 	INC	DE
-	CALL	PutComChar
-	JR	NZ,Next_0053
-	JR	C,Next_0052
-Next_0053:	POP	DE
+	CALL	WRCHAR
+	JR	NZ,RP23
+	JR	C,RP22
+RP23:	POP	DE
 	POP	BC
 	RET	NZ
 	JP	Next_0050
 
 Next_0430:	POP	DE
-	JR	Next_0055
+	JR	RP29
 
-Next_0054:	POP	DE
+RP28:	POP	DE
 	POP	HL
 	DEC	HL
 	LD	(HL),"%"
-Next_0055:	POP	HL
+RP29:	POP	HL
 	POP	BC
 	LD	A,(DE)
 	INC	DE
-Next_0056:	CALL	PutComChar
+RP30:	CALL	WRCHAR
 	RET	NZ
 	JP	C,Next_0050
 	RET
@@ -688,7 +688,7 @@ Next_0433:	JR	NZ,Next_0434
 	LD	A,(HL)
 	OR	A
 	JR	Z,Next_0434
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	JR	C,Next_0433
 	LD	A,(HL)
 	INC	HL
@@ -750,7 +750,7 @@ Next_0438:	CP	"]"
 Next_0439:	INC	A
 	POP	HL
 Next_0440:	POP	IX
-	JP	NZ,Next_0055
+	JP	NZ,RP29
 	POP	BC
 	LD	A,B
 	EX	AF,AF'
@@ -772,7 +772,7 @@ Next_0442:	JP	NZ,Next_0434
 	LD	A,(HL)
 	OR	A
 	JP	Z,Next_0434
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	JR	C,Next_0442
 	EX	AF,AF'
 	LD	B,A
@@ -788,124 +788,152 @@ Next_0442:	JP	NZ,Next_0434
 	PUSH	BC
 	RET
 
-MakeComLin:	LD	B,A
-	LD	C,#00
-	LD	DE,(LineAdres)
-	LD	A,(HL)
+;        This routine is called during the command line parsing to expand  the
+; user's batch file replacable parameters, accessed as %0 to %9.
+;        When  the  batch  file  was  invoked, the command line was saved in a
+; buffer and the pointer PERC0 pointed to the start of it. When not in a batch
+; file,  PERC0  points  to a null (a dummy null command line) so that %0 to %9
+; are replaced by a null string.
+;        On entry, B is the number of the parameter, 1 to 10 for parameters %0
+; to %9. The length byte of the current command line is saved, and  the  first
+; parameter expanded from the command at (PERC0). Then B is decremented and if
+; not 0, then the old length byte is restored which causes the  just  expanded
+; parameter  to  be  ignored, and then the next parameter is expanded.  When B
+; decrements to 0 the length byte is  not  restored,  thus  making  the  newly
+; expanded  parameter part of the command line. This is not the most efficient
+; way of doing it but it is adequate.
+; On entry, B is the parameter number required (1 to 10).
+;           HL points to the length byte of the new expanded command line.
+; On exit,  HL is preserved and the parameter has been expanded.
+;           AF = error code.
+EXPAND:	LD	B,A	; Save parameter number, 1 => %0.
+	LD	C,#00	; Not in quotes initially.
+	LD	DE,(LineAdres)	; Point to parameter's command line.
+	LD	A,(HL)	; Save current length byte.
 	EX	AF,AF'
-Next_0057:	CALL	CheckChar
-	JR	C,Next_0060
+EXP10:	CALL	RDCHAR
+	JR	C,EXP20
 	CP	"/"
-	JR	Z,Next_0058
-	CALL	SkipChar
-	JR	NZ,Next_0060
-Next_0058:	EX	DE,HL
+	JR	Z,GOTSEP
+	CALL	SEP?
+	JR	NZ,EXP20
+GOTSEP:	EX	DE,HL
 	DEC	HL
 	PUSH	BC
-	CALL	FndFirstChr
+	CALL	GETCH
 	POP	BC
 	EX	DE,HL
-	DJNZ	Next_0059
+	DJNZ	NXTPAR
 	LD	A,(FIB2)
 	OR	A
 	RET	Z
 	DEC	DE
 	LD	A,(DE)
-	CALL	SkipChar
+	CALL	SEP?
 	JR	Z,Next_0443
 	INC	DE
 Next_0443:	LD	A,(DE)
 	INC	DE
-	CALL	PutComChar
+	CALL	WRCHAR
 	RET	NZ
 	JR	C,Next_0443
 	RET
 
-Next_0059:	EX	AF,AF'
-	LD	(HL),A
+NXTPAR:	EX	AF,AF'
+	LD	(HL),A	; Restore old command line.
 	EX	AF,AF'
-	LD	A,(DE)
-	CP	"/"
-	JR	NZ,Next_0057
+	LD	A,(DE)	; Get first character of next param.
+	CP	"/"	; Fiddle to make sure / options are
+	JR	NZ,EXP10	;   separate parameters.
 	INC	DE
-Next_0060:	CALL	PutComChar
-	RET	NZ
-	JR	C,Next_0057
-	RET
+EXP20:	CALL	WRCHAR	; Put character in buffer.
+	RET	NZ	; return if error.
+	JR	C,EXP10	; Repeat for next character if not end.
+	RET	; Else return with no error.
 
-Next_0061:	LD	A,.IFNM
+		SUBTTL	REDIRECT
+;        This routine is called after all the other  parameter  expansion  has
+; been  performed when parsing a command line. It removes all re-direction and
+; piping information from the command line, so that commands and  programs  do
+; not know anything about them.
+; On entry, DE points to the first character of the ASCIIZ command line.
+;           HL points the start of a buffer for the new command line.
+; On exit,  AF = error code.
+;           HL is preserved, and points to the length byte of the new command.
+;       The actual entry point is at REDIRECT.
+BADFN:	LD	A,.IFNM
 	OR	A
 	RET
 
-Redirecting:	XOR	A
-	LD	(BufEnvData),A
-	LD	(BufEnvName),A
-	LD	C,A
-	LD	(HL),A
-Next_0062:	CALL	CheckChar
-	JR	C,Next_0067
+REDIRECT:	XOR	A
+	LD	(BufEnvData),A	; No output redirection yet.
+	LD	(BufEnvName),A	; No input redirection yet.
+	LD	C,A	; Clear quotes flag.
+	LD	(HL),A	; Initialise length byte.
+RED10:	CALL	RDCHAR
+	JR	C,NXTRED
 	BIT	7,(IY+#00)
-	JR	NZ,Next_0067
+	JR	NZ,NXTRED
 	CP	"<"
-	JR	Z,Next_0063
+	JR	Z,RED20
 	CP	">"
-	JR	NZ,Next_0067
+	JR	NZ,NXTRED
 	PUSH	DE
 	EXX
 	LD	HL,BufEnvData
-	JR	Next_0064
+	JR	RED30
 
-Next_0063:	PUSH	DE
-	EXX
-	LD	HL,BufEnvName
-Next_0064:	EX	(SP),HL
-	PUSH	HL
-	CP	(HL)
-	JR	NZ,Next_0065
+RED20:	PUSH	DE	; Save start of input filename.
+	EXX	; Save other registers.
+	LD	HL,BufEnvName	; Copy input filename to BUFF2.
+RED30:	EX	(SP),HL	; Save buffer ptr, get filename.
+	PUSH	HL	; Save it again.
+	CP	(HL)	; Skip double >> and <<.
+	JR	NZ,NDBL
 	INC	HL
-Next_0065:	CALL	FndFirstChr
-	EX	DE,HL
-	LD	BC,_PARSE
-	LD	A,#39
+NDBL:	CALL	GETCH	; Remove spaces after > or <.
+	EX	DE,HL	; DE -> filename to parse.
+	LD	BC,_PARSE	; Parse redirection filename.
+	LD	A,#39	; Error type = redirection.
 	LD	(StringCode),A
 	CALL	BDOS
 	EX	AF,AF'
-	LD	A,B
-	POP	BC
-	POP	HL
+	LD	A,B	; Get parse flags.
+	POP	BC	; Get back pointer to filename start.
+	POP	HL	; Get back buffer pointer.
 	EX	AF,AF'
-	RET	NZ
+	RET	NZ	; Return if error.
 	EX	AF,AF'
 	BIT	5,A
-	JR	NZ,Next_0061
+	JR	NZ,BADFN	;   no filename and no extension.
 	AND	#18
-	JR	Z,Next_0061
-	PUSH	DE
-	EX	DE,HL
-	SBC	HL,BC
-	PUSH	BC
-	EX	(SP),HL
-	POP	BC
-	JR	Z,Next_0066
-	LDIR
-Next_0066:	XOR	A
-	LD	(DE),A
-	EXX
-	POP	DE
+	JR	Z,BADFN
+	PUSH	DE	; Save pointer to terminating char.
+	EX	DE,HL	; HL -> end of filename, DE -> buffer.
+	SBC	HL,BC	; HL = size of filename.
+	PUSH	BC	; Save start of filename.
+	EX	(SP),HL	; Get start, save size.
+	POP	BC	; Get size.
+	JR	Z,NOFN	; Go if null filename.
+	LDIR	; Copy filename to buffer.
+NOFN:	XOR	A
+	LD	(DE),A	; Terminate with a null.
+	EXX	; Get back command line pointers.
+	POP	DE	; Continue after filename.
 	DEC	A
-	LD	(StringCode),A
-	JR	Next_0062
+	LD	(StringCode),A	; Normal errors again.
+	JR	RED10	; Continue with rest of command line.
 
-Next_0067:	CALL	PutComChar
+NXTRED:	CALL	WRCHAR
 	RET	NZ
-	JP	C,Next_0062
+	JP	C,RED10
 	LD	A,#39
 	LD	(StringCode),A
 	EXX
 	LD	HL,BufEnvData
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0069
+	JR	Z,GOTOUT
 	PUSH	HL
 	LD	BC,#0145
 	CALL	BDOS
@@ -913,17 +941,17 @@ Next_0067:	CALL	PutComChar
 	RET	NZ
 	LD	A,(HL)
 	CP	">"
-	JR	NZ,Next_0068
+	JR	NZ,CRTOUT
 	INC	HL
 	PUSH	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	EX	DE,HL
 	LD	C,_OPEN
 	LD	A,#06
 	CALL	BDOS
 	POP	HL
 	CP	.NOFIL
-	JR	Z,Next_0068
+	JR	Z,CRTOUT
 	OR	A
 	RET	NZ
 	LD	BC,#014A
@@ -933,78 +961,82 @@ Next_0067:	CALL	PutComChar
 	LD	D,H
 	CALL	BDOS
 	RET	NZ
-	JR	Next_0069
+	JR	GOTOUT
 
-Next_0068:	CALL	FndFirstChr
+CRTOUT:	CALL	GETCH	; Allow spaces etc. after '>' and '>>'.
 	EX	DE,HL
 	LD	BC,_CREATE
-	LD	A,#06
+	LD	A,#06	; Inheritable, not read.
 	CALL	BDOS
-	RET	NZ
-Next_0069:	LD	HL,BufEnvName
+	RET	NZ	; Return if can't create it.
+GOTOUT:	LD	HL,BufEnvName	; Point to input filename.
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0071
+	JR	Z,GOTIN	; Go if no input redirection.
 	PUSH	HL
-	LD	BC,_CLOSE
+	LD	BC,_CLOSE	; Close standard input.
 	CALL	BDOS
 	POP	HL
-	RET	NZ
-	LD	A,(HL)
+	RET	NZ	; Return if error.
+	LD	A,(HL)	; Double << ?
 	CP	"<"
-	JR	NZ,Next_0070
-	INC	HL
-Next_0070:	CALL	FndFirstChr
+	JR	NZ,OPNIN	; Go if not.
+	INC	HL	; Skip last < character.
+OPNIN:	CALL	GETCH	; Allow spaces after '<'.
 	EX	DE,HL
-	LD	C,_OPEN
-	LD	A,#05
+	LD	C,_OPEN	; Attempt to open file.
+	LD	A,#05	; Inheritable, not write.
 	CALL	BDOS
 	RET	NZ
-	BIT	7,B
-	LD	A,.NOFIL
+	BIT	7,B	; 'File not found' if this is
+	LD	A,.NOFIL	;  sub-directory.
 	RET	NZ
-Next_0071:	EXX
-	LD	A,#FF
+GOTIN:	EXX	; Restore command line pointers.
+	LD	A,#FF	; Error type = normal again.
 	LD	(StringCode),A
-	RET
+	RET	; With error code.
 
-Pipelining:	LD	A,#3A
+		SUBTTL	PIPE
+;       This routine is called to set up any piping that is necessary.
+; On entry, DE -> command line.
+; On exit, command is terminated at |.
+PIPE:	LD	A,#3A	; Set error type to piping error.
 	LD	(StringCode),A
 	XOR	A
-	LD	C,A
+	LD	C,A	; Zero quotes flag.
 	LD	L,A
 	LD	H,A
-	LD	(PipeAdres),HL
-	LD	A,(OutputHandle)
+	LD	(PipeAdres),HL	; Assume no following command.
+	LD	A,(OutputHandle)	; Save current pipe output.
 	EX	AF,AF'
-Next_0072:	CALL	CheckChar
-	JR	C,Next_0073
+RDPIPE:	CALL	RDCHAR
+	JR	C,NPIPE
 	BIT	7,(IY+#00)
-	JR	NZ,Next_0073
+	JR	NZ,NPIPE
 	CP	"|"
-	JR	NZ,Next_0073
+	JR	NZ,NPIPE
 	LD	L,E
 	LD	H,D
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	(PipeAdres),HL
 	DEC	DE
 	XOR	A
 	LD	(DE),A
-	CALL	OpenPipeFile
+	CALL	TEMPFILE
 	RET	NZ
 	LD	A,B
 	LD	(OutputHandle),A
-	JR	Next_0074
+	JR	DOPIPE
 
-Next_0073:	OR	A
-	JR	NZ,Next_0072
-	LD	(OutputHandle),A
-Next_0074:	EX	AF,AF'
+NPIPE:	OR	A	; End of command line ?
+	JR	NZ,RDPIPE	; Check next character for | if not.
+	LD	(OutputHandle),A	; Last in pipeline, so no output file.
+DOPIPE:	EX	AF,AF'
 	OR	A
-	JR	Z,Next_0075
-	LD	(InputHandle),A
+	JR	Z,FIRSTP	; Go if no previous command in pipe.
+	LD	(InputHandle),A	; Else make last output this input.
 	LD	B,A
-	XOR	A
+	XOR	A	; Position file ptr to file start.
 	LD	L,A
 	LD	H,A
 	LD	E,A
@@ -1012,82 +1044,87 @@ Next_0074:	EX	AF,AF'
 	LD	C,_SEEK
 	CALL	BDOS
 	RET	NZ
-Next_0075:	LD	A,(OutputHandle)
-	LD	HL,InputHandle
+FIRSTP:	LD	A,(OutputHandle)	; If no piping at all being done, then
+	LD	HL,InputHandle	;   don't fork.
 	OR	(HL)
-	JR	Z,Next_0077
-	LD	C,_FORK
+	JR	Z,PIPRET
+	LD	C,_FORK	; Do fork for piping.
 	CALL	BDOS
 	RET	NZ
 	LD	A,B
-	LD	(ID_Pipelin),A
-	LD	A,(InputHandle)
-	OR	A
-	JR	Z,Next_0076
-	PUSH	AF
-	LD	BC,_CLOSE
+	LD	(ID_Pipelin),A	; Save process id for pipe.
+	LD	A,(InputHandle)	; Get input file handle.
+	OR	A	; First file in pipe ?
+	JR	Z,CLOSOUT	; Go if yes.
+	PUSH	AF	; Else close standard input and
+	LD	BC,_CLOSE	;   dup the input handle.
 	CALL	BDOS
 	POP	BC
 	LD	C,_DUP
 	CALL	Z,BDOS
 	RET	NZ
-Next_0076:	LD	A,(OutputHandle)
-	OR	A
-	JR	Z,Next_0077
-	PUSH	AF
-	LD	BC,#0145
+CLOSOUT:	LD	A,(OutputHandle)	; Get output file handle.
+	OR	A	; Last file in pipe ?
+	JR	Z,PIPRET	; Go if yes.
+	PUSH	AF	; Else close standard output
+	LD	BC,#0145	;   and dup the output handle.
 	CALL	BDOS
 	POP	BC
 	LD	C,_DUP
 	CALL	Z,BDOS
 	RET	NZ
-Next_0077:	LD	A,#FF
+PIPRET:	LD	A,#FF	; Reset error type.
 	LD	(StringCode),A
-	XOR	A
+	XOR	A	; No error.
 	RET
 
-OpenPipeFile:	LD	HL,PipeFileName+7
-Next_0078:	LD	A,(HL)
+TEMPFILE:	LD	HL,PipeFileName+7
+INCDIG:	LD	A,(HL)	;   temporary piping filename.
 	INC	A
 	LD	(HL),A
 	CP	"9"+1
-	JR	C,Next_0079
-	LD	(HL),"0"
-	DEC	HL
-	JR	Next_0078
+	JR	C,DIGOK	; Go if digit '0' - '9'.
+	LD	(HL),"0"	; If it was >='9', then set it to '0'
+	DEC	HL	;   and repeat for next character.
+	JR	INCDIG
 
-Next_0079:	LD	HL,Env_Temp
-	CALL	GetEnvData2
+DIGOK:	LD	HL,TEMP$	; Read the TEMP environment string to
+	CALL	GENV2	;   find out where to create it.
 	LD	BC,_PARSE
 	CALL	BDOS
 	RET	NZ
-	LD	A,B
-	AND	#18
-	JR	Z,Next_0080
+	LD	A,B	; A=parse flags.
+	AND	#18	; If non-null filename, then add a
+	JR	Z,NULLFN	;   '\'.
 	LD	A,"\"
 	LD	(DE),A
 	INC	DE
-Next_0080:	LD	HL,PipeFileName
-	LD	BC,#0C
+NULLFN:	LD	HL,PipeFileName	; Copy temporary filename to end of
+	LD	BC,#0C	;   TEMP pathname.
 	LDIR
 	XOR	A
-	LD	(DE),A
-	LD	DE,BufEnvData
-	LD	BC,#8044
-	LD	A,#04
-	CALL	BDOS
+	LD	(DE),A	; Terminate the string.
+	LD	DE,BufEnvData	; Attempt to create the file,
+	LD	BC,#8044	;   but don't overwrite any
+	LD	A,#04	;   existing file of the
+	CALL	BDOS	;   same name.
 	RET	Z
-	CP	.FILEX
-	JR	Z,OpenPipeFile
-	RET
+	CP	.FILEX	; If the file already exists, then
+	JR	Z,TEMPFILE	;   loop back and try another filename.
+	RET	; Else return the error.
 
-Rejoin2:	LD	HL,ID_Pipelin
+		SUBTTL	UNPIPE
+;        This routine is called after executing a command  and  printing  it's
+; error  message  if  appropriate,  and  it  deals  with  various  tidying  up
+; operations which are necessary after piping the output or input of a command
+; On exit, DE -> next command in pipe, or 0 if none.
+UNPIPE:	LD	HL,ID_Pipelin
 	LD	B,(HL)
 	XOR	A
-	LD	(HL),A
+	LD	(HL),A	;   (not forked now)
 	OR	B
 	LD	C,_JOIN
-	CALL	NZ,BDOS
+	CALL	NZ,BDOS	; Do the join if yes.
 	RET	NZ
 	LD	HL,InputHandle
 	LD	B,(HL)
@@ -1098,32 +1135,32 @@ Rejoin2:	LD	HL,ID_Pipelin
 	CALL	NZ,BDOS
 	RET
 
-Rejoin:	LD	HL,#00
+DELPIPE:	LD	HL,#00	; Abandon pipe.
 	LD	(PipeAdres),HL
 	LD	HL,InputHandle
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
-	LD	C,_HDELETE
-	CALL	NZ,BDOS
+	LD	C,_HDELETE	; Delete input pipe handle, if any.
+	CALL	NZ,BDOS	;   (error ignored)
 	LD	HL,OutputHandle
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
-	LD	C,_HDELETE
-	CALL	NZ,BDOS
+	LD	C,_HDELETE	; Delete output pipe handle, if any.
+	CALL	NZ,BDOS	;   (error ignored)
 	LD	HL,ID_Pipelin
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
 	LD	C,_JOIN
-	CALL	NZ,BDOS
+	CALL	NZ,BDOS	; Join, if forked.
 	RET
 
-CheckChar:	LD	A,(DE)
+RDCHAR:	LD	A,(DE)
 	INC	DE
 	OR	A
 	RET	Z
@@ -1151,30 +1188,31 @@ Next_0444:	OR	A
 	SCF
 	RET
 
-PutComChar:	BIT	7,(HL)
-	JR	NZ,Next_0082
-	PUSH	BC
+WRCHAR:	BIT	7,(HL)
+	JR	NZ,BUFUL
+	PUSH	BC	; Save BC.
 	LD	C,(HL)
-	LD	B,#00
+	LD	B,#00	; BC = offset to next buffer position.
 	INC	BC
 	ADD	HL,BC
-	LD	(HL),A
-	SBC	HL,BC
-	POP	BC
-	OR	A
-	RET	Z
-	INC	(HL)
-	XOR	A
-	SCF
+	LD	(HL),A	; Put character in buffer.
+	SBC	HL,BC	; Restore HL.
+	POP	BC	; Restore BC.
+	OR	A	; Null (end of line) ?
+	RET	Z	; Return with no error if yes (NC).
+	INC	(HL)	; Else include character in length.
+	XOR	A	; No error, NC.
+	SCF	; Cy => not end of line.
 	RET
 
-Next_0082:	LD	A,.BUFUL
+BUFUL:	LD	A,.BUFUL
+	RET	; NZ => error.
+
+		SUBTTL	DO_CMD
+XORET:	XOR	A
 	RET
 
-Next_0083:	XOR	A
-	RET
-
-Executing:	CALL	FndFirstChr
+DO_CMD:	CALL	GETCH
 	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
@@ -1211,8 +1249,8 @@ Next_0446:	LD	A,(ParseFlags)
 	BIT	0,A
 	JR	NZ,Next_0084
 	EXX
-	CALL	FndFirstChr
-	JR	NZ,Next_0085
+	CALL	GETCH
+	JR	NZ,BADRV
 	LD	HL,(IffAdres)
 	BIT	0,(HL)
 	RET	NZ
@@ -1227,28 +1265,28 @@ Next_0446:	LD	A,(ParseFlags)
 	RET
 
 Next_0084:	BIT	0,A
-	JR	Z,Next_0083
+	JR	Z,XORET
 	BIT	3,A
-	JP	Z,Next_0094
+	JP	Z,BADCMDZ
 	AND	#40
-Next_0085:	LD	A,.BADCM
+BADRV:	LD	A,.BADCM	;   or '..' given.
 	RET	NZ
-	EXX
-	DEC	DE
-	PUSH	HL
-	PUSH	BC
-	LD	A,(PathLen)
-	LD	B,A
-	LD	HL,Commands-2
-	XOR	A
-Next_0086:	JR	NZ,Next_0088
+	EXX	; Get registers.
+	DEC	DE	; Point to length byte of command.
+	PUSH	HL	; Save pointer to start of parameters.
+	PUSH	BC	; Save pointer to start of last item.
+	LD	A,(PathLen)	; Get length of first word.
+	LD	B,A	; B=length of command.
+	LD	HL,Commands-2	; First test for an internal command.
+	XOR	A	; Set Z for loop entry.
+DC10:	JR	NZ,NOTINT
 	INC	HL
 	INC	HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0088
-	CALL	Compare_DEHL
-	JR	C,Next_0086
+	JR	Z,NOTINT
+	CALL	COMPARE
+	JR	C,DC10
 	LD	A,(HL)
 	INC	HL
 	LD	H,(HL)
@@ -1282,7 +1320,7 @@ Next_0448:	LD	BC,Cmd_Echo
 	SBC	HL,BC
 	ADD	HL,BC
 	JR	Z,Next_0449
-	LD	BC,Cmd_Echos
+	LD	BC,@ECHO
 	OR	A
 	SBC	HL,BC
 	ADD	HL,BC
@@ -1291,19 +1329,19 @@ Next_0448:	LD	BC,Cmd_Echo
 	EX	(SP),HL
 Next_0449:	EX	(SP),HL
 	LD	A,(HL)
-	CALL	CheckBlank
+	CALL	BLANK?
 	JR	NC,Next_0087
 	INC	HL
 	DEFB	#06
 Next_0087:	OR	A
-	CALL	NC,FndFirstChr
+	CALL	NC,GETCH
 	XOR	A
 	LD	(DirFlag),A
 	LD	B,A
 	DEC	A
 	RET
 
-Next_0088:	POP	BC
+NOTINT:	POP	BC
 	POP	HL
 	PUSH	HL
 	LD	HL,(IffAdres)
@@ -1324,51 +1362,51 @@ Next_0088:	POP	BC
 	LD	B,H
 	LD	HL,BufEnvName
 	EX	DE,HL
-	JR	Z,Next_0089
+	JR	Z,NDP
 	LDIR
-Next_0089:	LD	(DE),A
-	POP	DE
-	POP	HL
-	SBC	HL,DE
+NDP:	LD	(DE),A	; Terminate with a null.
+	POP	DE	; DE -> start of last item.
+	POP	HL	; HL -> terminating character.
+	SBC	HL,DE	; Calculate size of given filename.
 	LD	C,L
 	LD	B,H
-	LD	HL,BufExtra
+	LD	HL,BufExtra	; Copy given filename to BUFF3.
 	PUSH	HL
 	EX	DE,HL
-	JR	Z,Next_0090
+	JR	Z,NFN	; Go if no filename (should not occur).
 	LDIR
-Next_0090:	LD	(DE),A
+NFN:	LD	(DE),A
 	EX	DE,HL
 	POP	DE
 	BIT	4,(IY+#0A)
-	JR	NZ,Next_0091
+	JR	NZ,GOTEXT
 	LD	(HL),"."
 	INC	HL
 	LD	(HL),"*"
 	INC	HL
 	LD	(HL),#00
-Next_0091:	CALL	FindFile
-	JR	Z,Next_0095
+GOTEXT:	CALL	FNDCMD	; Look for command.
+	JR	Z,EXECMD	; Execute command if file found.
 	CP	.NOFIL
+	RET	NZ	; Return error if not 'file not found'.
+	LD	A,(ParseFlags)	; Get parse flags for command.
+	AND	#06	; If drive or path specified, then
+	LD	A,.BADCM	;   don't search the current PATH.
+	LD	HL,Env_Path	; Get the current PATH environment
+	CALL	Z,GENV2	;   string to BUFF1.
 	RET	NZ
-	LD	A,(ParseFlags)
-	AND	#06
-	LD	A,.BADCM
-	LD	HL,Env_Path
-	CALL	Z,GetEnvData2
-	RET	NZ
-	EX	DE,HL
-Next_0093:	CALL	FndFirstChr
-Next_0094:	LD	A,.BADCM
+	EX	DE,HL	; HL -> PATH string in BUFF1.
+USEPTH:	CALL	GETCH
+BADCMDZ:	LD	A,.BADCM
 	RET	Z
 	LD	BC,BufEnvName
-	CALL	MakePath
+	CALL	CPYSTR
 	RET	C
 	LD	(Value_L),HL
-	CALL	FindFile
+	CALL	FNDCMD
 	LD	HL,(Value_L)
-	JR	NZ,Next_0093
-Next_0095:	JR	NC,Next_0098
+	JR	NZ,USEPTH
+EXECMD:	JR	NC,EXECOM
 	LD	HL,ID_Pipelin
 	LD	B,(HL)
 	XOR	A
@@ -1378,7 +1416,7 @@ Next_0095:	JR	NC,Next_0098
 	CALL	NZ,BDOS
 	LD	A,(BatchHandle)
 	INC	A
-	JR	Z,Next_0096
+	JR	Z,OPNBAT
 	INC	A
 	CALL	Z,ReleaseBTM
 	LD	A,(ID_Redir)
@@ -1389,11 +1427,11 @@ Next_0095:	JR	NC,Next_0098
 	LD	(ID_Redir),A
 	LD	A,(BatchHandle)
 	CP	#FE
-	JR	Z,Next_0096
+	JR	Z,OPNBAT
 	LD	B,A
 	LD	C,_CLOSE
 	CALL	BDOS
-Next_0096:	LD	A,#3B
+OPNBAT:	LD	A,#3B
 	LD	(StringCode),A
 	LD	HL,ID_Redir
 	LD	A,(HL)
@@ -1403,7 +1441,7 @@ Next_0096:	LD	A,#3B
 	LD	DE,FileBuffer+7
 	LD	HL,Ext_BTM
 	LD	B,(HL)
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	JR	C,Next_0450
 	CALL	OpenBTM
 	LD	B,#FE
@@ -1431,35 +1469,36 @@ Next_0451:	LD	(ErrorCode),A
 	CALL	NCopy
 	RET
 
-Next_0098:	LD	HL,Env_Expert
-	CALL	Check_ON
-	JR	NC,Next_0099
-	LD	A,(FIB1+25)
-	LD	L,A
-	LD	DE,BufEnvData
-	LD	C,_DPARM
-	CALL	BDOS
-	RET	NZ
-	LD	A,(BufEnvData+20)
-	BIT	7,A
-	LD	A,.BADVER
-	RET	NZ
-Next_0099:	LD	C,_FORK
-	CALL	BDOS
-	RET	NZ
+		SUBTTL	EXECOM
+EXECOM:	LD	HL,EXPERT$
+	CALL	ON?	;   if "EXPERT" switch is ON.
+	JR	NC,EXPERT
+	LD	A,(FIB1+25)	; Otherwise look at the media where
+	LD	L,A	;   the .COM file was found and
+	LD	DE,BufEnvData	;   if it is formatted by MSX-DOS2
+	LD	C,_DPARM	;   (by checking the volume_id field)
+	CALL	BDOS	;   we can proceed.
+	RET	NZ	; Report any errors.
+	LD	A,(BufEnvData+20)	; We had better define "FIB_VOLUME_ID".
+	BIT	7,A	; This is not actuall a
+	LD	A,.BADVER	;   "Wrong DOS version" what the error
+	RET	NZ	;   code was intended for.
+EXPERT:	LD	C,_FORK
+	CALL	BDOS	;   so that the corresponding join will
+	RET	NZ	;   tidy up it's open files.
 	LD	A,B
-	LD	(ID_Execute),A
-	LD	DE,FIB1
+	LD	(ID_Execute),A	; Save id of transient program process.
+	LD	DE,FIB1	; Attempt to open command file.
 	LD	C,_OPEN
-	LD	A,#01
+	LD	A,#01	; Read only.
 	CALL	BDOS
-	RET	NZ
+	RET	NZ	; Return if error.
 	LD	A,B
 	EX	AF,AF'
-	LD	HL,BufEnvData
-	LD	A,(LogiDrive)
-	ADD	A,"@"
-	LD	(HL),A
+	LD	HL,BufEnvData	; Set up whole path string in BUFF with
+	LD	A,(LogiDrive)	;   a drive : \ at the start, so that
+	ADD	A,"@"	;   programs can find out where they
+	LD	(HL),A	;   were loaded from.
 	INC	HL
 	LD	(HL),":"
 	INC	HL
@@ -1469,15 +1508,15 @@ Next_0099:	LD	C,_FORK
 	LD	C,_WPATH
 	CALL	BDOS
 	RET	NZ
-	LD	DE,FIB1+1
-Next_0100:	LD	A,(DE)
+	LD	DE,FIB1+1	; Copy upper-case filename in FIB on
+CPYFN:	LD	A,(DE)
 	LD	(HL),A
 	INC	DE
 	INC	HL
 	OR	A
-	JR	NZ,Next_0100
+	JR	NZ,CPYFN
 	LD	DE,BufEnvData
-	LD	HL,Env_Program
+	LD	HL,PROG$
 	LD	C,_SENV
 	CALL	BDOS
 	EXX
@@ -1485,11 +1524,11 @@ Next_0100:	LD	A,(DE)
 	EXX
 	POP	DE
 	PUSH	DE
-	LD	HL,Env_Parameters
+	LD	HL,PARAM$
 	LD	C,_SENV
 	CALL	BDOS
 	POP	HL
-	CALL	SetComLine
+	CALL	LDCOME
 	RET	NZ
 	CALL	SetPage2
 	LD	DE,(AliasEnd+#8000)
@@ -1542,7 +1581,7 @@ Next_0100:	LD	A,(DE)
 	CALL	BDOS
 	POP	DE
 	DEC	D
-	LD	HL,SetComLine-1
+	LD	HL,LDCOME-1
 	LD	BC,#59
 	LDDR
 	INC	DE
@@ -1599,68 +1638,69 @@ Next_0101:	LD	B,A
 	LD	C,_TERM
 	JP	BDOS
 
-SetComLine:	EX	DE,HL
-	LD	HL,#80
+LDCOME:	EX	DE,HL
+	LD	HL,#80	; Zero FCBs.
 	LD	B,#24
 	XOR	A
-Next_0102:	DEC	HL
+FILFCB:	DEC	HL
 	LD	(HL),A
-	DJNZ	Next_0102
-	PUSH	DE
-	CALL	SetFile
-	JR	NZ,Next_0103
-	EX	DE,HL
-	CALL	FndFirstChr
+	DJNZ	FILFCB
+	PUSH	DE	; Save ptr to start of parameters.
+	CALL	SETFCB	; Set up first FCB.
+	JR	NZ,FCBERR
+	EX	DE,HL	; Skip separators.
+	CALL	GETCH
 	EX	DE,HL
 	LD	HL,#6C
-	CALL	SetFile
-Next_0103:	POP	HL
+	CALL	SETFCB	; Set up second FCB.
+FCBERR:	POP	HL	; HL -> command line again.
 	RET	NZ
-	LD	BC,#80
+	LD	BC,#80	; Copy & upper-case parameters to 80H.
 	XOR	A
-	LD	D,A
+	LD	D,A	; Initialise character flags.
 	DEC	A
-	LD	(BC),A
+	LD	(BC),A	; Initialise count.
 	INC	BC
-Next_0104:	LD	E,(HL)
+CPYCMD:	LD	E,(HL)	; Get character.
 	PUSH	HL
 	PUSH	BC
-	LD	HL,#80
+	LD	HL,#80	; Increment count in anticipation.
 	INC	(HL)
-	LD	C,_CHKCHR
-	LD	HL,Env_Upper
-	CALL	Check_ON
+	LD	C,_CHKCHR	; Get upper cased character.
+	LD	HL,UPPER$	; Upper case the character only
+	CALL	ON?	;  if upper casing is ON.
 	CCF
 	SBC	A,A
 	CALL	NZ,BDOS
 	POP	BC
 	POP	HL
 	RET	NZ
-	OR	E
+	OR	E	; Get character, test for end of line.
 	LD	(BC),A
-	RET	Z
-	INC	BC
+	RET	Z	; Ret with no error if done.
+	INC	BC	; Else do next.
 	INC	HL
-	JR	Next_0104
+	JR	CPYCMD
 
-SetFile:	EX	DE,HL
-	CALL	FndFirstChr
+		SUBTTL	SETFCB
+SETFCB:	EX	DE,HL
+	CALL	GETCH	; Skip separators.
 	EX	DE,HL
-	PUSH	HL
+	PUSH	HL	; Save FCB pointer.
 	LD	BC,_PARSE
-	CALL	BDOS
-	EX	DE,HL
-	POP	HL
+	CALL	BDOS	; Do a parse path on parameter.
+	EX	DE,HL	; DE -> start of last item.
+	POP	HL	; Get pointer to CP/M FCB.
 	RET	NZ
 	BIT	2,B
-	JR	NZ,Next_0105
-	LD	C,#00
-Next_0105:	LD	(HL),C
-	INC	HL
+	JR	NZ,GOTDRV	; Go if yes, else use 0.
+	LD	C,#00	; 0 => use default drive.
+GOTDRV:	LD	(HL),C	; Set up drive.
+	INC	HL	; Then parse filename to set up FCB.
 	LD	C,_PFILE
-	JP	BDOS
+	JP	BDOS	; Leaves DE -> terminating character.
 
-FindFile:	LD	DE,BufEnvName
+FNDCMD:	LD	DE,BufEnvName
 	LD	BC,_PARSE
 	CALL	BDOS
 	SCF
@@ -1680,20 +1720,20 @@ Next_0106:	CALL	NCopy
 	LD	IX,FIB1
 	LD	B,#06
 	LD	C,_FFIRST
-Next_0107:	CALL	BDOS
-	JR	Z,Next_0108
+FCMD10:	CALL	BDOS	; Search for file.
+	JR	Z,GOTFIL	; Go if file found.
 	CP	.NOFIL
-	SCF
-	RET	NZ
+	SCF	; Return C and NZ if error not
+	RET	NZ	;   'file not found'.
 	EX	AF,AF'
 	CCF
-	SBC	A,A
-	AND	.NOFIL
-	SCF
+	SBC	A,A	; FF => batch file not found.
+	AND	.NOFIL	; Return .NOFILE, NZ and C if batch
+	SCF	;   file not found, else Z and C.
 	RET
 
-Next_0108:	LD	DE,FIB1+1
-	CALL	FindComBat
+GOTFIL:	LD	DE,FIB1+1
+	CALL	COMBAT
 	RET	Z
 	EXX
 	PUSH	BC
@@ -1724,7 +1764,7 @@ Next_0998:	EX	DE,HL
 	LD	A,(DE)
 	OR	A
 	LD	C,_FNEXT
-	JR	Z,Next_0107
+	JR	Z,FCMD10
 	EX	DE,HL
 	LD	DE,Buffer1
 	CALL	NCopy
@@ -1772,9 +1812,9 @@ Next_0455:	EXX
 	LD	(HL),#00
 	POP	HL
 	LD	HL,Buffer1
-	JP	Executing
+	JP	DO_CMD
 
-FindComBat:	LD	HL,FileBuffer
+COMBAT:	LD	HL,FileBuffer
 	LD	C,_PFILE
 	CALL	BDOS
 	SCF
@@ -1782,14 +1822,14 @@ FindComBat:	LD	HL,FileBuffer
 	LD	DE,FileBuffer+7
 	LD	HL,Ext_COM
 	LD	B,(HL)
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	DEC	A
 	RET	NC
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	DEC	A
 	CCF
 	RET	Z
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	DEC	A
 	CCF
 	RET
@@ -1801,28 +1841,38 @@ Ext_BAT:	DEFB	3
 Ext_BTM:	DEFB	3
 	DEFB	"BTM"
 
-Compare_DEHL:	PUSH	BC
+		SUBTTL	COMPARE
+;******************************************************************************
+;       This routine is used to compare two strings, mainly to decode commands
+; from the command table.
+;        The command at (DE) with length in B (and at (DE)) is  compared  with
+; the  string at (HL), length byte first. If the strings match, then the carry
+; is returned reset (NC). Otherwise, if the Z flag is not set  (NZ)  then  the
+; command had a length byte smaller than the string originally at (HL).
+; On exit,  BC and DE are not corrupted, and HL points to the byte after the
+;               string originally at (HL).
+COMPARE:	PUSH	BC
 	PUSH	DE
-	LD	A,B
-	LD	B,(HL)
-	CP	B
-	JR	C,Next_0112
-	INC	B
-Next_0110:	JR	C,Next_0111
-	SUB	(HL)
-	ADD	A,#FF
-Next_0111:	INC	HL
+	LD	A,B	; Get count.
+	LD	B,(HL)	; Get length from table.
+	CP	B	; Compare length bytes.
+	JR	C,CMP30	; Go with NZ to stop search.
+	INC	B	; Compare length bytes too.
+CMP10:	JR	C,CMP20	; Go if mismatch has occured.
+	SUB	(HL)	; Chars match ?
+	ADD	A,#FF	; NC => yes, else no.
+CMP20:	INC	HL	; Point to next char pair.
 	INC	DE
 	LD	A,(DE)
-	CALL	MakeCapital
-	DJNZ	Next_0110
-	SBC	A,A
-	INC	A
-Next_0112:	POP	DE
+	CALL	UC	; Upper case, carry not corrupted.
+	DJNZ	CMP10	; Compare next character.
+	SBC	A,A	; C & FF => no match.
+	INC	A	; Set Z if Cy set, Cy preserved.
+CMP30:	POP	DE
 	POP	BC
 	RET
 
-MakeCapital:	BIT	7,A
+UC:	BIT	7,A
 	RET	NZ
 	BIT	6,A
 	RET	Z
@@ -1843,28 +1893,28 @@ MakeUpper:	CP	"a"
 	RES	5,A
 	RET
 
-Env_Date:	DEFB	"DATE",0
-Env_Time:	DEFB	"TIME",0
-Data_On:	DEFB	"ON",0
-Data_Off:	DEFB	"OFF",0
-Env_Echo:	DEFB	"ECHO",0
-Env_Help:	DEFB	"HELP",0
+DATE$:	DEFB	"DATE",0
+TIME$:	DEFB	"TIME",0
+ON$:	DEFB	"ON",0
+OFF$:	DEFB	"OFF",0
+ECHO$:	DEFB	"ECHO",0
+HELP$:	DEFB	"HELP",0
 Env_Path:	DEFB	"PATH",0
 Env_Cdpath:	DEFB	"CDPATH",0
-Env_Prompt:	DEFB	"PROMPT",0
+PROMPT$:	DEFB	"PROMPT",0
 Env_TabOrder:	DEFB	"TABORDER",0
-Env_Parameters: DEFB	"PARAMETERS",0
-Env_Program:	DEFB	"PROGRAM",0
-Env_Temp:	DEFB	"TEMP",0
-Env_Upper:	DEFB	"UPPER",0
+PARAM$: DEFB	"PARAMETERS",0
+PROG$:	DEFB	"PROGRAM",0
+TEMP$:	DEFB	"TEMP",0
+UPPER$:	DEFB	"UPPER",0
 Env_Lower:	DEFB	"LOWER",0
-Env_Redir:	DEFB	"REDIR",0
-Env_Expert:	DEFB	"EXPERT",0
+REDIR$:	DEFB	"REDIR",0
+EXPERT$:	DEFB	"EXPERT",0
 Env_Alias:	DEFB	"ALIAS",0
 Env_Separ:	DEFB	"SEPAR",0
 Env_Expand:	DEFB	"EXPAND",0
 Env_Pushd:	DEFB	"PUSHD",0
-Data_Pipe:	DEFB	"%PIPE00.$$$"
+TEMPFN:	DEFB	"%PIPE00.$$$"
 Data_Prompt:	DEFB	"%_CWD%>",0
 Data_TabOrder:	DEFB	"BOTH",0
 

@@ -6,7 +6,7 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-StrAdr_Norm:	DEFB	"Yy",0
+MESSAGES:	DEFB	"Yy",0
 	DEFB	"Nn",0
 	DEFB	" Directory of ",0
 	DEFB	" <dir> ",0

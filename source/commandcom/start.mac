@@ -150,25 +150,25 @@ RedirSet:	LD	B,#00
 	LD	C,_REDIR
 	LD	A,#01
 	CALL	BDOS
-	LD	DE,AbortExit2
+	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
 	LD	DE,BufEnvData
 	XOR	A
 	LD	(DE),A
-	LD	HL,Env_Parameters
+	LD	HL,PARAM$
 	LD	C,_SENV
 	PUSH	DE
 	CALL	BDOS
 	POP	DE
-	LD	HL,Env_Program
+	LD	HL,PROG$
 	LD	C,_SENV
 	CALL	BDOS
 	LD	A,#FF
 	LD	(ExtraCRLF),A
 Error1:	LD	A,#00
 Error2:	LD	B,#00
-	JP	AbortExit2
+	JP	CLI_ABORT
 
 AbortExit4:	OR	A
 	LD	C,B
@@ -337,11 +337,11 @@ Start:	LD	SP,BootStrap
 	JR	C,Next_0013
 Next_0012:	CALL	RPrintCrLf
 	LD	A,#0D
-	CALL	PrintCode
+	CALL	DMESS
 	LD	A,#35
-	CALL	PrintCode
+	CALL	DMESS
 	LD	A,#0E
-	CALL	PrintCode
+	CALL	DMESS
 	CALL	RPrintCrLf
 	DI
 	HALT
@@ -367,7 +367,7 @@ Next_0013:	LD	DE,#00
 	JR	NZ,Next_0999
 	LD	HL,#00
 	LD	(#80),HL
-Next_0999:	CALL	GetMapSupport
+Next_0999:	CALL	SETLANG
 	LD	A,(RTYCNT)
 	OR	A
 	JR	Z,Next_0400
@@ -379,9 +379,9 @@ Next_0400:	LD	B,A
 	CALL	ALL_SEG
 	JR	NC,Next_0401
 	LD	A,#0D
-	CALL	PrintCode
+	CALL	DMESS
 	LD	A,#42
-	CALL	LPrintCode
+	CALL	DMESSCR
 	DI
 	HALT
 
@@ -433,11 +433,11 @@ Next_0014:	DEC	DE
 Next_0015:	PUSH	BC
 	EXX
 	POP	DE
-	CALL	FindEnvItem
+	CALL	FENV
 	JR	NZ,Next_0018
 	OR	(HL)
 	JR	Z,Next_0019
-	CALL	GetEnvData
+	CALL	GENV
 	EXX
 	CALL	ChkMemSpace
 	LD	HL,BufEnvName
@@ -468,7 +468,7 @@ Next_0019:	EXX
 	PUSH	DE
 Next_0020:	LD	A,(HL)
 	INC	HL
-	CALL	GetAdres
+	CALL	GETMSG
 	EX	(SP),HL
 	EX	DE,HL
 	CALL	ChkMemSpace
@@ -512,7 +512,7 @@ Next_0021:	LD	A,(DE)
 	LD	D,(HL)
 	LD	(WarmBoot),DE
 	EXX
-	LD	DE,AbortExit1
+	LD	DE,EXIT
 	LD	C,_DEFAB
 	CALL	BDOS
 	EXX
@@ -522,8 +522,8 @@ Next_0021:	LD	A,(DE)
 	EX	AF,AF'
 	OR	A
 	JR	Z,Next_0024
-	LD	HL,Env_Program
-	CALL	GetEnvData2
+	LD	HL,PROG$
+	CALL	GENV2
 	LD	HL,Env_Shell
 	JR	NZ,Next_0022
 	LD	A,(DE)
@@ -533,14 +533,14 @@ Next_0022:	LD	DE,Data_Shell
 	LD	C,_SENV
 	CALL	BDOS
 	XOR	A
-Next_0023:	CALL	NZ,PutEnvItem2
-Next_0024:	LD	HL,Env_Help
+Next_0023:	CALL	NZ,SENV2
+Next_0024:	LD	HL,HELP$
 	LD	DE,Data_Help
 	CALL	SetEnvItem
-	LD	HL,Env_Temp
+	LD	HL,TEMP$
 	LD	DE,Data_Root
 	CALL	SetEnvItem
-	LD	HL,Env_Date
+	LD	HL,DATE$
 	LD	DE,Data_Date1
 	LD	A,(DateFormat)
 	AND	#07
@@ -550,7 +550,7 @@ Next_0024:	LD	HL,Env_Help
 	JR	Z,Next_0025
 	LD	DE,Data_Date3
 Next_0025:	CALL	SetEnvItem
-	LD	HL,Env_Time
+	LD	HL,TIME$
 	LD	DE,Data_Time
 	CALL	SetEnvItem
 	LD	HL,Env_Path
@@ -559,32 +559,32 @@ Next_0025:	CALL	SetEnvItem
 	LD	HL,Env_Cdpath
 	LD	DE,Data_Empty
 	CALL	SetEnvItem
-	LD	HL,Env_Prompt
+	LD	HL,PROMPT$
 	LD	DE,Data_Prompt
 	CALL	SetEnvItem
-	LD	HL,Env_Expert
-	LD	DE,Data_On
+	LD	HL,EXPERT$
+	LD	DE,ON$
 	CALL	SetEnvItem
-	LD	HL,Env_Echo
-	LD	DE,Data_Off
+	LD	HL,ECHO$
+	LD	DE,OFF$
 	CALL	SetEnvItem
-	LD	HL,Env_Upper
-	LD	DE,Data_Off
+	LD	HL,UPPER$
+	LD	DE,OFF$
 	CALL	SetEnvItem
 	LD	HL,Env_Lower
-	LD	DE,Data_Off
+	LD	DE,OFF$
 	CALL	SetEnvItem
-	LD	HL,Env_Redir
-	LD	DE,Data_On
+	LD	HL,REDIR$
+	LD	DE,ON$
 	CALL	SetEnvItem
 	LD	HL,Env_Alias
-	LD	DE,Data_On
+	LD	DE,ON$
 	CALL	SetEnvItem
 	LD	HL,Env_Separ
-	LD	DE,Data_On
+	LD	DE,ON$
 	CALL	SetEnvItem
 	LD	HL,Env_Expand
-	LD	DE,Data_On
+	LD	DE,ON$
 	CALL	SetEnvItem
 	LD	HL,Env_TabOrder
 	LD	DE,Data_TabOrder
@@ -592,15 +592,15 @@ Next_0025:	CALL	SetEnvItem
 	LD	DE,BufEnvData
 	XOR	A
 	LD	(DE),A
-	LD	HL,Env_Parameters
+	LD	HL,PARAM$
 	LD	C,_SENV
 	PUSH	DE
 	CALL	BDOS
 	POP	DE
-	LD	HL,Env_Program
+	LD	HL,PROG$
 	LD	C,_SENV
 	CALL	BDOS
-	JP	Start2
+	JP	CLI
 
 ChkMemSpace:	PUSH	HL
 	PUSH	DE
@@ -618,7 +618,7 @@ ChkMemSpace:	PUSH	HL
 
 SetEnvItem:	PUSH	DE
 	PUSH	HL
-	CALL	GetEnvData2
+	CALL	GENV2
 	LD	A,(DE)
 	POP	HL
 	POP	DE

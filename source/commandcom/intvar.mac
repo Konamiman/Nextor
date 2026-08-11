@@ -18,7 +18,7 @@ Next_0456:	LD	HL,BufEnvName+1
 	EX	DE,HL
 Lower:	PUSH	DE
 	LD	HL,Env_Lower
-	CALL	Check_ON
+	CALL	ON?
 	POP	DE
 	RET	C
 	PUSH	DE
@@ -37,7 +37,7 @@ Int_Disk:	LD	A,(CurrentDrive)
 Int_Column:	LD	A,(CSRX)
 Next_0458:	LD	IX,BufEnvName
 	PUSH	IX
-	CALL	Convert8
+	CALL	D8
 	POP	DE
 	RET
 
@@ -159,7 +159,7 @@ Int_Cwp:	CALL	Int_Cwd
 
 Int_Datef:	SCF
 Int_Date:	EX	AF,AF'
-	CALL	GetDateForm
+	CALL	DFORM
 	LD	C,_GDATE
 	CALL	BDOS
 	LD	BC,#F844
@@ -182,7 +182,7 @@ Int_Date:	EX	AF,AF'
 	LD	C,A
 	LD	IX,BufEnvName+2
 	PUSH	IX
-	CALL	PrintDate
+	CALL	DDATE
 	POP	DE
 	INC	DE
 	RET
@@ -195,21 +195,21 @@ Text_Dosver:	DEFB	"2.41",0
 Int_Dow:	LD	C,_GDATE
 	CALL	BDOS
 	ADD	A,#17
-	CALL	GetAdres
+	CALL	GETMSG
 	EX	DE,HL
 	LD	DE,BufEnvName
 	CALL	NCopy
 	DEC	DE
 	PUSH	DE
 	LD	A,#1E
-	CALL	GetAdres
+	CALL	GETMSG
 	EX	DE,HL
 	POP	DE
 	CALL	NCopy
 	LD	DE,BufEnvName
 	RET
 
-Int_Time:	CALL	GetTimeForm
+Int_Time:	CALL	TFORM
 	LD	C,_GTIME
 	CALL	BDOS
 	PUSH	DE
@@ -226,7 +226,7 @@ Next_0461:	ADD	A,A
 	INC	HL
 	LD	(HL),C
 	LD	IX,BufEnvName+2
-	CALL	PrintTime
+	CALL	DTIME
 	POP	BC
 	PUSH	AF
 	LD	(IX),":"
@@ -247,10 +247,10 @@ SetAbort:	PUSH	BC
 	PUSH	DE
 	PUSH	HL
 	PUSH	AF
-	LD	DE,ErrorHand1
+	LD	DE,DSKERR
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	DE,AbortExit3
+	LD	DE,ABRT
 	LD	C,_DEFAB
 	CALL	BDOS
 	POP	AF
@@ -266,7 +266,7 @@ ResetAbort:	PUSH	BC
 	LD	DE,#00
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	DE,AbortExit2
+	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
 	POP	AF
@@ -284,7 +284,7 @@ Int_Fnext:	CALL	SetAbort
 	JP	NZ,Next_0475
 	LD	HL,FIB3+#15
 	LD	DE,FileTotal1
-	CALL	RestSubt
+	CALL	ADD32
 	LD	HL,(FileCount)
 	INC	HL
 	LD	(FileCount),HL
@@ -294,7 +294,7 @@ Int_Fnext:	CALL	SetAbort
 Int_Filecount:	LD	HL,(FileCount)
 	LD	IX,BufEnvName
 	PUSH	IX
-	CALL	Convert16
+	CALL	D16
 	POP	DE
 	RET
 
@@ -305,7 +305,7 @@ Fun_Alias:	LD	DE,BufEnvName
 Fun_Ascii:	LD	A,(HL)
 	LD	IX,BufEnvName
 	PUSH	IX
-	CALL	Convert8
+	CALL	D8
 	POP	DE
 	RET
 
@@ -318,9 +318,9 @@ Fun_Attrib:	EX	DE,HL
 	LD	(HL),A
 	LD	(Attribute1),A
 Next_0463:	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	Z,Next_0466
-	CALL	MakeCapital
+	CALL	UC
 	CP	"N"
 	LD	B,A
 	LD	A,#00
@@ -367,7 +367,7 @@ Attribs:	DEFB	"R",#01
 	DEFB	"D",#10
 	DEFB	"A",#20
 
-Fun_Char:	CALL	GetValue_8
+Fun_Char:	CALL	GET8
 	JP	NZ,Next_0475
 	LD	HL,BufEnvName+1
 	LD	(HL),#00
@@ -376,7 +376,7 @@ Fun_Char:	CALL	GetValue_8
 	EX	DE,HL
 	RET
 
-Fun_Hex:	CALL	GetValue_16
+Fun_Hex:	CALL	GET16
 	JP	NZ,Next_0475
 	LD	HL,BufEnvName
 	PUSH	HL
@@ -427,7 +427,7 @@ Next_0474:	LD	DE,Value_L
 	XOR	A
 	LD	IX,BufEnvName
 	PUSH	IX
-	CALL	Convert32
+	CALL	D32
 	POP	DE
 	XOR	A
 	RET
@@ -443,7 +443,7 @@ Fun_Filetotal:	LD	A,(HL)
 	JR	Next_0471
 
 GetAlloc:	LD	A,(HL)
-	CALL	MakeCapital
+	CALL	UC
 	SUB	"@"
 	RET	C
 	CP	9
@@ -456,10 +456,10 @@ GetAlloc:	LD	A,(HL)
 	SCF
 	RET	NZ
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	SCF
 	RET	Z
-	CALL	MakeCapital
+	CALL	UC
 	CP	"B"
 	JR	Z,Next_0476
 	CP	"K"
@@ -495,8 +495,8 @@ Fun_Filedate:	SCF
 Fun_Filetime:	EX	AF,AF'
 	EX	DE,HL
 	PUSH	DE
-	CALL	GetDateForm
-	CALL	GetTimeForm
+	CALL	DFORM
+	CALL	TFORM
 	POP	DE
 	PUSH	DE
 	LD	BC,_PARSE
@@ -504,7 +504,7 @@ Fun_Filetime:	EX	AF,AF'
 	EX	DE,HL
 	POP	DE
 	PUSH	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	POP	HL
 	JP	NZ,Next_0475
 	LD	(HL),A
@@ -526,7 +526,7 @@ Next_0477:	EX	AF,AF'
 	EX	AF,AF'
 	JR	C,Next_0480
 	PUSH	DE
-	CALL	PrintTime
+	CALL	DTIME
 	POP	BC
 	PUSH	AF
 	LD	(IX),":"
@@ -547,7 +547,7 @@ Next_0479:	LD	DE,BufEnvName+3
 
 Next_0480:	DEC	HL
 	LD	C,#00
-	CALL	PrintDate
+	CALL	DDATE
 	JR	Next_0479
 
 Fun_Filesize:	EX	DE,HL
@@ -562,9 +562,9 @@ Fun_Filesize:	EX	DE,HL
 	AND	%01100000
 	JP	NZ,Next_0475
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JP	Z,Next_0475
-	CALL	MakeCapital
+	CALL	UC
 	CP	"B"
 	JR	Z,Next_0481
 	CP	"K"
@@ -600,7 +600,7 @@ Fun_Fileattr:	EX	DE,HL
 	EX	DE,HL
 	POP	DE
 	PUSH	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	POP	HL
 	JP	NZ,Next_0475
 	LD	(HL),A
@@ -647,7 +647,7 @@ Fun_Label:	EX	DE,HL
 	RET
 
 Fun_Ready:	PUSH	HL
-	CALL	GetDriveLet
+	CALL	PARSDR
 	POP	DE
 	LD	B,#00
 	JR	NZ,Next_0485
@@ -694,16 +694,16 @@ Next_0486:	LD	A,(HL)
 	JP	Next_0458
 
 Fun_Instr:	LD	E,#00
-	CALL	GetDigit
+	CALL	GETDIG
 	JR	C,Next_0487
-	CALL	GetValue_8
+	CALL	GET8
 	JP	NZ,Next_0475
 Next_0487:	PUSH	DE
-	CALL	FndFirstChr
+	CALL	GETCH
 	CALL	ParseString
 	POP	DE
 	JP	Z,Next_0475
-	CALL	SkipSpace2
+	CALL	STRIP
 	PUSH	HL
 	LD	B,E
 	LD	E,#00
@@ -729,7 +729,7 @@ Next_0490:	INC	BC
 	JR	Z,Next_0491
 	PUSH	BC
 	PUSH	HL
-	CALL	Compare2
+	CALL	CHKEQ
 	POP	HL
 	POP	BC
 	JR	NZ,Next_0490
@@ -745,7 +745,7 @@ Next_0492:	POP	HL
 ParseString:	EX	DE,HL
 	LD	HL,BufExtra
 	LD	C,#00
-Next_0493:	CALL	CheckChar
+Next_0493:	CALL	RDCHAR
 	JR	C,Next_0494
 	CP	","
 	JR	Z,Next_0496
@@ -806,16 +806,16 @@ Fun_Path:	EX	DE,HL
 	RET
 
 Fun_Mid:	CALL	ParseString
-	CALL	NZ,FndFirstChr
+	CALL	NZ,GETCH
 	JP	Z,Next_0475
-	CALL	GetValue_8
+	CALL	GET8
 	JP	NZ,Next_0475
 	LD	A,E
 	PUSH	AF
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	E,A
 	JR	Z,Next_0498
-	CALL	GetValue_8
+	CALL	GET8
 Next_0498:	POP	BC
 	LD	HL,BufExtra-1
 Next_0499:	INC	HL
@@ -835,7 +835,7 @@ Next_0501:	LD	(HL),#00
 	RET
 
 Fun_Left:	CALL	ParseString
-	CALL	NZ,FndFirstChr
+	CALL	NZ,GETCH
 	JP	Z,Next_0475
 	LD	A,(HL)
 	CP	"-"
@@ -851,7 +851,7 @@ Next_0502:	LD	A,(HL)
 	JR	NZ,Next_0502
 	POP	HL
 	PUSH	BC
-	CALL	GetValue_8
+	CALL	GET8
 	POP	BC
 	JP	NZ,Next_0475
 	LD	A,B
@@ -861,7 +861,7 @@ Next_0502:	LD	A,(HL)
 	LD	E,#00
 	JR	Next_0504
 
-Next_0503:	CALL	GetValue_8
+Next_0503:	CALL	GET8
 	JP	NZ,Next_0475
 Next_0504:	LD	HL,BufExtra
 	PUSH	HL
@@ -869,9 +869,9 @@ Next_0504:	LD	HL,BufExtra
 	JR	Next_0500
 
 Fun_Right:	CALL	ParseString
-	CALL	NZ,FndFirstChr
+	CALL	NZ,GETCH
 	JP	Z,Next_0475
-	CALL	GetValue_8
+	CALL	GET8
 	JP	NZ,Next_0475
 	LD	HL,BufExtra
 	LD	D,#FF
@@ -920,7 +920,7 @@ Fun_Newfile:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	A,(DE)
-	CALL	SkipChar
+	CALL	SEP?
 	JP	NZ,Next_0475
 	EX	DE,HL
 	LD	(HL),#00
@@ -930,7 +930,7 @@ Fun_Newfile:	EX	DE,HL
 	LD	C,_PFILE
 	CALL	BDOS
 	POP	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JP	Z,Next_0475
 	EX	DE,HL
 	LD	HL,BufExtra+11
@@ -988,7 +988,7 @@ Fun_Ffirst:	CALL	SetAbort
 	JP	NZ,Next_0475
 	LD	HL,FIB3+#15
 	LD	DE,FileTotal1
-	CALL	RestSubt
+	CALL	ADD32
 	LD	HL,(FileCount)
 	INC	HL
 	LD	(FileCount),HL

@@ -6,14 +6,14 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-ReadBatLine:	LD	DE,ErrorHand2
+INBAT:	LD	DE,BATERR
 	LD	C,_DEFER
 	CALL	BDOS
 	LD	A,#3B
 	LD	(StringCode),A
 	LD	HL,BufEnvData
 	LD	(HL),#00
-	CALL	GetBatLine
+	CALL	IB10
 	PUSH	AF
 	PUSH	HL
 	LD	DE,#00
@@ -32,7 +32,7 @@ ReadBatLine:	LD	DE,ErrorHand2
 	JR	NZ,Next_0630
 	PUSH	HL
 	LD	HL,BufEnvData+1
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,(HL)
 	POP	HL
 	CP	"~"
@@ -41,26 +41,26 @@ ReadBatLine:	LD	DE,ErrorHand2
 Next_0630:	XOR	A
 	RET
 
-GetBatLine:	INC	HL
-	LD	(HL),#00
-Next_0307:	CALL	GetBatChar
+IB10:	INC	HL
+	LD	(HL),#00	; Terminate line so far with a null.
+IB15:	CALL	GetBatChar
 	LD	HL,BufEnvData
 	RET	NZ
 	LD	D,A
 	LD	A,C
 	CP	#0A
-	JR	Z,Next_0307
+	JR	Z,IB15
 	CP	#1A
 	JR	Z,Next_0308
 	SUB	#0D
 	RET	Z
 	BIT	7,(HL)
-	JR	NZ,Next_0307
+	JR	NZ,IB15
 	INC	(HL)
 	LD	E,(HL)
 	ADD	HL,DE
 	LD	(HL),C
-	JR	GetBatLine
+	JR	IB10
 
 Next_0308:	LD	A,.EOF
 	OR	A
@@ -68,7 +68,7 @@ Next_0308:	LD	A,.EOF
 
 GetBatChar:	LD	A,(BatchHandle)
 	CP	#FE
-	JR	NZ,Next_0632
+	JR	NZ,INBCHAR
 	CALL	GET_P2
 	LD	(TemporaryPage),A
 	LD	A,(BatchPage)
@@ -84,58 +84,58 @@ GetBatChar:	LD	A,(BatchHandle)
 Next_0631:	XOR	A
 	RET
 
-Next_0632:	LD	HL,(BatLineLen)
+INBCHAR:	LD	HL,(BatLineLen)	; Return A=error, C=char.
 	LD	A,H
 	OR	L
-	JR	NZ,Next_0309
-	LD	HL,#0100
-	LD	DE,BatchBuffer
-	LD	(BatLineAdr),DE
-	LD	A,(BatchHandle)
+	JR	NZ,BUFOK	; Go if some left.
+	LD	HL,#0100	; No. bytes to read = size of buffer.
+	LD	DE,BatchBuffer	; Try to read another buffer full.
+	LD	(BatLineAdr),DE	; Save pointer to current character.
+	LD	A,(BatchHandle)	; Get file handle for batch file.
 	LD	B,A
 	LD	C,_READ
-	CALL	BDOS
-	RET	NZ
+	CALL	BDOS	; Leaves HL=no. bytes read into buffer.
+	RET	NZ	; Return if error.
 	PUSH	HL
-	LD	DE,#0100
-	SBC	HL,DE
+	LD	DE,#0100	; If we read buffer full
+	SBC	HL,DE	;   it may not the end of batch file.
 	POP	HL
-	JR	Z,Next_0309
+	JR	Z,BUFOK
 	PUSH	HL
-	LD	DE,BatchBuffer
-	ADD	HL,DE
+	LD	DE,BatchBuffer	; Put ^Z at the buffer end
+	ADD	HL,DE	;   to avoid further reading.
 	LD	(HL),#1A
-	LD	A,(BatchHandle)
+	LD	A,(BatchHandle)	; Close batch file.
 	LD	B,A
 	LD	C,_CLOSE
-	CALL	BDOS
+	CALL	BDOS	; (error ignored)
 	POP	HL
 	INC	HL
-Next_0309:	DEC	HL
-	LD	(BatLineLen),HL
-	LD	HL,(BatLineAdr)
-	LD	C,(HL)
-	INC	HL
+BUFOK:	DEC	HL	; Dec. count after reading character.
+	LD	(BatLineLen),HL	; Save new count.
+	LD	HL,(BatLineAdr)	; Get pointer to current character.
+	LD	C,(HL)	; Return it in C.
+	INC	HL	; Ready for next character.
 	LD	(BatLineAdr),HL
-	XOR	A
+	XOR	A	; No error.
 	RET
 
-ErrorHand2:	CP	.WFILE
-	JR	Z,Next_0310
+BATERR:	CP	.WFILE	; Return with A=0 if .WFILE or .WDISK.
+	JR	Z,WFILE
 	CP	.WDISK
 	LD	A,#00
 	RET	NZ
-Next_0310:	PUSH	BC
+WFILE:	PUSH	BC
 	CALL	LPrint
 	LD	A,#37
-	CALL	PrintCode
+	CALL	DMESS
 	POP	AF
 	ADD	A,"@"
 	CALL	PrintChar
 	LD	A,#38
-	CALL	PrintCode
+	CALL	DMESS
 	CALL	LPrint
-	CALL	AskAnyKey
+	CALL	PAUSE
 	LD	A,#02
 	RET
 

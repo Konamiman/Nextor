@@ -445,7 +445,7 @@ Next_0653:	JR	NZ,Next_0654
 	LD	A,(HL)
 	OR	A
 	JR	Z,Next_0654
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	JR	C,Next_0653
 	LD	A,(HL)
 	DEFB	#21
@@ -502,7 +502,7 @@ Next_0659:	LD	(HL),"*"
 	LD	A,L
 	DEC	A
 	LD	(Toevoeg),A
-	LD	DE,ErrorHand1
+	LD	DE,DSKERR
 	LD	C,_DEFER
 	CALL	BDOS
 	LD	DE,AbortExit7
@@ -556,7 +556,7 @@ Next_0665:	LD	A,(FIB1+14)
 Next_0666:	LD	DE,0
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	DE,AbortExit2
+	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
 	POP	HL
@@ -638,7 +638,7 @@ Next_Tab:	LD	A,(#FBEB)
 	CALL	PrintChar
 	LD	A,(Invul)
 	LD	(Toevoeg),A
-Next_Tab2:	LD	DE,ErrorHand1
+Next_Tab2:	LD	DE,DSKERR
 	LD	C,_DEFER
 	CALL	BDOS
 	LD	DE,AbortExit7
@@ -657,7 +657,7 @@ Fout:	LD	A,7
 	LD	DE,#00
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	DE,AbortExit2
+	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
 	POP	HL

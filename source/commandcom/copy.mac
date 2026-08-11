@@ -6,9 +6,9 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-Cmd_Copy:	LD	DE,ListOption2
-	CALL	CountItem
-	CALL	Z,NoParameter
+@COPY:	LD	DE,CPYOPTS
+	CALL	PARSE
+	CALL	Z,CHKPAR
 	CALL	Z,ParseDestin
 	RET	NZ
 	LD	(IY+#18),B
@@ -25,10 +25,10 @@ Next_0241:	SET	7,(HL)
 	LD	(HL),A
 	LD	L,E
 	LD	H,D
-	CALL	FndFirstChr
-	CALL	ParseOption
+	CALL	GETCH
+	CALL	CHKOPT
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	LD	HL,OptionFlag1
@@ -46,15 +46,15 @@ Next_0241:	SET	7,(HL)
 	LD	H,A
 	LD	(CountFile),HL
 	LD	(Unknown2),HL
-	CALL	FirstFile
+	CALL	FIRST
 	RET	C
 	RES	0,(IY+#06)
-	CALL	OpenNul
+	CALL	CPYFORK
 	RET	NZ
 	LD	C,_GETVFY
 	CALL	BDOS
 	LD	(IY+#16),B
-	LD	DE,AbortExit6
+	LD	DE,ABORT
 	PUSH	DE
 	LD	C,_DEFAB
 	CALL	BDOS
@@ -64,109 +64,109 @@ Next_0241:	SET	7,(HL)
 	XOR	#01
 	LD	(HL),A
 	BIT	3,(HL)
-	JR	Z,Next_0242
+	JR	Z,NCPYV
 	LD	E,#FF
 	LD	C,_VERIFY
 	CALL	BDOS
-Next_0242:	LD	DE,BufEnvData
-	EXX
-Next_0243:	LD	DE,FIB1
+NCPYV:	LD	DE,BufEnvData	; Start of buffer.
+	EXX	; Save current buffer address in DE'.
+OPCPY:	LD	DE,FIB1	; Attempt to open source file.
 	LD	C,_OPEN
-	LD	A,#01
+	LD	A,#01	; Not write.
 	CALL	BDOS
-	JR	Z,Next_0244
-	CALL	CopyFile
-	EXX
-	LD	B,(IY+#17)
-	LD	C,_JOIN
+	JR	Z,Next_0244	; Go if opened OK.
+	CALL	CPYWRT	; Make sure all source files written.
+	EXX	; Save new start of buffer.
+	LD	B,(IY+#17)	; If no error do a 'join' to
+	LD	C,_JOIN	;   close all open files.
 	CALL	Z,BDOS
-	CALL	Z,OpenNul
+	CALL	Z,CPYFORK	; Then 'fork' again for next time.
 	RET	NZ
-	LD	DE,FIB1
+	LD	DE,FIB1	; Attempt to open source again.
 	LD	C,_OPEN
-	LD	A,#01
+	LD	A,#01	; Not write.
 	CALL	BDOS
-	RET	NZ
-Next_0244:	LD	A,B
-	LD	(TypeHandle),A
-	EXX
-	LD	HL,(ExitAdres)
-	OR	A
-	SBC	HL,DE
-	LD	BC,#0800
+	RET	NZ	; This time return errors.
+Next_0244:	LD	A,B	; Get source file handle.
+	LD	(TypeHandle),A	; Save this source file handle.
+	EXX	; DE -> current buffer position.
+	LD	HL,(ExitAdres)	; Make sure there is enough memory for
+	OR	A	;   source file info. Also allow some
+	SBC	HL,DE	;   extra for efficiency (see comments
+	LD	BC,#0800	;   at start of COPY).
 	SBC	HL,BC
-	JR	NC,Next_0245
-	CALL	CopyFile
-	RET	NZ
-Next_0245:	LD	HL,(Unknown2)
-	LD	B,(IY+#14)
-Next_0246:	LD	(Unknown2),DE
+	JR	NC,MEMOK	; Go if enough memory.
+	CALL	CPYWRT	; Else write out source files read so
+	RET	NZ	;   far.
+MEMOK:	LD	HL,(Unknown2)	; Add info about new source file onto
+	LD	B,(IY+#14)	; Get source handle.
+CONTRD:	LD	(Unknown2),DE
 	LD	A,H
 	OR	L
-	JR	Z,Next_0247
+	JR	Z,NLF
 	LD	(HL),E
 	INC	HL
 	LD	(HL),D
-Next_0247:	EX	DE,HL
-	LD	(HL),#00
+NLF:	EX	DE,HL	; HL -> current buffer position.
+	LD	(HL),#00	; End of chain.
 	INC	HL
 	LD	(HL),#00
 	INC	HL
-	LD	DE,FIB1+1
+	LD	DE,FIB1+1	; Remember source filename.
 Next_0248:	LD	A,(DE)
 	LD	(HL),A
 	INC	HL
 	INC	DE
 	OR	A
 	JR	NZ,Next_0248
-	LD	(HL),B
+	LD	(HL),B	; Save file handle / FF => continue.
 	INC	HL
-	EX	DE,HL
-	LD	HL,FIB1+#11
+	EX	DE,HL	; DE -> buffer.
+	LD	HL,FIB1+#11	; Copy date from FIB.
 	LDI
 	LDI
-	LD	HL,FIB1+#0F
+	LD	HL,FIB1+#0F	; Copy time from FIB.
 	LDI
 	LDI
-	LD	HL,#0203
-	ADD	HL,DE
+	LD	HL,#0203	; Round up to next sector boundary (&
+	ADD	HL,DE	;   allow 4 bytes for start & end ptr).
 	LD	L,#00
 	RES	0,H
-	EX	DE,HL
-	LD	(HL),E
+	EX	DE,HL	; HL -> buffer, DE -> data start.
+	LD	(HL),E	; Save data start.
 	INC	HL
 	LD	(HL),D
 	INC	HL
-	PUSH	HL
-	CALL	TypeFile
-	POP	HL
-	RET	NZ
-	CALL	C,SetEOF
-	LD	(HL),E
-	INC	HL
+	PUSH	HL	; Save ptr to end of data pointer.
+	CALL	READ	; Read from file, DE updated.
+	POP	HL	; Get old buffer address.
+	RET	NZ	; Ret if error from read.
+	CALL	C,SetEOF	; Add ^Z on end if /A on destination.
+	LD	(HL),E	; Save the end address of the data read
+	INC	HL	;   (Cy still not corrupted)
 	LD	(HL),D
-	JR	C,Next_0249
-	CALL	CopyFile
+	JR	C,NXTCPY	; Read next file if buffer not full.
+	CALL	CPYWRT	; Write out source files read.
 	RET	NZ
-	OR	A
-	JR	NZ,Next_0249
-	LD	B,#FF
-	JR	Next_0246
+	OR	A	; Read next source if unable to create
+	JR	NZ,NXTCPY	;   last destination.
+	LD	B,#FF	; Read more from the start of buffer.
+	JR	CONTRD
 
-Next_0249:	EXX
-	CALL	NextFile
-	JP	NC,Next_0243
-	CALL	Z,CopyFile
+NXTCPY:	EXX
+	CALL	NEXT
+	JP	NC,OPCPY
+	CALL	Z,CPYWRT
 	RET	NZ
 	BIT	5,(IY+#0A)
 	RET	Z
 	LD	A,#2E
-	CALL	PrintCode
+	CALL	DMESS
 	LD	HL,(CountFile)
 	PUSH	HL
 	LD	IX,BufExtra
 	PUSH	IX
-	CALL	Convert16
+	CALL	D16
 	POP	DE
 	CALL	PrintString
 	POP	HL
@@ -174,178 +174,193 @@ Next_0249:	EXX
 	LD	A,H
 	OR	L
 	LD	A,#2F
-	JR	Z,Next_0250
+	JR	Z,CPSING
 	LD	A,#30
-Next_0250:	JP	LPrintCode
+CPSING:	JP	DMESSCR
 
-CopyFile:	LD	HL,(Unknown2)
+CPYWRT:	LD	HL,(Unknown2)
 	LD	A,H
 	OR	L
-	JP	Z,Next_0261
+	JP	Z,WRET
 	LD	HL,BufEnvData
-Next_0251:	LD	C,(HL)
+CW10:	LD	C,(HL)	; Get ptr to next source file.
 	INC	HL
 	LD	B,(HL)
 	INC	HL
-	LD	E,L
+	LD	E,L	; Save ptr to source filename in DE.
 	LD	D,H
-Next_0252:	LD	A,(HL)
+FNDEND:	LD	A,(HL)	; Find end of name string.
 	INC	HL
 	OR	A
-	JR	NZ,Next_0252
-	LD	A,(HL)
+	JR	NZ,FNDEND
+	LD	A,(HL)	; File handle = FF => continue write.
 	INC	A
-	JP	Z,Next_0259
-	EXX
-	LD	B,(IY+#15)
-	LD	(IY+#15),#FF
-	LD	C,_CLOSE
-	CALL	BDOS
-	LD	DE,(DestinAdres)
+	JP	Z,CONTWRT
+	EXX	; Save HL, DE and BC.
+	LD	B,(IY+#15)	; Close existing destination
+	LD	(IY+#15),#FF	;   handle to guarantee that
+	LD	C,_CLOSE	;   there's a spare handle.
+	CALL	BDOS	;   (error ignored)
+	LD	DE,(DestinAdres)	; DE -> destination filename.
 	BIT	5,(IY+#18)
-	JR	NZ,Next_0255
-	LD	HL,(CountFile)
+	JR	NZ,CRTDST	; Just attempt a create if yes.
+	LD	HL,(CountFile)	; First file been created ?
 	LD	A,H
 	OR	L
-	JR	NZ,Next_0253
-	CALL	CreateNew
-	CP	.DIRX
-	JR	NZ,Next_0256
-	LD	HL,FIB2
-	LD	DE,FIB3
+	JR	NZ,DIRDEST	; Go & create in directory if yes.
+	CALL	CPYCRT	; Attempt to create dest (DE -> name).
+	CP	.DIRX	; Attempting to create in a directory ?
+	JR	NZ,DONDEST	; Go with error code if not.
+	LD	HL,FIB2	; Save FIB for sub-directory for
+	LD	DE,FIB3	;   creating dest files in it.
 	LD	BC,#40
 	LDIR
-	JR	Next_0254
+	JR	INDIR	; Create destination in directory.
 
-Next_0253:	LD	A,(FIB2+#0E)
-	AND	#80
-	JR	NZ,Next_0255
-	LD	A,(FIB3+#0E)
-	AND	#10
+DIRDEST:	LD	A,(FIB2+#0E)	; OK if last dest was a device
+	AND	#80	;   or directory, else 'Cannot
+	JR	NZ,CRTDST	;   overwrite previous dest.'.
+	LD	A,(FIB3+#0E)	; Give error if first dest was
+	AND	#10	;   not a directory.
 	LD	A,.OVDEST
-	JR	Z,Next_0257
-Next_0254:	LD	DE,FIB3
-Next_0255:	CALL	CreateNew
-Next_0256:	OR	A
-	JR	Z,Next_0258
-	PUSH	AF
-	CALL	NZ,OpenNul2
+	JR	Z,BADEST	;   (same dest as first file).
+INDIR:	LD	DE,FIB3
+CRTDST:	CALL	CPYCRT
+DONDEST:	OR	A	; A=error from create attempt.
+	JR	Z,DESTOK	; Go if dest created OK.
+	PUSH	AF	; Else open a file as a dummy dest to
+	CALL	NZ,OPNUL	;   ensure there's always a dest open.
 	POP	AF
-	CP	.FOPEN
-	JR	NZ,Next_0257
+	CP	.FOPEN	; If .FOPEN, then check for 'file
+	JR	NZ,BADEST	;   cannot be copied onto itself'.
 	EXX
-	LD	A,(HL)
+	LD	A,(HL)	; Get source handle.
 	EXX
 	LD	B,A
-	LD	DE,FIB2
-	LD	C,_HTEST
+	LD	DE,FIB2	; See if source & attempted destination
+	LD	C,_HTEST	;   file are the same.
 	CALL	BDOS
-	JR	NZ,Next_0257
+	JR	NZ,BADEST
 	OR	B
-	LD	A,.COPY
-	JR	NZ,Next_0257
-	LD	A,.BADEST
-Next_0257:	EXX
-	PUSH	BC
-	LD	C,A
+	LD	A,.COPY	; 'File cannot be copied onto itself'
+	JR	NZ,BADEST	;   if they are.
+	LD	A,.BADEST	; Else 'Cannot create destination'.
+BADEST:	EXX
+	PUSH	BC	; Save pointer to next source file.
+	LD	C,A	; C=error code, DE -> source filename.
 	XOR	A
-	LD	(FIB2),A
+	LD	(FIB2),A	; No dest created (for abort routine).
 	PUSH	DE
-	LD	DE,FIB2+1
-	CALL	FileError2
+	LD	DE,FIB2+1	; Print destination filename
+	CALL	DBADF	; Print filename & error message.
 	POP	DE
-	POP	HL
-	INC	A
-	JR	Next_0260
+	POP	HL	; HL -> next source file.
+	INC	A	; A<>0 => couldn't create destination.
+	JR	WRNXT	; Attempt to write next source file.
 
-Next_0258:	EXX
-	PUSH	DE
+DESTOK:	EXX	; Print name of this source file if
+	PUSH	DE	;   ambiguous source specified.
 	EXX
 	POP	DE
 	BIT	5,(IY+#0A)
-	CALL	NZ,LPrintString
-	LD	HL,(CountFile)
+	CALL	NZ,DMSCR
+	LD	HL,(CountFile)	; Inc count of no. files copied.
 	INC	HL
 	LD	(CountFile),HL
-	LD	DE,FIB2
-	LD	A,#02
+	LD	DE,FIB2	; Attempt to open new file.
+	LD	A,#02	; Not read.
 	LD	C,_OPEN
 	CALL	BDOS
 	RET	NZ
-	LD	(IY+#15),B
+	LD	(IY+#15),B	; Save destination file handle.
 	EXX
-Next_0259:	PUSH	BC
-	INC	HL
-	LD	DE,FileDate
+CONTWRT:	PUSH	BC
+	INC	HL	; Skip source file handle.
+	LD	DE,FileDate	; Save date of source in SDATE.
 	LDI
 	LDI
-	LD	DE,FileTime
+	LD	DE,FileTime	; Save time of source in STIME.
 	LDI
 	LDI
-	LD	E,(HL)
+	LD	E,(HL)	; Get start address of data.
 	INC	HL
 	LD	D,(HL)
 	INC	HL
-	LD	A,(HL)
+	LD	A,(HL)	; Get end address of data.
 	INC	HL
 	LD	H,(HL)
 	LD	L,A
-	EX	DE,HL
-	CALL	WriteFile
-	POP	HL
-	RET	NZ
-Next_0260:	LD	C,A
+	EX	DE,HL	; HL=start, DE=end.
+	CALL	WRITE2	; Attempt to write the data.
+	POP	HL	; Get pointer to next source file.
+	RET	NZ	; Ret if error from write.
+WRNXT:	LD	C,A	; A<>0 => couldn't create destination.
 	LD	A,H
 	OR	L
-	JP	NZ,Next_0251
+	JP	NZ,CW10	; Go if more source files to do.
 	LD	(Unknown2),HL
-	LD	A,C
-Next_0261:	LD	DE,BufEnvData
+	LD	A,C	; A<>0 => last dest not created.
+WRET:	LD	DE,BufEnvData	; Else start again at start of buffer.
 	RET
 
-OpenNul:	LD	C,_FORK
-	CALL	BDOS
+;        This routine is used by COPY to do a  'fork'  before  opening  source
+; files.  This  allows  it to later do a 'join' as a convenient way of closing
+; all files, which needs to be done when it runs out of file handles to use.
+;        A destination file is always open to 'reserve' a  handle.  After  the
+; fork  here  it  is  a  dummy destination open to the NUL device, but after a
+; destination has been created for the first time this will be replaced by the
+; previous destinatin file.
+; On exit, AF is an error code.
+CPYFORK:	LD	C,_FORK	; Do a 'fork' so that all files can be
+	CALL	BDOS	;   closed by doing a 'join'.
 	RET	NZ
 	LD	A,B
-	LD	(ID_Copy),A
-OpenNul2:	LD	DE,DeviceNul
-	LD	C,_OPEN
-	LD	A,#03
+	LD	(ID_Copy),A	; Save returned id for doing a join.
+OPNUL:	LD	DE,NULDEV	; Open a dummy handle to the NUL device
+	LD	C,_OPEN	;   to 'reserve' a handle for the
+	LD	A,#03	;   destination file.
 	CALL	BDOS
 	RET	NZ
-	LD	(IY+#15),B
+	LD	(IY+#15),B	; Save destination handle.
 	RET
 
 SetEOF:	BIT	5,(IY+#06)
-	RET	Z
+	RET	Z	;   /A on destination.
 	LD	A,#1A
 	LD	(DE),A
 	INC	DE
 	RET
 
-CreateNew:	EXX
-	PUSH	DE
+;        This routine is called by the  COPY  command  to  simply  create  the
+; destination file, and return with the error code. On entry, DE points to the
+; filename or FIB. Before doing the 'find  new',  HL  is  pointed  to  a  null
+; filename.  This  is  done  in case DE points to a FIB, in which case HL must
+; point to a filename. A null filename is equivalent to *.*, which  means  use
+; the 'template' filename in the new FIB. This needs to  be  copied  from  the
+; source filename for both kinds of 'find new'.
+CPYCRT:	EXX
+	PUSH	DE	; Get pointer to source filename.
 	EXX
 	POP	BC
-	LD	HL,FIB2+1
-Next_0262:	LD	A,(BC)
+	LD	HL,FIB2+1	; Copy source to here.
+CPYSRCE:	LD	A,(BC)
 	LD	(HL),A
 	INC	HL
 	INC	BC
 	OR	A
-	JR	NZ,Next_0262
-	LD	HL,DeviceNul+3
-	LD	IX,FIB2
-	LD	BC,_FNEW
+	JR	NZ,CPYSRCE
+	LD	HL,NULDEV+3	; HL->null filename, in case DE->FIB.
+	LD	IX,FIB2	; FIB for dest goes here.
+	LD	BC,_FNEW	; Zero attributes.
 	JP	BDOS
 
-DeviceNul:	DEFB	"NUL",0
+NULDEV:	DEFB	"NUL",0	; Name of NUL device for dummy dest.
 
-Cmd_Help:	CALL	FindScrSize
+@HELP:	CALL	SETP
 	LD	A,(HL)
 	OR	A
 	LD	A,#31
-	JP	Z,LPrintCode
+	JP	Z,DMESSCR
 	PUSH	HL
 	EXX
 	POP	DE
@@ -354,44 +369,44 @@ Cmd_Help:	CALL	FindScrSize
 	RET	NZ
 	EX	DE,HL
 	LD	A,(HL)
-	CALL	SkipChar
+	CALL	SEP?
 	LD	A,.NOHELP
-	CALL	Z,LastItem
+	CALL	Z,GCHKEOL
 	RET	NZ
 	LD	(HL),A
-	LD	HL,Env_Help
-	CALL	GetEnvData2
+	LD	HL,HELP$
+	CALL	GENV2
 	RET	NZ
 	LD	A,(DE)
 	OR	A
-	JR	NZ,Next_0266
+	JR	NZ,GOTSTR
 	LD	HL,Data_Help
 	PUSH	DE
 	CALL	NCopy
 	POP	DE
-Next_0266:	LD	B,#00
+GOTSTR:	LD	B,#00	; Parse source of HELP files.
 	LD	C,_PARSE
 	PUSH	DE
 	CALL	BDOS
-	EX	DE,HL
-	POP	DE
+	EX	DE,HL	; HL -> terminating character.
+	POP	DE	; DE -> start of string.
 	RET	NZ
-	LD	A,B
+	LD	A,B	; Add a '\' if non-null last item.
 	AND	#18
 	JR	Z,Next_0267
 	LD	(HL),"\"
 	INC	HL
-Next_0267:	EXX
+Next_0267:	EXX	; Get pointer to command for HELP.
 	PUSH	HL
 	EXX
-	POP	BC
-Next_0268:	LD	A,(BC)
-	LD	(HL),A
+	POP	BC	; BC -> start of command name for HELP.
+CPYHLP:	LD	A,(BC)	; Copy command name to end of HELP
+	LD	(HL),A	;   path.
 	INC	BC
 	INC	HL
 	OR	A
-	JR	NZ,Next_0268
-	DEC	HL
+	JR	NZ,CPYHLP
+	DEC	HL	; Stick a '.HLP' extension on the end.
 	LD	(HL),"."
 	INC	HL
 	LD	(HL),"H"
@@ -400,181 +415,187 @@ Next_0268:	LD	A,(BC)
 	INC	HL
 	LD	(HL),"P"
 	INC	HL
-	LD	(HL),A
-	EX	DE,HL
-	LD	DE,Null2
-	CALL	Type2
+	LD	(HL),A	; Terminate in a null.
+	EX	DE,HL	; HL -> start of HELP drive/path/file.
+	LD	DE,HLPOPTS	; DE -> table of options for HELP.
+	CALL	TYPFIL	; TYPE the help file (NC, A=0).
 	OR	A
 	RET	Z
-	CP	.IDRV
-	JR	Z,Next_0269
+	CP	.IDRV	; Convert certain errors into 'File for
+	JR	Z,NOHELP	;   HELP not found'.
 	CP	.IPATH
-	JR	Z,Next_0269
+	JR	Z,NOHELP
 	CP	.NODIR
-	JR	Z,Next_0269
+	JR	Z,NOHELP
 	CP	.NOFIL
 	RET	NZ
-Next_0269:	LD	A,.NOHELP
+NOHELP:	LD	A,.NOHELP
 	RET
 
-Cmd_Type:	LD	DE,ListOption5
-Type2:	PUSH	AF
-	CALL	CountItem
-	CALL	Z,NoParameter
-	CALL	Z,LastByte
-	POP	BC
+@TYPE:	LD	DE,TYPOPTS
+TYPFIL:	PUSH	AF	; Save HELP/TYPE flag (NZ => TYPE).
+	CALL	PARSE	; Parse source filename.
+	CALL	Z,CHKPAR	; Check that something was parsed.
+	CALL	Z,CHKEOL	; Check for garbage on the end of line.
+	POP	BC	; B=NZ => TYPE, not HELP.
 	RET	NZ
-	LD	HL,OptionFlag2
-	OR	B
-	JR	NZ,Next_0270
+	LD	HL,OptionFlag2	; If /B not given, then default to /A.
+	OR	B	; If HELP, then check that the
+	JR	NZ,Next_0270	;   parameter was not ambiguous.
 	BIT	5,(IY+#0A)
-	JR	NZ,Next_0269
+	JR	NZ,NOHELP
 Next_0270:	BIT	6,(HL)
 	JR	NZ,Next_0271
 	SET	5,(HL)
 Next_0271:	SET	7,(HL)
-	CALL	FirstFile
+	CALL	FIRST	; Look for first file.
 	RET	C
 	SET	0,(IY+#06)
 Next_0272:	BIT	5,(IY+#0A)
-	JR	Z,Next_0275
-	LD	DE,FIB1+1
+	JR	Z,NAMBIG	;   ambiguous source filename.
+	LD	DE,FIB1+1	; Print source filename.
 	PUSH	DE
-	CALL	LPrintString
+	CALL	DMSCR
 	POP	DE
-Next_0273:	LD	A,(DE)
+UND:	LD	A,(DE)	; Underline it with hyphens.
 	OR	A
-	JR	Z,Next_0274
+	JR	Z,UNDD
 	INC	DE
 	LD	A,"-"
 	CALL	PrintChar
-	JR	Next_0273
+	JR	UND
 
-Next_0274:	CALL	LPrint
-Next_0275:	LD	DE,FIB1
+UNDD:	CALL	LPrint
+NAMBIG:	LD	DE,FIB1	; Attempt to open source file.
 	LD	BC,_OPEN
-	LD	A,#01
+	LD	A,#01	; Not write.
 	CALL	BDOS
 	RET	NZ
-	LD	(IY+#14),B
-Next_0276:	LD	DE,BufEnvData+#EB
-	CALL	TypeFile
-	RET	NZ
-	JR	NC,Next_0276
-	CALL	LPrint
-	LD	C,_CLOSE
-	LD	B,(IY+#14)
+	LD	(IY+#14),B	; Save source file handle.
+RDTYP:	LD	DE,BufEnvData+#EB	; Start of buffer.
+	CALL	READ	; Read from source file into buffer,
+	RET	NZ	;   and print on screen.
+	JR	NC,RDTYP	; Keep going if not end of file.
+	CALL	LPrint	; Else put a CR, LF on the end.
+	LD	C,_CLOSE	; End of file reached, so close it &
+	LD	B,(IY+#14)	;   look for next.
 	CALL	BDOS
-	RET	NZ
-	CALL	NextFile
-	JR	NC,Next_0272
-	RET
+	RET	NZ	; Return if error, else Z.
+	CALL	NEXT	; Look for next source file.
+	JR	NC,Next_0272	; Open & read next if found.
+	RET	; Ret with error code from NEXT.
 
-Cmd_Concat:	LD	DE,ListOption4
-	CALL	CountItem
-	CALL	Z,NoParameter
-	CALL	Z,ParseDestin
-	RET	NZ
-	LD	A,B
-	AND	#05
-	LD	A,.NOPAR
+		SUBTTL	CONCAT
+;******************************************************************************
+;        This is the CONCAT command routine. This takes  a  possibly  ambigous
+; source  filespec  and  an unambiguous destination filename, and concatenates
+; all the source files into  the  destination  files.  CONCAT  shares  several
+; routines with copy, and behaves in a similar way for reading source files.
+@CONCAT:	LD	DE,ListOption4	; DE -> table of valid / options.
+	CALL	PARSE	; Parse source filename.
+	CALL	Z,CHKPAR	; Check that something was parsed.
+	CALL	Z,ParseDestin	; Parse destination filename.
+	RET	NZ	; Ret if error, else DE -> dest.
+	LD	A,B	; Get parse flags for destination.
+	AND	#05	; 'Missing parameter' if nothing
+	LD	A,.NOPAR	;   parsed.
 	RET	Z
-	EX	DE,HL
-	LD	(DestinAdres),HL
-	LD	HL,OptionFlag2
+	EX	DE,HL	; DE -> terminating character.
+	LD	(DestinAdres),HL	; Save pointer to destination string.
+	LD	HL,OptionFlag2	; If /B not given at start, then set /A
 	BIT	6,(HL)
 	JR	NZ,Next_0277
 	SET	5,(HL)
 Next_0277:	SET	7,(HL)
 	LD	A,(HL)
 	LD	HL,OptionFlag1
-	LD	B,(HL)
-	LD	(HL),A
-	LD	L,E
+	LD	B,(HL)	; Save ATTRS & initialise it to parse
+	LD	(HL),A	;   destination options into it.
+	LD	L,E	; Point HL to terminating character.
 	LD	H,D
-	CALL	FndFirstChr
-	CALL	ParseOption
+	CALL	GETCH
+	CALL	CHKOPT
 	RET	NZ
-	CALL	FndFirstChr
-	LD	A,.INP
+	CALL	GETCH	; Skip separators & give error if not
+	LD	A,.INP	;   end of line.
 	RET	NZ
 	LD	HL,OptionFlag1
-	LD	A,(HL)
-	LD	(OptionFlag4),A
-	AND	#BF
-	OR	B
-	LD	(HL),A
-	XOR	A
+	LD	A,(HL)	; Get destination / options.
+	LD	(OptionFlag4),A	; Save in DESTOPT.
+	AND	#BF	; Mask out destination / B option.
+	OR	B	; Combine destination & source options.
+	LD	(HL),A	; Restore original ATTRS.
+	XOR	A	; Ensure dest. is null-terminated.
 	LD	(DE),A
-	LD	(FIB2),A
-	LD	(IY+#15),#FF
-	CALL	FirstFile
+	LD	(FIB2),A	; No destination created yet.
+	LD	(IY+#15),#FF	; No destination openned yet.
+	CALL	FIRST	; Make sure at least one file exists !
 	RET	C
-	LD	C,_GETVFY
+	LD	C,_GETVFY	; Save current verify state in case /V.
 	CALL	BDOS
 	LD	(IY+#16),B
-	LD	DE,(DestinAdres)
-	LD	BC,_FNEW
-	LD	IX,FIB2
-	CALL	BDOS
+	LD	DE,(DestinAdres)	; Attempt to create destination file.
+	LD	BC,_FNEW	; Do a 'Find New' and 'Open' rather
+	LD	IX,FIB2	;   than a 'create' so that ABORT
+	CALL	BDOS	;   routine still works.
 	RET	NZ
-	LD	DE,AbortExit6
-	PUSH	DE
-	LD	C,_DEFAB
-	CALL	BDOS
-	RET	NZ
-	LD	DE,FIB2
-	LD	A,#02
+	LD	DE,ABORT	; Define abort routine to tidy up if an
+	PUSH	DE	;   abort occurs (eg. deletes dest if
+	LD	C,_DEFAB	;   it has not been closed yet). Also
+	CALL	BDOS	;   returns via here when command
+	RET	NZ	;   finishes with or without error.
+	LD	DE,FIB2	; Attempt to open the new dest file.
+	LD	A,#02	; Not read.
 	LD	C,_OPEN
 	CALL	BDOS
 	RET	NZ
-	LD	(IY+#15),B
+	LD	(IY+#15),B	; Save handle of destination file.
 	BIT	3,(IY+#05)
-	JR	Z,Next_0278
-	LD	E,#FF
+	JR	Z,NCATV
+	LD	E,#FF	; FF => verify enabled.
 	LD	C,_VERIFY
 	CALL	BDOS
-Next_0278:	LD	DE,BufEnvName-#14
-Next_0279:	EXX
-	LD	DE,FIB1
-	LD	B,(IY+#15)
-	LD	C,_HTEST
-	CALL	BDOS
+NCATV:	LD	DE,BufEnvName-#14
+OPCAT:	EXX	; Get another buffer full.
+	LD	DE,FIB1	; Check to see if the found source file
+	LD	B,(IY+#15)	;   is in fact the destination file,
+	LD	C,_HTEST	;   and print the filename and a
+	CALL	BDOS	;   message if it is.
 	RET	NZ
-	OR	B
+	OR	B	; Z => different files (OK).
 	LD	A,.NOCAT
-	JR	NZ,Next_0282
+	JR	NZ,NXTCAT	; Go with NZ, A=error if the same file.
 	BIT	5,(IY+#0A)
-	LD	DE,FIB1+1
-	CALL	NZ,LPrintString
-	LD	DE,FIB1
+	LD	DE,FIB1+1	;   ambiguous source specified.
+	CALL	NZ,DMSCR
+	LD	DE,FIB1	; Attempt to open source file.
 	LD	C,_OPEN
-	LD	A,#01
+	LD	A,#01	; Not write.
 	CALL	BDOS
 	RET	NZ
-	LD	(IY+#14),B
-	EXX
-Next_0280:	CALL	TypeFile
+	LD	(IY+#14),B	; Save source file handle.
+	EXX	; DE -> current buffer position.
+RDCAT:	CALL	READ	; Read from source file into buffer.
 	RET	NZ
-	JR	C,Next_0281
-	CALL	WriteFile2
-	RET	NZ
-	JR	Next_0280
+	JR	C,GOTEOF	; Go if end of source file reached.
+	CALL	WRITE	; Else write out entire buffer to dest.
+	RET	NZ	; DE -> back to buffer start.
+	JR	RDCAT	; Continue reading.
 
-Next_0281:	EXX
-	LD	C,_CLOSE
-	LD	B,(IY+#14)
+GOTEOF:	EXX	; Save buffer ptr in DE'.
+	LD	C,_CLOSE	; End of file reached, so close it &
+	LD	B,(IY+#14)	;   look for next.
 	CALL	BDOS
-	RET	NZ
-Next_0282:	CALL	NZ,FileError
-	CALL	NextFile
-	EXX
-	JR	NC,Next_0279
-	CALL	Z,WriteFile2
-	RET	NZ
+	RET	NZ	; Return if error, else Z.
+NXTCAT:	CALL	NZ,DBADFIL	; Print fn. & msg. if not from above.
+	CALL	NEXT	; Look for next source file.
+	EXX	; DE -> current buffer position.
+	JR	NC,OPCAT	; Open & read next if found.
+	CALL	Z,WRITE	; Write out remaining stuff in buffer.
+	RET	NZ	; Ret if error.
 	BIT	6,(IY+#06)
-	RET	NZ
-	LD	HL,BufEnvData
+	RET	NZ	;   on destination.
+	LD	HL,BufEnvData	; Else write a ^Z on the end.
 	LD	(HL),#1A
 	EX	DE,HL
 	LD	HL,#01
@@ -582,11 +603,11 @@ Next_0282:	CALL	NZ,FileError
 	LD	B,(IY+#15)
 	JP	BDOS
 
-ListOption2:	DEFB	"T"
+CPYOPTS:	DEFB	"T"
 	DEFB	#01
 ListOption4:	DEFB	"V"
 	DEFB	#08
-ListOption5:	DEFB	"A"
+TYPOPTS:	DEFB	"A"
 	DEFB	#20
 	DEFB	"B"
 	DEFB	#40
@@ -596,95 +617,111 @@ ListOption5:	DEFB	"A"
 	DEFB	#00
 	DEFB	"S"
 	DEFB	#04
-Null2:	DEFB	0
+HLPOPTS:	DEFB	0	; No / options for HELP.
 
-Next_0283:	EX	DE,HL
-	LD	A,H
+;        This routine is called from COPY, CONCAT, TYPE  and  HELP  and  reads
+; data from the source file.
+;        After reading a buffer full, it performs any processing necessary  on
+; the  file for ASCII copies (ie. truncating the file at the first ^Z) and for
+; the TYPE command (ie.  converting  non-printable  characters  into  printing
+; characters).   These checks should really be done by calling the CHKCHR BDOS
+; function to allow for 16-bit characters, but this is far too slow (about 1/2
+; minute for 40K), so these  characters  are  searched  for  byte-by-byte.  In
+; practise  this  will  not  matter  because  16-bit characters do not contain
+; control characters.
+; On entry, DE -> current buffer address.
+; On exit, DE -> updated buffer address.
+;          AF = error code.
+;          AF = Z, NC => read OK, buffer full (not end of file).
+;          AF = Z, Cy => read OK, end of source file read (or ^Z in /A mode).
+;       The entry point is not at the top, but at READ.
+Next_0283:	EX	DE,HL	; HL -> next free byte in buffer.
+	LD	A,H	; No bytes read = 0 (end of file) ?
 	OR	L
-	SCF
-	RET	Z
-	PUSH	IX
-	POP	BC
-	XOR	A
+	SCF	; Return C => end of file if yes.
+	RET	Z	; Z => no error.
+	PUSH	IX	; If fewer bytes were read than
+	POP	BC	;   requested, then read some more.
+	XOR	A	; Z => no error, NC.
 	SBC	HL,BC
-	RET	Z
-TypeFile:	LD	HL,(ExitAdres)
-	DEC	HL
-	XOR	A
-	SBC	HL,DE
-	LD	L,A
-	RES	0,H
-	RET	Z
+	RET	Z	; Z => no error, NC => buffer full.
+READ:	LD	HL,(ExitAdres)	; Get top of memory, & allow an extra
+	DEC	HL	;   byte for COPY /A to add ^Z on end.
+	XOR	A	; NC, no error.
+	SBC	HL,DE	; Calculate size left (ie. max. no.
+	LD	L,A	;   bytes to read) but truncate to a
+	RES	0,H	;   multiple of the sector size for
+	RET	Z	;   efficiency. Ret if buffer full.
 	BIT	0,(IY+#06)
-	JR	Z,Next_0284
-	LD	BC,#1800
-	SBC	HL,BC
-	ADD	HL,BC
-	JR	C,Next_0284
+	JR	Z,NLIMIT
+	LD	BC,#1800	; Limit to 6K if TYPE (this prevents it
+	SBC	HL,BC	;   from sitting there trying to read
+	ADD	HL,BC	;   Ks & Ks of stuff when only the
+	JR	C,NLIMIT	;   start of the file is really wanted)
 	LD	H,B
-Next_0284:	PUSH	DE
+NLIMIT:	PUSH	DE	; Save ptr to start of buffer.
+	PUSH	HL	; Save no. bytes requested.
 	PUSH	HL
-	PUSH	HL
-	POP	IX
+	POP	IX	; Save in IX too.
 	LD	C,_READ
 	LD	B,(IY+#14)
 	CALL	BDOS
-	POP	BC
-	POP	DE
-	JR	Z,Next_0285
-	CP	.EOF
-	RET	NZ
-Next_0285:	EX	DE,HL
-	ADD	HL,DE
+	POP	BC	; Get no. bytes requested.
+	POP	DE	; Restore ptr. to start of buffer.
+	JR	Z,NRDER	; Go if no error from read.
+	CP	.EOF	; Ignore end of file (no. bytes read=0
+	RET	NZ	;   in this case), but return others.
+NRDER:	EX	DE,HL	; HL -> start, DE = no. bytes read.
+	ADD	HL,DE	; HL = next free byte.
 	BIT	0,(IY+#06)
-	JR	NZ,Next_0286
+	JR	NZ,CHKCHRS	; Go if yes.
 	BIT	5,(IY+#03)
-	JR	Z,Next_0283
-Next_0286:	SBC	HL,DE
-	LD	C,E
+	JR	Z,Next_0283	; Go if not.
+CHKCHRS:	SBC	HL,DE	; Point HL back to start.
+	LD	C,E	; BC=down counter for bytes in buffer.
 	LD	B,D
-	LD	DE,#00
+	LD	DE,#00	; DE = no. bytes checked so far.
 	JR	Next_0288
 
-Next_0287:	INC	HL
+CHKN:	INC	HL	; Next character.
 	INC	DE
-	DEC	BC
-Next_0288:	LD	A,B
+	DEC	BC	; Decrement character count.
+Next_0288:	LD	A,B	; All characters checked ?
 	OR	C
-	JR	Z,Next_0283
-	LD	A,(HL)
+	JR	Z,Next_0283	; Go if yes.
+	LD	A,(HL)	; Get character.
 	BIT	5,(IY+#03)
-	JR	Z,Next_0289
-	EX	DE,HL
-	SUB	#1A
+	JR	Z,Next_0289	; Skip check if not.
+	EX	DE,HL	; DE -> next free byte in buffer.
+	SUB	#1A	; End of file in ASCII mode ?
 	SCF
-	RET	Z
-	EX	DE,HL
-	LD	A,(HL)
+	RET	Z	; Ret with Z => no error, C => EOF.
+	EX	DE,HL	; Restore pointers.
+	LD	A,(HL)	; Get character again.
 Next_0289:	BIT	0,(IY+#06)
-	JR	Z,Next_0287
+	JR	Z,CHKN	;   printing characters.
 	BIT	5,(IY+#03)
-	JR	Z,Next_0291
+	JR	Z,PRCH
 	CP	#7F
-	JR	Z,Next_0290
-	CP	#20
-	JR	NC,Next_0291
-	CP	#0D
-	JR	Z,Next_0291
+	JR	Z,PRCC
+	CP	#20	; TYPE, so convert control characters
+	JR	NC,PRCH	;   into printing characters.
+	CP	#0D	; Not CR or LF though !
+	JR	Z,PRCH
 	CP	#0A
-	JR	Z,Next_0291
+	JR	Z,PRCH
 	CP	#09
-	JR	Z,Next_0291
-Next_0290:	XOR	#40
+	JR	Z,PRCH
+PRCC:	XOR	#40
 	PUSH	AF
 	LD	A,"^"
 	CALL	PrintChar
 	POP	AF
-Next_0291:	CALL	PrintChar
-	JR	Next_0287
+PRCH:	CALL	PrintChar	; Output directly if TYPE.
+	JR	CHKN	; Check next character.
 
-WriteFile2:	LD	HL,BufEnvName-#14
-WriteFile:	PUSH	HL
+WRITE:	LD	HL,BufEnvName-#14
+WRITE2:	PUSH	HL
 	EX	DE,HL
 	OR	A
 	SBC	HL,DE
@@ -693,9 +730,9 @@ WriteFile:	PUSH	HL
 	PUSH	BC
 	CALL	BDOS
 	POP	BC
-	JR	NZ,Next_0293
+	JR	NZ,WRERR
 	BIT	0,(IY+#05)
-	JR	Z,Next_0292
+	JR	Z,NSURE
 	LD	IX,(FileTime)
 	LD	HL,(FileDate)
 	LD	A,#01
@@ -703,56 +740,64 @@ WriteFile:	PUSH	HL
 	PUSH	BC
 	CALL	BDOS
 	POP	BC
-Next_0292:	LD	C,_ENSURE
+NSURE:	LD	C,_ENSURE	; Ensure & flush buffers.
 	CALL	Z,BDOS
-Next_0293:	POP	DE
-	RET
+WRERR:	POP	DE	; Return DE -> start of buffer.
+	RET	; With error code.
 
-AbortExit6:	LD	DE,AbortExit2
-	PUSH	DE
-	PUSH	BC
-	PUSH	AF
+;        This routine is jumped to after  CONCAT  and  COPY  finish.  This  is
+; either  because an abort error occured, or just because the command returned
+; successfully or with an error. In both cases, the destination file handle is
+; closed and then the destination file is deleted if A<>0.
+ABORT:	LD	DE,CLI_ABORT	; Stop recursion if another abort.
+	PUSH	DE	; Also return to here.
+	PUSH	BC	; Save secondary error in case abort.
+	PUSH	AF	; Save error code from CONCAT or COPY.
 	LD	C,_DEFAB
-	CALL	BDOS
-	LD	E,(IY+#16)
+	CALL	BDOS	;   (error ignored)
+	LD	E,(IY+#16)	; Restore the saved verify state.
 	LD	C,_VERIFY
 	CALL	BDOS
-	LD	B,(IY+#15)
+	LD	B,(IY+#15)	; Close the destination file.
 	LD	C,_CLOSE
-	CALL	BDOS
-	POP	AF
-	PUSH	AF
-	LD	DE,FIB2
+	CALL	BDOS	;   (error ignored)
+	POP	AF	; Get back error code.
+	PUSH	AF	; Delete the possibly partial
+	LD	DE,FIB2	;   destination file if error.
 	LD	C,_DELETE
 	OR	A
-	JR	Z,Next_0294
+	JR	Z,dont_delete
 	CP	.ABORT
-Next_0294:	CALL	NZ,BDOS
+dont_delete:	CALL	NZ,BDOS
 	POP	AF
-	POP	BC
-	RET
+	POP	BC	; Get possible secondary error code.
+	RET	; Return with command's error.
 
-ParseDestin:	LD	B,#00
+		SUBTTL	PRS
+;------------------------------------------------------------------------------
+;        This little routine is called from  COPY  and  CONCAT  to  parse  the
+; destination filename.
+ParseDestin:	LD	B,#00	; Not parsing a valume name.
 	LD	C,_PARSE
-	EX	DE,HL
+	EX	DE,HL	; DE -> start of string.
 	PUSH	DE
 	CALL	BDOS
-	EX	DE,HL
-	POP	DE
-	RET	NZ
+	EX	DE,HL	; HL -> terminating character.
+	POP	DE	; DE -> start of filename string.
+	RET	NZ	; Return if error.
 	PUSH	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	POP	HL
-	JR	Z,Next_0295
-	CP	"/"
-	JR	Z,Next_0295
-	LD	A,.IPATH
-	RET
+	JR	Z,TERMOK	; End of line is OK.
+	CP	"/"	; / is OK as path string terminator.
+	JR	Z,TERMOK
+	LD	A,.IPATH	; 'Invalid pathname' if terminator is
+	RET	;   not a separator.
 
-Next_0295:	LD	A,B
+TERMOK:	LD	A,B	; Set ambiguous bit if null last item.
 	AND	#18
 	JR	NZ,Next_0296
 	SET	5,B
-Next_0296:	XOR	A
+Next_0296:	XOR	A	; Else no error.
 	RET
 

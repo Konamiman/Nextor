@@ -6,62 +6,69 @@
 ; repository. Do not reformat or reorganize while the build is verified
 ; byte-identical against command241.com (see Makefile, target "verify").
 ;
-Cmd_Atdir:	SCF
-Cmd_Attrib:	EX	AF,AF'
-	LD	DE,#00
-	LD	(Attribute1),DE
-	CALL	FindAttr
+;        This module contains the command routines for the commands which deal
+; with  sub-directories  on  the  disk, such as CHDIR, RMDIR, RNDIR, MVDIR and
+; ATDIR. These routines have much in common with the 'file'  versions  of  the
+; commands  such  as RENAME and ATTR, and so these commands are in this module
+; too.
+		SUBTTL  ATDIR
+;       The following entry points are for ATDIR and ATTRIB.
+@ATDIR:	SCF	; Cy => directories only, else files.
+@ATTRIB:	EX	AF,AF'
+	LD	DE,#00	; Initialise + and - letter flags
+	LD	(Attribute1),DE	;   ('+' <- 0, '-' <- FF).
+	CALL	PARSAT	; Parse R and H attributes.
 	RET	NZ
-	EXX
-	LD	HL,Attribute1
-	LD	A,(HL)
+	EXX	; Save text pointer.
+	LD	HL,Attribute1	; Give error if both + and - letter
+	LD	A,(HL)	;   given.
 	LD	C,A
 	INC	HL
 	AND	(HL)
 	LD	A,.IATTR
 	RET	NZ
-	LD	A,C
-	OR	(HL)
+	LD	A,C	; Give error if no attributes
+	OR	(HL)	;   specified to set or reset.
 	LD	A,.NOPAR
 	RET	Z
-	LD	A,(HL)
+	LD	A,(HL)	; Convert '-' flags into mask.
 	CPL
 	LD	(HL),A
 	EXX
 	EX	AF,AF'
-	LD	DE,ListOption3
-	CALL	CountItem
-	CALL	Z,NoParameter
-	CALL	Z,LastByte
+	LD	DE,ListOption3	; DE -> table of valid / options.
+	CALL	PARSE
+	CALL	Z,CHKPAR
+	CALL	Z,CHKEOL
 	RET	NZ
-	CALL	FirstFile
-Next_0230:	RET	C
-	LD	A,(FIB1+#0E)
+	CALL	FIRST
+AT10:	RET	C	; Ret if done.
+	LD	A,(FIB1+#0E)	; Get current attributes.
 	LD	HL,Attribute1
-	OR	(HL)
+	OR	(HL)	; Set '+' attributes.
 	INC	HL
-	AND	(HL)
-	LD	L,A
+	AND	(HL)	; Clear '-' attributes.
+	LD	L,A	; L=new attributes.
 	LD	DE,FIB1
 	LD	C,_ATTR
-	LD	A,#01
-	CALL	BDOS
-	CALL	NZ,FileError
-	CALL	NextFile
-	JR	Next_0230
+	LD	A,#01	; A=1 => set attributes.
+	CALL	BDOS	; Attempt to change attributes.
+	CALL	NZ,DBADFIL	; Print filename & error if error.
+	CALL	NEXT	; Look for next file.
+	JR	AT10
 
-Next_0231:	CALL	FndFirstChr
-FindAttr:	LD	BC,Attribute1
+GETAT:	CALL	GETCH
+PARSAT:	LD	BC,Attribute1	; BC -> + letter flags.
 	LD	A,(HL)
-	CP	"+"
-	JR	Z,Next_0232
-	INC	BC
-	CP	"-"
-	JR	NZ,Next_0234
-Next_0232:	INC	HL
+	CP	"+"	; '+' attribute ?
+	JR	Z,GOTPL	; Go if yes.
+	INC	BC	; Point to - letter flags.
+	CP	"-"	; '-' attribute ?
+	JR	NZ,Next_0234	; Return no error if not.
+GOTPL:	INC	HL
 	LD	A,(HL)
 	INC	HL
-	CALL	MakeCapital
+	CALL	UC
 	CP	"R"
 	JR	NZ,Next_0610
 	EX	AF,AF'
@@ -74,7 +81,7 @@ Next_0232:	INC	HL
 	LD	A,(BC)
 	SET	0,A
 	LD	(BC),A
-	JR	Next_0231
+	JR	GETAT
 
 Next_0610:	CP	"S"
 	JR	NZ,Next_0611
@@ -88,10 +95,10 @@ Next_0610:	CP	"S"
 	LD	A,(BC)
 	SET	2,A
 	LD	(BC),A
-	JR	Next_0231
+	JR	GETAT
 
 Next_0611:	CP	"A"
-	JR	NZ,Next_0233
+	JR	NZ,NMR
 	EX	AF,AF'
 	PUSH	AF
 	EX	AF,AF'
@@ -102,89 +109,107 @@ Next_0611:	CP	"A"
 	LD	A,(BC)
 	SET	5,A
 	LD	(BC),A
-	JR	Next_0231
+	JR	GETAT
 
-Next_0233:	CP	"H"
-	LD	A,.IATTR
+NMR:	CP	"H"	; H ?
+	LD	A,.IATTR	; Invalid attribute letter if not.
 	RET	NZ
 	LD	A,(BC)
 	SET	1,A
 	LD	(BC),A
-	JR	Next_0231
+	JR	GETAT	; Check for next + or - letter.
 
 Next_0234:	XOR	A
 	RET
 
-Cmd_Rmdir:	SCF
-Cmd_Delete:	LD	DE,ListOption3
-	CALL	CountItem
-	CALL	Z,NoParameter
-	CALL	Z,LastByte
-	CALL	Z,FirstFile
-	LD	DE,BufEnvData
-	LD	C,_WPATH
+		SUBTTL  RMDIR
+;       Below are the entry points for RMDIR and ERASE.
+;        If the search filename is totally ambiguous ie. *.*, then an 'Are you
+; sure  ?'  prompt  is printed. This test is made by checking the last item of
+; the whole path string for ????????.???, which is a lot easier  than  testing
+; the user's string.
+@RMDIR:	SCF	; Cy => directories only, else files.
+@ERASE:	LD	DE,ListOption3	; DE -> table of valid / options.
+	CALL	PARSE	; Parse filenames.
+	CALL	Z,CHKPAR	; Check something was parsed.
+	CALL	Z,CHKEOL	; Check for garbage.
+	CALL	Z,FIRST	; Find the first file to delete.
+	LD	DE,BufEnvData	; Get the whole path string for *.*
+	LD	C,_WPATH	;   testing.
 	CALL	Z,BDOS
-	RET	NZ
+	RET	NZ	; Return if any errors from above.
 	BIT	4,(IY+#08)
-	JR	NZ,Next_0235
-	CALL	CheckAmbi
+	JR	NZ,DELOOP	;    print a prompt if *.*.
+	CALL	AMBIG?	; Check for total ambiguity.
 	LD	A,#14
-	CALL	Z,Find_YyNn
+	CALL	Z,YN	; 'Are you sure ?' if *.*.
 	LD	A,#00
-	RET	Z
-Next_0235:	LD	DE,FIB1
+	RET	Z	; Return with no error if not sure.
+DELOOP:	LD	DE,FIB1	; DE -> FIB for found file.
 	LD	C,_DELETE
-	CALL	BDOS
-	CALL	NZ,FileError
-	CALL	NextFile
-	JR	NC,Next_0235
-	RET
+	CALL	BDOS	; Attempt to delete file.
+	CALL	NZ,DBADFIL	; Print filename & error if failed.
+	CALL	NEXT	; Look for next file.
+	JR	NC,DELOOP	; Delete it if found.
+	RET	; Else return.
 
-CheckAmbi:	LD	B,#08
-	CALL	Next_0236
-	RET	NZ
+AMBIG?:	LD	B,#08	; First check for 8 '?'s.
+	CALL	CHKAMB
+	RET	NZ	; Return if filename not '????????'.
 	LD	A,(HL)
 	CP	#2E
-	RET	NZ
+	RET	NZ	; Return if not '.' after filename.
 	INC	HL
-	LD	B,#03
-Next_0236:	LD	A,(HL)
-	CP	#3F
-	RET	NZ
-	INC	HL
-	DJNZ	Next_0236
-	RET
+	LD	B,#03	; Check extension is ambiguous.
+CHKAMB:	LD	A,(HL)	; Get character from filename.
+	CP	#3F	; Check it's a '?'.
+	RET	NZ	; Return with NZ if it's not.
+	INC	HL	; Else check next.
+	DJNZ	CHKAMB
+	RET	; Ret with Z if all '?'s.
 
-Find_YyNn:	LD	C,A
-Next_0237:	CALL	PrintCode
+		SUBTTL  YN
+;       This subroutine is called to get a 'Y/N' response.
+; On entry, A contains a message number to be printed first.
+; On exit, Z is set if the response was not 'Y'.
+YN:	LD	C,A	; Save message number.
+DYN:	CALL	DMESS	; Print message first.
 	PUSH	BC
-	CALL	WaitKey
+	CALL	INCH	; Get a character in L, print CRLF.
 	POP	BC
 	LD	A,#01
-	CALL	FindChar
-	RET	C
+	CALL	CHKCHR	; Check response for 'N'.
+	RET	C	; Return with Z and C if 'N'.
 	LD	A,#00
-	CALL	FindChar
-	SBC	A,A
+	CALL	CHKCHR	; Check response for 'Y'.
+	SBC	A,A	; Return with NZ and C if 'Y'.
 	RET	C
-	LD	A,C
-	JR	Next_0237
+	LD	A,C	; Get initial message again.
+	JR	DYN
 
-FindChar:	CALL	GetAdres
-Next_0238:	LD	A,(DE)
+CHKCHR:	CALL	GETMSG
+CHK:	LD	A,(DE)	; Get character from string.
 	OR	A
-	RET	Z
+	RET	Z	; Ret with NC if end of string.
 	INC	DE
-	CP	L
-	JR	NZ,Next_0238
-	SCF
+	CP	L	; Same as user's response ?
+	JR	NZ,CHK	; Check next character if not.
+	SCF	; Else return C and Z.
 	RET
 
-FileError:	LD	C,A
-	LD	DE,FIB1+1
-FileError2:	CALL	PrintString
+		SUBTTL  DBADFIL
+;        When a command such as ERASE gets an error  from  the  function  call
+; that  performs the function (eg. the DELETE function call) then this routine
+; is called to print out the filename and the error.
+;        The entry point DBADF is called from COPY, in which  case  the  error
+; code  is in C (normally in A) and the filename is pointed to by DE (normally
+; in FIB).
+; On entry, A contains the error code from the erroneous function call.
+DBADFIL:	LD	C,A	; Save the error code.
+	LD	DE,FIB1+1	; Print out the filename.
+DBADF:	CALL	PrintString
 	LD	A,#15
-	CALL	PrintCode
+	CALL	DMESS
 	LD	B,C
 	LD	C,#66
 	LD	DE,BufEnvData
@@ -192,44 +217,49 @@ FileError2:	CALL	PrintString
 	CALL	PrintString
 	JP	LPrint
 
-Cmd_Mvdir:	SCF
-Cmd_Move:	INC	A
-	DEFB	#06
+		SUBTTL  RNDIR/MVDIR
+;******************************************************************************
+;        These are the move and rename command  routines.  The  parameters  to
+; MOVE,  MVDIR, RENAME and RNDIR are all very similar, and so they all use the
+; same routine.
+@MVDIR:	SCF	; C => find directories, else files.
+@MOVE:	INC	A	; Z => move, else rename.
+	DEFB	#06	; Skip RNDIR entry point.
 Cmd_Rndir:	SCF
-Cmd_Rename:	PUSH	AF
+@RENAME:	PUSH	AF	; Save RENAME/RNDIR/MOVE/MVDIR flags.
 	LD	DE,ListOption3
-	CALL	CountItem
-	CALL	Z,NoParameter
+	CALL	PARSE	; Parse source filename.
+	CALL	Z,CHKPAR	; Check something was parsed.
 	EX	AF,AF'
 	POP	AF
 	EX	AF,AF'
 	RET	NZ
 	EX	AF,AF'
-	LD	A,_MOVE
-	JR	Z,Next_0239
-	LD	A,_RENAME
+	LD	A,_MOVE	; Assume MOVE.
+	JR	Z,MV10	; Go if MOVE or MVDIR.
+	LD	A,_RENAME	; Else RENAME or RNDIR.
 	EX	AF,AF'
-	OR	(HL)
-	LD	A,.NOPAR
+	OR	(HL)	; Else check that the second parameter
+	LD	A,.NOPAR	;   to rename was given.
 	RET	Z
 	EX	AF,AF'
-Next_0239:	EX	AF,AF'
-	CALL	CheckPath
-	CALL	Z,LastItem
+MV10:	EX	AF,AF'
+	CALL	PRS	; Parse second item.
+	CALL	Z,GCHKEOL	; Check for garbage on end of line.
 	RET	NZ
-	LD	(HL),A
-	PUSH	DE
-	CALL	FirstFile
+	LD	(HL),A	; Terminate second parameter.
+	PUSH	DE	; Save ptr to second item.
+	CALL	FIRST
 	POP	HL
-Next_0240:	RET	C
-	PUSH	HL
+MV20:	RET	C	; Ret if all done.
+	PUSH	HL	; Save pointer to second parameter.
 	LD	DE,FIB1
 	EX	AF,AF'
-	LD	C,A
+	LD	C,A	; Get function code for MOVE/RENAME.
 	EX	AF,AF'
-	CALL	BDOS
-	CALL	NZ,FileError
-	CALL	NextFile
+	CALL	BDOS	; Attempt to do the move/rename.
+	CALL	NZ,DBADFIL	; Print filename & error if any.
+	CALL	NEXT
 	POP	HL
-	JR	Next_0240
+	JR	MV20
 

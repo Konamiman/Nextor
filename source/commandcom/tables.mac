@@ -36,11 +36,11 @@ Commands:	DEFB	2
 
 	DEFB	2
 	DEFB	"RD"
-	DEFW	Cmd_Rmdir
+	DEFW	@RMDIR
 
 	DEFB	2
 	DEFB	"MD"
-	DEFW	Cmd_Mkdir
+	DEFW	@MKDIR
 
 	DEFB	3
 	DEFB	"CDD"
@@ -48,7 +48,7 @@ Commands:	DEFB	2
 
 	DEFB	3
 	DEFB	"CLS"
-	DEFW	Cmd_Cls
+	DEFW	@CLS
 
 	DEFB	3
 	DEFB	"CPU"
@@ -56,11 +56,11 @@ Commands:	DEFB	2
 
 	DEFB	3
 	DEFB	"DEL"
-	DEFW	Cmd_Delete
+	DEFW	@ERASE
 
 	DEFB	3
 	DEFB	"DIR"
-	DEFW	Cmd_Dir
+	DEFW	@DIR
 
 	DEFB	3
 	DEFB	"END"
@@ -76,19 +76,19 @@ Commands:	DEFB	2
 
 	DEFB	3
 	DEFB	"REN"
-	DEFW	Cmd_Rename
+	DEFW	@RENAME
 
 	DEFB	3
 	DEFB	"SET"
-	DEFW	Cmd_Set
+	DEFW	@SET
 
 	DEFB	3
 	DEFB	"VER"
-	DEFW	Cmd_Ver
+	DEFW	@VER
 
 	DEFB	3
 	DEFB	"VOL"
-	DEFW	Cmd_Vol
+	DEFW	@VOL
 
 	DEFB	4
 	DEFB	"BEEP"
@@ -96,11 +96,11 @@ Commands:	DEFB	2
 
 	DEFB	4
 	DEFB	"COPY"
-	DEFW	Cmd_Copy
+	DEFW	@COPY
 
 	DEFB	4
 	DEFB	"DATE"
-	DEFW	Cmd_Date
+	DEFW	@DATE
 
 	DEFB	4
 	DEFB	"ECHO"
@@ -112,7 +112,7 @@ Commands:	DEFB	2
 
 	DEFB	4
 	DEFB	"EXIT"
-	DEFW	Cmd_Exit
+	DEFW	@EXIT
 
 	DEFB	4
 	DEFB	"FREE"
@@ -124,7 +124,7 @@ Commands:	DEFB	2
 
 	DEFB	4
 	DEFB	"HELP"
-	DEFW	Cmd_Help
+	DEFW	@HELP
 
 	DEFB	4
 	DEFB	"MODE"
@@ -132,7 +132,7 @@ Commands:	DEFB	2
 
 	DEFB	4
 	DEFB	"MOVE"
-	DEFW	Cmd_Move
+	DEFW	@MOVE
 
 	DEFB	4
 	DEFB	"PATH"
@@ -148,11 +148,11 @@ Commands:	DEFB	2
 
 	DEFB	4
 	DEFB	"TIME"
-	DEFW	Cmd_Time
+	DEFW	@TIME
 
 	DEFB	4
 	DEFB	"TYPE"
-	DEFW	Cmd_Type
+	DEFW	@TYPE
 
 	DEFB	5
 	DEFB	"ALIAS"
@@ -160,11 +160,11 @@ Commands:	DEFB	2
 
 	DEFB	5
 	DEFB	"ATDIR"
-	DEFW	Cmd_Atdir
+	DEFW	@ATDIR
 
 	DEFB	5
 	DEFB	"BASIC"
-	DEFW	Cmd_Basic
+	DEFW	@BASIC
 
 	DEFB	5
 	DEFB	"CHDIR"
@@ -176,7 +176,7 @@ Commands:	DEFB	2
 
 	DEFB	5
 	DEFB	"ECHOS"
-	DEFW	Cmd_Echos
+	DEFW	@ECHO
 
 	DEFB	5
 	DEFB	"GOSUB"
@@ -192,15 +192,15 @@ Commands:	DEFB	2
 
 	DEFB	5
 	DEFB	"MKDIR"
-	DEFW	Cmd_Mkdir
+	DEFW	@MKDIR
 
 	DEFB	5
 	DEFB	"MVDIR"
-	DEFW	Cmd_Mvdir
+	DEFW	@MVDIR
 
 	DEFB	5
 	DEFB	"PAUSE"
-	DEFW	Cmd_Pause
+	DEFW	@PAUSE
 
 	DEFB	5
 	DEFB	"PUSHD"
@@ -212,7 +212,7 @@ Commands:	DEFB	2
 
 	DEFB	5
 	DEFB	"RMDIR"
-	DEFW	Cmd_Rmdir
+	DEFW	@RMDIR
 
 	DEFB	5
 	DEFB	"RNDIR"
@@ -220,11 +220,11 @@ Commands:	DEFB	2
 
 	DEFB	6
 	DEFB	"ASSIGN"
-	DEFW	Cmd_Assign
+	DEFW	@ASSIGN
 
 	DEFB	6
 	DEFB	"ATTRIB"
-	DEFW	Cmd_Attrib
+	DEFW	@ATTRIB
 
 	DEFB	6
 	DEFB	"CDPATH"
@@ -232,7 +232,7 @@ Commands:	DEFB	2
 
 	DEFB	6
 	DEFB	"CONCAT"
-	DEFW	Cmd_Concat
+	DEFW	@CONCAT
 
 	DEFB	6
 	DEFB	"DSKCHK"
@@ -244,7 +244,7 @@ Commands:	DEFB	2
 
 	DEFB	6
 	DEFB	"FORMAT"
-	DEFW	Cmd_Format
+	DEFW	@FORMAT
 
 	DEFB	6
 	DEFB	"MEMORY"
@@ -256,11 +256,11 @@ Commands:	DEFB	2
 
 	DEFB	6
 	DEFB	"VERIFY"
-	DEFW	Cmd_Verify
+	DEFW	@VERIFY
 
 	DEFB	7
 	DEFB	"BUFFERS"
-	DEFW	Cmd_Buffers
+	DEFW	@BUFFERS
 
 	DEFB	7
 	DEFB	"HISTORY"
@@ -268,7 +268,7 @@ Commands:	DEFB	2
 
 	DEFB	7
 	DEFB	"RAMDISK"
-	DEFW	Cmd_Ramdisk
+	DEFW	@RAMDISK
 
 Null:	DEFB	0
 

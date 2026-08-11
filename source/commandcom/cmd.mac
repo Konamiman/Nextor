@@ -15,64 +15,71 @@ Cmd_Beep:	AND	(HL)
 	LD	A,#07
 	JP	PrintChar
 
-Cmd_Assign:	AND	(HL)
-	LD	B,A
+;        This module contains the command routines for the  assorted  commands
+; which are not directly related to the disk system eg. CLS and DATE.
+		SUBTTL	ASSIGN
+;        This  is  the  ASSIGN  command  routine,  which  either  sets  up  an
+; assignment,  clears all assignments or displays the current assignment for a
+; specified drive. Note that a drive can be un-assigned without affecting  the
+; other drives by assigning it to itself.
+@ASSIGN:	AND	(HL)	; If no parameters, then just cancel
+	LD	B,A	;   all assigns.
 	LD	D,A
 	LD	C,_ASSIGN
 	JP	Z,BDOS
 
-	CALL	GetDriveLet
+	CALL	PARSDR	; Parse a drive letter.
 	RET	NZ
-	LD	B,D
-	CALL	FndFirstChr
-	JR	NZ,Next_0113
-	LD	D,#FF
-	LD	C,_ASSIGN
+	LD	B,D	; Save in B.
+	CALL	GETCH
+	JR	NZ,ASN10	; Go if second drive given.
+	LD	D,#FF	; Else get current assign for this
+	LD	C,_ASSIGN	;   drive.
 	PUSH	BC
 	CALL	BDOS
 	POP	BC
 	RET	NZ
-	LD	HL,LPrint
+	LD	HL,LPrint	; Print CRLF at end.
 	PUSH	HL
-	CALL	PrintDrive
-	LD	A,"="
+	CALL	DDRV	; Print drive.
+	LD	A,"="	; Print '=' and the other drive.
 	CALL	PrintChar
 	LD	B,D
-PrintDrive:	LD	A,B
+DDRV:	LD	A,B
 	ADD	A,"@"
-	CALL	PrintChar
+	CALL	PrintChar	; Print drive letter.
 	LD	A,":"
 	JP	PrintChar
 
-Next_0113:	CALL	GetDriveLet
+ASN10:	CALL	PARSDR	; Get second drive.
 	RET	NZ
-	CALL	FndFirstChr
-	LD	A,.INP
+	CALL	GETCH	; Make sure there's no garbage on the
+	LD	A,.INP	;   end of the line.
 	RET	NZ
-	LD	C,_ASSIGN
+	LD	C,_ASSIGN	; Attempt to set up new assign.
 	JP	BDOS
 
-GetDriveLet:	LD	A,(HL)
-	CALL	MakeCapital
-	SUB	"@"
-	JR	C,Next_0115
-	JR	Z,Next_0115
-	CP	#1B
-	JR	NC,Next_0115
-	LD	D,A
+PARSDR:	LD	A,(HL)	; Get drive letter.
+	CALL	UC
+	SUB	"@"	; Attempt to convert to drive number.
+	JR	C,IDRV	; Invalid drive if < 'A'.
+	JR	Z,IDRV
+	CP	#1B	; Invalid drive if > 'Z'.
+	JR	NC,IDRV
+	LD	D,A	; Return drive in D.
 	INC	HL
-	LD	A,(HL)
+	LD	A,(HL)	; Allow a colon afterwards.
 	CP	":"
-	JR	NZ,Next_0114
+	JR	NZ,NCOL
 	INC	HL
-Next_0114:	LD	A,(HL)
-	CALL	SkipChar
-	RET	Z
-Next_0115:	LD	A,.IDRV
+NCOL:	LD	A,(HL)	; Make sure drive is followed by a
+	CALL	SEP?	;   separator character.
+	RET	Z	; OK if it is.
+IDRV:	LD	A,.IDRV
 	OR	A
 	RET
 
-Cmd_Basic:	CALL	SetComLine
+@BASIC:	CALL	LDCOME
 	RET	NZ
 	LD	HL,VariableEnd	; Release variable memory
 	LD	A,#FF
@@ -84,33 +91,33 @@ Cmd_Basic:	CALL	SetComLine
 	CALL	#F368
 	JP	#4022
 
-Cmd_Buffers:	AND	(HL)
-	JR	NZ,Next_0116
+@BUFFERS:	AND	(HL)
+	JR	NZ,SETBUF
 	LD	BC,_BUFFER
 	CALL	BDOS
 	RET	NZ
 	PUSH	BC
 	LD	A,#27
-	CALL	PrintCode
+	CALL	DMESS
 	POP	AF
 	LD	IX,BufEnvData
 	PUSH	IX
-	CALL	Convert8
+	CALL	D8
 	POP	DE
-	JP	LPrintString
+	JP	DMSCR
 
-Next_0116:	CALL	GetValue_8
-	CALL	Z,LastDigit
+SETBUF:	CALL	GET8	; Get the number specified into E.
+	CALL	Z,CHKNO
 	RET	NZ
-	LD	A,(HL)
-	OR	A
+	LD	A,(HL)	; Check for garbage on the end of the
+	OR	A	;   line.
 	LD	A,.INP
-	RET	NZ
-	LD	B,E
+	RET	NZ	; Give error if too many parameters.
+	LD	B,E	; Get specified number.
 	LD	C,_BUFFER
-	JP	BDOS
+	JP	BDOS	; Attempt to set that number.
 
-Cmd_Cls:	AND	(HL)
+@CLS:	AND	(HL)
 	LD	A,.INP
 	RET	NZ
 	LD	A,#0C
@@ -125,7 +132,7 @@ Cmd_Cpu:	AND	(HL)
 	CP	3
 	JR	NC,Next_0517
 	EX	AF,AF'
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	LD	A,(MSXVersion)
@@ -154,35 +161,35 @@ Next_0517:	LD	A,.BADNO
 	RET
 
 Next_0518:	LD	A,#43
-	CALL	PrintCode
+	CALL	DMESS
 	LD	A,(MSXVersion)
 	CP	3
 	LD	A,#44
-	JP	C,LPrintCode
+	JP	C,DMESSCR
 	LD	IX,#0183
 	CALL	CallSlot
 	LD	A,E
 	ADD	A,#44
-	JP	LPrintCode
+	JP	DMESSCR
 
-Cmd_Date:	PUSH	HL
-	CALL	GetDateForm
+@DATE:	PUSH	HL
+	CALL	DFORM
 	POP	HL
 	LD	A,(HL)
 	OR	A
-	JR	NZ,Next_0120
+	JR	NZ,RDAT
 	LD	C,_GDATE
 	CALL	BDOS
 	PUSH	HL
 	PUSH	DE
 	PUSH	AF
 	LD	A,#16
-	CALL	PrintCode
+	CALL	DMESS
 	POP	AF
 	ADD	A,#17
-	CALL	PrintCode
+	CALL	DMESS
 	LD	A,#1E
-	CALL	PrintCode
+	CALL	DMESS
 	POP	DE
 	POP	HL
 	LD	BC,#F844
@@ -203,308 +210,321 @@ Cmd_Date:	PUSH	HL
 	LD	C,#FF
 	LD	IX,BufEnvName+2
 	PUSH	IX
-	CALL	PrintDate
+	CALL	DDATE
 	POP	DE
 	CALL	PrintString
 	LD	A,#1F
-	CALL	LPrintCode
-Next_0117:	LD	A,#20
-	CALL	PrintCode
-	LD	HL,Env_Date
-	CALL	GetEnvData2
-	JR	NZ,Next_0118
-	LD	A,(DE)
+	CALL	DMESSCR
+NEWDAT:	LD	A,#20	; Print 'Enter new date'.
+	CALL	DMESS
+	LD	HL,DATE$	; Get the DATE environment string.
+	CALL	GENV2
+	JR	NZ,NDFORM	; Don't print the format if error.
+	LD	A,(DE)	; DATE in the environment ?
 	OR	A
-	JR	Z,Next_0118
+	JR	Z,NDFORM	; Go if not.
 	PUSH	DE
-	LD	A,#22
-	CALL	PrintCode
+	LD	A,#22	; Else print the format from the
+	CALL	DMESS	;   environment.
 	POP	DE
 	CALL	PrintString
 	LD	A,#23
-	CALL	PrintCode
-Next_0118:	LD	A,#21
-	CALL	PrintCode
-	CALL	GetLine
-	JR	Z,Next_0119
+	CALL	DMESS
+NDFORM:	LD	A,#21	; Print end message.
+	CALL	DMESS
+	CALL	INLI	; Input a line.
+	JR	Z,DAT5	; Go if no error.
 	CP	.EOF
-	RET	NZ
-Next_0119:	INC	HL
-	CALL	FndFirstChr
-	RET	Z
-Next_0120:	EXX
-	LD	C,_GDATE
+	RET	NZ	; Return if not end of file error.
+DAT5:	INC	HL	; Point passed length byte.
+	CALL	GETCH	; Skip leading separators.
+	RET	Z	; Just return if new date not given.
+RDAT:	EXX	; Hide the input line pointer.
+	LD	C,_GDATE	; Get current date again for defaults.
 	CALL	BDOS
-	EXX
+	EXX	; Save current values, get input ptr.
 	LD	A,(IY+#12)
+	ADD	A,A	; Ignore top two bits.
 	ADD	A,A
-	ADD	A,A
-	LD	B,#03
-	PUSH	AF
-	JR	Next_0122
+	LD	B,#03	; Read 3 numbers.
+	PUSH	AF	; Save format variable.
+	JR	DAT20
 
-Next_0121:	CALL	SkipSepars
-	JR	C,Next_0123
-Next_0122:	CALL	GetDigit2
+DAT10:	CALL	DTSKIP	; Skip date/time separators.
+	JR	C,BADAT	; Go if invalid.
+DAT20:	CALL	GETNO	; Get a number.
 	EXX
-	LD	B,A
-	SBC	A,A
-	LD	C,A
-	POP	AF
-	RLCA
+	LD	B,A	; Save number.
+	SBC	A,A	; FF => invalid number, 0 => OK.
+	LD	C,A	; Save error flag.
+	POP	AF	; Get & adjust format variable for this
+	RLCA	;   iteration.
 	RLCA
 	PUSH	AF
-	INC	C
-	JR	Z,Next_0130
-	AND	#03
-	JR	Z,Next_0130
-	DEC	A
-	JR	Z,Next_0129
-	DEC	A
-	JR	Z,Next_0128
+	INC	C	; Error ?
+	JR	Z,DAT50	; Use default value if yes.
+	AND	#03	; Mask out other grotty bits.
+	JR	Z,DAT50	; Go if invalid field value.
+	DEC	A	; Day ?
+	JR	Z,Next_0129	; Go if yes.
+	DEC	A	; Month ?
+	JR	Z,DAT30	; Go if yes, else year.
 	EXX
-	CALL	GetDigit
-	JR	C,Next_0124
-	INC	HL
-	CALL	GetDigit3
-	JR	C,Next_0123
+	CALL	GETDIG	; See if more digits of the number.
+	JR	C,NOCENT	; Go if not (century not given).
+	INC	HL	; Point to next digit.
+	CALL	GNO	; Get second digit.
+	JR	C,BADAT	; Error if invalid.
 	EXX
-	SUB	#50
-	LD	C,A
-	LD	A,B
+	SUB	#50	; Convert 80-99 to offset from 1980.
+	LD	C,A	; Save year part.
+	LD	A,B	; Get century.
 	CP	#13
-	JR	Z,Next_0127
+	JR	Z,ADD1980	; Go if 19xx with offset from 1980.
 	CP	#14
-	LD	A,C
-	JR	Z,Next_0125
-Next_0123:	POP	AF
-	LD	B,.IDATE
-	JR	Next_0131
+	LD	A,C	; Get year.
+	JR	Z,CENT20	; Go if 20xx.
+BADAT:	POP	AF	; Balance stack.
+	LD	B,.IDATE	; Give 'Invalid date' error.
+	JR	DAT60	; Print error, re-prompt.
 
-Next_0124:	EXX
-	LD	A,B
-	SUB	#50
-	JR	NC,Next_0126
-Next_0125:	ADD	A,#64
-Next_0126:	LD	C,A
-Next_0127:	LD	B,#00
+NOCENT:	EXX
+	LD	A,B	; Get given year.
+	SUB	#50	; 80-99 -> 0-19 (offset from 1980).
+	JR	NC,CENT19	; Go if 1980-1999.
+CENT20:	ADD	A,#64	; Convert to offset into 2000..
+CENT19:	LD	C,A
+ADD1980:	LD	B,#00	; BC=offset from 1980.
 	LD	HL,#07BC
-	ADD	HL,BC
-	LD	B,D
-Next_0128:	LD	D,B
+	ADD	HL,BC	; HL=new date.
+	LD	B,D	; Skip to DAT50.
+DAT30:	LD	D,B	; Save month.
 	DEFB	#06
 Next_0129:	LD	E,B
-Next_0130:	EXX
-	DJNZ	Next_0121
-	CALL	FndFirstChr
-	JR	NZ,Next_0123
-	POP	AF
-	EXX
+DAT50:	EXX	; Save new date, get line ptr.
+	DJNZ	DAT10	; Get separator & next digit.
+	CALL	GETCH	; Skip trailing spaces.
+	JR	NZ,BADAT	; Error if end of line.
+	POP	AF	; Balance stack.
+	EXX	; Get the new date.
 	LD	C,_SDATE
-	CALL	BDOS
-	AND	.IDATE
-	RET	Z
+	CALL	BDOS	; Attempt to set the new date.
+	AND	.IDATE	; .IDATE if error, else 0.
+	RET	Z	; Return if no error.
 	LD	B,A
-Next_0131:	LD	DE,BufEnvName
+DAT60:	LD	DE,BufEnvName
 	LD	C,_EXPLAIN
 	CALL	BDOS
 	PUSH	DE
 	CALL	LPrint
 	LD	A,#0D
-	CALL	PrintCode
+	CALL	DMESS
 	POP	DE
 	CALL	PrintString
 	LD	A,#0E
-	CALL	LPrintCode
-	JP	Next_0117
+	CALL	DMESSCR
+	JP	NEWDAT
 
 Cmd_Echo:	EX	DE,HL
-	JP	LPrintString
+	JP	DMSCR
 
-Cmd_Echos:	EX	DE,HL
-	JP	PrintString
+		SUBTTL	ECHO
+;        The ECHO command just prints it's arguments on the screen. It is used
+; for displaying comments ans messages in batch files.
+@ECHO:	EX	DE,HL	; DE -> arguments.
+	JP	PrintString	; Print rest of command line & CR,LF.
 
-Cmd_Exit:	AND	(HL)
-	JR	Z,AbortExit1
-	CALL	GetValue_8
-	CALL	Z,LastDigit
-	CALL	Z,LastByte
+		SUBTTL	EXIT
+;        The EXIT command reads an optional error number as it's argument  and
+; then  exits  this invokation of COMMAND with the error code. It restores the
+; pointers at the bottom of page 0, the BIOS re-boot jump entry point and  the
+; environment strings which COMMAND saved when it was first entered.
+@EXIT:	AND	(HL)
+	JR	Z,EXIT	; EXIT with no error if no parameters.
+	CALL	GET8	; Else read a number into E.
+	CALL	Z,CHKNO	; Check for garbage after number.
+	CALL	Z,CHKEOL	; Check for garbage on end of line.
 	RET	NZ
 	LD	A,E
 
-AbortExit1:	PUSH	AF
-	LD	HL,BootStrap
-	LD	DE,#00
+EXIT:	PUSH	AF	; Save error code for returning.
+	LD	HL,BootStrap	; Restore vectors in page 0 to what
+	LD	DE,#00	;   they were when COMMAND was invoked.
 	LD	BC,#08
 	LDIR
-	CP	.OKCMD
-	JR	Z,Next_0137
-	LD	DE,#01
-Next_0132:	PUSH	DE
-	CALL	FindEnvItem
+	CP	.OKCMD	; Restore environment strings unless
+	JR	Z,ENVDON	;   end of COMMAND <command> (eg.
+;					;   AUTOEXEC.BAT).
+	LD	DE,#01	; Delete first environment string.
+DELENV:	PUSH	DE
+	CALL	FENV	; Get name of item.
 	POP	DE
 	INC	DE
-	JR	NZ,Next_0132
-	OR	(HL)
-	JR	Z,Next_0133
+	JR	NZ,DELENV	; Do next if error.
+	OR	(HL)	; Name null (end of strings) ?
+	JR	Z,SETENV	; All deleted if yes.
 	PUSH	DE
 	LD	DE,BufEnvData
 	XOR	A
-	LD	(DE),A
-	LD	C,_SENV
+	LD	(DE),A	; Set to a null string to delete.
+	LD	C,_SENV	; Else set item to null.
 	CALL	BDOS
-	POP	DE
-	DEC	DE
-	JR	Next_0132
+	POP	DE	; Now the 1st string's deleted, the 2nd
+	DEC	DE	;   string's become the new first
+	JR	DELENV	;   string so DE not incremented.
 
-Next_0133:	LD	HL,(#06)
+SETENV:	LD	HL,(#06)	; Find out address of saved environment
+	DEC	HL	;   strings, and restore them.
 	DEC	HL
 	DEC	HL
 	DEC	HL
 	DEC	HL
 	DEC	HL
 	DEC	HL
-	DEC	HL
-Next_0134:	LD	A,(HL)
+CPYENV:	LD	A,(HL)	; End of environment string list ?
 	OR	A
-	JR	Z,Next_0137
-	LD	DE,BufEnvName
-Next_0135:	LD	A,(HL)
+	JR	Z,ENVDON
+	LD	DE,BufEnvName	; Copy name of item to BUFF2.
+Next_0135:	LD	A,(HL)	; Get character.
 	LD	(DE),A
 	DEC	HL
 	INC	DE
 	OR	A
-	JR	NZ,Next_0135
-	LD	DE,BufEnvData
+	JR	NZ,Next_0135	; Copy until null at end.
+	LD	DE,BufEnvData	; Copy saved value of item to BUFF.
 Next_0136:	LD	A,(HL)
 	LD	(DE),A
 	DEC	HL
 	INC	DE
 	OR	A
-	JR	NZ,Next_0136
+	JR	NZ,Next_0136	; Copy until null at end.
 	PUSH	HL
-	CALL	PutEnvItem
-	POP	HL
-	JR	Next_0134
+	CALL	SENV	; Set value.
+	POP	HL	; HL -> next string.
+	JR	CPYENV
 
-Next_0137:	LD	HL,(#01)
+ENVDON:	LD	HL,(#01)
 	INC	HL
-	LD	DE,(WarmBoot)
-	LD	(HL),E
+	LD	DE,(WarmBoot)	; Restore re-boot BIOS jump
+	LD	(HL),E	;   table entry point.
 	INC	HL
 	LD	(HL),D
-	LD	DE,#00
+	LD	DE,#00	; Un-define abort routine.
 	LD	C,_DEFAB
-	CALL	BDOS
-	POP	BC
+	CALL	BDOS	;   (error ignored)
+	POP	BC	; Restore error code in B.
 	LD	C,_TERM
-	JP	BDOS
+	JP	BDOS	; Terminate with error code.
 
-Cmd_Format:	AND	(HL)
-	LD	B,A
-	JR	NZ,Next_0145
+		SUBTTL	FORMAT
+;        This is the FORMAT command routine. It simply takes an optional drive
+; letter and passes this to the format BDOS function.
+@FORMAT:	AND	(HL)
+	LD	B,A	; Use default drive if none specified.
+	JR	NZ,FMT_HAS_ARG	;
 	LD	L,#00
 	LD	BC,#0867
-Next_0138:	ADD	HL,HL
+FMT_CHK_DRIVE:	ADD	HL,HL
 	PUSH	HL
 	PUSH	BC
-	XOR	A
-	CALL	BDOS
+	XOR	A	;See if format is supported by
+	CALL	BDOS	; drive [B].
 	POP	BC
 	POP	HL
-	JR	NZ,Next_0139
-	INC	HL
-Next_0139:	DJNZ	Next_0138
-	LD	A,L
-	OR	A
-	LD	A,.IDRV
-	RET	Z
+	JR	NZ,FMT_NO_DRIVE	;Any error means drive does not exist
+	INC	HL	;Add to the selection list.
+FMT_NO_DRIVE:	DJNZ	FMT_CHK_DRIVE
+	LD	A,L	;If nothing remains, no way to proceed.
+	OR	A	;
+	LD	A,.IDRV	;
+	RET	Z	;
 	LD	A,L
 	DEC	A
 	AND	L
-	LD	A,L
-	JR	Z,Next_0144
-	PUSH	HL
+	LD	A,L	;If only one drive,
+	JR	Z,FMT_1DRIVE	; no need to ask for drive name
+	PUSH	HL	;Save drive list.
 	LD	A,#2A
-	CALL	PrintCode
+	CALL	DMESS	;"Drive name? (".
 	POP	HL
 	PUSH	HL
 	LD	A,"@"
-Next_0140:	INC	A
+FMT_ASK_LOOP:	INC	A
 	SRL	L
-	JR	NC,Next_0141
+	JR	NC,FMT_SKIPDRV
 	PUSH	AF
-	CALL	PrintChar
+	CALL	PrintChar	;Print drive name.
 	POP	AF
 	PUSH	AF
 	LD	A,","
-	CALL	NZ,PrintChar
+	CALL	NZ,PrintChar	;Print separator if something remain.
 	POP	AF
-Next_0141:	JR	NZ,Next_0140
+FMT_SKIPDRV:	JR	NZ,FMT_ASK_LOOP
 	LD	A,#2B
-	CALL	PrintCode
-	POP	HL
-Next_0142:	PUSH	HL
-	LD	C,_CONST
-	CALL	BDOS
+	CALL	DMESS	;") " after drive name list.
+	POP	HL	;Restore drive list
+FMT_ASKAGAIN:	PUSH	HL
+	LD	C,_CONST	; Get a character, gobbling up chars
+	CALL	BDOS	;   in the keyboard buffer.
 	PUSH	AF
 	LD	C,_INNOE
 	CALL	BDOS
 	LD	C,A
 	POP	AF
 	POP	HL
-	JR	NZ,Next_0142
+	JR	NZ,FMT_ASKAGAIN
 	LD	A,C
-	CALL	MakeCapital
+	CALL	UC	;Force to upper case
 	LD	C,A
 	SUB	"A"
 	CP	#08
-	JR	NC,Next_0142
+	JR	NC,FMT_ASKAGAIN	;Invalid drive name.
 	LD	B,A
 	INC	B
 	XOR	A
 	SCF
-Next_0143:	RLA
-	DJNZ	Next_0143
+FMT_GETMASK:	RLA
+	DJNZ	FMT_GETMASK
 	AND	L
-	JR	Z,Next_0142
+	JR	Z,FMT_ASKAGAIN	;Drive does not exist
+					; or does not support format.
 	PUSH	AF
 	LD	A,C
-	CALL	PrintChar
+	CALL	PrintChar	;Echo to the console.
 	CALL	LPrint
 	POP	AF
-Next_0144:	INC	B
-	RRCA
-	JR	NC,Next_0144
-	JR	Next_0147
+FMT_1DRIVE:	INC	B	;Always comes here with B=0.
+	RRCA	;
+	JR	NC,FMT_1DRIVE
+	JR	NFDRV
 
-Next_0145:	INC	HL
+FMT_HAS_ARG:	INC	HL
 	LD	A,(HL)
 	CP	":"
 	LD	A,.IPARM
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	SkipChar
+	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
 	LD	A,B
-	CALL	MakeCapital
+	CALL	UC
 	CP	"Z"+1
-	JR	NC,Next_0146
+	JR	NC,NCIDRV
 	SUB	"A"
 	LD	B,A
 	CCF
-Next_0146:	LD	A,.IDRV
+NCIDRV:	LD	A,.IDRV
 	RET	NC
 	INC	B
-	CALL	FndFirstChr
-	JR	Z,Next_0147
+	CALL	GETCH
+	JR	Z,NFDRV
 	CP	"/"
 	LD	A,.IOPT
 	RET	Z
 	PUSH	BC
-	CALL	GetValue_8
+	CALL	GET8
 	POP	BC
 	RET	NZ
 	OR	E
@@ -519,14 +539,14 @@ Next_0146:	LD	A,.IDRV
 	JR	NZ,Next_0519
 	LD	A,E
 	EXX
-	JR	Next_0151
+	JR	NSTR
 
 Next_0519:	CP	"/"
 	JR	Z,Next_0520
-	CALL	SkipChar
+	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	CP	"/"
 	LD	A,.INP
 	RET	NZ
@@ -537,58 +557,58 @@ Next_0520:	INC	HL
 	LD	A,.IOPT
 	RET	NZ
 	INC	HL
-	CALL	LastByte
-	CALL	Z,LastItem
+	CALL	CHKEOL
+	CALL	Z,GCHKEOL
 	RET	NZ
 	LD	A,E
 	JR	Next_0521
 
-Next_0147:	LD	A,B
-	EXX
+NFDRV:	LD	A,B
+	EXX	; Save drive in B'.
 	LD	B,A
 	LD	C,_FORMAT
-	XOR	A
+	XOR	A	; Get pointer to prompt string.
 	CALL	BDOS
 	RET	NZ
 	LD	A,H
 	OR	L
-	JR	Z,Next_0151
-Next_0148:	LD	A,B
+	JR	Z,NSTR	; Go if no prompt string (A=0).
+GETCHR:	LD	A,B	; Get slot number.
 	PUSH	BC
-	CALL	ReadSlot
+	CALL	ReadSlot	; A=character from string.
 	POP	BC
 	OR	A
-	JR	Z,Next_0149
-	INC	HL
-	CALL	PrintChar
-	JR	Next_0148
+	JR	Z,DONSTR	; Go if string has been printed.
+	INC	HL	; Next character.
+	CALL	PrintChar	; Print character.
+	JR	GETCHR	; Do next character.
 
-Next_0149:	LD	A,"?"
+DONSTR:	LD	A,"?"
 	CALL	PrintChar
-	CALL	PrintSpace
-Next_0150:	LD	C,_CONST
-	CALL	BDOS
+	CALL	SPACE
+INCHAR:	LD	C,_CONST	; Get a character, gobbling up chars
+	CALL	BDOS	;   in the keyboard buffer.
 	PUSH	AF
 	LD	C,_INNOE
 	CALL	BDOS
 	LD	C,A
 	POP	AF
-	JR	NZ,Next_0150
+	JR	NZ,INCHAR
 	LD	A,C
-	CP	"9"+1
-	JR	NC,Next_0150
+	CP	"9"+1	; If not '1' to '9' to get another.
+	JR	NC,INCHAR
 	SUB	"1"
-	JR	C,Next_0150
-	PUSH	AF
-	LD	A,C
+	JR	C,INCHAR
+	PUSH	AF	; Save choice.
+	LD	A,C	; Echo it.
 	CALL	PrintChar
 	CALL	LPrint
 	POP	AF
-Next_0151:	INC	A
+NSTR:	INC	A
 	PUSH	AF
 	CALL	LPrint
 	LD	A,#2C
-	CALL	PrintCode
+	CALL	DMESS
 	EXX
 	LD	A,B
 	EXX
@@ -598,8 +618,8 @@ Next_0151:	INC	A
 	ADD	A,"A"
 	CALL	PrintChar
 	LD	A,#2D
-	CALL	LPrintCode
-	CALL	AskAnyKey
+	CALL	DMESSCR
+	CALL	PAUSE
 	POP	AF
 	EXX
 Next_0521:	LD	DE,BufEnvData
@@ -623,7 +643,7 @@ Next_0523:	LD	A,(HL)
 	LD	B,(HL)
 	CALL	Multiply16
 	LD	A,#49
-	CALL	PrintCode
+	CALL	DMESS
 	POP	AF
 	LD	B,A
 	AND	%00000011
@@ -644,17 +664,17 @@ Next_0524:	CALL	LPrint
 	LD	B,(HL)
 	CALL	Multiply16
 	LD	A,#06
-	CALL	LPrintCode
+	CALL	DMESSCR
 	INC	HL
 	LD	B,(HL)
 	CALL	Multiply16
 	LD	A,#4A
-	CALL	LPrintCode
+	CALL	DMESSCR
 	INC	HL
 	LD	B,(HL)
 	CALL	Multiply16
 	LD	A,#4B
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	LPrint
 	INC	HL
 	INC	HL
@@ -676,14 +696,14 @@ Next_0525:	LD	HL,(ExitAdres)
 	LD	(Value_H),HL
 	CALL	Print32
 	LD	A,#4C
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	LPrint
 	CALL	GetBufferLeng
 	PUSH	HL
 	LD	(Value_L),HL
 	CALL	Print32
 	LD	A,#4D
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	GetEndAdres
 	EX	DE,HL
 	POP	HL
@@ -695,7 +715,7 @@ Next_0525:	LD	HL,(ExitAdres)
 	LD	(Value_L),HL
 	CALL	Print32
 	LD	A,#06
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	LPrint
 	CALL	SetPage2
 	LD	HL,(AliasEnd+#8000)
@@ -712,7 +732,7 @@ Next_0525:	LD	HL,(ExitAdres)
 	LD	(Value_L),HL
 	CALL	Print32
 	LD	A,#4E
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	SetPage2
 	POP	HL
 Next_0526:	LD	C,(HL)
@@ -730,7 +750,7 @@ Next_0526:	LD	C,(HL)
 	LD	(Value_L),HL
 	CALL	Print32
 	LD	A,#06
-	CALL	LPrintCode
+	CALL	DMESSCR
 	CALL	LPrint
 	CALL	SetPage2
 	LD	DE,(AliasEnd+#8000)
@@ -740,7 +760,7 @@ Next_0526:	LD	C,(HL)
 	LD	(Value_L),HL
 	CALL	Print32
 	LD	A,#4F
-	CALL	LPrintCode
+	CALL	DMESSCR
 	LD	HL,(VariableEnd+#8000)
 	RES	7,H
 	POP	DE
@@ -749,7 +769,7 @@ Next_0526:	LD	C,(HL)
 	CALL	RestorePage2
 	CALL	Print32
 	LD	A,#06
-	JP	LPrintCode
+	JP	DMESSCR
 
 Next_0527:	LD	A,(HL)
 	CP	"/"
@@ -765,9 +785,9 @@ Next_0527:	LD	A,(HL)
 	LD	A,.IOPT
 	RET
 
-Next_0528:	CALL	FindScrSize
+Next_0528:	CALL	SETP
 Next_0529:	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	NZ,Next_0527
 	JP	Next_0522
 
@@ -803,7 +823,7 @@ Print32:	LD	A,(OptionFlag1)
 	PUSH	IX
 	LD	DE,Value_L
 	LD	A," "
-	CALL	Convert32
+	CALL	D32
 	POP	HL
 	PUSH	HL
 	INC	HL
@@ -818,7 +838,7 @@ Print32:	LD	A,(OptionFlag1)
 	POP	DE
 	CALL	PrintString
 	LD	A,#48
-	CALL	PrintCode
+	CALL	DMESS
 	POP	DE
 	POP	HL
 	RET
@@ -842,7 +862,7 @@ Cmd_Goto:	LD	A,(BatchHandle)
 	PUSH	HL
 Next_0535:	LD	HL,#00
 	LD	(BatLineAdr),HL
-Next_0536:	CALL	ReadBatLine
+Next_0536:	CALL	INBAT
 	JR	Z,Next_0537
 	POP	HL
 	CP	.EOF
@@ -855,10 +875,10 @@ Next_0536:	CALL	ReadBatLine
 
 Next_0537:	JR	NC,Next_0536
 	LD	HL,BufEnvData+1
-	CALL	FndFirstChr
+	CALL	GETCH
 	POP	BC
 	PUSH	BC
-	CALL	Compare
+	CALL	STRCMP
 	JR	NZ,Next_0536
 	POP	HL
 	RET
@@ -948,9 +968,9 @@ Executing2:	LD	DE,BufEnvData
 	PUSH	HL
 	CALL	RemoveQuote
 	POP	HL
-	JP	Executing
+	JP	DO_CMD
 
-Parse_If2:	CALL	Parse_If
+Parse_If2:	CALL	COND
 	RET	NZ
 	CCF
 	SBC	A,A
@@ -958,10 +978,10 @@ Parse_If2:	CALL	Parse_If
 	PUSH	HL
 	EXX
 	POP	HL
-	CALL	SkipSpace2
+	CALL	STRIP
 	LD	BC,BufEnvData
 	PUSH	BC
-	CALL	MakePath
+	CALL	CPYSTR
 	POP	BC
 	RET	NZ
 	PUSH	HL
@@ -971,7 +991,7 @@ Parse_If2:	CALL	Parse_If
 	POP	BC
 	POP	HL
 	JR	NZ,Next_0540
-	CALL	SkipSpace2
+	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
 	CALL	Parse_If2
@@ -989,7 +1009,7 @@ Next_0540:	PUSH	HL
 	POP	BC
 	POP	HL
 	JR	NZ,Next_0541
-	CALL	SkipSpace2
+	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
 	CALL	Parse_If2
@@ -1007,7 +1027,7 @@ Next_0541:	PUSH	HL
 	POP	BC
 	POP	HL
 	JR	NZ,Next_0542
-	CALL	SkipSpace2
+	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
 	CALL	Parse_If2
@@ -1090,56 +1110,56 @@ Next_0546:	POP	HL
 	RET	Z
 	JP	Executing2
 
-Parse_If:	LD	BC,BufEnvData
+COND:	LD	BC,BufEnvData
 	PUSH	BC
 	CALL	MakePath2
 	POP	BC
-	RET	NZ
+	RET	NZ	; Return if error
 	EX	DE,HL
-	LD	HL,Word_Not
+	LD	HL,$NOT
 	CALL	Compare3
 	EX	DE,HL
-	JR	NZ,Next_0152
-	CALL	Start_If
-	CCF
+	JR	NZ,EXIST?
+	CALL	COND10
+	CCF	; Reverse GO condition
 	RET
 
-Start_If:	CALL	FndFirstChr
+COND10:	CALL	GETCH
 	LD	BC,BufEnvData
 	CALL	MakePath2
 	RET	NZ
-Next_0152:	LD	BC,BufEnvData
+EXIST?:	LD	BC,BufEnvData
 	EX	DE,HL
-	LD	HL,Word_Exist
+	LD	HL,$EXIST
 	CALL	Compare3
 	EX	DE,HL
-	JR	NZ,Next_0154
-	CALL	FndFirstChr
-	CALL	CheckPath
-	RET	NZ
+	JR	NZ,EQUAL?
+	CALL	GETCH
+	CALL	PRS	; Get path string.
+	RET	NZ	; Return if error.
 	BIT	3,B
 	LD	A,.NOFIL
-	JR	Z,Next_0153
-	LD	C,(HL)
-	LD	(HL),#00
+	JR	Z,EX10
+	LD	C,(HL)	; Save terminating char.
+	LD	(HL),#00	; Terminate path.
 	PUSH	HL
 	PUSH	BC
 	LD	IX,FIB1
 	LD	BC,#0640
 	CALL	BDOS
-	POP	BC
-	POP	HL
+	POP	BC	; Restore terminating char.
+	POP	HL	;   in case this was the end of line.
 	LD	(HL),C
-Next_0153:	OR	A
-	RET	Z
+EX10:	OR	A
+	RET	Z	; Z & NC => if no error
 	CP	.NODIR
 	SCF
-	RET	Z
+	RET	Z	; Z & C => if directory not found
 	CP	.NOFIL
-	SCF
-	RET
+	SCF	; Z & C => if file not found,
+	RET	; NZ otherwise.
 
-Next_0154:	CALL	SkipSpace2
+EQUAL?:	CALL	STRIP
 	LD	A,(HL)
 	CALL	MakeUpper
 	CP	"="
@@ -1181,7 +1201,7 @@ Next_0549:	CP	"L"
 	LD	A,#03
 Next_0550:	EX	AF,AF'
 	INC	HL
-	CALL	SkipSpace2
+	CALL	STRIP
 	LD	BC,BufEnvData+#80
 	PUSH	BC
 	CALL	MakePath2
@@ -1189,7 +1209,7 @@ Next_0550:	EX	AF,AF'
 	RET	NZ
 	EX	DE,HL
 	LD	HL,BufEnvData
-	CALL	Compare
+	CALL	STRCMP
 	EX	DE,HL
 	EX	AF,AF'
 	DEC	A
@@ -1223,16 +1243,16 @@ Next_0554:	POP	HL
 	OR	A
 	RET
 
-Compare:	LD	A,(BC)
+STRCMP:	LD	A,(BC)
 	CP	(HL)
 	RET	NZ
 	INC	BC
 	INC	HL
 	OR	A
-	JR	NZ,Compare
+	JR	NZ,STRCMP
 	RET
 
-Compare2:	LD	A,(HL)
+CHKEQ:	LD	A,(HL)
 	OR	A
 	RET	Z
 	LD	A,(BC)
@@ -1241,7 +1261,7 @@ Compare2:	LD	A,(HL)
 	INC	BC
 	INC	HL
 	OR	A
-	JR	NZ,Compare2
+	JR	NZ,CHKEQ
 	RET
 
 Compare3:	LD	A,(BC)
@@ -1261,8 +1281,8 @@ Compare4:	LD	A,H
 	SUB	E
 	RET
 
-Word_Not:	DEFB	"NOT",0
-Word_Exist:	DEFB	"EXIST",0
+$NOT:	DEFB	"NOT",0
+$EXIST:	DEFB	"EXIST",0
 Word_And:	DEFB	"AND",0
 Word_Or:	DEFB	"OR",0
 Word_Xor:	DEFB	"XOR",0
@@ -1270,25 +1290,25 @@ Word_Xor:	DEFB	"XOR",0
 Cmd_Color:	AND	(HL)
 	LD	A,.NOPAR
 	RET	Z
-	CALL	GetValue_8
+	CALL	GET8
 	RET	NZ
 	LD	A,E
 	CP	#10
 	JR	NC,Next_0156
 	LD	(FORCLR),A
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	Z,Next_0555
-	CALL	GetValue_8
+	CALL	GET8
 	RET	NZ
 	LD	A,E
 	CP	#10
 	JR	NC,Next_0156
 	LD	(BAKCLR),A
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	Z,Next_0555
-	CALL	GetValue_8
-	CALL	Z,LastDigit
-	CALL	Z,LastByte
+	CALL	GET8
+	CALL	Z,CHKNO
+	CALL	Z,CHKEOL
 	RET	NZ
 	LD	A,E
 	CP	#10
@@ -1302,16 +1322,16 @@ Cmd_Mode:	AND	(HL)
 	RET	Z
 	LD	A,(CRTCNT)
 	LD	(BufExtra),A
-	CALL	GetValue_8
+	CALL	GET8
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	Z,Next_0556
 	PUSH	DE
-	CALL	GetValue_8
+	CALL	GET8
 	LD	C,E
 	POP	DE
-	CALL	Z,LastDigit
-	CALL	Z,LastByte
+	CALL	Z,CHKNO
+	CALL	Z,CHKEOL
 	RET	NZ
 	LD	A,C
 	LD	(BufExtra),A
@@ -1323,10 +1343,10 @@ Next_0556:	OR	E
 	LD	IX,#6C
 	LD	HL,LINL40
 	CP	#21
-	JR	NC,Next_0155
+	JR	NC,GOTCOLS
 	LD	IX,#6F
 	INC	HL
-Next_0155:	LD	(HL),A
+GOTCOLS:	LD	(HL),A
 	LD	A,(BufExtra)
 	OR	A
 	JR	Z,Next_0156
@@ -1347,7 +1367,7 @@ Cmd_Input:	EX	AF,AF'
 	RET	Z
 	CALL	ParseEnvName
 	JR	NZ,Next_0558
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	Z,Next_0560
 Next_0558:	LD	DE,BufEnvData
 Next_0559:	LD	A,(HL)
@@ -1367,7 +1387,7 @@ Next_0560:	PUSH	AF
 	CALL	NZ,ParseEnvName
 	LD	A,.INP
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	LD	A,(BufEnvName)
@@ -1378,7 +1398,7 @@ Next_0560:	PUSH	AF
 	CALL	PrintString
 	EX	AF,AF'
 	JR	NC,Next_0561
-	CALL	WaitKey
+	CALL	INCH
 	LD	A,L
 	LD	HL,BufEnvData
 	LD	(HL),A
@@ -1441,100 +1461,100 @@ Next_0565:	PUSH	HL
 	EXX
 	POP	HL
 	EXX
-	CALL	GetEnvData2
+	CALL	GENV2
 	POP	HL
 	RET	NZ
 	OR	(HL)
-	JP	Z,NPrintString
+	JP	Z,?DMSCR
 	INC	HL
 	CP	"-"
-	JR	Z,Next_0163
+	JR	Z,DELP
 	CP	"+"
-	JR	Z,Next_0157
+	JR	Z,ADDP
 	XOR	A
 	LD	(DE),A
 	DEC	HL
-Next_0157:	EX	DE,HL
-	PUSH	HL
-	CALL	FndFirstChr
-	POP	HL
-	JR	NZ,Next_0158
+ADDP:	EX	DE,HL	; HL -> current PATH string.
+	PUSH	HL	; If only separators there, then set
+	CALL	GETCH	;   the PATH string to a null string.
+	POP	HL	;   This fiddle is done because the
+	JR	NZ,PTH10	;   PATH string is initialised to '; '.
 	LD	(HL),A
-Next_0158:	EX	DE,HL
-Next_0159:	CALL	FndFirstChr
-	JR	Z,Next_0162
+PTH10:	EX	DE,HL
+AP10:	CALL	GETCH	; Skip separators.
+	JR	Z,Next_0162	; Set new path if end of user's items.
 	LD	BC,BufExtra
 	PUSH	BC
-	CALL	MakePath
-	PUSH	HL
-	CALL	NC,Next_0164
+	CALL	CPYSTR	; Copy & uppercase item, HL -> next.
+	PUSH	HL	; Save ptr to next item in user string.
+	CALL	NC,DELSTR	; Delete item if it exists.
 	POP	HL
-	POP	BC
-	RET	C
-	LD	DE,BufEnvData-1
-Next_0160:	INC	DE
-	LD	A,(DE)
+	POP	BC	; BC -> item copied to BUFF3.
+	RET	C	; Return if error.
+	LD	DE,BufEnvData-1	; Find end of current PATH string,
+AP20:	INC	DE	;   then append separator and the new
+	LD	A,(DE)	;   item.
 	OR	A
-	JR	NZ,Next_0160
-	LD	A,";"
+	JR	NZ,AP20
+	LD	A,";"	; Add separator to PATH string.
 	LD	(DE),A
 	INC	DE
 	LD	A," "
 	LD	(DE),A
-Next_0161:	INC	DE
+AP30:	INC	DE
 	LD	A,(BC)
 	INC	BC
 	LD	(DE),A
 	OR	A
-	JR	NZ,Next_0161
-	JR	Next_0159
+	JR	NZ,AP30
+	JR	AP10
 
 Next_0162:	EXX
 	PUSH	HL
 	EXX
 	POP	HL
-	JP	PutEnvItem2
+	JP	SENV2
 
-Next_0163:	CALL	FndFirstChr
-	JR	Z,Next_0162
-	LD	BC,BufExtra
-	CALL	MakePath
-	PUSH	HL
-	CALL	NC,Next_0164
+DELP:	CALL	GETCH	; Skip separators.
+	JR	Z,Next_0162	; Attempt to set PATH if end of items.
+	LD	BC,BufExtra	; Else copy to BUFF3 & upper case.
+	CALL	CPYSTR	; HL -> start of next item.
+	PUSH	HL	; Save pointer to next item.
+	CALL	NC,DELSTR	; Attempt to delete item from string.
 	POP	HL
-	RET	C
-	LD	A,.IPATH
+	RET	C	; Return if error.
+	LD	A,.IPATH	; Return .IPATH if item not found.
 	RET	Z
-	JR	Next_0163
+	JR	DELP	; Repeat for next item.
 
-Next_0164:	LD	HL,BufEnvData
-Next_0165:	PUSH	HL
+DELSTR:	LD	HL,BufEnvData
+DS5:	PUSH	HL	; Save start of this item.
 	POP	IX
-	CALL	FndFirstChr
-	RET	Z
-	LD	BC,BufExtra+#80
+	CALL	GETCH	; Skip leading separators.
+	RET	Z	; Return with Z if user item not found.
+	LD	BC,BufExtra+#80	; Copy item to BUFF3+128 & upper case.
 	PUSH	BC
-	CALL	MakePath
+	CALL	CPYSTR	; Leaves HL -> next item.
 	POP	BC
 	RET	C
-	LD	DE,BufExtra
-Next_0166:	LD	A,(BC)
+	LD	DE,BufExtra	; Compare with string at BUFF3.
+DS10:	LD	A,(BC)
 	EX	DE,HL
 	CP	(HL)
 	EX	DE,HL
-	JR	NZ,Next_0165
+	JR	NZ,DS5
 	INC	DE
 	INC	BC
 	OR	A
-	JR	NZ,Next_0166
+	JR	NZ,DS10
 	PUSH	IX
 	POP	DE
 	CALL	NCopy
 	INC	A
 	RET
 
-MakePath:	LD	D,#00
-Next_0168:	LD	E,(HL)
+CPYSTR:	LD	D,#00	; Zero character flags.
+CS10:	LD	E,(HL)
 	PUSH	BC
 	PUSH	HL
 	LD	C,_CHKCHR
@@ -1546,13 +1566,13 @@ Next_0168:	LD	E,(HL)
 	LD	(BC),A
 	OR	E
 	RET	Z
-	CALL	SkipChar
+	CALL	SEP?
 	RET	Z
 	LD	A,E
 	LD	(BC),A
 	INC	BC
 	INC	HL
-	JR	Next_0168
+	JR	CS10
 
 MakePath2:	LD	D,#01
 	XOR	A
@@ -1584,7 +1604,7 @@ Next_0567:	LD	E,(HL)
 	LD	A,(Value_L)
 	OR	A
 	LD	A,E
-	CALL	Z,SkipChar
+	CALL	Z,SEP?
 	RET	Z
 	LD	A,E
 	LD	(BC),A
@@ -1592,14 +1612,21 @@ Next_0567:	LD	E,(HL)
 	INC	HL
 	JR	Next_0169
 
-Cmd_Pause:	EX	DE,HL
-	CALL	NPrintString
-AskAnyKey:	LD	A,#0F
-	CALL	PrintCode
-	JP	WaitKey
+		SUBTTL	PAUSE
+;        The  PAUSE  command is similar to the ECHO command, except that after
+; printing the message on the reast of the command line, it prompts for a  key
+; to be pressed.  This is used in batch file processing  to  prompt  for,  for
+; example,  the user to change disks. The entry point PAUSE is called from the
+; character output routine OUTCH at the end of a screenful ot text if /P is in
+; effect.
+@PAUSE:	EX	DE,HL	; DE -> command arguments.
+	CALL	?DMSCR	; Print arguments & CR,LF if non-null.
+PAUSE:	LD	A,#0F
+	CALL	DMESS
+	JP	INCH
 
-Cmd_Ramdisk:	AND	(HL)
-	JR	NZ,Next_0170
+@RAMDISK:	AND	(HL)
+	JR	NZ,SETRAM
 	LD	BC,#FF68
 	CALL	BDOS
 	RET	NZ
@@ -1613,118 +1640,123 @@ Cmd_Ramdisk:	AND	(HL)
 	ADD	HL,HL
 	ADD	HL,HL
 	LD	A,#29
-	CALL	PrintCode
+	CALL	DMESS
 	LD	IX,BufEnvData
 	PUSH	IX
-	CALL	Convert16
+	CALL	D16
 	POP	DE
 	CALL	PrintString
 	LD	A,"K"
 	CALL	PrintChar
 	JP	LPrint
 
-Next_0170:	EX	AF,AF'
-	CALL	Find_D
-	RET	NZ
+SETRAM:	EX	AF,AF'
+	CALL	CHKD	; Check for /D.
+	RET	NZ	; Ret if error.
 	EX	AF,AF'
-	JR	NZ,Next_0171
-	OR	(HL)
+	JR	NZ,ND	; Go if not.
+	OR	(HL)	; Any number given ?
 	LD	B,A
-	JR	Z,Next_0176
-	XOR	A
-Next_0171:	EX	AF,AF'
-	CALL	GetValue_16
+	JR	Z,NRAM	; Just delete RAM disk if not.
+	XOR	A	; Else AF' = Z again, get number.
+ND:	EX	AF,AF'
+	CALL	GET16	; Get size of RAM disk required.
 	RET	NZ
-	LD	A,(HL)
-	CALL	MakeCapital
+	LD	A,(HL)	; Allow 'K' to be given after number.
+	CALL	UC
 	CP	"K"
-	JR	NZ,Next_0172
-	INC	HL
-Next_0172:	LD	A,(HL)
-	CP	"/"
-	CALL	NZ,LastDigit
-	CALL	Z,Find_D
-	RET	NZ
-	CALL	FndFirstChr
-	LD	A,.INP
+	JR	NZ,NK
+	INC	HL	; Skip passed K if given.
+NK:	LD	A,(HL)	; Get character after number.
+	CP	"/"	; Start of /D ?
+	CALL	NZ,CHKNO	; Check for garbage if not.
+	CALL	Z,CHKD	; Check for /D if no error.
+	RET	NZ	;   if not.
+	CALL	GETCH	; Check for garbage on end of line.
+	LD	A,.INP	; 'Too many parameters' if not eol.
 	RET	NZ
 	LD	B,#04
-	LD	HL,#0F
+	LD	HL,#0F	; Round up to next 16K boundary.
 	ADD	HL,DE
-Next_0173:	SRL	H
+DIV16:	SRL	H	; Divide by 16 for no. segments.
 	RR	L
-	DJNZ	Next_0173
-	LD	A,.IPARM
-	INC	H
+	DJNZ	DIV16
+	LD	A,.IPARM	; If > 254 16K segments, then give
+	INC	H	;   error.
 	DEC	H
 	RET	NZ
-	LD	B,L
+	LD	B,L	; B=no. segments in new RAM disk.
 	INC	L
-	RET	Z
-	EXX
+	RET	Z	; Ret if 255 segments specified.
+	EXX	; Save new size in B'.
 	EX	AF,AF'
-	JR	Z,Next_0174
+	JR	Z,DELRAM	; Destroy existing RAM disk if yes.
 	LD	BC,#FF68
-	CALL	BDOS
-	RET	NZ
-	OR	B
-	JR	Z,Next_0175
+	CALL	BDOS	; See if RAM disk already exists.
+	RET	NZ	; Return any errors.
+	OR	B	; NZ => RAM disk currently exists.
+	JR	Z,NEWRAM	; Create one if one doesn't exist.
 	LD	A,#34
-	CALL	Find_YyNn
+	CALL	YN	; Prompt with 'Delete RAM disk (Y/N) ?'
 	LD	A,#00
-	RET	Z
-Next_0174:	LD	BC,_RAMDISK
+	RET	Z	; Ret with no error if 'N' pressed.
+DELRAM:	LD	BC,_RAMDISK	; Delete current RAM disk.
 	CALL	BDOS
 	RET	NZ
-Next_0175:	EXX
-Next_0176:	LD	C,_RAMDISK
+NEWRAM:	EXX	; B=size of new RAM disk.
+NRAM:	LD	C,_RAMDISK	; Create new RAM disk.
 	JP	BDOS
 
-Find_D:	LD	A,(HL)
+CHKD:	LD	A,(HL)	; Start of option ?
 	CP	"/"
-	JR	NZ,Next_0177
+	JR	NZ,OKRET	; Return no error if not.
 	INC	HL
-	LD	A,(HL)
-	CALL	MakeCapital
-	CP	"D"
+	LD	A,(HL)	; Else get option character.
+	CALL	UC
+	CP	"D"	; /D ?
 	LD	A,.IOPT
-	RET	NZ
+	RET	NZ	; Return 'invalid option' error if not.
 	INC	HL
 	XOR	A
 	EX	AF,AF'
-	CALL	FndFirstChr
-	JR	Find_D
+	CALL	GETCH	; Skip following separators.
+	JR	CHKD	; Repeat so invalid /s give .IOPT.
 
-Next_0177:	XOR	A
+OKRET:	XOR	A
 	RET
 
-Cmd_Set:	AND	(HL)
-	JR	NZ,Next_0569
-Next_0568:	LD	HL,#01
-Next_0178:	PUSH	HL
+		SUBTTL	SET
+;        This is the SET command routine.  SET  alone  prints  out  the  whole
+; environment,  SET followed by a name prints out the string for that name and
+; SET followed by a name, separator and string sets that environment  name  to
+; the string.
+@SET:	AND	(HL)	; Any name given ?
+	JR	NZ,Next_0569	; Go if yes, else print environment.
+Next_0568:	LD	HL,#01	; Initialise item number.
+DENV:	PUSH	HL	; Save item number.
 	EX	DE,HL
-	CALL	FindEnvItem
-	JR	NZ,Next_0179
+	CALL	FENV	; Get name of item.
+	JR	NZ,NXTENV	; Ignore this item if error.
 	POP	BC
-	OR	(HL)
-	RET	Z
+	OR	(HL)	; Null name ?
+	RET	Z	; Done if yes.
 	PUSH	BC
-	CALL	GetEnvData
-	JR	NZ,Next_0179
-	EX	DE,HL
-	CALL	PrintString
+	CALL	GENV	; Get string value of this name.
+	JR	NZ,NXTENV	; Ignore this item if error.
+	EX	DE,HL	; DE -> name.
+	CALL	PrintString	; Print name of string.
 	LD	A,#41
-	CALL	PrintCode
-	EX	DE,HL
-	CALL	LPrintString
-Next_0179:	POP	HL
-	INC	HL
-	JR	Next_0178
+	CALL	DMESS	; Print '='.
+	EX	DE,HL	; DE -> value of name.
+	CALL	DMSCR	; Followed by the string & CR,LF.
+NXTENV:	POP	HL	; Get back current item number.
+	INC	HL	; Next item.
+	JR	DENV
 
-Next_0180:	PUSH	HL
-	LD	D,#00
+SETNAME:	PUSH	HL	; HL -> start of name.
+	LD	D,#00	; Zero character flags.
 	DEC	HL
-Next_0181:	INC	HL
+NXTCHR:	INC	HL
 	LD	E,(HL)
 	PUSH	HL
 	LD	C,_CHKCHR
@@ -1734,42 +1766,42 @@ Next_0181:	INC	HL
 	RET	NZ
 	PUSH	BC
 	OR	E
-	JR	Z,Next_0182
-	CALL	SkipChar
-	JR	NZ,Next_0181
+	JR	Z,DSTR
+	CALL	SEP?
+	JR	NZ,NXTCHR
 	PUSH	HL
-	CALL	SkipSpace2
+	CALL	STRIP
 	POP	HL
 	LD	(HL),#00
-	JR	Z,Next_0182
+	JR	Z,DSTR
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	EX	DE,HL
 	POP	HL
 	LD	C,_SENV
 	JP	BDOS
 
-Next_0182:	POP	HL
-	CALL	GetEnvData2
+DSTR:	POP	HL	; HL -> start of name.
+	CALL	GENV2
 	RET	NZ
-NPrintString:	LD	A,(DE)
+?DMSCR:	LD	A,(DE)
 	OR	A
 	RET	Z
-	JP	LPrintString
+	JP	DMSCR
 
 Next_0569:	LD	A,(HL)
 	CP	"/"
-	JR	NZ,Next_0180
+	JR	NZ,SETNAME
 	INC	HL
 	LD	A,(HL)
 	CALL	MakeUpper
 	CP	"P"
 	LD	A,.IOPT
 	RET	NZ
-	CALL	FindScrSize
+	CALL	SETP
 	INC	HL
-	CALL	FndFirstChr
-	JR	NZ,Next_0180
+	CALL	GETCH
+	JR	NZ,SETNAME
 	JR	Next_0568
 
 Cmd_Alias:	AND	(HL)
@@ -1785,9 +1817,9 @@ Next_0571:	LD	HL,BufEnvName
 	EX	DE,HL
 	CALL	PrintString
 	LD	A,#41
-	CALL	PrintCode
+	CALL	DMESS
 	EX	DE,HL
-	CALL	LPrintString
+	CALL	DMSCR
 	POP	BC
 	JR	Next_0571
 
@@ -1806,15 +1838,15 @@ Next_0573:	INC	HL
 	PUSH	BC
 	OR	E
 	JR	Z,Next_0574
-	CALL	SkipChar
+	CALL	SEP?
 	JR	NZ,Next_0573
 	PUSH	HL
-	CALL	SkipSpace2
+	CALL	STRIP
 	POP	HL
 	LD	(HL),#00
 	JR	Z,Next_0574
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	EX	DE,HL
 	POP	HL
 	JP	SetAlias
@@ -1822,7 +1854,7 @@ Next_0573:	INC	HL
 Next_0574:	POP	HL
 	LD	DE,BufEnvData
 	CALL	GetAlias
-	JP	NPrintString
+	JP	?DMSCR
 
 Next_0575:	LD	A,(HL)
 	CP	"/"
@@ -1841,9 +1873,9 @@ Next_0575:	LD	A,(HL)
 	DEC	HL
 	JR	Next_0572
 
-Next_0576:	CALL	FindScrSize
+Next_0576:	CALL	SETP
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	NZ,Next_0572
 	JR	Next_0570
 
@@ -1917,7 +1949,7 @@ Next_0582:	CALL	ParsePath
 	PUSH	BC
 	LD	HL,BufEnvName
 	LD	BC,Text_Alias
-	CALL	Compare
+	CALL	STRCMP
 	POP	BC
 	LD	E,.IFNM
 	JR	NZ,Next_0581
@@ -1936,7 +1968,7 @@ Next_0582:	CALL	ParsePath
 	JR	Next_0580
 
 Next_0583:	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	CALL	GetAliasAdres
@@ -1949,7 +1981,7 @@ Next_0583:	INC	HL
 Text_Alias:	DEFB	"Alias File",26,0
 
 ParsePath:	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.NOPAR
 	RET	Z
 	LD	BC,_PARSE
@@ -1967,7 +1999,7 @@ ParsePath:	INC	HL
 	RET	NZ
 	LD	(HL),#00
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 Next_0584:	XOR	A
@@ -1978,8 +2010,8 @@ Cmd_History:	AND	(HL)
 	LD	A,(HL)
 	CP	"/"
 	JP	Z,Check_P
-	CALL	GetValue_16
-	CALL	Z,LastItem
+	CALL	GET16
+	CALL	Z,GCHKEOL
 	RET	NZ
 	EX	DE,HL
 	LD	DE,(MaxBufferLeng)
@@ -2098,14 +2130,14 @@ Check_P:	INC	HL
 	LD	A,.IOPT
 	RET	NZ
 	INC	HL
-	CALL	FindScrSize
-	CALL	FndFirstChr
+	CALL	SETP
+	CALL	GETCH
 	JR	Z,Next_0900
 	LD	A,.INP
 	RET
 
 Check_D:	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 Next_0903:	LD	HL,BufferAdres
@@ -2116,24 +2148,32 @@ Next_0903:	LD	HL,BufferAdres
 	XOR	A
 	RET
 
-Cmd_Time:	PUSH	HL
-	CALL	GetTimeForm
+		SUBTTL	TIME
+;        This is the TIME command routine. The time is  printed  using  DTIME,
+; which  prints  the  time  as  printed  by DIR ie. excluding seconds, so this
+; routine prints seconds afterwards. DTIME  prints  the  time  in  the  format
+; defined  by  the  TIME environment string, but this routine does not need to
+; know about this since the time can be input in either format  unambiguously.
+; Although  100ths  of  a  second  are  not  printed,  they  are accepted when
+; inputting the time.
+@TIME:	PUSH	HL	; Save pointer to command line.
+	CALL	TFORM	; Set up TM_FORM, the time format var.
 	POP	HL
 	LD	A,(HL)
-	OR	A
-	JR	NZ,Next_0186
-	LD	A,#24
-	CALL	PrintCode
-	LD	C,_GTIME
+	OR	A	; New time given on command line ?
+	JR	NZ,RTIM	; Attempt to set new time if yes.
+	LD	A,#24	; Print 'Current time is'
+	CALL	DMESS
+	LD	C,_GTIME	; Get current time for printing.
 	CALL	BDOS
-	PUSH	DE
-	LD	A,L
+	PUSH	DE	; Save seconds in D.
+	LD	A,L	; Convert hours & mins to FIB format.
 	ADD	A,A
 	ADD	A,A
 	LD	B,#03
-Next_0183:	ADD	A,A
+TIM2:	ADD	A,A
 	RL	H
-	DJNZ	Next_0183
+	DJNZ	TIM2
 	LD	C,H
 	LD	HL,BufEnvName
 	LD	(HL),A
@@ -2141,7 +2181,7 @@ Next_0183:	ADD	A,A
 	LD	(HL),C
 	LD	IX,BufEnvName+2
 	PUSH	IX
-	CALL	PrintTime
+	CALL	DTIME
 	POP	DE
 	POP	BC
 	PUSH	AF
@@ -2150,131 +2190,133 @@ Next_0183:	ADD	A,A
 	CALL	PrintChar
 	LD	A,B
 	LD	D,#FF
-	CALL	PrintFigure
+	CALL	DDT
 	POP	AF
 	CP	" "
 	CALL	NZ,PrintChar
 	LD	A,#0E
-	CALL	LPrintCode
-Next_0184:	LD	A,#26
-	CALL	PrintCode
-	CALL	GetLine
-	JR	Z,Next_0185
+	CALL	DMESSCR
+NEWTIM:	LD	A,#26	; Print 'Enter new time:'.
+	CALL	DMESS
+	CALL	INLI	; Input a line.
+	JR	Z,TIM5	; Go if no error.
 	CP	.EOF
-	RET	NZ
-Next_0185:	INC	HL
-	CALL	FndFirstChr
-	RET	Z
-Next_0186:	EXX
-	LD	C,_GTIME
+	RET	NZ	; Return if not end of file error.
+TIM5:	INC	HL	; Point passed length byte.
+	CALL	GETCH	; Skip leading separators.
+	RET	Z	; Just return if new time not given.
+RTIM:	EXX	; Hide the input line pointer.
+	LD	C,_GTIME	; Get current values for defaults.
 	CALL	BDOS
+	EXX	; Save current values, get input ptr.
+	CALL	GETNO	; Get hours.
+	JR	C,TIM10	; Go if invalid number.
 	EXX
-	CALL	GetDigit2
-	JR	C,Next_0187
+	LD	H,A	; Else save new hours.
 	EXX
-	LD	H,A
+TIM10:	CALL	DTSKIP	; Skip separators.
+	CALL	NC,GETNO	; Get minutes.
+	JR	C,TIM20	; Go if invalid number.
 	EXX
-Next_0187:	CALL	SkipSepars
-	CALL	NC,GetDigit2
-	JR	C,Next_0188
+	LD	L,A	; Else save new minutes.
 	EXX
-	LD	L,A
+TIM20:	CALL	DTSKIP	; Skip separators.
+	CALL	NC,GETNO	; Get seconds.
+	JR	C,TIM30	; Go if invalid number.
 	EXX
-Next_0188:	CALL	SkipSepars
-	CALL	NC,GetDigit2
-	JR	C,Next_0189
+	LD	D,A	; Else save new number.
 	EXX
-	LD	D,A
+TIM30:	CALL	DTSKIP	; Skip separators.
+	CALL	NC,GETNO	; Get 100ths.
+	JR	C,TIM35	; Go if invalid number.
 	EXX
-Next_0189:	CALL	SkipSepars
-	CALL	NC,GetDigit2
-	JR	C,Next_0190
+	LD	E,A	; Else save new 100ths second.
 	EXX
-	LD	E,A
-	EXX
-Next_0190:	CALL	FndFirstChr
-	CALL	MakeCapital
-	CP	"A"
-	JR	Z,Next_0193
-	CP	"P"
+TIM35:	CALL	GETCH	; Strip spaces etc.
+	CALL	UC	; Upper case next character.
+	CP	"A"	; am. indicator ?
+	JR	Z,TIM40	; Go if yes, NC => am.
+	CP	"P"	; pm. indicator ?
 	SCF
-	JR	Z,Next_0193
-	OR	A
+	JR	Z,TIM40	; Go if yes, C => pm.
+	OR	A	; Else end of line ?
 	EXX
-	JR	Z,Next_0197
-	DEFB	#3E
+	JR	Z,SETIME	; Set new time if yes.
+	DEFB	#3E	; Else give error.
 Next_0191:	POP	AF
-Next_0192:	LD	B,.ITIME
-	JR	Next_0198
+BADTIM:	LD	B,.ITIME
+	JR	TIM60	; Print error & re-prompt.
 
-Next_0193:	PUSH	AF
+TIM40:	PUSH	AF
 	INC	HL
-	CALL	FndFirstChr
+	CALL	GETCH
 	JR	NZ,Next_0191
 	POP	AF
 	EXX
 	LD	B,#0C
 	LD	A,H
-	JR	C,Next_0195
+	JR	C,TIM50
 	CP	B
-	JR	Z,Next_0194
-	JR	NC,Next_0192
+	JR	Z,TIM45
+	JR	NC,BADTIM
 	DEFB	#D2
-Next_0194:	LD	H,#00
-	JR	Next_0197
+TIM45:	LD	H,#00
+	JR	SETIME
 
-Next_0195:	OR	A
-	JR	Z,Next_0192
-	CP	B
-	JR	NC,Next_0196
+TIM50:	OR	A	; Hour=0 pm is invalid.
+	JR	Z,BADTIM
+	CP	B	; Convert to 24 hour hours.
+	JR	NC,TIM55	;   (no change if >12)
 	ADD	A,B
-Next_0196:	LD	H,A
-Next_0197:	LD	C,_STIME
-	CALL	BDOS
-	AND	.ITIME
-	RET	Z
-	LD	B,A
-Next_0198:	LD	DE,BufEnvName
+TIM55:	LD	H,A	; H=new hours.
+SETIME:	LD	C,_STIME
+	CALL	BDOS	; Attempt to set the new time.
+	AND	.ITIME	; 0 => OK, else .ITIME => invalid time.
+	RET	Z	; Return if no error.
+	LD	B,A	; B=error code.
+TIM60:	LD	DE,BufEnvName	; Get message into BUFF2.
 	LD	C,_EXPLAIN
 	CALL	BDOS
-	PUSH	DE
-	CALL	LPrint
+	PUSH	DE	; Save message ptr.
+	CALL	LPrint	; New line & '***'.
 	LD	A,#0D
-	CALL	PrintCode
+	CALL	DMESS
 	POP	DE
-	CALL	PrintString
-	LD	A,#0E
-	CALL	LPrintCode
-	JP	Next_0184
+	CALL	PrintString	; Print actual message.
+	LD	A,#0E	; Followed by message after error.
+	CALL	DMESSCR
+	JP	NEWTIM	; Prompt & input for another date.
 
-Cmd_Ver:	AND	(HL)
-	LD	A,.INP
+		SUBTTL	VER
+;       The VER command simply prints the version number.
+@VER:	AND	(HL)
+	LD	A,.INP	; Error if any parameters.
 	RET	NZ
-	LD	HL,#4039
-	CALL	ReadDiskRom
+	LD	HL,#4039	; Read address of KBDOS's version
+	CALL	_RDSLT	;   message.
 	PUSH	AF
 	DEC	HL
-	CALL	ReadDiskRom
+	CALL	_RDSLT
 	POP	HL
-	LD	L,A
-	SCF
-Next_0199:	CALL	NC,PrintChar
-	CALL	ReadDiskRom
+	LD	L,A	; HL -> message in KBDOS ROM.
+	SCF	; Skip printing first time round.
+VER10:	CALL	NC,PrintChar	; Print character from message.
+	CALL	_RDSLT	; Read a character from the message.
 	INC	HL
 	OR	A
-	JR	NZ,Next_0199
+	JR	NZ,VER10	; Go with character and NC if not end.
 	CALL	LPrint
-	LD	HL,(#01)
+	LD	HL,(#01)	; Get pointer to MSXDOS.SYS's message.
 	LD	DE,#30
 	ADD	HL,DE
 	LD	E,(HL)
 	INC	HL
-	LD	D,(HL)
-	CALL	LPrintString
-	LD	DE,Text_Version
-	JP	LPrintString
+	LD	D,(HL)	; DE -> message.
+	CALL	DMSCR	; Print message and CRLF.
+	LD	DE,VERMSG	; Finally print COMMAND.COM's message.
+	JP	DMSCR
 
-ReadDiskRom:	LD	A,(#F348)
+_RDSLT:	LD	A,(#F348)
 ReadSlot:	EX	DE,HL
 	PUSH	DE
 	LD	HL,#00
@@ -2288,45 +2330,49 @@ ReadSlot:	EX	DE,HL
 	POP	HL
 	RET
 
-Text_Version:	DEFB	"COMMAND2.COM version 2.41",13,10
+VERMSG:	DEFB	"COMMAND2.COM version 2.41",13,10
 	DEFB	"Copyright (c) 1995-1997 by C.P.U.",13,10,0
 
-Cmd_Verify:	AND	(HL)
-	JR	NZ,Next_0201
-	LD	C,_GETVFY
+		SUBTTL	VERIFY
+;******************************************************************************
+;        This  is  the  VERIFY  command   routine.   It   simply   sets   disk
+; verify-after-write ON or OFF.
+@VERIFY:	AND	(HL)
+	JR	NZ,SETVFY	; Go & set verify if parameters given.
+	LD	C,_GETVFY	; Else get & print verify state.
 	CALL	BDOS
-	LD	HL,Adres_OFF+1
+	LD	HL,Adres_OFF+1	; Assume disabled.
 	INC	B
-	DEC	B
-	JR	Z,Next_0200
+	DEC	B	; 0 => disabled, else enabled.
+	JR	Z,GOTVFY
 	LD	HL,Adres_ON+1
-Next_0200:	LD	A,#28
-	CALL	PrintCode
-	EX	DE,HL
-	JP	LPrintString
+GOTVFY:	LD	A,#28	; Print 'VERIFY='.
+	CALL	DMESS
+	EX	DE,HL	; DE -> ON/OFF string.
+	JP	DMSCR	; Print verify state.
 
-Next_0201:	EX	DE,HL
-	DEC	DE
-	LD	HL,Adres_ON
-	LD	B,(HL)
-	LD	C,#FF
-	CALL	Compare_DEHL
-	JR	NC,Next_0202
-	INC	B
-	INC	C
-	INC	HL
-	CALL	C,Compare_DEHL
-	LD	A,.IPARM
+SETVFY:	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,Adres_ON	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#FF	; NZ => ON.
+	CALL	COMPARE
+	JR	NC,VFY10
+	INC	B	; Ready for OFF check.
+	INC	C	; 0 => OFF.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE	; Check for OFF if not ON.
+	LD	A,.IPARM	; 'Invalid parameter' if not ON or OFF.
 	RET	C
-Next_0202:	INC	DE
-	DJNZ	Next_0202
+VFY10:	INC	DE
+	DJNZ	VFY10
 	INC	DE
 	EX	DE,HL
 	LD	A,(HL)
-	CALL	SkipChar
+	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	LD	E,C
@@ -2344,21 +2390,21 @@ Cmd_Dskchk:	AND	(HL)
 	JR	Z,Next_0588
 	LD	HL,Adres_OFF+1
 Next_0588:	LD	A,#47
-	CALL	PrintCode
+	CALL	DMESS
 	EX	DE,HL
-	JP	LPrintString
+	JP	DMSCR
 
 Next_0589:	EX	DE,HL
 	DEC	DE
 	LD	HL,Adres_ON
 	LD	B,(HL)
 	LD	C,#00
-	CALL	Compare_DEHL
+	CALL	COMPARE
 	JR	NC,Next_0590
 	INC	B
 	DEC	C
 	INC	HL
-	CALL	C,Compare_DEHL
+	CALL	C,COMPARE
 	LD	A,.IPARM
 	RET	C
 Next_0590:	INC	DE
@@ -2366,10 +2412,10 @@ Next_0590:	INC	DE
 	INC	DE
 	EX	DE,HL
 	LD	A,(HL)
-	CALL	SkipChar
+	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
-	CALL	FndFirstChr
+	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
 	LD	B,C
