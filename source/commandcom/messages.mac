@@ -1,11 +1,15 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Message strings
+;******************************************************************************
 ;
-; COMMAND2.COM - String constants table
+;        The string constants used all over the program, accessed through
+; a table of addresses.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
+;******************************************************************************
 MESSAGES:	DEFB	"Yy",0
 	DEFB	"Nn",0
 	DEFB	" Directory of ",0

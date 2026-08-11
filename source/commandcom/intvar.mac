@@ -1,119 +1,123 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Internal variables and variable functions
+;******************************************************************************
 ;
-; COMMAND2.COM - Internal variable (%_VAR%) and variable function (%@FUN[]%) implementations
+;        Implementations of the internal variables (%_VAR%) and of the
+; variable functions (%@FUN[parameters]%), both new in COMMAND2.COM 2.40.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
-Int_Dirbuffer:	LD	DE,DirBuffer
-	JR	Lower
+;******************************************************************************
+IV_DIRBUFFER:	LD	DE,DIRBUF
+	JR	CHKLOW
 
-Int_Boot:	LD	A,(BootDrive)
-Next_0456:	LD	HL,BufEnvName+1
+IV_BOOT:	LD	A,(BOOTDRV)
+IVB10:	LD	HL,ENVNAME+1
 	LD	(HL),#00
 	DEC	HL
 	ADD	A,"@"
 	LD	(HL),A
 	EX	DE,HL
-Lower:	PUSH	DE
-	LD	HL,Env_Lower
+CHKLOW:	PUSH	DE
+	LD	HL,LOWER$
 	CALL	ON?
 	POP	DE
 	RET	C
 	PUSH	DE
-Next_0457:	LD	A,(DE)
-	CALL	MakeLower
+CHK10:	LD	A,(DE)
+	CALL	MKLOWER
 	LD	(DE),A
 	INC	DE
 	OR	A
-	JR	NZ,Next_0457
+	JR	NZ,CHK10
 	POP	DE
 	RET
 
-Int_Disk:	LD	A,(CurrentDrive)
-	JR	Next_0456
+IV_DISK:	LD	A,(CURDRIVE)
+	JR	IVB10
 
-Int_Column:	LD	A,(CSRX)
-Next_0458:	LD	IX,BufEnvName
+IV_COLUMN:	LD	A,(CSRX)
+IVC10:	LD	IX,ENVNAME
 	PUSH	IX
 	CALL	D8
 	POP	DE
 	RET
 
-Int_Columns:	LD	A,(LINLEN)
-	JR	Next_0458
+IV_COLUMNS:	LD	A,(LINLEN)
+	JR	IVC10
 
-Int_Bg:	LD	A,(BAKCLR)
-	JR	Next_0458
+IV_BG:	LD	A,(BAKCLR)
+	JR	IVC10
 
-Int_Fg:	LD	A,(FORCLR)
-	JR	Next_0458
+IV_FG:	LD	A,(FORCLR)
+	JR	IVC10
 
-Int_Row:	LD	A,(CSRY)
-	JR	Next_0458
+IV_ROW:	LD	A,(CSRY)
+	JR	IVC10
 
-Int_Rows:	LD	A,(CRTCNT)
-	JR	Next_0458
+IV_ROWS:	LD	A,(CRTCNT)
+	JR	IVC10
 
-Int_Error:	LD	A,(AbortError)
-	JR	Next_0458
+IV_ERROR:	LD	A,(ABORTERR)
+	JR	IVC10
 
-Int_Drivemap:	LD	C,_LOGIN
+IV_DRIVEMAP:	LD	C,_LOGIN
 	CALL	BDOS
 	LD	C,L
-	JP	Next_0509
+	JP	FNP10
 
-Int_Shell:	CALL	SetPage2
+IV_SHELL:	CALL	SETPG2
 	LD	HL,#3FFF
-	LD	DE,(VariableEnd+#8000)
+	LD	DE,(VAREND+#8000)
 	RES	7,D
 	OR	A
 	SBC	HL,DE
-	CALL	RestorePage2
-	LD	DE,Buffer1-ExitAdres
+	CALL	RSTPG2
+	LD	DE,BUFFER1-EXITADDR
 	XOR	A
-Next_0950:	INC	A
+IVS10:	INC	A
 	SBC	HL,DE
-	JR	NC,Next_0950
+	JR	NC,IVS10
 	DEC	A
-	JR	Next_0458
+	JR	IVC10
 
-Int_Cpu:	LD	A,(MSXVersion)
-	LD	DE,Text_Z80
+IV_CPU:	LD	A,(MSXVER)
+	LD	DE,Z80$
 	CP	3
 	RET	C
 	LD	IX,#0183
-	CALL	CallSlot
+	CALL	CALLSLOT
 	LD	A,E
-	LD	DE,Text_Z80
+	LD	DE,Z80$
 	OR	A
 	RET	Z
-	LD	DE,Text_R800
+	LD	DE,R800$
 	RET
 
-Text_Z80:	DEFB	"Z80",0
-Text_R800:	DEFB	"R800",0
+Z80$:	DEFB	"Z80",0
+R800$:	DEFB	"R800",0
 
-Int_Msxver:	LD	A,(MSXVersion)
-	LD	DE,Text_MSX2
+IV_MSXVER:	LD	A,(MSXVER)
+	LD	DE,MSX2$
 	DEC	A
 	RET	Z
-	LD	DE,Text_MSX3
+	LD	DE,MSX2P$
 	DEC	A
 	RET	Z
-	LD	DE,Text_MSX4
+	LD	DE,TURBOR$
 	RET
 
-Text_MSX2:	DEFB	"MSX-2",0
-Text_MSX3:	DEFB	"MSX-2+",0
-Text_MSX4:	DEFB	"Turbo-R",0
+MSX2$:	DEFB	"MSX-2",0
+MSX2P$:	DEFB	"MSX-2+",0
+TURBOR$:	DEFB	"Turbo-R",0
 
-Int_Cwds:	SCF
-Int_Cwd:	EX	AF,AF'
-	CALL	SetAbort
-	LD	HL,BufEnvName
-	LD	A,(CurrentDrive)
+IV_CWDS:	SCF
+IV_CWD:	EX	AF,AF'
+	CALL	SETABT
+	LD	HL,ENVNAME
+	LD	A,(CURDRIVE)
 	LD	B,A
 	ADD	A,"@"
 	LD	(HL),A
@@ -127,29 +131,29 @@ Int_Cwd:	EX	AF,AF'
 	LD	C,_GETCD
 	CALL	BDOS
 	OR	A
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	PUSH	DE
-	JR	NZ,Next_0459
+	JR	NZ,IVC20
 	EX	AF,AF'
-	JR	NC,Next_0460
+	JR	NC,IVC30
 	LD	BC,_PARSE
 	CALL	BDOS
 	DEC	DE
 	LD	A,(DE)
 	CP	"\"
 	INC	DE
-	JR	Z,Next_0460
+	JR	Z,IVC30
 	LD	A,"\"
 	LD	(DE),A
-Next_0459:	XOR	A
+IVC20:	XOR	A
 	INC	DE
 	LD	(DE),A
-Next_0460:	CALL	ResetAbort
+IVC30:	CALL	RSTABT
 	POP	DE
-	JP	Lower
+	JP	CHKLOW
 
-Int_Cwps:	SCF
-Int_Cwp:	CALL	Int_Cwd
+IV_CWPS:	SCF
+IV_CWP:	CALL	IV_CWD
 	INC	DE
 	LD	A,(DE)
 	OR	A
@@ -157,8 +161,8 @@ Int_Cwp:	CALL	Int_Cwd
 	INC	DE
 	RET
 
-Int_Datef:	SCF
-Int_Date:	EX	AF,AF'
+IV_DATEF:	SCF
+IV_DATE:	EX	AF,AF'
 	CALL	DFORM
 	LD	C,_GDATE
 	CALL	BDOS
@@ -173,43 +177,43 @@ Int_Date:	EX	AF,AF'
 	RL	L
 	OR	E
 	LD	D,L
-	LD	HL,BufEnvName+1
+	LD	HL,ENVNAME+1
 	LD	(HL),D
 	DEC	HL
 	LD	(HL),A
 	EX	AF,AF'
 	SBC	A,A
 	LD	C,A
-	LD	IX,BufEnvName+2
+	LD	IX,ENVNAME+2
 	PUSH	IX
 	CALL	DDATE
 	POP	DE
 	INC	DE
 	RET
 
-Int_Dosver:	LD	DE,Text_Dosver
+IV_DOSVER:	LD	DE,DOSVER$
 	RET
 
-Text_Dosver:	DEFB	"2.41",0
+DOSVER$:	DEFB	"2.41",0
 
-Int_Dow:	LD	C,_GDATE
+IV_DOW:	LD	C,_GDATE
 	CALL	BDOS
 	ADD	A,#17
 	CALL	GETMSG
 	EX	DE,HL
-	LD	DE,BufEnvName
-	CALL	NCopy
+	LD	DE,ENVNAME
+	CALL	NCOPY
 	DEC	DE
 	PUSH	DE
 	LD	A,#1E
 	CALL	GETMSG
 	EX	DE,HL
 	POP	DE
-	CALL	NCopy
-	LD	DE,BufEnvName
+	CALL	NCOPY
+	LD	DE,ENVNAME
 	RET
 
-Int_Time:	CALL	TFORM
+IV_TIME:	CALL	TFORM
 	LD	C,_GTIME
 	CALL	BDOS
 	PUSH	DE
@@ -217,15 +221,15 @@ Int_Time:	CALL	TFORM
 	ADD	A,A
 	ADD	A,A
 	LD	B,#03
-Next_0461:	ADD	A,A
+IVT10:	ADD	A,A
 	RL	H
-	DJNZ	Next_0461
+	DJNZ	IVT10
 	LD	C,H
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	LD	(HL),A
 	INC	HL
 	LD	(HL),C
-	LD	IX,BufEnvName+2
+	LD	IX,ENVNAME+2
 	CALL	DTIME
 	POP	BC
 	PUSH	AF
@@ -233,17 +237,17 @@ Next_0461:	ADD	A,A
 	INC	IX
 	LD	A,B
 	LD	D,#FF
-	CALL	PrintFigure2
+	CALL	PRFIG2
 	POP	AF
 	CP	" "
-	JR	Z,Next_0462
+	JR	Z,IVT20
 	LD	(IX),A
 	INC	IX
-Next_0462:	LD	(IX),#00
-	LD	DE,BufEnvName+3
+IVT20:	LD	(IX),#00
+	LD	DE,ENVNAME+3
 	RET
 
-SetAbort:	PUSH	BC
+SETABT:	PUSH	BC
 	PUSH	DE
 	PUSH	HL
 	PUSH	AF
@@ -259,7 +263,7 @@ SetAbort:	PUSH	BC
 	POP	BC
 	RET
 
-ResetAbort:	PUSH	BC
+RSTABT:	PUSH	BC
 	PUSH	DE
 	PUSH	HL
 	PUSH	AF
@@ -275,174 +279,174 @@ ResetAbort:	PUSH	BC
 	POP	BC
 	RET
 
-Int_Fnext:	CALL	SetAbort
+IV_FNEXT:	CALL	SETABT
 	LD	IX,FIB3
 	LD	C,_FNEXT
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	HL,FIB3+#15
-	LD	DE,FileTotal1
+	LD	DE,FILETOT1
 	CALL	ADD32
-	LD	HL,(FileCount)
+	LD	HL,(FILECNT)
 	INC	HL
-	LD	(FileCount),HL
+	LD	(FILECNT),HL
 	LD	DE,FIB3+1
 	RET
 
-Int_Filecount:	LD	HL,(FileCount)
-	LD	IX,BufEnvName
+IV_FILECOUNT:	LD	HL,(FILECNT)
+	LD	IX,ENVNAME
 	PUSH	IX
 	CALL	D16
 	POP	DE
 	RET
 
-Fun_Alias:	LD	DE,BufEnvName
-	CALL	GetAlias
+FN_ALIAS:	LD	DE,ENVNAME
+	CALL	GETALIAS
 	RET
 
-Fun_Ascii:	LD	A,(HL)
-	LD	IX,BufEnvName
+FN_ASCII:	LD	A,(HL)
+	LD	IX,ENVNAME
 	PUSH	IX
 	CALL	D8
 	POP	DE
 	RET
 
-Fun_Attrib:	EX	DE,HL
+FN_ATTRIB:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
 	EX	DE,HL
 	XOR	A
 	LD	(HL),A
-	LD	(Attribute1),A
-Next_0463:	INC	HL
+	LD	(ATTRIB1),A
+FNA10:	INC	HL
 	CALL	GETCH
-	JR	Z,Next_0466
+	JR	Z,FNA40
 	CALL	UC
 	CP	"N"
 	LD	B,A
 	LD	A,#00
-	JR	Z,Next_0465
-	LD	DE,Attribs
-Next_0464:	LD	A,(DE)
+	JR	Z,FNA30
+	LD	DE,ATTRTAB
+FNA20:	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0463
+	JR	Z,FNA10
 	CP	B
 	INC	DE
 	LD	A,(DE)
 	INC	DE
-	JR	NZ,Next_0464
+	JR	NZ,FNA20
 	LD	B,A
-	LD	A,(Attribute1)
+	LD	A,(ATTRIB1)
 	OR	B
-Next_0465:	LD	(Attribute1),A
-	JR	Next_0463
+FNA30:	LD	(ATTRIB1),A
+	JR	FNA10
 
-Next_0466:	CALL	SetAbort
+FNA40:	CALL	SETABT
 	POP	DE
 	LD	C,_ATTR
 	XOR	A
 	CALL	BDOS
 	OR	A
-	JR	Z,Next_0467
+	JR	Z,FNA50
 	LD	L,#FF
-Next_0467:	CALL	ResetAbort
-	LD	DE,BufEnvName+1
+FNA50:	CALL	RSTABT
+	LD	DE,ENVNAME+1
 	LD	(DE),A
 	DEC	DE
 	LD	A,"0"
 	LD	(DE),A
-	LD	A,(Attribute1)
+	LD	A,(ATTRIB1)
 	CP	L
 	RET	NZ
 	LD	A,"1"
 	LD	(DE),A
 	RET
 
-Attribs:	DEFB	"R",#01
+ATTRTAB:	DEFB	"R",#01
 	DEFB	"H",#02
 	DEFB	"S",#04
 	DEFB	"D",#10
 	DEFB	"A",#20
 
-Fun_Char:	CALL	GET8
-	JP	NZ,Next_0475
-	LD	HL,BufEnvName+1
+FN_CHAR:	CALL	GET8
+	JP	NZ,FND90
+	LD	HL,ENVNAME+1
 	LD	(HL),#00
 	DEC	HL
 	LD	(HL),E
 	EX	DE,HL
 	RET
 
-Fun_Hex:	CALL	GET16
-	JP	NZ,Next_0475
-	LD	HL,BufEnvName
+FN_HEX:	CALL	GET16
+	JP	NZ,FND90
+	LD	HL,ENVNAME
 	PUSH	HL
 	LD	A,D
-	CALL	MakeByte
+	CALL	MKBYTE
 	LD	A,E
-	CALL	MakeByte
+	CALL	MKBYTE
 	LD	(HL),#00
 	POP	DE
 	RET
 
-Fun_Diskfree:	CALL	GetAlloc
-Next_0468:	JR	C,Next_0475
+FN_DISKFREE:	CALL	GETALLOC
+FND20:	JR	C,FND90
 	DEFB	#3E
-Next_0469:	ADD	HL,HL
-Next_0470:	SRL	B
-	JR	NZ,Next_0469
+FND30:	ADD	HL,HL
+FND40:	SRL	B
+	JR	NZ,FND30
 	LD	E,#00
 	LD	D,L
 	LD	L,H
 	LD	H,E
 	SLA	D
 	ADC	HL,HL
-Next_0471:	LD	(Value_L),DE
-	LD	(Value_H),HL
+FND50:	LD	(VALUEL),DE
+	LD	(VALUEH),HL
 	EX	AF,AF'
 	CP	"B"
-	JR	Z,Next_0474
+	JR	Z,FND80
 	LD	B,10
-Next_0472:	SRL	H
+FND60:	SRL	H
 	RR	L
 	RR	D
 	RR	E
-	DJNZ	Next_0472
-	LD	(Value_L),DE
-	LD	(Value_H),HL
+	DJNZ	FND60
+	LD	(VALUEL),DE
+	LD	(VALUEH),HL
 	CP	"K"
-	JR	Z,Next_0474
+	JR	Z,FND80
 	LD	B,10
-Next_0473:	SRL	H
+FND70:	SRL	H
 	RR	L
 	RR	D
 	RR	E
-	DJNZ	Next_0473
-	LD	(Value_L),DE
-	LD	(Value_H),HL
-Next_0474:	LD	DE,Value_L
+	DJNZ	FND70
+	LD	(VALUEL),DE
+	LD	(VALUEH),HL
+FND80:	LD	DE,VALUEL
 	XOR	A
-	LD	IX,BufEnvName
+	LD	IX,ENVNAME
 	PUSH	IX
 	CALL	D32
 	POP	DE
 	XOR	A
 	RET
 
-Next_0475:	LD	DE,Null
+FND90:	LD	DE,CMDTEND
 	RET
 
-Fun_Filetotal:	LD	A,(HL)
-	CALL	MakeUpper
+FN_FILETOTAL:	LD	A,(HL)
+	CALL	MKUPPER
 	EX	AF,AF'
-	LD	DE,(FileTotal1)
-	LD	HL,(FileTotal2)
-	JR	Next_0471
+	LD	DE,(FILETOT1)
+	LD	HL,(FILETOT2)
+	JR	FND50
 
-GetAlloc:	LD	A,(HL)
+GETALLOC:	LD	A,(HL)
 	CALL	UC
 	SUB	"@"
 	RET	C
@@ -461,18 +465,18 @@ GetAlloc:	LD	A,(HL)
 	RET	Z
 	CALL	UC
 	CP	"B"
-	JR	Z,Next_0476
+	JR	Z,GET10
 	CP	"K"
-	JR	Z,Next_0476
+	JR	Z,GET10
 	CP	"M"
 	SCF
 	RET	NZ
-Next_0476:	EX	AF,AF'
-	CALL	SetAbort
+GET10:	EX	AF,AF'
+	CALL	SETABT
 	LD	C,_ALLOC
 	CALL	BDOS
-	CALL	ResetAbort
-	LD	IY,RedirState
+	CALL	RSTABT
+	LD	IY,REDIRST
 	LD	B,A
 	INC	A
 	SCF
@@ -480,19 +484,19 @@ Next_0476:	EX	AF,AF'
 	OR	A
 	RET
 
-Fun_Disktotal:	CALL	GetAlloc
+FN_DISKTOTAL:	CALL	GETALLOC
 	EX	DE,HL
-	JP	Next_0468
+	JP	FND20
 
-Fun_Diskused:	CALL	GetAlloc
-	JP	C,Next_0475
+FN_DISKUSED:	CALL	GETALLOC
+	JP	C,FND90
 	EX	DE,HL
 	OR	A
 	SBC	HL,DE
-	JP	Next_0470
+	JP	FND40
 
-Fun_Filedate:	SCF
-Fun_Filetime:	EX	AF,AF'
+FN_FILEDATE:	SCF
+FN_FILETIME:	EX	AF,AF'
 	EX	DE,HL
 	PUSH	DE
 	CALL	DFORM
@@ -506,25 +510,25 @@ Fun_Filetime:	EX	AF,AF'
 	PUSH	HL
 	CALL	GETCH
 	POP	HL
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	(HL),A
-	CALL	SetAbort
+	CALL	SETABT
 	LD	C,_FTIME
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	EX	AF,AF'
-	JR	NC,Next_0477
+	JR	NC,FNF10
 	EX	DE,HL
-Next_0477:	EX	AF,AF'
-	LD	HL,BufEnvName
+FNF10:	EX	AF,AF'
+	LD	HL,ENVNAME
 	LD	(HL),E
 	INC	HL
 	LD	(HL),D
-	LD	IX,BufEnvName+2
+	LD	IX,ENVNAME+2
 	EX	AF,AF'
-	JR	C,Next_0480
+	JR	C,FNF40
 	PUSH	DE
 	CALL	DTIME
 	POP	BC
@@ -535,22 +539,22 @@ Next_0477:	EX	AF,AF'
 	AND	%00011111
 	ADD	A,A
 	LD	D,#FF
-	CALL	PrintFigure2
+	CALL	PRFIG2
 	POP	AF
 	CP	" "
-	JR	Z,Next_0478
+	JR	Z,FNF20
 	LD	(IX),A
 	INC	IX
-Next_0478:	LD	(IX),#00
-Next_0479:	LD	DE,BufEnvName+3
+FNF20:	LD	(IX),#00
+FNF30:	LD	DE,ENVNAME+3
 	RET
 
-Next_0480:	DEC	HL
+FNF40:	DEC	HL
 	LD	C,#00
 	CALL	DDATE
-	JR	Next_0479
+	JR	FNF30
 
-Fun_Filesize:	EX	DE,HL
+FN_FILESIZE:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
@@ -560,29 +564,29 @@ Fun_Filesize:	EX	DE,HL
 	POP	DE
 	LD	A,B
 	AND	%01100000
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	INC	HL
 	CALL	GETCH
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CALL	UC
 	CP	"B"
-	JR	Z,Next_0481
+	JR	Z,FNF50
 	CP	"K"
-	JR	Z,Next_0481
+	JR	Z,FNF50
 	CP	"M"
-	JP	NZ,Next_0475
-Next_0481:	EX	AF,AF'
-	CALL	SetAbort
+	JP	NZ,FND90
+FNF50:	EX	AF,AF'
+	CALL	SETABT
 	LD	C,_FFIRST
 	LD	B,#16
 	LD	IX,FIB1
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JR	Z,Next_0482
-	JP	Next_0475
+	JR	Z,FNF60
+	JP	FND90
 
-Next_0482:	LD	HL,FIB1+#15
+FNF60:	LD	HL,FIB1+#15
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
@@ -591,9 +595,9 @@ Next_0482:	LD	HL,FIB1+#15
 	INC	HL
 	LD	H,(HL)
 	LD	L,A
-	JP	Next_0471
+	JP	FND50
 
-Fun_Fileattr:	EX	DE,HL
+FN_FILEATTR:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
@@ -602,70 +606,70 @@ Fun_Fileattr:	EX	DE,HL
 	PUSH	HL
 	CALL	GETCH
 	POP	HL
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	(HL),A
-	CALL	SetAbort
+	CALL	SETABT
 	LD	C,_ATTR
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	A,L
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	PUSH	DE
-	LD	HL,AttrList
+	LD	HL,ATTRLST$
 	LD	B,#08
-Next_0483:	RLA
-	JR	NC,Next_0484
+FNF70:	RLA
+	JR	NC,FNF80
 	PUSH	AF
 	LD	A,(HL)
 	LD	(DE),A
 	POP	AF
 	INC	DE
-Next_0484:	INC	HL
-	DJNZ	Next_0483
+FNF80:	INC	HL
+	DJNZ	FNF70
 	XOR	A
 	LD	(DE),A
 	POP	DE
 	RET
 
-AttrList:	DEFB	"--ADVSHR"
+ATTRLST$:	DEFB	"--ADVSHR"
 
-Fun_Label:	EX	DE,HL
-	CALL	SetAbort
+FN_LABEL:	EX	DE,HL
+	CALL	SETABT
 	LD	BC,#0840
 	LD	IX,FIB1
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	CP	.IDRV
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CP	.NOFIL
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CP	#FF
-	JP	Z,Next_0475
+	JP	Z,FND90
 	LD	DE,FIB1+1
 	RET
 
-Fun_Ready:	PUSH	HL
+FN_READY:	PUSH	HL
 	CALL	PARSDR
 	POP	DE
 	LD	B,#00
-	JR	NZ,Next_0485
-	CALL	SetAbort
+	JR	NZ,FNR10
+	CALL	SETABT
 	LD	BC,#0840
 	LD	IX,FIB1
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	LD	B,"1"
 	OR	A
-	JR	Z,Next_0485
+	JR	Z,FNR10
 	CP	.NOFIL
-	JR	Z,Next_0485
+	JR	Z,FNR10
 	LD	B,"0"
 	CP	#FF
-	JR	Z,Next_0485
+	JR	Z,FNR10
 	LD	B,#00
-Next_0485:	LD	HL,BufEnvName
+FNR10:	LD	HL,ENVNAME
 	PUSH	HL
 	LD	(HL),B
 	INC	HL
@@ -673,131 +677,131 @@ Next_0485:	LD	HL,BufEnvName
 	POP	DE
 	RET
 
-Fun_Ext:	EX	DE,HL
+FN_EXT:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	EX	DE,HL
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	LD	C,_PFILE
 	CALL	BDOS
-	LD	(BufEnvName+11),A
-	LD	DE,BufEnvName+8
+	LD	(ENVNAME+11),A
+	LD	DE,ENVNAME+8
 	RET
 
-Fun_Len:	LD	B,#FF
-Next_0486:	LD	A,(HL)
+FN_LEN:	LD	B,#FF
+FNL10:	LD	A,(HL)
 	INC	B
 	INC	HL
 	OR	A
-	JR	NZ,Next_0486
+	JR	NZ,FNL10
 	LD	A,B
-	JP	Next_0458
+	JP	IVC10
 
-Fun_Instr:	LD	E,#00
+FN_INSTR:	LD	E,#00
 	CALL	GETDIG
-	JR	C,Next_0487
+	JR	C,FNI10
 	CALL	GET8
-	JP	NZ,Next_0475
-Next_0487:	PUSH	DE
+	JP	NZ,FND90
+FNI10:	PUSH	DE
 	CALL	GETCH
-	CALL	ParseString
+	CALL	PRSSTR
 	POP	DE
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CALL	STRIP
 	PUSH	HL
 	LD	B,E
 	LD	E,#00
-	LD	HL,BufExtra-1
+	LD	HL,XBUF1-1
 	DEC	B
 	INC	B
-	JR	Z,Next_0489
-Next_0488:	INC	HL
+	JR	Z,FNI30
+FNI20:	INC	HL
 	INC	E
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0492
-	DJNZ	Next_0488
+	JR	Z,FNI60
+	DJNZ	FNI20
 	DEC	HL
 	DEC	E
-Next_0489:	LD	B,H
+FNI30:	LD	B,H
 	LD	C,L
 	POP	HL
-Next_0490:	INC	BC
+FNI40:	INC	BC
 	INC	E
 	LD	A,(BC)
 	OR	A
-	JR	Z,Next_0491
+	JR	Z,FNI50
 	PUSH	BC
 	PUSH	HL
 	CALL	CHKEQ
 	POP	HL
 	POP	BC
-	JR	NZ,Next_0490
+	JR	NZ,FNI40
 	LD	A,E
-	JP	Next_0458
+	JP	IVC10
 
-Next_0491:	XOR	A
-	JP	Next_0458
+FNI50:	XOR	A
+	JP	IVC10
 
-Next_0492:	POP	HL
-	JP	Next_0475
+FNI60:	POP	HL
+	JP	FND90
 
-ParseString:	EX	DE,HL
-	LD	HL,BufExtra
+PRSSTR:	EX	DE,HL
+	LD	HL,XBUF1
 	LD	C,#00
-Next_0493:	CALL	RDCHAR
-	JR	C,Next_0494
+PRS20:	CALL	RDCHAR
+	JR	C,PRS30
 	CP	","
-	JR	Z,Next_0496
+	JR	Z,PRS50
 	OR	A
-Next_0494:	JR	NC,Next_0495
+PRS30:	JR	NC,PRS40
 	CP	C
-	JR	Z,Next_0493
-Next_0495:	LD	(HL),A
+	JR	Z,PRS20
+PRS40:	LD	(HL),A
 	INC	HL
 	OR	A
 	RET	Z
-	JR	Next_0493
+	JR	PRS20
 
-Next_0496:	XOR	A
+PRS50:	XOR	A
 	LD	(HL),A
 	EX	DE,HL
 	INC	A
 	RET
 
-Fun_Lower:	EX	DE,HL
+FN_LOWER:	EX	DE,HL
 	PUSH	DE
-	JP	Next_0457
+	JP	CHK10
 
-Fun_Upper:	EX	DE,HL
+FN_UPPER:	EX	DE,HL
 	PUSH	DE
-Next_0497:	LD	A,(DE)
-	CALL	MakeUpper
+FNU10:	LD	A,(DE)
+	CALL	MKUPPER
 	LD	(DE),A
 	INC	DE
 	OR	A
-	JR	NZ,Next_0497
+	JR	NZ,FNU10
 	POP	DE
 	RET
 
-Fun_Name:	EX	DE,HL
+FN_NAME:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	EX	DE,HL
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	LD	C,_PFILE
 	CALL	BDOS
-	LD	(BufEnvName+8),A
-	LD	DE,BufEnvName
+	LD	(ENVNAME+8),A
+	LD	DE,ENVNAME
 	RET
 
-Fun_File:	EX	DE,HL
+FN_FILE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	EX	DE,HL
 	RET
 
-Fun_Path:	EX	DE,HL
+FN_PATH:	EX	DE,HL
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
@@ -805,206 +809,206 @@ Fun_Path:	EX	DE,HL
 	POP	DE
 	RET
 
-Fun_Mid:	CALL	ParseString
+FN_MID:	CALL	PRSSTR
 	CALL	NZ,GETCH
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CALL	GET8
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	A,E
 	PUSH	AF
 	CALL	GETCH
 	LD	E,A
-	JR	Z,Next_0498
+	JR	Z,FNM10
 	CALL	GET8
-Next_0498:	POP	BC
-	LD	HL,BufExtra-1
-Next_0499:	INC	HL
+FNM10:	POP	BC
+	LD	HL,XBUF1-1
+FNM20:	INC	HL
 	LD	A,(HL)
 	OR	A
-	JP	Z,Next_0475
-	DJNZ	Next_0499
+	JP	Z,FND90
+	DJNZ	FNM20
 	PUSH	HL
 	LD	B,E
-Next_0500:	INC	HL
+FNM30:	INC	HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0501
-	DJNZ	Next_0500
-Next_0501:	LD	(HL),#00
+	JR	Z,FNM40
+	DJNZ	FNM30
+FNM40:	LD	(HL),#00
 	POP	DE
 	RET
 
-Fun_Left:	CALL	ParseString
+FN_LEFT:	CALL	PRSSTR
 	CALL	NZ,GETCH
-	JP	Z,Next_0475
+	JP	Z,FND90
 	LD	A,(HL)
 	CP	"-"
-	JR	NZ,Next_0503
+	JR	NZ,FNL30
 	INC	HL
 	PUSH	HL
-	LD	HL,BufExtra
+	LD	HL,XBUF1
 	LD	B,#FF
-Next_0502:	LD	A,(HL)
+FNL20:	LD	A,(HL)
 	INC	B
 	INC	HL
 	OR	A
-	JR	NZ,Next_0502
+	JR	NZ,FNL20
 	POP	HL
 	PUSH	BC
 	CALL	GET8
 	POP	BC
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	A,B
 	SUB	E
 	LD	E,A
-	JR	NC,Next_0504
+	JR	NC,FNL40
 	LD	E,#00
-	JR	Next_0504
+	JR	FNL40
 
-Next_0503:	CALL	GET8
-	JP	NZ,Next_0475
-Next_0504:	LD	HL,BufExtra
+FNL30:	CALL	GET8
+	JP	NZ,FND90
+FNL40:	LD	HL,XBUF1
 	PUSH	HL
 	LD	B,E
-	JR	Next_0500
+	JR	FNM30
 
-Fun_Right:	CALL	ParseString
+FN_RIGHT:	CALL	PRSSTR
 	CALL	NZ,GETCH
-	JP	Z,Next_0475
+	JP	Z,FND90
 	CALL	GET8
-	JP	NZ,Next_0475
-	LD	HL,BufExtra
+	JP	NZ,FND90
+	LD	HL,XBUF1
 	LD	D,#FF
-Next_0505:	LD	A,(HL)
+FNR20:	LD	A,(HL)
 	INC	HL
 	INC	D
 	OR	A
-	JR	NZ,Next_0505
+	JR	NZ,FNR20
 	LD	A,D
 	SUB	E
 	LD	B,A
-	LD	HL,BufExtra
-	JR	NC,Next_0507
-Next_0506:	EX	DE,HL
+	LD	HL,XBUF1
+	JR	NC,FNR40
+FNR30:	EX	DE,HL
 	RET
 
-Next_0507:	INC	B
+FNR40:	INC	B
 	DEC	B
-	JR	Z,Next_0506
-Next_0508:	INC	HL
+	JR	Z,FNR30
+FNR50:	INC	HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0506
-	DJNZ	Next_0508
-	JR	Next_0506
+	JR	Z,FNR30
+	DJNZ	FNR50
+	JR	FNR30
 
-Fun_Parse:	EX	DE,HL
+FN_PARSE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	C,B
-Next_0509:	LD	HL,BufExtra
+FNP10:	LD	HL,XBUF1
 	PUSH	HL
 	LD	B,#08
 	XOR	A
-Next_0510:	SLA	C
+FNP20:	SLA	C
 	ADC	A,"0"
 	LD	(HL),A
 	INC	HL
 	XOR	A
-	DJNZ	Next_0510
+	DJNZ	FNP20
 	LD	(HL),#00
 	POP	DE
 	RET
 
-Fun_Newfile:	EX	DE,HL
+FN_NEWFILE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	A,(DE)
 	CALL	SEP?
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	EX	DE,HL
 	LD	(HL),#00
 	INC	HL
 	PUSH	HL
-	LD	HL,BufExtra
+	LD	HL,XBUF1
 	LD	C,_PFILE
 	CALL	BDOS
 	POP	HL
 	CALL	GETCH
-	JP	Z,Next_0475
+	JP	Z,FND90
 	EX	DE,HL
-	LD	HL,BufExtra+11
+	LD	HL,XBUF1+11
 	LD	C,_PFILE
 	CALL	BDOS
-	LD	DE,BufExtra
+	LD	DE,XBUF1
 	LD	B,11
-Next_0511:	LD	A,(DE)
+FNN10:	LD	A,(DE)
 	LD	C,A
 	LD	A,(HL)
 	CP	"?"
-	JR	NZ,Next_0512
+	JR	NZ,FNN20
 	LD	(HL),C
-Next_0512:	INC	HL
+FNN20:	INC	HL
 	INC	DE
-	DJNZ	Next_0511
+	DJNZ	FNN10
 	PUSH	HL
 	LD	B,8
-Next_0513:	LD	A,(DE)
+FNN30:	LD	A,(DE)
 	CP	" "
-	JR	Z,Next_0514
+	JR	Z,FNN40
 	LD	(HL),A
 	INC	HL
-Next_0514:	INC	DE
-	DJNZ	Next_0513
+FNN40:	INC	DE
+	DJNZ	FNN30
 	LD	A,(DE)
 	CP	" "
-	JR	Z,Next_0516
+	JR	Z,FNN60
 	LD	(HL),"."
 	INC	HL
 	LD	B,3
-Next_0515:	LD	A,(DE)
+FNN50:	LD	A,(DE)
 	CP	" "
-	JR	Z,Next_0516
+	JR	Z,FNN60
 	LD	(HL),A
 	INC	HL
 	INC	DE
-	DJNZ	Next_0515
-Next_0516:	LD	(HL),#00
+	DJNZ	FNN50
+FNN60:	LD	(HL),#00
 	POP	DE
 	RET
 
-Fun_Ffirst:	CALL	SetAbort
+FN_FFIRST:	CALL	SETABT
 	EX	DE,HL
 	LD	HL,#0000
-	LD	(FileTotal1),HL
-	LD	(FileTotal2),HL
-	LD	(FileCount),HL
+	LD	(FILETOT1),HL
+	LD	(FILETOT2),HL
+	LD	(FILECNT),HL
 	LD	C,_FFIRST
 	LD	B,#16
 	LD	IX,FIB3
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JP	NZ,Next_0475
+	JP	NZ,FND90
 	LD	HL,FIB3+#15
-	LD	DE,FileTotal1
+	LD	DE,FILETOT1
 	CALL	ADD32
-	LD	HL,(FileCount)
+	LD	HL,(FILECNT)
 	INC	HL
-	LD	(FileCount),HL
+	LD	(FILECNT),HL
 	LD	DE,FIB3+1
 	RET
 
-Fun_Full:	CALL	SetAbort
+FN_FULL:	CALL	SETABT
 	EX	DE,HL
 	LD	C,_FFIRST
 	LD	B,#16
 	LD	IX,FIB3
 	CALL	BDOS
-	CALL	ResetAbort
+	CALL	RSTABT
 	OR	A
-	JP	NZ,Next_0475
-	LD	HL,BufEnvName
+	JP	NZ,FND90
+	LD	HL,ENVNAME
 	PUSH	HL
 	LD	A,(FIB3+#19)
 	ADD	A,"@"
@@ -1020,10 +1024,10 @@ Fun_Full:	CALL	SetAbort
 	POP	DE
 	RET
 
-Fun_Drive:	EX	DE,HL
+FN_DRIVE:	EX	DE,HL
 	LD	BC,_PARSE
 	CALL	BDOS
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	PUSH	HL
 	LD	A,C
 	ADD	A,"@"

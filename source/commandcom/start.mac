@@ -1,19 +1,24 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Startup, reload and initialisation
+;******************************************************************************
 ;
-; COMMAND2.COM - Entry point, banner, self-reload (CopyBack/Reload), boot drive logic, initialisation
+;        Program entry point and banner, the code that keeps a copy of the
+; CLI at the top of the TPA and re-loads COMMAND2.COM from disk after a
+; transient program has overwritten it, and the once-only initialisation.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
-	JP	Start
+;******************************************************************************
+	JP	START
 
-TekstIntro:	DEFB	13
+BANNER:	DEFB	13
 	DEFB	"MSX-DOS 2  COMMAND version 2.41",13,10
 	DEFB	"Copyright (c) 1995-1997 by C.P.U.",13,10,10,26
 
-CopyBack:	LD	SP,#F51F
-StoEndTPA:	LD	HL,#00
+COPYBACK:	LD	SP,#F51F
+SAVETPA:	LD	HL,#00
 	DEC	HL
 	DEC	HL
 	LD	SP,HL
@@ -24,101 +29,101 @@ StoEndTPA:	LD	HL,#00
 	LD	D,(HL)
 	PUSH	DE
 	EX	DE,HL
-	LD	DE,CopyBack
-	LD	BC,Reload-CopyBack
+	LD	DE,COPYBACK
+	LD	BC,RELOAD-COPYBACK
 	LDIR
 	PUSH	DE
-	LD	BC,Start-Reload
+	LD	BC,START-RELOAD
 	LDIR
 	RET
 
-Reload:	LD	A,(HL)
+RELOAD:	LD	A,(HL)
 	INC	HL
 	LD	H,(HL)
 	LD	L,A
-	LD	(RGetAdres+1),HL
+	LD	(RGETADR+1),HL
 	POP	HL
 	DEC	HL
-	LD	DE,ExitAdres-1
-	LD	BC,ExitAdres-BootStrap
+	LD	DE,EXITADDR-1
+	LD	BC,EXITADDR-BOOTSTRAP
 	LDDR
-	LD	HL,BootStrap
+	LD	HL,BOOTSTRAP
 	LD	DE,#00
 	LD	BC,#08
 	LDIR
 	LD	DE,#00
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	DE,AbortExit4
+	LD	DE,ABEXIT4
 	LD	C,_DEFAB
 	CALL	BDOS
 	LD	HL,#0100
 	LD	(HL),#C3
 	INC	HL
-	LD	(HL),LOW Start
+	LD	(HL),LOW START
 	INC	HL
-	LD	(HL),HIGH Start
-	LD	A,(ID_Execute)
+	LD	(HL),HIGH START
+	LD	A,(EXECID)
 	LD	B,A
 	LD	C,_JOIN
 	CALL	BDOS
-	JR	NZ,Next_0001
+	JR	NZ,REL10
 	LD	A,B
-Next_0001:	LD	(Error1+1),A
+REL10:	LD	(ERR1+1),A
 	LD	A,C
-	LD	(Error2+1),A
-Mapper1:	LD	A,#00
-Adres1:	CALL	#00
-	LD	HL,(VariableEnd+#8000)
+	LD	(ERR2+1),A
+MAPCALL1:	LD	A,#00
+MAPADDR1:	CALL	#00
+	LD	HL,(VAREND+#8000)
 	INC	HL
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
 	EX	DE,HL
-	LD	(VariableEnd+#8000),HL
-	LD	DE,Buffer1-1
-	LD	BC,Buffer1-ExitAdres
+	LD	(VAREND+#8000),HL
+	LD	DE,BUFFER1-1
+	LD	BC,BUFFER1-EXITADDR
 	LDDR
-Mapper2:	LD	A,#00
-Adres2:	CALL	#00
+MAPCALL2:	LD	A,#00
+MAPADDR2:	CALL	#00
 	LD	A,#01
 	LD	BC,_REDIR
 	CALL	BDOS
 	LD	A,B
-	LD	(RedirSet+1),A
-	LD	DE,AbortExit5
+	LD	(SETREDIR+1),A
+	LD	DE,ABEXIT5
 	LD	C,_DEFAB
 	CALL	BDOS
-	CALL	CheckChecksum
+	CALL	CHKSUM
 	POP	HL
-	CALL	NZ,CopyCheck
-	JP	Z,RedirSet
-	LD	HL,Env_Shell
-	LD	DE,BufEnvData
+	CALL	NZ,CPYCHK
+	JP	Z,SETREDIR
+	LD	HL,SHELL$
+	LD	DE,ENVDATA
 	LD	B,#FF
 	LD	C,_GENV
 	CALL	BDOS
-	JR	NZ,Next_0002
+	JR	NZ,MAP10
 	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0002
+	JR	Z,MAP10
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
 	POP	HL
-	JR	NZ,Next_0002
+	JR	NZ,MAP10
 	LD	(DE),A
 	LD	A,#01
 	EX	DE,HL
 	LD	C,_OPEN
 	CALL	BDOS
-	JR	Z,Next_0003
-Next_0002:	LD	DE,Data_Shell
+	JR	Z,MAP20
+MAP10:	LD	DE,DSHELL$
 	LD	A,#01
 	LD	C,_OPEN
 	CALL	BDOS
-	JR	NZ,Next_0004
-Next_0003:	LD	HL,Start-#0100
+	JR	NZ,ABE10
+MAP20:	LD	HL,START-#0100
 	XOR	A
 	LD	E,A
 	LD	D,A
@@ -126,9 +131,9 @@ Next_0003:	LD	HL,Start-#0100
 	PUSH	BC
 	CALL	BDOS
 	POP	BC
-	JR	NZ,Next_0004
-	LD	DE,Start
-	LD	HL,Stack-Start
+	JR	NZ,ABE10
+	LD	DE,START
+	LD	HL,STACK-START
 	LD	C,_READ
 	PUSH	BC
 	CALL	BDOS
@@ -136,24 +141,24 @@ Next_0003:	LD	HL,Start-#0100
 	POP	BC
 	LD	C,_CLOSE
 	CALL	BDOS
-	JR	NZ,Next_0004
+	JR	NZ,ABE10
 	EX	AF,AF'
-	JR	NZ,Next_0004
+	JR	NZ,ABE10
 	LD	A,.BADCOM
-AbortExit5:	LD	SP,(EndTPA)
+ABEXIT5:	LD	SP,(ENDTPA)
 	PUSH	AF
-	CALL	CheckChecksum
+	CALL	CHKSUM
 	POP	BC
 	LD	A,B
-	JR	NZ,Next_0004
-RedirSet:	LD	B,#00
+	JR	NZ,ABE10
+SETREDIR:	LD	B,#00
 	LD	C,_REDIR
 	LD	A,#01
 	CALL	BDOS
 	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
-	LD	DE,BufEnvData
+	LD	DE,ENVDATA
 	XOR	A
 	LD	(DE),A
 	LD	HL,PARAM$
@@ -165,24 +170,24 @@ RedirSet:	LD	B,#00
 	LD	C,_SENV
 	CALL	BDOS
 	LD	A,#FF
-	LD	(ExtraCRLF),A
-Error1:	LD	A,#00
-Error2:	LD	B,#00
+	LD	(XTRACRLF),A
+ERR1:	LD	A,#00
+ERR2:	LD	B,#00
 	JP	CLI_ABORT
 
-AbortExit4:	OR	A
+ABEXIT4:	OR	A
 	LD	C,B
 	POP	HL
 	RET
 
-Next_0004:	PUSH	AF
+ABE10:	PUSH	AF
 	LD	A,#01
 	LD	BC,_REDIR
 	CALL	BDOS
 	POP	AF
 	CP	.NOFIL
-	JR	Z,Next_0006
-	LD	DE,BufEnvData
+	JR	Z,ABE30
+	LD	DE,ENVDATA
 	LD	B,A
 	PUSH	AF
 	LD	C,_EXPLAIN
@@ -190,54 +195,54 @@ Next_0004:	PUSH	AF
 	POP	AF
 	PUSH	DE
 	CP	.STOP
-	JR	Z,Next_0005
+	JR	Z,ABE20
 	CP	.CTRLC
-Next_0005:	CALL	Z,RPrintCrLf
-	CALL	RPrintCrLf
+ABE20:	CALL	Z,RPRCRLF
+	CALL	RPRCRLF
 	LD	A,#00
-	CALL	RPrintCode
+	CALL	RPRCODE
 	POP	DE
-	CALL	RPrintString
+	CALL	RPRSTR
 	LD	A,#01
-	CALL	RPrintCode
-Next_0006:	CALL	RPrintCrLf
+	CALL	RPRCODE
+ABE30:	CALL	RPRCRLF
 	LD	A,#02
-	CALL	RPrintCode
-	LD	A,(Data_Shell)
-	CALL	RPrintChar
+	CALL	RPRCODE
+	LD	A,(DSHELL$)
+	CALL	RPRCHR
 	LD	A,#03
-	CALL	RPrintCode
-	CALL	RPrintCrLf
+	CALL	RPRCODE
+	CALL	RPRCRLF
 	LD	A,#04
-	CALL	RPrintCode
-Next_0007:	LD	C,_CONST
+	CALL	RPRCODE
+ABE40:	LD	C,_CONST
 	CALL	BDOS
 	PUSH	AF
 	LD	C,_INNOE
 	CALL	BDOS
 	POP	AF
-	JR	NZ,Next_0007
-	CALL	RPrintCrLf
+	JR	NZ,ABE40
+	CALL	RPRCRLF
 	LD	A,L
 	AND	%11011111
 	CP	"A"
-	JP	C,Next_0002
+	JP	C,MAP10
 	CP	"I"
-	JP	NC,Next_0002
-	LD	(Data_Shell),A
-	JP	Next_0002
+	JP	NC,MAP10
+	LD	(DSHELL$),A
+	JP	MAP10
 
-CopyCheck:	LD	DE,Start
-	LD	BC,Stack-Start
+CPYCHK:	LD	DE,START
+	LD	BC,STACK-START
 	LDIR
-CheckChecksum:	CALL	MakeChecksum
-	LD	BC,Checksum1
+CHKSUM:	CALL	MKSUM
+	LD	BC,CSUM1
 	PUSH	IX
 	EX	(SP),HL
-	CALL	CompareCheck
+	CALL	CMPSUM
 	POP	HL
 	RET	NZ
-CompareCheck:	LD	A,(BC)
+CMPSUM:	LD	A,(BC)
 	INC	BC
 	LD	E,A
 	LD	A,(BC)
@@ -247,13 +252,13 @@ CompareCheck:	LD	A,(BC)
 	SBC	HL,DE
 	RET
 
-MakeChecksum:	LD	BC,(Stack-Start)/4
+MKSUM:	LD	BC,(STACK-START)/4
 	EXX
-	LD	BC,Start
+	LD	BC,START
 	LD	HL,#00
 	PUSH	HL
 	POP	IX
-Next_0008:	LD	A,(BC)
+MKS10:	LD	A,(BC)
 	INC	BC
 	LD	E,A
 	LD	A,(BC)
@@ -272,42 +277,42 @@ Next_0008:	LD	A,(BC)
 	LD	A,B
 	OR	C
 	EXX
-	JR	NZ,Next_0008
+	JR	NZ,MKS10
 	RET
 
-Checksum1:	DEFW	#00
-Checksum2:	DEFW	#00
+CSUM1:	DEFW	#00
+CSUM2:	DEFW	#00
 
-RPrintCode:	CALL	RGetAdres
-Next_0009:	LD	A,(DE)
+RPRCODE:	CALL	RGETADR
+RPR10:	LD	A,(DE)
 	OR	A
 	RET	Z
 	DEC	DE
-	CALL	RPrintChar
-	JR	Next_0009
+	CALL	RPRCHR
+	JR	RPR10
 
-RGetAdres:	LD	DE,#00
+RGETADR:	LD	DE,#00
 	LD	B,A
 	INC	B
-Next_0010:	DEC	B
+RGE10:	DEC	B
 	RET	Z
-Next_0011:	LD	A,(DE)
+RGE20:	LD	A,(DE)
 	DEC	DE
 	OR	A
-	JR	NZ,Next_0011
-	JR	Next_0010
+	JR	NZ,RGE20
+	JR	RGE10
 
-RPrintString:	LD	A,(DE)
+RPRSTR:	LD	A,(DE)
 	OR	A
 	RET	Z
-	CALL	RPrintChar
+	CALL	RPRCHR
 	INC	DE
-	JR	RPrintString
+	JR	RPRSTR
 
-RPrintCrLf:	LD	A,#0D
-	CALL	RPrintChar
+RPRCRLF:	LD	A,#0D
+	CALL	RPRCHR
 	LD	A,#0A
-RPrintChar:	PUSH	HL
+RPRCHR:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
 	LD	E,A
@@ -318,66 +323,66 @@ RPrintChar:	PUSH	HL
 	POP	HL
 	RET
 
-Env_Shell:	DEFB	"SHELL",0
-Data_Shell:	DEFB	"A:\COMMAND2.COM",0
-Data_Help:	DEFB	"A:\HELP",0
-Data_Root:	DEFB	"A:\",0
+SHELL$:	DEFB	"SHELL",0
+DSHELL$:	DEFB	"A:\COMMAND2.COM",0
+DHELP$:	DEFB	"A:\HELP",0
+DROOT$:	DEFB	"A:\",0
 
-MaxBufferLeng:	DEFW	 4096
+MAXBUFLEN:	DEFW	 4096
 
-Start:	LD	SP,BootStrap
+START:	LD	SP,BOOTSTRAP
 	LD	A,(#37)
 	EX	AF,AF'
 	LD	C,_DOSVER
 	CALL	BDOS
 	LD	A,#01
 	CP	B
-	JR	NC,Next_0012
+	JR	NC,STA10
 	CP	D
-	JR	C,Next_0013
-Next_0012:	CALL	RPrintCrLf
+	JR	C,STA20
+STA10:	CALL	RPRCRLF
 	LD	A,#0D
 	CALL	DMESS
 	LD	A,#35
 	CALL	DMESS
 	LD	A,#0E
 	CALL	DMESS
-	CALL	RPrintCrLf
+	CALL	RPRCRLF
 	DI
 	HALT
 
-Next_0013:	LD	DE,#00
+STA20:	LD	DE,#00
 	PUSH	DE
 	LD	C,_DEFAB
 	CALL	BDOS
 	POP	DE
 	LD	C,_DEFER
 	CALL	BDOS
-	LD	A,(BootDrive)
+	LD	A,(BOOTDRV)
 	ADD	A,"@"
-	LD	(Data_Help),A
-	LD	(Data_Shell),A
-	LD	(Data_Root),A
+	LD	(DHELP$),A
+	LD	(DSHELL$),A
+	LD	(DROOT$),A
 	LD	BC,#04
-	LD	DE,DirBuffer
-	LD	HL,Data_Root
+	LD	DE,DIRBUF
+	LD	HL,DROOT$
 	LDIR
 	LD	A,(#FBED)
 	BIT	1,A
-	JR	NZ,Next_0999
+	JR	NZ,STA30
 	LD	HL,#00
 	LD	(#80),HL
-Next_0999:	CALL	SETLANG
+STA30:	CALL	SETLANG
 	LD	A,(RTYCNT)
 	OR	A
-	JR	Z,Next_0400
-	LD	(MapperPage),A
-	JR	Next_0402
+	JR	Z,STA40
+	LD	(MAPPAGE),A
+	JR	STA60
 
-Next_0400:	LD	B,A
+STA40:	LD	B,A
 	INC	A
 	CALL	ALL_SEG
-	JR	NC,Next_0401
+	JR	NC,STA50
 	LD	A,#0D
 	CALL	DMESS
 	LD	A,#42
@@ -385,103 +390,103 @@ Next_0400:	LD	B,A
 	DI
 	HALT
 
-Next_0401:	LD	(MapperPage),A
+STA50:	LD	(MAPPAGE),A
 	LD	(RTYCNT),A
-	LD	HL,BufferAdres
-	CALL	SetPutAdres
-	CALL	SetReadAdres
+	LD	HL,BUFADDR
+	CALL	SETPUTADDR
+	CALL	SETRDADDR
 	DEC	HL
-	CALL	SetEndAdres
+	CALL	SETENDADDR
 	LD	HL,#0400
-	CALL	SetBufferLeng
-	LD	HL,BufferAdres+#0400
+	CALL	SETBUFLEN
+	LD	HL,BUFADDR+#0400
 	PUSH	HL
-	CALL	SetAliasAdres
-	LD	HL,BufferAdres+#0400+#2800
-	CALL	SetAliasEnd
+	CALL	SETALIADDR
+	LD	HL,BUFADDR+#0400+#2800
+	CALL	SETALIEND
 	POP	HL
 	XOR	A
-	CALL	Wr_Char
+	CALL	WRCHR
 	INC	HL
-	CALL	Wr_Char
-	LD	HL,VariableEnd
+	CALL	WRCHR
+	LD	HL,VAREND
 	LD	A,#FF
-	CALL	Wr_Char
+	CALL	WRCHR
 	INC	HL
 	LD	A,#BF
-	CALL	Wr_Char
-Next_0402:	LD	HL,#00
-	LD	DE,BootStrap
+	CALL	WRCHR
+STA60:	LD	HL,#00
+	LD	DE,BOOTSTRAP
 	LD	BC,#08
 	LDIR
-	LD	A,(MapperPage)
-	LD	(Mapper1+1),A
+	LD	A,(MAPPAGE)
+	LD	(MAPCALL1+1),A
 	CALL	GET_P2
-	LD	(Mapper2+1),A
-	LD	HL,(MapperAdres)
+	LD	(MAPCALL2+1),A
+	LD	HL,(MAPADDR)
 	LD	DE,#24
 	ADD	HL,DE
-	LD	(Adres1+1),HL
-	LD	(Adres2+1),HL
-	CALL	MakeChecksum
-	LD	(Checksum1),IX
-	LD	(Checksum2),HL
+	LD	(MAPADDR1+1),HL
+	LD	(MAPADDR2+1),HL
+	CALL	MKSUM
+	LD	(CSUM1),IX
+	LD	(CSUM2),HL
 	LD	DE,(#06)
 	LD	BC,#0701
-Next_0014:	DEC	DE
-	DJNZ	Next_0014
-Next_0015:	PUSH	BC
+STA70:	DEC	DE
+	DJNZ	STA70
+STA80:	PUSH	BC
 	EXX
 	POP	DE
 	CALL	FENV
-	JR	NZ,Next_0018
+	JR	NZ,STA110
 	OR	(HL)
-	JR	Z,Next_0019
+	JR	Z,STA120
 	CALL	GENV
 	EXX
-	CALL	ChkMemSpace
-	LD	HL,BufEnvName
-Next_0016:	LD	A,(HL)
+	CALL	CHKMEM
+	LD	HL,ENVNAME
+STA90:	LD	A,(HL)
 	INC	HL
 	LD	(DE),A
 	DEC	DE
 	OR	A
-	JR	NZ,Next_0016
-	LD	HL,BufEnvData
-Next_0017:	LD	A,(HL)
+	JR	NZ,STA90
+	LD	HL,ENVDATA
+STA100:	LD	A,(HL)
 	INC	HL
 	LD	(DE),A
 	DEC	DE
 	OR	A
-	JR	NZ,Next_0017
+	JR	NZ,STA100
 	EXX
-Next_0018:	EXX
+STA110:	EXX
 	INC	BC
-	JR	Next_0015
+	JR	STA80
 
-Next_0019:	EXX
+STA120:	EXX
 	LD	(DE),A
 	DEC	DE
-	LD	HL,StringCodes
+	LD	HL,STRCODES
 	LD	C,#05
 	PUSH	DE
 	PUSH	DE
-Next_0020:	LD	A,(HL)
+STA130:	LD	A,(HL)
 	INC	HL
 	CALL	GETMSG
 	EX	(SP),HL
 	EX	DE,HL
-	CALL	ChkMemSpace
+	CALL	CHKMEM
 	EX	DE,HL
-Next_0021:	LD	A,(DE)
+STA140:	LD	A,(DE)
 	INC	DE
 	LD	(HL),A
 	DEC	HL
 	OR	A
-	JR	NZ,Next_0021
+	JR	NZ,STA140
 	EX	(SP),HL
 	DEC	C
-	JR	NZ,Next_0020
+	JR	NZ,STA130
 	POP	HL
 	POP	DE
 	LD	(HL),D
@@ -491,17 +496,17 @@ Next_0021:	LD	A,(DE)
 	EX	DE,HL
 	LD	L,E
 	LD	H,D
-	LD	BC,Start-CopyBack+ExitAdres-BootStrap
+	LD	BC,START-COPYBACK+EXITADDR-BOOTSTRAP
 	OR	A
 	SBC	HL,BC
-	LD	(StoEndTPA+1),HL
-	LD	(EndTPA),HL
-	CALL	ChkMemSpace
-	LD	HL,Start-1
-	LD	BC,Start-CopyBack
+	LD	(SAVETPA+1),HL
+	LD	(ENDTPA),HL
+	CALL	CHKMEM
+	LD	HL,START-1
+	LD	BC,START-COPYBACK
 	LDDR
-	CALL	ChkMemSpace
-	LD	(ExitAdres),DE
+	CALL	CHKMEM
+	LD	(EXITADDR),DE
 	LD	C,E
 	LD	B,D
 	INC	BC
@@ -510,7 +515,7 @@ Next_0021:	LD	A,(DE)
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
-	LD	(WarmBoot),DE
+	LD	(WARMBOOT),DE
 	EXX
 	LD	DE,EXIT
 	LD	C,_DEFAB
@@ -521,75 +526,75 @@ Next_0021:	LD	A,(DE)
 	LD	(HL),C
 	EX	AF,AF'
 	OR	A
-	JR	Z,Next_0024
+	JR	Z,STA170
 	LD	HL,PROG$
 	CALL	GENV2
-	LD	HL,Env_Shell
-	JR	NZ,Next_0022
+	LD	HL,SHELL$
+	JR	NZ,STA150
 	LD	A,(DE)
 	OR	A
-	JR	NZ,Next_0023
-Next_0022:	LD	DE,Data_Shell
+	JR	NZ,STA160
+STA150:	LD	DE,DSHELL$
 	LD	C,_SENV
 	CALL	BDOS
 	XOR	A
-Next_0023:	CALL	NZ,SENV2
-Next_0024:	LD	HL,HELP$
-	LD	DE,Data_Help
-	CALL	SetEnvItem
+STA160:	CALL	NZ,SENV2
+STA170:	LD	HL,HELP$
+	LD	DE,DHELP$
+	CALL	PUTENV
 	LD	HL,TEMP$
-	LD	DE,Data_Root
-	CALL	SetEnvItem
+	LD	DE,DROOT$
+	CALL	PUTENV
 	LD	HL,DATE$
-	LD	DE,Data_Date1
-	LD	A,(DateFormat)
+	LD	DE,DDATE1$
+	LD	A,(DATEFMT)
 	AND	#07
 	CP	#01
-	JR	C,Next_0025
-	LD	DE,Data_Date2
-	JR	Z,Next_0025
-	LD	DE,Data_Date3
-Next_0025:	CALL	SetEnvItem
+	JR	C,STA180
+	LD	DE,DDATE2$
+	JR	Z,STA180
+	LD	DE,DDATE3$
+STA180:	CALL	PUTENV
 	LD	HL,TIME$
-	LD	DE,Data_Time
-	CALL	SetEnvItem
-	LD	HL,Env_Path
-	LD	DE,Data_Empty
-	CALL	SetEnvItem
-	LD	HL,Env_Cdpath
-	LD	DE,Data_Empty
-	CALL	SetEnvItem
+	LD	DE,DTIME$
+	CALL	PUTENV
+	LD	HL,PATH$
+	LD	DE,DEMPTY$
+	CALL	PUTENV
+	LD	HL,CDPATH$
+	LD	DE,DEMPTY$
+	CALL	PUTENV
 	LD	HL,PROMPT$
-	LD	DE,Data_Prompt
-	CALL	SetEnvItem
+	LD	DE,DPROMPT$
+	CALL	PUTENV
 	LD	HL,EXPERT$
 	LD	DE,ON$
-	CALL	SetEnvItem
+	CALL	PUTENV
 	LD	HL,ECHO$
 	LD	DE,OFF$
-	CALL	SetEnvItem
+	CALL	PUTENV
 	LD	HL,UPPER$
 	LD	DE,OFF$
-	CALL	SetEnvItem
-	LD	HL,Env_Lower
+	CALL	PUTENV
+	LD	HL,LOWER$
 	LD	DE,OFF$
-	CALL	SetEnvItem
+	CALL	PUTENV
 	LD	HL,REDIR$
 	LD	DE,ON$
-	CALL	SetEnvItem
-	LD	HL,Env_Alias
+	CALL	PUTENV
+	LD	HL,ALIAS$
 	LD	DE,ON$
-	CALL	SetEnvItem
-	LD	HL,Env_Separ
+	CALL	PUTENV
+	LD	HL,SEPAR$
 	LD	DE,ON$
-	CALL	SetEnvItem
-	LD	HL,Env_Expand
+	CALL	PUTENV
+	LD	HL,EXPAND$
 	LD	DE,ON$
-	CALL	SetEnvItem
-	LD	HL,Env_TabOrder
-	LD	DE,Data_TabOrder
-	CALL	SetEnvItem
-	LD	DE,BufEnvData
+	CALL	PUTENV
+	LD	HL,TABORD$
+	LD	DE,DTABORD$
+	CALL	PUTENV
+	LD	DE,ENVDATA
 	XOR	A
 	LD	(DE),A
 	LD	HL,PARAM$
@@ -602,9 +607,9 @@ Next_0025:	CALL	SetEnvItem
 	CALL	BDOS
 	JP	CLI
 
-ChkMemSpace:	PUSH	HL
+CHKMEM:	PUSH	HL
 	PUSH	DE
-	LD	HL,BufEnvData
+	LD	HL,ENVDATA
 	OR	A
 	SBC	HL,DE
 	LD	DE,#F5FF
@@ -616,7 +621,7 @@ ChkMemSpace:	PUSH	HL
 	LD	C,_TERM
 	JP	BDOS
 
-SetEnvItem:	PUSH	DE
+PUTENV:	PUSH	DE
 	PUSH	HL
 	CALL	GENV2
 	LD	A,(DE)
@@ -628,11 +633,11 @@ SetEnvItem:	PUSH	DE
 	LD	C,_SENV
 	JP	BDOS
 
-Data_Date1:	DEFB	"yy-mm-dd",0
-Data_Date2:	DEFB	"mm-dd-yy",0
-Data_Date3:	DEFB	"dd-mm-yy",0
-Data_Empty:	DEFB	";",0
-Data_Time:	DEFB	"24",0
+DDATE1$:	DEFB	"yy-mm-dd",0
+DDATE2$:	DEFB	"mm-dd-yy",0
+DDATE3$:	DEFB	"dd-mm-yy",0
+DEMPTY$:	DEFB	";",0
+DTIME$:	DEFB	"24",0
 
-StringCodes:	DEFB	#0D,#0E,#32,#33,#0F
+STRCODES:	DEFB	#0D,#0E,#32,#33,#0F
 

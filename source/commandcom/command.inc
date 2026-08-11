@@ -1,10 +1,12 @@
 ;
-; COMMAND2.COM - BIOS/DOS workarea addresses, DOS function and error codes
+;        This file is included by all the major COMMAND2.COM source files.
+; It defines the BIOS and DOS workarea addresses, the DOS function and
+; error codes, and the variables kept in the mapper segment that holds the
+; command history and the alias space (accessed relative to page 2).
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
 
 ; DOS Variabelen
@@ -12,8 +14,8 @@
 BDOS:	EQU	#05
 RDSLT:	EQU	#0C
 CALSLT:	EQU	#1C
-BootDrive:	EQU	#F2FD
-DateFormat:	EQU	#F30E
+BOOTDRV:	EQU	#F2FD
+DATEFMT:	EQU	#F30E
 LINL40:	EQU	#F3AE
 LINLEN:	EQU	#F3B0
 CRTCNT:	EQU	#F3B1
@@ -131,12 +133,12 @@ _REDIR:	EQU	#70
 
 ; Programma variabelen
 
-ReadAdres:	EQU	#0000
-PutAdres:	EQU	ReadAdres+#02
-EndAdres:	EQU	PutAdres+#02
-BufferLengte:	EQU	EndAdres+#02
-VariableEnd:	EQU	BufferLengte+#02
-AliasAdres:	EQU	VariableEnd+#02
-AliasEnd:	EQU	AliasAdres+#02
-BufferAdres:	EQU	AliasEnd+#02
+RDADDR:	EQU	#0000
+PUTADDR:	EQU	RDADDR+#02
+ENDADDR:	EQU	PUTADDR+#02
+BUFLEN:	EQU	ENDADDR+#02
+VAREND:	EQU	BUFLEN+#02
+ALIADDR:	EQU	VAREND+#02
+ALIEND:	EQU	ALIADDR+#02
+BUFADDR:	EQU	ALIEND+#02
 

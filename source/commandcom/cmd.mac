@@ -1,19 +1,25 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Non-disk commands
+;******************************************************************************
 ;
-; COMMAND2.COM - Non-disk internal commands (REM..DSKCHK): batch flow control, IF/IFF, screen, env, alias, history, date/time
+;        The internal commands that do not deal with files: batch flow
+; control (GOTO/GOSUB/RETURN/END), IF and IFF/THEN/ELSE/ENDIFF, screen and
+; keyboard commands, environment and alias management, HISTORY, MEMORY,
+; date and time.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
-Cmd_Rem:	XOR	A
+;******************************************************************************
+@REM:	XOR	A
 	RET
 
-Cmd_Beep:	AND	(HL)
+@BEEP:	AND	(HL)
 	LD	A,.INP
 	RET	NZ
 	LD	A,#07
-	JP	PrintChar
+	JP	PRCHAR
 
 ;        This module contains the command routines for the  assorted  commands
 ; which are not directly related to the disk system eg. CLS and DATE.
@@ -39,17 +45,17 @@ Cmd_Beep:	AND	(HL)
 	CALL	BDOS
 	POP	BC
 	RET	NZ
-	LD	HL,LPrint	; Print CRLF at end.
+	LD	HL,LPRINT	; Print CRLF at end.
 	PUSH	HL
 	CALL	DDRV	; Print drive.
 	LD	A,"="	; Print '=' and the other drive.
-	CALL	PrintChar
+	CALL	PRCHAR
 	LD	B,D
 DDRV:	LD	A,B
 	ADD	A,"@"
-	CALL	PrintChar	; Print drive letter.
+	CALL	PRCHAR	; Print drive letter.
 	LD	A,":"
-	JP	PrintChar
+	JP	PRCHAR
 
 ASN10:	CALL	PARSDR	; Get second drive.
 	RET	NZ
@@ -81,12 +87,12 @@ IDRV:	LD	A,.IDRV
 
 @BASIC:	CALL	LDCOME
 	RET	NZ
-	LD	HL,VariableEnd	; Release variable memory
+	LD	HL,VAREND	; Release variable memory
 	LD	A,#FF
-	CALL	Wr_Char
+	CALL	WRCHR
 	INC	HL
 	LD	A,#BF
-	CALL	Wr_Char
+	CALL	WRCHR
 	LD	SP,#F51F
 	CALL	#F368
 	JP	#4022
@@ -100,7 +106,7 @@ IDRV:	LD	A,.IDRV
 	LD	A,#27
 	CALL	DMESS
 	POP	AF
-	LD	IX,BufEnvData
+	LD	IX,ENVDATA
 	PUSH	IX
 	CALL	D8
 	POP	DE
@@ -121,21 +127,21 @@ SETBUF:	CALL	GET8	; Get the number specified into E.
 	LD	A,.INP
 	RET	NZ
 	LD	A,#0C
-	JP	PrintChar
+	JP	PRCHAR
 
-Cmd_Cpu:	AND	(HL)
-	JR	Z,Next_0518
+@CPU:	AND	(HL)
+	JR	Z,CAL20
 	LD	A,(HL)
 	INC	HL
 	SUB	"0"
-	JR	C,Next_0517
+	JR	C,CAL10
 	CP	3
-	JR	NC,Next_0517
+	JR	NC,CAL10
 	EX	AF,AF'
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-	LD	A,(MSXVersion)
+	LD	A,(MSXVER)
 	CP	3
 	LD	A,0
 	RET	C
@@ -143,7 +149,7 @@ Cmd_Cpu:	AND	(HL)
 	OR	%10000000
 	LD	IX,#0180
 
-CallSlot:	LD	IY,(EXPTBL-1)
+CALLSLOT:	LD	IY,(EXPTBL-1)
 	LD	HL,#00
 	ADD	HL,SP
 	LD	SP,#F51F
@@ -153,21 +159,21 @@ CallSlot:	LD	IY,(EXPTBL-1)
 	LD	SP,HL
 	LD	E,A
 	XOR	A
-	LD	IY,RedirState
+	LD	IY,REDIRST
 	RET
 
-Next_0517:	LD	A,.BADNO
+CAL10:	LD	A,.BADNO
 	OR	A
 	RET
 
-Next_0518:	LD	A,#43
+CAL20:	LD	A,#43
 	CALL	DMESS
-	LD	A,(MSXVersion)
+	LD	A,(MSXVER)
 	CP	3
 	LD	A,#44
 	JP	C,DMESSCR
 	LD	IX,#0183
-	CALL	CallSlot
+	CALL	CALLSLOT
 	LD	A,E
 	ADD	A,#44
 	JP	DMESSCR
@@ -203,16 +209,16 @@ Next_0518:	LD	A,#43
 	RL	L
 	OR	E
 	LD	D,L
-	LD	HL,BufEnvName+1
+	LD	HL,ENVNAME+1
 	LD	(HL),D
 	DEC	HL
 	LD	(HL),A
 	LD	C,#FF
-	LD	IX,BufEnvName+2
+	LD	IX,ENVNAME+2
 	PUSH	IX
 	CALL	DDATE
 	POP	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,#1F
 	CALL	DMESSCR
 NEWDAT:	LD	A,#20	; Print 'Enter new date'.
@@ -227,7 +233,7 @@ NEWDAT:	LD	A,#20	; Print 'Enter new date'.
 	LD	A,#22	; Else print the format from the
 	CALL	DMESS	;   environment.
 	POP	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,#23
 	CALL	DMESS
 NDFORM:	LD	A,#21	; Print end message.
@@ -266,7 +272,7 @@ DAT20:	CALL	GETNO	; Get a number.
 	AND	#03	; Mask out other grotty bits.
 	JR	Z,DAT50	; Go if invalid field value.
 	DEC	A	; Day ?
-	JR	Z,Next_0129	; Go if yes.
+	JR	Z,DAT40	; Go if yes.
 	DEC	A	; Month ?
 	JR	Z,DAT30	; Go if yes, else year.
 	EXX
@@ -300,7 +306,7 @@ ADD1980:	LD	B,#00	; BC=offset from 1980.
 	LD	B,D	; Skip to DAT50.
 DAT30:	LD	D,B	; Save month.
 	DEFB	#06
-Next_0129:	LD	E,B
+DAT40:	LD	E,B
 DAT50:	EXX	; Save new date, get line ptr.
 	DJNZ	DAT10	; Get separator & next digit.
 	CALL	GETCH	; Skip trailing spaces.
@@ -312,27 +318,30 @@ DAT50:	EXX	; Save new date, get line ptr.
 	AND	.IDATE	; .IDATE if error, else 0.
 	RET	Z	; Return if no error.
 	LD	B,A
-DAT60:	LD	DE,BufEnvName
+DAT60:	LD	DE,ENVNAME
 	LD	C,_EXPLAIN
 	CALL	BDOS
 	PUSH	DE
-	CALL	LPrint
+	CALL	LPRINT
 	LD	A,#0D
 	CALL	DMESS
 	POP	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,#0E
 	CALL	DMESSCR
 	JP	NEWDAT
 
-Cmd_Echo:	EX	DE,HL
-	JP	DMSCR
-
 		SUBTTL	ECHO
 ;        The ECHO command just prints it's arguments on the screen. It is used
 ; for displaying comments ans messages in batch files.
+;
+;        ECHOS (new in 2.40) does the same, but without the trailing CR/LF.
+;
 @ECHO:	EX	DE,HL	; DE -> arguments.
-	JP	PrintString	; Print rest of command line & CR,LF.
+	JP	DMSCR	; Print rest of command line & CR,LF.
+
+@ECHOS:	EX	DE,HL	; DE -> arguments.
+	JP	PRTSTR	; Print rest of command line only.
 
 		SUBTTL	EXIT
 ;        The EXIT command reads an optional error number as it's argument  and
@@ -348,7 +357,7 @@ Cmd_Echo:	EX	DE,HL
 	LD	A,E
 
 EXIT:	PUSH	AF	; Save error code for returning.
-	LD	HL,BootStrap	; Restore vectors in page 0 to what
+	LD	HL,BOOTSTRAP	; Restore vectors in page 0 to what
 	LD	DE,#00	;   they were when COMMAND was invoked.
 	LD	BC,#08
 	LDIR
@@ -364,7 +373,7 @@ DELENV:	PUSH	DE
 	OR	(HL)	; Name null (end of strings) ?
 	JR	Z,SETENV	; All deleted if yes.
 	PUSH	DE
-	LD	DE,BufEnvData
+	LD	DE,ENVDATA
 	XOR	A
 	LD	(DE),A	; Set to a null string to delete.
 	LD	C,_SENV	; Else set item to null.
@@ -384,20 +393,20 @@ SETENV:	LD	HL,(#06)	; Find out address of saved environment
 CPYENV:	LD	A,(HL)	; End of environment string list ?
 	OR	A
 	JR	Z,ENVDON
-	LD	DE,BufEnvName	; Copy name of item to BUFF2.
-Next_0135:	LD	A,(HL)	; Get character.
+	LD	DE,ENVNAME	; Copy name of item to BUFF2.
+CPY20:	LD	A,(HL)	; Get character.
 	LD	(DE),A
 	DEC	HL
 	INC	DE
 	OR	A
-	JR	NZ,Next_0135	; Copy until null at end.
-	LD	DE,BufEnvData	; Copy saved value of item to BUFF.
-Next_0136:	LD	A,(HL)
+	JR	NZ,CPY20	; Copy until null at end.
+	LD	DE,ENVDATA	; Copy saved value of item to BUFF.
+CPY30:	LD	A,(HL)
 	LD	(DE),A
 	DEC	HL
 	INC	DE
 	OR	A
-	JR	NZ,Next_0136	; Copy until null at end.
+	JR	NZ,CPY30	; Copy until null at end.
 	PUSH	HL
 	CALL	SENV	; Set value.
 	POP	HL	; HL -> next string.
@@ -405,7 +414,7 @@ Next_0136:	LD	A,(HL)
 
 ENVDON:	LD	HL,(#01)
 	INC	HL
-	LD	DE,(WarmBoot)	; Restore re-boot BIOS jump
+	LD	DE,(WARMBOOT)	; Restore re-boot BIOS jump
 	LD	(HL),E	;   table entry point.
 	INC	HL
 	LD	(HL),D
@@ -453,11 +462,11 @@ FMT_ASK_LOOP:	INC	A
 	SRL	L
 	JR	NC,FMT_SKIPDRV
 	PUSH	AF
-	CALL	PrintChar	;Print drive name.
+	CALL	PRCHAR	;Print drive name.
 	POP	AF
 	PUSH	AF
 	LD	A,","
-	CALL	NZ,PrintChar	;Print separator if something remain.
+	CALL	NZ,PRCHAR	;Print separator if something remain.
 	POP	AF
 FMT_SKIPDRV:	JR	NZ,FMT_ASK_LOOP
 	LD	A,#2B
@@ -490,8 +499,8 @@ FMT_GETMASK:	RLA
 					; or does not support format.
 	PUSH	AF
 	LD	A,C
-	CALL	PrintChar	;Echo to the console.
-	CALL	LPrint
+	CALL	PRCHAR	;Echo to the console.
+	CALL	LPRINT
 	POP	AF
 FMT_1DRIVE:	INC	B	;Always comes here with B=0.
 	RRCA	;
@@ -536,13 +545,13 @@ NCIDRV:	LD	A,.IDRV
 	RET	NC
 	LD	A,(HL)
 	OR	A
-	JR	NZ,Next_0519
+	JR	NZ,NCI10
 	LD	A,E
 	EXX
 	JR	NSTR
 
-Next_0519:	CP	"/"
-	JR	Z,Next_0520
+NCI10:	CP	"/"
+	JR	Z,NCI20
 	CALL	SEP?
 	LD	A,.IPARM
 	RET	NZ
@@ -550,9 +559,9 @@ Next_0519:	CP	"/"
 	CP	"/"
 	LD	A,.INP
 	RET	NZ
-Next_0520:	INC	HL
+NCI20:	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"X"
 	LD	A,.IOPT
 	RET	NZ
@@ -561,7 +570,7 @@ Next_0520:	INC	HL
 	CALL	Z,GCHKEOL
 	RET	NZ
 	LD	A,E
-	JR	Next_0521
+	JR	NST10
 
 NFDRV:	LD	A,B
 	EXX	; Save drive in B'.
@@ -575,16 +584,16 @@ NFDRV:	LD	A,B
 	JR	Z,NSTR	; Go if no prompt string (A=0).
 GETCHR:	LD	A,B	; Get slot number.
 	PUSH	BC
-	CALL	ReadSlot	; A=character from string.
+	CALL	RDSLOT	; A=character from string.
 	POP	BC
 	OR	A
 	JR	Z,DONSTR	; Go if string has been printed.
 	INC	HL	; Next character.
-	CALL	PrintChar	; Print character.
+	CALL	PRCHAR	; Print character.
 	JR	GETCHR	; Do next character.
 
 DONSTR:	LD	A,"?"
-	CALL	PrintChar
+	CALL	PRCHAR
 	CALL	SPACE
 INCHAR:	LD	C,_CONST	; Get a character, gobbling up chars
 	CALL	BDOS	;   in the keyboard buffer.
@@ -601,12 +610,12 @@ INCHAR:	LD	C,_CONST	; Get a character, gobbling up chars
 	JR	C,INCHAR
 	PUSH	AF	; Save choice.
 	LD	A,C	; Echo it.
-	CALL	PrintChar
-	CALL	LPrint
+	CALL	PRCHAR
+	CALL	LPRINT
 	POP	AF
 NSTR:	INC	A
 	PUSH	AF
-	CALL	LPrint
+	CALL	LPRINT
 	LD	A,#2C
 	CALL	DMESS
 	EXX
@@ -616,73 +625,73 @@ NSTR:	INC	A
 	LD	C,_CURDRV
 	CALL	M,BDOS
 	ADD	A,"A"
-	CALL	PrintChar
+	CALL	PRCHAR
 	LD	A,#2D
 	CALL	DMESSCR
 	CALL	PAUSE
 	POP	AF
 	EXX
-Next_0521:	LD	DE,BufEnvData
-	LD	HL,(ExitAdres)
+NST10:	LD	DE,ENVDATA
+	LD	HL,(EXITADDR)
 	OR	A
 	SBC	HL,DE
 	EX	DE,HL
 	LD	C,_FORMAT
 	JP	BDOS
 
-Cmd_Memory:	AND	(HL)
+@MEMORY:	AND	(HL)
 	LD	A,#00
-	LD	(OptionFlag1),A
-	JP	NZ,Next_0527
-Next_0522:	LD	HL,(MapperTable)
-Next_0523:	LD	A,(HL)
+	LD	(OPTFLAG1),A
+	JP	NZ,MEM60
+MEM10:	LD	HL,(MAPTAB)
+MEM20:	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0525
+	JR	Z,MEM40
 	PUSH	AF
 	INC	HL
 	LD	B,(HL)
-	CALL	Multiply16
+	CALL	MUL16
 	LD	A,#49
 	CALL	DMESS
 	POP	AF
 	LD	B,A
 	AND	%00000011
 	ADD	A,"0"
-	CALL	PrintChar
+	CALL	PRCHAR
 	BIT	7,B
-	JR	Z,Next_0524
+	JR	Z,MEM30
 	LD	A,"-"
-	CALL	PrintChar
+	CALL	PRCHAR
 	LD	A,B
 	RRA
 	RRA
 	AND	%00000011
 	ADD	A,"0"
-	CALL	PrintChar
-Next_0524:	CALL	LPrint
+	CALL	PRCHAR
+MEM30:	CALL	LPRINT
 	INC	HL
 	LD	B,(HL)
-	CALL	Multiply16
+	CALL	MUL16
 	LD	A,#06
 	CALL	DMESSCR
 	INC	HL
 	LD	B,(HL)
-	CALL	Multiply16
+	CALL	MUL16
 	LD	A,#4A
 	CALL	DMESSCR
 	INC	HL
 	LD	B,(HL)
-	CALL	Multiply16
+	CALL	MUL16
 	LD	A,#4B
 	CALL	DMESSCR
-	CALL	LPrint
+	CALL	LPRINT
 	INC	HL
 	INC	HL
 	INC	HL
 	INC	HL
-	JR	Next_0523
+	JR	MEM20
 
-Next_0525:	LD	HL,(ExitAdres)
+MEM40:	LD	HL,(EXITADDR)
 	LD	DE,#FFD8
 	ADD	HL,DE
 	LD	L,#08
@@ -691,137 +700,137 @@ Next_0525:	LD	HL,(ExitAdres)
 	SBC	HL,DE
 	LD	L,#06
 	DEC	H
-	LD	(Value_L),HL
+	LD	(VALUEL),HL
 	LD	HL,#00
-	LD	(Value_H),HL
-	CALL	Print32
+	LD	(VALUEH),HL
+	CALL	PRINT32
 	LD	A,#4C
 	CALL	DMESSCR
-	CALL	LPrint
-	CALL	GetBufferLeng
+	CALL	LPRINT
+	CALL	GETBUFLEN
 	PUSH	HL
-	LD	(Value_L),HL
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	PRINT32
 	LD	A,#4D
 	CALL	DMESSCR
-	CALL	GetEndAdres
+	CALL	GETENDADDR
 	EX	DE,HL
 	POP	HL
 	SBC	HL,DE
 
-	LD	DE,BufferAdres
+	LD	DE,BUFADDR
 	ADD	HL,DE
 	DEC	HL
-	LD	(Value_L),HL
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	PRINT32
 	LD	A,#06
 	CALL	DMESSCR
-	CALL	LPrint
-	CALL	SetPage2
-	LD	HL,(AliasEnd+#8000)
-	CALL	RestorePage2
+	CALL	LPRINT
+	CALL	SETPG2
+	LD	HL,(ALIEND+#8000)
+	CALL	RSTPG2
 	SET	7,H
 	PUSH	HL
-	CALL	GetAliasAdres
+	CALL	GETALIADDR
 	SET	7,H
 	EX	DE,HL
 	POP	HL
 	PUSH	HL
 	PUSH	DE
 	SBC	HL,DE
-	LD	(Value_L),HL
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	PRINT32
 	LD	A,#4E
 	CALL	DMESSCR
-	CALL	SetPage2
+	CALL	SETPG2
 	POP	HL
-Next_0526:	LD	C,(HL)
+MEM50:	LD	C,(HL)
 	INC	HL
 	LD	B,(HL)
 	DEC	HL
 	ADD	HL,BC
 	LD	A,B
 	OR	C
-	JR	NZ,Next_0526
-	CALL	RestorePage2
+	JR	NZ,MEM50
+	CALL	RSTPG2
 	EX	DE,HL
 	POP	HL
 	SBC	HL,DE
-	LD	(Value_L),HL
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	PRINT32
 	LD	A,#06
 	CALL	DMESSCR
-	CALL	LPrint
-	CALL	SetPage2
-	LD	DE,(AliasEnd+#8000)
+	CALL	LPRINT
+	CALL	SETPG2
+	LD	DE,(ALIEND+#8000)
 	PUSH	DE
 	LD	HL,#3FFF
 	SBC	HL,DE
-	LD	(Value_L),HL
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	PRINT32
 	LD	A,#4F
 	CALL	DMESSCR
-	LD	HL,(VariableEnd+#8000)
+	LD	HL,(VAREND+#8000)
 	RES	7,H
 	POP	DE
 	SBC	HL,DE
-	LD	(Value_L),HL
-	CALL	RestorePage2
-	CALL	Print32
+	LD	(VALUEL),HL
+	CALL	RSTPG2
+	CALL	PRINT32
 	LD	A,#06
 	JP	DMESSCR
 
-Next_0527:	LD	A,(HL)
+MEM60:	LD	A,(HL)
 	CP	"/"
 	LD	A,.IPARM
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"P"
-	JR	Z,Next_0528
+	JR	Z,MEM70
 	CP	"K"
-	JR	Z,Next_0530
+	JR	Z,MEM90
 	LD	A,.IOPT
 	RET
 
-Next_0528:	CALL	SETP
-Next_0529:	INC	HL
+MEM70:	CALL	SETP
+MEM80:	INC	HL
 	CALL	GETCH
-	JR	NZ,Next_0527
-	JP	Next_0522
+	JR	NZ,MEM60
+	JP	MEM10
 
-Next_0530:	LD	A,#01
-	LD	(OptionFlag1),A
-	JR	Next_0529
+MEM90:	LD	A,#01
+	LD	(OPTFLAG1),A
+	JR	MEM80
 
-Multiply16:	PUSH	HL
+MUL16:	PUSH	HL
 	PUSH	DE
 	LD	HL,#00
-	LD	(Value_L),HL
-	LD	(Value_H),HL
+	LD	(VALUEL),HL
+	LD	(VALUEH),HL
 	LD	DE,#4000
 	INC	B
 	DEC	B
-	JR	Z,Next_0533
-Next_0531:	LD	HL,(Value_L)
+	JR	Z,MUL60
+MUL40:	LD	HL,(VALUEL)
 	ADD	HL,DE
-	LD	(Value_L),HL
-	JR	NC,Next_0532
-	LD	HL,(Value_H)
+	LD	(VALUEL),HL
+	JR	NC,MUL50
+	LD	HL,(VALUEH)
 	INC	HL
-	LD	(Value_H),HL
-Next_0532:	DJNZ	Next_0531
-Next_0533:	POP	DE
+	LD	(VALUEH),HL
+MUL50:	DJNZ	MUL40
+MUL60:	POP	DE
 	POP	HL
-Print32:	LD	A,(OptionFlag1)
+PRINT32:	LD	A,(OPTFLAG1)
 	BIT	0,A
-	JR	NZ,Next_0534
+	JR	NZ,PRI10
 	PUSH	HL
 	PUSH	DE
-	LD	IX,BufExtra
+	LD	IX,XBUF1
 	PUSH	IX
-	LD	DE,Value_L
+	LD	DE,VALUEL
 	LD	A," "
 	CALL	D32
 	POP	HL
@@ -829,29 +838,29 @@ Print32:	LD	A,(OptionFlag1)
 	INC	HL
 	INC	HL
 	LD	C," "
-	CALL	InsertByte
+	CALL	INSBYTE
 	INC	HL
 	INC	HL
 	INC	HL
 	INC	HL
-	CALL	InsertByte
+	CALL	INSBYTE
 	POP	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,#48
 	CALL	DMESS
 	POP	DE
 	POP	HL
 	RET
 
-Next_0534:	PUSH	HL
+PRI10:	PUSH	HL
 	PUSH	DE
 	LD	A," "
-	CALL	PrintLen2
+	CALL	PRLEN2
 	POP	DE
 	POP	HL
 	RET
 
-Cmd_Goto:	LD	A,(BatchHandle)
+@GOTO:	LD	A,(BATHNDL)
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
@@ -860,30 +869,30 @@ Cmd_Goto:	LD	A,(BatchHandle)
 	LD	A,.NOPAR
 	RET	Z
 	PUSH	HL
-Next_0535:	LD	HL,#00
-	LD	(BatLineAdr),HL
-Next_0536:	CALL	INBAT
-	JR	Z,Next_0537
+GOT80:	LD	HL,#00
+	LD	(BATLINADDR),HL
+GOT90:	CALL	INBAT
+	JR	Z,GOT100
 	POP	HL
 	CP	.EOF
 	RET	NZ
-	CALL	Next_0538
+	CALL	END10
 	LD	A,#FF
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	LD	A,.IPARM
 	RET
 
-Next_0537:	JR	NC,Next_0536
-	LD	HL,BufEnvData+1
+GOT100:	JR	NC,GOT90
+	LD	HL,ENVDATA+1
 	CALL	GETCH
 	POP	BC
 	PUSH	BC
 	CALL	STRCMP
-	JR	NZ,Next_0536
+	JR	NZ,GOT90
 	POP	HL
 	RET
 
-Cmd_End:	LD	A,(BatchHandle)
+@END:	LD	A,(BATHNDL)
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
@@ -891,13 +900,13 @@ Cmd_End:	LD	A,(BatchHandle)
 	OR	A
 	LD	A,.INP
 	RET	NZ
-Next_0538:	LD	HL,#00
-	LD	(BatLineAdr),HL
-	LD	A,(BatchPage)
+END10:	LD	HL,#00
+	LD	(BATLINADDR),HL
+	LD	A,(BATPAGE)
 	LD	E,#1A
 	JP	WR_SEG
 
-Cmd_Gosub:	LD	A,(BatchHandle)
+@GOSUB:	LD	A,(BATHNDL)
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
@@ -906,71 +915,71 @@ Cmd_Gosub:	LD	A,(BatchHandle)
 	LD	A,.NOPAR
 	RET	Z
 	PUSH	HL
-	LD	HL,(GosubAdres)
-	LD	DE,GosubList+16
+	LD	HL,(GOSUBADDR)
+	LD	DE,GOSUBLIST+16
 	OR	A
 	SBC	HL,DE
 	POP	HL
 	LD	A,.INP
 	RET	Z
 	PUSH	HL
-	LD	HL,(GosubAdres)
-	LD	DE,(BatLineAdr)
+	LD	HL,(GOSUBADDR)
+	LD	DE,(BATLINADDR)
 	LD	(HL),E
 	INC	HL
 	LD	(HL),D
 	INC	HL
-	LD	(GosubAdres),HL
-	JR	Next_0535
+	LD	(GOSUBADDR),HL
+	JR	GOT80
 
-Cmd_Return:	LD	A,(BatchHandle)
+@RETURN:	LD	A,(BATHNDL)
 	CP	#FE
 	LD	A,.BADCM
 	RET	NZ
 	PUSH	HL
-	LD	HL,(GosubAdres)
-	LD	DE,GosubList
+	LD	HL,(GOSUBADDR)
+	LD	DE,GOSUBLIST
 	PUSH	HL
 	SBC	HL,DE
 	POP	HL
-	JR	Z,Next_0539
+	JR	Z,RET10
 	DEC	HL
 	LD	D,(HL)
 	DEC	HL
 	LD	E,(HL)
-	LD	(GosubAdres),HL
+	LD	(GOSUBADDR),HL
 	EX	DE,HL
-	LD	(BatLineAdr),HL
-Next_0539:	POP	HL
+	LD	(BATLINADDR),HL
+RET10:	POP	HL
 	LD	A,(HL)
 	OR	A
 	RET	Z
 	PUSH	HL
-	JP	Next_0535
+	JP	GOT80
 
-Cmd_If:	CALL	Parse_If2
+@IF:	CALL	COND2
 	RET	NZ
-	JR	C,Executing2
+	JR	C,EXEC2
 	XOR	A
 	RET
 
-Executing2:	LD	DE,BufEnvData
+EXEC2:	LD	DE,ENVDATA
 	PUSH	DE
-	CALL	NCopy
+	CALL	NCOPY
 	POP	DE
-	CALL	Aliasing
+	CALL	ALIASING
 	RET	NZ
-	LD	HL,(NextAdres)
+	LD	HL,(NEXTADDR)
 	LD	A,H
 	OR	L
-	CALL	Z,MultiComm
+	CALL	Z,MULTICMD
 	EX	DE,HL
 	PUSH	HL
-	CALL	RemoveQuote
+	CALL	UNQUOTE
 	POP	HL
 	JP	DO_CMD
 
-Parse_If2:	CALL	COND
+COND2:	CALL	COND
 	RET	NZ
 	CCF
 	SBC	A,A
@@ -979,22 +988,22 @@ Parse_If2:	CALL	COND
 	EXX
 	POP	HL
 	CALL	STRIP
-	LD	BC,BufEnvData
+	LD	BC,ENVDATA
 	PUSH	BC
 	CALL	CPYSTR
 	POP	BC
 	RET	NZ
 	PUSH	HL
 	PUSH	BC
-	LD	HL,Word_And
-	CALL	Compare3
+	LD	HL,$AND
+	CALL	COMPARE3
 	POP	BC
 	POP	HL
-	JR	NZ,Next_0540
+	JR	NZ,CON10
 	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
-	CALL	Parse_If2
+	CALL	COND2
 	POP	BC
 	RET	NZ
 	AND	B
@@ -1002,17 +1011,17 @@ Parse_If2:	CALL	COND
 	RRA
 	RET
 
-Next_0540:	PUSH	HL
+CON10:	PUSH	HL
 	PUSH	BC
-	LD	HL,Word_Or
-	CALL	Compare3
+	LD	HL,$OR
+	CALL	COMPARE3
 	POP	BC
 	POP	HL
-	JR	NZ,Next_0541
+	JR	NZ,CON20
 	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
-	CALL	Parse_If2
+	CALL	COND2
 	POP	BC
 	RET	NZ
 	OR	B
@@ -1020,17 +1029,17 @@ Next_0540:	PUSH	HL
 	RRA
 	RET
 
-Next_0541:	PUSH	HL
+CON20:	PUSH	HL
 	PUSH	BC
-	LD	HL,Word_Xor
-	CALL	Compare3
+	LD	HL,$XOR
+	CALL	COMPARE3
 	POP	BC
 	POP	HL
-	JR	NZ,Next_0542
+	JR	NZ,CON30
 	CALL	STRIP
 	EX	AF,AF'
 	PUSH	AF
-	CALL	Parse_If2
+	CALL	COND2
 	POP	BC
 	RET	NZ
 	XOR	B
@@ -1038,86 +1047,86 @@ Next_0541:	PUSH	HL
 	RRA
 	RET
 
-Next_0542:	EXX
+CON30:	EXX
 	EX	AF,AF'
 	CP	A
 	RRA
 	RET
 
-Cmd_Iff:	PUSH	HL
-	LD	HL,(IffAdres)
-	LD	DE,IffList+16
-	CALL	Compare4
-	JR	Z,Next_0544
+@IFF:	PUSH	HL
+	LD	HL,(IFFADDR)
+	LD	DE,IFFLIST+16
+	CALL	COMPARE4
+	JR	Z,IFF20
 	LD	A,(HL)
 	INC	HL
-	LD	(IffAdres),HL
+	LD	(IFFADDR),HL
 	LD	(HL),A
 	EX	DE,HL
 	POP	HL
 	LD	B,A
 	PUSH	BC
 	PUSH	DE
-	CALL	Parse_If2
+	CALL	COND2
 	CCF
 	POP	DE
 	POP	BC
 	RET	NZ
 	BIT	0,B
-	JR	Z,Next_0543
+	JR	Z,IFF10
 	DEFB	#3E
-Next_0543:	SBC	A,A
+IFF10:	SBC	A,A
 	LD	(DE),A
 	LD	A,(HL)
 	OR	A
 	RET	Z
-	JP	Executing2
+	JP	EXEC2
 
-Next_0544:	POP	HL
+IFF20:	POP	HL
 	LD	A,.INP
 	RET
 
-Cmd_Then:	AND	(HL)
+@THEN:	AND	(HL)
 	RET	Z
-	JP	Executing2
+	JP	EXEC2
 
-Cmd_Else:	PUSH	HL
-	LD	HL,(IffAdres)
-	LD	DE,IffList
-	CALL	Compare4
-	JR	Z,Next_0545
+@ELSE:	PUSH	HL
+	LD	HL,(IFFADDR)
+	LD	DE,IFFLIST
+	CALL	COMPARE4
+	JR	Z,ELS10
 	LD	A,(HL)
 	CP	#9F
-	JR	Z,Next_0545
+	JR	Z,ELS10
 	CPL
 	LD	(HL),A
-Next_0545:	POP	HL
+ELS10:	POP	HL
 	LD	A,(HL)
 	OR	A
 	RET	Z
-	JP	Executing2
+	JP	EXEC2
 
-Cmd_Endiff:	PUSH	HL
-	LD	HL,(IffAdres)
-	LD	DE,IffList
-	CALL	Compare4
-	JR	Z,Next_0546
+@ENDIFF:	PUSH	HL
+	LD	HL,(IFFADDR)
+	LD	DE,IFFLIST
+	CALL	COMPARE4
+	JR	Z,END20
 	DEC	HL
-	LD	(IffAdres),HL
-Next_0546:	POP	HL
+	LD	(IFFADDR),HL
+END20:	POP	HL
 	LD	A,(HL)
 	OR	A
 	RET	Z
-	JP	Executing2
+	JP	EXEC2
 
-COND:	LD	BC,BufEnvData
+COND:	LD	BC,ENVDATA
 	PUSH	BC
-	CALL	MakePath2
+	CALL	MKPATH2
 	POP	BC
 	RET	NZ	; Return if error
 	EX	DE,HL
 	LD	HL,$NOT
-	CALL	Compare3
+	CALL	COMPARE3
 	EX	DE,HL
 	JR	NZ,EXIST?
 	CALL	COND10
@@ -1125,13 +1134,13 @@ COND:	LD	BC,BufEnvData
 	RET
 
 COND10:	CALL	GETCH
-	LD	BC,BufEnvData
-	CALL	MakePath2
+	LD	BC,ENVDATA
+	CALL	MKPATH2
 	RET	NZ
-EXIST?:	LD	BC,BufEnvData
+EXIST?:	LD	BC,ENVDATA
 	EX	DE,HL
 	LD	HL,$EXIST
-	CALL	Compare3
+	CALL	COMPARE3
 	EX	DE,HL
 	JR	NZ,EQUAL?
 	CALL	GETCH
@@ -1161,84 +1170,84 @@ EX10:	OR	A
 
 EQUAL?:	CALL	STRIP
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"="
-	JR	NZ,Next_0547
+	JR	NZ,EQU10
 	INC	HL
 	LD	A,(HL)
 	CP	"="
-	JP	NZ,Next_0554
+	JP	NZ,EQU80
 	LD	A,#01
-	JR	Next_0550
+	JR	EQU40
 
-Next_0547:	CP	"E"
-	JR	NZ,Next_0548
+EQU10:	CP	"E"
+	JR	NZ,EQU20
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"Q"
-	JR	NZ,Next_0554
+	JR	NZ,EQU80
 	LD	A,#01
-	JR	Next_0550
+	JR	EQU40
 
-Next_0548:	CP	"G"
-	JR	NZ,Next_0549
+EQU20:	CP	"G"
+	JR	NZ,EQU30
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"T"
-	JR	NZ,Next_0554
+	JR	NZ,EQU80
 	LD	A,#02
-	JR	Next_0550
+	JR	EQU40
 
-Next_0549:	CP	"L"
-	JR	NZ,Next_0554
+EQU30:	CP	"L"
+	JR	NZ,EQU80
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"T"
-	JR	NZ,Next_0554
+	JR	NZ,EQU80
 	LD	A,#03
-Next_0550:	EX	AF,AF'
+EQU40:	EX	AF,AF'
 	INC	HL
 	CALL	STRIP
-	LD	BC,BufEnvData+#80
+	LD	BC,ENVDATA+#80
 	PUSH	BC
-	CALL	MakePath2
+	CALL	MKPATH2
 	POP	BC
 	RET	NZ
 	EX	DE,HL
-	LD	HL,BufEnvData
+	LD	HL,ENVDATA
 	CALL	STRCMP
 	EX	DE,HL
 	EX	AF,AF'
 	DEC	A
-	JR	Z,Next_0553
+	JR	Z,EQU70
 	DEC	A
-	JR	Z,Next_0552
+	JR	Z,EQU60
 	DEC	A
 	EX	AF,AF'
-	JR	NZ,Next_0551
+	JR	NZ,EQU50
 	SCF
 	RET
 
-Next_0551:	LD	A,#00
+EQU50:	LD	A,#00
 	BIT	0,A
 	RET
 
-Next_0552:	EX	AF,AF'
+EQU60:	EX	AF,AF'
 	LD	A,#00
 	BIT	0,A
 	CCF
 	RET
 
-Next_0553:	EX	AF,AF'
+EQU70:	EX	AF,AF'
 	RET	Z
 	CP	A
 	SCF
 	RET
 
-Next_0554:	POP	HL
+EQU80:	POP	HL
 	LD	A,.IPARM
 	OR	A
 	RET
@@ -1264,17 +1273,17 @@ CHKEQ:	LD	A,(HL)
 	JR	NZ,CHKEQ
 	RET
 
-Compare3:	LD	A,(BC)
-	CALL	MakeUpper
+COMPARE3:	LD	A,(BC)
+	CALL	MKUPPER
 	CP	(HL)
 	RET	NZ
 	INC	BC
 	INC	HL
 	OR	A
-	JR	NZ,Compare3
+	JR	NZ,COMPARE3
 	RET
 
-Compare4:	LD	A,H
+COMPARE4:	LD	A,H
 	SUB	D
 	RET	NZ
 	LD	A,L
@@ -1283,49 +1292,49 @@ Compare4:	LD	A,H
 
 $NOT:	DEFB	"NOT",0
 $EXIST:	DEFB	"EXIST",0
-Word_And:	DEFB	"AND",0
-Word_Or:	DEFB	"OR",0
-Word_Xor:	DEFB	"XOR",0
+$AND:	DEFB	"AND",0
+$OR:	DEFB	"OR",0
+$XOR:	DEFB	"XOR",0
 
-Cmd_Color:	AND	(HL)
+@COLOR:	AND	(HL)
 	LD	A,.NOPAR
 	RET	Z
 	CALL	GET8
 	RET	NZ
 	LD	A,E
 	CP	#10
-	JR	NC,Next_0156
+	JR	NC,GOT120
 	LD	(FORCLR),A
 	CALL	GETCH
-	JR	Z,Next_0555
+	JR	Z,COL10
 	CALL	GET8
 	RET	NZ
 	LD	A,E
 	CP	#10
-	JR	NC,Next_0156
+	JR	NC,GOT120
 	LD	(BAKCLR),A
 	CALL	GETCH
-	JR	Z,Next_0555
+	JR	Z,COL10
 	CALL	GET8
 	CALL	Z,CHKNO
 	CALL	Z,CHKEOL
 	RET	NZ
 	LD	A,E
 	CP	#10
-	JR	NC,Next_0156
+	JR	NC,GOT120
 	LD	(BDRCLR),A
-Next_0555:	LD	IX,#62
-	JR	Next_0557
+COL10:	LD	IX,#62
+	JR	GOT110
 
-Cmd_Mode:	AND	(HL)
+@MODE:	AND	(HL)
 	LD	A,.NOPAR
 	RET	Z
 	LD	A,(CRTCNT)
-	LD	(BufExtra),A
+	LD	(XBUF1),A
 	CALL	GET8
 	RET	NZ
 	CALL	GETCH
-	JR	Z,Next_0556
+	JR	Z,MOD10
 	PUSH	DE
 	CALL	GET8
 	LD	C,E
@@ -1334,12 +1343,12 @@ Cmd_Mode:	AND	(HL)
 	CALL	Z,CHKEOL
 	RET	NZ
 	LD	A,C
-	LD	(BufExtra),A
+	LD	(XBUF1),A
 	XOR	A
-Next_0556:	OR	E
-	JR	Z,Next_0156
+MOD10:	OR	E
+	JR	Z,GOT120
 	CP	#51
-	JR	NC,Next_0156
+	JR	NC,GOT120
 	LD	IX,#6C
 	LD	HL,LINL40
 	CP	#21
@@ -1347,73 +1356,73 @@ Next_0556:	OR	E
 	LD	IX,#6F
 	INC	HL
 GOTCOLS:	LD	(HL),A
-	LD	A,(BufExtra)
+	LD	A,(XBUF1)
 	OR	A
-	JR	Z,Next_0156
+	JR	Z,GOT120
 	CP	#1B
-	JR	NC,Next_0156
+	JR	NC,GOT120
 	LD	(CRTCNT),A
-Next_0557:	JP	CallSlot
+GOT110:	JP	CALLSLOT
 
-Next_0156:	LD	A,.IPARM
+GOT120:	LD	A,.IPARM
 	RET
 
-Cmd_Inkey:	SCF
-Cmd_Input:	EX	AF,AF'
+@INKEY:	SCF
+@INPUT:	EX	AF,AF'
 	XOR	A
-	LD	(BufEnvName),A
+	LD	(ENVNAME),A
 	OR	(HL)
 	LD	A,.NOPAR
 	RET	Z
-	CALL	ParseEnvName
-	JR	NZ,Next_0558
+	CALL	PRSENV
+	JR	NZ,INP10
 	CALL	GETCH
-	JR	Z,Next_0560
-Next_0558:	LD	DE,BufEnvData
-Next_0559:	LD	A,(HL)
+	JR	Z,INP30
+INP10:	LD	DE,ENVDATA
+INP20:	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0560
+	JR	Z,INP30
 	CP	"%"
-	JR	Z,Next_0560
+	JR	Z,INP30
 	LD	(DE),A
 	INC	DE
 	INC	HL
-	JR	Next_0559
-Next_0560:	PUSH	AF
+	JR	INP20
+INP30:	PUSH	AF
 	XOR	A
 	LD	(DE),A
 	POP	AF
 	OR	A
-	CALL	NZ,ParseEnvName
+	CALL	NZ,PRSENV
 	LD	A,.INP
 	RET	NZ
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-	LD	A,(BufEnvName)
+	LD	A,(ENVNAME)
 	OR	A
 	LD	A,.NOPAR
 	RET	Z
-	LD	DE,BufEnvData
-	CALL	PrintString
+	LD	DE,ENVDATA
+	CALL	PRTSTR
 	EX	AF,AF'
-	JR	NC,Next_0561
+	JR	NC,INP40
 	CALL	INCH
 	LD	A,L
-	LD	HL,BufEnvData
+	LD	HL,ENVDATA
 	LD	(HL),A
 	INC	HL
 	LD	(HL),0
 	DEC	HL
 	EX	DE,HL
-	JR	Next_0562
-Next_0561:	LD	HL,BufEnvData
+	JR	INP50
+INP40:	LD	HL,ENVDATA
 	LD	(HL),#7F
 	EX	DE,HL
 	LD	C,_BUFIN
 	CALL	BDOS
-	CALL	LPrint
-	LD	HL,BufEnvData+1
+	CALL	LPRINT
+	LD	HL,ENVDATA+1
 	PUSH	HL
 	LD	C,(HL)
 	LD	B,0
@@ -1422,28 +1431,28 @@ Next_0561:	LD	HL,BufEnvData
 	LD	(HL),0
 	POP	DE
 	INC	DE
-Next_0562:	LD	HL,BufEnvName
+INP50:	LD	HL,ENVNAME
 	LD	C,_SENV
 	JP	BDOS
 
-ParseEnvName:	LD	A,(HL)
+PRSENV:	LD	A,(HL)
 	CP	"%"
 	RET	NZ
-	LD	DE,BufEnvName
-Next_0563:	INC	HL
+	LD	DE,ENVNAME
+PRS60:	INC	HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0564
+	JR	Z,PRS70
 	CP	" "
-	JR	Z,Next_0564
+	JR	Z,PRS70
 	LD	(DE),A
 	INC	DE
-	JR	Next_0563
-Next_0564:	XOR	A
+	JR	PRS60
+PRS70:	XOR	A
 	LD	(DE),A
 	RET
 
-Cmd_Reset:	AND	(HL)
+@RESET:	AND	(HL)
 	LD	A,.INP
 	RET	NZ
 	LD	IY,(EXPTBL-1)
@@ -1451,13 +1460,13 @@ Cmd_Reset:	AND	(HL)
 	LD	IX,#00
 	JP	CALSLT
 
-Cmd_Cdpath:	PUSH	HL
-	LD	HL,Env_Cdpath
-	JR	Next_0565
+@CDPATH:	PUSH	HL
+	LD	HL,CDPATH$
+	JR	PAT10
 
-Cmd_Path:	PUSH	HL
-	LD	HL,Env_Path
-Next_0565:	PUSH	HL
+@PATH:	PUSH	HL
+	LD	HL,PATH$
+PAT10:	PUSH	HL
 	EXX
 	POP	HL
 	EXX
@@ -1482,8 +1491,8 @@ ADDP:	EX	DE,HL	; HL -> current PATH string.
 	LD	(HL),A
 PTH10:	EX	DE,HL
 AP10:	CALL	GETCH	; Skip separators.
-	JR	Z,Next_0162	; Set new path if end of user's items.
-	LD	BC,BufExtra
+	JR	Z,APC10	; Set new path if end of user's items.
+	LD	BC,XBUF1
 	PUSH	BC
 	CALL	CPYSTR	; Copy & uppercase item, HL -> next.
 	PUSH	HL	; Save ptr to next item in user string.
@@ -1491,7 +1500,7 @@ AP10:	CALL	GETCH	; Skip separators.
 	POP	HL
 	POP	BC	; BC -> item copied to BUFF3.
 	RET	C	; Return if error.
-	LD	DE,BufEnvData-1	; Find end of current PATH string,
+	LD	DE,ENVDATA-1	; Find end of current PATH string,
 AP20:	INC	DE	;   then append separator and the new
 	LD	A,(DE)	;   item.
 	OR	A
@@ -1509,15 +1518,15 @@ AP30:	INC	DE
 	JR	NZ,AP30
 	JR	AP10
 
-Next_0162:	EXX
+APC10:	EXX
 	PUSH	HL
 	EXX
 	POP	HL
 	JP	SENV2
 
 DELP:	CALL	GETCH	; Skip separators.
-	JR	Z,Next_0162	; Attempt to set PATH if end of items.
-	LD	BC,BufExtra	; Else copy to BUFF3 & upper case.
+	JR	Z,APC10	; Attempt to set PATH if end of items.
+	LD	BC,XBUF1	; Else copy to BUFF3 & upper case.
 	CALL	CPYSTR	; HL -> start of next item.
 	PUSH	HL	; Save pointer to next item.
 	CALL	NC,DELSTR	; Attempt to delete item from string.
@@ -1527,17 +1536,17 @@ DELP:	CALL	GETCH	; Skip separators.
 	RET	Z
 	JR	DELP	; Repeat for next item.
 
-DELSTR:	LD	HL,BufEnvData
+DELSTR:	LD	HL,ENVDATA
 DS5:	PUSH	HL	; Save start of this item.
 	POP	IX
 	CALL	GETCH	; Skip leading separators.
 	RET	Z	; Return with Z if user item not found.
-	LD	BC,BufExtra+#80	; Copy item to BUFF3+128 & upper case.
+	LD	BC,XBUF1+#80	; Copy item to BUFF3+128 & upper case.
 	PUSH	BC
 	CALL	CPYSTR	; Leaves HL -> next item.
 	POP	BC
 	RET	C
-	LD	DE,BufExtra	; Compare with string at BUFF3.
+	LD	DE,XBUF1	; Compare with string at BUFF3.
 DS10:	LD	A,(BC)
 	EX	DE,HL
 	CP	(HL)
@@ -1549,7 +1558,7 @@ DS10:	LD	A,(BC)
 	JR	NZ,DS10
 	PUSH	IX
 	POP	DE
-	CALL	NCopy
+	CALL	NCOPY
 	INC	A
 	RET
 
@@ -1574,22 +1583,22 @@ CS10:	LD	E,(HL)
 	INC	HL
 	JR	CS10
 
-MakePath2:	LD	D,#01
+MKPATH2:	LD	D,#01
 	XOR	A
-	LD	(Value_L),A
-Next_0169:	LD	A,(HL)
+	LD	(VALUEL),A
+MKP10:	LD	A,(HL)
 	CP	"{"
-	JR	NZ,Next_0566
-	LD	(Value_L),A
+	JR	NZ,MKP20
+	LD	(VALUEL),A
 	INC	HL
-	JR	Next_0169
-Next_0566:	CP	"}"
-	JR	NZ,Next_0567
+	JR	MKP10
+MKP20:	CP	"}"
+	JR	NZ,MKP30
 	XOR	A
-	LD	(Value_L),A
+	LD	(VALUEL),A
 	INC	HL
-	JR	Next_0169
-Next_0567:	LD	E,(HL)
+	JR	MKP10
+MKP30:	LD	E,(HL)
 	PUSH	BC
 	PUSH	HL
 	LD	C,_CHKCHR
@@ -1601,7 +1610,7 @@ Next_0567:	LD	E,(HL)
 	LD	(BC),A
 	OR	E
 	RET	Z
-	LD	A,(Value_L)
+	LD	A,(VALUEL)
 	OR	A
 	LD	A,E
 	CALL	Z,SEP?
@@ -1610,7 +1619,7 @@ Next_0567:	LD	E,(HL)
 	LD	(BC),A
 	INC	BC
 	INC	HL
-	JR	Next_0169
+	JR	MKP10
 
 		SUBTTL	PAUSE
 ;        The  PAUSE  command is similar to the ECHO command, except that after
@@ -1641,14 +1650,14 @@ PAUSE:	LD	A,#0F
 	ADD	HL,HL
 	LD	A,#29
 	CALL	DMESS
-	LD	IX,BufEnvData
+	LD	IX,ENVDATA
 	PUSH	IX
 	CALL	D16
 	POP	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,"K"
-	CALL	PrintChar
-	JP	LPrint
+	CALL	PRCHAR
+	JP	LPRINT
 
 SETRAM:	EX	AF,AF'
 	CALL	CHKD	; Check for /D.
@@ -1731,8 +1740,8 @@ OKRET:	XOR	A
 ; SET followed by a name, separator and string sets that environment  name  to
 ; the string.
 @SET:	AND	(HL)	; Any name given ?
-	JR	NZ,Next_0569	; Go if yes, else print environment.
-Next_0568:	LD	HL,#01	; Initialise item number.
+	JR	NZ,DST10	; Go if yes, else print environment.
+SET10:	LD	HL,#01	; Initialise item number.
 DENV:	PUSH	HL	; Save item number.
 	EX	DE,HL
 	CALL	FENV	; Get name of item.
@@ -1744,7 +1753,7 @@ DENV:	PUSH	HL	; Save item number.
 	CALL	GENV	; Get string value of this name.
 	JR	NZ,NXTENV	; Ignore this item if error.
 	EX	DE,HL	; DE -> name.
-	CALL	PrintString	; Print name of string.
+	CALL	PRTSTR	; Print name of string.
 	LD	A,#41
 	CALL	DMESS	; Print '='.
 	EX	DE,HL	; DE -> value of name.
@@ -1789,12 +1798,12 @@ DSTR:	POP	HL	; HL -> start of name.
 	RET	Z
 	JP	DMSCR
 
-Next_0569:	LD	A,(HL)
+DST10:	LD	A,(HL)
 	CP	"/"
 	JR	NZ,SETNAME
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"P"
 	LD	A,.IOPT
 	RET	NZ
@@ -1802,31 +1811,31 @@ Next_0569:	LD	A,(HL)
 	INC	HL
 	CALL	GETCH
 	JR	NZ,SETNAME
-	JR	Next_0568
+	JR	SET10
 
-Cmd_Alias:	AND	(HL)
-	JR	NZ,Next_0575
-Next_0570:	LD	BC,#00
-Next_0571:	LD	HL,BufEnvName
-	LD	DE,BufEnvData
-	CALL	FindAlias
+@ALIAS:	AND	(HL)
+	JR	NZ,ALI180
+ALI130:	LD	BC,#00
+ALI140:	LD	HL,ENVNAME
+	LD	DE,ENVDATA
+	CALL	FNDALIAS
 	LD	A,(HL)
 	OR	A
 	RET	Z
 	PUSH	BC
 	EX	DE,HL
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,#41
 	CALL	DMESS
 	EX	DE,HL
 	CALL	DMSCR
 	POP	BC
-	JR	Next_0571
+	JR	ALI140
 
-Next_0572:	PUSH	HL
+ALI150:	PUSH	HL
 	LD	D,#00
 	DEC	HL
-Next_0573:	INC	HL
+ALI160:	INC	HL
 	LD	E,(HL)
 	PUSH	HL
 	LD	C,_CHKCHR
@@ -1837,49 +1846,49 @@ Next_0573:	INC	HL
 	RET	NZ
 	PUSH	BC
 	OR	E
-	JR	Z,Next_0574
+	JR	Z,ALI170
 	CALL	SEP?
-	JR	NZ,Next_0573
+	JR	NZ,ALI160
 	PUSH	HL
 	CALL	STRIP
 	POP	HL
 	LD	(HL),#00
-	JR	Z,Next_0574
+	JR	Z,ALI170
 	INC	HL
 	CALL	GETCH
 	EX	DE,HL
 	POP	HL
-	JP	SetAlias
+	JP	SETALIAS
 
-Next_0574:	POP	HL
-	LD	DE,BufEnvData
-	CALL	GetAlias
+ALI170:	POP	HL
+	LD	DE,ENVDATA
+	CALL	GETALIAS
 	JP	?DMSCR
 
-Next_0575:	LD	A,(HL)
+ALI180:	LD	A,(HL)
 	CP	"/"
-	JR	NZ,Next_0572
+	JR	NZ,ALI150
 	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"S"
-	JR	Z,Next_0577
+	JR	Z,ALI200
 	CP	"L"
-	JR	Z,Next_0582
+	JR	Z,ALI250
 	CP	"R"
-	JP	Z,Next_0583
+	JP	Z,ALI260
 	CP	"P"
-	JR	Z,Next_0576
+	JR	Z,ALI190
 	DEC	HL
-	JR	Next_0572
+	JR	ALI150
 
-Next_0576:	CALL	SETP
+ALI190:	CALL	SETP
 	INC	HL
 	CALL	GETCH
-	JR	NZ,Next_0572
-	JR	Next_0570
+	JR	NZ,ALI150
+	JR	ALI130
 
-Next_0577:	CALL	ParsePath
+ALI200:	CALL	PRSPATH
 	OR	A
 	RET	NZ
 	LD	BC,_CREATE
@@ -1887,27 +1896,27 @@ Next_0577:	CALL	ParsePath
 	RET	NZ
 	PUSH	BC
 	LD	C,_WRITE
-	LD	DE,Text_Alias
+	LD	DE,TALIAS$
 	LD	HL,#0C
 	CALL	BDOS
 	POP	BC
 	RET	NZ
 	PUSH	BC
-	CALL	SetPage2
-	CALL	GetAliasAdres
+	CALL	SETPG2
+	CALL	GETALIADDR
 	SET	7,H
-Next_0578:	LD	E,(HL)
+ALI210:	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
 	DEC	HL
 	LD	A,D
 	OR	E
-	JR	Z,Next_0579
+	JR	Z,ALI220
 	ADD	HL,DE
-	JR	Next_0578
+	JR	ALI210
 
-Next_0579:	PUSH	HL
-	CALL	GetAliasAdres
+ALI220:	PUSH	HL
+	CALL	GETALIADDR
 	SET	7,H
 	DEC	HL
 	DEC	HL
@@ -1919,21 +1928,21 @@ Next_0579:	PUSH	HL
 	POP	BC
 	PUSH	BC
 	LD	C,_WRITE
-Next_0580:	CALL	BDOS
+ALI230:	CALL	BDOS
 	LD	E,A
 	POP	BC
-Next_0581:	PUSH	DE
+ALI240:	PUSH	DE
 	LD	C,_CLOSE
 	CALL	BDOS
 	PUSH	AF
-	CALL	RestorePage2
+	CALL	RSTPG2
 	POP	AF
 	POP	DE
 	RET	NZ
 	LD	A,E
 	RET
 
-Next_0582:	CALL	ParsePath
+ALI250:	CALL	PRSPATH
 	OR	A
 	RET	NZ
 	LD	C,_OPEN
@@ -1941,46 +1950,46 @@ Next_0582:	CALL	ParsePath
 	RET	NZ
 	PUSH	BC
 	LD	C,_READ
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	LD	HL,#0C
 	CALL	BDOS
 	POP	BC
 	RET	NZ
 	PUSH	BC
-	LD	HL,BufEnvName
-	LD	BC,Text_Alias
+	LD	HL,ENVNAME
+	LD	BC,TALIAS$
 	CALL	STRCMP
 	POP	BC
 	LD	E,.IFNM
-	JR	NZ,Next_0581
+	JR	NZ,ALI240
 	PUSH	BC
-	CALL	SetPage2
+	CALL	SETPG2
 	POP	BC
 	PUSH	BC
-	LD	HL,(AliasAdres+#8000)
+	LD	HL,(ALIADDR+#8000)
 	SET	7,H
 	EX	DE,HL
-	LD	HL,(AliasEnd+#8000)
+	LD	HL,(ALIEND+#8000)
 	SET	7,H
 	OR	A
 	SBC	HL,DE
 	LD	C,_READ
-	JR	Next_0580
+	JR	ALI230
 
-Next_0583:	INC	HL
+ALI260:	INC	HL
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-	CALL	GetAliasAdres
+	CALL	GETALIADDR
 	XOR	A
-	CALL	Wr_Char
+	CALL	WRCHR
 	INC	HL
-	CALL	Wr_Char
+	CALL	WRCHR
 	RET
 
-Text_Alias:	DEFB	"Alias File",26,0
+TALIAS$:	DEFB	"Alias File",26,0
 
-ParsePath:	INC	HL
+PRSPATH:	INC	HL
 	CALL	GETCH
 	LD	A,.NOPAR
 	RET	Z
@@ -1993,7 +2002,7 @@ ParsePath:	INC	HL
 	EX	DE,HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0584
+	JR	Z,PRS80
 	CP	" "
 	LD	A,.IPATH
 	RET	NZ
@@ -2002,46 +2011,46 @@ ParsePath:	INC	HL
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-Next_0584:	XOR	A
+PRS80:	XOR	A
 	RET
 
-Cmd_History:	AND	(HL)
-	JP	Z,Next_0900
+@HISTORY:	AND	(HL)
+	JP	Z,HIS30
 	LD	A,(HL)
 	CP	"/"
-	JP	Z,Check_P
+	JP	Z,CHECKP
 	CALL	GET16
 	CALL	Z,GCHKEOL
 	RET	NZ
 	EX	DE,HL
-	LD	DE,(MaxBufferLeng)
-	CALL	Compare4
+	LD	DE,(MAXBUFLEN)
+	CALL	COMPARE4
 	LD	A,.BADNO
 	RET	NC
 	LD	DE,128
-	CALL	Compare4
+	CALL	COMPARE4
 	LD	A,.BADNO
 	RET	C
-	CALL	SetBufferLeng	; stel nieuwe bufferlengte in
-	LD	DE,BufferAdres	; start van buffer
+	CALL	SETBUFLEN	; stel nieuwe bufferlengte in
+	LD	DE,BUFADDR	; start van buffer
 	ADD	HL,DE	; tel lengte erbij
 	PUSH	HL	; dit is start van aliasbuffer
-	CALL	GetAliasAdres	; haal huidige aliasbuffer
+	CALL	GETALIADDR	; haal huidige aliasbuffer
 	POP	DE	; nieuw start adres
-	CALL	Compare4	; zijn die gelijk?
+	CALL	COMPARE4	; zijn die gelijk?
 	RET	Z	; ja, dan zijn we klaar
 	EX	AF,AF'                  ; bewaar vergelijking voor later
 	SET	7,H	; echte adres in geheugen
 	PUSH	HL	; bewaar dit
-	CALL	SetPage2	; schakel pagina 2 permanent in
-Next_0902:	LD	C,(HL)	; lengte van deze alias
+	CALL	SETPG2	; schakel pagina 2 permanent in
+HIS10:	LD	C,(HL)	; lengte van deze alias
 	INC	HL
 	LD	B,(HL)
 	DEC	HL
 	ADD	HL,BC	; tel bij adres op
 	LD	A,B	; is lengte nul?
 	OR	C
-	JR	NZ,Next_0902	; nee, dan volgende
+	JR	NZ,HIS10	; nee, dan volgende
 	INC	HL
 	INC	HL	; eind adres aliasbuffer
 	PUSH	HL	; bewaar dit in HL'
@@ -2057,8 +2066,8 @@ Next_0902:	LD	C,(HL)	; lengte van deze alias
 	EXX
 	PUSH	HL
 	EXX
-	CALL	GetBufferLeng	; haal lengte van buffer
-	LD	DE,BufferAdres	; startadres van buffer
+	CALL	GETBUFLEN	; haal lengte van buffer
+	LD	DE,BUFADDR	; startadres van buffer
 	ADD	HL,DE	; tel op
 	EX	DE,HL	; naar DE
 	PUSH	DE
@@ -2071,80 +2080,80 @@ Next_0902:	LD	C,(HL)	; lengte van deze alias
 	EXX
 	POP	HL	; startadres aliasbuffer terug
 	EX	AF,AF'                  ; resultaat van vergelijking
-	JR	C,Next_0905	; C betekent achteruit kopieren
+	JR	C,HIS20	; C betekent achteruit kopieren
 	PUSH	DE	; bewaar nieuwe startadres
 	SET	7,D	; maak echte adres
 	LDIR		; kopieer
-	CALL	RestorePage2	; zet pagina 2 terug
+	CALL	RSTPG2	; zet pagina 2 terug
 	POP	HL	; haal nieuwe startadres terug
-	CALL	SetAliasAdres	; en stel dit in
-	JR	Next_0903	; wis history buffer
+	CALL	SETALIADDR	; en stel dit in
+	JR	CHE10	; wis history buffer
 
-Next_0905:	EXX		; haal alternatieve registers
+HIS20:	EXX		; haal alternatieve registers
 	DEC	HL
 	DEC	DE
 	SET	7,D	; maak echte adres
 	LDDR		; en kopieer achteruit
-	CALL	GetBufferLeng	; lengte buffer
-	LD	DE,BufferAdres	; start buffer
+	CALL	GETBUFLEN	; lengte buffer
+	LD	DE,BUFADDR	; start buffer
 	ADD	HL,DE	; tel op
 	PUSH	HL	; bewaar start aliasbuffer
-	CALL	RestorePage2	; zet pagina 2 terug
+	CALL	RSTPG2	; zet pagina 2 terug
 	POP	HL	; haal terug
-	CALL	SetAliasAdres	; dit is nieuwe startadres aliasbuffer
-	JR	Next_0903	; wis history buffer
+	CALL	SETALIADDR	; dit is nieuwe startadres aliasbuffer
+	JR	CHE10	; wis history buffer
 
-Next_0900:	CALL	GetReadAdres
-	LD	(Value_L),HL
-	CALL	GetPutAdres
-	LD	DE,BufferAdres
-	CALL	Compare4
+HIS30:	CALL	GETRDADDR
+	LD	(VALUEL),HL
+	CALL	GETPUTADDR
+	LD	DE,BUFADDR
+	CALL	COMPARE4
 	RET	Z
-	CALL	SetReadAdres
-	CALL	Less
-	CALL	GetReadAdres
+	CALL	SETRDADDR
+	CALL	HISPREV
+	CALL	GETRDADDR
 	LD	D,H
 	LD	E,L
-Next_0585:	CALL	More
-	JR	NZ,Next_0587
-Next_0586:	CALL	GetReadAdres
-	CALL	Compare4
-	JR	NZ,Next_0585
-	LD	HL,(Value_L)
-	CALL	SetReadAdres
+HIS40:	CALL	HISNEXT
+	JR	NZ,HIS60
+HIS50:	CALL	GETRDADDR
+	CALL	COMPARE4
+	JR	NZ,HIS40
+	LD	HL,(VALUEL)
+	CALL	SETRDADDR
 	XOR	A
 	RET
 
-Next_0587:	CALL	Z,LPrint
-	JR	Z,Next_0586
-	CALL	PrintChar
-	CALL	More
-	JR	Next_0587
+HIS60:	CALL	Z,LPRINT
+	JR	Z,HIS50
+	CALL	PRCHAR
+	CALL	HISNEXT
+	JR	HIS60
 
-Check_P:	INC	HL
+CHECKP:	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	CP	"D"
-	JR	Z,Check_D
+	JR	Z,CHECKD
 	CP	"P"
 	LD	A,.IOPT
 	RET	NZ
 	INC	HL
 	CALL	SETP
 	CALL	GETCH
-	JR	Z,Next_0900
+	JR	Z,HIS30
 	LD	A,.INP
 	RET
 
-Check_D:	INC	HL
+CHECKD:	INC	HL
 	CALL	GETCH
 	LD	A,.INP
 	RET	NZ
-Next_0903:	LD	HL,BufferAdres
-	CALL	SetPutAdres
-	CALL	SetReadAdres
+CHE10:	LD	HL,BUFADDR
+	CALL	SETPUTADDR
+	CALL	SETRDADDR
 	DEC	HL
-	CALL	SetEndAdres
+	CALL	SETENDADDR
 	XOR	A
 	RET
 
@@ -2175,25 +2184,25 @@ TIM2:	ADD	A,A
 	RL	H
 	DJNZ	TIM2
 	LD	C,H
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	LD	(HL),A
 	INC	HL
 	LD	(HL),C
-	LD	IX,BufEnvName+2
+	LD	IX,ENVNAME+2
 	PUSH	IX
 	CALL	DTIME
 	POP	DE
 	POP	BC
 	PUSH	AF
-	CALL	PrintString
+	CALL	PRTSTR
 	LD	A,":"
-	CALL	PrintChar
+	CALL	PRCHAR
 	LD	A,B
 	LD	D,#FF
 	CALL	DDT
 	POP	AF
 	CP	" "
-	CALL	NZ,PrintChar
+	CALL	NZ,PRCHAR
 	LD	A,#0E
 	CALL	DMESSCR
 NEWTIM:	LD	A,#26	; Print 'Enter new time:'.
@@ -2243,14 +2252,14 @@ TIM35:	CALL	GETCH	; Strip spaces etc.
 	EXX
 	JR	Z,SETIME	; Set new time if yes.
 	DEFB	#3E	; Else give error.
-Next_0191:	POP	AF
+TIM70:	POP	AF
 BADTIM:	LD	B,.ITIME
 	JR	TIM60	; Print error & re-prompt.
 
 TIM40:	PUSH	AF
 	INC	HL
 	CALL	GETCH
-	JR	NZ,Next_0191
+	JR	NZ,TIM70
 	POP	AF
 	EXX
 	LD	B,#0C
@@ -2274,15 +2283,15 @@ SETIME:	LD	C,_STIME
 	AND	.ITIME	; 0 => OK, else .ITIME => invalid time.
 	RET	Z	; Return if no error.
 	LD	B,A	; B=error code.
-TIM60:	LD	DE,BufEnvName	; Get message into BUFF2.
+TIM60:	LD	DE,ENVNAME	; Get message into BUFF2.
 	LD	C,_EXPLAIN
 	CALL	BDOS
 	PUSH	DE	; Save message ptr.
-	CALL	LPrint	; New line & '***'.
+	CALL	LPRINT	; New line & '***'.
 	LD	A,#0D
 	CALL	DMESS
 	POP	DE
-	CALL	PrintString	; Print actual message.
+	CALL	PRTSTR	; Print actual message.
 	LD	A,#0E	; Followed by message after error.
 	CALL	DMESSCR
 	JP	NEWTIM	; Prompt & input for another date.
@@ -2300,12 +2309,12 @@ TIM60:	LD	DE,BufEnvName	; Get message into BUFF2.
 	POP	HL
 	LD	L,A	; HL -> message in KBDOS ROM.
 	SCF	; Skip printing first time round.
-VER10:	CALL	NC,PrintChar	; Print character from message.
+VER10:	CALL	NC,PRCHAR	; Print character from message.
 	CALL	_RDSLT	; Read a character from the message.
 	INC	HL
 	OR	A
 	JR	NZ,VER10	; Go with character and NC if not end.
-	CALL	LPrint
+	CALL	LPRINT
 	LD	HL,(#01)	; Get pointer to MSXDOS.SYS's message.
 	LD	DE,#30
 	ADD	HL,DE
@@ -2317,7 +2326,7 @@ VER10:	CALL	NC,PrintChar	; Print character from message.
 	JP	DMSCR
 
 _RDSLT:	LD	A,(#F348)
-ReadSlot:	EX	DE,HL
+RDSLOT:	EX	DE,HL
 	PUSH	DE
 	LD	HL,#00
 	ADD	HL,SP
@@ -2341,11 +2350,11 @@ VERMSG:	DEFB	"COMMAND2.COM version 2.41",13,10
 	JR	NZ,SETVFY	; Go & set verify if parameters given.
 	LD	C,_GETVFY	; Else get & print verify state.
 	CALL	BDOS
-	LD	HL,Adres_OFF+1	; Assume disabled.
+	LD	HL,OFFWORD$+1	; Assume disabled.
 	INC	B
 	DEC	B	; 0 => disabled, else enabled.
 	JR	Z,GOTVFY
-	LD	HL,Adres_ON+1
+	LD	HL,ONWORD$+1
 GOTVFY:	LD	A,#28	; Print 'VERIFY='.
 	CALL	DMESS
 	EX	DE,HL	; DE -> ON/OFF string.
@@ -2353,7 +2362,7 @@ GOTVFY:	LD	A,#28	; Print 'VERIFY='.
 
 SETVFY:	EX	DE,HL	; DE -> parameter.
 	DEC	DE	; Pretend DE -> length byte.
-	LD	HL,Adres_ON	; Check for ON.
+	LD	HL,ONWORD$	; Check for ON.
 	LD	B,(HL)	; Length of 'ON'.
 	LD	C,#FF	; NZ => ON.
 	CALL	COMPARE
@@ -2379,36 +2388,36 @@ VFY10:	INC	DE
 	LD	C,_VERIFY
 	JP	BDOS
 
-Cmd_Dskchk:	AND	(HL)
-	JR	NZ,Next_0589
+@DSKCHK:	AND	(HL)
+	JR	NZ,DSK20
 	LD	C,_DSKCHK
 	XOR	A
 	CALL	BDOS
-	LD	HL,Adres_ON+1
+	LD	HL,ONWORD$+1
 	INC	B
 	DEC	B
-	JR	Z,Next_0588
-	LD	HL,Adres_OFF+1
-Next_0588:	LD	A,#47
+	JR	Z,DSK10
+	LD	HL,OFFWORD$+1
+DSK10:	LD	A,#47
 	CALL	DMESS
 	EX	DE,HL
 	JP	DMSCR
 
-Next_0589:	EX	DE,HL
+DSK20:	EX	DE,HL
 	DEC	DE
-	LD	HL,Adres_ON
+	LD	HL,ONWORD$
 	LD	B,(HL)
 	LD	C,#00
 	CALL	COMPARE
-	JR	NC,Next_0590
+	JR	NC,DSK30
 	INC	B
 	DEC	C
 	INC	HL
 	CALL	C,COMPARE
 	LD	A,.IPARM
 	RET	C
-Next_0590:	INC	DE
-	DJNZ	Next_0590
+DSK30:	INC	DE
+	DJNZ	DSK30
 	INC	DE
 	EX	DE,HL
 	LD	A,(HL)

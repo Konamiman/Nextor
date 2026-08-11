@@ -1,11 +1,17 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	The command loop
+;******************************************************************************
 ;
-; COMMAND2.COM - Main loop, prompt, alias expansion, command separators, %-expansion, redirection, piping, command execution dispatch, transient program loading, command search
+;        The main command loop: prompting, reading and expanding the command
+; line (aliases, %-variables and %-parameters), command separators, I/O
+; redirection and piping, and dispatching to internal commands and to
+; .COM, .BAT and .BTM files.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
+;******************************************************************************
 CLI:	LD	HL,#80
 	LD	C,(HL)
 	LD	B,#00
@@ -14,11 +20,11 @@ CLI:	LD	HL,#80
 	LD	(HL),B
 	SBC	HL,BC
 	CALL	GETCH
-	LD	(ComlinChar1),A
-	LD	(ComlinChar2),A
+	LD	(CMDCHR1),A
+	LD	(CMDCHR2),A
 	EXX
 	LD	HL,TEMPFN
-	LD	DE,PipeFileName
+	LD	DE,PIPEFN
 	LD	BC,#07
 	LDIR
 	LD	A,R
@@ -29,24 +35,24 @@ CLI:	LD	HL,#80
 	LD	C,#04
 	LDIR
 	XOR	A
-	LD	(ID_Redir),A
-	LD	(ID_Pipelin),A
-	LD	(InputHandle),A
-	LD	(OutputHandle),A
-	LD	(ExtraCRLF),A
+	LD	(REDIRID),A
+	LD	(PIPEID),A
+	LD	(INHNDL),A
+	LD	(OUTHNDL),A
+	LD	(XTRACRLF),A
 	LD	L,A
 	LD	H,A
-	LD	(PipeAdres),HL
-	LD	(NextAdres),HL
+	LD	(PIPEADDR),HL
+	LD	(NEXTADDR),HL
 	DEC	A
-	LD	(BatchHandle),A
-	LD	(StringCode),A
-	LD	HL,Null
-	LD	(LineAdres),HL
-	LD	HL,GosubList
-	LD	(GosubAdres),HL
-	LD	HL,IffList
-	LD	(IffAdres),HL
+	LD	(BATHNDL),A
+	LD	(STRCODE),A
+	LD	HL,CMDTEND
+	LD	(LINEADDR),HL
+	LD	HL,GOSUBLIST
+	LD	(GOSUBADDR),HL
+	LD	HL,IFFLIST
+	LD	(IFFADDR),HL
 	LD	D,H
 	LD	E,L
 	INC	DE
@@ -56,7 +62,7 @@ CLI:	LD	HL,#80
 	LD	DE,CLI_ABORT
 	LD	C,_DEFAB
 	CALL	BDOS
-Next_0026:	LD	IY,RedirState
+CLI10:	LD	IY,REDIRST
 	LD	(IY+#0E),#00
 	LD	(IY+#10),#00
 	LD	(IY+#00),#00
@@ -65,52 +71,52 @@ Next_0026:	LD	IY,RedirState
 	LD	C,_CURDRV
 	CALL	BDOS
 	INC	A
-	LD	(CurrentDrive),A
-	LD	DE,(PipeAdres)
+	LD	(CURDRIVE),A
+	LD	DE,(PIPEADDR)
 	LD	A,D
 	OR	E
 	JP	NZ,REPIPE
-	LD	DE,(NextAdres)
+	LD	DE,(NEXTADDR)
 	LD	A,D
 	OR	E
-	JP	NZ,Next_0403
+	JP	NZ,CMD10
 	LD	HL,REDIR$
 	CALL	OFF?
 	CCF
 	SBC	A,A
-	LD	(RedirState),A
-	LD	HL,Env_Alias
+	LD	(REDIRST),A
+	LD	HL,ALIAS$
 	CALL	OFF?
 	CCF
 	SBC	A,A
-	LD	(AliasState),A
-	LD	HL,Env_Separ
+	LD	(ALISTATE),A
+	LD	HL,SEPAR$
 	CALL	OFF?
 	CCF
 	SBC	A,A
-	LD	(SeparState),A
+	LD	(SEPSTATE),A
 	EXX
 	LD	A,(HL)
 	OR	A
 	JP	NZ,CMD
-	LD	A,(BatchHandle)
+	LD	A,(BATHNDL)
 	INC	A
 	JR	Z,NOBAT
-	LD	HL,ErrorCode
+	LD	HL,ERRCODE
 	LD	A,(HL)
 	LD	(HL),#00
 	OR	A
 	JR	Z,NOTEND
 	PUSH	AF
-	LD	A,(ID_Redir2)
-	LD	(ID_Redir),A
-	LD	HL,Null
-	LD	(LineAdres),HL
+	LD	A,(REDIRID2)
+	LD	(REDIRID),A
+	LD	HL,CMDTEND
+	LD	(LINEADDR),HL
 	LD	A,#FF
-	LD	(BatchHandle),A
-	LD	A,(BatchPage)
+	LD	(BATHNDL),A
+	LD	A,(BATPAGE)
 	OR	A
-	CALL	NZ,ReleaseBTM
+	CALL	NZ,FREEBTM
 	POP	AF
 	CP	.OKCMD
 	JR	NZ,JERROR
@@ -118,72 +124,72 @@ Next_0026:	LD	IY,RedirState
 JERROR:	JP	ERROR
 
 NOTEND:	CALL	ECHO?	; Batch file ECHO ON ?
-	JR	C,Next_0033	; Go & read command if not.
+	JR	C,PRO20	; Go & read command if not.
 	SCF
 	JR	PROMPT	; Else print prompt & get command.
 
-NOBAT:	LD	A,(ComlinChar2)	; If EXITF is NZ, then exit COMMAND.COM
+NOBAT:	LD	A,(CMDCHR2)	; If EXITF is NZ, then exit COMMAND.COM
 	OR	A	;   with the error code from the last
 	JR	Z,PROMPT	;   command, which is in ERR (NC).
-	LD	A,(AbortError)	; If no error, then return .OKCMD,
+	LD	A,(ABORTERR)	; If no error, then return .OKCMD,
 	OR	A	;   which does not produce an error
 	JR	NZ,JEXIT	;   but which is used by MSX-DOS.SYS to
 	LD	A,.OKCMD	;   prevent a spurious re-load of
 JEXIT:	JP	EXIT
 
 PROMPT:	PUSH	AF
-	LD	HL,ExtraCRLF
+	LD	HL,XTRACRLF
 	XOR	A
 	CP	(HL)
 	LD	(HL),A
-	CALL	NZ,LPrint
+	CALL	NZ,LPRINT
 	LD	HL,PROMPT$
 	CALL	GENV2
 	LD	A,(DE)
 	OR	A
-	JR	NZ,Next_0032
-	LD	HL,Data_Prompt
+	JR	NZ,PRO10
+	LD	HL,DPROMPT$
 	LD	BC,8
 	PUSH	DE
 	LDIR
 	POP	DE
-Next_0032:	LD	HL,Buffer1
-	LD	IX,BufExtra3
+PRO10:	LD	HL,BUFFER1
+	LD	IX,XBUF3
 	LD	(IX),#00
-	CALL	ParseLine
+	CALL	REPLACE
 	EX	DE,HL
 	INC	DE
-	CALL	PrintString
+	CALL	PRTSTR
 	POP	AF
 	JR	NC,GETCON
-Next_0033:	CALL	INBAT
-	JR	C,Next_0033
+PRO20:	CALL	INBAT
+	JR	C,PRO20
 	JR	Z,GOTBAT
 	CP	.EOF
 	JR	Z,BATEOF
 	PUSH	AF
-	CALL	LPrint
+	CALL	LPRINT
 	POP	AF
 	JP	ERROR
 
 BATEOF:	LD	A,.OKCMD	; OKCMD => return no error.
-GOTBAT:	LD	(ErrorCode),A
+GOTBAT:	LD	(ERRCODE),A
 	SCF	; Skip console read.
 GETCON:	CALL	NC,INLI	; Read from console if not batch file.
 	INC	HL
 CMD:	EX	DE,HL
-	CALL	Aliasing
+	CALL	ALIASING
 	JP	NZ,ERROR
-Next_0403:	CALL	MultiComm
-	LD	HL,Buffer1
-	LD	IX,BufExtra3
+CMD10:	CALL	MULTICMD
+	LD	HL,BUFFER1
+	LD	IX,XBUF3
 	LD	(IX),#00
-	CALL	ParseLine
+	CALL	REPLACE
 	JR	NZ,ERROR
 	EX	DE,HL
 	INC	DE
 	PUSH	DE
-	LD	A,(BatchHandle)
+	LD	A,(BATHNDL)
 	INC	A
 	SCF
 	CALL	NZ,ECHO?
@@ -193,74 +199,74 @@ Next_0403:	CALL	MultiComm
 	POP	DE
 	JR	NZ,ERROR
 	LD	A,B
-	LD	(ID_Redir),A
-	LD	HL,Buffer2
+	LD	(REDIRID),A
+	LD	HL,BUFFER2
 	CALL	REDIRECT
 	JR	NZ,ERROR
 	EX	DE,HL
 	INC	DE
 	XOR	A
-	LD	(InputHandle),A
-	LD	(OutputHandle),A
+	LD	(INHNDL),A
+	LD	(OUTHNDL),A
 	LD	H,A
 	LD	L,A
-	LD	(PipeAdres),HL
+	LD	(PIPEADDR),HL
 REPIPE:	PUSH	DE
 	CALL	PIPE
 	POP	HL
 	JR	NZ,ERROR
 	PUSH	HL
-	CALL	RemoveQuote
+	CALL	UNQUOTE
 	POP	HL
 	CALL	DO_CMD
 	CP	.BADCM
 	JR	NZ,ERROR
-	LD	HL,Txt_Unknown
-	LD	DE,BufEnvData
-	CALL	GetAlias
+	LD	HL,UNKCMD$
+	LD	DE,ENVDATA
+	CALL	GETALIAS
 	JR	NZ,ERROR
 	LD	A,(DE)
 	OR	A
-	JR	NZ,Next_0403
+	JR	NZ,CMD10
 	LD	A,.BADCM
 	JR	ERROR
 
-Txt_Unknown:	DEFB	"UNKNOWN_CMD",0
+UNKCMD$:	DEFB	"UNKNOWN_CMD",0
 
 CLI_ABORT:	CP	.INERR	; Error on standard input ?
-	JR	Z,Next_0039	; Go if yes.
+	JR	Z,CLI20	; Go if yes.
 	CP	.OUTERR	; Error on standard output ?
 	JR	NZ,ERROR	; Give error if not.
 	LD	A,#3D	; Error type = output error.
 	DEFB	#21
-Next_0039:	LD	A,#3C
-	LD	(StringCode),A
-	LD	A,(ID_Redir)	; If not forked, then exit with error
+CLI20:	LD	A,#3C
+	LD	(STRCODE),A
+	LD	A,(REDIRID)	; If not forked, then exit with error
 	OR	A	;   code since there's no way of recov-
 	LD	A,B	;   ering from this situation.
 	JP	Z,EXIT	; Else give error.
-ERROR:	LD	SP,BootStrap	; Set up SP again in case an abort.
-	LD	(AbortError),A	; Save error for terminating COMMAND2.
+ERROR:	LD	SP,BOOTSTRAP	; Set up SP again in case an abort.
+	LD	(ABORTERR),A	; Save error for terminating COMMAND2.
 	LD	B,A	; B=error code.
 	PUSH	BC	; Save it for later.
-	LD	DE,BufEnvName	; DE -> buffer to get message into.
+	LD	DE,ENVNAME	; DE -> buffer to get message into.
 	CP	" "	; User error ?
-	JR	C,Next_0041	; Go if yes (no message required).
+	JR	C,ERR10	; Go if yes (no message required).
 	CP	.OKCMD	; Means command executed OK from
-	JR	Z,Next_0041	;   COMMAND, so no msg for this either.
+	JR	Z,ERR10	;   COMMAND, so no msg for this either.
 	CP	#80	; Means 'Y' response from 'Terminate
-	JR	Z,Next_0041	;   batch file ?' so no message.
+	JR	Z,ERR10	;   batch file ?' so no message.
 	LD	C,_EXPLAIN	; Get message to (DE) from system.
 	CALL	BDOS
 	DEFB	#21
-Next_0041:	XOR	A
+ERR10:	XOR	A
 	LD	(DE),A
 	LD	BC,#FF5F	; Flush buffers for all drives.
 	LD	D,#00	; Flush but don't invalidate.
 	CALL	BDOS	;   (error ignored)
 	POP	BC	; B=error code.
 	LD	C,B	; And C.
-	LD	HL,ComlinChar1
+	LD	HL,CMDCHR1
 	LD	A,(HL)	; Suppress error message (<>0 => yes) ?
 	LD	(HL),#00	;   (reset again for next time round)
 	OR	A
@@ -278,20 +284,20 @@ Next_0041:	XOR	A
 	CP	.ABORT	; Extra CR,LF if command aborted, but
 	JR	Z,NABERR	;   not if .ABORT or if .BADCMD.
 	CP	.BADCM
-	CALL	NZ,LPrint
-NABERR:	LD	A,(BufEnvName)
+	CALL	NZ,LPRINT
+NABERR:	LD	A,(ENVNAME)
 	OR	A	; Message given ?
 	JR	Z,TSTBAT	; Go if not.
-	CALL	LPrint	; CR, LF before error message.
+	CALL	LPRINT	; CR, LF before error message.
 	LD	A,#0D	; Three stars before message.
 	CALL	DMESS
-	LD	A,(StringCode)	; Get error type.
+	LD	A,(STRCODE)	; Get error type.
 	ADD	A,#01	; Print type message if not FF.
 	DEC	A
 	PUSH	AF
 	CALL	NC,DMESS
-	LD	DE,BufEnvName
-	CALL	PrintString	; Print actual error message.
+	LD	DE,ENVNAME
+	CALL	PRTSTR	; Print actual error message.
 	LD	A,#0E	; Followed by message after error.
 	CALL	DMESSCR
 	POP	AF
@@ -310,24 +316,24 @@ NOPIPE:	CALL	DELPIPE
 TBF:	LD	BC,_REDIR	; Turn off redirection to
 	LD	A,#01	;   do 'Terminate batch file'
 	CALL	BDOS	;   prompting.
-	LD	A,(BatchHandle)
+	LD	A,(BATHNDL)
 	INC	A
 	LD	A,#36	; Prompt 'Terminate batch file (Y/N)?'
 	CALL	NZ,YN	;   and get response if in batch file.
 	JR	Z,NABORT	; Don't abort if response was 'N'.
-ENDBAT:	LD	HL,ErrorCode	; BATEND=NZ => end batch file, if any.
+ENDBAT:	LD	HL,ERRCODE	; BATEND=NZ => end batch file, if any.
 	LD	(HL),#80	; Error for 'batch file terminated'.
 NABORT:	LD	A,#3A	; Set error type to piping error.
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	CALL	UNPIPE	; Tidy up if command was piped.
 	JP	NZ,ERROR
 	DEC	A	; Clear ERRTYPE.
-	LD	(StringCode),A
-	LD	DE,(PipeAdres)
+	LD	(STRCODE),A
+	LD	DE,(PIPEADDR)
 	LD	A,D	; Another command in pipe to execute ?
 	OR	E
 	JR	NZ,DONE	; Execute it if yes.
-	LD	HL,ID_Redir	; If forked, then do a join to cancel
+	LD	HL,REDIRID	; If forked, then do a join to cancel
 	LD	B,(HL)	;   redirection.
 	XOR	A
 	LD	(HL),A	; 0 => not forked.
@@ -335,9 +341,9 @@ NABORT:	LD	A,#3A	; Set error type to piping error.
 	LD	C,_JOIN
 	CALL	NZ,BDOS	; Join, and give error if any (should
 	JP	NZ,ERROR	;   not normally occur).
-	LD	HL,Null	; No command to execute.
+	LD	HL,CMDTEND	; No command to execute.
 	EXX
-DONE:	JP	Next_0026
+DONE:	JP	CLI10
 
 ABORT?:	CP	.ABORT	; Return Z if command abort error.
 	RET	Z
@@ -345,7 +351,7 @@ ABORT?:	CP	.ABORT	; Return Z if command abort error.
 	RET	Z
 	CP	.CTRLC
 	RET	Z
-	LD	A,(StringCode)	; Get error type.
+	LD	A,(STRCODE)	; Get error type.
 	CP	#3C	; If an input or output error then
 	RET	Z	;   command was aborted.
 	CP	#3D
@@ -358,200 +364,200 @@ ABRT:	POP	HL
 	LD	A,#FF
 	RET
 
-Aliasing:	PUSH	DE
+ALIASING:	PUSH	DE
 	XOR	A
 	BIT	7,(IY+#29)
-	JP	NZ,Next_0413
-Next_0404:	LD	A,(DE)
+	JP	NZ,ALI100
+ALI10:	LD	A,(DE)
 	INC	DE
 	CP	" "
-	JR	Z,Next_0404
+	JR	Z,ALI10
 	CP	"^"
-	JR	Z,Next_0404
+	JR	Z,ALI10
 	DEC	DE
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	PUSH	DE
 	LD	A,(DE)
 	CP	"@"
-	JR	NZ,Next_0406
+	JR	NZ,ALI30
 	LD	L,E
 	LD	H,D
-Next_0405:	INC	HL
+ALI20:	INC	HL
 	LD	A,(HL)
 	LD	(DE),A
 	INC	DE
 	OR	A
-	JR	NZ,Next_0405
+	JR	NZ,ALI20
 	POP	DE
 	LD	C,#00
-	JR	Next_0412
+	JR	ALI90
 
-Next_0406:	LD	(HL),A
+ALI30:	LD	(HL),A
 	INC	HL
 	INC	DE
 	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0407
+	JR	Z,ALI40
 	CP	"^"
-	JR	NZ,Next_0406
-Next_0407:	LD	(HL),#00
+	JR	NZ,ALI30
+ALI40:	LD	(HL),#00
 	EX	DE,HL
 	CALL	GETCH
 	PUSH	HL
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	PUSH	HL
 	DEC	HL
-Next_0408:	INC	HL
+ALI50:	INC	HL
 	LD	A,(HL)
-	CALL	MakeUpper
+	CALL	MKUPPER
 	LD	(HL),A
 	OR	A
-	JR	Z,Next_0409
+	JR	Z,ALI60
 	CP	" "
-	JR	Z,Next_0409
+	JR	Z,ALI60
 	CP	"/"
-	JR	NZ,Next_0408
-Next_0409:	LD	A,(HL)
+	JR	NZ,ALI50
+ALI60:	LD	A,(HL)
 	LD	(HL),#00
 	LD	B,H
 	LD	C,L
 	POP	HL
 	PUSH	AF
 	PUSH	BC
-	LD	DE,BufExtra
-	CALL	GetAlias
+	LD	DE,XBUF1
+	CALL	GETALIAS
 	POP	BC
 	POP	AF
 	LD	(BC),A
-	LD	HL,(LineAdres)
+	LD	HL,(LINEADDR)
 	LD	(FIB2+1),HL
-	LD	HL,BufEnvName
-	LD	(LineAdres),HL
-	LD	HL,BufExtra2
-	CALL	ParseLine
+	LD	HL,ENVNAME
+	LD	(LINEADDR),HL
+	LD	HL,XBUF2
+	CALL	REPLACE
 	LD	HL,(FIB2+1)
-	LD	(LineAdres),HL
+	LD	(LINEADDR),HL
 	POP	HL
-	LD	A,(BufExtra)
+	LD	A,(XBUF1)
 	POP	DE
 	LD	C,#00
 	OR	A
-	JR	Z,Next_0412
+	JR	Z,ALI90
 	PUSH	DE
-	CALL	NCopy
+	CALL	NCOPY
 	POP	HL
 	PUSH	HL
-	LD	DE,BufExtra2
+	LD	DE,XBUF2
 	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0411
+	JR	Z,ALI80
 	INC	DE
-Next_0410:	LD	A,(DE)
+ALI70:	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0411
+	JR	Z,ALI80
 	LD	C,A
-	CALL	InsertByte
+	CALL	INSBYTE
 	INC	HL
 	INC	DE
-	JR	Next_0410
+	JR	ALI70
 
-Next_0411:	LD	C,_CONST
+ALI80:	LD	C,_CONST
 	CALL	BDOS
 	POP	DE
-	JP	Next_0404
+	JP	ALI10
 
-Next_0412:	CALL	RDCHAR
-	JR	Z,Next_0413
-	JR	C,Next_0412
+ALI90:	CALL	RDCHAR
+	JR	Z,ALI100
+	JR	C,ALI90
 	CP	"^"
-	JR	NZ,Next_0412
-	JP	Next_0404
+	JR	NZ,ALI90
+	JP	ALI10
 
-Next_0413:	LD	B,A
-	LD	DE,LineBuffer
+ALI100:	LD	B,A
+	LD	DE,LINEBUF
 	POP	HL
-Next_0414:	LD	A,(HL)
+ALI110:	LD	A,(HL)
 	LD	(DE),A
 	OR	A
-	JR	Z,Next_0415
+	JR	Z,ALI120
 	INC	HL
 	INC	DE
 	DEC	B
-	JR	NZ,Next_0414
+	JR	NZ,ALI110
 	LD	A,.BUFUL
 	RET
 
-Next_0415:	LD	DE,LineBuffer
+ALI120:	LD	DE,LINEBUF
 	XOR	A
 	RET
 
-MultiComm:	PUSH	DE
+MULTICMD:	PUSH	DE
 	XOR	A
 	BIT	7,(IY+#2A)
-	JR	NZ,Next_0417
+	JR	NZ,MUL20
 	LD	C,#00
-Next_0416:	CALL	RDCHAR
-	JR	Z,Next_0417
-	JR	C,Next_0416
+MUL10:	CALL	RDCHAR
+	JR	Z,MUL20
+	JR	C,MUL10
 	CP	"^"
-	JR	NZ,Next_0416
+	JR	NZ,MUL10
 	EX	DE,HL
 	DEC	HL
 	LD	(HL),#00
 	INC	HL
 	CALL	GETCH
-	JR	NZ,Next_0418
-Next_0417:	LD	H,A
+	JR	NZ,MUL30
+MUL20:	LD	H,A
 	LD	L,A
-Next_0418:	LD	(NextAdres),HL
+MUL30:	LD	(NEXTADDR),HL
 	POP	DE
 	RET
 
-RemoveQuote:	LD	A,(HL)
+UNQUOTE:	LD	A,(HL)
 	INC	HL
 	OR	A
 	RET	Z
 	CP	#22
-	JR	Z,Next_0419
+	JR	Z,UNQ10
 	CP	"'"
-	JR	NZ,RemoveQuote
-Next_0419:	LD	B,A
+	JR	NZ,UNQUOTE
+UNQ10:	LD	B,A
 	LD	D,H
 	LD	E,L
 	DEC	DE
-Next_0420:	LD	A,(HL)
+UNQ20:	LD	A,(HL)
 	CP	B
-	JR	Z,Next_0421
+	JR	Z,UNQ30
 	LD	(DE),A
 	OR	A
 	RET	Z
 	INC	HL
 	INC	DE
-	JR	Next_0420
+	JR	UNQ20
 
-Next_0421:	PUSH	HL
-Next_0422:	INC	HL
+UNQ30:	PUSH	HL
+UNQ40:	INC	HL
 	LD	A,(HL)
 	LD	(DE),A
 	INC	DE
 	OR	A
-	JR	NZ,Next_0422
+	JR	NZ,UNQ40
 	POP	HL
 	DEC	HL
-	JR	RemoveQuote
+	JR	UNQUOTE
 
-ParseLine:	XOR	A
+REPLACE:	XOR	A
 	LD	(HL),A
 	LD	C,A
 	LD	(FIB2),A
-Next_0050:	CALL	RDCHAR
+REP10:	CALL	RDCHAR
 	JP	C,RP30
 	CP	"%"
 	JP	NZ,RP30
 	LD	A,(DE)
 	INC	DE
 	CP	"&"
-	JR	Z,Next_0423
+	JR	Z,REP20
 	CP	"0"
 	JR	C,RP20
 	CP	"9"+1
@@ -562,7 +568,7 @@ Next_0050:	CALL	RDCHAR
 	PUSH	DE
 	EX	DE,HL
 	CALL	GET8
-	JR	Z,Next_0424
+	JR	Z,REP30
 	POP	DE
 	POP	HL
 	POP	BC
@@ -570,14 +576,14 @@ Next_0050:	CALL	RDCHAR
 	INC	DE
 	JR	RP20
 
-Next_0423:	PUSH	BC
+REP20:	PUSH	BC
 	PUSH	HL
 	PUSH	DE
 	EX	DE,HL
 	LD	A,#FF
 	LD	(FIB2),A
 	LD	E,#01
-Next_0424:	LD	A,E
+REP30:	LD	A,E
 	INC	A
 	POP	DE
 	EX	DE,HL
@@ -587,17 +593,17 @@ Next_0424:	LD	A,E
 	PUSH	AF
 	LD	A,(DE)
 	CP	"&"
-	JR	NZ,Next_0425
+	JR	NZ,REP40
 	LD	A,#FF
 	LD	(FIB2),A
 	INC	DE
-Next_0425:	POP	AF
+REP40:	POP	AF
 	PUSH	DE
 	CALL	EXPAND
 	POP	DE
 	POP	BC
 	RET	NZ
-	JR	Next_0050
+	JR	REP10
 
 RP20:	CP	"%"
 	JP	Z,RP30
@@ -605,43 +611,43 @@ RP20:	CP	"%"
 	PUSH	BC
 	PUSH	HL
 	XOR	A
-	LD	(BufEnvName),A
+	LD	(ENVNAME),A
 	LD	L,E
 	LD	H,D
 	PUSH	DE
 	LD	D,#00
-Next_0426:	LD	A,(HL)
+RPC10:	LD	A,(HL)
 	INC	HL
 	OR	A
-	JR	Z,Next_0430
+	JR	Z,RPC50
 	CP	"["
-	JR	NZ,Next_0427
+	JR	NZ,RPC20
 	INC	D
-Next_0427:	CP	"]"
-	JR	NZ,Next_0428
+RPC20:	CP	"]"
+	JR	NZ,RPC30
 	DEC	D
-Next_0428:	INC	D
+RPC30:	INC	D
 	DEC	D
-	JR	NZ,Next_0426
+	JR	NZ,RPC10
 	CP	"%"
-	JR	NZ,Next_0426
+	JR	NZ,RPC10
 	POP	DE
 	PUSH	HL
 	PUSH	DE
 	DEC	HL
 	LD	(HL),#00
 	EX	DE,HL
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	LD	A,(HL)
 	CP	"_"
-	JP	Z,Next_0431
+	JP	Z,RPC60
 	CP	"@"
-	JP	Z,Next_0435
+	JP	Z,RPC100
 	LD	BC,#FF6B
 	CALL	BDOS
 	JR	NZ,RP28
 	PUSH	IX
-Next_0429:	POP	IX
+RPC40:	POP	IX
 	POP	HL
 	POP	HL
 	EX	(SP),HL
@@ -653,9 +659,9 @@ RP22:	LD	A,(DE)
 RP23:	POP	DE
 	POP	BC
 	RET	NZ
-	JP	Next_0050
+	JP	REP10
 
-Next_0430:	POP	DE
+RPC50:	POP	DE
 	JR	RP29
 
 RP28:	POP	DE
@@ -668,69 +674,69 @@ RP29:	POP	HL
 	INC	DE
 RP30:	CALL	WRCHAR
 	RET	NZ
-	JP	C,Next_0050
+	JP	C,REP10
 	RET
 
-Next_0431:	EX	DE,HL
+RPC60:	EX	DE,HL
 	PUSH	DE
 	LD	B,#FF
-Next_0432:	INC	DE
+RPC70:	INC	DE
 	INC	B
 	LD	A,(DE)
 	OR	A
-	JR	NZ,Next_0432
+	JR	NZ,RPC70
 	POP	DE
-	LD	HL,Internals-2
+	LD	HL,IVTAB-2
 	XOR	A
-Next_0433:	JR	NZ,Next_0434
+RPC80:	JR	NZ,RPC90
 	INC	HL
 	INC	HL
 	LD	A,(HL)
 	OR	A
-	JR	Z,Next_0434
+	JR	Z,RPC90
 	CALL	COMPARE
-	JR	C,Next_0433
+	JR	C,RPC80
 	LD	A,(HL)
 	INC	HL
 	LD	H,(HL)
 	LD	L,A
 	PUSH	IX
-	LD	DE,Next_0429
+	LD	DE,RPC40
 	PUSH	DE
 	PUSH	HL
 	XOR	A
 	RET
 
-Next_0434:	LD	DE,Null
+RPC90:	LD	DE,CMDTEND
 	PUSH	IX
-	JP	Next_0429
+	JP	RPC40
 
-Next_0435:	EX	DE,HL
+RPC100:	EX	DE,HL
 	PUSH	DE
 	LD	B,#FF
-Next_0436:	INC	DE
+RPC110:	INC	DE
 	INC	B
 	LD	A,(DE)
 	OR	A
-	JP	Z,Next_0441
+	JP	Z,RPC160
 	CP	"["
-	JR	NZ,Next_0436
+	JR	NZ,RPC110
 	EX	DE,HL
 	INC	HL
 	PUSH	BC
 	PUSH	HL
 	LD	D,#01
-Next_0437:	LD	A,(HL)
+RPC120:	LD	A,(HL)
 	INC	HL
 	OR	A
-	JR	Z,Next_0439
+	JR	Z,RPC140
 	CP	"["
-	JR	NZ,Next_0438
+	JR	NZ,RPC130
 	INC	D
-Next_0438:	CP	"]"
-	JR	NZ,Next_0437
+RPC130:	CP	"]"
+	JR	NZ,RPC120
 	DEC	D
-	JR	NZ,Next_0437
+	JR	NZ,RPC120
 	DEC	HL
 	LD	(HL),#00
 	PUSH	IX
@@ -744,12 +750,12 @@ Next_0438:	CP	"]"
 	INC	HL
 	PUSH	HL
 	POP	IX
-	CALL	ParseLine
-	JR	Next_0440
+	CALL	REPLACE
+	JR	RPC150
 
-Next_0439:	INC	A
+RPC140:	INC	A
 	POP	HL
-Next_0440:	POP	IX
+RPC150:	POP	IX
 	JP	NZ,RP29
 	POP	BC
 	LD	A,B
@@ -761,19 +767,19 @@ Next_0440:	POP	IX
 	LD	B,A
 	LD	A,H
 	EX	AF,AF'
-Next_0441:	POP	DE
+RPC160:	POP	DE
 	OR	A
-	JP	Z,Next_0434
-	LD	HL,Functions-2
+	JP	Z,RPC90
+	LD	HL,FNTAB-2
 	XOR	A
-Next_0442:	JP	NZ,Next_0434
+RPC170:	JP	NZ,RPC90
 	INC	HL
 	INC	HL
 	LD	A,(HL)
 	OR	A
-	JP	Z,Next_0434
+	JP	Z,RPC90
 	CALL	COMPARE
-	JR	C,Next_0442
+	JR	C,RPC170
 	EX	AF,AF'
 	LD	B,A
 	INC	BC
@@ -782,7 +788,7 @@ Next_0442:	JP	NZ,Next_0434
 	INC	HL
 	LD	B,(HL)
 	POP	HL
-	LD	DE,Next_0429
+	LD	DE,RPC40
 	PUSH	IX
 	PUSH	DE
 	PUSH	BC
@@ -808,7 +814,7 @@ Next_0442:	JP	NZ,Next_0434
 ;           AF = error code.
 EXPAND:	LD	B,A	; Save parameter number, 1 => %0.
 	LD	C,#00	; Not in quotes initially.
-	LD	DE,(LineAdres)	; Point to parameter's command line.
+	LD	DE,(LINEADDR)	; Point to parameter's command line.
 	LD	A,(HL)	; Save current length byte.
 	EX	AF,AF'
 EXP10:	CALL	RDCHAR
@@ -830,13 +836,13 @@ GOTSEP:	EX	DE,HL
 	DEC	DE
 	LD	A,(DE)
 	CALL	SEP?
-	JR	Z,Next_0443
+	JR	Z,GOT10
 	INC	DE
-Next_0443:	LD	A,(DE)
+GOT10:	LD	A,(DE)
 	INC	DE
 	CALL	WRCHAR
 	RET	NZ
-	JR	C,Next_0443
+	JR	C,GOT10
 	RET
 
 NXTPAR:	EX	AF,AF'
@@ -866,8 +872,8 @@ BADFN:	LD	A,.IFNM
 	RET
 
 REDIRECT:	XOR	A
-	LD	(BufEnvData),A	; No output redirection yet.
-	LD	(BufEnvName),A	; No input redirection yet.
+	LD	(ENVDATA),A	; No output redirection yet.
+	LD	(ENVNAME),A	; No input redirection yet.
 	LD	C,A	; Clear quotes flag.
 	LD	(HL),A	; Initialise length byte.
 RED10:	CALL	RDCHAR
@@ -880,12 +886,12 @@ RED10:	CALL	RDCHAR
 	JR	NZ,NXTRED
 	PUSH	DE
 	EXX
-	LD	HL,BufEnvData
+	LD	HL,ENVDATA
 	JR	RED30
 
 RED20:	PUSH	DE	; Save start of input filename.
 	EXX	; Save other registers.
-	LD	HL,BufEnvName	; Copy input filename to BUFF2.
+	LD	HL,ENVNAME	; Copy input filename to BUFF2.
 RED30:	EX	(SP),HL	; Save buffer ptr, get filename.
 	PUSH	HL	; Save it again.
 	CP	(HL)	; Skip double >> and <<.
@@ -895,7 +901,7 @@ NDBL:	CALL	GETCH	; Remove spaces after > or <.
 	EX	DE,HL	; DE -> filename to parse.
 	LD	BC,_PARSE	; Parse redirection filename.
 	LD	A,#39	; Error type = redirection.
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	CALL	BDOS
 	EX	AF,AF'
 	LD	A,B	; Get parse flags.
@@ -921,16 +927,16 @@ NOFN:	XOR	A
 	EXX	; Get back command line pointers.
 	POP	DE	; Continue after filename.
 	DEC	A
-	LD	(StringCode),A	; Normal errors again.
+	LD	(STRCODE),A	; Normal errors again.
 	JR	RED10	; Continue with rest of command line.
 
 NXTRED:	CALL	WRCHAR
 	RET	NZ
 	JP	C,RED10
 	LD	A,#39
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	EXX
-	LD	HL,BufEnvData
+	LD	HL,ENVDATA
 	LD	A,(HL)
 	OR	A
 	JR	Z,GOTOUT
@@ -969,7 +975,7 @@ CRTOUT:	CALL	GETCH	; Allow spaces etc. after '>' and '>>'.
 	LD	A,#06	; Inheritable, not read.
 	CALL	BDOS
 	RET	NZ	; Return if can't create it.
-GOTOUT:	LD	HL,BufEnvName	; Point to input filename.
+GOTOUT:	LD	HL,ENVNAME	; Point to input filename.
 	LD	A,(HL)
 	OR	A
 	JR	Z,GOTIN	; Go if no input redirection.
@@ -993,7 +999,7 @@ OPNIN:	CALL	GETCH	; Allow spaces after '<'.
 	RET	NZ
 GOTIN:	EXX	; Restore command line pointers.
 	LD	A,#FF	; Error type = normal again.
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	RET	; With error code.
 
 		SUBTTL	PIPE
@@ -1001,13 +1007,13 @@ GOTIN:	EXX	; Restore command line pointers.
 ; On entry, DE -> command line.
 ; On exit, command is terminated at |.
 PIPE:	LD	A,#3A	; Set error type to piping error.
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	XOR	A
 	LD	C,A	; Zero quotes flag.
 	LD	L,A
 	LD	H,A
-	LD	(PipeAdres),HL	; Assume no following command.
-	LD	A,(OutputHandle)	; Save current pipe output.
+	LD	(PIPEADDR),HL	; Assume no following command.
+	LD	A,(OUTHNDL)	; Save current pipe output.
 	EX	AF,AF'
 RDPIPE:	CALL	RDCHAR
 	JR	C,NPIPE
@@ -1018,23 +1024,23 @@ RDPIPE:	CALL	RDCHAR
 	LD	L,E
 	LD	H,D
 	CALL	GETCH
-	LD	(PipeAdres),HL
+	LD	(PIPEADDR),HL
 	DEC	DE
 	XOR	A
 	LD	(DE),A
 	CALL	TEMPFILE
 	RET	NZ
 	LD	A,B
-	LD	(OutputHandle),A
+	LD	(OUTHNDL),A
 	JR	DOPIPE
 
 NPIPE:	OR	A	; End of command line ?
 	JR	NZ,RDPIPE	; Check next character for | if not.
-	LD	(OutputHandle),A	; Last in pipeline, so no output file.
+	LD	(OUTHNDL),A	; Last in pipeline, so no output file.
 DOPIPE:	EX	AF,AF'
 	OR	A
 	JR	Z,FIRSTP	; Go if no previous command in pipe.
-	LD	(InputHandle),A	; Else make last output this input.
+	LD	(INHNDL),A	; Else make last output this input.
 	LD	B,A
 	XOR	A	; Position file ptr to file start.
 	LD	L,A
@@ -1044,16 +1050,16 @@ DOPIPE:	EX	AF,AF'
 	LD	C,_SEEK
 	CALL	BDOS
 	RET	NZ
-FIRSTP:	LD	A,(OutputHandle)	; If no piping at all being done, then
-	LD	HL,InputHandle	;   don't fork.
+FIRSTP:	LD	A,(OUTHNDL)	; If no piping at all being done, then
+	LD	HL,INHNDL	;   don't fork.
 	OR	(HL)
 	JR	Z,PIPRET
 	LD	C,_FORK	; Do fork for piping.
 	CALL	BDOS
 	RET	NZ
 	LD	A,B
-	LD	(ID_Pipelin),A	; Save process id for pipe.
-	LD	A,(InputHandle)	; Get input file handle.
+	LD	(PIPEID),A	; Save process id for pipe.
+	LD	A,(INHNDL)	; Get input file handle.
 	OR	A	; First file in pipe ?
 	JR	Z,CLOSOUT	; Go if yes.
 	PUSH	AF	; Else close standard input and
@@ -1063,7 +1069,7 @@ FIRSTP:	LD	A,(OutputHandle)	; If no piping at all being done, then
 	LD	C,_DUP
 	CALL	Z,BDOS
 	RET	NZ
-CLOSOUT:	LD	A,(OutputHandle)	; Get output file handle.
+CLOSOUT:	LD	A,(OUTHNDL)	; Get output file handle.
 	OR	A	; Last file in pipe ?
 	JR	Z,PIPRET	; Go if yes.
 	PUSH	AF	; Else close standard output
@@ -1074,11 +1080,11 @@ CLOSOUT:	LD	A,(OutputHandle)	; Get output file handle.
 	CALL	Z,BDOS
 	RET	NZ
 PIPRET:	LD	A,#FF	; Reset error type.
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	XOR	A	; No error.
 	RET
 
-TEMPFILE:	LD	HL,PipeFileName+7
+TEMPFILE:	LD	HL,PIPEFN+7
 INCDIG:	LD	A,(HL)	;   temporary piping filename.
 	INC	A
 	LD	(HL),A
@@ -1099,12 +1105,12 @@ DIGOK:	LD	HL,TEMP$	; Read the TEMP environment string to
 	LD	A,"\"
 	LD	(DE),A
 	INC	DE
-NULLFN:	LD	HL,PipeFileName	; Copy temporary filename to end of
+NULLFN:	LD	HL,PIPEFN	; Copy temporary filename to end of
 	LD	BC,#0C	;   TEMP pathname.
 	LDIR
 	XOR	A
 	LD	(DE),A	; Terminate the string.
-	LD	DE,BufEnvData	; Attempt to create the file,
+	LD	DE,ENVDATA	; Attempt to create the file,
 	LD	BC,#8044	;   but don't overwrite any
 	LD	A,#04	;   existing file of the
 	CALL	BDOS	;   same name.
@@ -1118,7 +1124,7 @@ NULLFN:	LD	HL,PipeFileName	; Copy temporary filename to end of
 ; error  message  if  appropriate,  and  it  deals  with  various  tidying  up
 ; operations which are necessary after piping the output or input of a command
 ; On exit, DE -> next command in pipe, or 0 if none.
-UNPIPE:	LD	HL,ID_Pipelin
+UNPIPE:	LD	HL,PIPEID
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A	;   (not forked now)
@@ -1126,7 +1132,7 @@ UNPIPE:	LD	HL,ID_Pipelin
 	LD	C,_JOIN
 	CALL	NZ,BDOS	; Do the join if yes.
 	RET	NZ
-	LD	HL,InputHandle
+	LD	HL,INHNDL
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
@@ -1136,22 +1142,22 @@ UNPIPE:	LD	HL,ID_Pipelin
 	RET
 
 DELPIPE:	LD	HL,#00	; Abandon pipe.
-	LD	(PipeAdres),HL
-	LD	HL,InputHandle
+	LD	(PIPEADDR),HL
+	LD	HL,INHNDL
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
 	LD	C,_HDELETE	; Delete input pipe handle, if any.
 	CALL	NZ,BDOS	;   (error ignored)
-	LD	HL,OutputHandle
+	LD	HL,OUTHNDL
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
 	LD	C,_HDELETE	; Delete output pipe handle, if any.
 	CALL	NZ,BDOS	;   (error ignored)
-	LD	HL,ID_Pipelin
+	LD	HL,PIPEID
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
@@ -1166,7 +1172,7 @@ RDCHAR:	LD	A,(DE)
 	RET	Z
 	INC	C
 	DEC	C
-	JR	Z,Next_0081
+	JR	Z,RDC10
 	CP	C
 	SCF
 	RET	NZ
@@ -1175,16 +1181,16 @@ RDCHAR:	LD	A,(DE)
 	SCF
 	RET
 
-Next_0081:	LD	C,A
+RDC10:	LD	C,A
 	CP	#22
-	JR	Z,Next_0444
+	JR	Z,RDC20
 	CP	"'"
-	JR	Z,Next_0444
+	JR	Z,RDC20
 	LD	C,#00
 	OR	A
 	RET
 
-Next_0444:	OR	A
+RDC20:	OR	A
 	SCF
 	RET
 
@@ -1226,35 +1232,35 @@ DO_CMD:	CALL	GETCH
 	SBC	HL,DE
 	LD	A,L
 	ADD	HL,DE
-	LD	(PathLen),A
+	LD	(PATHLEN),A
 	DEC	HL
 	LD	A,(HL)
 	INC	HL
 	CP	"\"
-	JR	NZ,Next_0446
+	JR	NZ,DOC20
 	PUSH	HL
-	LD	HL,(IffAdres)
+	LD	HL,(IFFADDR)
 	BIT	0,(HL)
 	POP	HL
-	JR	NZ,Next_0446
-Next_0445:	PUSH	DE
-	LD	HL,Cmd_Chdir
-	JR	Next_0447
-Next_0446:	LD	A,(ParseFlags)
+	JR	NZ,DOC20
+DOC10:	PUSH	DE
+	LD	HL,@CHDIR
+	JR	DCC10
+DOC20:	LD	A,(PRSFLAGS)
 	BIT	6,A
-	JR	NZ,Next_0445
+	JR	NZ,DOC10
 	EXX
 	BIT	2,A
-	JR	Z,Next_0084
+	JR	Z,DOC30
 	BIT	0,A
-	JR	NZ,Next_0084
+	JR	NZ,DOC30
 	EXX
 	CALL	GETCH
 	JR	NZ,BADRV
-	LD	HL,(IffAdres)
+	LD	HL,(IFFADDR)
 	BIT	0,(HL)
 	RET	NZ
-	LD	A,(LogiDrive)
+	LD	A,(LOGDRV)
 	DEC	A
 	LD	E,A
 	LD	C,_SELDSK
@@ -1264,7 +1270,7 @@ Next_0446:	LD	A,(ParseFlags)
 	LD	A,B
 	RET
 
-Next_0084:	BIT	0,A
+DOC30:	BIT	0,A
 	JR	Z,XORET
 	BIT	3,A
 	JP	Z,BADCMDZ
@@ -1275,9 +1281,9 @@ BADRV:	LD	A,.BADCM	;   or '..' given.
 	DEC	DE	; Point to length byte of command.
 	PUSH	HL	; Save pointer to start of parameters.
 	PUSH	BC	; Save pointer to start of last item.
-	LD	A,(PathLen)	; Get length of first word.
+	LD	A,(PATHLEN)	; Get length of first word.
 	LD	B,A	; B=length of command.
-	LD	HL,Commands-2	; First test for an internal command.
+	LD	HL,CMDTAB-2	; First test for an internal command.
 	XOR	A	; Set Z for loop entry.
 DC10:	JR	NZ,NOTINT
 	INC	HL
@@ -1292,51 +1298,51 @@ DC10:	JR	NZ,NOTINT
 	LD	H,(HL)
 	LD	L,A
 	POP	BC
-Next_0447:	LD	BC,Cmd_Else
+DCC10:	LD	BC,@ELSE
 	SBC	HL,BC
 	ADD	HL,BC
-	JR	Z,Next_0448
-	LD	BC,Cmd_Endiff
+	JR	Z,DCC20
+	LD	BC,@ENDIFF
 	OR	A
 	SBC	HL,BC
 	ADD	HL,BC
-	JR	Z,Next_0448
-	LD	BC,Cmd_Iff
+	JR	Z,DCC20
+	LD	BC,@IFF
 	OR	A
 	SBC	HL,BC
 	ADD	HL,BC
-	JR	Z,Next_0448
+	JR	Z,DCC20
 	PUSH	HL
-	LD	HL,(IffAdres)
+	LD	HL,(IFFADDR)
 	BIT	0,(HL)
 	POP	HL
-	JR	Z,Next_0448
+	JR	Z,DCC20
 	POP	DE
 	XOR	A
 	RET
 
-Next_0448:	LD	BC,Cmd_Echo
+DCC20:	LD	BC,@ECHO
 	OR	A
 	SBC	HL,BC
 	ADD	HL,BC
-	JR	Z,Next_0449
-	LD	BC,@ECHO
+	JR	Z,DCC30
+	LD	BC,@ECHOS
 	OR	A
 	SBC	HL,BC
 	ADD	HL,BC
 	EX	(SP),HL
-	JR	NZ,Next_0087
+	JR	NZ,DCC40
 	EX	(SP),HL
-Next_0449:	EX	(SP),HL
+DCC30:	EX	(SP),HL
 	LD	A,(HL)
 	CALL	BLANK?
-	JR	NC,Next_0087
+	JR	NC,DCC40
 	INC	HL
 	DEFB	#06
-Next_0087:	OR	A
+DCC40:	OR	A
 	CALL	NC,GETCH
 	XOR	A
-	LD	(DirFlag),A
+	LD	(DIRFLAG),A
 	LD	B,A
 	DEC	A
 	RET
@@ -1344,7 +1350,7 @@ Next_0087:	OR	A
 NOTINT:	POP	BC
 	POP	HL
 	PUSH	HL
-	LD	HL,(IffAdres)
+	LD	HL,(IFFADDR)
 	BIT	0,(HL)
 	POP	HL
 	RET	NZ
@@ -1360,7 +1366,7 @@ NOTINT:	POP	BC
 	SBC	HL,DE
 	LD	C,L
 	LD	B,H
-	LD	HL,BufEnvName
+	LD	HL,ENVNAME
 	EX	DE,HL
 	JR	Z,NDP
 	LDIR
@@ -1370,7 +1376,7 @@ NDP:	LD	(DE),A	; Terminate with a null.
 	SBC	HL,DE	; Calculate size of given filename.
 	LD	C,L
 	LD	B,H
-	LD	HL,BufExtra	; Copy given filename to BUFF3.
+	LD	HL,XBUF1	; Copy given filename to BUFF3.
 	PUSH	HL
 	EX	DE,HL
 	JR	Z,NFN	; Go if no filename (should not occur).
@@ -1389,84 +1395,84 @@ GOTEXT:	CALL	FNDCMD	; Look for command.
 	JR	Z,EXECMD	; Execute command if file found.
 	CP	.NOFIL
 	RET	NZ	; Return error if not 'file not found'.
-	LD	A,(ParseFlags)	; Get parse flags for command.
+	LD	A,(PRSFLAGS)	; Get parse flags for command.
 	AND	#06	; If drive or path specified, then
 	LD	A,.BADCM	;   don't search the current PATH.
-	LD	HL,Env_Path	; Get the current PATH environment
+	LD	HL,PATH$	; Get the current PATH environment
 	CALL	Z,GENV2	;   string to BUFF1.
 	RET	NZ
 	EX	DE,HL	; HL -> PATH string in BUFF1.
 USEPTH:	CALL	GETCH
 BADCMDZ:	LD	A,.BADCM
 	RET	Z
-	LD	BC,BufEnvName
+	LD	BC,ENVNAME
 	CALL	CPYSTR
 	RET	C
-	LD	(Value_L),HL
+	LD	(VALUEL),HL
 	CALL	FNDCMD
-	LD	HL,(Value_L)
+	LD	HL,(VALUEL)
 	JR	NZ,USEPTH
 EXECMD:	JR	NC,EXECOM
-	LD	HL,ID_Pipelin
+	LD	HL,PIPEID
 	LD	B,(HL)
 	XOR	A
 	LD	(HL),A
 	OR	B
 	LD	C,_JOIN
 	CALL	NZ,BDOS
-	LD	A,(BatchHandle)
+	LD	A,(BATHNDL)
 	INC	A
 	JR	Z,OPNBAT
 	INC	A
-	CALL	Z,ReleaseBTM
-	LD	A,(ID_Redir)
+	CALL	Z,FREEBTM
+	LD	A,(REDIRID)
 	LD	B,A
 	LD	C,_JOIN
 	CALL	BDOS
-	LD	A,(ID_Redir2)
-	LD	(ID_Redir),A
-	LD	A,(BatchHandle)
+	LD	A,(REDIRID2)
+	LD	(REDIRID),A
+	LD	A,(BATHNDL)
 	CP	#FE
 	JR	Z,OPNBAT
 	LD	B,A
 	LD	C,_CLOSE
 	CALL	BDOS
 OPNBAT:	LD	A,#3B
-	LD	(StringCode),A
-	LD	HL,ID_Redir
+	LD	(STRCODE),A
+	LD	HL,REDIRID
 	LD	A,(HL)
-	LD	(ID_Redir2),A
+	LD	(REDIRID2),A
 	XOR	A
 	LD	(HL),A
-	LD	DE,FileBuffer+7
-	LD	HL,Ext_BTM
+	LD	DE,FILEBUF+7
+	LD	HL,BTMEXT$
 	LD	B,(HL)
 	CALL	COMPARE
-	JR	C,Next_0450
-	CALL	OpenBTM
+	JR	C,OPN10
+	CALL	OPENBTM
 	LD	B,#FE
-	JR	Next_0451
+	JR	OPN20
 
-Next_0450:	LD	DE,FIB1
+OPN10:	LD	DE,FIB1
 	LD	A,#01
 	LD	C,_OPEN
 	CALL	BDOS
-Next_0451:	LD	(ErrorCode),A
+OPN20:	LD	(ERRCODE),A
 	RET	NZ
 	LD	L,A
 	LD	H,A
-	LD	(BatLineLen),HL
+	LD	(BATLINLEN),HL
 	DEC	A
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	LD	A,B
-	LD	(BatchHandle),A
+	LD	(BATHNDL),A
 	EXX
 	PUSH	DE
 	EXX
 	POP	HL
-	LD	DE,OrigLine
-	LD	(LineAdres),DE
-	CALL	NCopy
+	LD	DE,ORIGLINE
+	LD	(LINEADDR),DE
+	CALL	NCOPY
 	RET
 
 		SUBTTL	EXECOM
@@ -1475,11 +1481,11 @@ EXECOM:	LD	HL,EXPERT$
 	JR	NC,EXPERT
 	LD	A,(FIB1+25)	; Otherwise look at the media where
 	LD	L,A	;   the .COM file was found and
-	LD	DE,BufEnvData	;   if it is formatted by MSX-DOS2
+	LD	DE,ENVDATA	;   if it is formatted by MSX-DOS2
 	LD	C,_DPARM	;   (by checking the volume_id field)
 	CALL	BDOS	;   we can proceed.
 	RET	NZ	; Report any errors.
-	LD	A,(BufEnvData+20)	; We had better define "FIB_VOLUME_ID".
+	LD	A,(ENVDATA+20)	; We had better define "FIB_VOLUME_ID".
 	BIT	7,A	; This is not actuall a
 	LD	A,.BADVER	;   "Wrong DOS version" what the error
 	RET	NZ	;   code was intended for.
@@ -1487,7 +1493,7 @@ EXPERT:	LD	C,_FORK
 	CALL	BDOS	;   so that the corresponding join will
 	RET	NZ	;   tidy up it's open files.
 	LD	A,B
-	LD	(ID_Execute),A	; Save id of transient program process.
+	LD	(EXECID),A	; Save id of transient program process.
 	LD	DE,FIB1	; Attempt to open command file.
 	LD	C,_OPEN
 	LD	A,#01	; Read only.
@@ -1495,8 +1501,8 @@ EXPERT:	LD	C,_FORK
 	RET	NZ	; Return if error.
 	LD	A,B
 	EX	AF,AF'
-	LD	HL,BufEnvData	; Set up whole path string in BUFF with
-	LD	A,(LogiDrive)	;   a drive : \ at the start, so that
+	LD	HL,ENVDATA	; Set up whole path string in BUFF with
+	LD	A,(LOGDRV)	;   a drive : \ at the start, so that
 	ADD	A,"@"	;   programs can find out where they
 	LD	(HL),A	;   were loaded from.
 	INC	HL
@@ -1515,7 +1521,7 @@ CPYFN:	LD	A,(DE)
 	INC	HL
 	OR	A
 	JR	NZ,CPYFN
-	LD	DE,BufEnvData
+	LD	DE,ENVDATA
 	LD	HL,PROG$
 	LD	C,_SENV
 	CALL	BDOS
@@ -1530,22 +1536,22 @@ CPYFN:	LD	A,(DE)
 	POP	HL
 	CALL	LDCOME
 	RET	NZ
-	CALL	SetPage2
-	LD	DE,(AliasEnd+#8000)
-	LD	HL,(VariableEnd+#8000)
+	CALL	SETPG2
+	LD	DE,(ALIEND+#8000)
+	LD	HL,(VAREND+#8000)
 	RES	7,H
-	CALL	RestorePage2
+	CALL	RSTPG2
 	OR	A
 	SBC	HL,DE
-	LD	DE,Buffer1-ExitAdres
-	CALL	Compare4
+	LD	DE,BUFFER1-EXITADDR
+	CALL	COMPARE4
 	LD	A,.NORAM
 	RET	C
-	CALL	SetPage2
-	LD	DE,(VariableEnd+#8000)
+	CALL	SETPG2
+	LD	DE,(VAREND+#8000)
 	PUSH	DE
-	LD	HL,Buffer1-1
-	LD	BC,Buffer1-ExitAdres
+	LD	HL,BUFFER1-1
+	LD	BC,BUFFER1-EXITADDR
 	LDDR
 	EX	DE,HL
 	POP	DE
@@ -1553,11 +1559,11 @@ CPYFN:	LD	A,(DE)
 	DEC	HL
 	LD	(HL),E
 	DEC	HL
-	LD	(VariableEnd+#8000),HL
-	CALL	RestorePage2
-	LD	DE,(ExitAdres)
-	LD	HL,ExitAdres-1
-	LD	BC,ExitAdres-BootStrap+1
+	LD	(VAREND+#8000),HL
+	CALL	RSTPG2
+	LD	DE,(EXITADDR)
+	LD	HL,EXITADDR-1
+	LD	BC,EXITADDR-BOOTSTRAP+1
 	LDDR
 	LD	HL,#FFD8
 	ADD	HL,DE
@@ -1573,7 +1579,7 @@ CPYFN:	LD	A,(DE)
 	LD	(#06),DE
 	XOR	A
 	LD	(#03),A
-	LD	A,(CurrentDrive)
+	LD	A,(CURDRIVE)
 	DEC	A
 	LD	(#04),A
 	LD	DE,#00
@@ -1588,10 +1594,10 @@ CPYFN:	LD	A,(DE)
 	PUSH	DE
 	RET
 
-	LD	SP,(EndTPA)
+	LD	SP,(ENDTPA)
 	PUSH	DE
-	LD	HL,Stack-1
-	LD	BC,Stack-Start
+	LD	HL,STACK-1
+	LD	BC,STACK-START
 	LDDR
 	INC	DE
 	EX	DE,HL
@@ -1606,13 +1612,13 @@ CPYFN:	LD	A,(DE)
 	CALL	BDOS
 	POP	BC
 	POP	DE
-	JR	NZ,Next_0101
+	JR	NZ,CPY10
 	SBC	HL,DE
 	LD	A,.NORAM
-	JR	Z,Next_0101
+	JR	Z,CPY10
 	LD	C,_CLOSE
 	CALL	BDOS
-	JR	NZ,Next_0101
+	JR	NZ,CPY10
 	LD	DE,#80
 	LD	C,_SETDMA
 	CALL	BDOS
@@ -1634,7 +1640,7 @@ CPYFN:	LD	A,(DE)
 	PUSH	HL
 	JP	#0100
 
-Next_0101:	LD	B,A
+CPY10:	LD	B,A
 	LD	C,_TERM
 	JP	BDOS
 
@@ -1700,23 +1706,23 @@ GOTDRV:	LD	(HL),C	; Set up drive.
 	LD	C,_PFILE
 	JP	BDOS	; Leaves DE -> terminating character.
 
-FNDCMD:	LD	DE,BufEnvName
+FNDCMD:	LD	DE,ENVNAME
 	LD	BC,_PARSE
 	CALL	BDOS
 	SCF
 	RET	NZ
 	LD	A,C
-	LD	(LogiDrive),A
-	LD	HL,BufExtra
+	LD	(LOGDRV),A
+	LD	HL,XBUF1
 	LD	A,B
 	AND	#18
-	JR	Z,Next_0106
+	JR	Z,FND10
 	LD	A,"\"
 	LD	(DE),A
 	INC	DE
-Next_0106:	CALL	NCopy
+FND10:	CALL	NCOPY
 	EX	AF,AF'
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	LD	IX,FIB1
 	LD	B,#06
 	LD	C,_FFIRST
@@ -1740,22 +1746,22 @@ GOTFIL:	LD	DE,FIB1+1
 	PUSH	DE
 	PUSH	HL
 	EXX
-	LD	DE,Buffer1+1
-	LD	HL,FileBuffer+8
+	LD	DE,BUFFER1+1
+	LD	HL,FILEBUF+8
 	LD	B,3
-Next_0997:	LD	A,(HL)
+GOT20:	LD	A,(HL)
 	CP	" "
-	JR	Z,Next_0998
+	JR	Z,GOT30
 	LD	(DE),A
 	INC	HL
 	INC	DE
-	DJNZ	Next_0997
-Next_0998:	EX	DE,HL
+	DJNZ	GOT20
+GOT30:	EX	DE,HL
 	LD	(HL),#00
-	LD	HL,Buffer1
+	LD	HL,BUFFER1
 	LD	(HL),"."
-	LD	DE,BufEnvData
-	CALL	GetAlias
+	LD	DE,ENVDATA
+	CALL	GETALIAS
 	EXX
 	POP	HL
 	POP	DE
@@ -1766,61 +1772,61 @@ Next_0998:	EX	DE,HL
 	LD	C,_FNEXT
 	JR	Z,FCMD10
 	EX	DE,HL
-	LD	DE,Buffer1
-	CALL	NCopy
+	LD	DE,BUFFER1
+	CALL	NCOPY
 	DEC	DE
 	LD	A," "
 	LD	(DE),A
 	INC	DE
 	PUSH	DE
-	LD	DE,BufEnvName
+	LD	DE,ENVNAME
 	PUSH	DE
 	LD	BC,_PARSE
 	CALL	BDOS
 	LD	(HL),#00
 	POP	HL
 	POP	DE
-	CALL	NCopy
+	CALL	NCOPY
 	DEC	DE
 	LD	B,8
-	LD	HL,FileBuffer
-Next_0452:	LD	A,(HL)
+	LD	HL,FILEBUF
+GOT40:	LD	A,(HL)
 	CP	" "
-	JR	Z,Next_0453
+	JR	Z,GOT50
 	LD	(DE),A
 	INC	DE
 	INC	HL
-	DJNZ	Next_0452
-Next_0453:	LD	A,"."
+	DJNZ	GOT40
+GOT50:	LD	A,"."
 	LD	(DE),A
 	INC	DE
-	LD	HL,FileBuffer+8
+	LD	HL,FILEBUF+8
 	LD	B,3
-Next_0454:	LD	A,(HL)
+GOT60:	LD	A,(HL)
 	CP	" "
-	JR	Z,Next_0455
+	JR	Z,GOT70
 	LD	(DE),A
 	INC	DE
 	INC	HL
-	DJNZ	Next_0454
-Next_0455:	EXX
+	DJNZ	GOT60
+GOT70:	EXX
 	PUSH	HL
 	EXX
 	POP	HL
-	CALL	NCopy
+	CALL	NCOPY
 	EX	DE,HL
 	LD	(HL),#00
 	POP	HL
-	LD	HL,Buffer1
+	LD	HL,BUFFER1
 	JP	DO_CMD
 
-COMBAT:	LD	HL,FileBuffer
+COMBAT:	LD	HL,FILEBUF
 	LD	C,_PFILE
 	CALL	BDOS
 	SCF
 	RET	NZ
-	LD	DE,FileBuffer+7
-	LD	HL,Ext_COM
+	LD	DE,FILEBUF+7
+	LD	HL,COMEXT$
 	LD	B,(HL)
 	CALL	COMPARE
 	DEC	A
@@ -1834,11 +1840,11 @@ COMBAT:	LD	HL,FileBuffer
 	CCF
 	RET
 
-Ext_COM:	DEFB	3
+COMEXT$:	DEFB	3
 	DEFB	"COM"
-Ext_BAT:	DEFB	3
+BATEXT$:	DEFB	3
 	DEFB	"BAT"
-Ext_BTM:	DEFB	3
+BTMEXT$:	DEFB	3
 	DEFB	"BTM"
 
 		SUBTTL	COMPARE
@@ -1879,14 +1885,14 @@ UC:	BIT	7,A
 	RES	5,A
 	RET
 
-MakeLower:	CP	"A"
+MKLOWER:	CP	"A"
 	RET	C
 	CP	"Z"+1
 	RET	NC
 	SET	5,A
 	RET
 
-MakeUpper:	CP	"a"
+MKUPPER:	CP	"a"
 	RET	C
 	CP	"z"+1
 	RET	NC
@@ -1899,22 +1905,22 @@ ON$:	DEFB	"ON",0
 OFF$:	DEFB	"OFF",0
 ECHO$:	DEFB	"ECHO",0
 HELP$:	DEFB	"HELP",0
-Env_Path:	DEFB	"PATH",0
-Env_Cdpath:	DEFB	"CDPATH",0
+PATH$:	DEFB	"PATH",0
+CDPATH$:	DEFB	"CDPATH",0
 PROMPT$:	DEFB	"PROMPT",0
-Env_TabOrder:	DEFB	"TABORDER",0
+TABORD$:	DEFB	"TABORDER",0
 PARAM$: DEFB	"PARAMETERS",0
 PROG$:	DEFB	"PROGRAM",0
 TEMP$:	DEFB	"TEMP",0
 UPPER$:	DEFB	"UPPER",0
-Env_Lower:	DEFB	"LOWER",0
+LOWER$:	DEFB	"LOWER",0
 REDIR$:	DEFB	"REDIR",0
 EXPERT$:	DEFB	"EXPERT",0
-Env_Alias:	DEFB	"ALIAS",0
-Env_Separ:	DEFB	"SEPAR",0
-Env_Expand:	DEFB	"EXPAND",0
-Env_Pushd:	DEFB	"PUSHD",0
+ALIAS$:	DEFB	"ALIAS",0
+SEPAR$:	DEFB	"SEPAR",0
+EXPAND$:	DEFB	"EXPAND",0
+PUSHD$:	DEFB	"PUSHD",0
 TEMPFN:	DEFB	"%PIPE00.$$$"
-Data_Prompt:	DEFB	"%_CWD%>",0
-Data_TabOrder:	DEFB	"BOTH",0
+DPROMPT$:	DEFB	"%_CWD%>",0
+DTABORD$:	DEFB	"BOTH",0
 

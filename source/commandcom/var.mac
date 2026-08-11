@@ -1,11 +1,15 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Runtime variables
+;******************************************************************************
 ;
-; COMMAND2.COM - Runtime variables, allocated past the end of the binary image
+;        The runtime variables, allocated past the end of the binary image
+; (they are not part of the COMMAND2.COM file).
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
+;******************************************************************************
 
 VAR	MACRO	NAME, SIZE
 NAME	 EQU	VARIABLES + VAR_OFFSET
@@ -15,106 +19,106 @@ VAR_OFFSET DEFL	VAR_OFFSET + (SIZE)
 VARIABLES EQU	$		; First address past the binary image
 VAR_OFFSET DEFL	0
 ;
-	VAR	Stack, 256
-	VAR	BootStrap, 8
-	VAR	ID_Execute, 1
-	VAR	ExitAdres, 2
-	VAR	WarmBoot, 2
-	VAR	ComlinChar1, 1
-	VAR	ComlinChar2, 1
-	VAR	BatchPage, 1
-	VAR	MapperPage, 1
-	VAR	TemporaryPage, 1
-	VAR	MSXVersion, 1
-	VAR	MapperAdres, 2
-	VAR	MapperTable, 2
-	VAR	StringCode, 1
-	VAR	PipeAdres, 2
-	VAR	NextAdres, 2
-	VAR	InputHandle, 1
-	VAR	OutputHandle, 1
-	VAR	ID_Pipelin, 1
-	VAR	PipeFileName, 12	; Was initialised to "            " (never relied upon)
-	VAR	IffAdres, 2
-	VAR	IffList, 17
-	VAR	GosubAdres, 2
-	VAR	GosubList, 16
-	VAR	FileCount, 2
-	VAR	FileTotal1, 2
-	VAR	FileTotal2, 2
-	VAR	BatchHandle, 1
-	VAR	ID_Redir2, 1
-	VAR	ErrorCode, 1
-	VAR	OrigLine, 130
-	VAR	LineAdres, 2
-	VAR	BatchBuffer, 256
-	VAR	BatLineLen, 2
-	VAR	BatLineAdr, 2
-	VAR	ID_Redir, 1
-	VAR	EndTPA, 2
-	VAR	DirBuffer, 3	; Was initialised to "A:\" (never relied upon)
-	VAR	Unused_1, 64
-	VAR	LineBuffer, 256
-	VAR	Buffer2, 131
-	VAR	Buffer1, 131
-	VAR	PathLen, 1
-	VAR	AbortError, 1
+	VAR	STACK, 256
+	VAR	BOOTSTRAP, 8
+	VAR	EXECID, 1
+	VAR	EXITADDR, 2
+	VAR	WARMBOOT, 2
+	VAR	CMDCHR1, 1
+	VAR	CMDCHR2, 1
+	VAR	BATPAGE, 1
+	VAR	MAPPAGE, 1
+	VAR	TMPPAGE, 1
+	VAR	MSXVER, 1
+	VAR	MAPADDR, 2
+	VAR	MAPTAB, 2
+	VAR	STRCODE, 1
+	VAR	PIPEADDR, 2
+	VAR	NEXTADDR, 2
+	VAR	INHNDL, 1
+	VAR	OUTHNDL, 1
+	VAR	PIPEID, 1
+	VAR	PIPEFN, 12	; Was initialised to "            " (never relied upon)
+	VAR	IFFADDR, 2
+	VAR	IFFLIST, 17
+	VAR	GOSUBADDR, 2
+	VAR	GOSUBLIST, 16
+	VAR	FILECNT, 2
+	VAR	FILETOT1, 2
+	VAR	FILETOT2, 2
+	VAR	BATHNDL, 1
+	VAR	REDIRID2, 1
+	VAR	ERRCODE, 1
+	VAR	ORIGLINE, 130
+	VAR	LINEADDR, 2
+	VAR	BATBUF, 256
+	VAR	BATLINLEN, 2
+	VAR	BATLINADDR, 2
+	VAR	REDIRID, 1
+	VAR	ENDTPA, 2
+	VAR	DIRBUF, 3	; Was initialised to "A:\" (never relied upon)
+	VAR	UNUSED1, 64
+	VAR	LINEBUF, 256
+	VAR	BUFFER2, 131
+	VAR	BUFFER1, 131
+	VAR	PATHLEN, 1
+	VAR	ABORTERR, 1
 	VAR	FIB1, 64
 	VAR	FIB2, 64
 	VAR	FIB3, 64
-	VAR	LineAdres2, 2
-	VAR	Value_L, 2
-	VAR	Value_H, 2
-	VAR	FilesFound, 2
-	VAR	CountFile, 2
-	VAR	Attribute1, 1
-	VAR	Attribute2, 1
-	VAR	OptionAdres, 2
-	VAR	LastItemAdr, 2
-	VAR	SearchAdr, 2
-	VAR	SearchAdr2, 2
-	VAR	DestinAdres, 2
-	VAR	Unknown2, 2
-	VAR	FileDate, 2
-	VAR	FileTime, 2
-	VAR	FileOrDir, 1	; b3 = gevonden; b2=mag wisselen; b1=dirs; b0=files
-	VAR	RedirState, 1	; IY+#00
-	VAR	ExtraCRLF, 1
-	VAR	Unused_2, 1
-	VAR	OptionFlag1, 1
-	VAR	OptionFlag2, 1
-	VAR	OptionFlag3, 1
-	VAR	OptionFlag4, 1
-	VAR	Unknown3, 1
-	VAR	DirFlag, 1
-	VAR	CurrentDrive, 1
-	VAR	ParseFlags, 1
-	VAR	LogiDrive, 1
-	VAR	LogiDrive2, 1
-	VAR	ColumnMax2, 1
-	VAR	RowMax, 1
-	VAR	ColumnMax, 1
-	VAR	ColumnCount, 1
-	VAR	Unused_3, 1
-	VAR	DateForm, 1
-	VAR	TimeForm, 1
-	VAR	TypeHandle, 1
-	VAR	NulHandle, 1
-	VAR	VerifyState, 1
-	VAR	ID_Copy, 1
-	VAR	DestinFlags, 1
-	VAR	FileBuffer, 11	; Was initialised to "           " (never relied upon)
-	VAR	Position, 2
-	VAR	InsertFlag, 1
-	VAR	Toevoeg, 1
-	VAR	Invul, 1
-	VAR	AliasState, 1	; IY+#29
-	VAR	SeparState, 1	; IY+#2A
-	VAR	MinInvul, 1
-	VAR	BufEnvData, 255
-	VAR	BufEnvName, 255
-	VAR	BufExtra, 255
-	VAR	BufExtra2, 255
-	VAR	BufExtra3, 255
+	VAR	LINEADDR2, 2
+	VAR	VALUEL, 2
+	VAR	VALUEH, 2
+	VAR	FILESFND, 2
+	VAR	CNTFILE, 2
+	VAR	ATTRIB1, 1
+	VAR	ATTRIB2, 1
+	VAR	OPTADDR, 2
+	VAR	LASTITEM, 2
+	VAR	SRCHADDR, 2
+	VAR	SRCHADDR2, 2
+	VAR	DESTADDR, 2
+	VAR	UNKNOWN2, 2
+	VAR	FILEDATE, 2
+	VAR	FILETIME, 2
+	VAR	FDFLAGS, 1	; b3 = gevonden; b2=mag wisselen; b1=dirs; b0=files
+	VAR	REDIRST, 1	; IY+#00
+	VAR	XTRACRLF, 1
+	VAR	UNUSED2, 1
+	VAR	OPTFLAG1, 1
+	VAR	OPTFLAG2, 1
+	VAR	OPTFLAG3, 1
+	VAR	OPTFLAG4, 1
+	VAR	UNKNOWN3, 1
+	VAR	DIRFLAG, 1
+	VAR	CURDRIVE, 1
+	VAR	PRSFLAGS, 1
+	VAR	LOGDRV, 1
+	VAR	LOGDRV2, 1
+	VAR	COLMAX2, 1
+	VAR	ROWMAX, 1
+	VAR	COLMAX, 1
+	VAR	COLCNT, 1
+	VAR	UNUSED3, 1
+	VAR	DATEFORM, 1
+	VAR	TIMEFORM, 1
+	VAR	TYPHNDL, 1
+	VAR	NULHNDL, 1
+	VAR	VFYSTATE, 1
+	VAR	COPYID, 1
+	VAR	DESTFLAGS, 1
+	VAR	FILEBUF, 11	; Was initialised to "           " (never relied upon)
+	VAR	POSITION, 2
+	VAR	INSFLAG, 1
+	VAR	APPENDF, 1
+	VAR	INSPOS, 1
+	VAR	ALISTATE, 1	; IY+#29
+	VAR	SEPSTATE, 1	; IY+#2A
+	VAR	MININSPOS, 1
+	VAR	ENVDATA, 255
+	VAR	ENVNAME, 255
+	VAR	XBUF1, 255
+	VAR	XBUF2, 255
+	VAR	XBUF3, 255
 ;
 ; Total: 2867 bytes

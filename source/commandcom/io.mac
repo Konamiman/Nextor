@@ -1,91 +1,95 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Console I/O and mapper access
+;******************************************************************************
 ;
-; COMMAND2.COM - Console and printer output, alias storage management, mapper segment access, key/line input
+;        Console and printer output, alias storage management, mapper
+; segment access and keyboard input.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
+;******************************************************************************
 DMESSCR:	CALL	GETMSG
-DMSCR:	CALL	PrintString
+DMSCR:	CALL	PRTSTR
 
-LPrint:	LD	A,#0D
-	CALL	PrintChar
+LPRINT:	LD	A,#0D
+	CALL	PRCHAR
 	LD	A,#0A
-PrintChar:	PUSH	HL
+PRCHAR:	PUSH	HL
 	PUSH	DE
 	PUSH	BC
 	LD	E,A
-	LD	A,(RowMax)
+	LD	A,(ROWMAX)
 	AND	A
-	JR	Z,Next_0301
+	JR	Z,NPA10
 	LD	A,E
 	CP	#0D
-	JR	NZ,ouch_nocr
+	JR	NZ,OUCHNCR
 	XOR	A
-	LD	(ColumnCount),A
-	JR	Next_0301
+	LD	(COLCNT),A
+	JR	NPA10
 
-ouch_nocr:	CP	#0A
-	JR	Z,ouch_chkpause	; yes
+OUCHNCR:	CP	#0A
+	JR	Z,OUCHPAU	; yes
 	CP	#09	; tab?
-	JR	NZ,ouch_k2nd	; no
-	LD	A,(ColumnMax)
+	JR	NZ,OUCHK2	; no
+	LD	A,(COLMAX)
 	LD	D,A
-	LD	A,(ColumnCount)
+	LD	A,(COLCNT)
 	OR	#07
 	INC	A
-	LD	(ColumnCount),A
+	LD	(COLCNT),A
 	CP	D
-	JR	C,Next_0301
-	LD	A,(ColumnCount)
-ouch_subloop:	SUB	D
-	JR	NC,ouch_subloop
+	JR	C,NPA10
+	LD	A,(COLCNT)
+OUCHSUB:	SUB	D
+	JR	NC,OUCHSUB
 	ADD	A,D
-	LD	(ColumnCount),A
-	JR	ouch_chkpause
+	LD	(COLCNT),A
+	JR	OUCHPAU
 
-ouch_k2nd:	LD	A,(ColumnCount)
+OUCHK2:	LD	A,(COLCNT)
 	INC	A
-	LD	(ColumnCount),A
+	LD	(COLCNT),A
 	LD	D,A
-	LD	A,(ColumnMax)
+	LD	A,(COLMAX)
 	CP	D
-	JR	NZ,Next_0301
+	JR	NZ,NPA10
 	XOR	A
-	LD	(ColumnCount),A
-ouch_chkpause:	CALL	conout
-	CALL	chkpause
+	LD	(COLCNT),A
+OUCHPAU:	CALL	CONOUT
+	CALL	CHKPAUSE
 NPAUS:	XOR	A
 	POP	BC
 	POP	DE
 	POP	HL
 	RET
 
-Next_0301:	CALL	conout
+NPA10:	CALL	CONOUT
 	JR	NPAUS
 
-chkpause:	LD	A,(RowMax)
+CHKPAUSE:	LD	A,(ROWMAX)
 	DEC	A
-	LD	(RowMax),A
+	LD	(ROWMAX),A
 	RET	NZ
 	CALL	PAUSE
 	CALL	SETP
 	RET
 
-conout:	LD	C,_CONOUT
+CONOUT:	LD	C,_CONOUT
 	JP	BDOS
 
-SPACE?:	JP	NZ,PrintChar
+SPACE?:	JP	NZ,PRCHAR
 SPACE:	LD	A," "
-	JP	PrintChar
+	JP	PRCHAR
 
-PrintDigit2:	JR	Z,PrintSpace2
-Next_0612:	LD	(IX),A
+PRDIG2:	JR	Z,PRSPC2
+PRD10:	LD	(IX),A
 	INC	IX
 	RET
-PrintSpace2:	LD	A," "
-	JR	Next_0612
+PRSPC2:	LD	A," "
+	JR	PRD10
 
 SETP:	PUSH	HL
 	PUSH	DE
@@ -94,24 +98,24 @@ SETP:	PUSH	HL
 	LD	A,#04	;   (0 => 'infinite').
 	CALL	BDOS
 	LD	A,E	; Get width.
-	LD	(ColumnMax),A
+	LD	(COLMAX),A
 	LD	A,D	; Get height.
 	POP	BC
 	POP	DE
 	POP	HL
 	RET	NZ	; Ignore it if error (shouldn't occur).
 	DEC	A
-	LD	(RowMax),A	; Save height in /P line count.
+	LD	(ROWMAX),A	; Save height in /P line count.
 	RET
 
 		SUBTTL  DMESS
 DMESS:	CALL	GETMSG
-PrintString:	LD	A,(DE)
+PRTSTR:	LD	A,(DE)
 	OR	A
 	RET	Z	; Return if done.
 	INC	DE
-	CALL	PrintChar	; Else output the character.
-	JR	PrintString
+	CALL	PRCHAR	; Else output the character.
+	JR	PRTSTR
 
 GETMSG:	LD	B,A
 	LD	DE,MESSAGES
@@ -124,20 +128,20 @@ MSG20:	LD	A,(DE)
 	JR	NZ,MSG20
 	JR	MSG10
 
-FindAlias:	PUSH	DE
+FNDALIAS:	PUSH	DE
 	PUSH	HL
-	CALL	SetPage2
-	CALL	GetAliasAdres
+	CALL	SETPG2
+	CALL	GETALIADDR
 	SET	7,H
 	BIT	7,B
-	JR	Z,Next_0613
+	JR	Z,FND110
 	LD	H,B
 	LD	L,C
-	JR	Next_0615
+	JR	FND130
 
-Next_0613:	LD	A,B
+FND110:	LD	A,B
 	OR	C
-	JR	Z,Next_0615
+	JR	Z,FND130
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
@@ -146,82 +150,82 @@ Next_0613:	LD	A,B
 	DEC	BC
 	LD	A,D
 	OR	E
-	JR	NZ,Next_0613
-Next_0614:	POP	HL
+	JR	NZ,FND110
+FND120:	POP	HL
 	LD	(HL),A
 	POP	DE
 	LD	(DE),A
 	LD	B,A
 	LD	C,A
-	CALL	RestorePage2
+	CALL	RSTPG2
 	RET
 
-Next_0615:	LD	E,(HL)
+FND130:	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
 	INC	HL
 	LD	A,D
 	OR	E
-	JR	Z,Next_0614
+	JR	Z,FND120
 	POP	DE
 	PUSH	DE
-	CALL	NCopy
+	CALL	NCOPY
 	POP	BC
 	POP	DE
 	PUSH	DE
 	PUSH	BC
-	CALL	NCopy
+	CALL	NCOPY
 	LD	B,H
 	LD	C,L
 	POP	HL
 	POP	DE
-	CALL	RestorePage2
+	CALL	RSTPG2
 	RET
 
-GetAlias:	PUSH	DE
+GETALIAS:	PUSH	DE
 	PUSH	HL
-	CALL	SetPage2
-	CALL	GetAliasAdres
+	CALL	SETPG2
+	CALL	GETALIADDR
 	SET	7,H
-Next_0616:	LD	E,(HL)
+GET60:	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
 	INC	HL
 	POP	BC
 	LD	A,D
 	OR	E
-	JR	Z,Next_0619
+	JR	Z,GET90
 	PUSH	BC
 	PUSH	HL
 	CALL	STRCMP
-	JR	Z,Next_0617
+	JR	Z,GET70
 	POP	HL
 	ADD	HL,DE
 	DEC	HL
 	DEC	HL
-	JR	Next_0616
+	JR	GET60
 
-Next_0617:	POP	BC
+GET70:	POP	BC
 	POP	BC
 	POP	DE
 	PUSH	DE
-	CALL	NCopy
-Next_0618:	CALL	RestorePage2
+	CALL	NCOPY
+GET80:	CALL	RSTPG2
 	POP	DE
 	RET
 
-Next_0619:	POP	DE
+GET90:	POP	DE
 	XOR	A
 	LD	(DE),A
 	PUSH	DE
-	JR	Next_0618
+	JR	GET80
 
-SetAlias:	PUSH	DE
+SETALIAS:	PUSH	DE
 	PUSH	HL
-	CALL	SetPage2
-	CALL	GetAliasAdres
+	CALL	SETPG2
+	CALL	GETALIADDR
 	SET	7,H
-Next_0620:	LD	E,(HL)
+SET20:	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
 	DEC	HL
@@ -230,18 +234,18 @@ Next_0620:	LD	E,(HL)
 	OR	E
 	EX	DE,HL
 	PUSH	BC
-	JR	Z,Next_0623
+	JR	Z,SET50
 	EX	DE,HL
 	PUSH	HL
 	INC	HL
 	INC	HL
 	CALL	STRCMP
-	JR	Z,Next_0621
+	JR	Z,SET30
 	POP	HL
 	ADD	HL,DE
-	JR	Next_0620
+	JR	SET20
 
-Next_0621:	POP	HL
+SET30:	POP	HL
 	LD	C,(HL)
 	INC	HL
 	LD	B,(HL)
@@ -249,23 +253,23 @@ Next_0621:	POP	HL
 	LD	D,H
 	LD	E,L
 	ADD	HL,BC
-Next_0622:	LD	C,(HL)
+SET40:	LD	C,(HL)
 	INC	HL
 	LD	B,(HL)
 	DEC	HL
 	LD	A,B
 	OR	C
-	JR	Z,Next_0623
+	JR	Z,SET50
 	LDIR
-	JR	Next_0622
+	JR	SET40
 
-Next_0623:	LD	B,D
+SET50:	LD	B,D
 	LD	C,E
 	POP	HL
 	POP	DE
 	LD	A,(DE)
 	OR	A
-	JR	Z,Next_0629
+	JR	Z,SET110
 	PUSH	BC
 	PUSH	DE
 	LD	D,B
@@ -273,29 +277,29 @@ Next_0623:	LD	B,D
 	INC	DE
 	INC	DE
 	LD	BC,#02
-Next_0624:	LD	A,(HL)
+SET60:	LD	A,(HL)
 	LD	(DE),A
 	INC	HL
 	PUSH	HL
-	LD	HL,(AliasEnd)
+	LD	HL,(ALIEND)
 	SET	7,H
 	SBC	HL,DE
 	POP	HL
-	JR	Z,Next_0627
+	JR	Z,SET90
 	INC	DE
 	INC	BC
 	OR	A
-	JR	NZ,Next_0624
+	JR	NZ,SET60
 	POP	HL
-Next_0625:	LD	A,(HL)
+SET70:	LD	A,(HL)
 	LD	(DE),A
 	INC	HL
 	BIT	6,D
-	JR	NZ,Next_0628
+	JR	NZ,SET100
 	INC	DE
 	INC	BC
 	OR	A
-	JR	NZ,Next_0625
+	JR	NZ,SET70
 	LD	(DE),A
 	INC	DE
 	LD	(DE),A
@@ -303,20 +307,20 @@ Next_0625:	LD	A,(HL)
 	LD	(HL),C
 	INC	HL
 	LD	(HL),B
-Next_0626:	CALL	RestorePage2
+SET80:	CALL	RSTPG2
 	RET
 
-Next_0627:	POP	HL
-Next_0628:	POP	HL
-	CALL	RestorePage2
+SET90:	POP	HL
+SET100:	POP	HL
+	CALL	RSTPG2
 	LD	A,.NORAM
 	OR	A
 	RET
 
-Next_0629:	LD	(BC),A
+SET110:	LD	(BC),A
 	INC	BC
 	LD	(BC),A
-	JR	Next_0626
+	JR	SET80
 
 SETLANG:	PUSH	AF
 	PUSH	BC
@@ -340,14 +344,14 @@ SETLANG:	PUSH	AF
 	PUSH	HL
 	LD	DE,#0402
 	CALL	EXTBIO
-	LD	(MapperAdres),HL
+	LD	(MAPADDR),HL
 	LD	DE,#0401
 	CALL	EXTBIO
-	LD	(MapperTable),HL
+	LD	(MAPTAB),HL
 	LD	A,(EXPTBL)
 	LD	HL,#2D
 	CALL	RDSLT
-	LD	(MSXVersion),A
+	LD	(MSXVER),A
 	POP	HL
 	LD	SP,HL
 	EXX
@@ -389,9 +393,9 @@ PUT_P2:	PUSH	DE
 GET_P2:	PUSH	DE
 	LD	DE,#27
 XCAL:	PUSH	HL
-	LD	HL,(MapperAdres)
+	LD	HL,(MAPADDR)
 	ADD	HL,DE
-	LD	(JumpAdres+1),HL
+	LD	(JMPADDR+1),HL
 	POP	HL
 	POP	DE
 	PUSH	BC
@@ -403,23 +407,23 @@ XCAL:	PUSH	HL
 	LD	SP,#F51F
 	PUSH	HL
 	EXX
-JumpAdres:	CALL	#00
+JMPADDR:	CALL	#00
 	POP	HL
 	LD	SP,HL
 	POP	DE
 	LD	HL,#00
-	LD	(JumpAdres+1),HL
+	LD	(JMPADDR+1),HL
 	POP	HL
 	POP	BC
 	RET
 
-SetPage2:	CALL	GET_P2
-	LD	(TemporaryPage),A
-	LD	A,(MapperPage)
+SETPG2:	CALL	GET_P2
+	LD	(TMPPAGE),A
+	LD	A,(MAPPAGE)
 	CALL	PUT_P2
 	RET
 
-RestorePage2:	LD	A,(TemporaryPage)
+RSTPG2:	LD	A,(TMPPAGE)
 	CALL	PUT_P2
 	RET
 
@@ -437,19 +441,19 @@ INCH:	LD	C,_CONST	; Console status.
 	JR	NZ,IC0	; If key pressed, then read it.
 	LD	C,_CONIN	; Wait for, read & echo another key.
 	CALL	BDOS	; Character in L.
-	JP	LPrint
+	JP	LPRINT
 
-INLI:	LD	DE,BufEnvData
+INLI:	LD	DE,ENVDATA
 	LD	A,#7F
 	LD	(DE),A
-	LD	HL,Env_Expand
+	LD	HL,EXPAND$
 	CALL	OFF?
 	SBC	A,A
 	LD	C,_BUFIN
 	CALL	Z,BDOS
-	CALL	NZ,BufInput
-	CALL	LPrint
-	LD	HL,BufEnvData+1
+	CALL	NZ,EDLINE
+	CALL	LPRINT
+	LD	HL,ENVDATA+1
 	PUSH	HL
 	LD	E,(HL)
 	XOR	A

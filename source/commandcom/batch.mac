@@ -1,17 +1,22 @@
+	TITLE	MSX-DOS 2 - COMMAND2.COM
+	SUBTTL	Batch file input
+;******************************************************************************
 ;
-; COMMAND2.COM - Batch file line reader, .BTM loading, disk error handler
+;        Batch file input: .BAT files are read line by line, .BTM files
+; (new in 2.40) are loaded whole into a mapper segment. Also the disk
+; error handler used while a batch file is being read.
 ;
-; Code from COMMAND2.COM 2.41 by Fokke Post (source released as freeware
-; in 2003), split mechanically; to be restyled to the conventions of this
-; repository. Do not reformat or reorganize while the build is verified
-; byte-identical against command241.com (see Makefile, target "verify").
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
 ;
+;******************************************************************************
 INBAT:	LD	DE,BATERR
 	LD	C,_DEFER
 	CALL	BDOS
 	LD	A,#3B
-	LD	(StringCode),A
-	LD	HL,BufEnvData
+	LD	(STRCODE),A
+	LD	HL,ENVDATA
 	LD	(HL),#00
 	CALL	IB10
 	PUSH	AF
@@ -23,35 +28,35 @@ INBAT:	LD	DE,BATERR
 	POP	AF
 	RET	NZ
 	DEC	A
-	LD	(StringCode),A
+	LD	(STRCODE),A
 	BIT	7,(HL)
 	LD	A,.BUFUL
 	RET	NZ
-	LD	A,(BatchHandle)
+	LD	A,(BATHNDL)
 	CP	#FE
-	JR	NZ,Next_0630
+	JR	NZ,INB10
 	PUSH	HL
-	LD	HL,BufEnvData+1
+	LD	HL,ENVDATA+1
 	CALL	GETCH
 	LD	A,(HL)
 	POP	HL
 	CP	"~"
 	SCF
 	RET	Z
-Next_0630:	XOR	A
+INB10:	XOR	A
 	RET
 
 IB10:	INC	HL
 	LD	(HL),#00	; Terminate line so far with a null.
-IB15:	CALL	GetBatChar
-	LD	HL,BufEnvData
+IB15:	CALL	GETBATCHR
+	LD	HL,ENVDATA
 	RET	NZ
 	LD	D,A
 	LD	A,C
 	CP	#0A
 	JR	Z,IB15
 	CP	#1A
-	JR	Z,Next_0308
+	JR	Z,IBB10
 	SUB	#0D
 	RET	Z
 	BIT	7,(HL)
@@ -62,36 +67,36 @@ IB15:	CALL	GetBatChar
 	LD	(HL),C
 	JR	IB10
 
-Next_0308:	LD	A,.EOF
+IBB10:	LD	A,.EOF
 	OR	A
 	RET
 
-GetBatChar:	LD	A,(BatchHandle)
+GETBATCHR:	LD	A,(BATHNDL)
 	CP	#FE
 	JR	NZ,INBCHAR
 	CALL	GET_P2
-	LD	(TemporaryPage),A
-	LD	A,(BatchPage)
-	LD	HL,(BatLineAdr)
+	LD	(TMPPAGE),A
+	LD	A,(BATPAGE)
+	LD	HL,(BATLINADDR)
 	CALL	RD_SEG
 	LD	C,A
 	INC	HL
-	LD	(BatLineAdr),HL
+	LD	(BATLINADDR),HL
 	CP	#1A
-	JR	NZ,Next_0631
-	LD	A,(BatchPage)
+	JR	NZ,GET100
+	LD	A,(BATPAGE)
 	CALL	FRE_SEG
-Next_0631:	XOR	A
+GET100:	XOR	A
 	RET
 
-INBCHAR:	LD	HL,(BatLineLen)	; Return A=error, C=char.
+INBCHAR:	LD	HL,(BATLINLEN)	; Return A=error, C=char.
 	LD	A,H
 	OR	L
 	JR	NZ,BUFOK	; Go if some left.
 	LD	HL,#0100	; No. bytes to read = size of buffer.
-	LD	DE,BatchBuffer	; Try to read another buffer full.
-	LD	(BatLineAdr),DE	; Save pointer to current character.
-	LD	A,(BatchHandle)	; Get file handle for batch file.
+	LD	DE,BATBUF	; Try to read another buffer full.
+	LD	(BATLINADDR),DE	; Save pointer to current character.
+	LD	A,(BATHNDL)	; Get file handle for batch file.
 	LD	B,A
 	LD	C,_READ
 	CALL	BDOS	; Leaves HL=no. bytes read into buffer.
@@ -102,21 +107,21 @@ INBCHAR:	LD	HL,(BatLineLen)	; Return A=error, C=char.
 	POP	HL
 	JR	Z,BUFOK
 	PUSH	HL
-	LD	DE,BatchBuffer	; Put ^Z at the buffer end
+	LD	DE,BATBUF	; Put ^Z at the buffer end
 	ADD	HL,DE	;   to avoid further reading.
 	LD	(HL),#1A
-	LD	A,(BatchHandle)	; Close batch file.
+	LD	A,(BATHNDL)	; Close batch file.
 	LD	B,A
 	LD	C,_CLOSE
 	CALL	BDOS	; (error ignored)
 	POP	HL
 	INC	HL
 BUFOK:	DEC	HL	; Dec. count after reading character.
-	LD	(BatLineLen),HL	; Save new count.
-	LD	HL,(BatLineAdr)	; Get pointer to current character.
+	LD	(BATLINLEN),HL	; Save new count.
+	LD	HL,(BATLINADDR)	; Get pointer to current character.
 	LD	C,(HL)	; Return it in C.
 	INC	HL	; Ready for next character.
-	LD	(BatLineAdr),HL
+	LD	(BATLINADDR),HL
 	XOR	A	; No error.
 	RET
 
@@ -126,38 +131,38 @@ BATERR:	CP	.WFILE	; Return with A=0 if .WFILE or .WDISK.
 	LD	A,#00
 	RET	NZ
 WFILE:	PUSH	BC
-	CALL	LPrint
+	CALL	LPRINT
 	LD	A,#37
 	CALL	DMESS
 	POP	AF
 	ADD	A,"@"
-	CALL	PrintChar
+	CALL	PRCHAR
 	LD	A,#38
 	CALL	DMESS
-	CALL	LPrint
+	CALL	LPRINT
 	CALL	PAUSE
 	LD	A,#02
 	RET
 
-OpenBTM:	LD	HL,FIB1+#18
+OPENBTM:	LD	HL,FIB1+#18
 	LD	D,(HL)
 	DEC	HL
 	LD	A,(HL)
 	OR	D
-	JR	Z,Next_0634
-Next_0633:	LD	A,.NORAM
+	JR	Z,OPE20
+OPE10:	LD	A,.NORAM
 	CP	A
 	RET
 
-Next_0634:	DEC	HL
+OPE20:	DEC	HL
 	LD	A,(HL)
 	CP	#40
-	JR	NC,Next_0633
+	JR	NC,OPE10
 	XOR	A
 	LD	B,A
 	INC	A
 	CALL	ALL_SEG
-	LD	(BatchPage),A
+	LD	(BATPAGE),A
 	LD	A,.NORAM
 	RET	C
 	LD	DE,FIB1
@@ -167,8 +172,8 @@ Next_0634:	DEC	HL
 	RET	NZ
 	PUSH	BC
 	CALL	GET_P2
-	LD	(TemporaryPage),A
-	LD	A,(BatchPage)
+	LD	(TMPPAGE),A
+	LD	A,(BATPAGE)
 	CALL	PUT_P2
 	LD	DE,#8000
 	LD	HL,#3FFF
@@ -181,7 +186,7 @@ Next_0634:	DEC	HL
 	PUSH	AF
 	ADD	HL,DE
 	LD	(HL),#1A
-	LD	A,(TemporaryPage)
+	LD	A,(TMPPAGE)
 	CALL	PUT_P2
 	POP	DE
 	POP	BC
@@ -192,13 +197,13 @@ Next_0634:	DEC	HL
 	RET	NZ
 	LD	H,A
 	LD	L,A
-	LD	(BatLineAdr),HL
+	LD	(BATLINADDR),HL
 	OR	D
 	RET
 
-ReleaseBTM:	LD	A,(BatchPage)
+FREEBTM:	LD	A,(BATPAGE)
 	CALL	FRE_SEG
 	XOR	A
-	LD	(BatchPage),A
+	LD	(BATPAGE),A
 	RET
 
