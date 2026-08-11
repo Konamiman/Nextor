@@ -1,5 +1,7 @@
+	name('tables')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Dispatch tables
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The dispatch tables: TABORDER values, the internal command table,
@@ -25,7 +27,7 @@
 ;        The table has no terminator of its own: the scan relies on the
 ; ascending length order to give up before running into CMDTAB. When no
 ; entry matches (or TABORDER is not set) the default is %00000011.
-ORDTAB:	DEFB	3
+ORDTAB::	DEFB	3
 	DEFB	"DIR"
 	DEFB	%00000010	; Directories only.
 
@@ -49,254 +51,254 @@ ORDTAB:	DEFB	3
 ; (DC10 in cli.mac) against the first word of the command line.
 ;        Each entry is a length byte, the command name and a DEFW with the
 ; handler address. The zero length byte at CMDTEND terminates the table.
-CMDTAB:	DEFB	2
+CMDTAB::	DEFB	2
 	DEFB	"IF"
-	DEFW	@IF
+	DEFW	@IF##
 
 	DEFB	2
 	DEFB	"CD"
-	DEFW	@CHDIR
+	DEFW	@CHDIR##
 
 	DEFB	2
 	DEFB	"RD"
-	DEFW	@RMDIR
+	DEFW	@RMDIR##
 
 	DEFB	2
 	DEFB	"MD"
-	DEFW	@MKDIR
+	DEFW	@MKDIR##
 
 	DEFB	3
 	DEFB	"CDD"
-	DEFW	@CDD
+	DEFW	@CDD##
 
 	DEFB	3
 	DEFB	"CLS"
-	DEFW	@CLS
+	DEFW	@CLS##
 
 	DEFB	3
 	DEFB	"CPU"
-	DEFW	@CPU
+	DEFW	@CPU##
 
 	DEFB	3
 	DEFB	"DEL"
-	DEFW	@ERASE
+	DEFW	@ERASE##
 
 	DEFB	3
 	DEFB	"DIR"
-	DEFW	@DIR
+	DEFW	@DIR##
 
 	DEFB	3
 	DEFB	"END"
-	DEFW	@END
+	DEFW	@END##
 
 	DEFB	3
 	DEFB	"IFF"
-	DEFW	@IFF
+	DEFW	@IFF##
 
 	DEFB	3
 	DEFB	"REM"
-	DEFW	@REM
+	DEFW	@REM##
 
 	DEFB	3
 	DEFB	"REN"
-	DEFW	@RENAME
+	DEFW	@RENAME##
 
 	DEFB	3
 	DEFB	"SET"
-	DEFW	@SET
+	DEFW	@SET##
 
 	DEFB	3
 	DEFB	"VER"
-	DEFW	@VER
+	DEFW	@VER##
 
 	DEFB	3
 	DEFB	"VOL"
-	DEFW	@VOL
+	DEFW	@VOL##
 
 	DEFB	4
 	DEFB	"BEEP"
-	DEFW	@BEEP
+	DEFW	@BEEP##
 
 	DEFB	4
 	DEFB	"COPY"
-	DEFW	@COPY
+	DEFW	@COPY##
 
 	DEFB	4
 	DEFB	"DATE"
-	DEFW	@DATE
+	DEFW	@DATE##
 
 	DEFB	4
 	DEFB	"ECHO"
-	DEFW	@ECHO
+	DEFW	@ECHO##
 
 	DEFB	4
 	DEFB	"ELSE"
-	DEFW	@ELSE
+	DEFW	@ELSE##
 
 	DEFB	4
 	DEFB	"EXIT"
-	DEFW	@EXIT
+	DEFW	@EXIT##
 
 	DEFB	4
 	DEFB	"FREE"
-	DEFW	@FREE
+	DEFW	@FREE##
 
 	DEFB	4
 	DEFB	"GOTO"
-	DEFW	@GOTO
+	DEFW	@GOTO##
 
 	DEFB	4
 	DEFB	"HELP"
-	DEFW	@HELP
+	DEFW	@HELP##
 
 	DEFB	4
 	DEFB	"MODE"
-	DEFW	@MODE
+	DEFW	@MODE##
 
 	DEFB	4
 	DEFB	"MOVE"
-	DEFW	@MOVE
+	DEFW	@MOVE##
 
 	DEFB	4
 	DEFB	"PATH"
-	DEFW	@PATH
+	DEFW	@PATH##
 
 	DEFB	4
 	DEFB	"POPD"
-	DEFW	@POPD
+	DEFW	@POPD##
 
 	DEFB	4
 	DEFB	"THEN"
-	DEFW	@THEN
+	DEFW	@THEN##
 
 	DEFB	4
 	DEFB	"TIME"
-	DEFW	@TIME
+	DEFW	@TIME##
 
 	DEFB	4
 	DEFB	"TYPE"
-	DEFW	@TYPE
+	DEFW	@TYPE##
 
 	DEFB	5
 	DEFB	"ALIAS"
-	DEFW	@ALIAS
+	DEFW	@ALIAS##
 
 	DEFB	5
 	DEFB	"ATDIR"
-	DEFW	@ATDIR
+	DEFW	@ATDIR##
 
 	DEFB	5
 	DEFB	"BASIC"
-	DEFW	@BASIC
+	DEFW	@BASIC##
 
 	DEFB	5
 	DEFB	"CHDIR"
-	DEFW	@CHDIR
+	DEFW	@CHDIR##
 
 	DEFB	5
 	DEFB	"COLOR"
-	DEFW	@COLOR
+	DEFW	@COLOR##
 
 	DEFB	5
 	DEFB	"ECHOS"
-	DEFW	@ECHOS
+	DEFW	@ECHOS##
 
 	DEFB	5
 	DEFB	"GOSUB"
-	DEFW	@GOSUB
+	DEFW	@GOSUB##
 
 	DEFB	5
 	DEFB	"INKEY"
-	DEFW	@INKEY
+	DEFW	@INKEY##
 
 	DEFB	5
 	DEFB	"INPUT"
-	DEFW	@INPUT
+	DEFW	@INPUT##
 
 	DEFB	5
 	DEFB	"MKDIR"
-	DEFW	@MKDIR
+	DEFW	@MKDIR##
 
 	DEFB	5
 	DEFB	"MVDIR"
-	DEFW	@MVDIR
+	DEFW	@MVDIR##
 
 	DEFB	5
 	DEFB	"PAUSE"
-	DEFW	@PAUSE
+	DEFW	@PAUSE##
 
 	DEFB	5
 	DEFB	"PUSHD"
-	DEFW	@PUSHD
+	DEFW	@PUSHD##
 
 	DEFB	5
 	DEFB	"RESET"
-	DEFW	@RESET
+	DEFW	@RESET##
 
 	DEFB	5
 	DEFB	"RMDIR"
-	DEFW	@RMDIR
+	DEFW	@RMDIR##
 
 	DEFB	5
 	DEFB	"RNDIR"
-	DEFW	@RNDIR
+	DEFW	@RNDIR##
 
 	DEFB	6
 	DEFB	"ASSIGN"
-	DEFW	@ASSIGN
+	DEFW	@ASSIGN##
 
 	DEFB	6
 	DEFB	"ATTRIB"
-	DEFW	@ATTRIB
+	DEFW	@ATTRIB##
 
 	DEFB	6
 	DEFB	"CDPATH"
-	DEFW	@CDPATH
+	DEFW	@CDPATH##
 
 	DEFB	6
 	DEFB	"CONCAT"
-	DEFW	@CONCAT
+	DEFW	@CONCAT##
 
 	DEFB	6
 	DEFB	"DSKCHK"
-	DEFW	@DSKCHK
+	DEFW	@DSKCHK##
 
 	DEFB	6
 	DEFB	"ENDIFF"
-	DEFW	@ENDIFF
+	DEFW	@ENDIFF##
 
 	DEFB	6
 	DEFB	"FORMAT"
-	DEFW	@FORMAT
+	DEFW	@FORMAT##
 
 	DEFB	6
 	DEFB	"MEMORY"
-	DEFW	@MEMORY
+	DEFW	@MEMORY##
 
 	DEFB	6
 	DEFB	"RETURN"
-	DEFW	@RETURN
+	DEFW	@RETURN##
 
 	DEFB	6
 	DEFB	"VERIFY"
-	DEFW	@VERIFY
+	DEFW	@VERIFY##
 
 	DEFB	7
 	DEFB	"BUFFERS"
-	DEFW	@BUFFERS
+	DEFW	@BUFFERS##
 
 	DEFB	7
 	DEFB	"HISTORY"
-	DEFW	@HISTORY
+	DEFW	@HISTORY##
 
 	DEFB	7
 	DEFB	"RAMDISK"
-	DEFW	@RAMDISK
+	DEFW	@RAMDISK##
 
 ;        The terminating zero also doubles as the shared empty string: the
 ; %var% expander and the variable functions return DE -> CMDTEND for a null
 ; value (RPC90 in cli.mac, FND90 in intvar.mac).
-CMDTEND:	DEFB	0	; End of table.
+CMDTEND::	DEFB	0	; End of table.
 
 ;        The internal variable table, scanned by the %var% expander (RPC80
 ; in cli.mac) when a variable name starts with "_"; the names are stored
@@ -304,105 +306,105 @@ CMDTEND:	DEFB	0	; End of table.
 ;        Each entry is a length byte, the name and a DEFW with the handler
 ; address (see intvar.mac; the handler is called with no arguments and
 ; returns DE -> ASCIIZ value). Terminated by a zero length byte.
-IVTAB:	DEFB	2
+IVTAB::	DEFB	2
 	DEFB	"BG"
-	DEFW	IV_BG
+	DEFW	IV_BG##
 
 	DEFB	2
 	DEFB	"FG"
-	DEFW	IV_FG
+	DEFW	IV_FG##
 
 	DEFB	3
 	DEFB	"CPU"
-	DEFW	IV_CPU
+	DEFW	IV_CPU##
 
 	DEFB	3
 	DEFB	"CWD"
-	DEFW	IV_CWD
+	DEFW	IV_CWD##
 
 	DEFB	3
 	DEFB	"CWP"
-	DEFW	IV_CWP
+	DEFW	IV_CWP##
 
 	DEFB	3
 	DEFB	"DOW"
-	DEFW	IV_DOW
+	DEFW	IV_DOW##
 
 	DEFB	3
 	DEFB	"ROW"
-	DEFW	IV_ROW
+	DEFW	IV_ROW##
 
 	DEFB	4
 	DEFB	"BOOT"
-	DEFW	IV_BOOT
+	DEFW	IV_BOOT##
 
 	DEFB	4
 	DEFB	"CWDS"
-	DEFW	IV_CWDS
+	DEFW	IV_CWDS##
 
 	DEFB	4
 	DEFB	"CWPS"
-	DEFW	IV_CWPS
+	DEFW	IV_CWPS##
 
 	DEFB	4
 	DEFB	"DATE"
-	DEFW	IV_DATE
+	DEFW	IV_DATE##
 
 	DEFB	4
 	DEFB	"DISK"
-	DEFW	IV_DISK
+	DEFW	IV_DISK##
 
 	DEFB	4
 	DEFB	"ROWS"
-	DEFW	IV_ROWS
+	DEFW	IV_ROWS##
 
 	DEFB	4
 	DEFB	"TIME"
-	DEFW	IV_TIME
+	DEFW	IV_TIME##
 
 	DEFB	5
 	DEFB	"DATEF"
-	DEFW	IV_DATEF
+	DEFW	IV_DATEF##
 
 	DEFB	5
 	DEFB	"ERROR"
-	DEFW	IV_ERROR
+	DEFW	IV_ERROR##
 
 	DEFB	5
 	DEFB	"FNEXT"
-	DEFW	IV_FNEXT
+	DEFW	IV_FNEXT##
 
 	DEFB	5
 	DEFB	"SHELL"
-	DEFW	IV_SHELL
+	DEFW	IV_SHELL##
 
 	DEFB	6
 	DEFB	"COLUMN"
-	DEFW	IV_COLUMN
+	DEFW	IV_COLUMN##
 
 	DEFB	6
 	DEFB	"DOSVER"
-	DEFW	IV_DOSVER
+	DEFW	IV_DOSVER##
 
 	DEFB	6
 	DEFB	"MSXVER"
-	DEFW	IV_MSXVER
+	DEFW	IV_MSXVER##
 
 	DEFB	7
 	DEFB	"COLUMNS"
-	DEFW	IV_COLUMNS
+	DEFW	IV_COLUMNS##
 
 	DEFB	8
 	DEFB	"DRIVEMAP"
-	DEFW	IV_DRIVEMAP
+	DEFW	IV_DRIVEMAP##
 
 	DEFB	9
 	DEFB	"DIRBUFFER"
-	DEFW	IV_DIRBUFFER
+	DEFW	IV_DIRBUFFER##
 
 	DEFB	9
 	DEFB	"FILECOUNT"
-	DEFW	IV_FILECOUNT
+	DEFW	IV_FILECOUNT##
 
 	DEFB	0	; End of table.
 
@@ -414,129 +416,129 @@ IVTAB:	DEFB	2
 ; argument text from between the brackets, with nested constructs already
 ; expanded, and returns DE -> ASCIIZ result). Terminated by a zero length
 ; byte.
-FNTAB:	DEFB	3
+FNTAB::	DEFB	3
 	DEFB	"EXT"
-	DEFW	FN_EXT
+	DEFW	FN_EXT##
 
 	DEFB	3
 	DEFB	"HEX"
-	DEFW	FN_HEX
+	DEFW	FN_HEX##
 
 	DEFB	3
 	DEFB	"LEN"
-	DEFW	FN_LEN
+	DEFW	FN_LEN##
 
 	DEFB	3
 	DEFB	"MID"
-	DEFW	FN_MID
+	DEFW	FN_MID##
 
 	DEFB	4
 	DEFB	"CHAR"
-	DEFW	FN_CHAR
+	DEFW	FN_CHAR##
 
 	DEFB	4
 	DEFB	"FILE"
-	DEFW	FN_FILE
+	DEFW	FN_FILE##
 
 	DEFB	4
 	DEFB	"FULL"
-	DEFW	FN_FULL
+	DEFW	FN_FULL##
 
 	DEFB	4
 	DEFB	"LEFT"
-	DEFW	FN_LEFT
+	DEFW	FN_LEFT##
 
 	DEFB	4
 	DEFB	"NAME"
-	DEFW	FN_NAME
+	DEFW	FN_NAME##
 
 	DEFB	4
 	DEFB	"PATH"
-	DEFW	FN_PATH
+	DEFW	FN_PATH##
 
 	DEFB	5
 	DEFB	"ALIAS"
-	DEFW	FN_ALIAS
+	DEFW	FN_ALIAS##
 
 	DEFB	5
 	DEFB	"ASCII"
-	DEFW	FN_ASCII
+	DEFW	FN_ASCII##
 
 	DEFB	5
 	DEFB	"DRIVE"
-	DEFW	FN_DRIVE
+	DEFW	FN_DRIVE##
 
 	DEFB	5
 	DEFB	"INSTR"
-	DEFW	FN_INSTR
+	DEFW	FN_INSTR##
 
 	DEFB	5
 	DEFB	"LABEL"
-	DEFW	FN_LABEL
+	DEFW	FN_LABEL##
 
 	DEFB	5
 	DEFB	"LOWER"
-	DEFW	FN_LOWER
+	DEFW	FN_LOWER##
 
 	DEFB	5
 	DEFB	"PARSE"
-	DEFW	FN_PARSE
+	DEFW	FN_PARSE##
 
 	DEFB	5
 	DEFB	"READY"
-	DEFW	FN_READY
+	DEFW	FN_READY##
 
 	DEFB	5
 	DEFB	"RIGHT"
-	DEFW	FN_RIGHT
+	DEFW	FN_RIGHT##
 
 	DEFB	5
 	DEFB	"UPPER"
-	DEFW	FN_UPPER
+	DEFW	FN_UPPER##
 
 	DEFB	6
 	DEFB	"ATTRIB"
-	DEFW	FN_ATTRIB
+	DEFW	FN_ATTRIB##
 
 	DEFB	6
 	DEFB	"FFIRST"
-	DEFW	FN_FFIRST
+	DEFW	FN_FFIRST##
 
 	DEFB	7
 	DEFB	"NEWFILE"
-	DEFW	FN_NEWFILE
+	DEFW	FN_NEWFILE##
 
 	DEFB	8
 	DEFB	"DISKFREE"
-	DEFW	FN_DISKFREE
+	DEFW	FN_DISKFREE##
 
 	DEFB	8
 	DEFB	"DISKUSED"
-	DEFW	FN_DISKUSED
+	DEFW	FN_DISKUSED##
 
 	DEFB	8
 	DEFB	"FILEATTR"
-	DEFW	FN_FILEATTR
+	DEFW	FN_FILEATTR##
 
 	DEFB	8
 	DEFB	"FILEDATE"
-	DEFW	FN_FILEDATE
+	DEFW	FN_FILEDATE##
 
 	DEFB	8
 	DEFB	"FILESIZE"
-	DEFW	FN_FILESIZE
+	DEFW	FN_FILESIZE##
 
 	DEFB	8
 	DEFB	"FILETIME"
-	DEFW	FN_FILETIME
+	DEFW	FN_FILETIME##
 
 	DEFB	9
 	DEFB	"DISKTOTAL"
-	DEFW	FN_DISKTOTAL
+	DEFW	FN_DISKTOTAL##
 
 	DEFB	9
 	DEFB	"FILETOTAL"
-	DEFW	FN_FILETOTAL
+	DEFW	FN_FILETOTAL##
 
 	DEFB	0	; End of table.
 

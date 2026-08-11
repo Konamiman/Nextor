@@ -1,5 +1,7 @@
+	name('cmd')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Non-disk commands
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The internal commands that do not deal with files: batch flow
@@ -14,18 +16,18 @@
 ;******************************************************************************
 ;        The REM command does nothing, so that remark lines in batch files
 ; parse as valid commands.
-@REM:	XOR	A	; Return with no error.
+@REM::	XOR	A	; Return with no error.
 	RET
 
-		SUBTTL	BEEP
+		SUBTTL	BEEP##
 ;        The BEEP command just prints a BEL control character. Note that on
 ; entry to an internal command handler HL points to the parameter text and
 ; A=FF, so the initial AND (HL) sets Z when there are no parameters.
-@BEEP:	AND	(HL)	; No parameters allowed.
-	LD	A,.INP
+@BEEP::	AND	(HL)	; No parameters allowed.
+	LD	A,.INP##
 	RET	NZ
 	LD	A,#07	; Print BEL.
-	JP	PRCHAR
+	JP	PRCHAR##
 
 ;        This module contains the command routines for the  assorted  commands
 ; which are not directly related to the disk system eg. CLS and DATE.
@@ -34,45 +36,45 @@
 ; assignment,  clears all assignments or displays the current assignment for a
 ; specified drive. Note that a drive can be un-assigned without affecting  the
 ; other drives by assigning it to itself.
-@ASSIGN:	AND	(HL)	; If no parameters, then just cancel
+@ASSIGN::	AND	(HL)	; If no parameters, then just cancel
 	LD	B,A	;   all assigns.
 	LD	D,A
-	LD	C,_ASSIGN
+	LD	C,_ASSIGN##
 	JP	Z,BDOS
 
 	CALL	PARSDR	; Parse a drive letter.
 	RET	NZ
 	LD	B,D	; Save in B.
-	CALL	GETCH
+	CALL	GETCH##
 	JR	NZ,ASN10	; Go if second drive given.
 	LD	D,#FF	; Else get current assign for this
-	LD	C,_ASSIGN	;   drive.
+	LD	C,_ASSIGN##	;   drive.
 	PUSH	BC
 	CALL	BDOS
 	POP	BC
 	RET	NZ
-	LD	HL,LPRINT	; Print CRLF at end.
+	LD	HL,LPRINT##	; Print CRLF at end.
 	PUSH	HL
 	CALL	DDRV	; Print drive.
 	LD	A,"="	; Print '=' and the other drive.
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	B,D
 DDRV:	LD	A,B
 	ADD	A,"@"
-	CALL	PRCHAR	; Print drive letter.
+	CALL	PRCHAR##	; Print drive letter.
 	LD	A,":"
-	JP	PRCHAR
+	JP	PRCHAR##
 
 ASN10:	CALL	PARSDR	; Get second drive.
 	RET	NZ
-	CALL	GETCH	; Make sure there's no garbage on the
-	LD	A,.INP	;   end of the line.
+	CALL	GETCH##	; Make sure there's no garbage on the
+	LD	A,.INP##	;   end of the line.
 	RET	NZ
-	LD	C,_ASSIGN	; Attempt to set up new assign.
+	LD	C,_ASSIGN##	; Attempt to set up new assign.
 	JP	BDOS
 
-PARSDR:	LD	A,(HL)	; Get drive letter.
-	CALL	UC
+PARSDR::	LD	A,(HL)	; Get drive letter.
+	CALL	UC##
 	SUB	"@"	; Attempt to convert to drive number.
 	JR	C,IDRV	; Invalid drive if < 'A'.
 	JR	Z,IDRV
@@ -85,55 +87,55 @@ PARSDR:	LD	A,(HL)	; Get drive letter.
 	JR	NZ,NCOL
 	INC	HL
 NCOL:	LD	A,(HL)	; Make sure drive is followed by a
-	CALL	SEP?	;   separator character.
+	CALL	SEP?##	;   separator character.
 	RET	Z	; OK if it is.
-IDRV:	LD	A,.IDRV
+IDRV:	LD	A,.IDRV##
 	OR	A
 	RET
 
-@BASIC:	CALL	LDCOME
+@BASIC::	CALL	LDCOME##
 	RET	NZ
 	LD	HL,VAREND	; Release variable memory
 	LD	A,#FF	;   (reset VAREND to BFFFh, the
-	CALL	WRCHR	;   segment top: nothing swapped).
+	CALL	WRCHR##	;   segment top: nothing swapped).
 	INC	HL
 	LD	A,#BF
-	CALL	WRCHR
+	CALL	WRCHR##
 	LD	SP,#F51F
 	CALL	#F368
 	JP	#4022
 
-@BUFFERS:	AND	(HL)
+@BUFFERS::	AND	(HL)
 	JR	NZ,SETBUF
-	LD	BC,_BUFFER
+	LD	BC,_BUFFER##
 	CALL	BDOS
 	RET	NZ
 	PUSH	BC
 	LD	A,#27
-	CALL	DMESS
+	CALL	DMESS##
 	POP	AF
-	LD	IX,ENVDATA
+	LD	IX,ENVDATA##
 	PUSH	IX
-	CALL	D8
+	CALL	D8##
 	POP	DE
-	JP	DMSCR
+	JP	DMSCR##
 
-SETBUF:	CALL	GET8	; Get the number specified into E.
-	CALL	Z,CHKNO
+SETBUF:	CALL	GET8##	; Get the number specified into E.
+	CALL	Z,CHKNO##
 	RET	NZ
 	LD	A,(HL)	; Check for garbage on the end of the
 	OR	A	;   line.
-	LD	A,.INP
+	LD	A,.INP##
 	RET	NZ	; Give error if too many parameters.
 	LD	B,E	; Get specified number.
-	LD	C,_BUFFER
+	LD	C,_BUFFER##
 	JP	BDOS	; Attempt to set that number.
 
-@CLS:	AND	(HL)
-	LD	A,.INP
+@CLS::	AND	(HL)
+	LD	A,.INP##
 	RET	NZ
 	LD	A,#0C
-	JP	PRCHAR
+	JP	PRCHAR##
 
 		SUBTTL	CPU
 ;        The CPU command (new in 2.40) displays or sets the CPU mode of an
@@ -141,7 +143,7 @@ SETBUF:	CALL	GET8	; Get the number specified into E.
 ; GETCPU BIOS entries, which exist from MSX version 3 upwards; on older
 ; machines setting the mode is silently ignored and the mode is always
 ; reported as Z80.
-@CPU:	AND	(HL)	; Display the mode if no parameter.
+@CPU::	AND	(HL)	; Display the mode if no parameter.
 	JR	Z,CAL20
 	LD	A,(HL)	; Get the mode: a digit 0..2.
 	INC	HL
@@ -150,10 +152,10 @@ SETBUF:	CALL	GET8	; Get the number specified into E.
 	CP	3
 	JR	NC,CAL10
 	EX	AF,AF'	; Save the mode.
-	CALL	GETCH	; No further parameters allowed.
-	LD	A,.INP
+	CALL	GETCH##	; No further parameters allowed.
+	LD	A,.INP##
 	RET	NZ
-	LD	A,(MSXVER)	; Return quietly, doing nothing, on
+	LD	A,(MSXVER##)	; Return quietly, doing nothing, on
 	CP	3	;   machines below MSX turbo R.
 	LD	A,0
 	RET	C
@@ -167,7 +169,7 @@ SETBUF:	CALL	GET8	; Get the number specified into E.
 ; On exit, E = A as returned by the BIOS routine, A = 0 with Z set, and IY
 ; is restored to the base of the IY-addressed variables (CALSLT corrupts
 ; it).
-CALLSLOT:	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
+CALLSLOT::	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
 	LD	HL,#00	; Switch to a stack in page 3,
 	ADD	HL,SP	;   saving the current one.
 	LD	SP,#F51F
@@ -177,43 +179,43 @@ CALLSLOT:	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
 	LD	SP,HL
 	LD	E,A	; Return the BIOS result in E.
 	XOR	A
-	LD	IY,REDIRST	; Restore the variables base.
+	LD	IY,REDIRST##	; Restore the variables base.
 	RET
 
-CAL10:	LD	A,.BADNO	; 'Invalid number' unless 0..2.
+CAL10:	LD	A,.BADNO##	; 'Invalid number' unless 0..2.
 	OR	A
 	RET
 
 CAL20:	LD	A,#43	; Print 'CPU mode is ', then 'Z80'
-	CALL	DMESS	;   if not a turbo R,
-	LD	A,(MSXVER)
+	CALL	DMESS##	;   if not a turbo R,
+	LD	A,(MSXVER##)
 	CP	3
 	LD	A,#44
-	JP	C,DMESSCR
+	JP	C,DMESSCR##
 	LD	IX,#0183	;   else ask GETCPU: message #44+n
 	CALL	CALLSLOT	;   = 'Z80'/'R800-ROM'/'R800-RAM'.
 	LD	A,E
 	ADD	A,#44
-	JP	DMESSCR
+	JP	DMESSCR##
 
-@DATE:	PUSH	HL
-	CALL	DFORM
+@DATE::	PUSH	HL
+	CALL	DFORM##
 	POP	HL
 	LD	A,(HL)
 	OR	A
 	JR	NZ,RDAT
-	LD	C,_GDATE
+	LD	C,_GDATE##
 	CALL	BDOS
 	PUSH	HL
 	PUSH	DE
 	PUSH	AF
 	LD	A,#16
-	CALL	DMESS
+	CALL	DMESS##
 	POP	AF
 	ADD	A,#17
-	CALL	DMESS
+	CALL	DMESS##
 	LD	A,#1E
-	CALL	DMESS
+	CALL	DMESS##
 	POP	DE
 	POP	HL
 	LD	BC,#F844
@@ -227,44 +229,44 @@ CAL20:	LD	A,#43	; Print 'CPU mode is ', then 'Z80'
 	RL	L
 	OR	E
 	LD	D,L
-	LD	HL,ENVNAME+1
+	LD	HL,ENVNAME##+1
 	LD	(HL),D
 	DEC	HL
 	LD	(HL),A
 	LD	C,#FF
-	LD	IX,ENVNAME+2
+	LD	IX,ENVNAME##+2
 	PUSH	IX
-	CALL	DDATE
+	CALL	DDATE##
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#1F
-	CALL	DMESSCR
+	CALL	DMESSCR##
 NEWDAT:	LD	A,#20	; Print 'Enter new date'.
-	CALL	DMESS
-	LD	HL,DATE$	; Get the DATE environment string.
-	CALL	GENV2
+	CALL	DMESS##
+	LD	HL,DATE$##	; Get the DATE environment string.
+	CALL	GENV2##
 	JR	NZ,NDFORM	; Don't print the format if error.
 	LD	A,(DE)	; DATE in the environment ?
 	OR	A
 	JR	Z,NDFORM	; Go if not.
 	PUSH	DE
 	LD	A,#22	; Else print the format from the
-	CALL	DMESS	;   environment.
+	CALL	DMESS##	;   environment.
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#23
-	CALL	DMESS
+	CALL	DMESS##
 NDFORM:	LD	A,#21	; Print end message.
-	CALL	DMESS
-	CALL	INLI	; Input a line.
+	CALL	DMESS##
+	CALL	INLI##	; Input a line.
 	JR	Z,DAT5	; Go if no error.
-	CP	.EOF
+	CP	.EOF##
 	RET	NZ	; Return if not end of file error.
 DAT5:	INC	HL	; Point passed length byte.
-	CALL	GETCH	; Skip leading separators.
+	CALL	GETCH##	; Skip leading separators.
 	RET	Z	; Just return if new date not given.
 RDAT:	EXX	; Hide the input line pointer.
-	LD	C,_GDATE	; Get current date again for defaults.
+	LD	C,_GDATE##	; Get current date again for defaults.
 	CALL	BDOS
 	EXX	; Save current values, get input ptr.
 	LD	A,(IY+#12)
@@ -274,9 +276,9 @@ RDAT:	EXX	; Hide the input line pointer.
 	PUSH	AF	; Save format variable.
 	JR	DAT20
 
-DAT10:	CALL	DTSKIP	; Skip date/time separators.
+DAT10:	CALL	DTSKIP##	; Skip date/time separators.
 	JR	C,BADAT	; Go if invalid.
-DAT20:	CALL	GETNO	; Get a number.
+DAT20:	CALL	GETNO##	; Get a number.
 	EXX
 	LD	B,A	; Save number.
 	SBC	A,A	; FF => invalid number, 0 => OK.
@@ -294,10 +296,10 @@ DAT20:	CALL	GETNO	; Get a number.
 	DEC	A	; Month ?
 	JR	Z,DAT30	; Go if yes, else year.
 	EXX
-	CALL	GETDIG	; See if more digits of the number.
+	CALL	GETDIG##	; See if more digits of the number.
 	JR	C,NOCENT	; Go if not (century not given).
 	INC	HL	; Point to next digit.
-	CALL	GNO	; Get second digit.
+	CALL	GNO##	; Get second digit.
 	JR	C,BADAT	; Error if invalid.
 	EXX
 	SUB	#50	; Convert 80-99 to offset from 1980.
@@ -309,7 +311,7 @@ DAT20:	CALL	GETNO	; Get a number.
 	LD	A,C	; Get year.
 	JR	Z,CENT20	; Go if 20xx.
 BADAT:	POP	AF	; Balance stack.
-	LD	B,.IDATE	; Give 'Invalid date' error.
+	LD	B,.IDATE##	; Give 'Invalid date' error.
 	JR	DAT60	; Print error, re-prompt.
 
 NOCENT:	EXX
@@ -327,26 +329,26 @@ DAT30:	LD	D,B	; Save month.
 DAT40:	LD	E,B
 DAT50:	EXX	; Save new date, get line ptr.
 	DJNZ	DAT10	; Get separator & next digit.
-	CALL	GETCH	; Skip trailing spaces.
+	CALL	GETCH##	; Skip trailing spaces.
 	JR	NZ,BADAT	; Error if end of line.
 	POP	AF	; Balance stack.
 	EXX	; Get the new date.
-	LD	C,_SDATE
+	LD	C,_SDATE##
 	CALL	BDOS	; Attempt to set the new date.
-	AND	.IDATE	; .IDATE if error, else 0.
+	AND	.IDATE##	; .IDATE if error, else 0.
 	RET	Z	; Return if no error.
 	LD	B,A
-DAT60:	LD	DE,ENVNAME
-	LD	C,_EXPLAIN
+DAT60:	LD	DE,ENVNAME##
+	LD	C,_EXPLAIN##
 	CALL	BDOS
 	PUSH	DE
-	CALL	LPRINT
+	CALL	LPRINT##
 	LD	A,#0D
-	CALL	DMESS
+	CALL	DMESS##
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#0E
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	JP	NEWDAT
 
 		SUBTTL	ECHO
@@ -355,46 +357,46 @@ DAT60:	LD	DE,ENVNAME
 ;
 ;        ECHOS (new in 2.40) does the same, but without the trailing CR/LF.
 ;
-@ECHO:	EX	DE,HL	; DE -> arguments.
-	JP	DMSCR	; Print rest of command line & CR,LF.
+@ECHO::	EX	DE,HL	; DE -> arguments.
+	JP	DMSCR##	; Print rest of command line & CR,LF.
 
-@ECHOS:	EX	DE,HL	; DE -> arguments.
-	JP	PRTSTR	; Print rest of command line only.
+@ECHOS::	EX	DE,HL	; DE -> arguments.
+	JP	PRTSTR##	; Print rest of command line only.
 
 		SUBTTL	EXIT
 ;        The EXIT command reads an optional error number as it's argument  and
 ; then  exits  this invokation of COMMAND with the error code. It restores the
 ; pointers at the bottom of page 0, the BIOS re-boot jump entry point and  the
 ; environment strings which COMMAND saved when it was first entered.
-@EXIT:	AND	(HL)
+@EXIT::	AND	(HL)
 	JR	Z,EXIT	; EXIT with no error if no parameters.
-	CALL	GET8	; Else read a number into E.
-	CALL	Z,CHKNO	; Check for garbage after number.
-	CALL	Z,CHKEOL	; Check for garbage on end of line.
+	CALL	GET8##	; Else read a number into E.
+	CALL	Z,CHKNO##	; Check for garbage after number.
+	CALL	Z,CHKEOL##	; Check for garbage on end of line.
 	RET	NZ
 	LD	A,E
 
-EXIT:	PUSH	AF	; Save error code for returning.
-	LD	HL,BOOTSTRAP	; Restore vectors in page 0 to what
+EXIT::	PUSH	AF	; Save error code for returning.
+	LD	HL,BOOTSTRAP##	; Restore vectors in page 0 to what
 	LD	DE,#00	;   they were when COMMAND was invoked.
 	LD	BC,#08
 	LDIR
-	CP	.OKCMD	; Restore environment strings unless
+	CP	.OKCMD##	; Restore environment strings unless
 	JR	Z,ENVDON	;   end of COMMAND <command> (eg.
 ;					;   AUTOEXEC.BAT).
 	LD	DE,#01	; Delete first environment string.
 DELENV:	PUSH	DE
-	CALL	FENV	; Get name of item.
+	CALL	FENV##	; Get name of item.
 	POP	DE
 	INC	DE
 	JR	NZ,DELENV	; Do next if error.
 	OR	(HL)	; Name null (end of strings) ?
 	JR	Z,SETENV	; All deleted if yes.
 	PUSH	DE
-	LD	DE,ENVDATA
+	LD	DE,ENVDATA##
 	XOR	A
 	LD	(DE),A	; Set to a null string to delete.
-	LD	C,_SENV	; Else set item to null.
+	LD	C,_SENV##	; Else set item to null.
 	CALL	BDOS
 	POP	DE	; Now the 1st string's deleted, the 2nd
 	DEC	DE	;   string's become the new first
@@ -411,14 +413,14 @@ SETENV:	LD	HL,(#06)	; Find out address of saved environment
 CPYENV:	LD	A,(HL)	; End of environment string list ?
 	OR	A
 	JR	Z,ENVDON
-	LD	DE,ENVNAME	; Copy name of item to BUFF2.
+	LD	DE,ENVNAME##	; Copy name of item to BUFF2.
 CPY20:	LD	A,(HL)	; Get character.
 	LD	(DE),A
 	DEC	HL
 	INC	DE
 	OR	A
 	JR	NZ,CPY20	; Copy until null at end.
-	LD	DE,ENVDATA	; Copy saved value of item to BUFF.
+	LD	DE,ENVDATA##	; Copy saved value of item to BUFF.
 CPY30:	LD	A,(HL)
 	LD	(DE),A
 	DEC	HL
@@ -426,27 +428,27 @@ CPY30:	LD	A,(HL)
 	OR	A
 	JR	NZ,CPY30	; Copy until null at end.
 	PUSH	HL
-	CALL	SENV	; Set value.
+	CALL	SENV##	; Set value.
 	POP	HL	; HL -> next string.
 	JR	CPYENV
 
 ENVDON:	LD	HL,(#01)
 	INC	HL
-	LD	DE,(WARMBOOT)	; Restore re-boot BIOS jump
+	LD	DE,(WARMBOOT##)	; Restore re-boot BIOS jump
 	LD	(HL),E	;   table entry point.
 	INC	HL
 	LD	(HL),D
 	LD	DE,#00	; Un-define abort routine.
-	LD	C,_DEFAB
+	LD	C,_DEFAB##
 	CALL	BDOS	;   (error ignored)
 	POP	BC	; Restore error code in B.
-	LD	C,_TERM
+	LD	C,_TERM##
 	JP	BDOS	; Terminate with error code.
 
 		SUBTTL	FORMAT
 ;        This is the FORMAT command routine. It simply takes an optional drive
 ; letter and passes this to the format BDOS function.
-@FORMAT:	AND	(HL)
+@FORMAT::	AND	(HL)
 	LD	B,A	; Use default drive if none specified.
 	JR	NZ,FMT_HAS_ARG	;
 	LD	L,#00
@@ -463,7 +465,7 @@ FMT_CHK_DRIVE:	ADD	HL,HL
 FMT_NO_DRIVE:	DJNZ	FMT_CHK_DRIVE
 	LD	A,L	;If nothing remains, no way to proceed.
 	OR	A	;
-	LD	A,.IDRV	;
+	LD	A,.IDRV##	;
 	RET	Z	;
 	LD	A,L
 	DEC	A
@@ -472,7 +474,7 @@ FMT_NO_DRIVE:	DJNZ	FMT_CHK_DRIVE
 	JR	Z,FMT_1DRIVE	; no need to ask for drive name
 	PUSH	HL	;Save drive list.
 	LD	A,#2A
-	CALL	DMESS	;"Drive name? (".
+	CALL	DMESS##	;"Drive name? (".
 	POP	HL
 	PUSH	HL
 	LD	A,"@"
@@ -480,28 +482,28 @@ FMT_ASK_LOOP:	INC	A
 	SRL	L
 	JR	NC,FMT_SKIPDRV
 	PUSH	AF
-	CALL	PRCHAR	;Print drive name.
+	CALL	PRCHAR##	;Print drive name.
 	POP	AF
 	PUSH	AF
 	LD	A,","
-	CALL	NZ,PRCHAR	;Print separator if something remain.
+	CALL	NZ,PRCHAR##	;Print separator if something remain.
 	POP	AF
 FMT_SKIPDRV:	JR	NZ,FMT_ASK_LOOP
 	LD	A,#2B
-	CALL	DMESS	;") " after drive name list.
+	CALL	DMESS##	;") " after drive name list.
 	POP	HL	;Restore drive list
 FMT_ASKAGAIN:	PUSH	HL
-	LD	C,_CONST	; Get a character, gobbling up chars
+	LD	C,_CONST##	; Get a character, gobbling up chars
 	CALL	BDOS	;   in the keyboard buffer.
 	PUSH	AF
-	LD	C,_INNOE
+	LD	C,_INNOE##
 	CALL	BDOS
 	LD	C,A
 	POP	AF
 	POP	HL
 	JR	NZ,FMT_ASKAGAIN
 	LD	A,C
-	CALL	UC	;Force to upper case
+	CALL	UC##	;Force to upper case
 	LD	C,A
 	SUB	"A"
 	CP	#08
@@ -517,8 +519,8 @@ FMT_GETMASK:	RLA
 					; or does not support format.
 	PUSH	AF
 	LD	A,C
-	CALL	PRCHAR	;Echo to the console.
-	CALL	LPRINT
+	CALL	PRCHAR##	;Echo to the console.
+	CALL	LPRINT##
 	POP	AF
 FMT_1DRIVE:	INC	B	;Always comes here with B=0.
 	RRCA	;
@@ -528,38 +530,38 @@ FMT_1DRIVE:	INC	B	;Always comes here with B=0.
 FMT_HAS_ARG:	INC	HL	; A drive letter plus a colon must
 	LD	A,(HL)	;   have been given.
 	CP	":"
-	LD	A,.IPARM
+	LD	A,.IPARM##
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	SEP?
-	LD	A,.IPARM
+	CALL	SEP?##
+	LD	A,.IPARM##
 	RET	NZ
 	LD	A,B	; Convert the letter to a drive
-	CALL	UC	;   number, 1..26.
+	CALL	UC##	;   number, 1..26.
 	CP	"Z"+1
 	JR	NC,NCIDRV
 	SUB	"A"
 	LD	B,A
 	CCF
-NCIDRV:	LD	A,.IDRV
+NCIDRV:	LD	A,.IDRV##
 	RET	NC
 	INC	B
-	CALL	GETCH	; No format choice given: use the
+	CALL	GETCH##	; No format choice given: use the
 	JR	Z,NFDRV	;   _FORMAT prompt.
 	CP	"/"	; An option cannot come first.
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET	Z
 	PUSH	BC	; Get the format choice, 1..9.
-	CALL	GET8
+	CALL	GET8##
 	POP	BC
 	RET	NZ
 	OR	E
-	LD	A,.IPARM
+	LD	A,.IPARM##
 	RET	Z
 	LD	A,E
 	CP	#0A
-	LD	A,.IPARM
+	LD	A,.IPARM##
 	RET	NC
 	LD	A,(HL)	; Go if anything follows the
 	OR	A	;   choice.
@@ -570,22 +572,22 @@ NCIDRV:	LD	A,.IDRV
 
 NCI10:	CP	"/"	; Only the /X option may follow
 	JR	Z,NCI20	;   the choice number.
-	CALL	SEP?
-	LD	A,.IPARM
+	CALL	SEP?##
+	LD	A,.IPARM##
 	RET	NZ
-	CALL	GETCH
+	CALL	GETCH##
 	CP	"/"
-	LD	A,.INP
+	LD	A,.INP##
 	RET	NZ
 NCI20:	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"X"	; /X: format at once, skipping the
-	LD	A,.IOPT	;   warning prompt.
+	LD	A,.IOPT##	;   warning prompt.
 	RET	NZ
 	INC	HL
-	CALL	CHKEOL
-	CALL	Z,GCHKEOL
+	CALL	CHKEOL##
+	CALL	Z,GCHKEOL##
 	RET	NZ
 	LD	A,E
 	JR	NST10
@@ -593,7 +595,7 @@ NCI20:	INC	HL
 NFDRV:	LD	A,B
 	EXX	; Save drive in B'.
 	LD	B,A
-	LD	C,_FORMAT
+	LD	C,_FORMAT##
 	XOR	A	; Get pointer to prompt string.
 	CALL	BDOS
 	RET	NZ
@@ -607,16 +609,16 @@ GETCHR:	LD	A,B	; Get slot number.
 	OR	A
 	JR	Z,DONSTR	; Go if string has been printed.
 	INC	HL	; Next character.
-	CALL	PRCHAR	; Print character.
+	CALL	PRCHAR##	; Print character.
 	JR	GETCHR	; Do next character.
 
 DONSTR:	LD	A,"?"
-	CALL	PRCHAR
-	CALL	SPACE
-INCHAR:	LD	C,_CONST	; Get a character, gobbling up chars
+	CALL	PRCHAR##
+	CALL	SPACE##
+INCHAR:	LD	C,_CONST##	; Get a character, gobbling up chars
 	CALL	BDOS	;   in the keyboard buffer.
 	PUSH	AF
-	LD	C,_INNOE
+	LD	C,_INNOE##
 	CALL	BDOS
 	LD	C,A
 	POP	AF
@@ -628,33 +630,33 @@ INCHAR:	LD	C,_CONST	; Get a character, gobbling up chars
 	JR	C,INCHAR
 	PUSH	AF	; Save choice.
 	LD	A,C	; Echo it.
-	CALL	PRCHAR
-	CALL	LPRINT
+	CALL	PRCHAR##
+	CALL	LPRINT##
 	POP	AF
 NSTR:	INC	A
 	PUSH	AF
-	CALL	LPRINT
+	CALL	LPRINT##
 	LD	A,#2C
-	CALL	DMESS
+	CALL	DMESS##
 	EXX
 	LD	A,B
 	EXX
 	DEC	A
-	LD	C,_CURDRV
+	LD	C,_CURDRV##
 	CALL	M,BDOS
 	ADD	A,"A"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A,#2D
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	CALL	PAUSE
 	POP	AF
 	EXX
-NST10:	LD	DE,ENVDATA	; Format, using all memory from
-	LD	HL,(EXITADDR)	;   BUFF up to the resident code as
+NST10:	LD	DE,ENVDATA##	; Format, using all memory from
+	LD	HL,(EXITADDR##)	;   BUFF up to the resident code as
 	OR	A	;   the work buffer.
 	SBC	HL,DE
 	EX	DE,HL
-	LD	C,_FORMAT
+	LD	C,_FORMAT##
 	JP	BDOS
 
 		SUBTTL	MEMORY
@@ -667,11 +669,11 @@ NST10:	LD	DE,ENVDATA	; Format, using all memory from
 ; area and the variable swap space used for running nested COMMAND2's.
 ;        /K prints figures of 1K and over in kilobytes, /P pages the
 ; output.
-@MEMORY:	AND	(HL)	; Parse options first if present.
+@MEMORY::	AND	(HL)	; Parse options first if present.
 	LD	A,#00	; Default is to print byte counts.
-	LD	(OPTFLAG1),A
+	LD	(OPTFLAG1##),A
 	JP	NZ,MEM60
-MEM10:	LD	HL,(MAPTAB)	; Walk the mapper table: per mapper
+MEM10:	LD	HL,(MAPTAB##)	; Walk the mapper table: per mapper
 MEM20:	LD	A,(HL)	;   +0 = slot address (0 ends the
 	OR	A	;   table), +1 = total segments,
 	JR	Z,MEM40	;   +2 = free, +3 = used by system,
@@ -680,46 +682,46 @@ MEM20:	LD	A,(HL)	;   +0 = slot address (0 ends the
 	LD	B,(HL)	; Print total segments as a byte
 	CALL	MUL16	;   (or K) count, then ' total RAM
 	LD	A,#49	;   in Slot '.
-	CALL	DMESS
+	CALL	DMESS##
 	POP	AF
 	LD	B,A
 	AND	%00000011	; Print the primary slot number,
 	ADD	A,"0"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	BIT	7,B	;   plus '-' and the subslot number
 	JR	Z,MEM30	;   if the slot is expanded.
 	LD	A,"-"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A,B
 	RRA
 	RRA
 	AND	%00000011
 	ADD	A,"0"
-	CALL	PRCHAR
-MEM30:	CALL	LPRINT
+	CALL	PRCHAR##
+MEM30:	CALL	LPRINT##
 	INC	HL
 	LD	B,(HL)	; Free segments,
 	CALL	MUL16
 	LD	A,#06	;   as bytes/K plus ' free'.
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	INC	HL
 	LD	B,(HL)	; Segments used by the system.
 	CALL	MUL16
 	LD	A,#4A	; ' used by system'.
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	INC	HL
 	LD	B,(HL)	; Segments used by the user.
 	CALL	MUL16
 	LD	A,#4B	; ' used by user'.
-	CALL	DMESSCR
-	CALL	LPRINT
+	CALL	DMESSCR##
+	CALL	LPRINT##
 	INC	HL	; Advance to the next table entry.
 	INC	HL
 	INC	HL
 	INC	HL
 	JR	MEM20
 
-MEM40:	LD	HL,(EXITADDR)	; Compute the TPA available to a
+MEM40:	LD	HL,(EXITADDR##)	; Compute the TPA available to a
 	LD	DE,#FFD8	;   transient program: the bottom
 	ADD	HL,DE	;   of the resident code less a
 	LD	L,#08	;   margin for the program loader,
@@ -728,20 +730,20 @@ MEM40:	LD	HL,(EXITADDR)	; Compute the TPA available to a
 	SBC	HL,DE
 	LD	L,#06
 	DEC	H
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	LD	HL,#00	; (32-bit high word = 0.)
-	LD	(VALUEH),HL
+	LD	(VALUEH##),HL
 	CALL	PRINT32
 	LD	A,#4C	; ' total TPA memory'.
-	CALL	DMESSCR
-	CALL	LPRINT
-	CALL	GETBUFLEN	; Total size of the history buffer.
+	CALL	DMESSCR##
+	CALL	LPRINT##
+	CALL	GETBUFLEN##	; Total size of the history buffer.
 	PUSH	HL
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	CALL	PRINT32
 	LD	A,#4D	; ' total history buffer'.
-	CALL	DMESSCR
-	CALL	GETENDADDR	; Free history bytes = size minus
+	CALL	DMESSCR##
+	CALL	GETENDADDR##	; Free history bytes = size minus
 	EX	DE,HL	;   what is in use, i.e. from the
 	POP	HL	;   buffer start to the end
 	SBC	HL,DE	;   pointer.
@@ -749,28 +751,28 @@ MEM40:	LD	HL,(EXITADDR)	; Compute the TPA available to a
 	LD	DE,BUFADDR
 	ADD	HL,DE
 	DEC	HL
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	CALL	PRINT32
 	LD	A,#06	; ' free'.
-	CALL	DMESSCR
-	CALL	LPRINT
-	CALL	SETPG2	; Total alias memory: from the
+	CALL	DMESSCR##
+	CALL	LPRINT##
+	CALL	SETPG2##	; Total alias memory: from the
 	LD	HL,(ALIEND+#8000)	;   start of the alias area to its
-	CALL	RSTPG2	;   end, both kept in the mapper
+	CALL	RSTPG2##	;   end, both kept in the mapper
 	SET	7,H	;   segment. SET 7,H turns a
 	PUSH	HL	;   segment offset into a page 2
-	CALL	GETALIADDR	;   address.
+	CALL	GETALIADDR##	;   address.
 	SET	7,H
 	EX	DE,HL
 	POP	HL
 	PUSH	HL
 	PUSH	DE
 	SBC	HL,DE
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	CALL	PRINT32
 	LD	A,#4E	; ' total alias memory'.
-	CALL	DMESSCR
-	CALL	SETPG2
+	CALL	DMESSCR##
+	CALL	SETPG2##
 	POP	HL
 MEM50:	LD	C,(HL)	; Find the end of the alias
 	INC	HL	;   records: each starts with its
@@ -780,56 +782,56 @@ MEM50:	LD	C,(HL)	; Find the end of the alias
 	LD	A,B
 	OR	C
 	JR	NZ,MEM50
-	CALL	RSTPG2
+	CALL	RSTPG2##
 	EX	DE,HL	; Free alias memory = area end
 	POP	HL	;   minus end of the records.
 	SBC	HL,DE
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	CALL	PRINT32
 	LD	A,#06	; ' free'.
-	CALL	DMESSCR
-	CALL	LPRINT
-	CALL	SETPG2	; Total variable swap memory: from
+	CALL	DMESSCR##
+	CALL	LPRINT##
+	CALL	SETPG2##	; Total variable swap memory: from
 	LD	DE,(ALIEND+#8000)	;   the end of the alias area to
 	PUSH	DE	;   the top of the 16K segment.
 	LD	HL,#3FFF
 	SBC	HL,DE
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	CALL	PRINT32
 	LD	A,#4F	; ' total variable swap memory'.
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	LD	HL,(VAREND+#8000)	; Free = the bottom of the in-use
 	RES	7,H	;   swap area (it grows downwards)
 	POP	DE	;   minus the end of the alias
 	SBC	HL,DE	;   area.
-	LD	(VALUEL),HL
-	CALL	RSTPG2
+	LD	(VALUEL##),HL
+	CALL	RSTPG2##
 	CALL	PRINT32
 	LD	A,#06	; ' free'.
-	JP	DMESSCR
+	JP	DMESSCR##
 
 MEM60:	LD	A,(HL)	; Options: /P pages the output, /K
 	CP	"/"	;   prints in kilobyte units.
-	LD	A,.IPARM
+	LD	A,.IPARM##
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"P"
 	JR	Z,MEM70
 	CP	"K"
 	JR	Z,MEM90
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET
 
-MEM70:	CALL	SETP	; /P: set up the pause line count.
+MEM70:	CALL	SETP##	; /P: set up the pause line count.
 MEM80:	INC	HL
-	CALL	GETCH	; More options may follow.
+	CALL	GETCH##	; More options may follow.
 	JR	NZ,MEM60
 	JP	MEM10
 
 MEM90:	LD	A,#01	; /K: flag kilobyte units.
-	LD	(OPTFLAG1),A
+	LD	(OPTFLAG1##),A
 	JR	MEM80
 
 ;        MUL16 computes B (a number of 16K mapper segments) times 16384
@@ -838,19 +840,19 @@ MEM90:	LD	A,#01	; /K: flag kilobyte units.
 MUL16:	PUSH	HL
 	PUSH	DE
 	LD	HL,#00	; Zero the 32-bit accumulator,
-	LD	(VALUEL),HL
-	LD	(VALUEH),HL
+	LD	(VALUEL##),HL
+	LD	(VALUEH##),HL
 	LD	DE,#4000	;   then add 16384 B times.
 	INC	B	; (B may be 0.)
 	DEC	B
 	JR	Z,MUL60
-MUL40:	LD	HL,(VALUEL)
+MUL40:	LD	HL,(VALUEL##)
 	ADD	HL,DE
-	LD	(VALUEL),HL
+	LD	(VALUEL##),HL
 	JR	NC,MUL50	; Carry into the high word.
-	LD	HL,(VALUEH)
+	LD	HL,(VALUEH##)
 	INC	HL
-	LD	(VALUEH),HL
+	LD	(VALUEH##),HL
 MUL50:	DJNZ	MUL40
 MUL60:	POP	DE
 	POP	HL
@@ -860,31 +862,31 @@ MUL60:	POP	DE
 ; and ' bytes' is printed after the number. When /K is in effect (OPTFLAG1
 ; bit 0), PRLEN2 is used instead: it prints values of 1K and over as 'nK'
 ; and smaller ones as 'n byte(s)'.
-PRINT32:	LD	A,(OPTFLAG1)
+PRINT32:	LD	A,(OPTFLAG1##)
 	BIT	0,A	; /K in effect ?
 	JR	NZ,PRI10
 	PUSH	HL
 	PUSH	DE
-	LD	IX,XBUF1	; Render the number in BUFF3 as 8
+	LD	IX,XBUF1##	; Render the number in BUFF3 as 8
 	PUSH	IX	;   space-padded decimal digits.
-	LD	DE,VALUEL
+	LD	DE,VALUEL##
 	LD	A," "	; ' ' = padding character.
-	CALL	D32
+	CALL	D32##
 	POP	HL
 	PUSH	HL
 	INC	HL	; Insert two spaces to group the
 	INC	HL	;   digits in thousands.
 	LD	C," "
-	CALL	INSBYTE
+	CALL	INSBYTE##
 	INC	HL
 	INC	HL
 	INC	HL
 	INC	HL
-	CALL	INSBYTE
+	CALL	INSBYTE##
 	POP	DE	; Print the number,
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#48	;   then ' bytes'.
-	CALL	DMESS
+	CALL	DMESS##
 	POP	DE
 	POP	HL
 	RET
@@ -892,7 +894,7 @@ PRINT32:	LD	A,(OPTFLAG1)
 PRI10:	PUSH	HL	; /K: print as 'nK', or as 'n
 	PUSH	DE	;   byte(s)' if less than 1K.
 	LD	A," "	; ' ' = padding character.
-	CALL	PRLEN2
+	CALL	PRLEN2##
 	POP	DE
 	POP	HL
 	RET
@@ -905,31 +907,31 @@ PRI10:	PUSH	HL	; /K: print as 'nK', or as 'n
 ; the '~label' given as its parameter and continues execution from the line
 ; after it. If the label is not found, the batch file is ended and 'Invalid
 ; parameter' given.
-@GOTO:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
+@GOTO::	LD	A,(BATHNDL##)	; Only allowed in a .BTM file.
 	CP	#FE
-	LD	A,.BADCM
+	LD	A,.BADCMD##
 	RET	NZ
 	LD	A,(HL)	; A label must be given.
 	OR	A
-	LD	A,.NOPAR
+	LD	A,.NOPAR##
 	RET	Z
 	PUSH	HL	; Save pointer to the label.
 GOT80:	LD	HL,#00	; Rewind the batch file to the
-	LD	(BATLINADDR),HL	;   start.
-GOT90:	CALL	INBAT	; Read the next batch line: Cy set
+	LD	(BATLINADDR##),HL	;   start.
+GOT90:	CALL	INBAT##	; Read the next batch line: Cy set
 	JR	Z,GOT100	;   if it is a '~label' line.
 	POP	HL
-	CP	.EOF	; Errors other than end of file are
+	CP	.EOF##	; Errors other than end of file are
 	RET	NZ	;   returned as they are.
 	CALL	END10	; Label not found: end the batch
 	LD	A,#FF	;   file and give 'Invalid
-	LD	(STRCODE),A	;   parameter', without a 'Batch
-	LD	A,.IPARM	;   file error:' prefix.
+	LD	(STRCODE##),A	;   parameter', without a 'Batch
+	LD	A,.IPARM##	;   file error:' prefix.
 	RET
 
 GOT100:	JR	NC,GOT90	; Skip lines that are not labels.
-	LD	HL,ENVDATA+1	; Compare the line with the given
-	CALL	GETCH	;   label, case sensitively.
+	LD	HL,ENVDATA##+1	; Compare the line with the given
+	CALL	GETCH##	;   label, case sensitively.
 	POP	BC
 	PUSH	BC
 	CALL	STRCMP
@@ -940,58 +942,58 @@ GOT100:	JR	NC,GOT90	; Skip lines that are not labels.
 ;        END terminates the batch file: the read pointer is rewound and an
 ; EOF mark is written at the very start of the batch segment, so the next
 ; attempt to read a line ends the batch file.
-@END:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
+@END::	LD	A,(BATHNDL##)	; Only allowed in a .BTM file.
 	CP	#FE
-	LD	A,.BADCM
+	LD	A,.BADCMD##
 	RET	NZ
 	LD	A,(HL)	; No parameters allowed.
 	OR	A
-	LD	A,.INP
+	LD	A,.INP##
 	RET	NZ
 END10:	LD	HL,#00	; Rewind to the start of the file
-	LD	(BATLINADDR),HL	;   and write a ^Z there.
-	LD	A,(BATPAGE)
+	LD	(BATLINADDR##),HL	;   and write a ^Z there.
+	LD	A,(BATPAGE##)
 	LD	E,#1A
-	JP	WR_SEG
+	JP	WR_SEG##
 
 ;        GOSUB pushes the current batch file position onto the GOSUB list
 ; (up to 8 levels) and then does a GOTO to the given label.
-@GOSUB:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
+@GOSUB::	LD	A,(BATHNDL##)	; Only allowed in a .BTM file.
 	CP	#FE
-	LD	A,.BADCM
+	LD	A,.BADCMD##
 	RET	NZ
 	LD	A,(HL)	; A label must be given.
 	OR	A
-	LD	A,.NOPAR
+	LD	A,.NOPAR##
 	RET	Z
 	PUSH	HL
-	LD	HL,(GOSUBADDR)	; 'Too many parameters' when eight
-	LD	DE,GOSUBLIST+16	;   GOSUBs are already active.
+	LD	HL,(GOSUBADDR##)	; 'Too many parameters' when eight
+	LD	DE,GOSUBLIST##+16	;   GOSUBs are already active.
 	OR	A
 	SBC	HL,DE
 	POP	HL
-	LD	A,.INP
+	LD	A,.INP##
 	RET	Z
 	PUSH	HL
-	LD	HL,(GOSUBADDR)	; Push the current batch position
-	LD	DE,(BATLINADDR)	;   onto the GOSUB list,
+	LD	HL,(GOSUBADDR##)	; Push the current batch position
+	LD	DE,(BATLINADDR##)	;   onto the GOSUB list,
 	LD	(HL),E
 	INC	HL
 	LD	(HL),D
 	INC	HL
-	LD	(GOSUBADDR),HL
+	LD	(GOSUBADDR##),HL
 	JR	GOT80	;   and do the GOTO.
 
 ;        RETURN pops the position saved by GOSUB and continues the batch
 ; file there; if a '~label' parameter is given, it continues at that label
 ; instead.
-@RETURN:	LD	A,(BATHNDL)	; Only allowed in a .BTM file.
+@RETURN::	LD	A,(BATHNDL##)	; Only allowed in a .BTM file.
 	CP	#FE
-	LD	A,.BADCM
+	LD	A,.BADCMD##
 	RET	NZ
 	PUSH	HL
-	LD	HL,(GOSUBADDR)	; Nothing to pop if the GOSUB list
-	LD	DE,GOSUBLIST	;   is empty.
+	LD	HL,(GOSUBADDR##)	; Nothing to pop if the GOSUB list
+	LD	DE,GOSUBLIST##	;   is empty.
 	PUSH	HL
 	SBC	HL,DE
 	POP	HL
@@ -1000,9 +1002,9 @@ END10:	LD	HL,#00	; Rewind to the start of the file
 	LD	D,(HL)	;   BATLINADDR.
 	DEC	HL
 	LD	E,(HL)
-	LD	(GOSUBADDR),HL
+	LD	(GOSUBADDR##),HL
 	EX	DE,HL
-	LD	(BATLINADDR),HL
+	LD	(BATLINADDR##),HL
 RET10:	POP	HL
 	LD	A,(HL)	; If a label was given, then GOTO
 	OR	A	;   it rather than just returning.
@@ -1015,7 +1017,7 @@ RET10:	POP	HL
 ; by COND2 and, when it is true, the rest of the line is executed as a
 ; command. An optional THEN needs no handling here, because THEN is itself
 ; an internal command which just executes the rest of its own line.
-@IF:	CALL	COND2	; Evaluate the condition.
+@IF::	CALL	COND2	; Evaluate the condition.
 	RET	NZ
 	JR	C,EXEC2	; Execute the command if true.
 	XOR	A
@@ -1025,21 +1027,21 @@ RET10:	POP	HL
 ; BUFF, alias expanded, split at a '^' separator (unless a following
 ; command is already pending), stripped of quotes and handed back to the
 ; dispatcher. Used by IF, IFF, THEN, ELSE and ENDIFF.
-EXEC2:	LD	DE,ENVDATA	; Copy the command to BUFF.
+EXEC2:	LD	DE,ENVDATA##	; Copy the command to BUFF.
 	PUSH	DE
-	CALL	NCOPY
+	CALL	NCOPY##
 	POP	DE
-	CALL	ALIASING	; Expand aliases in it.
+	CALL	ALIASING##	; Expand aliases in it.
 	RET	NZ
-	LD	HL,(NEXTADDR)	; Split at '^', unless a next
+	LD	HL,(NEXTADDR##)	; Split at '^', unless a next
 	LD	A,H	;   command is already pending.
 	OR	L
-	CALL	Z,MULTICMD
+	CALL	Z,MULTICMD##
 	EX	DE,HL
 	PUSH	HL
-	CALL	UNQUOTE	; Remove quote characters.
+	CALL	UNQUOTE##	; Remove quote characters.
 	POP	HL
-	JP	DO_CMD	; Dispatch it.
+	JP	DO_CMD##	; Dispatch it.
 
 ;        COND2 evaluates a complete IF/IFF condition, including AND, OR and
 ; XOR combinations of elementary conditions. After the first condition is
@@ -1065,8 +1067,8 @@ COND2:	CALL	COND	; Evaluate one condition: COND
 	PUSH	HL	; Duplicate the line pointer into
 	EXX	;   the other register set.
 	POP	HL
-	CALL	STRIP
-	LD	BC,ENVDATA	; Fetch the next word.
+	CALL	STRIP##
+	LD	BC,ENVDATA##	; Fetch the next word.
 	PUSH	BC
 	CALL	CPYSTR
 	POP	BC
@@ -1078,7 +1080,7 @@ COND2:	CALL	COND	; Evaluate one condition: COND
 	POP	BC
 	POP	HL
 	JR	NZ,CON10
-	CALL	STRIP	; Evaluate the rest of the line,
+	CALL	STRIP##	; Evaluate the rest of the line,
 	EX	AF,AF'	;   then AND the two truth masks.
 	PUSH	AF
 	CALL	COND2
@@ -1096,7 +1098,7 @@ CON10:	PUSH	HL	; Is it OR ?
 	POP	BC
 	POP	HL
 	JR	NZ,CON20
-	CALL	STRIP	; Evaluate the rest of the line,
+	CALL	STRIP##	; Evaluate the rest of the line,
 	EX	AF,AF'	;   then OR the two truth masks.
 	PUSH	AF
 	CALL	COND2
@@ -1114,7 +1116,7 @@ CON20:	PUSH	HL	; Is it XOR ?
 	POP	BC
 	POP	HL
 	JR	NZ,CON30
-	CALL	STRIP	; Evaluate the rest of the line,
+	CALL	STRIP##	; Evaluate the rest of the line,
 	EX	AF,AF'	;   then XOR the two truth masks.
 	PUSH	AF
 	CALL	COND2
@@ -1142,14 +1144,14 @@ CON30:	EXX	; No combining word: restore the
 ;        IFF opens a new level (16 maximum), ELSE toggles the current level
 ; and ENDIFF closes it. All three execute the rest of their command line,
 ; so for example 'ENDIFF command' works.
-@IFF:	PUSH	HL
-	LD	HL,(IFFADDR)	; 'Too many parameters' when 16
-	LD	DE,IFFLIST+16	;   levels are already open.
+@IFF::	PUSH	HL
+	LD	HL,(IFFADDR##)	; 'Too many parameters' when 16
+	LD	DE,IFFLIST##+16	;   levels are already open.
 	CALL	COMPARE4
 	JR	Z,IFF20
 	LD	A,(HL)	; Get the enclosing state and open
 	INC	HL	;   a new level.
-	LD	(IFFADDR),HL
+	LD	(IFFADDR##),HL
 	LD	(HL),A
 	EX	DE,HL	; DE -> the new state byte.
 	POP	HL
@@ -1172,20 +1174,20 @@ IFF10:	SBC	A,A	;   eats this opcode); else FF/00.
 	JP	EXEC2
 
 IFF20:	POP	HL
-	LD	A,.INP
+	LD	A,.INP##
 	RET
 
 ;        THEN executes the rest of its line as a command: after 'IF cond
 ; THEN cmd' the IF executes 'THEN cmd', which in turn executes 'cmd'. When
 ; command mode is off, a THEN is simply never dispatched.
-@THEN:	AND	(HL)	; Nothing to do for THEN alone.
+@THEN::	AND	(HL)	; Nothing to do for THEN alone.
 	RET	Z
 	JP	EXEC2
 
 ;        ELSE inverts the command mode of the current IFF level.
-@ELSE:	PUSH	HL
-	LD	HL,(IFFADDR)	; Nothing to toggle when not within
-	LD	DE,IFFLIST	;   an IFF.
+@ELSE::	PUSH	HL
+	LD	HL,(IFFADDR##)	; Nothing to toggle when not within
+	LD	DE,IFFLIST##	;   an IFF.
 	CALL	COMPARE4
 	JR	Z,ELS10
 	LD	A,(HL)	; Don't toggle a level that was
@@ -1200,13 +1202,13 @@ ELS10:	POP	HL
 	JP	EXEC2
 
 ;        ENDIFF closes the current IFF level.
-@ENDIFF:	PUSH	HL
-	LD	HL,(IFFADDR)	; Close the current level, unless
-	LD	DE,IFFLIST	;   already at the outermost one.
+@ENDIFF::	PUSH	HL
+	LD	HL,(IFFADDR##)	; Close the current level, unless
+	LD	DE,IFFLIST##	;   already at the outermost one.
 	CALL	COMPARE4
 	JR	Z,END20
 	DEC	HL
-	LD	(IFFADDR),HL
+	LD	(IFFADDR##),HL
 END20:	POP	HL
 	LD	A,(HL)	; Execute the rest of the line, if
 	OR	A	;   any.
@@ -1224,7 +1226,7 @@ END20:	POP	HL
 ; On exit,  Z & NC => condition true    (note that this is the opposite
 ;           Z & Cy => condition false    convention to COND2's exit!)
 ;           NZ     => error, code in A.
-COND:	LD	BC,ENVDATA	; Fetch the first word to BUFF.
+COND:	LD	BC,ENVDATA##	; Fetch the first word to BUFF.
 	PUSH	BC
 	CALL	MKPATH2
 	POP	BC
@@ -1238,27 +1240,27 @@ COND:	LD	BC,ENVDATA	; Fetch the first word to BUFF.
 	CCF	; Reverse GO condition
 	RET
 
-COND10:	CALL	GETCH	; Fetch the word after NOT.
-	LD	BC,ENVDATA
+COND10:	CALL	GETCH##	; Fetch the word after NOT.
+	LD	BC,ENVDATA##
 	CALL	MKPATH2
 	RET	NZ
-EXIST?:	LD	BC,ENVDATA	; EXIST keyword: the condition is
+EXIST?:	LD	BC,ENVDATA##	; EXIST keyword: the condition is
 	EX	DE,HL	;   whether the given file exists.
 	LD	HL,$EXIST
 	CALL	COMPARE3
 	EX	DE,HL
 	JR	NZ,EQUAL?	; Else it must be a comparison.
-	CALL	GETCH
-	CALL	PRS	; Get path string.
+	CALL	GETCH##
+	CALL	PRS##	; Get path string.
 	RET	NZ	; Return if error.
 	BIT	3,B	; 'Not found' at once if no
-	LD	A,.NOFIL	;   filename was given.
+	LD	A,.NOFIL##	;   filename was given.
 	JR	Z,EX10
 	LD	C,(HL)	; Save terminating char.
 	LD	(HL),#00	; Terminate path.
 	PUSH	HL
 	PUSH	BC
-	LD	IX,FIB1	; Search the first matching file,
+	LD	IX,FIB1##	; Search the first matching file,
 	LD	BC,#0640	;   hidden and system ones too.
 	CALL	BDOS
 	POP	BC	; Restore terminating char.
@@ -1266,10 +1268,10 @@ EXIST?:	LD	BC,ENVDATA	; EXIST keyword: the condition is
 	LD	(HL),C
 EX10:	OR	A
 	RET	Z	; Z & NC => if no error
-	CP	.NODIR
+	CP	.NODIR##
 	SCF
 	RET	Z	; Z & C => if directory not found
-	CP	.NOFIL
+	CP	.NOFIL##
 	SCF	; Z & C => if file not found,
 	RET	; NZ otherwise.
 
@@ -1278,9 +1280,9 @@ EX10:	OR	A
 ; than) which is kept in AF' while the second expression is fetched to
 ; BUFF+128; then the expressions are compared as strings, strictly and
 ; case sensitively.
-EQUAL?:	CALL	STRIP
+EQUAL?:	CALL	STRIP##
 	LD	A,(HL)	; '==' ?
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"="
 	JR	NZ,EQU10
 	INC	HL
@@ -1294,7 +1296,7 @@ EQU10:	CP	"E"	; 'EQ' ?
 	JR	NZ,EQU20
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"Q"
 	JR	NZ,EQU80
 	LD	A,#01
@@ -1304,7 +1306,7 @@ EQU20:	CP	"G"	; 'GT' ?
 	JR	NZ,EQU30
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"T"
 	JR	NZ,EQU80
 	LD	A,#02
@@ -1314,20 +1316,20 @@ EQU30:	CP	"L"	; 'LT' ?
 	JR	NZ,EQU80
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"T"
 	JR	NZ,EQU80
 	LD	A,#03
 EQU40:	EX	AF,AF'	; Save the operator code.
 	INC	HL
-	CALL	STRIP
-	LD	BC,ENVDATA+#80	; Fetch the second expression to
+	CALL	STRIP##
+	LD	BC,ENVDATA##+#80	; Fetch the second expression to
 	PUSH	BC	;   BUFF+128.
 	CALL	MKPATH2
 	POP	BC
 	RET	NZ
 	EX	DE,HL
-	LD	HL,ENVDATA	; Compare the strings: Z => equal,
+	LD	HL,ENVDATA##	; Compare the strings: Z => equal,
 	CALL	STRCMP	;   Cy => expr1 > expr2.
 	EX	DE,HL
 	EX	AF,AF'	; Dispatch on the operator, with
@@ -1358,14 +1360,14 @@ EQU70:	EX	AF,AF'	; ==: equal => Z & NC (true), else
 	RET
 
 EQU80:	POP	HL	; Invalid operator: drop one return
-	LD	A,.IPARM	;   level (skips NOT's inversion)
+	LD	A,.IPARM##	;   level (skips NOT's inversion)
 	OR	A	;   and give 'Invalid parameter'.
 	RET
 
 ;        Compare the ASCIIZ strings at (BC) and (HL): Z => they are equal.
 ; Otherwise Cy set => the (BC) string is the lower one; this ordering is
 ; what the GT/LT conditions use.
-STRCMP:	LD	A,(BC)
+STRCMP::	LD	A,(BC)
 	CP	(HL)
 	RET	NZ
 	INC	BC
@@ -1377,7 +1379,7 @@ STRCMP:	LD	A,(BC)
 ;        Like STRCMP, but returns Z as soon as the (HL) string ends, i.e.
 ; Z => the string at (HL) is a leading substring of the one at (BC). Used
 ; by the @INSTR function (intvar.mac).
-CHKEQ:	LD	A,(HL)
+CHKEQ::	LD	A,(HL)
 	OR	A
 	RET	Z
 	LD	A,(BC)
@@ -1392,7 +1394,7 @@ CHKEQ:	LD	A,(HL)
 ;        Compare the string at (BC), upper-cased, against the upper case
 ; keyword at (HL): Z => equal.
 COMPARE3:	LD	A,(BC)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	(HL)
 	RET	NZ
 	INC	BC
@@ -1403,7 +1405,7 @@ COMPARE3:	LD	A,(BC)
 
 ;        16-bit compare of HL against DE: Z => equal, Cy => HL < DE. Only
 ; AF is corrupted.
-COMPARE4:	LD	A,H
+COMPARE4::	LD	A,H
 	SUB	D
 	RET	NZ
 	LD	A,L
@@ -1422,28 +1424,28 @@ $XOR:	DEFB	"XOR",0
 ; the background and border colours (each 0..15). They are stored in the
 ; BIOS variables FORCLR/BAKCLR/BDRCLR and made effective with the CHGCLR
 ; BIOS routine.
-@COLOR:	AND	(HL)	; At least one colour is required.
-	LD	A,.NOPAR
+@COLOR::	AND	(HL)	; At least one colour is required.
+	LD	A,.NOPAR##
 	RET	Z
-	CALL	GET8	; Get the foreground colour, 0..15.
+	CALL	GET8##	; Get the foreground colour, 0..15.
 	RET	NZ
 	LD	A,E
 	CP	#10
 	JR	NC,GOT120
 	LD	(FORCLR),A
-	CALL	GETCH
+	CALL	GETCH##
 	JR	Z,COL10
-	CALL	GET8	; Get the background colour, 0..15.
+	CALL	GET8##	; Get the background colour, 0..15.
 	RET	NZ
 	LD	A,E
 	CP	#10
 	JR	NC,GOT120
 	LD	(BAKCLR),A
-	CALL	GETCH
+	CALL	GETCH##
 	JR	Z,COL10
-	CALL	GET8	; Get the border colour, 0..15;
-	CALL	Z,CHKNO	;   nothing may follow it.
-	CALL	Z,CHKEOL
+	CALL	GET8##	; Get the border colour, 0..15;
+	CALL	Z,CHKNO##	;   nothing may follow it.
+	CALL	Z,CHKEOL##
 	RET	NZ
 	LD	A,E
 	CP	#10
@@ -1458,24 +1460,24 @@ COL10:	LD	IX,#62	; Set the new colours with the
 ; more columns the text screen is selected via LINL40 and the INITXT BIOS
 ; routine, with fewer the 32-column screen via LINL32 and INIT32; the
 ; screen is cleared by the re-initialisation.
-@MODE:	AND	(HL)	; At least the columns required.
-	LD	A,.NOPAR
+@MODE::	AND	(HL)	; At least the columns required.
+	LD	A,.NOPAR##
 	RET	Z
 	LD	A,(CRTCNT)	; Default rows = current rows.
-	LD	(XBUF1),A
-	CALL	GET8	; Get the number of columns.
+	LD	(XBUF1##),A
+	CALL	GET8##	; Get the number of columns.
 	RET	NZ
-	CALL	GETCH
+	CALL	GETCH##
 	JR	Z,MOD10
 	PUSH	DE	; Get the number of rows; nothing
-	CALL	GET8	;   may follow it.
+	CALL	GET8##	;   may follow it.
 	LD	C,E
 	POP	DE
-	CALL	Z,CHKNO
-	CALL	Z,CHKEOL
+	CALL	Z,CHKNO##
+	CALL	Z,CHKEOL##
 	RET	NZ
 	LD	A,C
-	LD	(XBUF1),A
+	LD	(XBUF1##),A
 	XOR	A
 MOD10:	OR	E	; Columns must be 1..80.
 	JR	Z,GOT120
@@ -1488,7 +1490,7 @@ MOD10:	OR	E	; Columns must be 1..80.
 	LD	IX,#6F	;   1..32 columns: via LINL32 and
 	INC	HL	;   INIT32.
 GOTCOLS:	LD	(HL),A
-	LD	A,(XBUF1)	; Rows must be 1..26.
+	LD	A,(XBUF1##)	; Rows must be 1..26.
 	OR	A
 	JR	Z,GOT120
 	CP	#1B
@@ -1496,7 +1498,7 @@ GOTCOLS:	LD	(HL),A
 	LD	(CRTCNT),A
 GOT110:	JP	CALLSLOT	; Re-init (and clear) the screen.
 
-GOT120:	LD	A,.IPARM	; Parameter out of range.
+GOT120:	LD	A,.IPARM##	; Parameter out of range.
 	RET
 
 		SUBTTL	INKEY, INPUT
@@ -1507,18 +1509,18 @@ GOT120:	LD	A,.IPARM	; Parameter out of range.
 ; The prompt text, if present, is printed first. INKEY reads a single key,
 ; INPUT a line with all the editing facilities that _BUFIN provides. The
 ; two entries share their code: the carry kept in AF' tells them apart.
-@INKEY:	SCF	; Cy => INKEY.
-@INPUT:	EX	AF,AF'	; Save the INKEY/INPUT flag.
+@INKEY::	SCF	; Cy => INKEY.
+@INPUT::	EX	AF,AF'	; Save the INKEY/INPUT flag.
 	XOR	A
-	LD	(ENVNAME),A	; No name seen yet.
+	LD	(ENVNAME##),A	; No name seen yet.
 	OR	(HL)	; A parameter must be given.
-	LD	A,.NOPAR
+	LD	A,.NOPAR##
 	RET	Z
 	CALL	PRSENV	; A '%name' with no prompt text ?
 	JR	NZ,INP10
-	CALL	GETCH	; Yes if the line ends after it.
+	CALL	GETCH##	; Yes if the line ends after it.
 	JR	Z,INP30
-INP10:	LD	DE,ENVDATA	; Copy the prompt text to BUFF, up
+INP10:	LD	DE,ENVDATA##	; Copy the prompt text to BUFF, up
 INP20:	LD	A,(HL)	;   to a '%' or the end of the
 	OR	A	;   line.
 	JR	Z,INP30
@@ -1534,35 +1536,35 @@ INP30:	PUSH	AF
 	POP	AF
 	OR	A	; Parse the '%name' if the text
 	CALL	NZ,PRSENV	;   ended with '%'.
-	LD	A,.INP
+	LD	A,.INP##
 	RET	NZ
-	CALL	GETCH	; No garbage after the name.
-	LD	A,.INP
+	CALL	GETCH##	; No garbage after the name.
+	LD	A,.INP##
 	RET	NZ
-	LD	A,(ENVNAME)	; A '%name' must have been given.
+	LD	A,(ENVNAME##)	; A '%name' must have been given.
 	OR	A
-	LD	A,.NOPAR
+	LD	A,.NOPAR##
 	RET	Z
-	LD	DE,ENVDATA	; Print the prompt text.
-	CALL	PRTSTR
+	LD	DE,ENVDATA##	; Print the prompt text.
+	CALL	PRTSTR##
 	EX	AF,AF'
 	JR	NC,INP40	; Go if INPUT.
-	CALL	INCH	; INKEY: read one key (returned in
+	CALL	INCH##	; INKEY: read one key (returned in
 	LD	A,L	;   L) and make a one-character
-	LD	HL,ENVDATA	;   string of it in BUFF.
+	LD	HL,ENVDATA##	;   string of it in BUFF.
 	LD	(HL),A
 	INC	HL
 	LD	(HL),0
 	DEC	HL
 	EX	DE,HL
 	JR	INP50
-INP40:	LD	HL,ENVDATA	; INPUT: read a line of up to 127
+INP40:	LD	HL,ENVDATA##	; INPUT: read a line of up to 127
 	LD	(HL),#7F	;   characters into BUFF,
 	EX	DE,HL
-	LD	C,_BUFIN
+	LD	C,_BUFIN##
 	CALL	BDOS
-	CALL	LPRINT
-	LD	HL,ENVDATA+1	;   null-terminate it and point DE
+	CALL	LPRINT##
+	LD	HL,ENVDATA##+1	;   null-terminate it and point DE
 	PUSH	HL	;   at the typed text.
 	LD	C,(HL)
 	LD	B,0
@@ -1571,8 +1573,8 @@ INP40:	LD	HL,ENVDATA	; INPUT: read a line of up to 127
 	LD	(HL),0
 	POP	DE
 	INC	DE
-INP50:	LD	HL,ENVNAME	; Set the environment item named at
-	LD	C,_SENV	;   BUFF2 to the value at (DE).
+INP50:	LD	HL,ENVNAME##	; Set the environment item named at
+	LD	C,_SENV##	;   BUFF2 to the value at (DE).
 	JP	BDOS
 
 ;        Parse a '%name' argument: if (HL) does not point at a '%' then NZ
@@ -1583,7 +1585,7 @@ INP50:	LD	HL,ENVNAME	; Set the environment item named at
 PRSENV:	LD	A,(HL)
 	CP	"%"
 	RET	NZ
-	LD	DE,ENVNAME
+	LD	DE,ENVNAME##
 PRS60:	INC	HL
 	LD	A,(HL)
 	OR	A
@@ -1601,8 +1603,8 @@ PRS70:	XOR	A
 ;        The RESET command (new in 2.40) resets the machine by calling
 ; address 0 of the main BIOS ROM. The stack is moved to page 3 first, as in
 ; CALLSLOT; there is no return.
-@RESET:	AND	(HL)	; No parameters allowed.
-	LD	A,.INP
+@RESET::	AND	(HL)	; No parameters allowed.
+	LD	A,.INP##
 	RET	NZ
 	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
 	LD	SP,#F51F
@@ -1619,17 +1621,17 @@ PRS70:	XOR	A
 ; if one of them is not there), one starting with '+' appends each item
 ; (deleting it first if already present, so items can be re-ordered), and
 ; a plain list replaces the whole path.
-@CDPATH:	PUSH	HL	; CDPATH works on the CDPATH item,
-	LD	HL,CDPATH$
+@CDPATH::	PUSH	HL	; CDPATH works on the CDPATH item,
+	LD	HL,CDPATH$##
 	JR	PAT10
 
-@PATH:	PUSH	HL	;   PATH on the PATH item.
-	LD	HL,PATH$
+@PATH::	PUSH	HL	;   PATH on the PATH item.
+	LD	HL,PATH$##
 PAT10:	PUSH	HL	; Keep the item name pointer in
 	EXX	;   HL'.
 	POP	HL
 	EXX
-	CALL	GENV2	; Get the current value into BUFF.
+	CALL	GENV2##	; Get the current value into BUFF.
 	POP	HL
 	RET	NZ
 	OR	(HL)	; If no parameters, then just print
@@ -1644,14 +1646,14 @@ PAT10:	PUSH	HL	; Keep the item name pointer in
 	DEC	HL
 ADDP:	EX	DE,HL	; HL -> current PATH string.
 	PUSH	HL	; If only separators there, then set
-	CALL	GETCH	;   the PATH string to a null string.
+	CALL	GETCH##	;   the PATH string to a null string.
 	POP	HL	;   This fiddle is done because the
 	JR	NZ,PTH10	;   PATH string is initialised to '; '.
 	LD	(HL),A
 PTH10:	EX	DE,HL
-AP10:	CALL	GETCH	; Skip separators.
+AP10:	CALL	GETCH##	; Skip separators.
 	JR	Z,APC10	; Set new path if end of user's items.
-	LD	BC,XBUF1
+	LD	BC,XBUF1##
 	PUSH	BC
 	CALL	CPYSTR	; Copy & uppercase item, HL -> next.
 	PUSH	HL	; Save ptr to next item in user string.
@@ -1659,7 +1661,7 @@ AP10:	CALL	GETCH	; Skip separators.
 	POP	HL
 	POP	BC	; BC -> item copied to BUFF3.
 	RET	C	; Return if error.
-	LD	DE,ENVDATA-1	; Find end of current PATH string,
+	LD	DE,ENVDATA##-1	; Find end of current PATH string,
 AP20:	INC	DE	;   then append separator and the new
 	LD	A,(DE)	;   item.
 	OR	A
@@ -1681,17 +1683,17 @@ APC10:	EXX	; Set the new path: recover the
 	PUSH	HL	;   item name pointer from HL' and
 	EXX	;   set the value built in BUFF.
 	POP	HL
-	JP	SENV2
+	JP	SENV2##
 
-DELP:	CALL	GETCH	; Skip separators.
+DELP:	CALL	GETCH##	; Skip separators.
 	JR	Z,APC10	; Attempt to set PATH if end of items.
-	LD	BC,XBUF1	; Else copy to BUFF3 & upper case.
+	LD	BC,XBUF1##	; Else copy to BUFF3 & upper case.
 	CALL	CPYSTR	; HL -> start of next item.
 	PUSH	HL	; Save pointer to next item.
 	CALL	NC,DELSTR	; Attempt to delete item from string.
 	POP	HL
 	RET	C	; Return if error.
-	LD	A,.IPATH	; Return .IPATH if item not found.
+	LD	A,.IPATH##	; Return .IPATH if item not found.
 	RET	Z
 	JR	DELP	; Repeat for next item.
 
@@ -1699,17 +1701,17 @@ DELP:	CALL	GETCH	; Skip separators.
 ; of the path in turn is copied to BUFF3+128 and compared with it; when a
 ; match is found, the rest of the path string is copied down over the item.
 ; On exit, Cy => error, Z => item not found, NZ => item deleted.
-DELSTR:	LD	HL,ENVDATA
+DELSTR:	LD	HL,ENVDATA##
 DS5:	PUSH	HL	; Save start of this item.
 	POP	IX
-	CALL	GETCH	; Skip leading separators.
+	CALL	GETCH##	; Skip leading separators.
 	RET	Z	; Return with Z if user item not found.
-	LD	BC,XBUF1+#80	; Copy item to BUFF3+128 & upper case.
+	LD	BC,XBUF1##+#80	; Copy item to BUFF3+128 & upper case.
 	PUSH	BC
 	CALL	CPYSTR	; Leaves HL -> next item.
 	POP	BC
 	RET	C
-	LD	DE,XBUF1	; Compare with string at BUFF3.
+	LD	DE,XBUF1##	; Compare with string at BUFF3.
 DS10:	LD	A,(BC)
 	EX	DE,HL
 	CP	(HL)
@@ -1721,7 +1723,7 @@ DS10:	LD	A,(BC)
 	JR	NZ,DS10
 	PUSH	IX	; Found: copy the rest of the path
 	POP	DE	;   down over this item,
-	CALL	NCOPY
+	CALL	NCOPY##
 	INC	A	;   and return NZ.
 	RET
 
@@ -1730,11 +1732,11 @@ DS10:	LD	A,(BC)
 ; copy. Every character is passed through the DOS check character function
 ; so that double byte (Kanji) characters are handled properly.
 ; On exit, HL points to the terminating character; Cy set => error.
-CPYSTR:	LD	D,#00	; Zero character flags.
+CPYSTR::	LD	D,#00	; Zero character flags.
 CS10:	LD	E,(HL)	; Check the character.
 	PUSH	BC
 	PUSH	HL
-	LD	C,_CHKCHR
+	LD	C,_CHKCHR##
 	CALL	BDOS
 	POP	HL
 	POP	BC
@@ -1743,7 +1745,7 @@ CS10:	LD	E,(HL)	; Check the character.
 	LD	(BC),A	; Terminate the copy (A is 0):
 	OR	E	;   done if at the end of the line
 	RET	Z	;   or at a separator,
-	CALL	SEP?
+	CALL	SEP?##
 	RET	Z
 	LD	A,E	;   else overwrite the null with
 	LD	(BC),A	;   the character and carry on.
@@ -1757,23 +1759,23 @@ CS10:	LD	E,(HL)	; Check the character.
 ; "inside braces" state.
 MKPATH2:	LD	D,#01	; Initialise character flags.
 	XOR	A	; Not inside braces.
-	LD	(VALUEL),A
+	LD	(VALUEL##),A
 MKP10:	LD	A,(HL)	; '{' : set the brace flag and
 	CP	"{"	;   skip the character.
 	JR	NZ,MKP20
-	LD	(VALUEL),A
+	LD	(VALUEL##),A
 	INC	HL
 	JR	MKP10
 MKP20:	CP	"}"	; '}' : clear the brace flag and
 	JR	NZ,MKP30	;   skip the character.
 	XOR	A
-	LD	(VALUEL),A
+	LD	(VALUEL##),A
 	INC	HL
 	JR	MKP10
 MKP30:	LD	E,(HL)	; The rest is as CPYSTR,
 	PUSH	BC
 	PUSH	HL
-	LD	C,_CHKCHR
+	LD	C,_CHKCHR##
 	CALL	BDOS
 	POP	HL
 	POP	BC
@@ -1782,10 +1784,10 @@ MKP30:	LD	E,(HL)	; The rest is as CPYSTR,
 	LD	(BC),A
 	OR	E
 	RET	Z
-	LD	A,(VALUEL)	;   except that separators end the
+	LD	A,(VALUEL##)	;   except that separators end the
 	OR	A	;   item only outside braces.
 	LD	A,E
-	CALL	Z,SEP?
+	CALL	Z,SEP?##
 	RET	Z
 	LD	A,E
 	LD	(BC),A
@@ -1800,20 +1802,20 @@ MKP30:	LD	E,(HL)	; The rest is as CPYSTR,
 ; example,  the user to change disks. The entry point PAUSE is called from the
 ; character output routine OUTCH at the end of a screenful ot text if /P is in
 ; effect.
-@PAUSE:	EX	DE,HL	; DE -> command arguments.
+@PAUSE::	EX	DE,HL	; DE -> command arguments.
 	CALL	?DMSCR	; Print arguments & CR,LF if non-null.
-PAUSE:	LD	A,#0F
-	CALL	DMESS
-	JP	INCH
+PAUSE::	LD	A,#0F
+	CALL	DMESS##
+	JP	INCH##
 
-@RAMDISK:	AND	(HL)
+@RAMDISK::	AND	(HL)
 	JR	NZ,SETRAM
 	LD	BC,#FF68
 	CALL	BDOS
 	RET	NZ
 	LD	H,A
 	OR	B
-	LD	A,.NRAMD
+	LD	A,.NRAMD##
 	RET	Z
 	LD	L,B
 	ADD	HL,HL
@@ -1821,15 +1823,15 @@ PAUSE:	LD	A,#0F
 	ADD	HL,HL
 	ADD	HL,HL
 	LD	A,#29
-	CALL	DMESS
-	LD	IX,ENVDATA
+	CALL	DMESS##
+	LD	IX,ENVDATA##
 	PUSH	IX
-	CALL	D16
+	CALL	D16##
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,"K"
-	CALL	PRCHAR
-	JP	LPRINT
+	CALL	PRCHAR##
+	JP	LPRINT##
 
 SETRAM:	EX	AF,AF'
 	CALL	CHKD	; Check for /D.
@@ -1841,20 +1843,20 @@ SETRAM:	EX	AF,AF'
 	JR	Z,NRAM	; Just delete RAM disk if not.
 	XOR	A	; Else AF' = Z again, get number.
 ND:	EX	AF,AF'
-	CALL	GET16	; Get size of RAM disk required.
+	CALL	GET16##	; Get size of RAM disk required.
 	RET	NZ
 	LD	A,(HL)	; Allow 'K' to be given after number.
-	CALL	UC
+	CALL	UC##
 	CP	"K"
 	JR	NZ,NK
 	INC	HL	; Skip passed K if given.
 NK:	LD	A,(HL)	; Get character after number.
 	CP	"/"	; Start of /D ?
-	CALL	NZ,CHKNO	; Check for garbage if not.
+	CALL	NZ,CHKNO##	; Check for garbage if not.
 	CALL	Z,CHKD	; Check for /D if no error.
 	RET	NZ	;   if not.
-	CALL	GETCH	; Check for garbage on end of line.
-	LD	A,.INP	; 'Too many parameters' if not eol.
+	CALL	GETCH##	; Check for garbage on end of line.
+	LD	A,.INP##	; 'Too many parameters' if not eol.
 	RET	NZ
 	LD	B,#04
 	LD	HL,#0F	; Round up to next 16K boundary.
@@ -1862,7 +1864,7 @@ NK:	LD	A,(HL)	; Get character after number.
 DIV16:	SRL	H	; Divide by 16 for no. segments.
 	RR	L
 	DJNZ	DIV16
-	LD	A,.IPARM	; If > 254 16K segments, then give
+	LD	A,.IPARM##	; If > 254 16K segments, then give
 	INC	H	;   error.
 	DEC	H
 	RET	NZ
@@ -1878,14 +1880,14 @@ DIV16:	SRL	H	; Divide by 16 for no. segments.
 	OR	B	; NZ => RAM disk currently exists.
 	JR	Z,NEWRAM	; Create one if one doesn't exist.
 	LD	A,#34
-	CALL	YN	; Prompt with 'Delete RAM disk (Y/N) ?'
+	CALL	YN##	; Prompt with 'Delete RAM disk (Y/N) ?'
 	LD	A,#00
 	RET	Z	; Ret with no error if 'N' pressed.
-DELRAM:	LD	BC,_RAMDISK	; Delete current RAM disk.
+DELRAM:	LD	BC,_RAMD##	; Delete current RAM disk.
 	CALL	BDOS
 	RET	NZ
 NEWRAM:	EXX	; B=size of new RAM disk.
-NRAM:	LD	C,_RAMDISK	; Create new RAM disk.
+NRAM:	LD	C,_RAMD##	; Create new RAM disk.
 	JP	BDOS
 
 CHKD:	LD	A,(HL)	; Start of option ?
@@ -1893,14 +1895,14 @@ CHKD:	LD	A,(HL)	; Start of option ?
 	JR	NZ,OKRET	; Return no error if not.
 	INC	HL
 	LD	A,(HL)	; Else get option character.
-	CALL	UC
+	CALL	UC##
 	CP	"D"	; /D ?
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET	NZ	; Return 'invalid option' error if not.
 	INC	HL
 	XOR	A
 	EX	AF,AF'
-	CALL	GETCH	; Skip following separators.
+	CALL	GETCH##	; Skip following separators.
 	JR	CHKD	; Repeat so invalid /s give .IOPT.
 
 OKRET:	XOR	A
@@ -1911,25 +1913,25 @@ OKRET:	XOR	A
 ; environment,  SET followed by a name prints out the string for that name and
 ; SET followed by a name, separator and string sets that environment  name  to
 ; the string.
-@SET:	AND	(HL)	; Any name given ?
+@SET::	AND	(HL)	; Any name given ?
 	JR	NZ,DST10	; Go if yes, else print environment.
 SET10:	LD	HL,#01	; Initialise item number.
 DENV:	PUSH	HL	; Save item number.
 	EX	DE,HL
-	CALL	FENV	; Get name of item.
+	CALL	FENV##	; Get name of item.
 	JR	NZ,NXTENV	; Ignore this item if error.
 	POP	BC
 	OR	(HL)	; Null name ?
 	RET	Z	; Done if yes.
 	PUSH	BC
-	CALL	GENV	; Get string value of this name.
+	CALL	GENV##	; Get string value of this name.
 	JR	NZ,NXTENV	; Ignore this item if error.
 	EX	DE,HL	; DE -> name.
-	CALL	PRTSTR	; Print name of string.
+	CALL	PRTSTR##	; Print name of string.
 	LD	A,#41
-	CALL	DMESS	; Print '='.
+	CALL	DMESS##	; Print '='.
 	EX	DE,HL	; DE -> value of name.
-	CALL	DMSCR	; Followed by the string & CR,LF.
+	CALL	DMSCR##	; Followed by the string & CR,LF.
 NXTENV:	POP	HL	; Get back current item number.
 	INC	HL	; Next item.
 	JR	DENV
@@ -1940,7 +1942,7 @@ SETNAME:	PUSH	HL	; HL -> start of name.
 NXTCHR:	INC	HL
 	LD	E,(HL)
 	PUSH	HL
-	LD	C,_CHKCHR
+	LD	C,_CHKCHR##
 	CALL	BDOS
 	POP	HL
 	POP	BC
@@ -1948,40 +1950,40 @@ NXTCHR:	INC	HL
 	PUSH	BC
 	OR	E
 	JR	Z,DSTR
-	CALL	SEP?
+	CALL	SEP?##
 	JR	NZ,NXTCHR
 	PUSH	HL
-	CALL	STRIP
+	CALL	STRIP##
 	POP	HL
 	LD	(HL),#00
 	JR	Z,DSTR
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH##
 	EX	DE,HL
 	POP	HL
-	LD	C,_SENV
+	LD	C,_SENV##
 	JP	BDOS
 
 DSTR:	POP	HL	; HL -> start of name.
-	CALL	GENV2
+	CALL	GENV2##
 	RET	NZ
 ?DMSCR:	LD	A,(DE)	; Print the string at (DE) plus a
 	OR	A	;   CRLF, unless it is null.
 	RET	Z
-	JP	DMSCR
+	JP	DMSCR##
 
 DST10:	LD	A,(HL)	; An option must be /P, which pages
 	CP	"/"	;   the environment listing;
 	JR	NZ,SETNAME	;   anything else is a name.
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"P"
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET	NZ
-	CALL	SETP
+	CALL	SETP##
 	INC	HL
-	CALL	GETCH	; List all if nothing follows /P.
+	CALL	GETCH##	; List all if nothing follows /P.
 	JR	NZ,SETNAME
 	JR	SET10
 
@@ -1996,22 +1998,22 @@ DST10:	LD	A,(HL)	; An option must be /P, which pages
 ; whole list, /S file saves the alias area to a file and /L file loads such
 ; a file back, replacing all current aliases. An alias file starts with the
 ; 12-byte signature 'Alias File'+^Z, which /L checks.
-@ALIAS:	AND	(HL)	; No parameters => list all.
+@ALIAS::	AND	(HL)	; No parameters => list all.
 	JR	NZ,ALI180
 ALI130:	LD	BC,#00	; Start with the first alias.
-ALI140:	LD	HL,ENVNAME	; Get the name and value of the
-	LD	DE,ENVDATA	;   next alias; BC advances through
-	CALL	FNDALIAS	;   the list.
+ALI140:	LD	HL,ENVNAME##	; Get the name and value of the
+	LD	DE,ENVDATA##	;   next alias; BC advances through
+	CALL	FNDALIAS##	;   the list.
 	LD	A,(HL)	; A null name ends the list.
 	OR	A
 	RET	Z
 	PUSH	BC
 	EX	DE,HL	; Print 'name = value'.
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#41
-	CALL	DMESS
+	CALL	DMESS##
 	EX	DE,HL
-	CALL	DMSCR
+	CALL	DMSCR##
 	POP	BC
 	JR	ALI140
 
@@ -2021,7 +2023,7 @@ ALI150:	PUSH	HL	; HL -> start of the alias name.
 ALI160:	INC	HL	; Scan the name for a separator or
 	LD	E,(HL)	;   the end of the line, checking
 	PUSH	HL
-	LD	C,_CHKCHR
+	LD	C,_CHKCHR##
 	CALL	BDOS
 	POP	HL
 	LD	(HL),E	;   each character and storing it
@@ -2030,22 +2032,22 @@ ALI160:	INC	HL	; Scan the name for a separator or
 	PUSH	BC
 	OR	E
 	JR	Z,ALI170	;   back. End of line: query it.
-	CALL	SEP?
+	CALL	SEP?##
 	JR	NZ,ALI160
 	PUSH	HL	; Separator: if only blanks follow,
-	CALL	STRIP	;   query the alias, else define it
+	CALL	STRIP##	;   query the alias, else define it
 	POP	HL
 	LD	(HL),#00	;   with the rest of the line as
 	JR	Z,ALI170	;   its value.
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH##
 	EX	DE,HL	; DE -> value.
 	POP	HL	; HL -> name.
-	JP	SETALIAS
+	JP	SETALIAS##
 
 ALI170:	POP	HL	; Print the value of the alias, if
-	LD	DE,ENVDATA	;   it is defined.
-	CALL	GETALIAS
+	LD	DE,ENVDATA##	;   it is defined.
+	CALL	GETALIAS##
 	JP	?DMSCR
 
 ALI180:	LD	A,(HL)	; Check for an option:
@@ -2053,7 +2055,7 @@ ALI180:	LD	A,(HL)	; Check for an option:
 	JR	NZ,ALI150
 	INC	HL
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"S"	;   /S file = save the aliases,
 	JR	Z,ALI200
 	CP	"L"	;   /L file = load an alias file,
@@ -2065,28 +2067,28 @@ ALI180:	LD	A,(HL)	; Check for an option:
 	DEC	HL	;   anything else is a name.
 	JR	ALI150
 
-ALI190:	CALL	SETP	; /P: set up the pause line count;
+ALI190:	CALL	SETP##	; /P: set up the pause line count;
 	INC	HL
-	CALL	GETCH	;   list all if nothing follows.
+	CALL	GETCH##	;   list all if nothing follows.
 	JR	NZ,ALI150
 	JR	ALI130
 
 ALI200:	CALL	PRSPATH	; /S: parse the file name and
 	OR	A	;   create the file.
 	RET	NZ
-	LD	BC,_CREATE
+	LD	BC,_CREATE##
 	CALL	BDOS
 	RET	NZ
 	PUSH	BC	; B = file handle.
-	LD	C,_WRITE	; Write the 12-byte 'Alias File'
+	LD	C,_WRITE##	; Write the 12-byte 'Alias File'
 	LD	DE,TALIAS$	;   signature.
 	LD	HL,#0C
 	CALL	BDOS
 	POP	BC
 	RET	NZ
 	PUSH	BC
-	CALL	SETPG2	; Find the end of the alias records
-	CALL	GETALIADDR	;   in the mapper segment.
+	CALL	SETPG2##	; Find the end of the alias records
+	CALL	GETALIADDR##	;   in the mapper segment.
 	SET	7,H
 ALI210:	LD	E,(HL)
 	INC	HL
@@ -2099,7 +2101,7 @@ ALI210:	LD	E,(HL)
 	JR	ALI210
 
 ALI220:	PUSH	HL	; Compute the used length of the
-	CALL	GETALIADDR	;   alias area, including the zero
+	CALL	GETALIADDR##	;   alias area, including the zero
 	SET	7,H	;   terminator record, and write
 	DEC	HL	;   the whole area to the file.
 	DEC	HL
@@ -2110,15 +2112,15 @@ ALI220:	PUSH	HL	; Compute the used length of the
 	INC	DE
 	POP	BC
 	PUSH	BC
-	LD	C,_WRITE
+	LD	C,_WRITE##
 ALI230:	CALL	BDOS	; Read or write the alias area,
 	LD	E,A	;   then close the file, restore
 	POP	BC	;   page 2 and return any error.
 ALI240:	PUSH	DE
-	LD	C,_CLOSE
+	LD	C,_CLOSE##
 	CALL	BDOS
 	PUSH	AF
-	CALL	RSTPG2
+	CALL	RSTPG2##
 	POP	AF
 	POP	DE
 	RET	NZ
@@ -2128,25 +2130,25 @@ ALI240:	PUSH	DE
 ALI250:	CALL	PRSPATH	; /L: parse the file name and open
 	OR	A	;   the file.
 	RET	NZ
-	LD	C,_OPEN
+	LD	C,_OPEN##
 	CALL	BDOS
 	RET	NZ
 	PUSH	BC
-	LD	C,_READ	; Read the 12-byte signature and
-	LD	DE,ENVNAME	;   check that this really is an
+	LD	C,_READ##	; Read the 12-byte signature and
+	LD	DE,ENVNAME##	;   check that this really is an
 	LD	HL,#0C	;   alias file.
 	CALL	BDOS
 	POP	BC
 	RET	NZ
 	PUSH	BC
-	LD	HL,ENVNAME
+	LD	HL,ENVNAME##
 	LD	BC,TALIAS$
 	CALL	STRCMP
 	POP	BC
-	LD	E,.IFNM	; 'Invalid filename' if it is not.
+	LD	E,.IFNM##	; 'Invalid filename' if it is not.
 	JR	NZ,ALI240
 	PUSH	BC
-	CALL	SETPG2	; Read the file straight into the
+	CALL	SETPG2##	; Read the file straight into the
 	POP	BC	;   alias area (at most its full
 	PUSH	BC	;   size), replacing all aliases.
 	LD	HL,(ALIADDR+#8000)
@@ -2156,18 +2158,18 @@ ALI250:	CALL	PRSPATH	; /L: parse the file name and open
 	SET	7,H
 	OR	A
 	SBC	HL,DE
-	LD	C,_READ
+	LD	C,_READ##
 	JR	ALI230
 
 ALI260:	INC	HL	; /R: no more parameters allowed;
-	CALL	GETCH	;   empty the list by writing a
-	LD	A,.INP	;   zero length record at the start
+	CALL	GETCH##	;   empty the list by writing a
+	LD	A,.INP##	;   zero length record at the start
 	RET	NZ	;   of the alias area.
-	CALL	GETALIADDR
+	CALL	GETALIADDR##
 	XOR	A
-	CALL	WRCHR
+	CALL	WRCHR##
 	INC	HL
-	CALL	WRCHR
+	CALL	WRCHR##
 	RET
 
 ; The signature written at the start of an alias file.
@@ -2179,10 +2181,10 @@ TALIAS$:	DEFB	"Alias File",26,0
 ;           NZ => error: .NOPAR if no name given, .IPATH if it does not
 ;           end cleanly, .INP if anything follows it.
 PRSPATH:	INC	HL	; Skip the option letter and any
-	CALL	GETCH	;   separators; a name must follow.
-	LD	A,.NOPAR
+	CALL	GETCH##	;   separators; a name must follow.
+	LD	A,.NOPAR##
 	RET	Z
-	LD	BC,_PARSE	; Parse the file name.
+	LD	BC,_PARSE##	; Parse the file name.
 	EX	DE,HL
 	PUSH	DE
 	CALL	BDOS
@@ -2193,12 +2195,12 @@ PRSPATH:	INC	HL	; Skip the option letter and any
 	OR	A
 	JR	Z,PRS80
 	CP	" "	; The name must end at a space or
-	LD	A,.IPATH	;   at the end of the line.
+	LD	A,.IPATH##	;   at the end of the line.
 	RET	NZ
 	LD	(HL),#00	; Null-terminate the name; nothing
 	INC	HL	;   may follow it.
-	CALL	GETCH
-	LD	A,.INP
+	CALL	GETCH##
+	LD	A,.INP##
 	RET	NZ
 PRS80:	XOR	A
 	RET
@@ -2211,35 +2213,35 @@ PRS80:	XOR	A
 ;        A number (128..4095) sets a new size for the history buffer. The
 ; alias area, which follows the history buffer in the segment, is moved up
 ; or down to make this possible, and the history itself is cleared.
-@HISTORY:	AND	(HL)	; Print the history if no
+@HISTORY::	AND	(HL)	; Print the history if no
 	JP	Z,HIS30	;   parameters.
 	LD	A,(HL)	; Check for /D or /P.
 	CP	"/"
 	JP	Z,CHECKP
-	CALL	GET16	; Else it is a new history buffer
-	CALL	Z,GCHKEOL	;   size, 128..4095 bytes.
+	CALL	GET16##	; Else it is a new history buffer
+	CALL	Z,GCHKEOL##	;   size, 128..4095 bytes.
 	RET	NZ
 	EX	DE,HL
-	LD	DE,(MAXBUFLEN)	; 'Invalid number' unless below
+	LD	DE,(MAXBUFLEN##)	; 'Invalid number' unless below
 	CALL	COMPARE4	;   4096...
-	LD	A,.BADNO
+	LD	A,.BADNO##
 	RET	NC
 	LD	DE,128	;   ...and at least 128.
 	CALL	COMPARE4
-	LD	A,.BADNO
+	LD	A,.BADNO##
 	RET	C
-	CALL	SETBUFLEN	; Set the new buffer length.
+	CALL	SETBUFLEN##	; Set the new buffer length.
 	LD	DE,BUFADDR	; Start of the history buffer.
 	ADD	HL,DE	; Add the new length to it:
 	PUSH	HL	;   this is the new alias area start.
-	CALL	GETALIADDR	; Get the current alias area start.
+	CALL	GETALIADDR##	; Get the current alias area start.
 	POP	DE	; New start address.
 	CALL	COMPARE4	; Are they equal?
 	RET	Z	; Yes, then we are done.
 	EX	AF,AF'                  ; Save the comparison for later.
 	SET	7,H	; Real address in memory (page 2).
 	PUSH	HL	; Save it.
-	CALL	SETPG2	; Page 2 switched for the duration.
+	CALL	SETPG2##	; Page 2 switched for the duration.
 HIS10:	LD	C,(HL)	; Length of this alias record.
 	INC	HL
 	LD	B,(HL)
@@ -2263,7 +2265,7 @@ HIS10:	LD	C,(HL)	; Length of this alias record.
 	EXX
 	PUSH	HL
 	EXX
-	CALL	GETBUFLEN	; Get the new history buffer length.
+	CALL	GETBUFLEN##	; Get the new history buffer length.
 	LD	DE,BUFADDR	; Start address of the buffer.
 	ADD	HL,DE	; Add them: the new alias start.
 	EX	DE,HL	; To DE.
@@ -2281,9 +2283,9 @@ HIS10:	LD	C,(HL)	; Length of this alias record.
 	PUSH	DE	; Save the new start address.
 	SET	7,D	; Make the real (page 2) address.
 	LDIR		; Copy (forwards).
-	CALL	RSTPG2	; Restore page 2.
+	CALL	RSTPG2##	; Restore page 2.
 	POP	HL	; Get the new start address back
-	CALL	SETALIADDR	;   and set it.
+	CALL	SETALIADDR##	;   and set it.
 	JR	CHE10	; Clear the history buffer.
 
 HIS20:	EXX		; Get the alternate registers.
@@ -2291,66 +2293,66 @@ HIS20:	EXX		; Get the alternate registers.
 	DEC	DE
 	SET	7,D	; Make the real (page 2) address.
 	LDDR		; And copy backwards.
-	CALL	GETBUFLEN	; New buffer length.
+	CALL	GETBUFLEN##	; New buffer length.
 	LD	DE,BUFADDR	; Buffer start.
 	ADD	HL,DE	; Add them: the new alias start.
 	PUSH	HL	; Save the alias area start.
-	CALL	RSTPG2	; Restore page 2.
+	CALL	RSTPG2##	; Restore page 2.
 	POP	HL	; Get it back
-	CALL	SETALIADDR	;   and set the new alias start.
+	CALL	SETALIADDR##	;   and set the new alias start.
 	JR	CHE10	; Clear the history buffer.
 
-HIS30:	CALL	GETRDADDR	; Save the editor's read pointer.
-	LD	(VALUEL),HL
-	CALL	GETPUTADDR	; Nothing to print if the buffer is
+HIS30:	CALL	GETRDADDR##	; Save the editor's read pointer.
+	LD	(VALUEL##),HL
+	CALL	GETPUTADDR##	; Nothing to print if the buffer is
 	LD	DE,BUFADDR	;   still empty.
 	CALL	COMPARE4
 	RET	Z
-	CALL	SETRDADDR	; Start at the write pointer and
-	CALL	HISPREV	;   step back one character: that
-	CALL	GETRDADDR	;   is where the dump must stop.
+	CALL	SETRDADDR##	; Start at the write pointer and
+	CALL	HISPREV##	;   step back one character: that
+	CALL	GETRDADDR##	;   is where the dump must stop.
 	LD	D,H
 	LD	E,L
-HIS40:	CALL	HISNEXT	; Get the next character, moving
+HIS40:	CALL	HISNEXT##	; Get the next character, moving
 	JR	NZ,HIS60	;   circularly through the buffer.
-HIS50:	CALL	GETRDADDR	; At the end of a command: done
+HIS50:	CALL	GETRDADDR##	; At the end of a command: done
 	CALL	COMPARE4	;   when the whole buffer has been
 	JR	NZ,HIS40	;   walked.
-	LD	HL,(VALUEL)	; Restore the editor's read
-	CALL	SETRDADDR	;   pointer.
+	LD	HL,(VALUEL##)	; Restore the editor's read
+	CALL	SETRDADDR##	;   pointer.
 	XOR	A
 	RET
 
-HIS60:	CALL	Z,LPRINT	; CRLF at the end of each command,
+HIS60:	CALL	Z,LPRINT##	; CRLF at the end of each command,
 	JR	Z,HIS50
-	CALL	PRCHAR	;   else print the character.
-	CALL	HISNEXT
+	CALL	PRCHAR##	;   else print the character.
+	CALL	HISNEXT##
 	JR	HIS60
 
 CHECKP:	INC	HL	; Get the option letter:
 	LD	A,(HL)
-	CALL	MKUPPER
+	CALL	MKUPPER##
 	CP	"D"	;   /D clears the history,
 	JR	Z,CHECKD
 	CP	"P"	;   /P pages the listing.
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET	NZ
 	INC	HL
-	CALL	SETP
-	CALL	GETCH	; Nothing may follow /P.
+	CALL	SETP##
+	CALL	GETCH##	; Nothing may follow /P.
 	JR	Z,HIS30
-	LD	A,.INP
+	LD	A,.INP##
 	RET
 
 CHECKD:	INC	HL	; Nothing may follow /D.
-	CALL	GETCH
-	LD	A,.INP
+	CALL	GETCH##
+	LD	A,.INP##
 	RET	NZ
 CHE10:	LD	HL,BUFADDR	; Empty the history: read and write
-	CALL	SETPUTADDR	;   pointers to the buffer start,
-	CALL	SETRDADDR	;   end pointer just before it.
+	CALL	SETPUTADDR##	;   pointers to the buffer start,
+	CALL	SETRDADDR##	;   end pointer just before it.
 	DEC	HL
-	CALL	SETENDADDR
+	CALL	SETENDADDR##
 	XOR	A
 	RET
 
@@ -2362,15 +2364,15 @@ CHE10:	LD	HL,BUFADDR	; Empty the history: read and write
 ; know about this since the time can be input in either format  unambiguously.
 ; Although  100ths  of  a  second  are  not  printed,  they  are accepted when
 ; inputting the time.
-@TIME:	PUSH	HL	; Save pointer to command line.
-	CALL	TFORM	; Set up TM_FORM, the time format var.
+@TIME::	PUSH	HL	; Save pointer to command line.
+	CALL	TFORM##	; Set up TM_FORM, the time format var.
 	POP	HL
 	LD	A,(HL)
 	OR	A	; New time given on command line ?
 	JR	NZ,RTIM	; Attempt to set new time if yes.
 	LD	A,#24	; Print 'Current time is'
-	CALL	DMESS
-	LD	C,_GTIME	; Get current time for printing.
+	CALL	DMESS##
+	LD	C,_GTIME##	; Get current time for printing.
 	CALL	BDOS
 	PUSH	DE	; Save seconds in D.
 	LD	A,L	; Convert hours & mins to FIB format.
@@ -2381,65 +2383,65 @@ TIM2:	ADD	A,A
 	RL	H
 	DJNZ	TIM2
 	LD	C,H
-	LD	HL,ENVNAME
+	LD	HL,ENVNAME##
 	LD	(HL),A
 	INC	HL
 	LD	(HL),C
-	LD	IX,ENVNAME+2
+	LD	IX,ENVNAME##+2
 	PUSH	IX
-	CALL	DTIME
+	CALL	DTIME##
 	POP	DE
 	POP	BC
 	PUSH	AF
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,":"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A,B
 	LD	D,#FF
-	CALL	DDT
+	CALL	DDT##
 	POP	AF
 	CP	" "
-	CALL	NZ,PRCHAR
+	CALL	NZ,PRCHAR##
 	LD	A,#0E
-	CALL	DMESSCR
+	CALL	DMESSCR##
 NEWTIM:	LD	A,#26	; Print 'Enter new time:'.
-	CALL	DMESS
-	CALL	INLI	; Input a line.
+	CALL	DMESS##
+	CALL	INLI##	; Input a line.
 	JR	Z,TIM5	; Go if no error.
-	CP	.EOF
+	CP	.EOF##
 	RET	NZ	; Return if not end of file error.
 TIM5:	INC	HL	; Point passed length byte.
-	CALL	GETCH	; Skip leading separators.
+	CALL	GETCH##	; Skip leading separators.
 	RET	Z	; Just return if new time not given.
 RTIM:	EXX	; Hide the input line pointer.
-	LD	C,_GTIME	; Get current values for defaults.
+	LD	C,_GTIME##	; Get current values for defaults.
 	CALL	BDOS
 	EXX	; Save current values, get input ptr.
-	CALL	GETNO	; Get hours.
+	CALL	GETNO##	; Get hours.
 	JR	C,TIM10	; Go if invalid number.
 	EXX
 	LD	H,A	; Else save new hours.
 	EXX
-TIM10:	CALL	DTSKIP	; Skip separators.
-	CALL	NC,GETNO	; Get minutes.
+TIM10:	CALL	DTSKIP##	; Skip separators.
+	CALL	NC,GETNO##	; Get minutes.
 	JR	C,TIM20	; Go if invalid number.
 	EXX
 	LD	L,A	; Else save new minutes.
 	EXX
-TIM20:	CALL	DTSKIP	; Skip separators.
-	CALL	NC,GETNO	; Get seconds.
+TIM20:	CALL	DTSKIP##	; Skip separators.
+	CALL	NC,GETNO##	; Get seconds.
 	JR	C,TIM30	; Go if invalid number.
 	EXX
 	LD	D,A	; Else save new number.
 	EXX
-TIM30:	CALL	DTSKIP	; Skip separators.
-	CALL	NC,GETNO	; Get 100ths.
+TIM30:	CALL	DTSKIP##	; Skip separators.
+	CALL	NC,GETNO##	; Get 100ths.
 	JR	C,TIM35	; Go if invalid number.
 	EXX
 	LD	E,A	; Else save new 100ths second.
 	EXX
-TIM35:	CALL	GETCH	; Strip spaces etc.
-	CALL	UC	; Upper case next character.
+TIM35:	CALL	GETCH##	; Strip spaces etc.
+	CALL	UC##	; Upper case next character.
 	CP	"A"	; am. indicator ?
 	JR	Z,TIM40	; Go if yes, NC => am.
 	CP	"P"	; pm. indicator ?
@@ -2450,12 +2452,12 @@ TIM35:	CALL	GETCH	; Strip spaces etc.
 	JR	Z,SETIME	; Set new time if yes.
 	DEFB	#3E	; Else give error.
 TIM70:	POP	AF
-BADTIM:	LD	B,.ITIME
+BADTIM:	LD	B,.ITIME##
 	JR	TIM60	; Print error & re-prompt.
 
 TIM40:	PUSH	AF
 	INC	HL
-	CALL	GETCH
+	CALL	GETCH##
 	JR	NZ,TIM70
 	POP	AF
 	EXX
@@ -2475,28 +2477,28 @@ TIM50:	OR	A	; Hour=0 pm is invalid.
 	JR	NC,TIM55	;   (no change if >12)
 	ADD	A,B
 TIM55:	LD	H,A	; H=new hours.
-SETIME:	LD	C,_STIME
+SETIME:	LD	C,_STIME##
 	CALL	BDOS	; Attempt to set the new time.
-	AND	.ITIME	; 0 => OK, else .ITIME => invalid time.
+	AND	.ITIME##	; 0 => OK, else .ITIME => invalid time.
 	RET	Z	; Return if no error.
 	LD	B,A	; B=error code.
-TIM60:	LD	DE,ENVNAME	; Get message into BUFF2.
-	LD	C,_EXPLAIN
+TIM60:	LD	DE,ENVNAME##	; Get message into BUFF2.
+	LD	C,_EXPLAIN##
 	CALL	BDOS
 	PUSH	DE	; Save message ptr.
-	CALL	LPRINT	; New line & '***'.
+	CALL	LPRINT##	; New line & '***'.
 	LD	A,#0D
-	CALL	DMESS
+	CALL	DMESS##
 	POP	DE
-	CALL	PRTSTR	; Print actual message.
+	CALL	PRTSTR##	; Print actual message.
 	LD	A,#0E	; Followed by message after error.
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	JP	NEWTIM	; Prompt & input for another date.
 
 		SUBTTL	VER
 ;       The VER command simply prints the version number.
-@VER:	AND	(HL)
-	LD	A,.INP	; Error if any parameters.
+@VER::	AND	(HL)
+	LD	A,.INP##	; Error if any parameters.
 	RET	NZ
 	LD	HL,#4039	; Read address of KBDOS's version
 	CALL	_RDSLT	;   message.
@@ -2506,21 +2508,21 @@ TIM60:	LD	DE,ENVNAME	; Get message into BUFF2.
 	POP	HL
 	LD	L,A	; HL -> message in KBDOS ROM.
 	SCF	; Skip printing first time round.
-VER10:	CALL	NC,PRCHAR	; Print character from message.
+VER10:	CALL	NC,PRCHAR##	; Print character from message.
 	CALL	_RDSLT	; Read a character from the message.
 	INC	HL
 	OR	A
 	JR	NZ,VER10	; Go with character and NC if not end.
-	CALL	LPRINT
+	CALL	LPRINT##
 	LD	HL,(#01)	; Get pointer to MSXDOS.SYS's message.
 	LD	DE,#30
 	ADD	HL,DE
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)	; DE -> message.
-	CALL	DMSCR	; Print message and CRLF.
+	CALL	DMSCR##	; Print message and CRLF.
 	LD	DE,VERMSG	; Finally print COMMAND.COM's message.
-	JP	DMSCR
+	JP	DMSCR##
 
 ;        Read the byte at address (HL) from the master disk ROM (entry
 ; _RDSLT) or from the slot given in A (entry RDSLOT), with the RDSLT BIOS
@@ -2548,46 +2550,46 @@ VERMSG:	DEFB	"COMMAND2.COM version 2.41",13,10
 ;******************************************************************************
 ;        This  is  the  VERIFY  command   routine.   It   simply   sets   disk
 ; verify-after-write ON or OFF.
-@VERIFY:	AND	(HL)
+@VERIFY::	AND	(HL)
 	JR	NZ,SETVFY	; Go & set verify if parameters given.
-	LD	C,_GETVFY	; Else get & print verify state.
+	LD	C,_GETVFY##	; Else get & print verify state.
 	CALL	BDOS
-	LD	HL,OFFWORD$+1	; Assume disabled.
+	LD	HL,OFFWORD$##+1	; Assume disabled.
 	INC	B
 	DEC	B	; 0 => disabled, else enabled.
 	JR	Z,GOTVFY
-	LD	HL,ONWORD$+1
+	LD	HL,ONWORD$##+1
 GOTVFY:	LD	A,#28	; Print 'VERIFY='.
-	CALL	DMESS
+	CALL	DMESS##
 	EX	DE,HL	; DE -> ON/OFF string.
-	JP	DMSCR	; Print verify state.
+	JP	DMSCR##	; Print verify state.
 
 SETVFY:	EX	DE,HL	; DE -> parameter.
 	DEC	DE	; Pretend DE -> length byte.
-	LD	HL,ONWORD$	; Check for ON.
+	LD	HL,ONWORD$##	; Check for ON.
 	LD	B,(HL)	; Length of 'ON'.
 	LD	C,#FF	; NZ => ON.
-	CALL	COMPARE
+	CALL	COMPARE##
 	JR	NC,VFY10
 	INC	B	; Ready for OFF check.
 	INC	C	; 0 => OFF.
 	INC	HL	; Point passed null at end of ON.
-	CALL	C,COMPARE	; Check for OFF if not ON.
-	LD	A,.IPARM	; 'Invalid parameter' if not ON or OFF.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if not ON or OFF.
 	RET	C
 VFY10:	INC	DE	; Skip DE past the matched word.
 	DJNZ	VFY10
 	INC	DE
 	EX	DE,HL
 	LD	A,(HL)	; A separator and nothing else may
-	CALL	SEP?	;   follow it.
-	LD	A,.IPARM
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
 	RET	NZ
-	CALL	GETCH
-	LD	A,.INP
+	CALL	GETCH##
+	LD	A,.INP##
 	RET	NZ
 	LD	E,C	; Set the new verify state.
-	LD	C,_VERIFY
+	LD	C,_VERIFY##
 	JP	BDOS
 
 		SUBTTL	DSKCHK
@@ -2595,47 +2597,47 @@ VFY10:	INC	DE	; Skip DE past the matched word.
 ; state, using the DSKCHK function that MSX-DOS 2 always had but COMMAND
 ; 2.31 never exposed. The code mirrors VERIFY, except that for the DSKCHK
 ; function B=0 means checking enabled.
-@DSKCHK:	AND	(HL)	; Go & set the state if parameters.
+@DSKCHK::	AND	(HL)	; Go & set the state if parameters.
 	JR	NZ,DSK20
-	LD	C,_DSKCHK	; Else get the current state:
+	LD	C,_DSKCHK##	; Else get the current state:
 	XOR	A	;   B = 0 => checking is on.
 	CALL	BDOS
-	LD	HL,ONWORD$+1	; Assume enabled.
+	LD	HL,ONWORD$##+1	; Assume enabled.
 	INC	B
 	DEC	B
 	JR	Z,DSK10
-	LD	HL,OFFWORD$+1
+	LD	HL,OFFWORD$##+1
 DSK10:	LD	A,#47	; Print 'DiskCheck is ' and the
-	CALL	DMESS	;   state.
+	CALL	DMESS##	;   state.
 	EX	DE,HL
-	JP	DMSCR
+	JP	DMSCR##
 
 DSK20:	EX	DE,HL	; DE -> parameter.
 	DEC	DE	; Pretend DE -> length byte.
-	LD	HL,ONWORD$	; Check for ON.
+	LD	HL,ONWORD$##	; Check for ON.
 	LD	B,(HL)	; Length of 'ON'.
 	LD	C,#00	; 0 => ON.
-	CALL	COMPARE
+	CALL	COMPARE##
 	JR	NC,DSK30
 	INC	B	; Ready for OFF check.
 	DEC	C	; FF => OFF.
 	INC	HL	; Point passed null at end of ON.
-	CALL	C,COMPARE	; Check for OFF if not ON.
-	LD	A,.IPARM	; 'Invalid parameter' if neither.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
 	RET	C
 DSK30:	INC	DE	; Skip DE past the matched word.
 	DJNZ	DSK30
 	INC	DE
 	EX	DE,HL
 	LD	A,(HL)	; A separator and nothing else may
-	CALL	SEP?	;   follow it.
-	LD	A,.IPARM
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
 	RET	NZ
-	CALL	GETCH
-	LD	A,.INP
+	CALL	GETCH##
+	LD	A,.INP##
 	RET	NZ
 	LD	B,C	; Set the new state.
 	LD	A,#01	; A = 1 => set.
-	LD	C,_DSKCHK
+	LD	C,_DSKCHK##
 	JP	BDOS
 

@@ -1,5 +1,7 @@
+	name('files')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Directory navigation and disk information commands
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The CDD, CHDIR, PUSHD, POPD, FREE, DIR, MKDIR and VOL commands.
@@ -9,17 +11,17 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
-@CDD:	SCF
-@CHDIR:	EX	AF,AF'
+@CDD::	SCF
+@CHDIR::	EX	AF,AF'
 	CALL	PRS
-	CALL	Z,GCHKEOL
+	CALL	Z,GCHKEOL##
 	RET	NZ
 	LD	(HL),A
 	PUSH	DE
 	PUSH	BC
 	LD	B,C
-	LD	C,_GETCD
-	LD	DE,ENVDATA
+	LD	C,_GETCD##
+	LD	DE,ENVDATA##
 	CALL	BDOS
 	POP	BC
 	POP	DE
@@ -29,45 +31,45 @@
 	CP	"-"
 	JR	NZ,CHD10
 	INC	HL
-	CALL	GETCH
-	LD	A,.IPARM
+	CALL	GETCH##
+	LD	A,.IPARM##
 	RET	NZ
 	SET	0,B
-	LD	HL,DIRBUF
+	LD	HL,DIRBUF##
 CHD10:	LD	A,C
 	BIT	0,B
-	LD	DE,ENVDATA
+	LD	DE,ENVDATA##
 	JR	Z,CD
 	PUSH	HL
-	LD	A,(LOGDRV)
+	LD	A,(LOGDRV##)
 	LD	B,A
-	LD	DE,ENVDATA
-	LD	C,_GETCD
+	LD	DE,ENVDATA##
+	LD	C,_GETCD##
 	CALL	BDOS
 	POP	HL
-	LD	DE,XBUF1
-	CALL	NCOPY
-	LD	DE,XBUF1
+	LD	DE,XBUF1##
+	CALL	NCOPY##
+	LD	DE,XBUF1##
 	PUSH	DE
-	LD	BC,_PARSE
+	LD	BC,_PARSE##
 	CALL	BDOS
 	LD	A,C
-	LD	(LOGDRV),A
+	LD	(LOGDRV##),A
 	POP	DE
-	LD	C,_CHDIR
+	LD	C,_CHDIR##
 	CALL	BDOS
 	JR	Z,CHD30
-	CP	.NODIR
-	LD	HL,CDPATH$
-	LD	DE,XBUF2
-	CALL	Z,GENV3
+	CP	.NODIR##
+	LD	HL,CDPATH$##
+	LD	DE,XBUF2##
+	CALL	Z,GENV3##
 	RET	NZ
 	EX	DE,HL
-CHD20:	CALL	GETCH
-	LD	A,.NODIR
+CHD20:	CALL	GETCH##
+	LD	A,.NODIR##
 	RET	Z
-	LD	BC,ENVNAME
-	CALL	CPYSTR
+	LD	BC,ENVNAME##
+	CALL	CPYSTR##
 	RET	C
 	PUSH	HL
 	CALL	FNDDIR
@@ -77,56 +79,56 @@ CHD20:	CALL	GETCH
 	SCF
 	EX	AF,AF'
 CHD30:	LD	BC,#40
-	LD	DE,DIRBUF+3
-	LD	HL,ENVDATA
+	LD	DE,DIRBUF##+3
+	LD	HL,ENVDATA##
 	LDIR
-	LD	C,_CURDRV
+	LD	C,_CURDRV##
 	CALL	BDOS
 	ADD	A,"A"
-	LD	(DIRBUF),A
+	LD	(DIRBUF##),A
 	EX	AF,AF'
 	LD	A,0
 	JR	NC,CHD50
-	LD	A,(LOGDRV)
+	LD	A,(LOGDRV##)
 	DEC	A
 	LD	E,A
-CHD40:	LD	C,_SELDSK
+CHD40:	LD	C,_SELDSK##
 	CALL	BDOS
-	LD	C,_ERROR
+	LD	C,_ERROR##
 	CALL	BDOS
 	LD	A,B
 CHD50:	OR	A
 	RET
 
 CD:	ADD	A,"@"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A,":"
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A,"\"
-	CALL	PRCHAR
-	JP	DMSCR
+	CALL	PRCHAR##
+	JP	DMSCR##
 
-FNDDIR:	LD	DE,ENVNAME
-	LD	BC,_PARSE
+FNDDIR:	LD	DE,ENVNAME##
+	LD	BC,_PARSE##
 	CALL	BDOS
 	SCF
 	RET	NZ
 	LD	A,C
-	LD	(LOGDRV),A
-	LD	HL,XBUF1
+	LD	(LOGDRV##),A
+	LD	HL,XBUF1##
 	LD	A,B
 	AND	#18
 	JR	Z,FND100
 	LD	A,"\"
 	LD	(DE),A
 	INC	DE
-FND100:	CALL	NCOPY
-	LD	DE,ENVNAME
-	LD	C,_CHDIR
+FND100:	CALL	NCOPY##
+	LD	DE,ENVNAME##
+	LD	C,_CHDIR##
 	JP	BDOS
 
-PRS:	LD	B,#00
-_PRS:	LD	C,_PARSE
+PRS::	LD	B,#00
+_PRS:	LD	C,_PARSE##
 	EX	DE,HL
 	PUSH	DE
 	CALL	BDOS
@@ -134,8 +136,8 @@ _PRS:	LD	C,_PARSE
 	POP	DE
 	RET	NZ
 	LD	A,(HL)
-	CALL	SEP?
-	LD	A,.IPATH
+	CALL	SEP?##
+	LD	A,.IPATH##
 	RET	NZ
 	LD	A,B
 	AND	#18
@@ -144,37 +146,37 @@ _PRS:	LD	C,_PARSE
 PRS90:	XOR	A
 	RET
 
-@PUSHD:	AND	(HL)
+@PUSHD::	AND	(HL)
 	JR	Z,PUS20
 	CALL	@CDD
 	RET	NZ
-	LD	HL,DIRBUF
-PUS10:	LD	DE,ENVNAME
-	CALL	NCOPY
+	LD	HL,DIRBUF##
+PUS10:	LD	DE,ENVNAME##
+	CALL	NCOPY##
 	DEC	DE
 	LD	A,";"
 	LD	(DE),A
 	INC	DE
 	PUSH	DE
-	LD	HL,PUSHD$
-	CALL	GENV2
+	LD	HL,PUSHD$##
+	CALL	GENV2##
 	EX	DE,HL
 	POP	DE
-	CALL	NCOPY
-	LD	HL,PUSHD$
-	LD	DE,ENVNAME
-	LD	C,_SENV
+	CALL	NCOPY##
+	LD	HL,PUSHD$##
+	LD	DE,ENVNAME##
+	LD	C,_SENV##
 	JP	BDOS
 
-PUS20:	LD	DE,XBUF1+3
-	LD	A,(LOGDRV)
+PUS20:	LD	DE,XBUF1##+3
+	LD	A,(LOGDRV##)
 	LD	B,A
-	LD	C,_GETCD
+	LD	C,_GETCD##
 	CALL	BDOS
 	RET	NZ
-	LD	A,(LOGDRV)
+	LD	A,(LOGDRV##)
 	ADD	A,"@"
-	LD	HL,XBUF1+2
+	LD	HL,XBUF1##+2
 	LD	(HL),"\"
 	DEC	HL
 	LD	(HL),":"
@@ -182,25 +184,25 @@ PUS20:	LD	DE,XBUF1+3
 	LD	(HL),A
 	JR	PUS10
 
-@POPD:	AND	(HL)
+@POPD::	AND	(HL)
 	JR	Z,POP10
 	LD	A,(HL)
 	CP	"/"
-	LD	A,.IPARM
+	LD	A,.IPARM##
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	UC
+	CALL	UC##
 	CP	"N"
-	LD	A,.IOPT
+	LD	A,.IOPT##
 	RET	NZ
 	INC	HL
 	LD	A,(HL)
-	CALL	SEP?
-	LD	A,.IOPT
+	CALL	SEP?##
+	LD	A,.IOPT##
 	RET	NZ
-	CALL	GETCH
-	LD	A,.INP
+	CALL	GETCH##
+	LD	A,.INP##
 	RET	NZ
 	CALL	GETPOPD
 	XOR	A
@@ -209,19 +211,19 @@ PUS20:	LD	DE,XBUF1+3
 POP10:	CALL	GETPOPD
 	RET	Z
 	PUSH	BC
-	LD	C,_CHDIR
+	LD	C,_CHDIR##
 	CALL	BDOS
 	POP	DE
 	RET	NZ
 	JP	CHD40
 
-GETPOPD:	LD	HL,PUSHD$
-	CALL	GENV2
+GETPOPD:	LD	HL,PUSHD$##
+	CALL	GENV2##
 	LD	A,(DE)
 	OR	A
 	RET	Z
 	EX	DE,HL
-	LD	DE,ENVNAME
+	LD	DE,ENVNAME##
 GET20:	LD	A,(HL)
 	OR	A
 	JR	Z,GET40
@@ -234,38 +236,38 @@ GET30:	INC	HL
 GET40:	XOR	A
 	LD	(DE),A
 	EX	DE,HL
-	LD	HL,PUSHD$
-	LD	C,_SENV
+	LD	HL,PUSHD$##
+	LD	C,_SENV##
 	CALL	BDOS
 	RET	NZ
-	LD	DE,ENVNAME+1
+	LD	DE,ENVNAME##+1
 	LD	A,(DE)
 	DEC	DE
 	CP	":"
 	JR	NZ,GET50
 	LD	A,(DE)
-	CALL	UC
+	CALL	UC##
 	SUB	"A"
 	LD	C,A
 	INC	A
 	RET
 
-GET50:	LD	A,(LOGDRV)
+GET50:	LD	A,(LOGDRV##)
 	DEC	A
 	LD	C,A
 	INC	A
 	RET
 
-@FREE:	AND	(HL)
+@FREE::	AND	(HL)
 	JR	NZ,FRE10
-	LD	A,(LOGDRV)
+	LD	A,(LOGDRV##)
 	JR	FRE20
-FRE10:	CALL	PARSDR
-	CALL	Z,GCHKEOL
+FRE10:	CALL	PARSDR##
+	CALL	Z,GCHKEOL##
 	RET	NZ
 	LD	A,D
 FRE20:	ADD	A,"@"
-	LD	HL,ENVNAME
+	LD	HL,ENVNAME##
 	LD	E,L
 	LD	D,H
 	LD	(HL),A
@@ -275,10 +277,10 @@ FRE20:	ADD	A,"@"
 	LD	(HL),0
 	CALL	VOL
 	RET	NZ
-	LD	A,(ENVNAME)
+	LD	A,(ENVNAME##)
 	SUB	"@"
 	LD	E,A
-	LD	C,_ALLOC
+	LD	C,_ALLOC##
 	CALL	BDOS
 	LD	B,A
 	PUSH	DE
@@ -287,7 +289,7 @@ FRE20:	ADD	A,"@"
 	PUSH	BC
 	CALL	COMPUTE
 	LD	A,#3E
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	POP	BC
 	POP	DE
 	POP	HL
@@ -296,12 +298,12 @@ FRE20:	ADD	A,"@"
 	PUSH	BC
 	CALL	COMPUTE
 	LD	A,#3F
-	CALL	DMESSCR
+	CALL	DMESSCR##
 	POP	BC
 	POP	HL
 	CALL	COMPUTE
 	LD	A,#40
-	JP	DMESSCR
+	JP	DMESSCR##
 
 COMPUTE:	DEFB	#3E
 COM10:	ADD	HL,HL
@@ -313,27 +315,27 @@ COM10:	ADD	HL,HL
 	LD	H,E
 	SLA	D
 	ADC	HL,HL
-	LD	(VALUEL),DE
-	LD	(VALUEH),HL
+	LD	(VALUEL##),DE
+	LD	(VALUEH##),HL
 	LD	A," "
-	CALL	PRLEN2
+	CALL	PRLEN2##
 	RET
 
-@DIR:	PUSH	HL
-	CALL	TFORM
-	CALL	DFORM
+@DIR::	PUSH	HL
+	CALL	TFORM##
+	CALL	DFORM##
 	POP	HL
-	LD	DE,ENVDATA
+	LD	DE,ENVDATA##
 	PUSH	DE
-	CALL	NCOPY
+	CALL	NCOPY##
 	POP	HL
 	LD	DE,DIROPTS
-	CALL	PARSE
-	CALL	Z,CHKEOL
+	CALL	PARSE##
+	CALL	Z,CHKEOL##
 	RET	NZ
-	LD	A,(LOGDRV2)
+	LD	A,(LOGDRV2##)
 	ADD	A,"@"
-	LD	HL,ENVNAME
+	LD	HL,ENVNAME##
 	LD	E,L
 	LD	D,H
 	LD	(HL),A
@@ -343,21 +345,21 @@ COM10:	ADD	HL,HL
 	LD	(HL),#00
 	CALL	VOL
 	RET	NZ
-	LD	A,(OPTFLAG1)
+	LD	A,(OPTFLAG1##)
 	BIT	2,A
 	JR	NZ,DIR10
-	LD	HL,OPTFLAG2
+	LD	HL,OPTFLAG2##
 	SET	4,(HL)
 DIR10:	SET	1,(IY+#08)
-	CALL	FIRST
+	CALL	FIRST##
 	JR	Z,DIR25
-	CP	.NOFIL
+	CP	.NOFIL##
 	RET	NZ
 	XOR	A
 	SCF
 DIR25:	EX	AF,AF'
-	LD	C,_WPATH	; Get and print whole path string.
-	LD	DE,ENVNAME+1
+	LD	C,_WPATH##	; Get and print whole path string.
+	LD	DE,ENVNAME##+1
 	CALL	BDOS
 	RET	NZ
 	LD	(HL),A	; Take off last item.
@@ -365,15 +367,15 @@ DIR25:	EX	AF,AF'
 	LD	(HL),A	; Fiddle for root directory.
 	PUSH	DE
 	LD	A,#02	; Print 'Directory of'.
-	CALL	DMESS
+	CALL	DMESS##
 	POP	DE	; DE -> whole path string.
-	LD	A,(LOGDRV2)	; Get drive of first filename parsed.
+	LD	A,(LOGDRV2##)	; Get drive of first filename parsed.
 	CALL	CD	; Call the CHDIR command to print drive
-	CALL	LPRINT	;   \ whole path string.
+	CALL	LPRINT##	;   \ whole path string.
 	LD	HL,#00	; Zero accumulated file size.
-	LD	(VALUEL),HL	; Low word.
-	LD	(VALUEH),HL	; High word.
-	LD	(CNTFILE),HL	; Zero number of files found count.
+	LD	(VALUEL##),HL	; Low word.
+	LD	(VALUEH##),HL	; High word.
+	LD	(CNTFILE##),HL	; Zero number of files found count.
 	LD	BC,#014B	; Get the output width.
 	LD	A,#04
 	CALL	BDOS
@@ -381,7 +383,7 @@ DIR25:	EX	AF,AF'
 	OR	E	; 0 => very wide, so use 80 columns.
 	JR	NZ,SETCOL
 WIDE:	LD	A,#50
-SETCOL:	LD	(COLMAX2),A	; Save number of output columns.
+SETCOL:	LD	(COLMAX2##),A	; Save number of output columns.
 	CP	#13
 	JR	NC,DIR30
 	LD	A,#13
@@ -396,86 +398,86 @@ DIR30:	ADD	A,#03	; Allow for trailing separators not
 	EXX
 	EX	AF,AF'
 DIR_LOOP:	JP	C,DIR_DONE
-	LD	HL,(CNTFILE)
+	LD	HL,(CNTFILE##)
 	INC	HL
-	LD	(CNTFILE),HL
+	LD	(CNTFILE##),HL
 	CALL	DFILNAM
-	LD	HL,FIB1+#15
-	LD	DE,VALUEL
-	CALL	ADD32
+	LD	HL,FIB1##+#15
+	LD	DE,VALUEL##
+	CALL	ADD32##
 	BIT	0,(IY+#05)
 	JP	NZ,DIRW
 	LD	A,#0F
 	CALL	MKMAXLEN
-	LD	A,(COLMAX2)
+	LD	A,(COLMAX2##)
 	CP	D
 	JP	C,DIR40
 	LD	C,(IX+#0E)
 	LD	A,"s"
 	BIT	2,C
-	CALL	SPACE?
+	CALL	SPACE?##
 	LD	A,"h"
 	BIT	1,C
-	CALL	SPACE?
+	CALL	SPACE?##
 	LD	A,"r"
 	BIT	0,C
-	CALL	SPACE?
+	CALL	SPACE?##
 	LD	A,#17
 	CALL	MKMAXLEN
-	LD	A,(COLMAX2)
+	LD	A,(COLMAX2##)
 	CP	D
 	JR	C,DIR40
 	BIT	4,C
 	JR	NZ,DIR20
 	LD	A," "
-	LD	DE,FIB1+#15
-	LD	IX,XBUF1
+	LD	DE,FIB1##+#15
+	LD	IX,XBUF1##
 	PUSH	IX
-	CALL	D32
+	CALL	D32##
 	POP	DE
 	INC	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	XOR	A
 DIR20:	LD	A,#03
-	CALL	NZ,DMESS
+	CALL	NZ,DMESS##
 	LD	A,#20
 	CALL	MKMAXLEN
-	LD	A,(COLMAX2)
+	LD	A,(COLMAX2##)
 	CP	D
 	JR	C,DIR40
-	LD	HL,FIB1+#12
+	LD	HL,FIB1##+#12
 	LD	A,(HL)
 	DEC	HL
 	OR	(HL)
 	LD	A,#1F
-	CALL	Z,DMESS
+	CALL	Z,DMESS##
 	JR	Z,DIR40
 	LD	C,#00
-	LD	IX,XBUF1+2
+	LD	IX,XBUF1##+2
 	PUSH	IX
-	CALL	DDATE
+	CALL	DDATE##
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	LD	A,#27
 	CALL	MKMAXLEN
-	LD	A,(COLMAX2)
+	LD	A,(COLMAX2##)
 	CP	D
 	JR	C,DIR40
-	LD	HL,FIB1+#0F
+	LD	HL,FIB1##+#0F
 	LD	A,(HL)
 	INC	HL
 	OR	(HL)
 	LD	A,#25
-	CALL	Z,DMESS
+	CALL	Z,DMESS##
 	JR	Z,DIR40
-	LD	IX,XBUF1+2
+	LD	IX,XBUF1##+2
 	PUSH	IX
-	CALL	DTIME
+	CALL	DTIME##
 	POP	DE
 	PUSH	AF
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	POP	AF
-	CALL	PRCHAR
+	CALL	PRCHAR##
 DIR40:	BIT	3,(IY+#05)
 	JR	Z,DIR50
 	EXX
@@ -484,15 +486,15 @@ DIR40:	BIT	3,(IY+#05)
 	JR	Z,DIR60
 	LD	C,#00
 	EXX
-DIR50:	CALL	LPRINT
+DIR50:	CALL	LPRINT##
 	JR	DIR_NEXT
 
 DIR60:	LD	C,#28
 	EXX
 	LD	A," "
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	LD	A," "
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	JR	DIR_NEXT
 
 DIRW:	EXX	; E=no. filenames on line, D=max. no.
@@ -500,31 +502,31 @@ DIRW:	EXX	; E=no. filenames on line, D=max. no.
 	LD	A,C
 	CP	B	; Last one on line just printed ?
 	JR	C,WSPC	; Print separating spaces if not.
-	CALL	LPRINT	; Else print new line.
+	CALL	LPRINT##	; Else print new line.
 	XOR	A	; Set current count back to 0, set NC.
 	LD	C,A
 WSPC:	EXX
 	LD	B,#04	; Print 4 spaces.
 	CALL	C,SPACES
-DIR_NEXT:	CALL	NEXT
+DIR_NEXT:	CALL	NEXT##
 	JP	DIR_LOOP
 
 DIR_DONE:	RET	NZ
 	EXX
 	OR	C
-	CALL	NZ,LPRINT
+	CALL	NZ,LPRINT##
 	LD	A,#04
-	CALL	DMESS
-	CALL	PRLEN
+	CALL	DMESS##
+	CALL	PRLEN##
 	LD	A,#05
-	CALL	DMESS
-	LD	HL,(CNTFILE)
+	CALL	DMESS##
+	LD	HL,(CNTFILE##)
 	PUSH	HL
-	LD	IX,XBUF1
+	LD	IX,XBUF1##
 	PUSH	IX
-	CALL	D16
+	CALL	D16##
 	POP	DE
-	CALL	PRTSTR
+	CALL	PRTSTR##
 	POP	HL
 	DEC	HL
 	LD	A,H
@@ -532,10 +534,10 @@ DIR_DONE:	RET	NZ
 	LD	A,#09
 	JR	Z,FILE
 	LD	A,#0A
-FILE:	CALL	DMESS
-	LD	A,(LOGDRV2)	; Get drive of first filename parsed.
+FILE::	CALL	DMESS##
+	LD	A,(LOGDRV2##)	; Get drive of first filename parsed.
 	LD	E,A
-	LD	C,_ALLOC	; Get allocation information.
+	LD	C,_ALLOC##	; Get allocation information.
 	CALL	BDOS
 	LD	B,A	; B=sectors/cluster, HL=clusters free.
 	DEFB	#3E
@@ -548,14 +550,14 @@ FIL10:	ADD	HL,HL
 	LD	H,E
 	SLA	D
 	ADC	HL,HL
-	LD	(VALUEL),DE	; Save in 32 bit number buffer.
-	LD	(VALUEH),HL
-	CALL	PRLEN	; Print no. bytes or Ks.
+	LD	(VALUEL##),DE	; Save in 32 bit number buffer.
+	LD	(VALUEH##),HL
+	CALL	PRLEN##	; Print no. bytes or Ks.
 	LD	A,#06	; Print 'free'.
-	CALL	DMESS
-	JP	LPRINT
+	CALL	DMESS##
+	JP	LPRINT##
 
-DFILNAM:	LD	HL,FIB1+1	; Point to filename to print.
+DFILNAM:	LD	HL,FIB1##+1	; Point to filename to print.
 	LD	B,#08	; Print 8 characters of filename.
 	LD	A,(HL)	; '.' or '..' ?
 	CP	"."
@@ -564,10 +566,10 @@ DFILNAM:	LD	HL,FIB1+1	; Point to filename to print.
 	CP	(HL)	; '..' ?
 	JR	NZ,DDOT	; Print one dot & 7 spaces if not.
 	DEC	B	; Else print two dots & 6 spaces,
-	CALL	PRCHAR	; First dot.
+	CALL	PRCHAR##	; First dot.
 	LD	A,(HL)	; Second dot.
 	INC	HL
-DDOT:	CALL	PRCHAR
+DDOT:	CALL	PRCHAR##
 	CALL	SPACES
 	JR	DEXT
 
@@ -583,7 +585,7 @@ DEDOT:	CP	(HL)	; Skip '.' if there.
 	JR	NZ,NODOT
 	INC	HL
 NODOT:	LD	A,C
-	CALL	PRCHAR	; Output character.
+	CALL	PRCHAR##	; Output character.
 DEXT:	LD	B,#03
 DEX10:	LD	A,(HL)
 	OR	A
@@ -592,21 +594,21 @@ DEX10:	LD	A,(HL)
 	PUSH	AF
 	BIT	0,(IY+#05)
 	JR	Z,DEX20
-	LD	A,(FIB1+14)
+	LD	A,(FIB1##+14)
 	BIT	4,A
 	JR	Z,DEX20
 	POP	AF
-	CALL	MKLOWER
+	CALL	MKLOWER##
 	PUSH	AF
 DEX20:	POP	AF
 	CP	"."
 	JR	NZ,SPA10
 	DEC	HL
-SPACES:	CALL	SPACE
+SPACES:	CALL	SPACE##
 	DJNZ	SPACES
 	RET
 
-SPA10:	CALL	PRCHAR
+SPA10:	CALL	PRCHAR##
 	DJNZ	DEX10
 	RET
 
@@ -622,7 +624,7 @@ DIROPTS:	DEFB	"W"
 	DEFB	#01
 	DEFB	"2"
 	DEFB	#08
-SPHOPTS:	DEFB	"S"
+SPHOPTS::	DEFB	"S"
 	DEFB	#04
 	DEFB	"P"
 	DEFB	#00
@@ -633,21 +635,21 @@ SPHOPTS:	DEFB	"S"
 		SUBTTL  MKDIR
 ;        This is the MD/MKDIR command routine, which simply parses a directory
 ; path from the command line and creates it.
-@MKDIR:	AND	(HL)
-	LD	A,.NOPAR	; 'Missing parameter' if no parameters
+@MKDIR::	AND	(HL)
+	LD	A,.NOPAR##	; 'Missing parameter' if no parameters
 	RET	Z	;   given.
 	CALL	PRS	; Parse directory path.
-	CALL	Z,GCHKEOL	; Check for garbage.
+	CALL	Z,GCHKEOL##	; Check for garbage.
 	RET	NZ	; Ret if error.
 	LD	(HL),A	; Make sure string is null terminated.
 	LD	A,B	; Give error if last item is null or
 	AND	#18	;   ambiguous (this test saves setting
-	LD	A,.IPATH	;   up a template filname in a FIB).
+	LD	A,.IPATH##	;   up a template filname in a FIB).
 	RET	Z
 	BIT	5,B
 	RET	NZ
 	LD	BC,#1042	; Find new sub-directory.
-	LD	IX,FIB1
+	LD	IX,FIB1##
 	JP	BDOS
 
 		SUBTTL  VOL
@@ -656,36 +658,36 @@ SPHOPTS:	DEFB	"S"
 ; creating a new one which automatically deletes any existing one.
 ;        The entry point DVOL is used by the DIR command to display the volume
 ; name on the disk.
-@VOL:	LD	B,#08	; Parse a volume name.
+@VOL::	LD	B,#08	; Parse a volume name.
 	CALL	_PRS
-	CALL	Z,GCHKEOL	; Check for garbage at end of line.
+	CALL	Z,GCHKEOL##	; Check for garbage at end of line.
 	RET	NZ
 	LD	(HL),A	; Ensure string is null terminated.
-	LD	IX,FIB1
-	LD	C,_FNEW
+	LD	IX,FIB1##
+	LD	C,_FNEW##
 	BIT	0,B
 	LD	B,#08
 	JP	NZ,BDOS	; Create new volume name if yes.
-VOL:	LD	IX,FIB1
+VOL:	LD	IX,FIB1##
 	LD	BC,#0840
 	CALL	BDOS	; Look for volume name.
 	JR	Z,DVOL	; OK if no error or file not found.
-	CP	.NOFIL
+	CP	.NOFIL##
 	RET	NZ
 DVOL:	PUSH	AF	; Save volume name found flag.
 	LD	A,#10	; Print 'Volume in drive '.
-	CALL	DMESS
-	LD	A,(FIB1+#19)	; Get actual drive letter.
+	CALL	DMESS##
+	LD	A,(FIB1##+#19)	; Get actual drive letter.
 	ADD	A,"@"
-	CALL	PRCHAR	; Print it in ASCII.
+	CALL	PRCHAR##	; Print it in ASCII.
 	LD	A,#11
-	CALL	DMESS	; Print stuff after drive (': ').
+	CALL	DMESS##	; Print stuff after drive (': ').
 	POP	AF	; Get volume name flag.
 	OR	A
 	LD	A,#12	; Print 'has no name' if no volume
-	JP	NZ,DMESSCR	;   name found.
+	JP	NZ,DMESSCR##	;   name found.
 	LD	A,#13	; Print 'is'.
-	CALL	DMESS
-	LD	DE,FIB1+1
-	JP	DMSCR	; Print volume name from FIB.
+	CALL	DMESS##
+	LD	DE,FIB1##+1
+	JP	DMSCR##	; Print volume name from FIB.
 

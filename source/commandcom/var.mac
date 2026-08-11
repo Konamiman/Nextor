@@ -1,5 +1,7 @@
+	name('var')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Runtime variables
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The runtime variables, allocated past the end of the binary image
@@ -13,6 +15,7 @@
 
 VAR	MACRO	NAME, SIZE
 NAME	 EQU	VARIABLES + VAR_OFFSET
+GLOBAL	 NAME
 VAR_OFFSET DEFL	VAR_OFFSET + (SIZE)
 	ENDM
 ;

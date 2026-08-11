@@ -1,144 +1,58 @@
 ;
 ;        This file is included by all the major COMMAND2.COM source files.
-; It defines the BIOS and DOS workarea addresses, the DOS function and
-; error codes, and the variables kept in the mapper segment that holds the
-; command history and the alias space (accessed relative to page 2).
+; It defines the MSX-DOS and BIOS entry points and workarea addresses used
+; by the program, and the offsets of the control words kept in the mapper
+; segment that holds the command history and the alias space.
+;
+;        The DOS function and error codes are not defined here: they are
+; resolved at link time from the SDK constant files (sdk/asm/constants),
+; assembled with GENERATE_PUBLIC_SYMBOLS (see the Makefile).
 ;
 ;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
 ; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
 ; released as freeware in 2003.
 ;
 
-; DOS Variabelen
+;------- MSX-DOS and BIOS entry points
+;
+BDOS:	EQU	#05	; MSX-DOS function call entry point.
+RDSLT:	EQU	#0C	; Inter-slot read (also available under MSX-DOS).
+CALSLT:	EQU	#1C	; Inter-slot call (also available under MSX-DOS).
 
-BDOS:	EQU	#05
-RDSLT:	EQU	#0C
-CALSLT:	EQU	#1C
-BOOTDRV:	EQU	#F2FD
-DATEFMT:	EQU	#F30E
-LINL40:	EQU	#F3AE
-LINLEN:	EQU	#F3B0
-CRTCNT:	EQU	#F3B1
-CSRY:	EQU	#F3DC
-CSRX:	EQU	#F3DD
-FORCLR:	EQU	#F3E9
-BAKCLR:	EQU	#F3EA
-BDRCLR:	EQU	#F3EB
-RTYCNT:	EQU	#FC9A
-EXPTBL:	EQU	#FCC1
-SLTWRK:	EQU	#FD88
-EXTBIO:	EQU	#FFCA
+;------- MSX-DOS kernel variables
+;
+BOOTDRV:	EQU	#F2FD	; Drive MSX-DOS boots from when leaving BASIC.
+DATEFMT:	EQU	#F30E	; Country code (determines the date format).
 
-; DOS Routines
+;------- BIOS workarea variables
+;
+LINL40:	EQU	#F3AE	; Columns in SCREEN 0.
+LINLEN:	EQU	#F3B0	; Columns in the current screen mode.
+CRTCNT:	EQU	#F3B1	; Rows in the current screen mode.
+CSRY:	EQU	#F3DC	; Cursor row (1 based).
+CSRX:	EQU	#F3DD	; Cursor column (1 based).
+FORCLR:	EQU	#F3E9	; Foreground colour.
+BAKCLR:	EQU	#F3EA	; Background colour.
+BDRCLR:	EQU	#F3EB	; Border colour.
+RTYCNT:	EQU	#FC9A	; BIOS workarea byte repurposed to remember the
+			;   history/alias mapper segment across re-loads.
+EXPTBL:	EQU	#FCC1	; Slot expanded flags (and main BIOS slot).
+SLTWRK:	EQU	#FD88	; Slot workarea table.
+EXTBIO:	EQU	#FFCA	; Extended BIOS hook.
 
-_CONIN:	EQU	#01
-_CONOUT:	EQU	#02
-_INNOE:	EQU	#08
-_BUFIN:	EQU	#0A
-_CONST:	EQU	#0B
-_SELDSK:	EQU	#0E
-_LOGIN:	EQU	#18
-_CURDRV:	EQU	#19
-_SETDMA:	EQU	#1A
-_ALLOC:	EQU	#1B
-_GDATE:	EQU	#2A
-_SDATE:	EQU	#2B
-_GTIME:	EQU	#2C
-_STIME:	EQU	#2D
-_VERIFY:	EQU	#2E
-_DPARM:	EQU	#31
-_FFIRST:	EQU	#40
-_FNEXT:	EQU	#41
-_FNEW:	EQU	#42
-_OPEN:	EQU	#43
-_CREATE:	EQU	#44
-_CLOSE:	EQU	#45
-_ENSURE:	EQU	#46
-_DUP:	EQU	#47
-_READ:	EQU	#48
-_WRITE:	EQU	#49
-_SEEK:	EQU	#4A
-_IOCTL:	EQU	#4B
-_HTEST:	EQU	#4C
-_DELETE:	EQU	#4D
-_RENAME:	EQU	#4E
-_MOVE:	EQU	#4F
-_ATTR:	EQU	#50
-_FTIME:	EQU	#51
-_HDELETE:	EQU	#52
-_HFTIME:	EQU	#56
-_GETVFY:	EQU	#58
-_GETCD:	EQU	#59
-_CHDIR:	EQU	#5A
-_PARSE:	EQU	#5B
-_PFILE:	EQU	#5C
-_CHKCHR:	EQU	#5D
-_WPATH:	EQU	#5E
-_FORK:	EQU	#60
-_JOIN:	EQU	#61
-_TERM:	EQU	#62
-_DEFAB:	EQU	#63
-_DEFER:	EQU	#64
-_ERROR:	EQU	#65
-_EXPLAIN:	EQU	#66
-_FORMAT:	EQU	#67
-_RAMDISK:	EQU	#68
-_BUFFER:	EQU	#69
-_ASSIGN:	EQU	#6A
-_GENV:	EQU	#6B
-_SENV:	EQU	#6C
-_FENV:	EQU	#6D
-_DSKCHK:	EQU	#6E
-_DOSVER:	EQU	#6F
-_REDIR:	EQU	#70
-
-; DOS Foutmeldingen
-
-.OVDEST:	EQU	#81
-.COPY:	EQU	#82
-.BADEST:	EQU	#83
-.NOCAT:	EQU	#84
-.BADVER:	EQU	#85
-.NOHELP:	EQU	#86
-.BADNO:	EQU	#87
-.IOPT:	EQU	#88
-.NOPAR:	EQU	#89
-.INP:	EQU	#8A
-.IPARM:	EQU	#8B
-.OKCMD:	EQU	#8C
-.BUFUL:	EQU	#8D
-.BADCM:	EQU	#8E
-.BADCOM:	EQU	#8F
-.INERR:	EQU	#9B
-.OUTERR:	EQU	#9C
-.ABORT:	EQU	#9D
-.CTRLC:	EQU	#9E
-.STOP:	EQU	#9F
-.NRAMD:	EQU	#BB
-.ITIME:	EQU	#BD
-.IDATE:	EQU	#BE
-.EOF:	EQU	#C7
-.FOPEN:	EQU	#CA
-.FILEX:	EQU	#CB
-.DIRX:	EQU	#CC
-.IATTR:	EQU	#CF
-.NODIR:	EQU	#D6
-.NOFIL:	EQU	#D7
-.IPATH:	EQU	#D9
-.IFNM:	EQU	#DA
-.IDRV:	EQU	#DB
-.NORAM:	EQU	#DE
-.WFILE:	EQU	#F4
-.WDISK:	EQU	#F5
-
-; Programma variabelen
-
-RDADDR:	EQU	#0000
-PUTADDR:	EQU	RDADDR+#02
-ENDADDR:	EQU	PUTADDR+#02
-BUFLEN:	EQU	ENDADDR+#02
-VAREND:	EQU	BUFLEN+#02
-ALIADDR:	EQU	VAREND+#02
-ALIEND:	EQU	ALIADDR+#02
-BUFADDR:	EQU	ALIEND+#02
-
+;------- Mapper segment control words
+;
+;        COMMAND2.COM keeps the command history, the alias list and the
+; variable swap area in a RAM mapper segment, switched into page 2 while
+; it is accessed. These are the offsets of the 16-bit control words kept
+; at the bottom of that segment, so each one lives at offset+#8000 (see
+; the accessor routines in editor.mac and the alias routines in io.mac).
+;
+RDADDR:	EQU	#0000	; History buffer read (cursor) position.
+PUTADDR:	EQU	RDADDR+#02	; History buffer write position.
+ENDADDR:	EQU	PUTADDR+#02	; End of the history data.
+BUFLEN:	EQU	ENDADDR+#02	; Size of the history buffer.
+VAREND:	EQU	BUFLEN+#02	; End of the variable swap area.
+ALIADDR:	EQU	VAREND+#02	; Start of the alias list.
+ALIEND:	EQU	ALIADDR+#02	; End of the alias list.
+BUFADDR:	EQU	ALIEND+#02	; Start of the free buffer area.

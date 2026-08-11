@@ -1,5 +1,7 @@
+	name('editor')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Command line editor
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The command line editor, new in COMMAND2.COM 2.40: line input with
@@ -27,14 +29,14 @@
 ; insert mode, b1 = TAB completion cycle in progress, b2 = current line is a
 ; history line recalled by CURUP/CURDOWN and not modified since.
 ;
-EDLINE:	PUSH	IY	; RETKEY pops this on exit.
-	LD	A,(INSFLAG)
+EDLINE::	PUSH	IY	; RETKEY pops this on exit.
+	LD	A,(INSFLAG##)
 	AND	4	; Keep only b2 (unmodified recalled line);
-	LD	(INSFLAG),A	;   insert and TAB cycle modes start off.
+	LD	(INSFLAG##),A	;   insert and TAB cycle modes start off.
 	XOR	A
-	LD	(APPENDF),A
-	LD	(INSPOS),A	; Cursor at the start of the line.
-	LD	(MININSPOS),A
+	LD	(APPENDF##),A
+	LD	(INSPOS##),A	; Cursor at the start of the line.
+	LD	(MININSPOS##),A
 	EX	DE,HL
 	INC	HL	; HL -> length byte, kept there throughout.
 	LD	(HL),0	; Start with an empty line.
@@ -43,9 +45,9 @@ RDLINE:	CALL	RDKEY	; Get next key.
 	CP	9
 	JP	Z,TABKEY	; TAB: filename completion.
 	PUSH	AF
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	RES	1,A	; Any other key restarts the completion
-	LD	(INSFLAG),A	;   cycle from scratch.
+	LD	(INSFLAG##),A	;   cycle from scratch.
 	POP	AF
 	CP	13
 	JP	Z,RETKEY	; CR: line finished.
@@ -75,12 +77,12 @@ RDLINE:	CALL	RDKEY	; Get next key.
 	CP	32
 	JR	C,RDLINE	; Ignore other control characters.
 	CALL	PUTLINE	; Put the character in the line and
-	CALL	PRCHAR	;   echo it (or beep if line is full).
+	CALL	PRCHAR##	;   echo it (or beep if line is full).
 	JR	RDLINE
 
 ; Get a key from the console without echoing it. Preserves HL.
 RDKEY:	PUSH	HL
-	LD	C,_INNOE	; Console input, no echo.
+	LD	C,_INNOE##	; Console input, no echo.
 	CALL	BDOS
 	POP	HL
 	RET
@@ -97,16 +99,16 @@ RDKEY:	PUSH	HL
 ;               the shifted tail), or BEL (7) if the line is full.
 ;
 PUTLINE:	EX	AF,AF'	; Save the character.
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	BIT	0,A
 	JR	NZ,INSERT	; NZ => insert mode.
 	DEC	HL	; HL -> maximum length.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	CP	(HL)	; Cursor at the buffer limit?
 	INC	HL
 	JR	Z,BEEP	; Yes: line full.
 	INC	A
-	LD	(INSPOS),A	; Advance the cursor.
+	LD	(INSPOS##),A	; Advance the cursor.
 	LD	C,A
 	LD	B,#00
 	ADD	HL,BC	; HL -> character cell at the new cursor.
@@ -115,7 +117,7 @@ PUTLINE:	EX	AF,AF'	; Save the character.
 	OR	A
 	SBC	HL,BC	; HL -> length byte again.
 	LD	C,A	; Save character while testing length.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	CP	(HL)	; Went past the current end of the line?
 	LD	A,C
 	RET	C	; No: overwrote inside the line.
@@ -131,7 +133,7 @@ INSERT:	LD	A,(HL)
 	INC	HL
 	JR	Z,BEEP	; Yes: can't insert.
 	PUSH	HL	; Save pointer to the length byte.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	CP	(HL)	; Cursor at the end of the line?
 	JR	Z,INS30	; Yes: plain append, nothing to shift.
 	LD	C,A
@@ -157,9 +159,9 @@ INS20:	EX	AF,AF'
 	INC	(HL)	; Length +2: PRTLINE prints (HL)-INSPOS-1
 	CALL	PRTLINE	;   chars, so this redraws the whole tail.
 	DEC	(HL)	; Now correct the length (net +1).
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	INC	A
-	LD	(INSPOS),A	; Advance the cursor, and return 28 so
+	LD	(INSPOS##),A	; Advance the cursor, and return 28 so
 	LD	A,28	;   it also moves right on screen.
 	RET
 
@@ -169,13 +171,13 @@ INS30:	LD	C,A	; Append at the end of the line:
 	ADD	HL,BC	; HL -> first free character cell.
 	JR	INS20
 
-BEEP:	LD	A,7	; Line full: return BEL to the caller.
+BEEP::	LD	A,7	; Line full: return BEL to the caller.
 	RET
 
 ;        Re-enter the key loop after a non-typing key: clear MININSPOS, the
 ; CLRLINE limit that is set while insert mode is being used.
 RDLINE2:	XOR	A
-	LD	(MININSPOS),A
+	LD	(MININSPOS##),A
 	JP	RDLINE
 
 		SUBTTL	Editing keys
@@ -190,18 +192,18 @@ CURLEFT:	LD	A,(#FBEB)
 	JP	Z,HOME	; CTRL held: to the start of the line.
 	BIT	0,A
 	JP	Z,WRDLEFT	; SHIFT held: to the previous word.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	OR	A
 	JP	Z,RDLINE2	; Already at the start.
 	CALL	MOVLEFT
 	JP	RDLINE2
 
 ; Move the cursor one position left, in INSPOS and on screen.
-MOVLEFT:	LD	A,(INSPOS)
+MOVLEFT:	LD	A,(INSPOS##)
 	DEC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,29	; Cursor left control character.
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	RET
 
 ;        Cursor right key: plain = one position right, with CTRL held = to
@@ -211,18 +213,18 @@ CURRIGHT:	LD	A,(#FBEB)
 	JP	Z,ENDKEY	; CTRL held: to the end of the line.
 	BIT	0,A
 	JP	Z,WRDRIGHT	; SHIFT held: to the next word.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	CP	(HL)
 	JP	Z,RDLINE2	; Already at the end.
 	CALL	MOVRIGHT
 	JP	RDLINE2
 
 ; Move the cursor one position right, in INSPOS and on screen.
-MOVRIGHT:	LD	A,(INSPOS)
+MOVRIGHT:	LD	A,(INSPOS##)
 	INC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,28	; Cursor right control character.
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	RET
 
 ;
@@ -233,16 +235,16 @@ MOVRIGHT:	LD	A,(INSPOS)
 BACKSPC:	LD	A,(HL)
 	OR	A
 	JP	Z,RDLINE2	; Empty line: nothing to delete.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	OR	A
 	JR	Z,BAC10	; At the start: skip the cursor move.
 	DEC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,29
-	CALL	PRCHAR	; Move the cursor left; the line now
+	CALL	PRCHAR##	; Move the cursor left; the line now
 	CALL	RSTLINE	;   counts as modified.
 BAC10:	PUSH	HL
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	LD	C,A
 	LD	A,(HL)
 	SUB	C	; Characters from cursor to end of line.
@@ -250,7 +252,7 @@ BAC10:	PUSH	HL
 	LD	C,A
 	LD	B,0
 	PUSH	BC	; Shift count.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	LD	C,A
 	LD	B,#00
 	INC	BC
@@ -280,7 +282,7 @@ DELCHR:	LD	A,(#FBEB)
 	JP	Z,RDLINE2	; Empty line: nothing to delete.
 	CALL	RSTLINE
 	LD	B,A
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	CP	B
 	JP	Z,RDLINE2	; At the end: nothing under the cursor.
 	JR	BAC10	; Delete like BS, without the move.
@@ -289,9 +291,9 @@ DELCHR:	LD	A,(#FBEB)
 ; will store it in the history even if it started out as a recalled line.
 ; Preserves AF.
 RSTLINE:	PUSH	AF
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	RES	2,A
-	LD	(INSFLAG),A
+	LD	(INSFLAG##),A
 	POP	AF
 	RET
 
@@ -305,7 +307,7 @@ CTRLDEL:	PUSH	HL
 	CALL	SETENDADDR	;   end of data = BUFADDR-1: no data.
 	POP	HL
 	LD	A,7
-	CALL	PRCHAR	; Beep.
+	CALL	PRCHAR##	; Beep.
 	JP	RDLINE2
 
 ;
@@ -317,7 +319,7 @@ CTRLDEL:	PUSH	HL
 ; Preserves HL.
 ;
 PRTLINE:	PUSH	HL
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	LD	C,A
 	LD	A,(HL)
 	SUB	C	; Characters from cursor to end of line.
@@ -330,37 +332,37 @@ PRTLINE:	PUSH	HL
 	JR	Z,PRT20	; None to print.
 PRT10:	INC	HL
 	LD	A,(HL)
-	CALL	PRCHAR	; Print the tail of the line.
+	CALL	PRCHAR##	; Print the tail of the line.
 	DJNZ	PRT10
 PRT20:	LD	A," "
-	CALL	PRCHAR	; Erase what was after it on screen.
+	CALL	PRCHAR##	; Erase what was after it on screen.
 	POP	BC
 	INC	B	; Printed characters plus the space:
 PRT30:	LD	A,29
-	CALL	PRCHAR	;   move back to the original column.
+	CALL	PRCHAR##	;   move back to the original column.
 	DJNZ	PRT30
 	POP	HL
 	RET
 
 ;        HOME key (and CTRL+cursor-left): move the cursor to the start of
 ; the line, one position at a time.
-HOME:	LD	A,(INSPOS)
+HOME:	LD	A,(INSPOS##)
 	OR	A
 	JP	Z,RDLINE2	; Reached the start.
 	DEC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,29
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	JR	HOME
 
 ;        CTRL+cursor-right: move the cursor to the end of the line.
-ENDKEY:	LD	A,(INSPOS)
+ENDKEY:	LD	A,(INSPOS##)
 	CP	(HL)
 	JP	Z,RDLINE2	; Reached the end.
 	INC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,28
-	CALL	PRCHAR
+	CALL	PRCHAR##
 	JR	ENDKEY
 
 ;
@@ -382,7 +384,7 @@ WRDLEFT2:	CALL	WRDLEFTC
 	JR	WRDLEFT2
 ; Get the character immediately left of the cursor.
 ; On exit, Z set if the cursor is at the start of the line, else A = char.
-WRDLEFTC:	LD	A,(INSPOS)
+WRDLEFTC:	LD	A,(INSPOS##)
 	OR	A
 	RET	Z	; Z => at the start of the line.
 	LD	C,A
@@ -412,7 +414,7 @@ WRDRIGHT2:	CALL	WRDRIGHTC
 
 ; Get the character under the cursor.
 ; On exit, Z set if the cursor is at the end of the line, else A = char.
-WRDRIGHTC:	LD	A,(INSPOS)
+WRDRIGHTC:	LD	A,(INSPOS##)
 	CP	(HL)
 	RET	Z	; Z => at the end of the line.
 	LD	C,A
@@ -433,14 +435,14 @@ SELECT:	CALL	CLRLINE
 ; to MININSPOS (normally 0; while insert mode is on, the position where it
 ; was switched on), then truncate the line there.
 CLRLINE:	PUSH	HL
-	LD	HL,MININSPOS
-CLR10:	LD	A,(INSPOS)
+	LD	HL,MININSPOS##
+CLR10:	LD	A,(INSPOS##)
 	CP	(HL)
 	JR	Z,CLR20	; Cursor back at the limit.
 	DEC	A
-	LD	(INSPOS),A
+	LD	(INSPOS##),A
 	LD	A,29
-	CALL	PRCHAR	; Move it one position left.
+	CALL	PRCHAR##	; Move it one position left.
 	JR	CLR10
 CLR20:	POP	HL
 	JR	SHFTDEL	; Now delete to the end of the line.
@@ -454,19 +456,19 @@ CLR20:	POP	HL
 INSKEY:	LD	A,(#FBEB)
 	BIT	1,A
 	JR	Z,CTRLINS	; CTRL held.
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	XOR	#01	; Toggle insert mode.
-	LD	(INSFLAG),A
+	LD	(INSFLAG##),A
 	BIT	0,A
 	JR	Z,INS50	; Now off: back to the block cursor.
 	LD	A,27
-	CALL	PRCHAR	; ESC "y4":
+	CALL	PRCHAR##	; ESC "y4":
 	LD	A,"y"
-	CALL	PRCHAR	;   insert mode cursor
+	CALL	PRCHAR##	;   insert mode cursor
 	LD	A,"4"
-	CALL	PRCHAR	;   (underline).
-	LD	A,(INSPOS)
-	LD	(MININSPOS),A	; Remember where insertion starts.
+	CALL	PRCHAR##	;   (underline).
+	LD	A,(INSPOS##)
+	LD	(MININSPOS##),A	; Remember where insertion starts.
 INS40:	JP	RDLINE
 INS50:	CALL	BLKCURS
 	JR	INS40
@@ -483,17 +485,17 @@ CTRLINS:	PUSH	HL
 
 ;        Leave insert mode: clear INSFLAG bit 0, restore the block cursor
 ; and forget the insert start position.
-BLKCURS:	LD	A,(INSFLAG)
+BLKCURS:	LD	A,(INSFLAG##)
 	RES	0,A	; Insert mode off.
-	LD	(INSFLAG),A
+	LD	(INSFLAG##),A
 	LD	A,27
-	CALL	PRCHAR	; ESC "x4":
+	CALL	PRCHAR##	; ESC "x4":
 	LD	A,"x"
-	CALL	PRCHAR	;   block cursor
+	CALL	PRCHAR##	;   block cursor
 	LD	A,"4"
-	CALL	PRCHAR	;   (overwrite mode).
+	CALL	PRCHAR##	;   (overwrite mode).
 	XOR	A
-	LD	(MININSPOS),A
+	LD	(MININSPOS##),A
 	RET
 
 ;        SHIFT-DEL: delete from the cursor to the end of the line.
@@ -502,11 +504,11 @@ CTRLE:	CALL	SHFTDEL
 
 ;        Truncate the line at the cursor: set the length to the cursor
 ; position, blank the removed characters on screen and move back.
-SHFTDEL:	LD	A,(INSPOS)
+SHFTDEL:	LD	A,(INSPOS##)
 	CP	(HL)
 	RET	Z	; Already at the end of the line.
 	CALL	RSTLINE
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	LD	B,A
 	LD	A,(HL)
 	LD	(HL),B	; New length = cursor position.
@@ -514,11 +516,11 @@ SHFTDEL:	LD	A,(INSPOS)
 	LD	B,A	; B = number of characters removed.
 	PUSH	BC
 SHF10:	LD	A," "
-	CALL	PRCHAR	; Blank them on screen,
+	CALL	PRCHAR##	; Blank them on screen,
 	DJNZ	SHF10
 	POP	BC
 SHF20:	LD	A,29
-	CALL	PRCHAR	;   and put the cursor back.
+	CALL	PRCHAR##	;   and put the cursor back.
 	DJNZ	SHF20
 	RET
 
@@ -542,15 +544,15 @@ SHF20:	LD	A,29
 ; lower-cased when LOWER is ON, and "\" is appended to directory names.
 ;
 TABKEY:	PUSH	HL
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	BIT	1,A
 	JP	NZ,NEXTTAB	; TAB again: just get the next match.
 	SET	1,A	; Start a completion cycle; the line
 	RES	2,A	;   counts as modified.
-	LD	(INSFLAG),A
-	LD	HL,TABORD$
-	LD	DE,XBUF2
-	CALL	GENV3	; Get the TABORDER item into XBUF2.
+	LD	(INSFLAG##),A
+	LD	HL,TABORD$##
+	LD	DE,XBUF2##
+	CALL	GENV3##	; Get the TABORDER item into XBUF2.
 	PUSH	DE
 	LD	B,#00
 TAB10:	LD	A,(DE)	; Count its length into B.
@@ -562,19 +564,19 @@ TAB10:	LD	A,(DE)	; Count its length into B.
 
 TAB20:	POP	DE
 	DEC	DE	; COMPARE wants DE -> string minus one.
-	LD	HL,ORDTAB-1
+	LD	HL,ORDTAB##-1
 	XOR	A	; Z for the first loop entry.
 TAB30:	JR	NZ,TAB40	; Entries are sorted by length: a longer
 	INC	HL	;   one means no match, use the default.
 	LD	A,(HL)
 	OR	A
 	JR	Z,TAB40	; End of the table: use the default.
-	CALL	COMPARE	; Compare TABORDER value with the entry.
+	CALL	COMPARE##	; Compare TABORDER value with the entry.
 	JR	C,TAB30	; No match: try the next entry.
 	LD	A,(HL)	; Match: A = flags byte after the name;
 	DEFB	#21	;   "LD HL,.." swallows the default load.
 TAB40:	LD	A,%00000011	; Default: files and directories.
-	LD	(FDFLAGS),A
+	LD	(FDFLAGS##),A
 	POP	HL
 	PUSH	HL
 	CALL	SHFTDEL	; Delete from the cursor to the end,
@@ -585,7 +587,7 @@ TAB40:	LD	A,%00000011	; Default: files and directories.
 	LD	(HL),0	;   and zero-terminate the line.
 	POP	HL
 	PUSH	HL
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	OR	A
 	JR	Z,TAB80	; Cursor at the start: empty item.
 	LD	C,A
@@ -605,7 +607,7 @@ TAB70:	DEC	HL	; No: move back one character, until
 TAB80:	EX	DE,HL
 	INC	DE	; DE -> first character of the item.
 	PUSH	DE
-	LD	BC,_PARSE	; Parse it as a pathname (B=0).
+	LD	BC,_PARSE##	; Parse it as a pathname (B=0).
 	CALL	BDOS
 	EX	DE,HL	; HL -> its termination character.
 	BIT	4,B	; Filename part already ambiguous?
@@ -625,17 +627,17 @@ TAB90:	LD	(HL),"*"	; (Yes: append just "*".)
 	SBC	HL,DE	;   line buffer: the difference minus
 	LD	A,L	;   one is the cursor position of the
 	DEC	A	;   last path component.
-	LD	(APPENDF),A	; The names found will be put there.
-	LD	DE,DSKERR
-	LD	C,_DEFER
+	LD	(APPENDF##),A	; The names found will be put there.
+	LD	DE,DSKERR##
+	LD	C,_DEFER##
 	CALL	BDOS	; Auto-abort on disk errors; aborts
 	LD	DE,ABEXIT7
-	LD	C,_DEFAB
+	LD	C,_DEFAB##
 	CALL	BDOS	;   return NZ to the editor (no exit).
 	POP	HL
-	LD	DE,XBUF1
+	LD	DE,XBUF1##
 	PUSH	DE
-	CALL	NCOPY	; Save the filespec in XBUF1 for the
+	CALL	NCOPY##	; Save the filespec in XBUF1 for the
 	POP	DE	;   wraparound searches.
 TAB100:	CALL	TABFIRST	; Search the first match.
 	POP	HL
@@ -644,47 +646,47 @@ TAB100:	CALL	TABFIRST	; Search the first match.
 ;        Names starting with "." ("." and "..") are never offered. Note: in
 ; a directory that contains nothing else this search never terminates
 ; (fixed in 2.44).
-TAB110:	LD	A,(FIB1+1)
+TAB110:	LD	A,(FIB1##+1)
 	CP	"."
 	JP	Z,NEXTTAB2	; Skip "." and "..": get the next match.
-	LD	A,(INSPOS)
+	LD	A,(INSPOS##)
 	LD	B,A
-	LD	A,(APPENDF)
-	LD	(INSPOS),A	; Cursor back to the insert position,
+	LD	A,(APPENDF##)
+	LD	(INSPOS##),A	; Cursor back to the insert position,
 	LD	C,A
 	LD	A,B
 	SUB	C
 	JR	Z,TAB130	; (it was already there)
 	LD	B,A
 TAB120:	LD	A,29
-	CALL	PRCHAR	;   on screen as well.
+	CALL	PRCHAR##	;   on screen as well.
 	DJNZ	TAB120
 TAB130:	POP	HL
 	PUSH	HL
 	CALL	SHFTDEL	; Delete the previous match, if any.
 	PUSH	HL
-	LD	DE,FIB1+1
-	CALL	CHKLOW	; Lower-case the name if LOWER is ON.
+	LD	DE,FIB1##+1
+	CALL	CHKLOW##	; Lower-case the name if LOWER is ON.
 	POP	HL
 TAB140:	LD	A,(DE)
 	OR	A
 	JR	Z,TAB150
 	CALL	PUTLINE	; Put the found name in the line,
-	CALL	PRCHAR	;   echoing it.
+	CALL	PRCHAR##	;   echoing it.
 	INC	DE
 	JR	TAB140
 
-TAB150:	LD	A,(FIB1+14)	; Found file's attribute byte.
+TAB150:	LD	A,(FIB1##+14)	; Found file's attribute byte.
 	BIT	4,A
 	JR	Z,TAB160
 	LD	A,"\"	; It is a directory: append a "\".
 	CALL	PUTLINE
-	CALL	PRCHAR
+	CALL	PRCHAR##
 TAB160:	LD	DE,0
-	LD	C,_DEFER
+	LD	C,_DEFER##
 	CALL	BDOS	; Restore the default error handling
-	LD	DE,CLI_ABORT
-	LD	C,_DEFAB
+	LD	DE,CLI_ABORT##
+	LD	C,_DEFAB##
 	CALL	BDOS	;   and abort routine.
 	POP	HL
 	JP	RDLINE2
@@ -701,28 +703,28 @@ STOPLST$:	DEFB	" +^<>|['",#22,0	; Characters that delimit the item.
 ;               A = error code.
 ;
 TABFIRST:	LD	B,#06	; Search attributes: hidden + system,
-	LD	A,(FDFLAGS)
+	LD	A,(FDFLAGS##)
 	BIT	1,A
 	JR	Z,TAB170
 	SET	4,B	;   plus directories if wanted.
-TAB170:	LD	IX,FIB1
-	LD	C,_FFIRST
+TAB170:	LD	IX,FIB1##
+	LD	C,_FFIRST##
 	CALL	BDOS	; Find the first match.
 TAB180:	JR	Z,TAB190	; Found one.
-	CP	.NOFIL
+	CP	.NOFIL##
 	CALL	Z,CHKNEXT	; No (more) files: try the other kind.
 	RET	NZ	; Error: give up.
-TAB190:	LD	A,(FDFLAGS)
+TAB190:	LD	A,(FDFLAGS##)
 	BIT	0,A
 	JR	Z,TAB210	; Files not wanted: directories only.
 TAB200:	XOR	A	; Accept the name found: Z.
 	RET
 
-TAB210:	LD	A,(FIB1+14)
+TAB210:	LD	A,(FIB1##+14)
 	BIT	4,A
 	JR	NZ,TAB200	; It is a directory: accept it.
-	LD	IX,FIB1
-	LD	C,_FNEXT
+	LD	IX,FIB1##
+	LD	C,_FNEXT##
 	CALL	BDOS	; It is a file: skip it.
 	JR	TAB180
 
@@ -732,23 +734,23 @@ TAB210:	LD	A,(FIB1+14)
 ; filespec saved in XBUF1: this is what makes the completion circular.
 ; Exit conditions as TABFIRST.
 ;
-TABNEXT:	LD	IX,FIB1
-	LD	C,_FNEXT
+TABNEXT:	LD	IX,FIB1##
+	LD	C,_FNEXT##
 	CALL	BDOS
 	JR	Z,TAB220	; Found one.
-	CP	.NOFIL
+	CP	.NOFIL##
 	RET	NZ	; Error: give up.
 	CALL	CHKNEXT	; No more: try the other kind.
 	JR	Z,TAB220
-	CP	.NOFIL
+	CP	.NOFIL##
 	RET	NZ
-	LD	DE,XBUF1	; Both kinds exhausted: wrap around
+	LD	DE,XBUF1##	; Both kinds exhausted: wrap around
 	JR	TABFIRST	;   to the first match again.
 
-TAB220:	LD	A,(FDFLAGS)
+TAB220:	LD	A,(FDFLAGS##)
 	BIT	0,A
 	JR	NZ,TAB200	; Files are wanted: accept it.
-	LD	A,(FIB1+14)
+	LD	A,(FIB1##+14)
 	BIT	4,A
 	JR	NZ,TAB200	; It is a directory: accept it.
 	JR	TABNEXT	; Files not wanted: skip this one.
@@ -756,22 +758,22 @@ TAB220:	LD	A,(FDFLAGS)
 ;        One kind (files or directories) is exhausted. If FDFLAGS bit 2
 ; says the other kind follows, swap the b0/b1 selection and restart the
 ; search with the filespec saved in XBUF1; else return NZ with A = .NOFIL.
-CHKNEXT:	LD	A,(FDFLAGS)
+CHKNEXT:	LD	A,(FDFLAGS##)
 	BIT	2,A
 	JR	NZ,CHK40	; The other kind follows.
-	LD	A,.NOFIL
+	LD	A,.NOFIL##
 	OR	A	; NZ: really nothing left.
 	RET
 
 CHK40:	XOR	%00000011	; Swap files <-> directories.
-	LD	(FDFLAGS),A
-	LD	DE,XBUF1	; Restart with the saved filespec.
+	LD	(FDFLAGS##),A
+	LD	DE,XBUF1##	; Restart with the saved filespec.
 	LD	B,#06	; Hidden + system,
 	BIT	1,A
 	JR	Z,CHK50
 	SET	4,B	;   plus directories if wanted now.
-CHK50:	LD	IX,FIB1
-	LD	C,_FFIRST
+CHK50:	LD	IX,FIB1##
+	LD	C,_FFIRST##
 	CALL	BDOS
 	RET
 
@@ -786,14 +788,14 @@ NEXTTAB:	LD	A,(#FBEB)
 	JR	NZ,NEXTTAB2	; CTRL not held: plain next match.
 	LD	A,"+"
 	CALL	PUTLINE	; CTRL-TAB: append a "+"; further
-	CALL	PRCHAR	;   matches go after it.
-	LD	A,(INSPOS)
-	LD	(APPENDF),A
-NEXTTAB2:	LD	DE,DSKERR
-	LD	C,_DEFER
+	CALL	PRCHAR##	;   matches go after it.
+	LD	A,(INSPOS##)
+	LD	(APPENDF##),A
+NEXTTAB2:	LD	DE,DSKERR##
+	LD	C,_DEFER##
 	CALL	BDOS	; Auto-abort on disk errors; aborts
 	LD	DE,ABEXIT7
-	LD	C,_DEFAB
+	LD	C,_DEFAB##
 	CALL	BDOS	;   return NZ to the editor (no exit).
 	CALL	TABNEXT
 	JP	Z,TAB110	; Got one: put it on the line.
@@ -802,17 +804,17 @@ NEXTTAB2:	LD	DE,DSKERR
 ;        No match, error or abort: beep, end the completion cycle and
 ; restore the default error and abort handling.
 ERRBEEP:	LD	A,7
-	CALL	PRCHAR	; Beep.
-	LD	A,(INSFLAG)
+	CALL	PRCHAR##	; Beep.
+	LD	A,(INSFLAG##)
 	RES	1,A	; End the completion cycle; the line
 	RES	2,A	;   counts as modified.
-	LD	(INSFLAG),A
+	LD	(INSFLAG##),A
 	PUSH	HL
 	LD	DE,#00
-	LD	C,_DEFER
+	LD	C,_DEFER##
 	CALL	BDOS	; Restore the default error handling
-	LD	DE,CLI_ABORT
-	LD	C,_DEFAB
+	LD	DE,CLI_ABORT##
+	LD	C,_DEFAB##
 	CALL	BDOS	;   and abort routine.
 	POP	HL
 	JP	RDLINE2
@@ -854,7 +856,7 @@ PUTCIRC:	PUSH	HL
 	LD	DE,BUFADDR
 	ADD	HL,DE	; HL = one past the end of the buffer.
 	POP	DE
-	CALL	COMPARE4	; Reached it?
+	CALL	COMPARE4##	; Reached it?
 	POP	HL
 	POP	DE
 	JR	NZ,PUT10
@@ -869,7 +871,7 @@ PUT10:	CALL	GETENDADDR
 	LD	DE,BUFADDR
 	ADD	HL,DE
 	POP	DE
-	CALL	COMPARE4	; Has the buffer filled up yet?
+	CALL	COMPARE4##	; Has the buffer filled up yet?
 	POP	HL
 	POP	DE
 	JR	Z,PUT20	; Yes: ENDADDR stays put.
@@ -887,7 +889,7 @@ PUT20:	POP	HL
 ; original sequence) or CTRL is held. This is the only editor exit path:
 ; it restores the IY pushed by EDLINE.
 ;
-RETKEY:	LD	A,(INSFLAG)
+RETKEY:	LD	A,(INSFLAG##)
 	BIT	2,A
 	JR	NZ,RET20	; Unmodified recalled line.
 	LD	A,(#FBEB)
@@ -942,11 +944,11 @@ HIS90:	EX	DE,HL
 ; On exit, A = that byte, Z set if it is a line terminator. HL and DE
 ;               are preserved.
 ;
-HISPREV:	PUSH	HL
+HISPREV::	PUSH	HL
 	PUSH	DE
 	CALL	GETRDADDR
 	LD	DE,BUFADDR
-	CALL	COMPARE4	; At the start of the buffer?
+	CALL	COMPARE4##	; At the start of the buffer?
 	DEC	HL
 	CALL	SETRDADDR	; RDADDR = RDADDR-1.
 	JR	NZ,HIS110
@@ -963,7 +965,7 @@ HIS110:	CALL	RDCHR	; Get the byte at the new position;
 ; ENDADDR back to the start of the buffer, and get the byte at the new
 ; position. Exit conditions as HISPREV.
 ;
-HISNEXT:	PUSH	HL
+HISNEXT::	PUSH	HL
 	PUSH	DE
 	CALL	GETRDADDR
 	PUSH	HL
@@ -982,17 +984,17 @@ HISNEXT:	PUSH	HL
 
 ;        Read the byte at address HL of COMMAND2's mapper segment into A.
 ; Corrupts AF only.
-RDCHR:	LD	A,(MAPPAGE)	; Segment number of the mapper segment.
-	CALL	RD_SEG
+RDCHR:	LD	A,(MAPPAGE##)	; Segment number of the mapper segment.
+	CALL	RD_SEG##
 	RET
 
 ;        Write A to the byte at address HL of COMMAND2's mapper segment.
 ; All registers are preserved.
-WRCHR:	PUSH	DE
+WRCHR::	PUSH	DE
 	PUSH	AF
 	LD	E,A	; WR_SEG takes the value in E.
-	LD	A,(MAPPAGE)
-	CALL	WR_SEG
+	LD	A,(MAPPAGE##)
+	CALL	WR_SEG##
 	POP	AF
 	POP	DE
 	RET
@@ -1006,7 +1008,7 @@ WRCHR:	PUSH	DE
 CURUP:	PUSH	HL
 	CALL	GETENDADDR
 	LD	DE,BUFADDR
-	CALL	COMPARE4	; Any history stored at all?
+	CALL	COMPARE4##	; Any history stored at all?
 	POP	HL
 	JP	C,RDLINE	; No (ENDADDR < BUFADDR): ignore.
 	PUSH	HL
@@ -1027,15 +1029,15 @@ CUR40:	CALL	HISNEXT
 	OR	A
 	JR	Z,CUR50	; Terminator: whole entry copied.
 	CALL	PUTLINE	; Put each character in the line
-	CALL	PRCHAR	;   and echo it.
+	CALL	PRCHAR##	;   and echo it.
 	JR	CUR40
 CUR50:	POP	DE
 	EX	DE,HL
 	CALL	SETRDADDR	; Cursor back to the entry's start.
 	EX	DE,HL
-	LD	A,(INSFLAG)
+	LD	A,(INSFLAG##)
 	SET	2,A	; Recalled and not modified yet.
-	LD	(INSFLAG),A
+	LD	(INSFLAG##),A
 	JP	RDLINE
 
 ;
@@ -1045,7 +1047,7 @@ CUR50:	POP	DE
 CURDOWN:	PUSH	HL
 	CALL	GETENDADDR
 	LD	DE,BUFADDR
-	CALL	COMPARE4	; Any history stored at all?
+	CALL	COMPARE4##	; Any history stored at all?
 	POP	HL
 	JP	C,RDLINE	; No: ignore the key.
 	PUSH	HL
@@ -1075,15 +1077,15 @@ ABEXIT7:	POP	DE	; Drop the aborted call's return address.
 ; GETxx: on exit, HL = the value read. Corrupts AF; preserves DE.
 ; SETxx: on entry, HL = the value to store; HL and DE are preserved.
 ;
-GETALIADDR:	LD	HL,ALIADDR
+GETALIADDR::	LD	HL,ALIADDR
 	JR	GET110
-GETBUFLEN:	LD	HL,BUFLEN
+GETBUFLEN::	LD	HL,BUFLEN
 	JR	GET110
-GETRDADDR:	LD	HL,RDADDR
+GETRDADDR::	LD	HL,RDADDR
 	JR	GET110
-GETPUTADDR:	LD	HL,PUTADDR
+GETPUTADDR::	LD	HL,PUTADDR
 	JR	GET110
-GETENDADDR:	LD	HL,ENDADDR
+GETENDADDR::	LD	HL,ENDADDR
 GET110:	CALL	RDCHR	; Read the low byte,
 	PUSH	AF
 	INC	HL
@@ -1093,27 +1095,27 @@ GET110:	CALL	RDCHR	; Read the low byte,
 	LD	L,A
 	RET
 
-SETALIEND:	PUSH	DE
+SETALIEND::	PUSH	DE
 	PUSH	HL	; The value, popped into DE at SET120.
 	LD	HL,ALIEND
 	JR	SET120
-SETALIADDR:	PUSH	DE
+SETALIADDR::	PUSH	DE
 	PUSH	HL
 	LD	HL,ALIADDR
 	JR	SET120
-SETBUFLEN:	PUSH	DE
+SETBUFLEN::	PUSH	DE
 	PUSH	HL
 	LD	HL,BUFLEN
 	JR	SET120
-SETRDADDR:	PUSH	DE
+SETRDADDR::	PUSH	DE
 	PUSH	HL
 	LD	HL,RDADDR
 	JR	SET120
-SETPUTADDR:	PUSH	DE
+SETPUTADDR::	PUSH	DE
 	PUSH	HL
 	LD	HL,PUTADDR
 	JR	SET120
-SETENDADDR:	PUSH	DE
+SETENDADDR::	PUSH	DE
 	PUSH	HL
 	LD	HL,ENDADDR
 SET120:	POP	DE	; DE = the value to store.

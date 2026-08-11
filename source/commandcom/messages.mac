@@ -1,5 +1,7 @@
+	name('messages')
 	TITLE	MSX-DOS 2 - COMMAND2.COM
 	SUBTTL	Message strings
+	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        The string constants used all over the program, accessed through
@@ -10,7 +12,7 @@
 ; released as freeware in 2003.
 ;
 ;******************************************************************************
-MESSAGES:	DEFB	"Yy",0
+MESSAGES::	DEFB	"Yy",0
 	DEFB	"Nn",0
 	DEFB	" Directory of ",0
 	DEFB	" <dir> ",0
