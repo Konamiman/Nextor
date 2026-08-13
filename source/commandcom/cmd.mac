@@ -3377,6 +3377,336 @@ NOLOCK$:	DEFB	"No drives are locked",0
 LOCKED$:	DEFB	"is locked",0
 NLOCKED$:	DEFB	"is not locked",0
 
+		SUBTTL	MAPDRV
+;        The MAPDRV command (new as an internal command in 3.0; it has
+; existed as the MAPDRV.COM tool since Nextor 2.0):
+;
+;          MAPDRV [/L] d: partition|d|u|s [device] [slot[-sub][:seg]]
+;          MAPDRV d: [/]filename [/RO]
+;
+;        Maps a drive to a partition of a device of a Nextor driver, or
+; mounts a disk image file on a drive. 'd' reverts the drive to its
+; boot time mapping and 'u' unmaps it (further arguments are ignored);
+; 's' attaches the drive to the device without a partition, so that a
+; suitable one is searched on each access. Partition 0 maps the drive
+; directly to the device; partitions 2 to 4 mean the extended
+; partitions 2-1 to 2-3 when partition 2 of the device is extended.
+; When the slot (0 = the master disk ROM slot) is omitted, the driver
+; currently controlling the drive is kept; when the device is omitted
+; or 0, the device the drive is mapped to is kept (both require the
+; drive to be on a Nextor driver). The segment (default FFh = ROM) is
+; only meaningful for RAM loaded drivers. /L locks the drive after a
+; successful partition mapping. A file name starting with a digit must
+; be prefixed with '/' to distinguish it from a partition number, and
+; /RO mounts the file in read only mode.
+;        The work variables live in the ENVNAME scratch area, laid out
+; exactly like the tool's block so that _GPART and _MAPDRV get the
+; same structures: +0 drive, +1 primary, +2 extended, +3 slot,
+; +4 segment, +5 device, +6 LUN (always 0), +7-10 start sector (the
+; 8 bytes from +3 up are the _MAPDRV B=2 mapping table), +11
+; partition, +12 skip-partition flag, +13 /L (or /RO) flag. The GDLI/
+; GDRVR calls use ENVDATA as their buffer, and a mounted file's FIB is
+; built in XBUF1.
+;
+PT_EXT	EQU	#05	; Extended partition type codes.
+PT_EXTL	EQU	#0F	;   (CHS and LBA variants.)
+;
+@MAPDRV::	AND	(HL)
+	LD	A,.NOPAR##
+	RET	Z
+	XOR	A	; Initialise the work variables:
+	LD	(ENVNAME##+6),A	;   LUN,
+	LD	(ENVNAME##+11),A	;   partition,
+	LD	(ENVNAME##+12),A	;   skip-partition flag,
+	LD	(ENVNAME##+13),A	;   /L flag.
+	LD	A,#FF
+	LD	(ENVNAME##+3),A	; Slot: FF = not specified.
+	LD	(ENVNAME##+4),A	; Segment: FF = ROM driver.
+	LD	A,(HL)	; /L before the drive ?
+	CP	"/"
+	JR	NZ,MDR10
+	INC	HL
+	LD	A,(HL)
+	OR	#20
+	CP	"l"
+	LD	A,.IPARM##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)	; A separator must follow it.
+	CALL	SEP?##
+	LD	A,.IPARM##
+	RET	NZ
+	LD	A,#FF
+	LD	(ENVNAME##+13),A
+	CALL	GETCH##
+	LD	A,.NOPAR##
+	RET	Z
+MDR10:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
+	RET	NZ
+	LD	A,D
+	CP	#08+1	; Only drives A: to H: exist.
+	LD	A,.IDRV##
+	RET	NC
+	DEC	D
+	LD	A,D
+	LD	(ENVNAME##+0),A	; The drive, counted from 0.
+	CALL	GETCH##
+	LD	A,.NOPAR##
+	RET	Z
+	LD	A,(HL)	; A leading '/' forces the rest to
+	CP	"/"	;   be taken as a file name.
+	JR	NZ,MDR20
+	INC	HL
+	JP	MDRFIL
+MDR20:	PUSH	HL	; A number is a partition, when a
+	CALL	GET8##	;   separator follows it (else it
+	JR	NZ,MDR30	;   is a file name like 2GAMES.DSK).
+	LD	A,(HL)
+	CALL	SEP?##
+	JR	NZ,MDR30
+	POP	AF	; Drop the saved pointer.
+	LD	A,E
+	LD	(ENVNAME##+11),A	; The partition number.
+	JR	MDRDEV
+MDR30:	POP	HL	; Not a partition: 'd', 'u', 's'
+	INC	HL	;   (one letter and a separator)
+	LD	A,(HL)	;   or a file name.
+	DEC	HL
+	CALL	SEP?##
+	JP	NZ,MDRFIL
+	LD	A,(HL)
+	OR	#20
+	CP	"u"
+	LD	B,#00	; B = 0: unmap the drive.
+	JR	Z,MDRDU
+	CP	"d"
+	LD	B,#01	; B = 1: boot time mapping.
+	JR	Z,MDRDU
+	CP	"s"
+	JP	NZ,MDRFIL
+	LD	A,#FF	; 's': attach to the device with
+	LD	(ENVNAME##+12),A	;   no partition assigned.
+	INC	HL
+	JR	MDRDEV
+;
+MDRDU:	LD	A,(ENVNAME##+0)	; Unmap / map to the default;
+	LD	C,_MAPDRV##	;   any further arguments are
+	JP	BDOS	;   ignored, as in the tool.
+;
+MDRDEV:	CALL	GETCH##	; Optional device number.
+	JR	Z,MDMAP
+	CALL	GET8##
+	RET	NZ
+	LD	A,E
+	LD	(ENVNAME##+5),A
+	CALL	GETCH##	; Optional slot[-subslot][:segment].
+	JR	Z,MDMAP
+	CALL	GET8##	; Primary slot, 0 to 3.
+	RET	NZ
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,(HL)	; A subslot may follow.
+	CP	"-"
+	JR	NZ,MDR40
+	INC	HL
+	PUSH	DE	; (GET8 zeroes DE while parsing.)
+	CALL	GET8##
+	POP	BC	; C = primary slot.
+	RET	NZ
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,E	; Slot byte = expanded flag +
+	ADD	A,A	;   subslot + primary slot.
+	ADD	A,A
+	OR	C
+	OR	#80
+	JR	MDR50
+MDR40:	LD	A,E	; With no subslot, a plain 0 means
+	OR	A	;   the master disk ROM slot.
+	JR	NZ,MDR50
+	LD	A,(#F348)
+MDR50:	LD	(ENVNAME##+3),A	; The driver slot.
+	LD	A,(HL)	; The segment may follow, after
+	CP	":"	;   a colon (RAM loaded drivers).
+	JR	NZ,MDR60
+	INC	HL
+	CALL	GET8##
+	RET	NZ
+	LD	A,E
+	LD	(ENVNAME##+4),A
+MDR60:	CALL	GETCH##	; Nothing else may follow.
+	LD	A,.INP##
+	RET	NZ
+	;fall through into MDMAP
+;
+;        Map to a partition and device. First resolve the current
+; mapping when no slot was specified, as the tool does.
+MDMAP:	LD	A,(ENVNAME##+3)
+	INC	A	; FF => no slot was given.
+	JR	NZ,MDM20
+	LD	A,(ENVNAME##+0)	; Get the current mapping of the
+	LD	HL,ENVDATA##	;   drive.
+	LD	C,_GDLI##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,(ENVDATA##)	; It must be mapped to a block
+	CP	#01	;   device.
+	LD	A,.IDRV##
+	RET	NZ
+	LD	A,(ENVNAME##+5)	; Device not given or 0: keep the
+	OR	A	;   one the drive is mapped to.
+	JR	NZ,MDM10
+	LD	A,(ENVDATA##+4)
+	LD	(ENVNAME##+5),A
+MDM10:	LD	HL,ENVDATA##+1	; Get the information of the
+	LD	D,(HL)	;   driver controlling the drive
+	INC	HL	;   (D = slot, E = segment).
+	LD	E,(HL)
+	XOR	A
+	LD	HL,ENVDATA##
+	LD	C,_GDRVR##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,(ENVDATA##+4)	; It must be a Nextor driver.
+	AND	#01
+	LD	A,.IDRVR##
+	RET	Z
+	LD	A,(ENVDATA##)	; Keep its slot and segment.
+	LD	(ENVNAME##+3),A
+	LD	A,(ENVDATA##+1)
+	LD	(ENVNAME##+4),A
+MDM20:	LD	A,(ENVNAME##+12)	; 's': mapping sector FFFFFFFFh
+	OR	A	;   attaches the drive to the
+	JR	Z,MDM30	;   device with no partition
+	LD	HL,#FFFF	;   assigned.
+	LD	DE,#FFFF
+	JR	MDM60
+MDM30:	LD	A,(ENVNAME##+11)	; Adjust the partition number:
+	OR	A	;   0 = direct mapping (sector 0),
+	JR	Z,MDM55
+	CP	#01	;   1 = primary partition 1,
+	JR	Z,MDM40
+	CP	#05	;   5 on = always extended,
+	JR	NC,MDM45
+	LD	IX,ENVNAME##	;   2 to 4 = extended 2-1 to 2-3
+	LD	A,(IX+3)	;   when partition 2 of the device
+	LD	B,(IX+4)	;   is extended, else primary.
+	LD	D,(IX+5)
+	LD	E,#00
+	LD	H,#02
+	LD	L,#00
+	LD	C,_GPART##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,B	; B = the partition type.
+	CP	PT_EXT
+	JR	Z,MDM45
+	CP	PT_EXTL
+	JR	Z,MDM45
+MDM40:	LD	A,(ENVNAME##+11)	; Primary partition, as given.
+	LD	(ENVNAME##+1),A
+	XOR	A
+	LD	(ENVNAME##+2),A
+	JR	MDM50
+MDM45:	LD	A,#02	; Extended partition 2-(n-1).
+	LD	(ENVNAME##+1),A
+	LD	A,(ENVNAME##+11)
+	DEC	A
+	LD	(ENVNAME##+2),A
+MDM50:	LD	IX,ENVNAME##	; Get the partition's starting
+	LD	A,(IX+3)	;   sector.
+	LD	B,(IX+4)
+	LD	D,(IX+5)
+	LD	E,#00
+	LD	H,(IX+1)
+	LD	L,(IX+2)
+	LD	C,_GPART##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	JR	MDM60	; DE:HL = the starting sector.
+MDM55:	LD	HL,#00
+	LD	DE,#00
+MDM60:	LD	(ENVNAME##+7),DE	; Store the sector and do the
+	LD	(ENVNAME##+9),HL	;   mapping with the 8 byte table
+	LD	A,(ENVNAME##+0)	;   at ENVNAME+3 (slot, segment,
+	LD	B,#02	;   device, LUN, sector).
+	LD	HL,ENVNAME##+3
+	LD	C,_MAPDRV##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,(ENVNAME##+13)	; /L: lock the drive now that it
+	OR	A	;   is mapped.
+	RET	Z
+	LD	A,(ENVNAME##+0)
+	LD	E,A
+	LD	A,#01
+	LD	B,#FF
+	LD	C,_LOCK##
+	JP	BDOS
+;
+;        Mount a file: copy the file spec to ENVDATA, take an optional
+; /RO, locate the file and map it with _MAPDRV B=3.
+MDRFIL:	LD	DE,ENVDATA##
+MDF10:	LD	A,(HL)	; Copy up to a space, a control
+	CP	" "+1	;   character, the end of the line
+	JR	C,MDF20	;   or a '/' (which may start the
+	CP	"/"	;   /RO option; file names cannot
+	JR	Z,MDF20	;   contain slashes).
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	MDF10
+MDF20:	XOR	A
+	LD	(DE),A
+	LD	(ENVNAME##+13),A	; No /RO so far.
+	CALL	GETCH##
+	JR	Z,MDF40
+	CP	"/"	; Only /RO may follow.
+	LD	A,.IPARM##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	OR	#20
+	CP	"r"
+	LD	A,.IPARM##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	OR	#20
+	CP	"o"
+	LD	A,.IPARM##
+	RET	NZ
+	INC	HL
+	CALL	GETCH##
+	LD	A,.INP##
+	RET	NZ
+	LD	A,#01
+	LD	(ENVNAME##+13),A
+MDF40:	XOR	A	; Locate the file; directories,
+	LD	B,%10110	;   hidden and system files are
+	LD	DE,ENVDATA##	;   included, as in the tool.
+	LD	IX,XBUF1##
+	LD	C,_FFIRST##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,(ENVNAME##+13)	; D = 1 => mount read only.
+	LD	D,A
+	LD	A,(ENVNAME##+0)
+	LD	B,#03	; Mount the file whose FIB is at
+	LD	HL,XBUF1##	;   XBUF1 on the drive.
+	LD	C,_MAPDRV##
+	JP	BDOS
+
 		SUBTTL	RALLOC
 ;        The RALLOC command (new in 3.0): RALLOC [d: [ON|OFF]].
 ;        Displays or sets the reduced allocation information mode for a

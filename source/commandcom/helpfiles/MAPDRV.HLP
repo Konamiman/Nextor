@@ -1,0 +1,87 @@
+MAPDRV                                                         [3.0]
+------
+
+Format:      MAPDRV [/L] d: partition|d|u|s [device]
+                    [slot[-subslot][:segment]]
+             MAPDRV [/L] d: partition|d|u|s [device] [0]
+             MAPDRV d: [/]filename [/RO]
+
+Purpose:     Maps a drive to a partition of a device of a Nextor
+        driver, or mounts a disk image file on a drive.
+
+Use:         The first form maps the drive to the given partition  of
+        the given device of the driver in the given slot  (which must
+        be a Nextor driver).
+
+             The partition can be any number starting at 1,  or 0  to
+        map the drive directly to  the  device  (needed  for  devices
+        without partitions,  such  as floppy disks).  Partition  num-
+        bers 2 to 4 refer to the extended partitions 2-1 to 2-3  when
+        partition 2 of the device is extended,  otherwise  they refer
+        to primary partitions.
+
+             Instead of a partition,  'd' reverts the  drive  to  its
+        mapping at boot time and 'u' leaves the  drive  unmapped (any
+        further arguments are ignored in both cases),  and    's'
+        attaches the drive to the device without assigning  a  parti-
+        tion:  a suitable one is searched on each access to the drive
+        (useful for removable devices that are currently offline).
+
+             The device must be a number from 1 to 255.
+
+             The slot and subslot must be numbers from  0  to   3.
+        A plain 0 with no subslot selects the slot  of  the   primary
+        Nextor controller,  wherever it is; an explicit 0-0 means the
+        literal slot 0-0.  The segment,  after a colon,  is only mea-
+        ningful for drivers loaded in RAM.
+
+             When device information is given but the slot  is  omit-
+        ted, the drive is mapped to the given partition of the  given
+        device of the driver already controlling  the  drive.    When
+        both are omitted,  the drive is mapped to the given partition
+        of the device it is already mapped to.  Both  cases   require
+        the drive to be currently mapped to a Nextor driver.
+
+             /L locks the drive (see HELP LOCK)  immediately  after a
+        successful mapping.
+
+             The second form mounts the given file on the  drive.   A
+        file cannot be mounted on its own drive,  or on a drive  that
+        contains a mounted file.  Prefix the file name with '/'  when
+        it starts with a digit,  so that it is not taken for a parti-
+        tion number; /RO mounts the file in read only mode.
+
+             The same function is provided by the MAPDRV.COM external
+        tool, which also works on older Nextor versions.
+
+Examples:
+
+        MAPDRV A: 2
+
+             Drive A: is mapped to partition 2 of the device  it  is
+        currently mapped to.
+
+        MAPDRV /L E: 1 2 3-2
+
+             Drive E: is mapped to partition 1 of device 2 of the
+        Nextor driver in slot 3-2, and locked.
+
+        MAPDRV B: 0 1 1:4
+
+             Drive B: is mapped directly to device 1 of  the  Nextor
+        driver loaded in RAM segment 4 whose master slot is 1.
+
+        MAPDRV C: 3 1 0
+
+             Drive C: is mapped to partition 3 of device  1  of  the
+        primary Nextor controller.
+
+        MAPDRV D: DISKS\GAMES.DSK /RO
+
+             The disk image file GAMES.DSK is mounted read  only  on
+        drive D:.
+
+        MAPDRV G: u
+
+             Drive G: is unmapped.
+

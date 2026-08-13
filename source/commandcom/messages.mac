@@ -111,6 +111,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"INPUT .... reads string into environment item",13,10
 	DEFB	"KMODE .... sets or resets ",34,"Kanji Mode",34,13,10
 	DEFB	"LOCK ..... locks/unlocks a drive",13,10
+	DEFB	"MAPDRV ... maps a drive to a device and partition or mounts a file",13,10
 	DEFB	"MD ....... see MKDIR",13,10
 	DEFB	"MEM ...... displays a compact memory mapper listing",13,10
 	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
