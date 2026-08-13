@@ -1,0 +1,40 @@
+MORE                                                           [New]
+----
+
+Format:      command | MORE
+
+Purpose:     Displays output per screen.
+
+Use:         MORE is a  piping command.  The output of  the previous
+        command is redirected as input for MORE. It will  pause when
+        the screen is filled with output.
+
+             On the last line of the screen <more> is  displayed and
+        it will wait for a keypress. The ESCAPE or N key  will abort
+        the command, any other key  will continue  displaying output
+        until the screen is completely filled again.
+
+             MORE can handle the Kanji display modes which  can have
+        a different number of lines. The <more> text will  always be
+        displayed on the last line.
+
+             Advantages over the /P option several  commands already
+        have are:
+
+        - Clean continuation of output display.  The <more>  text is
+          removed before the output is continued.
+        - Clean abort of output display.
+        - Not all commands have a built in per screen output.
+
+             See also HELP IO.
+
+             Note  that  this  is  a  transient  command,  and  must
+        therefore be loaded off disk.
+
+Examples:
+
+        TYPEWW LONG.TXT | MORE
+
+             The contents of LONG.TXT is piped to MORE to display it
+        per screen.
+

@@ -1,0 +1,48 @@
+MOVE                                                      [Enhanced]
+----
+
+Format:      MOVE [/S] [/H] [/P] compound-filespec [path]
+
+Purpose:     Moves files from one place to another on a disk.
+
+Use:         The  compound-filespec specifies which files are to  be
+        moved. /H allows hidden files to be included in the move and
+        /S allows system files to be included in the move.
+
+             The path specifies the directory to which the files are
+        to be moved, the current directory being used if this is not
+        given.  The  path must exist on each drive referenced by the
+        filespecs in the compound-filespec.
+
+             If a particular file cannot be moved into the specified
+        or current directory (eg. if a file of the same name already
+        exists) then the offending filename is printed along with an
+        error  message,  and the move operation continues  with  the
+        next  file.  If many errors occur,  then the /P option  will
+        cause the output to pause at the bottom of the screen.
+
+Examples:
+
+        MOVE FILE1 \
+
+             The  file FILE1 is moved from the current directory  of
+        the  current  drive  to the root directory  of  the  current
+        drive.
+
+        MOVE /H /P E:*.COM \
+        COMMAND2.COM -- File exists
+
+             All files matching *.COM,  both hidden and not  hidden,
+        in  the current directory of drive E:  are moved to the root
+        directory  of  that drive.  The  file  COMMAND2.COM  already
+        existed  in  the root directory,  so the error was  printed.
+        Neither of the COMMAND2.COM files were moved or altered.  If
+        many  such errors had occurred then a prompt would have been
+        printed after a screen full.
+
+        MOVE \UTIL\*.COM + \UTIL\*.BAT
+
+             All files matching *.COM or *.BAT in a directory called
+        UTIL on the current drive are moved to the current directory
+        of that drive.
+

@@ -1,0 +1,55 @@
+REN                                                       [Enhanced]
+---
+
+Format:      REN [/S] [/H] [/P] compound-filespec filename
+                  or
+             RENAME [/S] [/H] [/P] compound-filespec filename
+
+Purpose:     Renames one or more files.
+
+Use:         The  compound-filespec specifies  the files that are to
+        be renamed.  /H allows  hidden files  to be  included in the
+        rename  operation and  /S allows system files to be included
+        in the rename operation.
+
+             The  second  filename specifies the new  name  for  the
+        files.   A   '?'   in  the  new  name  indicates  that   the
+        corresponding character from the filename being renamed will
+        be used,  thus allowing an ambiguous rename. Thus '*' in the
+        second  filename,  which is just equivalent to a  series  of
+        '?'s,  indicates that the whole of the filename or extension
+        will remain unchanged.
+
+             If  for some reason a particular file cannot be renamed
+        (eg.  if  a  file  or directory with the  new  name  already
+        exists)  then the offending filename will be  printed  along
+        with an error message and the rename operation will continue
+        with the next file. If many errors occur, then /P will cause
+        the output to pause at the end of the screen.
+
+Examples:
+
+        REN FILE1 FILE2
+
+             The  file FILE1 in the current directory of the current
+        drive is renamed to FILE2.
+
+        REN B:\DIR1\*.DOC/H/P *.OLD
+        FILE2.DOC -- File exists
+
+             All  files matching *.DOC in the directory called  DIR1
+        in the root directory of drive B:,  including hidden  files,
+        are renamed with the same main name but with an extension of
+        .OLD.  The file FILE2.DOC could not be renamed because there
+        was already a file called FILE2.OLD in the directory, so the
+        error  was  printed.  Neither  FILE2.DOC nor  FILE2.OLD  was
+        altered at all. If many such errors had been printed, then a
+        prompt would have been printed at the bottom of every screen
+        full.
+
+        REN DOC + FILE1 *.OLD
+
+             All  files  in the directory called DOC  and  the  file
+        FILE1,  both  in the current directory of the current drive,
+        and renamed with an extension of .OLD.
+

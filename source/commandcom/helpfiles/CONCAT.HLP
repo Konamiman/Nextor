@@ -1,0 +1,77 @@
+CONCAT                                                    [Enhanced]
+------
+
+Format:      CONCAT [/S] [/H] [/P] [/A] [/B] [/V] source filespec
+
+Purpose:     Concatenates (joins together) files or devices.
+
+Use:         The definition of the source is:
+
+                  compound-filespec
+
+        The  compound-filespec specifies  the files  or devices that
+        are to  be joined  together. /H  allows hidden  files to  be
+        joined and /S allows system files to be joined.
+
+             The  second  parameter  is  a  filespec  that  must  be
+        unambiguous and is created before the source files are read.
+        Each  source file is then read,  joined onto the end of  the
+        previous one and written out to the destination.
+
+             As each  source file  is read, its filename is printed.
+        If  for some  reason the  file cannot be read (eg. it is the
+        file  that  has been  created as  the destination)  then the
+        filename  is  followed by  an error  message and  the CONCAT
+        operation continues with the next source file. If many files
+        are being  concatenated, then  /P will  cause the  output to
+        pause at the end of the screen until a key is pressed.
+
+             Normally,  the  concatenation  is  performed  on  ASCII
+        files.  Source  files  are read up to the first  end-of-file
+        character  (CTRL-Z)  and a single end-of-file  character  is
+        appended to the destination after all data has been  written
+        out.  If,  however,  /B is given,  then no interpretation is
+        given to the data read and no additional data is added.
+
+             It  is also possible to give the /B to the  destination
+        or to any of the filespecs in the compound-filespec,  and it
+        will then refer only to those files. /A may also be given to
+        reverse the effect of /B.
+
+             The  /V option can be given to turn write  verification
+        on  for  the duration of the CONCAT command (see the  VERIFY
+        command). This will ensure that data is written correctly to
+        disks but will slow the operation down.
+
+             If  CONCAT  gives  a 'Not  enough  memory'  error  then
+        probably  reducing  the number of buffers (see  the  BUFFERS
+        command)  or removing some environment items  (see HELP  ENV
+        on Environment Items) will free up sufficient memory.
+
+Examples:
+
+        CONCAT *.DOC ALL.PRN
+
+             A  new  file called ALL.PRN is created,  and all  files
+        matching  *.DOC  (for  example  FILE1.DOC,   FILE2.DOC   and
+        FILE3.DOC)  are joined together  and written to the new file
+        in the order that they are found on disk.  Any existing file
+        called ALL.PRN will be overwritten.
+
+        CONCAT /H /P *.DOC ALL.DOC
+        ALL.DOC -- Cannot concatenate destination file
+
+             A  new  file called ALL.DOC is created,  and all  files
+        matching  *.DOC are joined together and written to  the  new
+        file  in  the order that they are found on disk.  Since  the
+        destination  file ALL.DOC also matched the  source  filename
+        *.DOC,  the message is printed and it is not included in the
+        concatenation.
+
+        CONCAT /B  FILE2.DOC + FILE3.DOC + FILE1.DOC  ALL.DOC
+
+             A new file ALL.DOC is created, and the files FILE2.DOC,
+        FILE3.DOC  and  FILE1.DOC and joined together in that  order
+        and  written to the new file.  They are joined  together  in
+        binary mode.
+

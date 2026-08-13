@@ -1,0 +1,70 @@
+DATE                                                      [Enhanced]
+----
+
+Format:      DATE [date]
+
+Purpose:     Displays or sets the current date.
+
+Use:         If the date is given after the command,  then the  date
+        is set to this value (for the format see below). If the date
+        is  not  given after the command,  then the current day  and
+        date is printed and the new date is prompted for and  input.
+        If  no  input  is given (i.e. if the 'enter'  key  alone  is
+        pressed) then the current date is not altered. Otherwise the
+        input  is  assumed to be a new date,  and is interpreted  as
+        described  below.  If  the  date is invalid  then  an  error
+        message is displayed and the new date again prompted for and
+        input.
+
+             The date is expected to consist of up to three numbers,
+        separated by one of the following characters:
+
+             space tab , - . / :
+
+        with  spaces  allowed  either side  of  the  character.  Any
+        missing  numbers  will default to the current  setting.  The
+        year may either be a full century and year,  or may be  just
+        the  year  in which case the century defaults to 19  if  the
+        year is greater than 80 or 20 otherwise.
+
+             The  format  in which the date is printed and input  is
+        flexible and can be changed. An environment item called DATE
+        is set up by default to a format that is appropriate for the
+        country  of  origin  of the MSX machine  (see  HELP  ENV  on
+        Environment  Items).  For example,  on Japanese machines the
+        default setting is YY-MM-DD.  The command SET DATE  DD-MM-YY
+        will  change  the date format to the UK format.  The  format
+        also affects the dates printed by the DIR command.
+
+             If  the DATE environment item is defined,  then it will
+        be  printed  by the DATE command to indicate the  format  in
+        which the date is required to be input.
+
+Examples:
+
+        DATE 86-6-18
+
+             The current date is set to the 18th June 1986.
+
+        DATE
+        Current date is Wednesday 1986-06-18
+        Enter new date (yy-mm-dd): - -19
+
+             No  parameter  was given,  so the current date of  18th
+        June  1986 was printed and a new date prompted for.  In  the
+        reply to the prompt, the date was updated to the next day by
+        only specifying the 19th.  Since the year and month were not
+        given, they remained the same.
+
+        SET DATE = DD/MM/YY
+
+             The date format has been changed to the UK format.
+
+        DATE
+        Current date is Thursday 19-06-1986
+        Enter new date (DD/MM/YY):
+
+             No  parameter was given,  so the current date  of  19th
+        June  1986  was  printed in the UK format,  and  the  prompt
+        printed. The reply is expected in the UK format.
+

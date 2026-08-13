@@ -1,0 +1,275 @@
+TO                                                             [New]
+--
+
+Format:      TO partial_subdir_name [/N] [/X|F|P|L]
+                  or
+             TO [d:] /S [/H]
+                  or
+             TO [d:]...
+                  or
+             TO [d:]-n
+                  or
+             TO [d:]\
+                  or
+             TO [d:]directory_name /M|C [/H]
+                  or
+             TO [d:]directory_name /D
+                  or
+             TO [d:]oldname newname /R
+                  or
+             TO [d:]source destination /V
+
+Purpose:     Changes the current directory, creates, deletes, renames
+        or removes a directory.
+
+Use:         TO is an extended Change Directory command (compare with
+        the CD  or CHDIR  command) that can change the current direc-
+        tory  to any directory available by only specifying a partial
+        subdirectory name.
+
+             The  partial_subdir_name consists of one or more charac-
+        ters. The  current directory is changed to the directory that
+        contains this partial_subdir_name.
+
+             If  no /N  option was given and more than one match was
+        found, then  a list  will be  displayed, containing  all the
+        directories  matching the partial_subdir_name. Choose one of
+        these  directories  by  pressing  the corresponding  key, or
+        leave the  current directory unaltered by pressing ESC. When
+        more  than fifteen  matches were  found, then  the sixteenth
+        choice will  be 'more'. Choose this to display the remaining
+        matches.
+
+             If the  /X option was given then only exact matches will
+        be found. Partial matches will not be found.
+
+             The /F  option can be used to only find directories that
+        start with the specified partial_subdir_name.
+
+             The /L  option can be used to only find directories that
+        end in the specified partial_subdir_name.
+
+             The /P  option can be used to find directories that con-
+        tain the partial_subdir_name.
+
+             The  /S option  scans the current drive or the specified
+        drive  for  all  sub-directories  and creates  a file  called
+        TO.LST that contains these sub-directories. When using TO for
+        the first  time, a scan must be executed to create this file.
+        The main program uses this file to search for a directory.
+
+             /H can  be given to cause the /S option to also scan for
+        hidden directories.
+
+             An  environment item  called TO_PATH is used to refer to
+        the directory  or disk where the TO.LST file will be created/
+        searched for (see HELP ENV on Environment Items). This can be
+        changed  with the SET command to refer to any other directory
+        or disk if required.
+
+             When  the environment  item was  not found then the file
+        TO.LST will  be created/searched for in the root directory on
+        the current drive or the specified drive.
+
+             An environment item called TO_DRIVES is used to refer to
+        the drives that are recognized by TO. When a scan is executed
+        and this environment item was found, then the specified drive
+        will be  ignored and  all the drives, refered to by the envi-
+        ronment item, are scanned.
+
+             It  is recommended  to use TO_DRIVES in combination with
+        TO_PATH.
+
+             An  environment item  called TO_INIT, and with a maximum
+        of ten  characters, can  be used to initialize some functions
+        of TO. In this version only the first character is supported,
+        other  characters are ignored. The first character, which can
+        be an  X, F,  L or  P, determines  which option to use as the
+        current  option. For  the meaning of this options, see above.
+        When the  environment item TO_INIT was not found, then the /P
+        option will be the current.
+
+             Note that  when an  /X, /F,  /L or  /P option was given,
+        then  this  option  is prefered  to the  option specified  by
+        TO_INIT.
+
+             When the  expression ... is given, instead of a partial-
+        subdir_name, the current directory goes up serveral directory
+        levels.  In general,  the number  of dots minus one specifies
+        the amount of levels to go up.
+
+             -n can also be used to go up several directory levels. n
+        specifies  the amount of levels to go up, and must be between
+        1 to 9.
+
+             \  can be  used to  change to  the root-directory of the
+        current or specified drive.
+
+             The  /M option  can be  used to  create a  new directory
+        specified by directory_name. The created directory will imme-
+        diately be added to the file TO.LST.
+
+             /C is similar to /M. It subsequently changes the current
+        directory to the specified directory.
+
+             /H can  be given to cause the /M option or the /C option
+        to create a hidden directory.
+
+             The /D option can be used to remove a directory specifi-
+        ed  by directory_name.  The directory will immediately be re-
+        moved from the file TO.LST.
+
+             The /R  option can be used to rename a directory, speci-
+        fied  by oldname,  as newname. The directory will immediately
+        be renamed in the file TO.LST.
+
+             The  /V  option can  be used  to move  a directory  from
+        source  to  destination.  The  directory will  immediately be
+        moved in the file TO.LST.
+
+             Global filename  characters are  not allowed, except for
+        newname  using the  /R option.  Where they occur the existing
+        filename character will be left unaltered.
+
+
+             WARNING:  When  using other  programs than  the COMMAND2
+        interpreter for deleting subdirectories, the file TO.LST will
+        not be  updated. Use TO /S before using TO to change a direc-
+        tory,  otherwise it  may occur that TO puts the computer in a
+        hang-up state!  (This can only occur when using an other pro-
+        gram  to delete  a subdirectory  and subsequently using TO to
+        delete a subdirectory.)
+
+
+             Note that  TO is a transient command, and must therefore
+        be loaded off disk.
+
+Examples:
+
+        TO /S
+        Scanning...
+
+             An initial scan is executed and a file called TO.LST is
+        created  in a  directory specified  by the  environment item
+        TO_PATH, or in the root directory of the current drive.
+
+        TO B: /S/H
+        Scanning...
+
+             An initial  scan is executed on drive B:. Hidden direc-
+        tories  will also  be found. The file TO.LST is created in a
+        directory specified  by the  environment item TO_PATH, or in
+        the root directory of drive B:.
+
+        TO LP
+
+             The  current directory is changed to the first directory
+        found, that contains LP. For example the HELP directory. When
+        the HELP  directory was  on an  other drive  then the current
+        drive,  then the  current drive  will also  be changed to the
+        drive containing the HELP directory.
+
+        TO B:TS
+
+             No path was specified by the evironment item TO_PATH, so
+        the  current drive  is changed  to drive  B: and  the current
+        directory is  changed to the first directory found, that con-
+        tains TS. For example the \MEMMAN\TSR directory.
+
+        TO 123
+
+             There  was no  directory found  that contains 123, so no
+        change is made.
+
+        TO 123
+        *** File for TO not found
+
+             The  file TO.LST  was not found in the directory speci-
+        fied by  the environment  item TO_PATH,  nor was it found in
+        the root directory of the current drive.
+
+        TO E
+        Choose one of these directories:
+
+        A  -  A:\HELP
+        B  -  A:\MEMMAN
+        C  -  A:\TED
+        D  -  A:\TED\TEXT
+        E  -  B:\MODEM
+
+             More  than one  match was found, so a list is displayed
+        with all  directories containing  the given  partial_subdir-
+        name.  Choose one  of these directories by pressing the cor-
+        responding key,  or press ESCape to leave the current direc-
+        tory unaltered.
+
+        TO E /N
+
+             More than  one match  was found,  but the  /N option was
+        given,  so the current directory will be changed to HELP, the
+        first directory found containing an 'E'.
+
+        TO ....
+
+             The current  directory will  be moved up three directory
+        levels.  Note that  TO . and TO .. are similar to CD . and CD
+        .. respectively.
+
+        TO -3
+
+             This command  is similar  to the afore mentioned TO ....
+        command,  it will  move up the current directory three direc-
+        tory levels.
+
+        TO \NEWDIR /M
+        TO - directory created; database updated
+
+             A new  directory called  NEWDIR is  created in  the root
+        directory of the current drive. Then the name NEWDIR is added
+        to the directory-list in the file TO.LST.
+
+        TO B:NEWDIR /C/H
+        TO - directory created; database updated
+
+             A  new hidden  directory called NEWDIR is created in the
+        current directory  of drive  B:. The  name NEWDIR is added to
+        the  directory-list in  the file TO.LST, the current drive is
+        changed  to  B:  and  the  current  directory  is  changed to
+        \NEWDIR.
+
+        TO E:NEWDIR /C
+        TO - directory created
+
+             A new  directory called NEWDIR is created in the current
+        directory  of drive  B:. The name NEWDIR was not added to the
+        directory-list in  the file  TO.LST, because drive E: was not
+        specified by the environment item TO_DRIVES.
+
+        TO \NEWDIR /D
+        TO - directory deleted; database updated
+
+             The  directory called  NEWDIR is  removed from  the root
+        directory of  the current  drive. Then the name NEWDIR is re-
+        moved from the directory-list in the file TO.LST.
+
+        TO A:\TESTDIR /D
+        *** Directory not found in list
+
+             The directory  TESTDIR in the root directory of drive A:
+        has  been deleted, but the directory TESTDIR was not found in
+        the file TO.LST, hence the file TO.LST was left unaltered.
+
+        TO A:\MEMMAN\PROGS TSR /R
+        TO - directory renamed; database updated
+
+             The directory PROGS in the directory \MEMMAN on drive A:
+        is renamed  as TSR.  The file TO.LST will be updated with the
+        new name of the directory.
+
+        TO \TED\TEXT\MANUALS \TED /V
+        TO - directory moved; database updated
+
+             The  directory MANUALS in the directory \TED\TEXT on the
+        current drive is moved to the directory \TED. The file TO.LST
+        will be updated with the new location of the directory.
+

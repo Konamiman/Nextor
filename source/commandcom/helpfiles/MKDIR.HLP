@@ -1,0 +1,31 @@
+MKDIR                                                   [Compatible]
+-----
+
+Format:      MKDIR [d:]path
+                  or
+             MD [d:]path
+
+Purpose:     Creates a new sub-directory.
+
+Use:         The  last item in the path is the name of the new  sub-
+        directory which is to be created on the default or specified
+        drive.  Thus if this is the only item in the path,  the  new
+        directory  is created in the current directory.  If the  new
+        directory  is to be hidden,  then it must be separately made
+        hidden with the ATDIR command.
+
+             The  MD  command  is an abbreviated form of  the  MKDIR
+        command provided for convenience and MS-DOS compatibility.
+
+Examples:
+
+        MKDIR UTIL
+
+             A  directory  called  UTIL is created  in  the  current
+        directory of the current drive.
+
+        MKDIR A:\UTIL\RAM
+
+             A directory called RAM is created in the UTIL directory
+        in the root directory of drive A:.
+

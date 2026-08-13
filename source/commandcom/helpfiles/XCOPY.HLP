@@ -1,0 +1,77 @@
+XCOPY                                                   [Compatible]
+-----
+
+Format:      XCOPY [filespec [filespec]] [options]
+
+Purpose:     Copies files and directories from one disk to another.
+
+Use:         The options available are:
+
+                   [/A] [/E] [/H] [/M] [/P] [/S] [/T] [/V] [/W]
+
+             XCOPY is an extended file copying command (compare with
+        the  COPY command) that can selectively copy both files  and
+        directories.   The  first  filespec specifies   the   source
+        filenames, and if /H is given then hidden files will also be
+        copied.  The  second  filespec is the destination  filename.
+        Thus  files  can  be  renamed during the  copy  (as  in  the
+        standard COPY command).
+
+             /T will cause the copied files to have the current date
+        and time rather than the source file's date and time.
+
+             If  /A is specified, then only files with the 'archive'
+        attribute set are copied. A file has an archive attribute in
+        the  same  way  as a 'hidden' attribute and  a  'read  only'
+        attribute.  It  is set whenever a file is  updated  (written
+        to).
+
+             /M  is similar to /A,  but resets the archive bit after
+        copying  the file.  Thus,  using this option,  files can  be
+        regularly  copied onto another disk only if they  have  been
+        updated, providing a file backup facility.
+
+             /S  causes XCOPY to copy directories as well as  files.
+        Within  each directory,  all files are copied and  then  any
+        matching  files within each directory are copied,  with  the
+        directory  being  created on the destination if it does  not
+        already  exist.  Normally,  these  directories will  not  be
+        created if no files are to be copied into them.
+
+             /E  can  be given to cause the /S option to create  all
+        directories, even if they are empty.
+
+             The  /P  option  will cause XCOPY to pause  and  prompt
+        before  copying  each  file,   which  allows  files  to   be
+        selectively copied.
+
+             /W  causes XCOPY to pause and prompt before copying any
+        files, so that disks can be changed.
+
+             The  /V option can be given to turn write  verification
+        on  for  the duration of the XCOPY command (see  the  VERIFY
+        command). This will ensure that data is written correctly to
+        disks but will slow the operation down.
+
+             Note that XCOPY is a transient command,  and so must be
+        loaded off disk.
+
+Examples:
+
+        XCOPY B:\
+
+             All files in the root directory of drive B:  are copied
+        to the current directory of the current drive. There  is  no
+        advantage  in  this case over  using  the standard  built-in
+        COPY command.
+
+        XCOPY *.* B: /H/S/M
+
+             All  files, including hidden files, are copied to drive
+        B: only  if they  have been modified since a similar command
+        was last given. The files are then marked as unmodified. Not
+        only  are all the files in the current directory copied, but
+        so are  directories and all their descendant directories and
+        files.
+
+

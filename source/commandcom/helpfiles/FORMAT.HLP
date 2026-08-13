@@ -1,0 +1,71 @@
+FORMAT                                                    [Enhanced]
+------
+
+Format:      FORMAT [d: [option [/X]]]
+
+Purpose:     Formats (initializes) a disk.
+
+Use:         The specified  drive is  formatted, and all data on the
+        disk will be destroyed.
+
+             If  no  drive  is  specified then  a list  of available
+        drives is displayed an a drive is prompted for.
+
+             After  giving  a  FORMAT  command,  an  option  may  be
+        prompted for, allowing the required format of the disk to be
+        selected.  The exact nature of these prompts depends on  the
+        manufacturer of the MSX machine.
+
+             If 'option'  is specified then this option will be used
+        for formatting the disk, and no option is prompted for.
+
+             Before  formatting,  a  warning  prompt  is printed  to
+        prevent  accidental loss  of data.  However, if /X is given,
+        then  no  warning  is  printed  and  formatting  will  start
+        immediately.
+
+             After formatting, there will be no files or directories
+        on  the disk,  and the maximum amount of disk space will  be
+        free. The disk will not have a volume name, but can be given
+        one with the VOL command.  To turn the disk into a boot disk
+        so  that  MSX-DOS  can  be started up  from  it,  the  files
+        MSXDOS2.SYS and COMMAND2.COM must be copied onto it with the
+        COPY command.
+
+Examples:
+
+        FORMAT B:
+
+        1 - 1 side, double track
+        2 - 2 sides,double track
+
+        ? 2
+
+        All data on drive B: will be destroyed
+        Press any key to continue
+
+             The  command was given to format the disk in drive  B:.
+        In  this case,  the options available were to select  either
+        double sided or single sided, and double sided was selected.
+        The standard warning prompt was then printed.
+
+        FORMAT
+        Drive name? (A,B,C,D,E,F) B
+
+        1 - 1 side, double track
+        2 - 2 sides,double track
+
+        ? 2
+
+        All data on drive B: will be destroyed
+        Press any key to continue
+
+             No drive  was specified,  so a list of available drives
+        is displayed. Drive B: was then selected. Then a list of op-
+        tions is printed, as in the example above.
+
+        FORMAT B: 2 /X
+
+             Formatting  will start  immediately on  drive B: with a
+        '2' format-option.
+

@@ -1,0 +1,46 @@
+DISKCOPY                                                [Compatible]
+--------
+
+Format:      DISKCOPY [d: [d:]] [/X]
+
+Purpose:     Copies one disk to another.
+
+Use:         The first drive is the source drive and the second  the
+        destination,  which  defaults  to the current drive.  If  no
+        drives  are given,  then DISKCOPY will prompt for  both  the
+        source and the destination.
+
+             Before  DISKCOPY is used,  the destination disk must be
+        formatted  with the same format as the source disk,  and  an
+        error will be given if this is not the case.
+
+             If  /X is given,  then various messages printed  during
+        the disk copy operation will be suppressed.
+
+             Note that this is a transient command,  and must there-
+        fore be loaded from disk.
+
+Examples:
+
+        DISKCOPY A: B:
+        Insert source disk in drive A:
+        Insert target disk in drive B:
+        Press any key to continue...
+
+             The command was given to copy the disk in drive  A:  to
+        the  disk in drive B:,  thus destroying all existing data on
+        the disk in drive B:. The prompt is printed first.
+
+        DISKCOPY B:
+
+             The  disk  in  drive B:  is copied to the disk  in  the
+        current drive.
+
+        DISKCOPY
+        source drive?
+        target drive?
+
+             The DISKCOPY command was given with no  parameters,  so
+        the  source  and destination disks were  prompted  for.  The
+        reply to the prompts consists of just a single drive letter.
+

@@ -1,0 +1,43 @@
+HISTORY                                                        [New]
+-------
+
+Format:      HISTORY [n] [/D] [/P]
+
+Purpose:     Displays the command history list.
+
+Use:         HISTORY displays all the commands stored in the history
+        list,  starting with  the first  command entered, and ending
+        with the  last command  entered (which  will most  likely be
+        HISTORY).
+
+             The /P option can be given to cause the output to pause
+        at the bottom of the screen until a key is pressed.
+
+             When the /D option is specified the history buffer will
+        be cleared. The same effect when pressing CTRL-DEL.
+
+             When the HISTORY command contains a value,  the size of
+        the buffer will adjusted to that value. The minimum size for
+        the buffer should be at least 128  and can  be an  most 4095
+        bytes.  The buffer  will be  cleared automatically  when the
+        size is adjusted.
+
+Examples:
+
+        HISTORY
+        DIR *.COM /W/P
+        CDD A:\
+        HISTORY
+
+             All  the commands  stored in  the history list are dis-
+        played.
+
+        HISTORY /D
+
+             The history buffer will be cleared.
+
+        HISTORY 2048
+
+             The maximum size of the history buffer  will be  set to
+        2048 bytes. The buffer is cleared automatically.
+

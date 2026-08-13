@@ -1,0 +1,88 @@
+MEMORY                                                         [New]
+------
+
+Format:      MEMORY [/K] [/P]
+
+Purpose:     Displays the amount and status of system RAM.
+
+Use:         MEMORY displays information about the system RAM.
+
+             First it  lists the  amount of  total RAM, free RAM and
+        used  RAM, both  by the  system and by the user, for all the
+        available memory mappers.
+
+             Then it  lists the  amount of free TPA. This is not the
+        current  free TPA,  but the  TPA available  to any transient
+        program.
+
+             Next the  amount of  total history  RAM is  listed. The
+        amount of free history RAM is listed. When this is  0 bytes,
+        it means the history buffer is  full, and  that subsequently
+        entered commands cause the first commands to be deleted from
+        the buffer.
+
+             Finally, the  amount of  total and  free alias  RAM are
+        listed and  the total  and free  variables memory.  When the
+        variables memory has become too  small no  new shell  can be
+        started. The total amount is always  16 384 minus  the total
+        amount of history RAM minus an extra 6 bytes, which yields a
+        total of 15,354 bytes.
+
+             If the  /K option  is given,  then all figures of 1,024
+        bytes and over are represented in a kilobyte unit.
+
+             The /P option can be given to cause the output to pause
+        at the bottom of the screen until a key is pressed.
+
+Examples:
+
+        MEMORY
+           524 288 bytes total RAM in Slot 3-0
+           278 528 bytes free
+           245 760 bytes used by system
+                 0 bytes used by user
+
+         2 097 152 bytes total RAM in Slot 2-0
+         1 359 872 bytes free
+           737 280 bytes used by system
+                 0 bytes used by user
+
+            54 022 bytes total TPA memory
+
+             1 024 bytes total history
+               862 bytes free
+
+            10 240 bytes total alias
+             8 290 bytes free
+
+             5 105 bytes total variable swap memory
+             5 105 bytes free
+
+             The amount and status of the system RAM is displayed in
+        a bytes count.
+
+        MEMORY /K
+             512K total RAM in Slot 3-0
+             272K free
+             240K used by system
+               0 bytes used by user
+
+            2048K total RAM in Slot 2-0
+            1328K free
+             720K used by system
+               0 bytes used by user
+
+              52K total TPA memory
+
+               1K total history
+             839 bytes free
+
+              10K total alias
+               8K free
+
+               4K total variable swap memory
+               4K free
+
+             The amount and status of the system RAM is displayed in
+        a kilobytes count.
+

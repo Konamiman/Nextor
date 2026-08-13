@@ -1,0 +1,29 @@
+VOL                                                     [Compatible]
+---
+
+Format:      VOL [d:][volname]
+
+Purpose:     Displays or changes the volume name on a disk.
+
+Use:         If no parameters are given,  or if only a drive name is
+        given,  then  the  volume name of the current  or  specified
+        drive  is printed.
+
+             If  a  volname is given,  then the volume name  of  the
+        specified  or  current  drive is changed  to  the  specified
+        volume name.
+
+Examples:
+
+        VOL B:
+        Volume in drive B: has no name
+
+             Just   a drive was given,   so the volume name for  the
+        disk  in that drive is printed.  In this case there  was  no
+        volume name defined.
+
+        VOL B:BACKUP
+
+             The   volume   name  of the disk   in   drive   B:   is
+        changed to BACKUP.
+

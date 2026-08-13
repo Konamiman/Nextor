@@ -1,0 +1,128 @@
+DIR                                                       [Enhanced]
+---
+
+Format:      DIR [/S] [/H] [/W] [/P] [/2] [compound-filespec]
+
+Purpose:     Displays the names of files on disk.
+
+Use:         The  compound-filespec specifies which files are to  be
+        listed.  If  the /H option is given,  then hidden files will
+        also  be listed  and if  the /S option is given, then system
+        files will also be listed.
+
+             In  the DIR command,  unlike all other commands,  it is
+        permissible  to not give the main filename or  the  filename
+        extension,  and both will default to '*'. Thus a filename of
+        'FRED' is equivalent to 'FRED.*' and a filename of '.COM' is
+        equivalent to '*.COM'.  Note that if the '.' at the end of a
+        main  filename is given,  then the extension is also assumed
+        to  have  been given,  so that the filename 'FRED.'  is  not
+        equivalent to 'FRED.*', unlike the example above.
+
+             There  are three  formats of the listing. If the /W op-
+        tion is given, then a 'wide' listing is printed, with sever-
+        al  filenames  output  per  line. Sub-directory  names, file
+        attributes, and  the date and time each file was created are
+        not displayed.
+
+             If  the /W option is not given,  then the filenames are
+        printed  with  one  filename per  line,  together  with  the
+        attributes, the file size and the date and time at which the
+        file was last modified. The attributes are printed as an 'r'
+        if  the file is read-only and an 'h' if the file  is  hidden
+        (and  /H is  given) and  an 's' is the file is a system file
+        (and /S  is given).  If the time of a file is zero (i.e. the
+        file  does not  have an associated time) then the time field
+        will not  be printed.  If the  date of  a file is zero, then
+        neither  the date  nor the  time fields will be printed. The
+        formats in  which the  dates and times are printed in can be
+        changed (see HELP DATE and HELP TIME).
+
+             The  non-/W  display  is designed to fit  within  a  40
+        column screen,  but if fewer columns are available then some
+        fields  of the listing will not be shown so that the display
+        will  always fit on one line.  The number of files per  line
+        that  are  printed  when /W is specified  is  also  adjusted
+        according  to the screen width.  If the width of the display
+        is less than 13 characters however,  then in both cases  the
+        filenames will wrap to the next line.
+
+             If  the  /2  option  is given,  then the  filenames are
+        printed  with  two  filenames  per line.  The /2  display is
+        designed to  fit within  a 80  column screen,  but if  fewer
+        columns  are available  then some fields of the listing will
+        not be  shown so  that the  display will  always fit  on one
+        line.
+
+             At the top of the list of files, the volume name of the
+        disk  and  the  name  of  the  directory  being  listed   is
+        displayed.  At the bottom,  the number of files listed,  the
+        total  number  of  bytes  in the files  and  the  amount  of
+        remaining disk space is printed.
+
+             When  the directory of a sub-directory is printed,  the
+        first   two  items  listed  will  always  be   two   special
+        sub-directories called '.' and '..'. These are automatically
+        created  when  a new directory is created,  and it is  these
+        that allow '.' and '..' to be given in path names to signify
+        the  current and parent directories respectively  (see  HELP
+        SYNTAX for a description of paths).
+
+             When  printing  a  number  of  bytes,   the  number  is
+        truncated  and  printed as the number of kilobytes if 1K  or
+        greater.
+
+             If the /P option is given,  then the output will  pause
+        at the bottom of the screen until a key is pressed.
+
+Examples:
+
+        DIR
+
+             All  filenames  and  directory  names  in  the  current
+        directory of the current drive will be printed.  This  might
+        be as follows:
+
+              Volume in drive A: is MSX-DOS 2
+              Directory of A:\
+
+             MSXDOS2  SYS r    4096 86-06-19  2:45p
+             COMMAND2 COM r   10496 86-06-19  2:46p
+             UTILS           <dir>  86-06-19  2:50p
+             HELP            <dir>  86-06-19  2:50p
+              14K in 2 files   222K free
+
+        The   disk  thus  contains  the  two  MSX-DOS  system  files
+        MSXDOS2.SYS and COMMAND2.COM,  which are read only,  and two
+        directories called UTILS and HELP.
+
+        DIR B:\HELP/W
+
+             A  'wide'  directory format has been requested  of  the
+        HELP directory on drive B:. This might be as follows:
+
+              Volume in drive B: is MSX-DOS 2
+              Directory of B:\HELP
+
+             BUFFERS .HLP    ATTRIB  .HLP    ASSIGN  .HLP
+             ATDIR   .HLP    CHDIR   .HLP    CD      .HLP
+             SYNTAX  .HLP    ENV     .HLP    BATCH   .HLP
+             EDITING .HLP
+              25K in 10 files   222K free
+
+        DIR  UTILS + HELP/P
+
+             This will list all the files in the UTILS directory and
+        all  the files in the HELP directory,  and will pause at the
+        end of every screen full.
+
+        DIR .COM
+
+             No main filename was given,  and so defaults to *. Thus
+        this command is equivalent to the command DIR *.COM.
+
+        DIR COMMAND2
+
+             No extension was given,  so this defaults to  .*.  Thus
+        this command is equivalent to the command DIR COMMAND2.*.
+

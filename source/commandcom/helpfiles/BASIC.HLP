@@ -1,0 +1,31 @@
+BASIC                                                   [Compatible]
+-----
+
+Format:      BASIC [program]
+
+Purpose:     Transfers control to MSX disk BASIC.
+
+Use:         Program is the name of a BASIC program on disk.
+
+             Control is passed to the built-in MSX BASIC, which will
+        load  and execute the BASIC program if specified.  If a  RAM
+        disk has been set up, then it can still be used from BASIC.
+
+             The  BASIC  command _SYSTEM("command") can be  used  to
+        return to MSX-DOS,  and the optional command,  which can  be
+        any command mentioned in this manual,  will be executed.  If
+        the  command  is  not  given,   then  a  batch  file  called
+        REBOOT.BAT  will be  searched  for  and  executed  (see HELP
+        BATCH on Batch Files).
+
+Examples
+
+        BASIC
+
+             MSX disk BASIC is entered.
+
+        BASIC MYPROG.BAS
+
+             MSX  disk  BASIC  is entered,  and  the  BASIC  program
+        MYPROG.BAS loaded and RUN.
+

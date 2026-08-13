@@ -1,0 +1,68 @@
+CHDIR                                                     [Enhanced]
+-----
+
+Format:      CHDIR [[d:]path|-]
+                  or
+             CD [[d:]path|-]
+                  or
+             [d:]path\
+
+Purpose:     Displays or changes the current directory.
+
+Use:         If  no  path is specified,  then the current  directory
+        path for the default or specified drive is printed.  This is
+        the  directory path from the root directory to  the  current
+        directory.
+
+             If a path is specified,  then the current directory for
+        the  default or specified drive is changed to the  directory
+        specified  by  the path.
+
+             Before  changing the  directory, DOS  saves the current
+        directory. It  is possible  to change  back to  the previous
+        directory by using the CD - command.
+
+             Each  drive has its own current directory. This remains
+        at the  directory specified  by the  last CHDIR  command for
+        that  drive (or  at the  root directory initially) until an-
+        other CHDIR  command is  given or  it cannot be found on the
+        disk when it is accessed (because the disk has been changed,
+        for example). It is then returned to the root directory.
+
+             The  CD command  is an  abbreviated form  of the  CHDIR
+        command provided  for convenience  and MS-DOS compatibility.
+        The  CD or CHDIR command may be omitted if the pathname ends
+        in a '\', '.' or '..'.
+
+Examples:
+
+        CHDIR \DIR1
+
+             The  current directory of the current drive is  changed
+        to DIR1.
+
+        CHDIR A:DIR2
+
+             The current directory of drive A: is changed to DIR2.
+
+        A:DIR3\
+
+             The current directory of drive A: is changed to DIR3.
+
+        CD -
+
+             The  current directory  of drive  A: is changed back to
+        DIR2. Another CD - command will change it back to DIR3.
+
+        CD
+        E:\DIR1
+
+             The  current directory of the current drive is display-
+        ed, which in this case is E:\DIR1.
+
+        CHDIR A:
+        A:\DIR2
+
+             The current directory for drive A:  is displayed, which
+        is also DIR2.
+

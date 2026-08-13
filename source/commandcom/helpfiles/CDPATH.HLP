@@ -1,0 +1,79 @@
+CDPATH                                                         [New]
+------
+
+Format:      CDPATH [[+|-] [d:]path [[d:]path [[d:]path...]]]
+
+Purpose:     Displays or sets the directory search path.
+
+Use:         If no  parameters are  given, then the search path cur-
+        rently  set  will  be  displayed,  separated by  semi-colons
+        (';').
+
+             If  + or - is not given,  then the search path will  be
+        set  to the list of path names given and any existing search
+        path will be deleted.
+
+             If - is given before the list of paths,  then each path
+        in  the list will be deleted from the currently  set  search
+        path,  and  an error will be given if any of the given paths
+        do not already exist.
+
+             If + is given before the list of paths,  then each path
+        specified  will  first  be deleted from  the  currently  set
+        search  path if it exists,  and will then be added onto  the
+        end.  This allows the order of the paths in the search  path
+        to be changed and allows new paths to be appended to the end
+        of the current search path. The + syntax can also be used to
+        set  a search path longer than can be given in one  command,
+        the  maximum length of the search path being 255  characters
+        and the maximum length of a command 127 characters.
+
+             When  changing the  directory, the paths in the current
+        search path  will be used in order from left to right. It is
+        recommended  that the paths in the search path are specified
+        as full  paths starting  at the  root directory and with the
+        drive  specified. If  this is not the case, then the meaning
+        of the  search path  could change  when the current drive or
+        directory is changed.
+
+             The  search path is stored as an environment item  (see
+        HELP ENV on Environment Items),  and so can also be accessed
+        with the SET command.
+
+Examples:
+
+        CDPATH E:\UTILS\ E:\TED\TEXT\MISC\
+
+             When a directory is next searched for (specified by the
+        CD, CDD  or CHDIR command), the directories searched will be
+        the  current  directory  of  the  current  drive,  the UTILS
+        directory  in  the  root  directory  of  drive  E:  and  the
+        TED\TEXT\MISC  directory in  the root directory of drive E:,
+        in that order.
+
+        CDPATH
+        ; E:\UTILS\; E:\TED\TEXT\MISC\
+
+             No parameters were given so the current search path was
+        printed.
+
+        CDPATH +A:\COM; A:\BAT
+
+             The  directories A:\COM and A:\BAT are added to the end
+        of the search path.
+
+        CDPATH
+        ; E:\UTILS\; E:\TED\TEXT\MISC\; A:\COM; A:\BAT
+
+             The new search path is printed.
+
+        CDPATH - E:\UTILS\, E:\TED\TEXT\MISC\
+
+             The  directories  E:\UTILS\  and  E:\TED\TEXT\MISC\ are
+        deleted from the current search path.
+
+        CDPATH
+        ; A:\COM; A:\BAT
+
+             The new search path is again printed.
+

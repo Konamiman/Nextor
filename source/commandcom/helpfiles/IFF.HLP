@@ -1,0 +1,147 @@
+IFF                                                            [New]
+---
+
+Format:      IFF [NOT] EXIST [d:][path]filename [THEN] [command]
+                 .
+                 .
+             ENDIFF [command]
+
+                  or
+
+             IFF [NOT] expr.1 ==|EQ|LT|GT expr.2 [AND|OR|XOR [NOT]
+               expr.3 ==|EQ|LT|GT expr.4 [AND|OR|XOR ...]] [THEN]
+               command
+                 .
+                 .
+             ENDIFF [command]
+
+Purpose:     Turns  ON Command  Mode if  the given equation is true,
+        otherwise Command Mode is turned OFF.
+
+Use:         See HELP IF for more information on equations.
+
+             When Command  Mode is ON (as it is by default) then all
+        commands typed are executed.
+
+             When Command  Mode is OFF then all commands except ELSE
+        and  ENDIFF  are  ignored. When  Command Mode  is OFF  and a
+        higher  level  is  entered, then  the ELSE  command is  also
+        ignored.
+
+             Every  subsequent IFF command goes up one level up to a
+        maximum of  16 levels. When trying to enter level 17, a "***
+        Too many parameters" error occurs.
+
+             See also HELP THEN, HELP ELSE and HELP ENDIFF.
+
+
+Examples:
+
+        iff %@mid[%@parse[%1]%,3,1]% == 0
+          then set temporary = %2
+               iff %@len[%temporary% ]% == 1
+                 then set temporary = *.*
+               endiff
+               iff %@right[%temporary%,1]% == \
+                 then set temporary = %temporary%*.*
+               endiff
+               iff %@right[%@parse[%temporary%]%,1]% == 0
+                 then set temporary = %temporary%*.*
+               endiff
+               iff %@mid[%@parse[%temporary%]%,4,2]% == 00
+                 then set file = %temporary%%@file[%1]%
+                 else iff %@len[%@fileattr[%temporary%]% ]% == 1
+        rem The next command should be entered on one line
+                        then set file =
+              %@path[%temporary%]%%@newfile[%1 %@file[%temporary%]%]%
+                        else iff %@fileattr[%temporary%]% == D
+                               then set file = %temporary%\%@file[%1]%
+        rem The next command should be entered on one line
+                               else set file =
+              %@path[%temporary%]%%@newfile[%1 %@file[%temporary%]%]%
+                             endiff
+                      endiff
+               endiff
+
+               iff exist %file%
+                 then echo File %file% already exists
+                      inkey Make back-up? %%key
+                      iff %@upper[%key%]% == Y
+        rem The next command should be entered on one line
+                        then copy %file%
+                              %@path[%file%]%%@newfile[%file% *.BAK]%
+                      endiff
+               endiff
+               set key =
+               set file =
+               set temporary =
+        endiff
+        @copy %1 %2
+
+             This  example is also available as a batch file, called
+        COPY.BAT. It  copies one file to another, just like the COPY
+        command,  but  if  the destination  file already  exists, it
+        prints a warning, and makes a back-up, if desired.
+
+             This  example  also  makes  frequent  use  of  Internal
+        Variable Functions.  See HELP  ENV for  more information  on
+        this subject.
+
+             First of all the first parameter is parsed and bit 5 is
+        examined to determine whether the first parameter is ambigu-
+        ous. If  so, then  all the  following commands  are ignored,
+        until  the  last  ENDIFF.  This  means  that  if  the  first
+        parameter is  ambiguous (i.e.  more than  one file  would be
+        copied)  COPY.BAT can not make any back-ups, since the names
+        of the files copied are unknown.
+
+             A temporary  environment variable  is set up containing
+        the second parameter.
+
+             If  the length  of this  variable, including a trailing
+        space character,  is one,  then the  environment variable is
+        set  to  "*.*".  The trailing  space character  is necessary
+        since a null value parameter returns a null value string, no
+        matter what the function is.
+
+             If the last character of this variable if a back slash,
+        then  *.*  is added  to make  it really  ambiguous. This  is
+        necessary for the parse function in the next line.
+
+             Then the  temporary environment  variable is parsed and
+        the  bit 0  is examined  to determine  whether or not a path
+        and/or filename are specified rather than just a drive name.
+        If only a drive name is specified, then "*.*" is added.
+
+             Next,  bit 3  and 4 are examined to determine whether a
+        filename and/or  extension are  specified. If  both are  not
+        given,  then the  second parameter  ends with  a back  slash
+        ("\") and the filename from the first parameter can be added
+        directly after  the second  parameter. The  total result  is
+        stored in an environment variable FILE.
+
+             If a  filename and/or extension are specified, then the
+        last item from the second parameter is examined to determine
+        whether it is a directory rather than a file.
+
+             If it  is ambiguous,  which can be determined using the
+        length of the FILEATTR Variable Function, then it can not be
+        a  directory, so an environment variable FILE is set up con-
+        taining the path from the first parameter and a new filename
+        that is  given by  the filename  from the  second parameter,
+        with  wildcards ("?"  or "*")  replaced by the corresponding
+        characters from the filename from the first parameter.
+
+             If it  is not ambiguous, then the attributes are check-
+        ed.  If the directory attribute is set, then a back slash is
+        added, including  the filename  from the first parameter. If
+        the  directory attribute  is not set, then a new filename is
+        set up as was described above.
+
+             Next, the  existance of  the set up file is determined.
+        When  it already  exists, then  a warning  is printed  and a
+        back-up is made if the question is answered affirmatively.
+
+             Finally, all the environment variables used are removed
+        and the originally intended COPY command is executed.
+

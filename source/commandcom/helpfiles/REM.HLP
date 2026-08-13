@@ -1,0 +1,19 @@
+REM                                                     [Compatible]
+---
+
+Format:      REM [comment]
+
+Purpose:     Introduces a comment in a batch file.
+
+Use:         The  comment  is simply ignored,  and the next  command
+        executed.   The  comment  consists  of  a  sequence  of  any
+        characters  up to the maximum length of a command line  (127
+        characters).
+
+Examples:
+
+        REM This is my AUTOEXEC batch file
+
+             This command,  either in a batch file or typed in, does
+        nothing at all with its parameters.
+

@@ -1,0 +1,19 @@
+ENDIFF                                                         [New]
+----
+
+Format:      ENDIFF [command]
+
+Purpose:     Goes up one level and restores the Command Mode.
+
+Use:         ENDIFF enters the previous level, restoring the Command
+        Mode  for that  level. When already in level 0 (which is the
+        default level), ENDIFF does nothing at all.
+
+             If a command is given, then it is executed. This may be
+        any internal or external command, batchfile or alias.
+
+
+Examples:
+
+             See HELP IFF for an example.
+

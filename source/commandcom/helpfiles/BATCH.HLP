@@ -1,0 +1,222 @@
+BATCH FILES
+-----------
+
+             When a command is given to MSX-DOS and it is not one of
+        the  internal commands,  a file of that name is searched for
+        with  an  extension  of COM,  BAT or  BTM, or  any specified
+        executable  extension. If not found in the current directory
+        then the current search path is searched (see HELP PATH). If
+        a COM  file is  found, then  it is loaded and executed. If a
+        BAT  or BTM  file is found, then MSX-DOS starts execution of
+        the batch  file. If  an executable  extension is found, then
+        the associated command is executed.
+
+             A  batch  file is a text file that contains a  list  of
+        commands,  and these commands are read from the file a  line
+        at  a  time  and executed as though they were typed  at  the
+        keyboard.  Several  MSX-DOS  commands are in  fact  provided
+        mainly for use in batch files, such as ECHO and PAUSE.
+
+             There are to types of batch files: with a BAT extension
+        and  with a BTM extension. The only difference is that a BTM
+        batch file is read entirely into memory before it is execut-
+        ed.  The maximum  length of  a BTM  file is  16K. A  *** Not
+        enough memory  error occurs  when there is not enough memory
+        to  load the batch file, or if the batch file is longer than
+        16K. There  are four commands that can only be executed from
+        a .BTM file: GOTO, GOSUB, RETURN and END.
+
+             The  GOTO and  GOSUB commands  require a label as their
+        parameter. The  RETURN command  can also have a label as its
+        parameter.  A label  is a string of arbitrary characters. No
+        processing is  performed on the characters and so the casing
+        of characters is preserved. A label must always start with a
+        "~"  character to  distinguish it  from a  normal command. A
+        CR/LF is considered as a label delimiter. A label can appear
+        anywhere  in a  batch file, but it must be on a single line.
+        It can not be followed by any commands; the command would be
+        considered as  part of the label since a label may also con-
+        tain space characters.
+
+             The  GOTO and GOSUB commands search for the first label
+        that matches the specified label. So if there are two labels
+        that  have the  same name,  then only  the first one will be
+        found.
+
+             As  each  command  is read,  normally  it  is  executed
+        immediately.  An environment item ECHO exists, however, that
+        can  be  set to ON (with the command SET ECHO ON)  to  cause
+        each  command line to be printed on the screen before it  is
+        executed  (HELP  ENV  on  Environment  Items).  The  command
+        line  is  echoed in this way after % parameter  substitution
+        (see below) has taken place.  The command SET ECHO OFF  will
+        restore the normal state.
+
+             In  the  command  line  that invoked  the  batch  file,
+        parameters  may follow the name of the batch file just  like
+        any   other  command  or  transient  program   name.   These
+        parameters  may  be accessed anywhere in the batch  file  by
+        specifying %0  to %255. %1 is the first parameter, %2 is the
+        second  and so  on. %0 is the name of the batch file itself.
+        The  %  number  will  be replaced  by the  parameter on  the
+        original command  line, and  may appear  anywhere on a batch
+        file  command  line.  Also  %1&  can be  used to  access all
+        parameters  starting with the first. %2& will be replaced by
+        all  parameters  starting  with  the second,  and so  on. %&
+        defaults to  %1&. To  actually use  a %  symbol on a command
+        line  a double  % must  be given  ('%%') which  will then be
+        replaced by  a single  one, or the % symbol must be enclosed
+        in either single quotes ('%') or double quotes ("%").
+
+             If  the  execution  of any command in a batch  file  is
+        terminated  prematurely  for  some  reason  (typically   the
+        control-STOP  or  control-C  key  being  pressed)  then  the
+        following prompt is issued:
+
+                  Terminate batch file (Y/N)?
+
+        If the response to this is 'Y',  then execution of the whole
+        batch file is stopped.  If the response is 'N',  then  batch
+        file  execution continues with the next command in the batch
+        file.
+
+             After MSX-DOS has executed a command in batch file,  it
+        may  need  to  read the next command in the batch  file  off
+        disk.  If the correct disk is not in the drive when it comes
+        to  do  this,  then a prompt is  issued.  For  example,  the
+        following  prompt  will  be issued if  the  batch  file  was
+        originally executed from drive A:
+
+                  Insert batch file disk in drive A:
+                  Press any key to continue
+
+        When  the correct disk has been inserted and a key  pressed,
+        batch file execution will continue normally.
+
+             Below  is a very simple batch file,  which just  prints
+        the first few parameters.
+
+                  ECHO Parameter 0 = %0
+                  ECHO Parameter 1 = %1
+                  ECHO Parameter 2 = %2
+                  ECHO Parameter 3 = %3
+                  ECHO All parameters = %&
+
+             If  this is called MYBAT.BAT then the command MYBAT a b
+        c will output
+
+                  Parameter 0 = MYBAT
+                  Parameter 1 = a
+                  Parameter 2 = b
+                  Parameter 3 = c
+                  All parameters = a b c
+
+             With the SHIFT command it's possible to  move arguments
+        one position to the left allowing  powerful batch  files. An
+        example of a batch file that uses SHIFT is shown below.
+
+                  ECHO %0 %1 %2 %3 %4 %5 %6 %7 %8 %9
+                  SHIFT
+                  ECHO %0 %1 %2 %3 %4 %5 %6 %7 %8 %9
+                  SHIFT /3
+                  ECHO %0 %1 %2 %3 %4 %5 %6 %7 %8 %9
+
+             If this is called SHIFTY.BAT then the command  SHIFTY a
+        b c d e f g h i j k l m n o will output
+
+                  SHIFTY a b c d e f g h i
+                  a b c d e f g h i j
+                  a b c e f g h i j k
+
+             Another useful example of using SHIFT within a  loop is
+        shown below. Because of the loop this batch file is required
+        to run from a .BTM file.
+
+                 ~Loop
+                 ECHO First parameter: %1
+                 SHIFT
+                 IF NOT {%1} == {} GOTO ~Loop
+
+             If this is called SHIFTZ.BTM then the command  SHIFTZ a
+        new powerful command will output
+
+                 First parameter: a
+                 First parameter: new
+                 First parameter: powerful
+                 First parameter: command
+
+             When  MSX-DOS starts up for the first time,  a  special
+        batch   file  called  AUTOEXEC.BAT  is  looked  for  and  is
+        executed if found. This may contain any MSX-DOS command, and
+        usually contains once-only initialization commands,  such as
+        a RAMDISK command to set up a RAM disk.
+
+             One % parameter is passed to AUTOEXEC.BAT as  %1.  This
+        the  drive that MSX-DOS booted from and is in the form of  a
+        normal drive letter followed by a colon.
+
+             Another  special  batch  file is  REBOOT.BAT.  This  is
+        executed  when MSX-DOS is re-booted after using  some  other
+        application  (such  as  the built-in  MSX  BASIC).  As  with
+        AUTOEXEC.BAT  files,  the single %1 parameter passed is  the
+        drive from which MSX-DOS was re-booted.
+
+             Usually  some  commands need to be  performed  whenever
+        MSX-DOS  is booted,  whether for the first time or  sometime
+        later,  and these are put in the REBOOT batch file. They can
+        then  be executed from the AUTOEXEC batch file by ending  it
+        with  the command REBOOT %1.  An example of a  command  that
+        might be put in the REBOOT batch file is the PATH command to
+        set  up the transient command search path.  When setting  up
+        the search path using the command,  %1 can be used to set up
+        the path on whatever drive was booted from.
+
+             When  a command in a batch file is the name of  another
+        batch  file,  then that second batch file is executed in the
+        normal  way.  When  it  ends,  control passes  back  to  the
+        interactive command interpreter,  and not to the first batch
+        file. Batch file commands thus 'chain' together.
+
+             If  it  is desired to 'nest' batch files  i.e. to  pass
+        control back to the first batch file above, then this can be
+        done with the COMMAND2 command (see HELP COMMAND2),  passing
+        the  name  of the second batch file as the  parameter.  Then
+        when  the  second batch file ends,  the first  one  will  be
+        continued with the command after the COMMAND2 command.
+
+             A typical AUTOEXEC batch file is as follows:
+
+                  ECHO AUTOEXEC executing
+                  RAMDISK 100
+                  RAMDISK
+                  COPY COMMAND2.COM H:\
+                  REBOOT %1
+
+             A typical REBOOT batch file is as follows:
+
+                  ECHO REBOOT executing
+                  PATH H:\, %1\UTILS, %1\BATCH
+                  SET SHELL=H:\COMMAND2.COM
+                  SET TEMP=H:\
+                  H:
+
+             When  the  AUTOEXEC batch file  executes,  the  message
+        "AUTOEXEC executing" is printed,  and then a RAM disk is set
+        up with a maximum size of 100K.  Another RAMDISK command  is
+        then  given which will print out the actual size of RAM disk
+        created.  The COPY command then copies COMMAND2.COM onto the
+        RAM  disk so that it can load and re-load  quickly.  Finally
+        the  REBOOT batch file is executed,  with the  %1  parameter
+        (the boot drive) passed to it.
+
+             The REBOOT batch file prints a message and then sets  a
+        PATH. The first item in the path refers to the RAM disk that
+        was created by the AUTOEXEC batch file,  and the other items
+        refer  to  directories  on the disk from which  MSX-DOS  was
+        booted  (i.e. %1).  The SHELL environment item is set up  so
+        that COMMAND2.COM can re-load quickly off the RAM disk,  and
+        the TEMP environment item is set up so that temporary piping
+        files  are created on the RAM disk. Finally, the RAM disk is
+        made the default drive.
+
+

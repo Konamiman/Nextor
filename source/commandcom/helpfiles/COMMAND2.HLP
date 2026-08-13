@@ -1,0 +1,86 @@
+COMMAND2                                                [Compatible]
+--------
+
+Format:      COMMAND2 [command]
+
+Purpose:     Invokes the command interpreter.
+
+Use:         command  is  any command that can normally be typed  at
+        the prompt (such as the commands listed by HELP).
+
+             COMMAND2  is simply the name of the command interpreter
+        on disk,  and can be executed as a normal transient program.
+        In   normal  use  it  gets  loaded  and  executed  once   by
+        MSXDOS2.SYS,  and  this provides the ability to perform  all
+        the commands available.
+
+             Advanced  users may,  however,  wish to invoke  another
+        command  interpreter for a variety of  reasons.  The  second
+        COMMAND2.COM  may,  for  example,  be a  later  version  and
+        provide  more  facilities.  If a transient program  has  the
+        ability to load and execute programs,  as some sophisticated
+        programs do, then they can load the COMMAND2.COM program and
+        any  MSX-DOS  command can then be given.  When  COMMAND2.COM
+        exits, the original program will be returned to.
+
+             If no command is given as a parameter,  then the second
+        COMMAND2.COM  will simply issue the normal  prompt  (without
+        executing  AUTOEXEC.BAT or REBOOT.BAT) and wait for commands
+        in  the normal way.  It will terminate and exit back to  the
+        original  command  interpreter  or  program  when  the  EXIT
+        command is given (see the EXIT command). If an error code is
+        given  to  this  EXIT command,  then  the  original  command
+        interpreter or program will receive it and,  in the case  of
+        COMMAND2.COM  and  MSXDOS2.SYS,  print an appropriate  error
+        message (see HELP ERRORS).
+
+             If  a command  is given  as a parameter to COMMAND2.COM
+        however, then  it will  be executed  as though  it had  been
+        typed  in the  normal way. The command may be an internal or
+        external command, an alias or an executable extension. After
+        executing the  command, COMMAND2.COM  will immediately  exit
+        back to the original command interpreter or program.
+
+             In  this way,  invoking a second COMMAND2.COM from  the
+        normal  command  interpreter  with a batch file  name  as  a
+        command can be used to 'nest' batch files (see HELP BATCH on
+        Batch Files), instead of 'chaining'.
+
+             When  COMMAND2.COM  is executed,  it  saves  the  whole
+        environment,  and  then restores it again when it exits.  It
+        only  sets up the default environment items however if  they
+        are  not  already  defined.  Thus  the  second  COMMAND2.COM
+        inherits  the  environment of the first.  Any  changes  made
+        whilst  the second COMMAND2.COM is executing will only  last
+        as  long it does, and will be lost when it exits. The second
+        COMMAND2.COM  also  inherits the  alias list  of the  first.
+        However, changes  made here  will also be passed back to the
+        first COMMAND2.COM.
+
+             Each  incarnation of COMMAND2.COM uses up  some  memory
+        which  is freed again when it exits.  This depends partly on
+        the  number  of environment items,  and is  typically  about
+        1.5K.
+
+             When COMMAND2.COM executes a transient program,  it may
+        have to re-load itself off disk since the program is allowed
+        to use the memory occupied by COMMAND2.COM. In this case, it
+        uses  the SHELL environment item to locate the file that  it
+        must  use  to  load itself  (see  HELP  ENV  on  Environment
+        Items).  When  first  loaded from the COMMAND2.COM  file  on
+        disk, SHELL is set to refer to that file.
+
+Examples:
+
+        COMMAND2
+        A:\>
+
+             Another  copy  of  COMMAND2 is  loaded, and  prints its
+        normal prompt. EXIT will exit back to the original prompt.
+
+        COMMAND2 FILE.BAT
+
+             Normally  in  a  batch  file.   The  file  FILE.BAT  is
+        executed,  and  when it ends the current batch file will  be
+        resumed with the command after this one.
+

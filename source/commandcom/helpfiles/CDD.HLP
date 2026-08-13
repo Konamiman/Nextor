@@ -1,0 +1,63 @@
+CDD                                                            [New]
+---
+
+Format:      CDD [[d:]path|-]
+
+Purpose:     Displays or changes the current directory and drive.
+
+Use:         If  no  path is specified,  then the current  directory
+        path for the default or specified drive is printed.  This is
+        the  directory path from the root directory to  the  current
+        directory.
+
+             If a path is specified,  then the current directory for
+        the  default or specified drive is changed to the  directory
+        specified by  the path.  If a  drive is  specified then  the
+        current drive will be set to the specified drive.
+
+             Before  changing the directory and drive, DOS saves the
+        current directory  and drive.  It is possible to change back
+        to  the previous directory and drive by using the CDD - com-
+        mand.
+
+             Each  drive has its own current directory. This remains
+        at the  directory specified by the last CDD command for that
+        drive (or at the root directory initially) until another CDD
+        command  is given  or it cannot be found on the disk when it
+        is  accessed   (because  the  disk  has  been  changed,  for
+        example). It is then returned to the root directory.
+
+Examples:
+
+        CDD \DIR1
+
+             The  current directory of the current drive is  changed
+        to DIR1.
+
+        CDD A:DIR2
+
+             The current  directory of  drive A:  is changed to DIR2
+        and drive A: will become the current drive.
+
+        CDD C:\DIR1
+
+             The current  directory of  drive C:  is changed to DIR1
+        and drive C: will become the current drive.
+
+        CDD -
+
+             The current drive and directory will be changed back to
+        A:DIR2.
+
+        CDD
+        E:\DIR1
+
+             The  current directory of the current drive is display-
+        ed, which in this case is E:\DIR1.
+
+        CDD A:
+        A:\DIR2
+
+             The current directory for drive A:  is displayed, which
+        is also DIR2.
+

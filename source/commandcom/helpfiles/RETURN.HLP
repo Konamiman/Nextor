@@ -1,0 +1,57 @@
+RETURN                                                         [New]
+------
+
+Format:      RETURN [~label]
+
+Purpose:     Returns from a sub-routine.
+
+Use:         RETURN  returns from a sub-routine to the GOSUB command
+        that invoked  the sub-routine.  When a  label is also given,
+        then it returns to the specified label.
+
+             The  label  is  a  string of  arbitrary characters.  No
+        processing is  performed on the characters and so the casing
+        of characters is preserved. A label must always start with a
+        "~" character to distinguish it from a normal command.
+
+             An *** Unrecognized command error occurs when RETURN is
+        executed from the command line or from a .BAT file.
+
+             An *** Invalid parameter error occurs when the label is
+        not found  in the batch file. Execution of the batch file is
+        then  ended, since  continuing the  batch file would have no
+        meaning.
+
+             See also HELP GOSUB and HELP END.
+
+Examples:
+
+             The  following  example should  be executed  as a  .BTM
+        file.
+
+        ECHO This is the first line
+        GOSUB ~label1
+        ECHO This is the third line
+        END
+        ~label2
+        ECHO This is the second line
+        RETURN
+        ~label1
+        GOSUB ~label2
+        RETURN
+
+        This is the first line
+        This is the second line
+        This is the third line
+
+             First the  text "This  is the  first line" is echoed to
+        the  screen. Then  the batch  file continues  with the  sub-
+        routine following  the label  "~label1", which  calls a sub-
+        routine  following the label "~label2", so the text "This is
+        the second  line" is  echoed to  the screen. Then the second
+        sub-routine  returns to the line following the GOSUB command
+        that  invoked  the  sub-routine,  and the  first sub-routine
+        returns to  its invoking GOSUB command, so the text "This is
+        the third line" is echoed to the screen. Then the batch file
+        ends, and returns to the command interpreter.
+

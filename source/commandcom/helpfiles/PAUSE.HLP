@@ -1,0 +1,34 @@
+PAUSE                                                   [Compatible]
+-----
+
+Format:      PAUSE [comment]
+
+Purpose:     Prompts and waits for a key press in a batch file.
+
+Use:         The  comments  consists  of an  arbitrary  sequence  of
+        characters.
+
+             The  comment,  if  given,  is printed  followed by  the
+        prompt 'Press  any key  to continue  ' on the next line. The
+        system  will then wait for a key to be pressed and will echo
+        the  key  pressed  if  it is  a printable  character. If  no
+        comment is  given as  a parameter, then just the prompt will
+        be printed.
+
+             The  main use of this command is to issue prompts  from
+        within a batch file.
+
+Examples:
+
+        PAUSE
+        Press any key to continue
+
+             No comment was given, so just the prompt was printed.
+
+        PAUSE Insert document disk in drive B:
+        Insert document disk in drive B:
+        Press any key to continue
+
+             The  comment  given was 'Insert document disk in  drive
+        B:' so this was printed followed by the prompt.
+

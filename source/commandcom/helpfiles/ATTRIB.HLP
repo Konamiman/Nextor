@@ -1,0 +1,75 @@
+ATTRIB                                                    [Enhanced]
+------
+
+Format:      ATTRIB +|-R|H|S|A [/S] [/H] [/P] compound-filespec
+
+Purpose:     Changes the attributes of files to make them hidden/not
+        hidden and read only/not read only.
+
+Use:         The   compound-filespec  specifies   the  files   whose
+        attributes are to be changed. /H allows hidden files to also
+        have their  attributes changed and /S allows system files to
+        have their attributes changed.
+
+             If  +H is given,  then the selected files are marked as
+        hidden,  and  will  not be affected by most commands  or  be
+        shown  by the DIR command unless a /H option is  given  with
+        those commands.  -H marks the selected files as not  hidden,
+        and  will  not have any effect unless the /H option is  also
+        given.
+
+             If  +S is  given, then the selected files are marked as
+        system, and  will not  be affected  by most  commands or  be
+        shown  by the  DIR command  unless a /S option is given with
+        those commands.  -S marks  the selected files as not hidden,
+        and  will not  have any  effect unless the /S option is also
+        given.
+
+             If +R is given,  then the selected files are marked  as
+        read  only.  -R  marks the selected files as not  read  only
+        (read/write).  Read  only  files  cannot be  written  to  or
+        changed.
+
+             If  +A is  given, then the selected files are marked as
+        archived. Whenever a file has been written to and closed the
+        archive  bit  is  set.  This  bit  can be  examined by,  for
+        example, the XCOPY command to determine whether the file has
+        been changed. -A markes the selected files as not archived.
+
+             When an error occurs, the erroneous filename is printed
+        followed by an error message,  and the command will continue
+        with the next file. If many errors occur, then the /P option
+        can  be used to cause the output to pause at the end of  the
+        screen.
+
+             The  DIR  command can be used to indicate  the  current
+        attributes of files.
+
+Examples:
+
+        ATTRIB +R FILE1
+
+             The  file FILE1 is marked as read only,  and  will  not
+        subsequently be modifiable or deletable.
+
+        ATTRIB +H B:\DIR1\*.COM
+
+             Marks  all  *.COM  files  in the  directory  B:DIR1  as
+        hidden, and will not be displayed by the DIR command.
+
+        ATTRIB -R -H \DIR1/H/P
+
+             All  the files in DIR1 are marked as not read only  and
+        not hidden.  The output, if any, will pause at the bottom of
+        the screen.
+
+        ATTRIB +S \DIR1 + \DIR2 + FILE1
+
+             All files in the directories DIR1 and DIR2 and the file
+        FILE1 are marked as system files.
+
+        ATTRIB -S -A /S \DIR1 + \DIR2 + FILE1
+
+             All files in the directories DIR1 and DIR2 and the file
+        FILE1 are marked as not system files and as archived.
+

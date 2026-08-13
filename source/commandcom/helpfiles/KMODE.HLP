@@ -1,0 +1,56 @@
+KMODE                                                   [Compatible]
+-----
+
+Format:      KMODE number|OFF
+                or
+             KMODE [number|OFF] /S [d:]
+
+Purpose:     Sets  or resets  'Kanji Screen  Mode', or  updates boot
+        code so that it automatically installs Kanji Driver and then
+        selects screen mode.
+
+Use:         Number specifies the  'Kanji Screen Mode'.  The  number
+        ranges  from  0  to  3 and has the same meaning as its BASIC
+        counterpart  'CALL  KANJI<n>'  statement.   Specifying   OFF
+        restores  screen  mode  to  ANK  (MSX  native screen modes).
+        Unless Kanji Driver is installed (by  typing  CALL  KANJI<n>
+        statement  from  BASIC  or  automatically  by 'Kanji Boot'),
+        screen modes will not change.
+
+             If the /S option is specified then the boot code of the
+        default or specified drive is updated. In this case, if mode
+        is  not specified then current screen mode is used. When the
+        disk is  updated in  this way,  the boot code will always be
+        'Kanji  Boot' and  the disk  will no  longer be able to boot
+        MSX-DOS 1.
+
+             To  help prevent accidental updates of boot disks  from
+        other systems, a prompt is issued before updating a disk.
+
+             Note that  KMODE  is  a  transient  command,  and  must
+        therefore be loaded off disk.
+
+Examples:
+
+        KMODE 3
+
+             'Kanji screen mode' will be set to 3 if  'Kanji driver'
+        is installed.
+
+        KMODE OFF
+
+             Screen mode is set back to native MSX text screen.
+
+        KMODE /S B:
+        Disk in drive B: will only be able to boot MSX-DOS 2
+        Press any key to continue...
+
+             Drive B: will be updated to 'Kanji Boot'.  Since 'Kanji
+        Boot'  will not boot anything from disk,  a prompt is issued
+        before the disk is actually updated.
+
+             Booting from  this disk  will automatically install the
+        Kanji  Driver and then set screen mode, in this case, to ANK
+        (i.e. screen mode will not alter).
+
+

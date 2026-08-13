@@ -1,0 +1,61 @@
+RAMDISK                                                 [Compatible]
+-------
+
+Format:      RAMDISK [number[K]] [/D]
+
+Purpose:     Displays or sets the RAM disk size.
+
+Use:         If  no parameters are given,  then the current  RAMDISK
+        size is displayed as the number of kilobytes.
+
+             The  number,  if given,  specifies the maximum size for
+        the new RAM disk, and is specified in kilobytes. This figure
+        will be rounded up to the nearest multiple of 16K since  the
+        RAM  disk  is always a multiple of 16K.  A RAM disk  smaller
+        then  the specified maximum size may be created if there  is
+        not  enough free memory for the full size,  although a  'not
+        enough memory' error will be given if there is no memory  at
+        all  available  for  the  RAM disk.  Note  that  the  number
+        specified  is the maximum amount of RAM to use for  the  RAM
+        disk,  which  is not the same as the maximum amount of  free
+        space  available  on  the newly-created RAM disk  since  the
+        system needs to use some.
+
+             If  a  RAM  disk already exists before  a  new  one  is
+        created, then a 'Destroy all data on RAM disk (Y/N)?' prompt
+        is printed to avoid accidental loss of data. /D can be given
+        which will automatically delete any existing RAM disk first,
+        thus suppressing the prompt.
+
+             Having  created a RAM disk,  it can be referred  to  as
+        drive H:.
+
+             The  RAMDISK  command  is  normally  only  used  in  an
+        AUTOEXEC.BAT  batch file,  with a large number specified  so
+        that  as large a RAMDISK as possible is created.  It is  not
+        advisable to keep any data on a RAM disk except for a  short
+        length of time that is not also kept on a floppy disk, since
+        it will be lost if,  for example,  the power to the computer
+        fails.
+
+Examples:
+
+        RAMDISK
+        Ramdisk is 160K
+
+             No  parameters  were  given,  so the  current  size  is
+        printed, in this case 160K.
+
+        RAMDISK
+        *** RAM disk does not exist
+
+             No  parameters  were  given but no RAM  disk  has  been
+        created, so the error is given.
+
+        RAMDISK = 300
+        Destroy all data on RAM disk (Y/N)? y
+
+             A RAM disk already existed,  so the prompt was printed.
+        In this case,  the reply was 'y' so the current RAM disk was
+        deleted and the new one set up with a maximum size of 300K.
+

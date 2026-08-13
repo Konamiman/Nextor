@@ -1,0 +1,37 @@
+DSKCHK                                                         [New]
+------
+
+Format:      DSKCHK [ON | OFF]
+
+Purpose:     Displays/sets the current disk check state.
+
+Use:         If  no  parameters  are given,  then the  current check
+        state is displayed on the screen.
+
+             If  ON or OFF is given, then the check state is changed
+        appropriately.
+
+             The  disk check  state controls whether the system will
+        re-check the  boot sector  of a  disk to  see whether it has
+        changed,  each time  a file is accessed. If it is ON then it
+        will be  impossible to accidentally access the wrong disk by
+        changing  a disk  in the  middle of  an operation, otherwise
+        this will  be possible  and may  result in a corrupted disk.
+        Depending  on the  type of disk interface, there may be some
+        additional overhead  in having this feature enabled although
+        with  many types  of disk  (those with  explicit disk change
+        detection hardware) it will make no difference and the addi-
+        tional security is well worth having.
+
+Examples:
+
+        DSKCHK
+        DiskCheck is ON
+
+             No parameters were given, so the current check state is
+        printed, which in this case is on (the default state).
+
+        DSKCHK OFF
+
+             The disk check state is turned off.
+

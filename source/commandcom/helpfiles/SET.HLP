@@ -1,0 +1,69 @@
+SET                                                       [Enhanced]
+---
+
+Format:      SET [/P] [name] [separator] [value]
+
+Purpose:     Displays/sets environment items.
+
+Use:         If no parameters are given,  then all currently defined
+        environment  items  and their current values are  displayed.
+        Initially  there are several items set up to default  values
+        (see HELP ENV on Environment Items).
+
+             The /P option can be given to cause the output to pause
+        at the bottom of the screen until a key is pressed.
+
+             If  just  a name is given as the  parameter,  then  the
+        current value of the specified environment item is printed.
+
+             If the name is followed by a non-space separator,  then
+        the  separator  is  ignored  and  the name  is  set  to  the
+        following value. If the value is blank (i.e. not given) then
+        the environment item is deleted from the environment space.
+
+             The  area of memory used for environment items is  also
+        used  for disk buffers.  Thus if a 'not enough memory' error
+        occurs  when  using the SET command,  then it  may  help  to
+        reduce the number of disk buffers (see the BUFFERS command).
+
+             HELP  ENV  gives  more information  about   environment
+        items and the items and values that are set up by default.
+
+Examples:
+
+        SET
+        EXPAND = ON
+        SEPAR = ON
+        ALIAS = ON
+        REDIR = ON
+        LOWER = ON
+        UPPER = OFF
+        ECHO = OFF
+        EXPERT = ON
+        PROMPT = %_CWD%>
+        CDPATH = ;
+        PATH = ;
+        TIME = 24
+        DATE = yy-mm-dd
+        TEMP = A:\
+        HELP = A:\HELP
+        SHELL = A:\COMMAND2.COM
+
+             No parameters were given,  so all the  currently
+        set  environment  items were printed,  in  this  case
+        typical default values.
+
+        SET FRED=WOMBAT
+
+             An item called FRED is set to the value WOMBAT.
+
+        SET FRED
+        WOMBAT
+
+             The current value of FRED is printed.
+
+        SET FRED=
+
+             The  item  FRED  is set to a  null  value,  thus
+        removing it from the environment item list.
+

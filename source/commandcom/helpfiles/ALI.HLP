@@ -1,0 +1,197 @@
+ALIASES AND EXECUTABLE EXTENSIONS
+---------------------------------
+
+ALIASES
+
+             COMMAND2.COM  provides a facility called aliasing as is
+        described  hereafter.  However,  an  environment item  ALIAS
+        exists which  can be set to OFF (by using SET ALIAS OFF com-
+        mand) to cause COMMAND2.COM bypass aliasing. The command SET
+        ALIAS ON will restore the normal state.
+
+             MSX-DOS maintains  a list  of 'aliases'.  An alias is a
+        named  command that has a value associated with it. Whenever
+        the command  is entered  on the command line, it will be re-
+        placed by the value associated with that command.
+
+             An alias  can have any name chosen by the user, and can
+        consist  of any  character except for a space character.
+
+             The value  of an  alias is simply a string of arbitrary
+        characters. No processing is performed on the characters and
+        so  the casing  of characters  is preserved.  Any alias that
+        does not exist has a null value (i.e. no characters).
+
+             An alias can be changed or set up by the ALIAS command,
+        which can also display currently set aliases.
+
+             When   the  alias  value  contains  special  processing
+        characters (such  as %  @ <  > |  ^ '  "), the value must be
+        enclosed  in either  single (')  or double (") quote charac-
+        ters.
+
+             Any parameters  passed to an alias command are ignored.
+        When  a parameters  needs to be passed, the alias value must
+        contain a  %n. Whenever  a %n  is encounterd, it will be re-
+        placed by the nth parameter.
+
+Examples:
+
+        ALIAS D = DIR
+
+             An alias called D is set to the value DIR.
+
+        D
+
+             A command D is entered on the command line. Since there
+        is  an alias called D, the command D will be expanded to DIR
+        and the DIR command will be executed.
+
+        D *.COM
+
+             All parameters specified after an alias are ignored, so
+        the command D *.COM has the same effect as D.
+
+        ALIAS D = "DIR %1"
+        D *.COM
+
+             The D  command will be executed properly, since it will
+        be  expanded to  DIR *.COM.  The %1 is replaced by the first
+        parameter given after the alias name.
+
+        ALIAS DH = DIR H:%&
+        DH *.COM
+
+             This DH command will be expanded to DIR H:*.COM. The %&
+        is  replaced  by all  the parameters  given after  the alias
+        name, starting with the first parameter.
+
+        ALIAS DH = DIR H:%2&
+        DH *.COM *.BAT
+
+             This will  be expanded  to DIR  H:*.BAT. The %2& is re-
+        placed  by all  the parameters  given after  the alias name,
+        starting with the second parameter.
+
+        ALIAS DAL = DEL *.* ^ BEEP
+
+             An  alias called  DAL is set to the value DEL *.*. Sub-
+        sequently the BEEP command is executed.
+
+        ALIAS DAL = 'DEL *.* ^ BEEP'
+
+             An alias called DAL is set to the value DEL *.* ^ BEEP.
+
+        DAL
+
+             This command  will be expanded to DEL *.* ^ BEEP. First
+        it  will delete all files (after prompting for comfirmation)
+        and then it will beep.
+
+        ALIAS C = "COPY %&"
+        ALIAS CAL = 'C *.*'
+
+             The CAL  command will  be expanded  to C *.* which will
+        subsequently be expanded to COPY *.*.
+
+             Great  care  must  be  taken  when  using  the  kind of
+        recursive aliasing.
+
+        ALIAS A = B
+        ALIAS B = A
+
+             The A  command will  be expanded  to B, which will sub-
+        sequently  be  expanded  to  A,  which will  subsequently be
+        expanded to  B, etc. This alias loop can be broken by press-
+        ing CTRL-STOP.
+
+        ALIAS DIR = "DIR %& /W"
+
+             When  entering  the  DIR  command,  it  will always  be
+        executed as  a DIR /W command. To prevent the command inter-
+        preter  from interpreting a command as an alias, the command
+        must be preceded by a '@'.
+
+        DIR
+
+             This command will be expanded to DIR /W.
+
+        @DIR
+
+             This  command  will  not  be  interpreted as  an alias.
+        Instead, it will be executed as entered.
+
+
+EXECUTABLE EXTENSIONS
+
+             There  are also  some special aliases that will respond
+        to a  filename rather  than a  command. The  name of such an
+        alias  must be  preceded by a period, and have the same name
+        as the  extension of the file it refers to. The value can be
+        the  name of  an internal  or external  command, or  a batch
+        file.
+
+             .COM,  .BAT and .BTM are standard executable extension.
+        These  extension  cannot be  overridden by  creating an  new
+        executable extension that has the same name.
+
+             Unlike normal  aliases, any  parameters specified after
+        an  executable filename,  including the filename itself, are
+        automatically added to the alias value.
+
+             When the  specified file  is not  found in  the current
+        directory,  then  the  directories  specified  by  the  PATH
+        environment  variable are  searched. If the file is found in
+        one  of  these directories,  then the  complete pathname  is
+        added to the alias value.
+
+Examples:
+
+        ALIAS .TXT = A:\TED\TED
+
+             An  executable extension called TXT is set to the value
+        of A:\TED\TED.
+
+        INFO.TXT
+
+             A  file called  INFO.TXT is about to be executed. Since
+        the extension is an executable extension, the command:
+
+        A:\TED\TED INFO.TXT
+
+        will be executed.
+
+             When  the  file INFO.TXT  is not  found in  the current
+        directory, then  the directories  specified by the PATH com-
+        mand  are searched.  If the  file is  found in  one of these
+        directories, then the full path is added. For example:
+
+        A:\TED\TED B:\TEXTS\INFO\INFO.TXT
+
+             When no  extension is  given, then the first file found
+        that  has an executable extension, is executed. For example,
+        there  are  three  files  in  the  current directory  called
+        INFO.TXT, INFO.COM and INFO.BAT.
+
+        INFO
+
+             The  first file  found is  INFO.TXT. Since  this is  an
+        executable extension, the command:
+
+        A:\TED\TED INFO.TXT
+
+        will be executed. To execute the file INFO.COM, use:
+
+        INFO.COM
+
+        ALIAS .TXT =
+
+             The executable extension called TXT is removed from the
+        alias list.
+
+        INFO
+
+             The  first  file found  is INFO.COM.  Since this  is an
+        executable  extension  by  default,  the  file  INFO.COM  is
+        executed.
+

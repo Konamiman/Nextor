@@ -1,0 +1,55 @@
+FIXDISK                                                 [Compatible]
+-------
+
+Format:      FIXDISK [d:] [/S]
+
+Purpose:     Updates a disk to the full MSX-DOS 2 format.
+
+Use:         The  default or specified drive specifies the drive  on
+        which FIXDISK is to operate.
+
+             This  command is mainly used to update MSX-DOS 1  disks
+        to full MSX-DOS 2 compatibility,  but may also be useful for
+        updating other disks of a similar format.
+
+             Although  the disk format used by MSX-DOS 1 and MSX-DOS
+        2  is standardized,  MSX-DOS 1 does not use the  information
+        stored on certain parts of the disk (the boot sector) and so
+        this  information  is not necessarily correct on  MSX-DOS  1
+        disks.  This can cause problems when MSX-DOS 2 is used  with
+        these disks.  Additionally, the MSX-DOS 2 UNDEL command will
+        only  work  with disks that were formatted using  MSX-DOS  2
+        (i.e. disks  that have a 'volume id' in the boot sector) and
+        so will not work with MSX-DOS 1 disks or disks formatted  on
+        other  systems.
+
+             The FIXDISK command will correct the information on the
+        boot sector so that these disks can be used with MSX-DOS 2.
+
+             If /S option is also given, FIXDISK will update a  disk
+        so that  it is  fully MSX-DOS 2 compatible, and its use will
+        allow  full use  of MSX-DOS 2 disk features. When a disk has
+        been updated in this way, however, it may no longer be fully
+        compatible with the original system,  although it will still
+        be  readable and writeable under that system.  For  example,
+        if  a  FIXDISK command is used on an application disk  which
+        directly starts up from the boot code, then that  disk  will
+        no longer be able to boot that application.
+
+             To  help prevent accidental updates of boot disks  from
+        other systems, a prompt is issued before updating a disk.
+
+             Note  that  FIXDISK is a transient  command,  and  must
+        therefore be loaded off disk.
+
+Examples:
+
+        FIXDISK B: /S
+        Disk in drive B: will only be able to boot MSX-DOS
+        Press any key to continue...
+
+             Drive  B:  will  be  updated  to  be  fully  MSX-DOS  2
+        compatible.  Since  the disk may have been a boot disk  from
+        another  system,  a  prompt  is issued before  the  disk  is
+        actually updated.
+

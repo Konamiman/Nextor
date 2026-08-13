@@ -1,0 +1,58 @@
+TIME                                                    [Compatible]
+----
+
+Format:      TIME [time]
+
+Purpose:     Displays or sets the current time.
+
+Use:         If  the time is given after the command,  then the time
+        is set to this value (for the format see below). If the time
+        is  not given after the command,  then the current  time  is
+        printed  and the new time is prompted for and input.  If  no
+        input  is  given (i.e. if the 'enter' key alone is  pressed)
+        then the current time is not altered. Otherwise the input is
+        assumed  to be a new time,  and is interpreted as  described
+        below.  If  the  time is invalid then an  error  message  is
+        displayed and the new time again prompted for and input.
+
+             The  time is expected to consist of up to four numbers,
+        separated by one of the following characters:
+
+             space tab , - . / :
+
+        with  spaces  allowed  either side  of  the  character.  Any
+        missing  numbers will default to the  current  setting.  The
+        first  number is the hour,  the second is the  minutes,  the
+        third is the seconds and the forth is the centi-seconds. The
+        centi-seconds  are not printed however since it is not  very
+        useful to know the current value,  or indeed to enter a  new
+        one.
+
+             The format in which the time is printed is flexible and 
+        can  be  changed.  An  environment  item  (see  HELP  ENV on 
+        Environment Items)  called TIME  is set up by default to the 
+        value '24', which indicates that the time will be printed in 
+        24 hour mode. The command SET TIME 12 will cause the time to 
+        be printed in 12 hour format with a following 'a' or 'p' for 
+        am  and pm.  The time  can be  input unambiguously in either 
+        format. The  time format  also affects  the times printed by 
+        the DIR command.
+
+Examples:
+
+        TIME 16:45
+
+             The current time is set to 4:45 pm.
+
+        TIME
+        Current time is 10:45:58a
+        Enter new time:
+
+             No  parameters  were  given,  so the  current  time  is
+        printed   (in this case in 12 hour mode) and  the  new  time
+        prompted for.
+
+        TIME 10-50-30-23
+
+             The time is set to 30.23 seconds after 10:50 am.
+

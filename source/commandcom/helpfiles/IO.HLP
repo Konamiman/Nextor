@@ -1,0 +1,119 @@
+REDIRECTION AND PIPING
+----------------------
+
+             COMMAND2.COM provides facilities called redirection and
+        piping  as is described hereafter.  However,  an environment
+        item  REDIR  exists which can be set to OFF  (by  using  SET
+        REDIR   OFF  command)  to  cause  COMMAND2.COM  bypass   any
+        interpretation  of  redirection  or  piping  symbols.   When
+        command  line  is executed in this way,  these  symbols  are
+        passed to the command as it is typed.  The command SET REDIR
+        ON will restore the normal state.
+
+REDIRECTION
+
+             Most  commands,  CP/M  programs  and  MSX-DOS  programs
+        output  text  to  the screen by  writing  to  the  'standard
+        output',  and  read  from the keyboard by reading  from  the
+        'standard input'. COMMAND2.COM, however, provides facilities
+        for  changing the standard input and standard output for the
+        duration of the command to refer to other MSX-DOS devices or
+        to files on disk by including one or more of the redirection
+        symbols  <,  >  and >> on the command line,  followed  by  a
+        filename.
+
+             For  example,  the ECHO command normally  just  outputs
+        its  parameters to  the screen  by writing the characters to
+        the standard output. It can be made to output to the printer
+        instead by redirecting its output, as follows:
+
+                  ECHO text >PRN
+
+        which changes the standard output to refer to the device PRN
+        for  the  duration  of  the  ECHO  command.  Similarly,  the
+        command:
+
+                  ECHO text >filespec
+
+        will cause the specified file to be created,  and the output
+        of  the  ECHO  command written to the file.  To  append  the
+        output of a command to the end of an existing file,  the  >>
+        symbol  can  be used instead of the > symbol,  and the  file
+        will only be created if it does not already exist.
+
+             To change the standard input, the < symbol is used in a
+        similar manner to the > symbol.  In this case, the file must
+        already  exist,  and  must contain adequate  input  for  the
+        command.  If  the command attempts to read input beyond  the
+        end  of  the file,  then it will be aborted since it  cannot
+        continue.
+
+             When  redirection information is given on  the  command
+        line,  it  is used by COMMAND2.COM to set up the redirection
+        and then removed from the command line. Thus in the examples
+        above,  the  ECHO  command  will not  echo  the  redirection
+        symbols or the filename.
+
+             If  the input or output of a batch file is  redirected,
+        then that redirection is applied to all commands within  the
+        batch  file.  Individual commands within the batch file  may
+        still be redirected,  however, which will override the batch
+        file  redirection.  See HELP BATCH on Batch Files  for  more
+        information on commands in batch files.
+
+PIPING
+
+             As  well  as  redirecting  the  input and  output of  a
+        command  or program  to another device or a disk file, it is
+        possible to  redirect or  'pipe' the  standard output of one
+        command  into the  standard input  of another. Typically the
+        second  command  will  be  a  program  which reads  from its
+        standard  input,  modifies the  data, and  writes it  to its
+        standard output.  Such a  program is  called a 'filter'. For
+        example, a filter could be produced which read data from its
+        standard input, sorted it into alphabetical order, and wrote
+        it  to  its  standard  output.  Thus the  output of  the DIR
+        command could be sorted.
+
+             Piping is  indicated on  the command line by separating
+        the two commands by the | symbol. The command to the left of
+        the | symbol will be performed first, and its output will be
+        redirected to a temporary file created by COMMAND2.COM. Then
+        the  second  command  will be  performed, with  its standard
+        input  redirected  from  the same  temporary file.  When the
+        second command ends, the temporary file will be deleted. The
+        standard  output of  the second  command may  of course have
+        been piped  into the  standard input of a third command, and
+        so on.
+
+             If  any  input  redirection occurs on  a  command  line
+        involving  a  pipe,  then the redirection is applied to  the
+        first command in the pipe, as all the other commands receive
+        their  standard  input  from  the  standard  output  of  the
+        previous  command  in the pipe.  Similarly,  if  any  output
+        redirection occurs on a command line involving a pipe,  then
+        the  redirection  will  apply to the  last  command  on  the
+        command line.
+
+             It  is not possible to use pipes on either the input or
+        the output of batch files directly. It is, however, possible
+        to use piping with batch files if they are executed with the
+        COMMAND2  command (see HELP COMMAND2) since it is  then  the
+        COMMAND2 command that is being redirected and not the  batch
+        file.
+
+             As mentioned above,  in order to pipe the output of one
+        command into the input of another,  temporary files will  be
+        created  and deleted by COMMAND2.COM.  The location of these
+        temporary  files is specified by the TEMP  environment  item
+        (see  HELP ENV  on  Environment  Items),  and  this  may  be
+        changed  to  refer to any drive and directory  (for  example
+        piping  will be speeded up considerably if TEMP refers to  a
+        directory  on a RAM disk).  By default,  TEMP refers to  the
+        root  directory of the boot disk.  The filename used for the
+        temporary  file is created by COMMAND2.COM,  so TEMP  should
+        specify just the drive and directory. The filename is of the
+        form %PIPExxx.$$$  where  xxx is a three digit number chosen
+        by COMMAND2.COM to avoid clashes with any other files in the
+        TEMP directory.
+

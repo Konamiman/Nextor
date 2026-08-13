@@ -1,0 +1,157 @@
+IF                                                        [Enhanced]
+--
+
+Format:      IF [NOT] EXIST [d:][path]filename [THEN] command
+                  or
+             IF [NOT] expr.1 ==|EQ|LT|GT expr.2 [AND|OR|XOR [NOT]
+               expr.3 ==|EQ|LT|GT expr.4 [AND|OR|XOR ...]] [THEN]
+               command
+
+Purpose:     Executes the specified command if the given equation is
+        true.
+
+Use:         If NOT is given, then the command will be executed only
+        if  the equation  is false,  otherwise the  command will  be
+        executed if the equation is true.
+
+             If  EXIST if given, then the specified filename will be
+        searched, and  the command  will be executed if the filename
+        is  found in  the specified  drive and path. If NOT was also
+        given, then the command will be executed if the filename was
+        not found.
+
+             If no EXIST is given, then the command will be executed
+        if expression1 equals expression2.
+
+             Instead  of  equals,  the  following  equations  can be
+        given:
+
+        a == b     : true if a equals b              (a =  b)
+        a eq b     : true if a equals b              (a =  b)
+        a lt b     : true if a is less than b        (a <  b)
+        a gt b     : true if a is greater than b     (a >  b)
+        not a == b : true if a does not equal b      (a <> b)
+        not a eq b : true if a does not equal b      (a <> b)
+        not a lt b : true if a is not less than b    (a >= b)
+        not a gt b : true if a is not greater than b (a <= b)
+
+             Note  that  both  expressions  are  compared  as  being
+        strings.  Therefore "2"  if less  than "12", since the first
+        character of  each expression  is compared first, and "2" is
+        less  than "1".  To prevent  this, use the internal variable
+        function @HEX  to convert  both values  to a  4 digit  hexa-
+        decimal  value, which  can then  be compared normally, since
+        "0002" is less than "000C". Both values are considered to be
+        16-bit values and may thus not exceed 65,535.
+
+             Any subsequent  equation can  be combined with the pre-
+        ceding  using the  AND, OR  or XOR operation. When more than
+        two equations  are combined  then the  last two will be pro-
+        cessed  first. The  result of this will be combined with the
+        preceding equation.
+
+             When an expression contains spaces the complete expres-
+        sion needs to be placed between brackets ('{' and '}').
+
+             THEN  is optional,  and is only provided for reasons of
+        compatibility.
+
+             The  command may  be any  internal or external command,
+        batchfile or alias.
+
+
+Examples:
+
+        IF EXIST A:\COMMAND2.COM ECHO COMMAND2.COM was found!
+
+             If there  is a  file called COMMAND2.COM in the root of
+        drive  A:, then  the text  "COMMAND2.COM was found!" will be
+        displayed.
+
+        IF NOT EXIST H:\COMMAND2.COM COPY A:\COMMAND2.COM H:\
+
+             If  COMMAND2.COM does not exist in the root of drive H:
+        then it  will be  copied from  the root of drive A: to drive
+        H:.
+
+        IF 2 LT 12 THEN BEEP
+
+             If "2" is less than "12", compared as strings, then the
+        BEEP  command is executed. Since "2" is never less than "12"
+        (since the  first character of "2" if greater than the first
+        character of "12"), the BEEP command is never executed.
+
+        IF %@HEX[2]% LT %@HEX[12]% THEN BEEP
+
+             If  "2"  is  less  than "12",  compared as  hexadecimal
+        values,  then  the BEEP  command is  executed. Since  "2" is
+        always less than "12", the BEEP command is always executed.
+
+        IF NOT %@FILEDATE[MYFILE.DAT]% EQ %_DATE% DEL MYFILE.DAT
+
+             If the  date of  file "MYFILE.DAT"  does not  equal the
+        current date, then the file is deleted.
+
+             The following  example should  be entered  on a  single
+        line:
+
+        IF NOT %@FILEDATE[MYFILE.DAT]% EQ %_DATE% AND NOT
+        %@FILETIME[MYFILE.DAT]% LT %_TIME% DEL MYFILE.DAT
+
+             If the  date of  file "MYFILE.DAT"  does not  equal the
+        current date  and the  time of file "MYFILE.DAT" is not less
+        than the current time, then the file is deleted.
+
+        IF 1 == 1 AND 2 == 2 OR 3 == 4 command
+
+             First,  the last two equations are processed, so 2 == 2
+        OR 3  == 4  is "true", since one of the equations is "true".
+        The result of this is combined with the first equation, so 1
+        ==  1 AND "true" is "true", since both equations are "true".
+        The command will thus be executed.
+
+        IF 1 == 1 OR 2 == 2 AND 3 == 4 command
+
+             The result  of the  last two  equations yields "false".
+        Combined  with the  first equations  the result is "true" so
+        the command is executed.
+
+        IF (1 == 1 OR 2 == 3) AND (3 == 4 OR 4 == 5) command
+
+             The  parentheses in the example above are only meant to
+        show in  which order the equations should be processed, they
+        are not accepted by the IF command to determine the order of
+        processing.
+
+             The result  of the  example above  is "false". However,
+        the IF command processes the equation as follows:
+
+        IF (1 == 1 OR (2 == 3 AND (3 == 4 OR 4 == 5))) command
+
+        so the result is "true", which is not what was expected.
+
+             The  following example  can be used to get the expected
+        result.
+
+        SET EX1 = 0
+        SET EX2 = 0
+        IF 1 == 1 OR 2 == 3 SET EX1 = 1
+        IF 3 == 4 OR 4 == 5 SET EX1 = 1
+        IF %EX1% == 1 AND %EX2% == 1 command
+        SET EX1 =
+        SET EX2 =
+
+             First, two  environment items  name EX1 and EX2 are set
+        to  the  value  "0". Then  the two  equations are  processed
+        separately. The first equations is "true" so the environment
+        item  EX1 is  set to  the value  "1". The second equation is
+        "false" so the environment item EX2 remains "0".
+
+             Next,  the two  values of the environment items EX1 and
+        EX2 are compared with "1". The first equation is "true", the
+        second is  "false", so  the total  result is "false" and the
+        command will not be executed, which is what was expected.
+
+             Finally, the two environment items are removed from the
+        list by giving them a null value.
+

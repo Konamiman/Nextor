@@ -1,0 +1,48 @@
+END                                                            [New]
+---
+
+Format:      END
+
+Purpose:     Ends a batch file.
+
+Use:         When the  end of a batch file is reached, it returns to
+        the  command interpreter.  However, the  END command  can be
+        used anywhere  in the  batch file  to return  to the command
+        interpreter prematurely.
+
+             An  *** Unrecognized  command error  occurs when END is
+        executed from the command line or from a .BAT file.
+
+             See also HELP GOSUB and HELP RETURN.
+
+Examples:
+
+             The  following  example should  be executed  as a  .BTM
+        file.
+
+        ECHO This is the first line
+        GOSUB ~label1
+        ECHO This is the third line
+        END
+        ~label2
+        ECHO This is the second line
+        RETURN
+        ~label1
+        GOSUB ~label2
+        RETURN
+
+        This is the first line
+        This is the second line
+        This is the third line
+
+             First the  text "This  is the  first line" is echoed to
+        the  screen. Then  the batch  file continues  with the  sub-
+        routine following  the label  "~label1", which  calls a sub-
+        routine  following the label "~label2", so the text "This is
+        the second  line" is  echoed to  the screen. Then the second
+        sub-routine  returns to the line following the GOSUB command
+        that  invoked  the  sub-routine,  and the  first sub-routine
+        returns to  its invoking GOSUB command, so the text "This is
+        the third line" is echoed to the screen. Then the batch file
+        ends, and returns to the command interpreter.
+

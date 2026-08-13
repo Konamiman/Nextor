@@ -1,0 +1,34 @@
+ASSIGN                                                  [Compatible]
+------
+
+Format:      ASSIGN [d: [d:]]
+
+Purpose:     Sets up the logical to physical translation of drives.
+
+Use:         If  no  drives  are  given,   then  all  current  drive
+        assignments are cancelled.
+
+             If only one drive is given,  then the physical drive to
+        which this refers is printed.
+
+             If both drives are given,  then the first drive is  the
+        drive  which MSX-DOS currently uses,  and the second is  the
+        drive which MSX-DOS will subsequently use.
+
+Examples:
+
+        ASSIGN
+
+             Un-assigns all previous drive assignments.
+
+        ASSIGN A: B:
+
+             Assigns drive A: to drive B:, so that all accesses that
+        previously would go to drive A: go instead to drive B:
+
+        ASSIGN A:
+        A:=B:
+
+             Displays  the drive to which A:  is currently assigned,
+        which in this case is B:.
+

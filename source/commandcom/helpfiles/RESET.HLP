@@ -1,0 +1,16 @@
+RESET                                                          [New]
+-----
+
+Format:      RESET
+
+Purpose:     Resets the system.
+
+Use:         Simply resets the MSX system.
+
+Examples:
+
+        RESET
+
+             The system is reset and MSX-DOS will be restarted (when
+        available).
+

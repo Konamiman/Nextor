@@ -1,0 +1,52 @@
+ATDIR                                                   [Compatible]
+-----
+
+Format:      ATDIR +|-H [/H] [/P] compound-filespec
+
+Purpose:     Changes  the  attributes  of directories to  make  them
+        hidden/not hidden.
+
+Use:         The  compound-filespec specifies the directories  whose
+        attributes are to be changed.
+
+             If  +H  is given,  then the  selected  directories  are
+        marked  as  hidden,  and  will  not  be  affected  by  other
+        directory  commands  or shown by a DIR command unless  a  /H
+        option is given with those commands. The -H option marks the
+        selected  directories as not hidden,  and will not have  any
+        effect  unless  the  /H  option  is  given.  The  files  and
+        directories   within  the  specified  directories  are   not
+        affected.
+
+             Unlike  files,  directories cannot  be made  read only,
+        system directory or archived.
+
+             When  an error occurs,  the erroneous directory name is
+        printed followed by an error message,  and the command  will
+        continue with the next directory. If many errors occur, then
+        the  /P  option can be used to cause the output to pause  at
+        the end of the screen.
+
+             The  DIR /H command can be used to indicate the current
+        attributes of directories.
+
+Examples:
+
+        ATDIR +H DIR1
+
+             Marks the directory called DIR1 as hidden.
+
+        ATDIR -H DIR1/H
+
+             Marks the hidden directory DIR1 as not hidden.
+
+        ATDIR +H DIR?
+
+             Marks  all  directories matching DIR?  as  hidden  (for
+        example DIR1, DIR2 and DIR3).
+
+        ATDIR +H \DIR1+\DIR2
+
+             Marks  the  DIR1 directory and the  DIR2  directory  as
+        hidden.
+

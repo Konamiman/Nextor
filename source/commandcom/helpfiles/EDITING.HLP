@@ -1,0 +1,143 @@
+EDITING COMMAND LINES
+---------------------
+
+             When  typing  in a command line to  MSX-DOS,  a  simple
+        editing facility is available for correction of mistakes  or
+        the re-entering and editing of previous commands.
+
+             There are  two types  of editing  facilities: the  ones
+        provided  by MSX-DOS  and the  ones provided  by the command
+        interpreter. The  next paragraphs  describe both  types. The
+        paragraphs  preceded  by  a '*'  only apply  to the  command
+        interpreter editing facilities.
+
+             An  environment item  called EXPAND exists which can be
+        set to  OFF (by  using the  SET EXPAND OFF command) to cause
+        COMMAND2.COM to use the standard MSX-DOS editing facilities.
+        The command SET EXPAND ON will restore the normal state.
+
+             Typing  ordinary  characters at the keyboard cause  the
+        characters  to  appear on the screen as would  be  expected.
+        Typing most control characters cause them to be  represented
+        by  a '^' symbol followed by the control letter.  Exceptions
+        are carriage return (CTRL-M), line feed (CTRL-J), tab (CTRL-
+        I),  CTRL-C,  CTRL-N,  CTRL-P,  CTRL-S.  These  perform  the
+        following functions:
+
+             CTRL-C    - this acts as a 'break' key.  A more drastic
+                         and preferred 'break' key is CTRL-STOP.
+
+             CTRL-N    - this  turns  the printer  off  after  being
+                         turned on by CTRL-P.
+             CTRL-P    - this  turns the printer on.  When  on,  all
+                         characters  printed on the screen are  also
+                         printed on the printer.
+
+             CTRL-S    - this  suspends all character  output  until
+                         another key is pressed.
+
+*            Control characters  other than the above are not repre-
+        sented  by a  '^' symbol  and a control letter. Instead they
+        are ignored.  The '^' character is used as a command separa-
+        tor. Any command following the '^' character will be execut-
+        ed as if it were entered on a separate line.
+
+             The  line is entered when the 'enter' (carriage return)
+        key is pressed.
+
+             Some  other control characters have the same effect  as
+        the  special  editing  keys  described  hereafter,  as  they
+        generate the same key code (e.g. backspace key is equivalent
+        to CTRL-H).
+
+             At  any  point  whilst typing in a  command  line,  the
+        backspace  key (marked BS on most MSX machines) can be  used
+        to  delete  the  character immediately to the  left  of  the
+        cursor in the normal way.
+
+             The  cursor  left and right keys will move  the  cursor
+        left  and right along the line.  Typing a character at  this
+        point will overwrite the character currently underneath  the
+        cursor.
+
+*            Using  the cursor  left and right keys when holding the
+        CTRL-key will  move the  cursor to  the start  or end of the
+        line.
+
+*            Using  the cursor  left and right keys when holding the
+        SHIFT-key  will  move  the  cursor to  the beginning  of the
+        previous or next word on the line.
+
+             Pressing  the  insert  key  (marked  INS  on  most  MSX
+        machines) will toggle to 'insert mode',  and the cursor will
+        change  to an underline cursor to indicate this.  Instead of
+        the characters being typed overwriting the characters  under
+        the cursor,  they will be inserted before the cursor charac-
+        ter,  the remaining  characters to the end of the line being
+        moved one position to the right.
+
+             The  delete key (marked DEL on most MSX machines)  will
+        delete the character under the cursor and move the remaining
+        characters to the end of the line one position to the left.
+
+             The home key (marked 'HOME' on most MSX machines)  will
+        move the cursor to the start of the line.
+
+*            The  TAB key  will automatically expand file names. All
+        characters  typed from a separator character (space, ^ < > |
+        [  ' or  ") to  the cursor are treated as the beginning of a
+        filename.  It  may therefore  include a  drivename and/or  a
+        pathname. If  the beginning  of the  filename is unambiguous
+        (i.e.  no '*'  or '?'  characters used) then a '*.*' will be
+        added. If an error occurs, then a beep will be heard, other-
+        wise  the first filename that matches the specified filename
+        is printed.  Pressing the TAB key again, will search for the
+        next  matching filename.  Pressing any  other key causes the
+        search to start all over again. This feature is circular. At
+        the end of the list it will restart.
+
+*            With CTRL-TAB the next filename is appended to the cur-
+        rent with a '+' seperator between  both filenames.  Be aware
+        that a drive specification and directory of the first is not
+        added automatically or any filename after that.
+
+             Pressing ESC,  SELECT, CTRL-U  or CTRL-X will clear the
+        line to allow a new one to be entered.
+
+*            CTRL-U has  no effect.  SHIFT-DEL can  be used to clear
+        the line from the cursor position to the end of the line.
+
+             The  command  editor  also keeps  a  list  of  previous
+        commands entered,  up to a limit of 256 characters. Pressing
+        the  cursor  up  key will move up the list and  display  the
+        previous  command line entered,  allowing this  old  command
+        line  to be edited and re-entered.  Pressing the cursor down
+        key  will similarly move to the next old command  line  that
+        was entered.
+
+*            The editor can keep a list of commands up to a limit of
+        1024  characters.  The list  can be  cleared with  CTRL-DEL.
+        CTRL-INS will add the entered line to the bottom of the list
+        and clear the line, without executing it. The command inter-
+        preter  and  MSX-DOS  use  different lists  for storing  the
+        commands.
+
+             If a previous command line is changed,  then it will be
+        used  as the new command line and added to the bottom of the
+        list.  If it was not changed,  then it will not be added  to
+        the  list and the current command line will be the next  one
+        which  was originally entered.  This allows a whole sequence
+        of previous commands to be entered easily.
+
+             The  list of previous commands is in fact circular  and
+        moving off the top or bottom will move to the last or  first
+        command in the list respectively.
+
+             The features described here (except for the ones marked
+        with an  '*') are  in fact  available to  many programs that
+        MSX-DOS can execute. In any program that does 'line inputs',
+        each  line can  be edited as described above. Previous lines
+        can be  recalled for  re-entering and  editing, although the
+        list  of  previous  lines  will  of course  include previous
+        commands.
+

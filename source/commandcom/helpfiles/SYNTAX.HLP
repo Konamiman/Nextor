@@ -1,0 +1,187 @@
+SYNTAX NOTATION
+---------------
+
+             The  HELP command provides a description of the MSX-DOS
+        commands using the following notation:
+
+Words in upper case
+
+             These are keywords and must be entered as shown in  any
+        mixture of upper or lower case.
+
+Items in lower case
+
+             These  are  parameters  which must be supplied  to  the
+        command at this point in the command line.
+
+Items in square brackets ('[' and ']')
+
+             These  are  optional  items.  The  brackets  themselves
+        should not be included in the command line.
+
+Items separated by a vertical bar ('|')
+
+             This indicates that only one of the items is  required.
+        The  vertical  bar  itself  should not be  included  in  the
+        command line.
+
+             The following is a list of items which can appear on  a
+        command line:
+
+d:
+
+             This  indicates that a drive name is required  (A:,  B:
+        etc.).
+
+             If d:  is shown as optional and is not specified,  then
+        the  currently logged-on drive,  as indicated by the command
+        prompt, is assumed.
+
+path
+
+             This indicates that a directory path is  required,  the
+        syntax of which is similar to MS-DOS.  Each directory in the
+        path  is  separated by a backslash '\'.  A backslash at  the
+        start of the path indicates that the path starts at the root
+        directory,   otherwise  the  path  starts  at  the   current
+        directory  as indicated by the CHDIR command.  Frequently  a
+        filename  follows  a  path,  in which case the two  must  be
+        separated by a backslash.
+
+             Two consecutive dots '..' signify the immediate  parent
+        directory  in  the  path.  A single dot  '.'  signifies  the
+        current  directory in the path and therefore usually has  no
+        value in a path specification.
+
+             On  non-English MSX machines,  the backslash  character
+        '\' may be replaced by some other character.  In particular,
+        on Japanese MSX machines the Yen character is used.
+
+             If  a  path is shown as optional and is not  specified,
+        then the current directory as indicated by the CHDIR command
+        is assumed.
+
+             The  syntax of the directory names that make up a  path
+        name follows that for filenames given below.
+
+filename
+
+             This indicates that the name of a file is required, the
+        syntax  of  which  is similar to MS-DOS and  MSX-DOS  1.  An
+        ambiguous  filename  is  one  that  contains  '*'  and   '?'
+        characters and may match more than one file on disk,  whilst
+        one that does not contain these is an unambiguous filename.
+
+             A filename has the following syntax:-
+
+               mainname[.[ext]]
+
+             where mainname  is a sequence of up to 8 characters and
+        suf is a sequence of up to 3 characters inclusive. Any char-
+        acters  beyond these  fields are  ignored. A '*' in the main
+        name or extension is equivalent to filling from that charac-
+        ter position to the end of the field with '?'. If the exten-
+        sion is  given then  it must be separated from the main part
+        of the filename by a single dot '.'.
+
+             The following characters cannot be used in filenames:-
+
+             space : ; . , = + \ < > | / " ' ^ [ ]
+
+             All  characters  are  converted  to  upper  case  where
+        appropriate   and therefore lower and upper case  characters
+        have  the  same meaning.  Note that  extended  two-character
+        Japanese characters are allowed.
+
+             If  a  filename  is  shown  as  optional  and  is   not
+        specified, then a filename of *.* is assumed.
+
+filespec
+
+             This is used to identify a file or several files in the
+        same directory on a disk. It's syntax is:-
+
+                  [d:][path][filename]
+
+        where  at  least  one of the three optional  items  must  be
+        given.  Where this is used to specify existing files, /H may
+        be given to allow hidden files to be found.
+
+             Generally,  d:  if  not given defaults to the currently
+        logged on drive,  path if not given defaults to the  current
+        directory  of that drive and filename if not given  defaults
+        to a filename of *.*.
+
+compound-filespec
+
+             This  is used in many commands to specify the files  or
+        directories to which the command is applied. Its syntax is:-
+
+                  filespec [+ filespec [+ filespec ...]]
+
+             Thus  several  filespecs  (see  above)  can  be  given,
+        separated  by '+' symbols,  with spaces etc. allowed  either
+        side of the +. The effect of this in commands is exactly the
+        same as if all the matched files could have been matched  by
+        a single filespec.
+
+             Where  a compound-filespec is used to specify  existing
+        files,  /H  or  /S  may  be given  after each  filespec (see
+        above), in which case it will take effect only for the files
+        matched  by that  single filespec.  If a  /H or /S are given
+        before the  compound-filespec, then  they will  apply to all
+        the filespecs.
+
+volname
+
+             This indicates that a volume name is required. A volume
+        name is a sequence of up to 11 characters, which can include
+        the characters not valid for filenames with the exception of
+        control  codes  and  '/',  although leading spaces  will  be
+        deleted.
+
+device
+
+             This indicates one of the five standard MSX-DOS devices
+        is required. These and their meaning are:
+
+             CON  - screen/keyboard I/O
+             NUL  - 'null' device, does nothing
+             AUX  - auxiliary I/O (eg. RS232 serial)
+             LST  - printer output
+             PRN  - printer output
+
+             Unlike on some other systems,  a colon is not  required
+        after the device name.
+
+             Device  names can generally be used wherever  filenames
+        can be used.  For example,  the command COPY MYFILE PRN will
+        read the file MYFILE and write it to the printer.
+
+             When  using the CON device as an input filename,  lines
+        can be typed in and edited in the same way as command  lines
+        (see  HELP EDITING on  Editing Command Lines).  To  end  the
+        operation,  control-Z  (^Z) must be typed at the start of  a
+        line.  For example,  a small text file called MYFILE can  be
+        created with the command COPY CON MYFILE.  Lines of text can
+        then  be  typed  in,  and they will be written to  the  file
+        MYFILE.   The  command  will  then  complete  when  a   line
+        containing a single control-Z is entered.
+
+             If  the NUL device is written to,  then the  characters
+        written  are simply ignored.  If read from,  then an end-of-
+        file   condition  is  returned  straight  away   (which   is
+        equivalent to typing the control-Z in the example above).
+
+             For  most  commands,  it is not sensible to  specify  a
+        device  (the  CON  device  cannot be  deleted using  the DEL
+        command, for  example). The commands that devices are likely
+        to  be used  with those that read and write data from and to
+        files, such as CONCAT, COPY and TYPE.
+
+number
+
+             This  indicates that a number is required.  This may be
+        in  the  range  0  to 255 or 0 to  65535  depending  on  the
+        command.
+

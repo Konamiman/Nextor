@@ -1,0 +1,60 @@
+HELP                                                    [Compatible]
+----
+
+Format:      HELP [subject]
+
+Purpose:     Provides on-line help for an MSX-DOS feature.
+
+Use:         If  no  parameter  is given,  then a list  of  standard
+        subjects  on  which  help  is  available  is  printed.  This
+        includes  all  the commands and the major  system  features.
+        Other non-standard help subjects may also be available  with
+        commercial programs.
+
+             If  a  subject  is specified,  then help text  on  this
+        subject  is printed on the screen from a 'help  file'.  This
+        will  pause  at  the  end of every screen  until  a  key  is
+        pressed.
+
+             Help files have a filename of:
+
+                  subject.HLP
+
+        and are located by default on the standard MSX-DOS boot disk
+        in a directory called HELP.
+
+             An environment item called HELP is set up initially  to
+        refer  to  the HELP directory  (see HELP ENV on  Environment
+        Items). This can be changed with the SET command to refer to
+        any other directory or disk if required.
+
+             Any  HELP subject can be added by the user for his  own
+        use  simply by adding the appropriate .HLP file in the  HELP
+        directory.  The  help file will be displayed very much  like
+        the  TYPE command would display it.
+
+Examples:
+
+        HELP
+
+             A  general help screen is printed.  This lists all  the
+        subjects  on  which  help is available,  including  all  the
+        commands and main features of MSX-DOS.
+
+        HELP XCOPY
+
+             Help information on the XCOPY command is printed.  This
+        includes  a description of how to use the command  and  what
+        options are available.
+
+        HELP ME
+        *** File for HELP not found
+
+             This  command  caused  HELP to look for a  file  called
+        ME.HLP from which to get the help text,  but did not find it
+        so printed the error message.  The files containing the help
+        text  are normally found in a directory called \HELP on  the
+        drive  from  which MSX-DOS was booted,  and any  other  help
+        files  may be added if required.  If ME.HLP was  added  then
+        HELP ME would print it on the screen.
+

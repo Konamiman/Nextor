@@ -1,0 +1,40 @@
+UNDEL                                                   [Compatible]
+-----
+
+Format:      UNDEL [filespec]
+
+Purpose:     Recovers a previously deleted file.
+
+Use:         The filespec specifies which files are to be  undeleted
+        if possible, and defaults to *.*.
+
+             Files  can only be undeleted if they have been  deleted
+        using  MSX-DOS 2  on  an  MSX-DOS 2 formatted disk and if no
+        disk  allocation  has  taken  place  since  the   file   was
+        originally deleted, which usually means that they have to be
+        undeleted immediately after they have been deleted.
+
+             Each deleted file and directory reference that is found
+        in the directory specified by the filespec will be undeleted
+        if it's name is matched by the filename in the filespec, and
+        if  undeletion is possible.  UNDEL can therefore be used  to
+        restore  a  directory  removed  with  the  'RD'  or  'RMDIR'
+        commands; to restore the contents of the directory a further
+        UNDEL  command  is  required specifying  the  now  undeleted
+        directory.
+
+             Note  that UNDEL is a transient command,  and therefore
+        must be loaded from disk.
+
+Examples:
+
+        UNDEL B:FRED.MAC
+
+             Attempts  to  undelete  the  file  FRED.MAC  from   the
+        current directory of drive B:.
+
+        UNDEL A:\DIR1
+
+             All  undeletable  files  and directories  in  DIR1  are
+        undeleted.
+

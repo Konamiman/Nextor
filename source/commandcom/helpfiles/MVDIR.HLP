@@ -1,0 +1,53 @@
+MVDIR                                                   [Compatible]
+-----
+
+Format:      MVDIR [/H] [/P] compound-filespec [path]
+
+Purpose:     Moves directories from one place to another on a disk.
+
+Use:         The  compound-filespec specifies which directories  are
+        to be moved, and /H allows hidden directories to be included
+        in the move.
+
+             The second parameter specifies the directory into which
+        the directories are to be moved, the current directory being
+        used if this is not given. The path must exist on each drive
+        referenced by the filespecs in the compound-filepec.
+
+             If  a  particular directory cannot be  moved  into  the
+        specified  or current directory (eg.  if a directory of  the
+        same  name already exists) then the offending directory name
+        is  printed  along  with an  error  message,  and  the  move
+        operation continues with the next directory.  If many errors
+        occur,  then the /P option will cause the output to pause at
+        the bottom of the screen.
+
+             Note  that it  is not possible to move a directory into
+        one of its own descendant directories, as this would produce
+        an invalid  sub-directory tree. An error is given if this is
+        attempted.
+
+Examples:
+
+        MVDIR COM UTIL
+
+             A  directory called COM and all descendant  directories
+        and  files  are moved into a  directory  called  UTIL,  both
+        directories  being  in the current directory of the  current
+        drive.
+
+        MVDIR \COM + \BAT  \UTIL
+
+             A directory called COM and a directory called BAT,  and
+        both their contents, are moved into a directory called UTIL.
+
+        MVDIR E:DIR?/H/P ALL
+        DIR2 -- directory exists
+
+             All directories matching DIR? (eg. DIR1, DIR2 and DIR3)
+        in  the current directory of drive E:,  which may be hidden,
+        and  the  contents of these directories,  are moved  into  a
+        directory  called  ALL.  A  directory  called  DIR2  already
+        existed  in  ALL so the error was printed.  Neither  of  the
+        DIR2 directories were affected at all.
+

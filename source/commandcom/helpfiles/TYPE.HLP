@@ -1,0 +1,56 @@
+TYPE                                                      [Enhanced]
+----
+
+Format:      TYPE [/S] [/H] [/P] [/B] compound-filespec | device
+
+Purpose:     Displays data from a file or device.
+
+Use:         The  compound-filespec specifies the files that are  to
+        be displayed.  /H allows  hidden files  to be  typed and  /S
+        alows  system files to be typed. If the compound-filespec is
+        ambiguous, then  the filename  is printed before each one is
+        typed.
+
+             If  /B is specified,  then data is read from each  file
+        and displayed without modification on the screen,  until the
+        end of file is reached.  This may have strange effect on the
+        screen if the file contains control characters.
+
+             If /B is not given, then TYPE will look for the end-of-
+        file  character  (CTRL-Z) and stop when it  finds  it.  Also
+        control characters except carriage return, line feed and tab
+        will be converted into a '^' symbol followed by that control
+        letter so that they will be visible on the screen.
+
+             If /P is given,  then the output will pause at the  end
+        of the screen until a key is pressed.
+
+Examples:
+
+        TYPE FILE1
+
+             Data  is read from the file and printed on the  screen,
+        up to the first end-of-file character.
+
+        TYPE *.BAT/H/P
+
+             All batch files, including hidden ones, are read in and
+        displayed.  A  prompt is printed at the end of every  screen
+        full.
+
+        TYPE AUTOEXEC.BAT + REBOOT.BAT
+
+             The files AUTOEXEC.BAT and REBOOT.BAT are displayed.
+
+        TYPE /B DIR1
+
+             All  files  in the directory DIR1 are  printed  on  the
+        screen  and  no  interpretation is put on the  data  in  the
+        files.
+
+        TYPE AUX
+
+             Data  is  read from the AUX device (which may  be,  for
+        example, an RS232 serial device) up to the first end-of-file
+        character and printed on the screen.
+

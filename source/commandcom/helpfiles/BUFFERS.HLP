@@ -1,0 +1,51 @@
+BUFFERS                                                 [Compatible]
+-------
+
+Format:      BUFFERS [number]
+
+Purpose:     Displays  or changes the number of disk buffers in  the
+        system.
+
+Use:         If  the number is not given,  then the number  of  disk
+        buffers currently in the system will be displayed, otherwise
+        the  number  of  buffers will be changed  to  the  specified
+        number, the now unused memory being freed for other purposes
+        if the new number is less than the previous. If there is not
+        enough  memory for the specified number of buffers,  then as
+        many as possible are created and no error is given.
+
+             Increasing the number of disk buffers may speed up some
+        applications,   particularly   those  that  perform   random
+        accesses to files.  Setting the number above 10 is  unlikely
+        to  improve  performance  much,  and unnecessarily  uses  up
+        memory.
+
+             The  memory area used for disk buffers is also used for
+        environment  items  and  for  opening  files.  Thus  keeping
+        buffers  set  to  the  maximum  possible  may  prevent  some
+        commands from working, particularly SET, COPY and CONCAT. If
+        any of these commands give a 'not enough memory' error  then
+        it  may help to reduce the number of buffers.  Reducing them
+        below   about   three  however   will   impair   performance
+        considerably.
+
+             The default number of buffers in the system is 5, which
+        will be adequate for most purposes.
+
+Examples:
+
+        BUFFERS
+        Buffers is 5
+
+             The current number of disk buffers is printed, which in
+        this case is 5.
+
+        BUFFERS 10
+
+             The  number  of  buffers is increased  to  as  many  as
+        possible up to a limit of 10.
+
+        BUFFERS = 5
+
+             The number of buffers is reduced again to 5.
+

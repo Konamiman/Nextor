@@ -1,0 +1,33 @@
+INKEY                                                          [New]
+-----
+
+Format:      INKEY [string] %%envname
+
+Purpose:     Reads a single keystroke and places it into an environ-
+        ment variable.
+
+Use:         When a  string is specified, it will be displayed. Next
+        a  single keystroke  is read  and stored  in an  environment
+        item, which name is specified by envname.
+
+             Note that the environment item name must be preceded by
+        two percent signs and not enclosed in percent signs.
+
+Examples:
+
+        INKEY %%KEY
+
+             A keystroke  is read  and placed  into the  environment
+        item KEY.
+
+        INKEY Enter choice: %%KEY
+
+             The  text "Enter choice: " is displayed and a keystroke
+        is read and placed into the environment item KEY.
+
+        INKEY %ITEM% %%KEY
+
+             The value of the environment item ITEM is displayed and
+        a keystroke  is read  and placed  into the  environment item
+        KEY.
+

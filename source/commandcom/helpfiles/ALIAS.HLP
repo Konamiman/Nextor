@@ -1,0 +1,77 @@
+ALIAS                                                          [New]
+-----
+
+Format:      ALIAS [/P] [name] [separator] [value] | /R |
+                /L filespec | /S filespec
+
+Purpose:     Displays/sets aliases.
+
+Use:         If no  parameters are given, then all currently defined
+        aliases  and their  current values are displayed. The /P op-
+        tion can be given to cause the output to pause at the bottom
+        of the screen until a key is pressed.
+
+             If  just  a  name is  given as  the parameter,  then the
+        current value of the specified alias is printed.
+
+             If the  name is  followed by a non-space separator, then
+        the separator is ignored and the name is set to the following
+        value.  If the value is blank (i.e. not given) then the alias
+        is deleted from the alias space.
+
+             When  the  /R option  is given,  then all  currently set
+        aliases will be removed from the alias list.
+
+             The  /S option  can be  used to  save the  currently set
+        alias list to a file specified by filespec.
+
+             The  /L option can be used to load an alias list from a
+        file specified  by filespec.  If the  file is  not an  alias
+        file, then an "Invalid filename" error is given.
+
+             A  "Not enough  memory" error  is given  when the alias
+        space is full. The free alias space is 14K initially.
+
+             HELP ALI gives more information about aliases.
+
+Examples:
+
+        ALIAS D = DIR
+
+             An alias called D is set to the value DIR.
+
+        ALIAS D
+        DIR
+
+             The current value of D is printed.
+
+        ALIAS D=
+
+             The alias  D is  set to  a null  value, thus removing it
+        from the alias list.
+
+        ALIAS
+        D = DIR
+
+             No  parameters  were  given,  so all  the currently  set
+        aliases were printed.
+
+        ALIAS /R
+
+             All  currently set  aliases are  removed from  the alias
+        list.
+
+        ALIAS /S A:\ALIAS.DAT
+
+             All currently  set aliases  are saved  to a  file called
+        ALIAS.DAT in the root directory of drive A:.
+
+        ALIAS /L A:\ALIAS.DAT
+
+             A  file called  ALIAS.DAT in the root directory of drive
+        A: will  be loaded  into the alias memory. This will have the
+        same effect as specifying the aliases seperately by using the
+        ALIAS [name] [seperator] [value] command. Loading a file will
+        only be much quicker. Note that by loading an alias file, all
+        existing aliases will be removed.
+

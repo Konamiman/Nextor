@@ -1,0 +1,23 @@
+COLOR                                                          [New]
+-----
+
+Format:      COLOR forclr [bakclr [brdclr]]
+
+Purpose:     Changes the screen colors.
+
+Use:         All  colors must be in the range 0 to 15 inclusive. The
+        foreground color  must always be specified. The border color
+        is  not visible  when using more than 31 characters per line
+        on the screen (see HELP MODE to change this).
+
+Examples:
+
+        COLOR 10
+
+             The foreground color is set to yellow.
+
+        COLOR 4 1
+
+             The foreground  color is set to dark blue and the back-
+        ground color is set to black.
+

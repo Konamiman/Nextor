@@ -1,0 +1,36 @@
+INPUT                                                          [New]
+-----
+
+Format:      INPUT [string] %%envname
+
+Purpose:     Reads  a  string  and  places  it  into an  environment
+        variable.
+
+Use:         When a  string is specified, it will be displayed. Next
+        a  string is  read and  stored in an environment item, which
+        name is specified by envname.
+
+             Usually the  string will  be read from the keyboard. If
+        so,  all standard  editing facilities,  provided by MSX-DOS,
+        are available to enter or edit the string.
+
+             Note that the environment item name must be preceded by
+        two percent signs and not enclosed in percent signs.
+
+Examples:
+
+        INPUT %%KEY
+
+             A  string is  read and placed into the environment item
+        KEY.
+
+        INPUT Enter choice: %%KEY
+
+             The text  "Enter choice: " is displayed and a string is
+        read and placed into the environment item KEY.
+
+        INPUT %ITEM% %%KEY
+
+             The value of the environment item ITEM is displayed and
+        a string is read and placed into the environment item KEY.
+

@@ -1,0 +1,41 @@
+EXIT                                                    [Compatible]
+----
+
+Format:      EXIT [number]
+
+Purpose:     Exits COMMAND2.COM to the invoking program.
+
+Use:         The number is an error code and defaults to 0, which in
+        MSX-DOS indicates no error (see HELP ERRORS).
+
+             EXIT  exits the command interpreter (COMMAND2.COM)  and
+        returns the error code to the program that originally loaded
+        and  executed  it (see the COMMAND2 command).  This  may  be
+        another   COMMAND2.COM,   another  program   or,   normally,
+        MSXDOS2.SYS.  In  the  latter  case,  an  appropriate  error
+        message will be printed and COMMAND2.COM simply reloaded and
+        executed.
+
+             COMMAND2.COM when loaded saves the current  environment
+        (see HELP ENV on Environment Items),  and EXIT restores  it.
+        Thus, when  EXIT exits  back to MSXDOS2.SYS, the environment
+        will be cleared. COMMAND2.COM will then be reloaded and will
+        set  up the default environment again, providing a method of
+        resetting the environment to its default values.
+
+Examples:
+
+        EXIT
+
+             The  command interpreter is exited.  What happens  next
+        depends on what loaded it.
+
+        EXIT 40
+        *** User error 40
+
+             The command interpreter is exited with an error code of
+        40. Since this does not correspond to an error that is known
+        to  the  system,  the error message is printed  by  whatever
+        loaded  the  command  interpreter in the  first  place  (see
+        HELP ERRORS).
+

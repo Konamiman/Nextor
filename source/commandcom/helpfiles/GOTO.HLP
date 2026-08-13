@@ -1,0 +1,44 @@
+GOTO                                                           [New]
+----
+
+Format:      GOTO ~label
+
+Purpose:     Continues batch file from label.
+
+Use:         GOTO  searches the  batch file for the specified label.
+        Then it  continues executing  the batch  file from  the line
+        following the label.
+
+             The  label  is  a  string of  arbitrary characters.  No
+        processing is  performed on the characters and so the casing
+        of characters is preserved. A label must always start with a
+        "~" character to distinguish it from a normal command.
+
+             An  *** Unrecognized  command error occurs when GOTO is
+        executed from the command line or from a .BAT file.
+
+             An *** Invalid parameter error occurs when the label is
+        not found  in the batch file. Execution of the batch file is
+        then  ended, since  continuing the  batch file would have no
+        meaning.
+
+Examples:
+
+             The  following  example should  be executed  as a  .BTM
+        file.
+
+        ECHO This is the first line
+        GOTO ~label1
+        ECHO This line will not be printed
+        ~label1
+        ECHO This is the second line
+
+        This is the first line
+        This is the second line
+
+             First  the text  "This is  the first line" is echoed to
+        the screen. Then the batch file continues with the line fol-
+        lowing  the label "~label1", so the text "This is the second
+        line" is  echoed to the screen. The line "This line will not
+        be printed" is skipped.
+

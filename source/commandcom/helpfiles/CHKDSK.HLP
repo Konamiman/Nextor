@@ -1,0 +1,50 @@
+CHKDSK                                                  [Compatible]
+------
+
+Format:      CHKDSK [d:] [/F]
+
+Purpose:     Checks the integrity of the files on the disk.
+
+Use:         The  integrity  of the data structures on disk  in  the
+        specified or current drive is checked and lost disk space is
+        checked for.  When errors are found on the disk,  corrective
+        action  is taken.  If lost clusters are found,  a prompt  is
+        issued  allowing the lost disk space to be either  converted
+        into  usable  disk  space or into files.  If the  latter  is
+        chosen,  then files of the form  FILE0000.CHK,  FILE0001.CHK
+        etc. will be created.
+
+             If  the  /F option is not given,  then CHKDSK will  not
+        actually  write any corrections it makes to disk,  but  will
+        behave as though it has.  This allows CHKDSK to be  executed
+        to see what would be done to the disk if /F was given.
+
+             Disk space can become lost (i.e. lost clusters created)
+        when some programs are aborted. This applies particularly to
+        CP/M  programs.  It  is  recommended  that  CHKDSK  is  used
+        occasionally on all disks.
+
+             Note  that  this  is  a  transient  command,  and  must
+        therefore be loaded off disk.
+
+Examples:
+
+        CHKDSK
+
+             The  disk in the current drive is  checked.  A  'status
+        report'  will  be  printed.  Any errors found  will  not  be
+        written to disk.
+
+        CHKDSK B:
+
+             The disk in drive B:  is checked. Any errors found will
+        not be written to disk.
+
+        CHKDSK/F
+        20 lost clusters found in 1 chain
+        Convert lost chains to files (Y/N) ?
+
+             The  disk  in the current drive was checked,  and  some
+        lost disk space found.  Since /F was given,  the corrections
+        will be written to disk and the lost space recovered.
+

@@ -1,0 +1,34 @@
+CPU                                                            [New]
+---
+
+Format:      CPU [number]
+
+Purpose:     Displays or sets the CPU mode.
+
+Use:         If no  parameter is given, then the current CPU mode is
+        displayed.
+
+             If a  number is  specified, then  the CPU  mode will be
+        changed as follows:
+
+             0 - Z80 mode
+             1 - R800 ROM mode
+             2 - R800 RAM mode
+
+             Note that changing the CPU mode is only possible on MSX
+        Turbo-R machines.  When using  the CPU  command on other MSX
+        machines, it will behave as though it sets the CPU mode, but
+        it will not actually change it.
+
+Examples:
+
+        CPU
+        CPU mode is R800-RAM
+
+             No  parameter  was given,  so the  current CPU  mode is
+        displayed.
+
+        CPU 0
+
+             The CPU will be set to Z80 mode.
+

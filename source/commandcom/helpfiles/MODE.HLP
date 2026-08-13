@@ -1,0 +1,30 @@
+MODE                                                      [Enhanced]
+----
+
+Format:      MODE columns [rows]
+
+Purpose:     Changes the number of characters/line on the screen.
+
+Use:         "columns"  must be  in the range 1 to 80 inclusive, and
+        the number  of characters per line on the screen will be set
+        to  this. "rows" must be in the range 1 to 26 inclusive, and
+        the number  of lines  per screen  will be  set to  this. The
+        screen  will be cleared and the cursor moved to the top left
+        corner in the process.
+
+             Note that  only 24 lines are visible on the screen. DOS
+        does not automatically change the screen mode to display the
+        other two lines.
+
+Examples:
+
+        MODE 80
+
+             The  screen is set to 80 column mode and is cleared  in
+        the process.
+
+        MODE 40 15
+
+             The screen is set to 40 columns mode, with 15 lines per
+        screen. The screen is cleared in the process.
+

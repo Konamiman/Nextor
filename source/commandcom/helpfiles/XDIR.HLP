@@ -1,0 +1,35 @@
+XDIR                                                    [Compatible]
+----
+
+Format:      XDIR [filespec] [/H]
+
+Purpose:     Lists all files within directories.
+
+Use:         The  filespec specifies which files are to  be  listed,
+        and /H allows hidden files to be included.
+
+             XDIR is similar to the DIR command,  but does not print
+        the files' dates and times.
+
+             After  all  files in the specified directory have  been
+        listed,  then  files within descendant directories are  also
+        listed,  and  are  shown indented.  This allows a DIR  of  a
+        complete directory tree or disk to be obtained.
+
+Examples:
+
+        XDIR
+
+             The directory of the  entire disk in or descending from
+        the current directory of the current drive is printed.
+
+        XDIR B:\DIR1
+
+                     All   the  files  and  directories  and   their
+        contents are printed from the directory DIR1.
+
+        XDIR \*.COM/H
+
+             The  names  of  all  files,   including  hidden  files,
+        matching *.COM are displayed.
+

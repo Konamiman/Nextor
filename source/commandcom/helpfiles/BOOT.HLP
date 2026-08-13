@@ -1,0 +1,17 @@
+BOOT                                                           [New]
+----
+
+Format:      BOOT d:
+
+Purpose:     Assigns a new MSX-DOS boot drive.
+
+Use:         Simply changes the  drive used  to reboot  MSX-DOS from
+        BASIC.
+
+Examples:
+
+        BOOT B:
+
+             MSX-DOS will attempt to reboot from drive B: or will be
+        redirected to the default drive.
+

@@ -1,0 +1,40 @@
+RMDIR                                                   [Compatible]
+-----
+
+Format:      RMDIR [/H] [/P] compound-filespec
+                       or
+             RD [/H] [/P] compound-filespec
+
+Purpose:     Removes one or more sub-directories.
+
+Use:         The  compound-filespec specifies which directories  are
+        to  be  deleted,  and  /H allows hidden  directories  to  be
+        included in the delete operation.
+
+             If  a directory cannot be deleted for some reason  (eg.
+        it is not empty) then the name of the offending directory is
+        printed  along  with  an  error  message,   and  the  delete
+        operation continues with the next directory.  If many errors
+        occur  then /P will cause the output to pause at the end  of
+        the screen.
+
+Examples:
+
+        RMDIR DIR1
+
+             The  directory called DIR1 in the current directory  of
+        the current drive is removed.
+
+        RD B:\COM + B:\BAT
+
+             The  directories COM and BAT are removed from the  root
+        directory of drive B:.
+
+        RD \*.*
+        UTIL -- Directory not empty
+
+             An attempt was made to remove all directories from  the
+        root directory of the current drive,  but a directory called
+        UTIL  was not empty and so the error was printed.  UTIL  and
+        its contents are not affected at all.
+

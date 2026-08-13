@@ -1,0 +1,28 @@
+ELSE                                                           [New]
+----
+
+Format:      ELSE [command]
+
+Purpose:     Toggles Command Mode and executes command, if given.
+
+Use:         ELSE turns  Command Mode ON when it is OFF and OFF when
+        it is ON. When in level 0 (which is the default level), ELSE
+        does nothing at all.
+
+             If a command is given, then it is executed. This may be
+        any internal or external command, batchfile or alias.
+
+Examples:
+
+        ELSE
+
+             Toggles the  Command Mode.  Then a  new command  can be
+        typed.
+
+
+        ELSE BEEP
+
+             Toggles  the Command  Mode. If  Command Mode is ON then
+        the BEEP command is executed.
+
+

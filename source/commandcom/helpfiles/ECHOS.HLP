@@ -1,0 +1,28 @@
+ECHOS                                                          [New]
+-----
+
+Format:      ECHOS [text]
+
+Purpose:     Prints text in a batch file.
+
+Use:         The text is simply displayed on the screen.  If no text
+        is given,  then just a blank line is output. Unlike the ECHO
+        command,  the text  is not ended with a carriage return or a
+        line feed.
+
+Examples:
+
+        A:\>ECHOS AUTOEXEC batch file executed
+        AUTOEXEC batch file executedA:\>
+
+             The specified text ('AUTOEXEC batch file executed') was
+        printed  on the screen. No carriage return and line feed was
+        performed, so the command line prompt was displayed directly
+        after the text.
+
+        A:\>ECHOS
+        A:\>
+
+             No  parameters  were given,  so just a blank  line  was
+        printed.
+

@@ -1,0 +1,49 @@
+RNDIR                                                   [Compatible]
+-----
+
+Format:      RNDIR [/H] [/P] compound-filespec filename
+
+Purpose:     Renames one or more sub-directories.
+
+Use:         The  compound-filespec specifies the  directories  that
+        are  to be renamed,  and /H allows hidden directories to  be
+        included  in  the  rename operation.  The  contents  of  the
+        directories remain unchanged.
+
+             The  second  filename specifies the new  name  for  the
+        directories.  A  '?'  in  the new name  indicates  that  the
+        corresponding character from the name of the directory being
+        renamed  will  be used,  thus allowing an ambiguous  rename.
+        Thus '*' in the second filename, which is just equivalent to
+        a series of '?'s,  indicates that the whole of the  filename
+        or extension of the directory name will remain unchanged.
+
+             If  for  some reason a particular directory  cannot  be
+        renamed (eg.  if a file or directory of the new name already
+        exists)  then the offending directory name will  be  printed
+        along  with  an error message and the rename operation  will
+        continue with the next directory. If many errors occur, then
+        /P will cause the output to pause at the end of the screen.
+
+Examples:
+
+        RNDIR UTIL COM
+
+             The  directory called UTIL in the current directory  of
+        the current drive is renamed COM.
+
+        RNDIR A:\*.*/H/P *.OLD
+        UTIL -- Directory exists
+
+             All  directories,  hidden and not hidden,  in the  root
+        directory of drive A: are renamed with an extension of .OLD.
+        The  directory UTIL could not be renamed because a directory
+        called UTIL.OLD already existed,  so the error was  printed.
+        If  many  such  errors were printed then /P  would  cause  a
+        prompt to be printed at the end of every screen full.
+
+        RNDIR COM + BAT *.OLD
+
+             The  directories COM and BAT are renamed to COM.OLD and
+        BAT.OLD respectively.
+

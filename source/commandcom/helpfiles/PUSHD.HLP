@@ -1,0 +1,52 @@
+PUSHD                                                          [New]
+-----
+
+Format:      PUSHD [d:][path]
+
+Purpose:     Changes  the default  directory and  drive, saving  the
+        current settings.
+
+Use:         If  no  drive or  path is  specified, then  the current
+        drive and directory are stored.
+
+             If a  drive is  specified, then  the current  drive and
+        directory  are stored and the current directory path for the
+        specified drive is printed.
+
+             If  a drive  and path  are specified,  then the current
+        drive and  directory are  stored and  the current  drive and
+        directory are changend to the specified drive and directory.
+
+             The  drive and  directory are  stored in an environment
+        item called  PUSHD and  are separated  from each  other by a
+        semi-colon.  The  environment  item  may  also  be  accessed
+        directly  by the  SET command.  The maximum number of direc-
+        tories that  can be  stored is  limited only  by the maximum
+        length of an environment variable, being 255 characters.
+
+             See also the POPD command.
+
+
+Examples:
+
+        PUSHD
+
+             The current drive and directory are stored.
+
+        PUSHD B:
+
+             The  current  drive and  directory are  stored and  the
+        current directory of drive B: is printed.
+
+        PUSHD \DIR1
+
+             The  current  drive and  directory are  stored and  the
+        current directory of the current drive is changed to DIR1.
+
+
+        PUSHD A:DIR2
+
+             The  current  drive and  directory are  stored and  the
+        current drive is changed to A:, and the current directory of
+        drive A: is changed to DIR2.
+

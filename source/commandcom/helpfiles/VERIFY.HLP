@@ -1,0 +1,32 @@
+VERIFY                                                  [Compatible]
+------
+
+Format:      VERIFY [ON | OFF]
+
+Purpose:     Displays/sets the current disk write verify state.
+
+Use:         If  no parameters are given,  then the  current  verify
+        state is displayed on the screen.
+
+             If ON or OFF is given, then the verify state is changed
+        appropriately.
+
+             The  verify state affects all writes to disk.  If  OFF,
+        the default state,  then data is simply written. If ON, then
+        after writing the data it is read back and compared with the
+        original to ensure that it was written correctly.  The extra
+        overhead of this means that writing is slower when verify is
+        on.
+
+Examples:
+
+        VERIFY
+        Verify is OFF
+
+             No   parameters  were  given,   so  the  current verify
+        state is printed, which in this case is off.
+
+        VERIFY ON
+
+             Disk write verification is turned on.
+

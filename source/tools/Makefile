@@ -89,14 +89,17 @@ DATA.REL: \
 # ---------------------------------------------------------------------------
 # Tools disk image.
 #
-# `make tools-disk` creates bin/tools/nextor.dsk: a 360K single sided 3.5"
+# `make tools-disk` creates bin/tools/nextor.dsk: a 720K double sided 3.5"
 # FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
 # NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
 # .COM file present in bin/tools (which includes COMMAND2.COM), a README.TXT
-# (sourced from tools-disk-readme.txt) and any files supplied via the
-# EXTRA_FILES variable. The image is recreated from scratch on every run
-# using mformat and mcopy from the mtools package, plus dd to install the
-# boot sector code.
+# (sourced from tools-disk-readme.txt), the COMMAND2.COM help files from
+# ../commandcom/helpfiles in a HELP directory, and any files supplied via
+# the EXTRA_FILES variable. The image is recreated from scratch on every
+# run using mformat, mmd and mcopy from the mtools package, plus dd to
+# install the boot sector code.
+# (The image was a 360K single sided one until the help files came in:
+# they don't fit in the space a 360K disk leaves free.)
 #
 # The image gets the same MSX-DOS 2.20 style boot sector that the kernel's
 # built-in FORMAT command creates (assembled standalone via
@@ -143,7 +146,11 @@ DISK_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(DISK
 # duplicates, in case the filesystem is case-insensitive.
 DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com))
 
-MTOOLS := mformat mcopy
+MTOOLS := mformat mmd mcopy
+
+# The COMMAND2.COM help files, stored in the HELP directory of the disk.
+HELPFILES_DIR := ../commandcom/helpfiles
+HELPFILES = $(wildcard $(HELPFILES_DIR)/*.HLP)
 
 # The boot sector code, assembled standalone from the kernel source (see
 # tools-disk-bootsect.mac) and linked at 0C01Eh, where boot sector code runs.
@@ -171,8 +178,9 @@ tools-disk: $(BOOTSECT_BIN)
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
 	$(if $(EXTRA_MISSING),$(error "ERROR: EXTRA_FILES not found: $(EXTRA_MISSING)"))
+	$(if $(HELPFILES),,$(error "ERROR: no help files found in $(HELPFILES_DIR)"))
 	@rm -f $(TOOLS_DSK)
-	@mformat -C -i $(TOOLS_DSK) -t 80 -h 1 -n 9 -v NEXTOR ::
+	@mformat -C -i $(TOOLS_DSK) -t 80 -h 2 -n 9 -v NEXTOR ::
 	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
 	@dd if=/dev/zero of=$(TOOLS_DSK) bs=1 seek=30 count=482 conv=notrunc status=none
 	@dd if=$(BOOTSECT_BIN) of=$(TOOLS_DSK) bs=1 seek=30 conv=notrunc status=none
@@ -180,6 +188,8 @@ tools-disk: $(BOOTSECT_BIN)
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
 	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
+	@mmd -i $(TOOLS_DSK) ::HELP
+	@mcopy -i $(TOOLS_DSK) $(HELPFILES) ::HELP/
 	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
 		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
 	done)

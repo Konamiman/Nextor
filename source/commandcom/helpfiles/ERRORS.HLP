@@ -1,0 +1,642 @@
+ERRORS AND MESSAGES
+-------------------
+
+DISK ERRORS
+
+             Disk   errors  occur  when  a  command  or  program  is
+        attempting to access a disk and fails for some reason,  such
+        as a disk not being in the drive. When this happens, message
+        and  prompt appears which allows the user the  either  retry
+        the  operation  which may now work (eg.  if a disk has  been
+        inserted  into  the drive),  to ignore the operation  or  to
+        abort the entire command.
+
+             An example disk error message and prompt is as follows,
+        and  may be given if the disk was taken out whilst drive  A:
+        was being accessed:
+
+                  Not ready reading drive A:
+                  Abort, Retry or Ignore (A/R/I)?
+
+        The  'not ready' part of the message indicates why the  disk
+        operation failed, and other possibilities exist (see below).
+        'reading' indicates that the command was trying to read  the
+        disk,  and  may be replaced by 'writing' if that is what  it
+        was  doing.  'drive  A:' is the drive in which the disk  was
+        attempted to be accessed.
+
+             The  'Abort,   Retry  or  Ignore'  part  indicates  the
+        possible  actions that can be taken by the user,  and  these
+        are selected by pressing the 'A',  'R' or 'I' key.
+
+             If  Abort  is  selected,  then the  entire  command  is
+        aborted and the message 'Disk operation aborted' is  printed
+        before another command can be typed.
+
+             If  Retry  is selected then the failed  disk  operation
+        will  simply  be  retried and may fail again  or  may  work,
+        particularly  if some corrective action has been taken  such
+        as inserting a missing disk.
+
+             Ignore  causes the failed disk operation to be  ignored
+        by the command.  In many cases, ignoring an error may not be
+        recommended  and in these cases the Ignore option  will  not
+        even be displayed,  although it may still be selected. Doing
+        so  may  however cause serious system malfunction and  could
+        destroy  data  on the disk.  Even if the  Ignore  option  is
+        displayed,  it should be used with extreme caution, and only
+        when  all else fails.  Normally Ignore is only used when the
+        data on a disk has got corrupted and ignoring the disk error
+        offers the only possibility of recovering all or part of the
+        data.
+
+             A few serious errors which generally mean the disk  has
+        been   corrupted  beyond  possible  use  are   automatically
+        aborted,  and  just the appropriate error message is printed
+        (eg. 'Bad file allocation table').
+
+             The  possible errors that can occur as disk errors  and
+        their meanings are, in alphabetical order, as follows:
+
+        Bad file allocation table
+
+             The  disk  contains  an invalid file  allocation  table
+        (FAT).  The FAT is an area on disk in which the system keeps
+        information  to tell it where on the disk the data  in  each
+        file is stored.  Thus if the FAT is invalid,  it cannot read
+        any  data at all.  This message usually means that the  disk
+        has been corrupted beyond possible use.
+
+        Cannot format this drive
+
+             An  attempt  was made to format a disk in a drive  that
+        does not support disk formatting. This probably means that a
+        FORMAT command was given specifying the RAM disk.
+
+        Data Error
+
+             The data was read or written without error, but the CRC
+        check  failed.   This  usually  means  the  disk  has   been
+        corrupted.
+
+        Disk error
+
+             The data could not be read or written to the disk.
+
+        Incompatible disk
+
+             An  attempt was made to access an 80 track disk in a 40
+        track drive or a double sided disk in a single sided  drive.
+        This  basically  means that the disk is not compatible  with
+        the drive.  Note that MSX-DOS can read a 40 track disk in  a
+        80 track drive, but if the disk is written to in an 80 track
+        drive  then it may not be possible to read it again in a  40
+        track drive.
+
+        Not a DOS disk
+
+             The  disk is not a format that MSX-DOS  can  read.  For
+        example,  although  MSX-DOS  can  execute CP/M  programs  it
+        cannot access CP/M disks.
+
+        Not ready
+
+             The  disk is not in the drive being accessed.  The disk
+        should be inserted into the drive and 'Retry' selected.
+
+        Sector not found
+
+             MSX-DOS  tried  to  read or  write  to  a  non-existent
+        sector. May indicate that the disk has been corrupted.
+
+        Seek error
+
+             The  requested  track on the disk could not  be  found.
+        Could mean a corrupted disk or faulty disk drive.
+
+        Unformatted disk
+
+             The disk has not been formatted. Use the FORMAT command
+        on the disk before accessing it.
+
+        Verify error
+
+             Only  occurs  when verify is on,  and means  that  data
+        appeared  to be written to disk successfully but  when  read
+        back was found to be different to that written.
+
+        Write error
+
+             Data was not written correctly.
+
+        Write protected disk
+
+             The  disk is write protected and an attempt was made to
+        write  data to it.  The disk should be made unprotected  and
+        'Retry' selected.
+
+        Wrong disk and Wrong disk for file
+
+             MSX-DOS accessed a disk once and subsequently needed to
+        access  it  again,  but  found that the  drive  contained  a
+        different  one.  The  correct disk should  be  inserted  and
+        'Retry' selected.
+
+COMMAND ERRORS
+
+             Command  errors occur when a command cannot perform its
+        intended function for some reason.
+
+             If  an error occurs in a command and it is unlikely  to
+        be  able to continue,  then an appropriate error message  is
+        printed, and the next command is read at the prompt.
+
+             An example error message is:
+
+                  *** File not found
+
+             The  three asterisks *** are printed first to  indicate
+        that  an  error has occurred.  The message is then  printed,
+        followed by the normal command prompt on the next line.  The
+        possible errors that can occur are listed below.
+
+             When a command error occurs in a specific situation, an
+        'error  type'  message  may also be  printed.  For  example,
+        generally when a required file cannot be found on disk,  the
+        'File not found' message is printed as in the above example.
+        However,  if  the file required is a file specified  by  the
+        redirection  symbol  <  (see  HELP  IO  on  Redirection  and
+        Piping) then the message printed will be:
+
+                  *** Redirection error: File not found
+
+             The possible error types are:
+
+        Batch file error:
+
+             An  error  occurred  whilst attempting to read  from  a
+        batch  file,  for example a disk error occurred and  'abort'
+        was selected.
+
+        Piping error:
+
+             The error occurred during a piping operation,  probably
+        in  connection  with the temporary files  that  COMMAND2.COM
+        creates  (see  HELP  IO  on  Redirection  and  Piping).  For
+        example,  the TEMP environment item did not refer to a valid
+        drive or directory (see HELP ENV on Environment Items).
+
+        Redirection error:
+
+             The error occurred during a redirection operation.  For
+        example,   an   invalid  filename  was  specified  after   a
+        redirection symbol <,  > or >>,  or the specified input file
+        was not found (see HELP IO on Redirection and Piping).
+
+        Standard input error:
+
+             An error occurred on the standard input to a command or
+        program  after  redirection or piping has been set  up,  for
+        example  the standard input has been redirected from a  file
+        and the end of the file has been reached.
+
+        Standard output error:
+
+             An  error occurred on the standard output of a  command
+        or program after redirection or piping has been set up,  for
+        example  the standard output has been redirected to  a  file
+        and the disk is full.
+
+             Many commands  operate on  files or directories, and if 
+        an  ambiguous filename is given then the command operates on 
+        several files or directories (for example the REN command or 
+        the COPY  command). Often  an error occurs when it is trying 
+        to perform the command on one of the files, but which may be 
+        successful  on one  of the  other files.  In this  case, the 
+        filename is  printed followed  by the  error message and the 
+        command then continues. For example:
+
+                  COMMAND2.COM -- File cannot be copied onto itself
+
+             The  possible command errors that can be given are,  in
+        alphabetical order, as follows:
+
+        Cannot concatenate destination file
+
+             This error is given by CONCAT and means that one of the
+        filenames  matched by the source file specification  is  the
+        destination  file.  This  is not necessarily wrong  but  may
+        indicate a mistake in the command.
+
+        Cannot create destination file
+
+             This  is  given by COPY,  and usually  means  that  the
+        destination file for the file it is copying would, if it was
+        created,  overwrite a file that was already in use.  This is
+        likely to be a previously copied source file but may be some
+        other file such as the currently executing batch file.
+
+        Cannot overwrite previous destination file
+
+             This is given by COPY,  and means that the  destination
+        file  for the file it is copying would,  if it was  created,
+        overwrite   the  destination  file  of  the  file  that  was
+        previously  copied.  This  usually means that  the  intended
+        destination   was  a  directory  but  that  it's  name   was
+        misspelled.
+
+        Cannot transfer above 64K
+
+             This should not normally occur from commands.
+
+        Command too long
+
+             A  command that was given is too long.  This  will  not
+        occur when typing commands from the keyboard,  but may occur
+        from  a batch file.  The maximum length of a command is  127
+        characters after % parameter substitution.
+
+        Ctrl-C pressed
+
+             The command was interrupted by pressing CTRL-C.
+
+        Ctrl-STOP pressed
+
+             The command was interrupted by pressing CTRL-STOP.
+
+        Directory exists
+
+             A  command attempted to create a new file or  directory
+        on disk with the same name as an existing directory.
+
+        Directory not empty
+
+             The RMDIR (RD) command tried to remove a directory that 
+        contains files  or other  directories. These must be deleted 
+        first with the DEL and RMDIR commands since directories must 
+        be empty before they can be removed.
+
+        Directory not found
+
+             A  directory  command (eg.  RNDIR) could not  find  the
+        specified directory.
+
+        Disk full
+
+             There  is no more room on the disk and files will  have
+        to be deleted and the command given again.
+
+        Disk operation aborted
+
+             A  disk  error  occurred  and the  'Abort'  option  was
+        chosen, thus aborting the whole command.
+
+        Duplicate filename
+
+             REN  or  RNDIR  cannot  perform  the  specified  rename 
+        because  the new  filename is  the same  as a  filename that 
+        already exists.  Also occurs  from MOVE  or MVDIR  because a 
+        filename  already exists  in the  destination directory with 
+        the same name as the file or directory being moved.
+
+        End of file
+
+             This should not normally occur from commands.
+
+        Environment string too long
+
+             This should not normally occur from commands.
+
+        Error on standard input
+
+             This should not normally occur from commands, and means
+        that  an  error occurred while a command was  attempting  to
+        read from the keyboard.
+
+        Error on standard output
+
+             This should not normally occur from commands, and means
+        that  an  error occurred while a command was  attempting  to
+        write to the screen.
+
+        File access violation
+
+             This should not normally occur from commands.
+
+        File allocation error
+
+             This should not normally occur from commands.
+
+        File cannot be copied onto itself
+
+             The  destination  file when trying to do a COPY is  the
+        same file as the source.
+
+        File exists
+
+             MKDIR  (MD) tried to create a new directory but a  file
+        with   the  same  name  already  exists  in  the   specified
+        directory.
+
+        File for HELP not found
+
+             The HELP command looked for a file to get the help text
+        from but could not find it. Help files are usually kept in a
+        directory called \HELP on the boot disk.
+
+        File handle has been deleted
+
+             This should not normally occur from commands.
+
+        File handle not open
+
+             This should not normally occur from commands.
+
+        File is already in use
+
+             A command tried to modify a file that is already  being
+        used for some other purpose, such as the currently executing
+        batch file.
+
+        File not found
+
+             A command could not find the specified file or files.
+
+        Internal error
+
+             This should not normally occur from commands.
+
+        Invalid BDOS call
+
+             This should not normally occur from commands.
+
+        Invalid attributes
+
+             Usually means an invalid +/- attribute was specified in
+        ATTRIB or ATDIR.
+
+        Invalid date
+
+             The  date  typed into the DATE command is not  a  valid
+        date or was typed in in an invalid format.
+
+        Invalid device operation
+
+             A command  cannot perform  its function  on one  of the
+        built-in system devices eg. a file cannot be renamed CON.
+
+        Invalid directory move
+
+             MVDIR attempted to move a directory into one of its own
+        descendant directories, which cannot be done.
+
+        Invalid drive
+
+             A drive that does not exist was specified.
+
+        Invalid environment string
+
+             The  name  of  an  environment  item  contains  invalid
+        characters.  Only  those  characters valid in filenames  are
+        valid in environment item names.
+
+        Invalid file handle
+
+             This should not normally occur from commands.
+
+        Invalid filename
+
+             A filename contains invalid characters.  This may be  a
+        filename   explicitly  given,   or  may  be  the  result  of
+        attempting to rename a file with an ambiguous new name.
+
+        Invalid number
+
+             A  number  given  in  a  command  contained   non-digit
+        characters.
+
+        Invalid option
+
+             An  invalid  letter  was given after a / on  a  command
+        line.
+
+        Invalid . or .. operation
+
+             A command  cannot perform  its function  on the special
+        '.'  and '..'  directories that  are present at the start of
+        all sub-directories.
+
+        Invalid parameter
+
+             The  parameter to a command is generally not valid  for
+        that command in some way.
+
+        Invalid pathname
+
+             A path specified on a command line does not exist or is
+        syntactically incorrect.
+
+        Invalid process id
+
+             This should not normally occur from commands.
+
+        Invalid sub-function number
+
+             This should not normally occur from commands.
+
+        Invalid time
+
+             The  time  typed into the TIME command is not  a  valid
+        time or was typed in in an invalid format.
+
+        Missing parameter
+
+             A command expected a parameter but did not find one.
+
+        No spare file handles
+
+             Should not normally occur from commands.
+
+        Not enough memory
+
+             Not  enough memory  is available for the given command.
+        For example, a large program too large to fit into memory or
+        not enough memory for a new environment string.
+
+        Not enough memory, system halted
+
+             This  special  error message is  printed  when  MSX-DOS
+        attempts  to  start  up and finds that there is  not  enough
+        memory to continue.  As the message suggests,  the  computer
+        must then be reset. This should not normally occur.
+
+        Pathname too long
+
+             A  path is too long.  Either the length of the pathname
+        given exceeds 100 characters,  or the total length of a path
+        from  the  root  directory  to  a  file  is  more  than   63
+        characters.
+
+        RAM disk (drive H:) already exists
+
+             Should not normally occur from commands.
+
+        RAM disk does not exist
+
+             The  RAMDISK  command was used to display  the  current
+        size of the RAM disk, but no RAM disk exists.
+
+        Read only file
+
+             An  attempt  was  made to modify or  overwrite  a  file
+        marked  as read only.  The DIR command shows this,  and  the
+        ATTRIB command can make it not read only.
+
+        Root directory full
+
+             The   fixed  maximum  number  of  files  in  the   root
+        directory  (often 64 or 112)  has been reached.  Directories
+        do not have this limitation.
+
+        System file exists
+
+             An attempt was made to create a file which would, if it
+        was  created,  overwrite a file that is marked as  a  system
+        file.  System  files  are not used in MSX-DOS,  and are  not
+        shown  by  the  DIR command or  accessible  from  any  other
+        commands,  and  so this error should not normally occur with
+        commands.
+
+        Too many parameters
+
+             All  the parameters a command expected were found on  a
+        command line,  but there were still more parameters left  on
+        the end of the line.
+
+        Unrecognized command
+
+             A  given  command  was  not an  internal command  or an
+        external command  found along the current search path as set
+        by the PATH command.
+
+        Wrong version of command
+
+             After  executing a program,  COMMAND2.COM tried to  re-
+        load itself from the COMMAND2.COM file on disk, and found it
+        was  not  the same version.  A prompt is  then  printed  and
+        COMMAND2.COM will attempt to re-load itself again.
+
+        Wrong version of MSX-DOS, system halted
+
+             This  special  error  message is printed  when  MSX-DOS
+        attempts to starts up and finds that some other part of  the
+        MSX-DOS  system has a version number earlier than  required.
+        As  the message suggests,  the computer must then be  reset.
+        This should not normally occur.
+
+             Internally,  errors  are represented as error  numbers.
+        The  numbers corresponding to the errors above start at  255
+        and decrease. If an error number is received for which there
+        is  no  message,  then it is printed.  Numbers above 64  are
+        reserved  for  future version of MSX-DOS and so  are  called
+        'system errors' and numbers below 63 can be used by external
+        commercially   available  programs  and  are  called   'user
+        errors'. User errors below 32 never print a message. The two
+        default  error messages (which will not normally occur  from
+        commands) are thus:
+
+        System error 64
+
+             and
+
+        User error 63
+
+        where  the  64 and 63 are example error  numbers.  The  only
+        command which uses error numbers is the EXIT command. A list
+        of the actual numbers for the above messages is available in
+        the Transient Program Interface specification.
+
+PROMPT MESSAGES
+
+             There are several situations in which user  interaction
+        is  required before the system can continue with what it was
+        doing,  typically  inserting a disk.  Also many  potentially
+        dangerous  commands  require  confirmation  prompts  to   be
+        answered before they perform their operation.  These various
+        system prompts are given below.
+
+        All data on drive A: will be destroyed
+        Press any key to continue
+
+             This  prompt  is given by the FORMAT  command,  and  is
+        issued  to  reduce the risk of accidentally  formatting  the
+        wrong  disk.  To abort the FORMAT command,  control-STOP  or
+        control-C can be pressed.
+
+        Destroy all data on RAM disk (Y/N)?
+
+             A RAMDISK command was given to set up a RAM disk, but a
+        RAM disk already existed.  If the response to the prompt  is
+        'Y',  then  any  files  on this existing RAM  disk  will  be
+        destroyed.  A  response of 'N' or control-STOP or  control-C
+        will abort the command.
+
+        Disk in drive A: will only be able to boot MSX-DOS
+        Press any key to continue...
+
+             This  prompt is given by the FIXDISK  command,  and  is
+        issued  to  reduce the risk of accidentally updating a  non-
+        MSX-DOS 2 disk.  To abort the FIXDISK command,  control-STOP
+        or control-C can be pressed.
+
+        Delete all files (Y/N)?
+
+             This prompt occurs when a DEL command is given specify-
+        ing all  the files  in a  directory, and is issued to reduce
+        the risk of accidentally deleting a lot of files.
+
+        Insert COMMAND2.COM disk in drive A:
+        Press any key to continue
+
+             This  may occur after running a program, and requires a
+        disk containing  COMMAND2.COM in  the root  directory to  be
+        present  in the specified drive. After inserting the disk in
+        the drive (which is the drive from which MSX-DOS was origin-
+        ally booted) and pressing a key, the system will continue as
+        normal. If, for some reason, the file COMMAND2.COM cannot be
+        found on the drive which it originally booted from, pressing
+        a valid driveletter key will cause COMMAND2.COM to boot from
+        another drive,  for example  a disk  drive instead of a hard
+        disk.  If COMMAND2.COM has been copied somewhere else (eg. a
+        RAM disk)  then the  SHELL environment item can be set up to
+        make  COMMAND2.COM re-load  from there instead (see HELP ENV
+        on Environment Items).
+
+        Insert batch file disk in drive A:
+        Press any key to continue
+
+             This  may occur during the execution of a  batch  file,
+        and  means  that the system needed to read the next  command
+        from the batch file but found that the wrong disk was in the
+        drive.  After  inserting  the disk in  the  specified  drive
+        (which  will  be  the drive from which the  batch  file  was
+        originally  started) and pressing a key,  execution  of  the
+        batch file will continue as normal.
+
+        Press any key to continue
+
+             This   prompt  is  generally  issued  when  some   user
+        interaction is required,  and is normally printed after some
+        other  message  which describes the action required.  It  is
+        also printed by the PAUSE command. To abort the command that
+        issued the prompt, control-STOP or control-C can be pressed.
+
+        Terminate batch file (Y/N)?
+
+             When MSX-DOS aborts a command prematurely (such as when
+        the  control-STOP  or  control-C key  is  pressed)  and  the
+        command  was  executing  in a batch  file,  this  prompt  is
+        issued. If the response is 'Y' then the batch file will also
+        be aborted.  If 'N' is the response then the batch file will
+        continue with the command that follows the aborted command.
+

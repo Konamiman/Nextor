@@ -1,0 +1,67 @@
+TREE                                                           [New]
+----
+
+Format:      TREE [d:] [path] [/P] [/?]
+
+Purpose:     Displays a tree of directories on disk.
+
+Use:         If no drive is specified then the directory-tree of the
+        default drive is displayed.
+
+             If no  path is specified then the directory-tree of the
+        current directory is displayed.
+
+             The /? option shows a help screen.
+
+             The /P option can be given to cause the output to pause
+        at the end of the screen.
+
+             TREE  builds  a  directory-tree using  the file  TO.LST
+        which  is generated  by the TO program. See HELP TO for more
+        information on this subject.
+
+             Note  that TREE is a transient command, and must there-
+        fore be loaded off disk.
+
+Examples:
+
+        TREE /P
+
+             All  directories  within the  current directory  of the
+        current drive will be displayed in a tree format. The output
+        will pause  at the end of the screen. The output might be as
+        follows:
+
+          Directory Tree of drive A:
+
+          A:\
+          +--BATCH
+          +--MEMMAN
+          |  +--TSR
+          |  `--TSR-HLP
+          +--MODEM
+          |  `--QWK
+          +--SDOS
+          |  `--SOURCE
+          +--TED
+          |  +--KAR-SET
+          |  +--MANUALS
+          |  `--TEXT
+          +--TOOLS
+          +--TURBO
+          `--UTILS
+             +--CRUNCHER
+             `--PROGS
+
+        TREE A:\MEMMAN
+
+             All directories within the directory MEMMAN on drive A:
+        will  be displayed  in a  tree format. This might be as fol-
+        lows:
+
+          Directory Tree of drive A:
+
+          A:\MEMMAN
+          +--TSR
+          `--TSR-HLP
+

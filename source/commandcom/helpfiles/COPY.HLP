@@ -1,0 +1,148 @@
+COPY                                                      [Enhanced]
+----
+
+Format:      COPY [/S] [/H] [/P] [/A] [/B] [/V] [/T] source dest
+
+Purpose:     Copies data from files/devices to other files/devices.
+
+Use:         The definition of the source is:
+
+                  compound-filespec
+
+        The  compound-filespec specifies the files or  devices  that
+        are  to be copied.  If /H is given then hidden files may  be
+        copied and if /S is given then system files may be copied.
+
+             The definition of the dest is:
+
+                  [d:][path][filename] | device
+
+        where d: and path default to the current drive and directory
+        respectively.  If any part of the filename is ambiguous then
+        the  appropriate  character  from  the  source  filename  is
+        substituted,  thus  allowing the files to be renamed in  the
+        process.  If  the  filename is not given,  then  the  entire
+        source  filename  is used.  If the dest  is  an  unambiguous
+        directory,  then  the  files are copied into that  directory
+        with a filename of *.*.
+
+             COPY  will  read as many source files as possible  into
+        memory before writing any out. When it can read no more into
+        memory (eg.  when it has used all available memory) it  will
+        write out each file in the order that it read them.  When it
+        creates  each destination file,  it prints the source  file-
+        name.  Then  if it is unable to create the destination file,
+        an error message is printed and the copy operation continues
+        with the next file. /P can be given to make the output pause
+        at the end of the screen.
+
+             Many reasons  exist for COPY to be unable to create the
+        destination,  such as a read-only file already existing with
+        the  same  name. Sometimes  COPY will  refuse to  create the
+        destination because  the user  may have  made a mistake. For
+        example,  a file  cannot be  copied onto  itself, or several
+        files cannot  be copied onto one file. A 'Cannot create des-
+        tination  file' error may be given if the destination of one
+        file would  delete a  previous source file or a file already
+        being  used for  something else (eg. the currently executing
+        batch  file). A 'Cannot overwrite previous destination file'
+        error results  if an  attempt is  made to copy many files to
+        one  file. This  usually means that the intended destination
+        was a directory, but that the name has been misspelled.
+
+             If  /A is specified,  then an ASCII copy is  performed.
+        This means that source files will only be read as far as the
+        first   end-of-file   character  (CTRL-Z)  and   then   each
+        destination   will  have  a  single  end-of-file   character
+        appended to it.
+
+             It is also possible to give a /A to the destination  or
+        to any of the filespecs in the compound-filespec separately,
+        in  which  case  it  applies only to  that  source  or  dest
+        specification. Also /B may be given to reverse the effect of
+        /A.
+
+             The  /V option can be given to turn write  verification
+        on  for  the  duration of the COPY command (see  the  VERIFY
+        command). This will ensure that data is written correctly to
+        disks but will slow the operation down.
+
+             Normally, the destination files are given the same date
+        and time as the source files.  However, the /T option can be
+        given  to  cause the destination files to have  the  current
+        date  and time.  The destination files will not be hidden or
+        read-only, regardless of the attributes of the source files.
+        The ATTRIB command can be used to change these.
+
+             If COPY gives a 'Not enough memory' error then probably
+        reducing the number of buffers (see the BUFFERS command)  or
+        removing some environment items (see HELP ENV on Environment
+        Items) will free up sufficient memory.
+
+             Note  that the COPY command is simpler than that in MS-
+        DOS  and  MSX-DOS  1 because  it  cannot  concatenate  (join
+        together) files.  To do this,  a CONCAT command is available
+        (see the CONCAT command).
+
+Examples:
+
+        COPY FILE1 B:
+
+             The  file FILE1 is copied from the current directory of
+        the current drive to the current directory of drive B:.
+
+        COPY /H  MSXDOS2.SYS + COMMAND2.COM  B:
+
+             The  two hidden files MSXDOS2.SYS and COMMAND2.COM  are
+        copied to drive B:, thus making it a booting disk.
+
+        COPY A:\DIR1 B:\DIR1 /V
+
+             All files in the directory DIR1 from the root of  drive
+        A: are copied to a similar directory on drive B: with verify
+        on to ensure that the files were written correctly.
+
+        COPY B:
+
+             All  files  in the current directory of  drive  B:  are
+        copied to the current directory of the current drive.
+
+        COPY /A AUX CON
+
+             Characters  are read from the device AUX (which may  be
+        used for RS232 serial for example) to the device CON,  which
+        is the screen.  The copy is done as far as the first end-of-
+        file  character.  If /A was not given,  then there may  have
+        been  no way of stopping the COPY operation without pressing
+        the CTRL-STOP key.
+
+        COPY A:*.DOC B:/T
+
+             All  files  matching  *.DOC  (for  example   FILE1.DOC,
+        FILE2.DOC and FILE3.DOC) are copied to the current directory
+        of drive B:  and are given the current date and time instead
+        of the dates and times of the *.DOC files.
+
+        COPY *.BAT
+        AUTOEXEC.BAT -- File cannot be copied onto itself
+        REBOOT.BAT -- File cannot be copied onto itself
+
+             This command told COPY to copy all files matching *.BAT
+        (in  this case AUTOEXEC.BAT and REBOOT.BAT) from the current
+        directory of the current drive to the same place,  and  COPY
+        printed  the messages to warn of this.  No data in this case
+        was actually copied.
+
+        COPY *.BAT DIR2
+        AUTOEXEC.BAT
+        REBOOT.BAT -- Cannot overwrite previous destination file
+
+             This command told COPY to copy all files matching *.BAT
+        (in  this case AUTOEXEC.BAT and REBOOT.BAT) to  a  directory
+        called DIR2.  DIR2,  however,  did not exist so AUTOEXEC.BAT
+        was  copied to a file called DIR2,  and then an attempt  was
+        made  to  copy REBOOT.BAT also to a file  called  DIR2.  The
+        message was printed as a warning that a mistake was probably
+        made  (in this case DIR2 not existing).  REBOOT.BAT was  not
+        actually copied anywhere.
+

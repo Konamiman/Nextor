@@ -1,0 +1,67 @@
+DEL                                                       [Enhanced]
+---
+
+Format:      DEL [/S] [/H] [/P] compound-filespec
+                  or
+             ERA [/S] [/H] [/P] compound-filespec
+                  or
+             ERASE [/S] [/H] [/P] compound-filespec
+
+Purpose:     Deletes one or more files.
+
+Use:         The  compound-filespec specifies which files are to  be
+        deleted.  The  /H  option  allows hidden files  to  also  be
+        deleted and the /S option allows system files to be deleted.
+
+             During  the  delete  operation,  if a  file  cannot  be
+        deleted for some reason (eg.  it is set to 'read only') then
+        the  offending  filename  is printed  along  with  an  error
+        message,  and  the delete operation continues with the  next
+        file.  If  many such errors occur,  then the /P option  will
+        cause the output to pause at the end of the screen.
+
+             If the filename is *.*, then the prompt:
+
+                  Delete all files (Y/N) ?
+
+        is  printed,  and  a reply is waited for.  If the  reply  is
+        anything other than 'Y' or 'y',  then the file deletion does
+        not take place. This is a safety feature designed to prevent
+        accidental loss of all files in a directory.
+
+             If files are deleted unintentionally on a disk that was
+        formatted  under  MSX-DOS 2,  then the UNDEL command may  be
+        used immediately afterwards to restore them again.
+
+Examples:
+
+        DEL FILE1.BAK
+
+             The   file  FILE1.BAK  is  deleted  from  the   current
+        directory of the current drive.
+
+        DEL *.COM/H
+
+             All  files matching *.COM,  both hidden and not hidden,
+        are deleted.
+
+        DEL B:\UTIL\*.COM + B:\UTIL\*.BAT
+
+             All files matching *.COM or *.BAT are deleted from  the
+        directory called UTIL on drive B:.
+
+        DEL B:\UTIL
+        Delete all files (Y/N)?
+
+             All files in the directory called UTIL on drive B:  are
+        deleted.  Since so many files are being deleted, a prompt is
+        printed first to prevent a catastrophe.
+
+        DEL *.BAT
+        AUTOEXEC.BAT -- Read only file
+        REBOOT.BAT -- Read only file
+
+             All  files  matching  *.BAT  are  deleted  except   for
+        AUTOEXEC.BAT  and REBOOT.BAT which have been marked as  read
+        only.
+

@@ -1,0 +1,27 @@
+FREE                                                           [New]
+----
+
+Format:      FREE [d:]
+
+Purpose:      Displays the  total disk  space, total disk space used
+        and total disk space free of the specified or default drive.
+
+Use:          If  a drive  is given,  then the  volume name  of that
+        drive is  displayed, along  with the  total disk  space, the
+        used disk space and the free disk space.
+
+             If  no drive is given, then the default drive is assum-
+        ed.
+
+
+Examples:
+
+        FREE A:
+
+             Volume in drive A: has no name
+                 10216K total disk space
+                  5100K used for files
+                  5116K available disk space
+
+        Displays the total, used and free disk space on drive A:.
+
