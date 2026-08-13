@@ -22,6 +22,8 @@ WRTVDP:	EQU	#47	; Write VDP register (main BIOS, via CALSLT).
 
 ;------- MSX-DOS kernel variables
 ;
+ERR_TO_BASIC:	EQU	#F245	; DOS error code that the Nextor kernel
+			;   reports at the next entry to BASIC.
 BOOTDRV:	EQU	#F2FD	; Drive MSX-DOS boots from when leaving BASIC.
 DATEFMT:	EQU	#F30E	; Country code (determines the date format).
 

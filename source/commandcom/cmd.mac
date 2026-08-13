@@ -515,8 +515,11 @@ ENVDON:	LD	HL,(#01)
 	JP	BDOS	; Terminate with error code.
 
 		SUBTTL	FORMAT
-;        This is the FORMAT command routine. It simply takes an optional drive
-; letter and passes this to the format BDOS function.
+;        This is the FORMAT command routine: FORMAT [d:] [choice] [/X], or
+; FORMAT [d:] /Q [/X] for a quick format (_FORMAT choice FBh: only the FAT
+; and the root directory are cleared). The format choice string is obtained
+; in RAM with the Nextor A=80h _FORMAT call, so drives on MSX-DOS and
+; Nextor drivers can both be formatted; /X skips the warning prompt.
 @FORMAT::	AND	(HL)
 	LD	B,A	; Use default drive if none specified.
 	JR	NZ,FMT_HAS_ARG	;
@@ -525,8 +528,10 @@ ENVDON:	LD	HL,(#01)
 FMT_CHK_DRIVE:	ADD	HL,HL
 	PUSH	HL
 	PUSH	BC
-	XOR	A	;See if format is supported by
-	CALL	BDOS	; drive [B].
+	LD	HL,ENVDATA##	;See if format is supported by
+	LD	DE,#0200	; drive [B]: try to get its choice
+	LD	A,#80	; string (works for MSX-DOS and
+	CALL	BDOS	; Nextor drivers alike).
 	POP	BC
 	POP	HL
 	JR	NZ,FMT_NO_DRIVE	;Any error means drive does not exist
@@ -594,7 +599,7 @@ FMT_GETMASK:	RLA
 FMT_1DRIVE:	INC	B	;Always comes here with B=0.
 	RRCA	;
 	JR	NC,FMT_1DRIVE
-	JR	NFDRV
+	JP	NFDRV
 
 FMT_HAS_ARG:	INC	HL	; A drive letter plus a colon must
 	LD	A,(HL)	;   have been given.
@@ -617,10 +622,9 @@ NCIDRV:	LD	A,.IDRV##
 	RET	NC
 	INC	B
 	CALL	GETCH##	; No format choice given: use the
-	JR	Z,NFDRV	;   _FORMAT prompt.
-	CP	"/"	; An option cannot come first.
-	LD	A,.IOPT##
-	RET	Z
+	JP	Z,NFDRV	;   _FORMAT prompt.
+	CP	"/"	; An option here can only be /Q.
+	JR	Z,NCIQ
 	PUSH	BC	; Get the format choice, 1..9.
 	CALL	GET8##
 	POP	BC
@@ -632,12 +636,12 @@ NCIDRV:	LD	A,.IDRV##
 	CP	#0A
 	LD	A,.IPARM##
 	RET	NC
-	LD	A,(HL)	; Go if anything follows the
+NCI05:	LD	A,(HL)	; Go if anything follows the
 	OR	A	;   choice.
 	JR	NZ,NCI10
-	LD	A,E
-	EXX
-	JR	NSTR
+	LD	A,E	; The typed choice is 1-based
+	EXX	;   already: skip the INC A at
+	JP	NSTR1	;   NSTR.
 
 NCI10:	CP	"/"	; Only the /X option may follow
 	JR	Z,NCI20	;   the choice number.
@@ -659,29 +663,61 @@ NCI20:	INC	HL
 	CALL	Z,GCHKEOL##
 	RET	NZ
 	LD	A,E
-	JR	NST10
+	JP	NST10
+
+NCIQ:	INC	HL	; /Q: quick format. Only the FAT
+	LD	A,(HL)	;   and the root directory are
+	CALL	MKUPPER##	;   cleared, so the disk must
+	CP	"Q"	;   already have a valid FAT12/16
+	LD	A,.IOPT##	;   boot sector.
+	RET	NZ
+	INC	HL
+	CALL	GETCH##	; The end of the line, or /X, may
+	JR	Z,NCIQ2	;   follow.
+	CP	"/"
+	LD	A,.INP##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	CALL	MKUPPER##
+	CP	"X"	; /X: skip the 'all data will be
+	LD	A,.IOPT##	;   destroyed' warning (the not a
+	RET	NZ	;   floppy warning still shows).
+	INC	HL
+	CALL	CHKEOL##
+	CALL	Z,GCHKEOL##
+	RET	NZ
+	CALL	QCHK	; Validate the target drive and
+	RET	NZ	;   warn if it is not a floppy.
+	JR	C,NCIQ3
+	LD	A,#FB
+	JP	NST10
+
+NCIQ2:	CALL	QCHK	; Validate and warn as above, then
+	RET	NZ	;   warn about the data loss too.
+	JR	C,NCIQ3
+	LD	A,#FB
+	EXX
+	JP	NSTR1
+
+NCIQ3:	XOR	A	; The user declined, or the drive
+	RET	;   cannot be quick formatted.
 
 NFDRV:	LD	A,B
 	EXX	; Save drive in B'.
 	LD	B,A
-	LD	C,_FORMAT##
-	XOR	A	; Get pointer to prompt string.
-	CALL	BDOS
+	LD	HL,ENVDATA##	; Get the choice string into RAM:
+	LD	DE,#0200	;   works for drives on MSX-DOS
+	LD	A,#80	;   and Nextor drivers alike (the
+	LD	C,_FORMAT##	;   old A=0 call only worked for
+	CALL	BDOS	;   the former).
 	RET	NZ
-	LD	A,H
-	OR	L
-	JR	Z,NSTR	; Go if no prompt string (A=0).
-GETCHR:	LD	A,B	; Get slot number.
-	PUSH	BC
-	CALL	RDSLOT	; A=character from string.
-	POP	BC
-	OR	A
-	JR	Z,DONSTR	; Go if string has been printed.
-	INC	HL	; Next character.
-	CALL	PRCHAR##	; Print character.
-	JR	GETCHR	; Do next character.
-
-DONSTR:	LD	A,"?"
+	LD	A,(ENVDATA##)
+	OR	A	; Empty string => single choice:
+	JR	Z,NSTR	;   don't ask, use choice 1.
+	LD	DE,ENVDATA##	; Print the choice string.
+	CALL	PRTSTR##
+	LD	A,"?"
 	CALL	PRCHAR##
 	CALL	SPACE##
 INCHAR:	LD	C,_CONST##	; Get a character, gobbling up chars
@@ -702,9 +738,10 @@ INCHAR:	LD	C,_CONST##	; Get a character, gobbling up chars
 	CALL	PRCHAR##
 	CALL	LPRINT##
 	POP	AF
-NSTR:	INC	A
-	PUSH	AF
-	CALL	LPRINT##
+NSTR:	INC	A	; The keyboard choice and the "no
+NSTR1:	PUSH	AF	;   choice string" case are 0-based;
+	CALL	LPRINT##	;   typed choices and /Q (FBh)
+			;   enter 1-based at NSTR1.
 	LD	A,#2C
 	CALL	DMESS##
 	EXX
@@ -727,6 +764,120 @@ NST10:	LD	DE,ENVDATA##	; Format, using all memory from
 	EX	DE,HL
 	LD	C,_FORMAT##
 	JP	BDOS
+
+;        Validate the target drive of a quick format with _GDLI, since
+; clearing the FAT of the wrong drive is catastrophic: unmapped drives,
+; the RAM disk and mounted disk image files are refused with a message,
+; and a drive on a Nextor driver whose device is not a floppy disk
+; (only floppy disk devices have a format choice string, so probing for
+; one tells them apart) asks for an explicit confirmation first.
+;        No warning is shown unless the quick format could actually run:
+; the media must be accessible and hold a FAT12/16 filesystem, which is
+; checked with _DPARM (so e.g. an offline removable device fails here
+; with the usual disk error handling, before any warning).
+; On entry, B = drive, 1 = A:.
+; On exit,  NZ    => error code in A.
+;           Z, Cy => abort quietly (message printed / user declined).
+;           Z, NC => go ahead with the quick format.
+QCHK:	LD	A,B
+	DEC	A	; _GDLI counts drives from 0.
+	PUSH	BC
+	LD	HL,ENVDATA##	; 64 byte drive info buffer.
+	LD	C,_GDLI##
+	CALL	BDOS
+	POP	BC
+	OR	A
+	RET	NZ	; (drive beyond the system maximum)
+	LD	A,(ENVDATA##)	; The drive status decides:
+	LD	DE,QNOMAP$	;   0 = unassigned and 2 = unused
+	OR	A	;   => not mapped;
+	JR	Z,QCK30
+	CP	#02
+	JR	Z,QCK30
+	LD	DE,QRAMD$	;   4 = the RAM disk;
+	CP	#04
+	JR	Z,QCK30
+	LD	DE,QFILE$	;   3 = a mounted image file;
+	CP	#03
+	JR	Z,QCK30
+	PUSH	AF	; Save the drive status.
+	PUSH	BC
+	LD	L,B	; The device must be accessible
+	LD	DE,ENVDATA##+64	;   before any warning is shown:
+	LD	C,_DPARM##	;   an offline removable device
+	CALL	BDOS	;   fails here, with the usual
+	POP	BC	;   disk error handling.
+	OR	A
+	JR	Z,QCK05
+	POP	DE	; Discard the saved status and
+	OR	A	;   return the error code.
+	RET
+QCK05:	LD	A,(ENVDATA##+64+28)	; The disk must hold a FAT12/16
+	CP	#02	;   filesystem, or the quick
+	JR	C,QCK06	;   format would refuse it
+	POP	DE	;   anyway.
+	LD	A,.NDOS##	; 'Not a DOS disk'.
+	OR	A
+	RET
+QCK06:	POP	AF	; A = the drive status again.
+	CP	#05	;   5 = ghost drive, a floppy for
+	JR	Z,QCK10	;   sure;
+	LD	A,(ENVDATA##+5)	;   1 = a device on a driver: 0
+	OR	A	;   here means an MSX-DOS driver,
+	JR	Z,QCK10	;   also a floppy for sure.
+	PUSH	BC	; Nextor driver: probe for the
+	LD	HL,ENVDATA##	;   format choice string to know
+	LD	DE,#0200	;   whether the device is a
+	LD	A,#80	;   floppy disk.
+	LD	C,_FORMAT##
+	CALL	BDOS
+	POP	BC
+	OR	A
+	JR	NZ,QCK20	; Not a floppy: ask first.
+QCK10:	XOR	A	; Go ahead: Z and NC.
+	RET
+
+QCK20:	LD	DE,QWARN1$	; Print the warning with the
+	CALL	PRTSTR##	;   drive letter in it and get
+	LD	A,B	;   an explicit confirmation.
+	ADD	A,"@"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	DE,QWARN2$
+	CALL	PRTSTR##
+	PUSH	BC
+	CALL	INCH##	; Answer key in L, echo + CRLF.
+	POP	BC
+	LD	A,L
+	AND	%11011111	; Upper case the answer.
+	CP	"Y"
+	JR	Z,QCK10	; Sure: go ahead.
+	CP	"N"
+	JR	NZ,QCK20	; Ask again until Y or N.
+	JR	QCK40	; No: abort quietly.
+
+QCK30:	PUSH	DE	; Refused: print 'Drive X: ' and
+	LD	DE,QDRIVE$	;   the reason, then abort.
+	CALL	PRTSTR##
+	LD	A,B
+	ADD	A,"@"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	SPACE##
+	POP	DE
+	CALL	DMSCR##
+QCK40:	XOR	A	; Abort quietly: Z and Cy.
+	SCF
+	RET
+
+QDRIVE$:	DEFB	"Drive ",0
+QNOMAP$:	DEFB	"is not mapped",0
+QRAMD$:	DEFB	"is the RAM disk",0
+QFILE$:	DEFB	"is mapped to a disk image file",0
+QWARN1$:	DEFB	"WARNING: Drive ",0
+QWARN2$:	DEFB	" is NOT a floppy disk.",13,10,"Are you sure? (y/n) ",0
 
 		SUBTTL	MEMORY
 ;        The MEMORY command (new in 2.40) displays the state of the system
@@ -2667,8 +2818,11 @@ RDSLOT:	EX	DE,HL
 	POP	HL
 	RET
 
-VERMSG:	DEFB	"COMMAND2.COM version 2.41",13,10
-	DEFB	"Copyright (c) 1995-1997 by C.P.U.",13,10,0
+VERMSG:	
+	DEFB	"Nextor command interpreter "
+	INCLUDE	version.inc
+	DEFB	13,10,13,10
+	DEFB	"TYPE COMMAND2.COM for more details",13,10,0
 
 		SUBTTL	VERIFY
 ;******************************************************************************
@@ -2763,5 +2917,330 @@ DSK30:	INC	DE	; Skip DE past the matched word.
 	LD	B,C	; Set the new state.
 	LD	A,#01	; A = 1 => set.
 	LD	C,_DSKCHK##
+	JP	BDOS
+
+		SUBTTL	LOCK
+;        The LOCK command (new in 3.0): LOCK [d: [ON|OFF]].
+;        Locks or unlocks a drive with the _LOCK function: while a drive
+; is locked Nextor never checks its media change status (the inserted
+; media is assumed to never change), which speeds up access to removable
+; devices used as fixed storage. Any aborted disk error unlocks the
+; drive again.
+;        With no arguments the locked drives are listed; with only a
+; drive letter, the lock state of that drive is shown.
+@LOCK::	AND	(HL)
+	JR	NZ,LCK20
+	LD	D,#00	; No arguments: list the locked
+	LD	E,D	;   drives. D counts them, E is
+LCK10:	PUSH	DE	;   the drive number (0 = A:).
+	CALL	GETLCK
+	POP	DE
+	JR	Z,LCK15	; Not locked (or not lockable).
+	INC	D	; Locked: count it and print
+	LD	A,E	;   'X: '.
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	SPACE##
+LCK15:	INC	E
+	LD	A,E
+	CP	#08
+	JR	C,LCK10
+	LD	A,D	; End the list, or say that no
+	OR	A	;   drive is locked at all.
+	JP	NZ,LPRINT##
+	LD	DE,NOLOCK$
+	JP	DMSCR##
+
+LCK20:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
+	RET	NZ
+	LD	A,D
+	CP	#08+1	; Only drives A: to H: exist.
+	LD	A,.IDRV##
+	RET	NC
+	CALL	GETCH##	; Anything after the drive ?
+	JR	NZ,LCK30
+	DEC	D	; No: show the drive's lock state
+	LD	E,D	;   as 'X: is (not) locked'.
+	PUSH	DE
+	CALL	GETLCK
+	POP	DE
+	LD	HL,LOCKED$
+	JR	NZ,LCK25
+	LD	HL,NLOCKED$
+LCK25:	LD	A,E
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	SPACE##
+	EX	DE,HL
+	JP	DMSCR##
+
+LCK30:	PUSH	DE	; Save the drive (in D).
+	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$##	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#FF	; FF => lock.
+	CALL	COMPARE##
+	JR	NC,LCK40
+	INC	B	; Ready for OFF check.
+	INC	C	; 0 => unlock.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
+	JR	C,LCKERR
+LCK40:	INC	DE	; Skip DE past the matched word.
+	DJNZ	LCK40
+	INC	DE
+	EX	DE,HL
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
+	JR	NZ,LCKERR
+	CALL	GETCH##
+	LD	A,.INP##
+	JR	NZ,LCKERR
+	POP	DE	; D = drive again.
+	DEC	D
+	LD	E,D	; E = drive, 0 = A:.
+	LD	B,C	; B = FF => lock, 0 => unlock.
+	LD	A,#01	; Set the new lock state.
+	LD	C,_LOCK##
+	JP	BDOS
+
+LCKERR:	POP	DE	; Drop the saved drive and return
+	OR	A	;   the error code in A with NZ.
+	RET
+
+;        Get the lock state of drive E (0 = A:).
+; On exit,  NZ => the drive is locked. Errors (the drive is not mapped or
+; not accessible) count as not locked.
+GETLCK:	XOR	A
+	LD	B,A	; Preset 'not locked' for the
+	LD	C,_LOCK##	;   error case.
+	CALL	BDOS
+	OR	A
+	LD	A,B
+	JR	Z,GLK10
+	XOR	A	; Error => not locked.
+GLK10:	OR	A	; NZ => locked.
+	RET
+
+NOLOCK$:	DEFB	"No drives are locked",0
+LOCKED$:	DEFB	"is locked",0
+NLOCKED$:	DEFB	"is not locked",0
+
+		SUBTTL	RALLOC
+;        The RALLOC command (new in 3.0): RALLOC [d: [ON|OFF]].
+;        Displays or sets the reduced allocation information mode for a
+; drive: while enabled, _ALLOC reports at most 32MB of total/free space
+; for the drive so that the computed sector count fits in 16 bits; and if
+; the ZALLOC environment item is "ON", the free space is reported as 0
+; instead, without scanning the FAT (the zero allocation information
+; mode, which FREE, DIR and _DSPACE honour).
+;        With no arguments the drives with the mode enabled are listed;
+; with only a drive letter, the state for that drive is shown.
+@RALLOC::	AND	(HL)
+	JR	NZ,RAL30
+	CALL	GETRAL	; No arguments: list the drives
+	LD	B,#08	;   with the mode enabled from the
+	LD	C,#00	;   vector in L. C counts them,
+	LD	A,"A"	;   A = the drive letter.
+RAL10:	SRL	L
+	JR	NC,RAL15
+	INC	C	; Mode enabled: count the drive
+	PUSH	AF	;   and print 'X: '.
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	SPACE##
+	POP	AF
+RAL15:	INC	A
+	DJNZ	RAL10
+	LD	A,C	; End the list, or say that the
+	OR	A	;   mode is off everywhere.
+	JP	NZ,LPRINT##
+	LD	DE,NORAL$
+	JP	DMSCR##
+
+RAL30:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
+	RET	NZ
+	LD	A,D
+	CP	#08+1	; Only drives A: to H: exist.
+	LD	A,.IDRV##
+	RET	NC
+	CALL	GETCH##	; Anything after the drive ?
+	JR	NZ,RAL40
+	PUSH	DE	; No: show the state for the
+	CALL	GETRAL	;   drive as 'X: ON|OFF'.
+	POP	DE
+	LD	A,L
+	LD	B,D	; Rotate the drive's bit (number
+RAL35:	RRA	;   D-1) into the carry.
+	DJNZ	RAL35
+	LD	HL,ONWORD$##+1
+	JR	C,RAL37
+	LD	HL,OFFWORD$##+1
+RAL37:	LD	A,D
+	ADD	A,"@"	; Drive 1 => 'A'.
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	SPACE##
+	EX	DE,HL
+	JP	DMSCR##
+
+RAL40:	PUSH	DE	; Save the drive (in D).
+	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$##	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#FF	; FF => enable.
+	CALL	COMPARE##
+	JR	NC,RAL50
+	INC	B	; Ready for OFF check.
+	INC	C	; 0 => disable.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
+	JP	C,LCKERR
+RAL50:	INC	DE	; Skip DE past the matched word.
+	DJNZ	RAL50
+	INC	DE
+	EX	DE,HL
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
+	JP	NZ,LCKERR
+	CALL	GETCH##
+	LD	A,.INP##
+	JP	NZ,LCKERR
+	POP	DE	; D = drive again.
+	PUSH	DE
+	PUSH	BC	; (C = FF => enable, 0 => disable)
+	CALL	GETRAL	; HL = the current vector.
+	POP	BC
+	POP	DE
+	LD	A,#01	; Build the mask for bit D-1 of L.
+	LD	B,D
+	DEC	B
+	JR	Z,RAL60
+RAL55:	ADD	A,A
+	DJNZ	RAL55
+RAL60:	LD	E,A	; E = the drive's bit mask.
+	LD	A,C
+	OR	A	; Enabling or disabling ?
+	LD	A,E
+	JR	Z,RAL65
+	OR	L	; Set the drive's bit...
+	LD	L,A
+	JR	RAL70
+RAL65:	CPL
+	AND	L	;   ...or clear it.
+	LD	L,A
+RAL70:	LD	A,#01	; Set the new vector.
+	LD	C,_RALLOC##
+	JP	BDOS
+
+;        Get the reduced allocation information mode vector into HL
+; (bit 0 of L = drive A:). DE is preserved.
+GETRAL:	PUSH	DE
+	XOR	A
+	LD	C,_RALLOC##
+	CALL	BDOS
+	POP	DE
+	RET
+
+NORAL$:	DEFB	"No drives are in reduced allocation information mode",0
+
+		SUBTTL	Z80MODE
+;        The Z80MODE command (new in 3.0): Z80MODE slot[-subslot]|0
+; [ON|OFF]. Displays or sets the Z80 access mode of the MSX-DOS driver
+; in the given slot (a plain 0 means the master disk ROM slot): while
+; the mode is enabled, Nextor switches to the Z80 CPU before every
+; access to the driver. The _Z80MODE function works on MSX Turbo-R and
+; on MSX-DOS drivers only; anything else returns the kernel's 'Invalid
+; device driver' error.
+@Z80MODE::	AND	(HL)
+	LD	A,.IPARM##	; The slot argument is mandatory.
+	RET	Z
+	CALL	GET8##	; Get the primary slot number,
+	RET	NZ	;   0 to 3.
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,(HL)	; A subslot may follow.
+	CP	"-"
+	JR	NZ,Z8M20
+	INC	HL
+	PUSH	DE	; Save the primary slot (GET8
+	CALL	GET8##	;   zeroes DE while parsing).
+	POP	BC	; C = primary slot.
+	RET	NZ	; Get the subslot number, 0 to 3.
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,E
+	ADD	A,A	; Slot byte = expanded flag +
+	ADD	A,A	;   subslot + primary slot.
+	OR	C
+	OR	#80
+	JR	Z8M30
+Z8M20:	LD	A,E	; With no subslot, a plain '0'
+	OR	A	;   means the master disk ROM
+	JR	NZ,Z8M30	;   slot.
+	LD	A,(#F348)
+Z8M30:	LD	E,A	; E = the driver slot byte.
+	CALL	GETCH##	; Anything else on the line ?
+	JR	NZ,Z8M40
+	LD	A,E	; No: display the current mode.
+	LD	B,#00
+	LD	C,_Z80MODE##
+	CALL	BDOS
+	OR	A
+	RET	NZ	; (not Turbo-R / no legacy driver)
+	LD	HL,ONWORD$##+1
+	LD	A,D	; D = FF => the mode is enabled.
+	OR	A
+	JR	NZ,Z8M35
+	LD	HL,OFFWORD$##+1
+Z8M35:	EX	DE,HL
+	JP	DMSCR##
+
+Z8M40:	PUSH	DE	; Save the slot byte (in E).
+	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$##	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#FF	; FF => enable.
+	CALL	COMPARE##
+	JR	NC,Z8M50
+	INC	B	; Ready for OFF check.
+	INC	C	; 0 => disable.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
+	JP	C,LCKERR
+Z8M50:	INC	DE	; Skip DE past the matched word.
+	DJNZ	Z8M50
+	INC	DE
+	EX	DE,HL
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
+	JP	NZ,LCKERR
+	CALL	GETCH##
+	LD	A,.INP##
+	JP	NZ,LCKERR
+	POP	DE	; E = the slot byte.
+	LD	D,C	; D = FF => enable, 0 => disable.
+	LD	A,E
+	LD	B,#01	; Set the new mode.
+	LD	C,_Z80MODE##
 	JP	BDOS
 

@@ -133,12 +133,36 @@ SETP::	PUSH	HL
 
 		SUBTTL  DMESS
 DMESS::	CALL	GETMSG
-PRTSTR::	LD	A,(DE)
+PRTSTR::	LD	A,(ROWMAX##)	; With no /P paging active, the
+	OR	A	;   whole string can go out in a
+	JR	NZ,PRTS20	;   single _ZSTROUT call (much
+	PUSH	BC	;   faster than per-character
+	PUSH	HL	;   _CONOUT calls).
+	EX	DE,HL	; HL = start of the string.
+	PUSH	HL
+	LD	BC,#0200	; A string of 512+ characters
+	XOR	A	;   would be truncated under the
+	CPIR	;   fast STROUT mode, so measure
+	POP	DE	;   it first. DE = start again.
+	JR	NZ,PRTS10	; No terminator seen => long.
+	DEC	HL	; HL = the terminator.
+	PUSH	HL
+	LD	C,_ZSTROUT##
+	CALL	BDOS
+	XOR	A	; A = 0 and Z set, as the
+	POP	DE	;   per-character path returns;
+	POP	HL	;   DE is left at the terminator
+	POP	BC	;   for the same reason.
+	RET
+
+PRTS10:	POP	HL	; Long string: print it with the
+	POP	BC	;   per-character path.
+PRTS20:	LD	A,(DE)
 	OR	A
 	RET	Z	; Return if done.
 	INC	DE
 	CALL	PRCHAR	; Else output the character.
-	JR	PRTSTR
+	JR	PRTS20
 
 GETMSG::	LD	B,A
 	LD	DE,MESSAGES##

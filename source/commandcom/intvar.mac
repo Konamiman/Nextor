@@ -268,7 +268,7 @@ IV_DATE::	EX	AF,AF'	; Save it.
 IV_DOSVER::	LD	DE,DOSVER$
 	RET
 
-DOSVER$:	DEFB	"2.41",0
+DOSVER$:	DEFB	"3.0",0
 
 ;        %_DOW%: the current day of the week as a full English name: _GDATE
 ; returns the day of the week in A (0 = Sunday); messages #17-#1D are the
@@ -534,27 +534,9 @@ FN_HEX::	CALL	GET16##
 	POP	DE
 	RET
 
-;        %@DISKFREE[d:,b|k|m]%: the free space on a drive ("@:" = current
-; drive) in bytes, kilobytes or megabytes.
-;        FND20-FND80 are shared by the disk and file size functions: the
-; cluster count in HL is multiplied by B = sectors per cluster and by the
-; sector size (512) into a 32-bit byte count, which is then divided by 1024
-; once for "K" or twice for "M" (unit letter in AF') and rendered in
-; decimal at ENVNAME. FND50 enters with a byte count in HL:DE directly.
-FN_DISKFREE::	CALL	GETALLOC	; HL = free clusters.
-FND20:	JR	C,FND90	; Bad argument => null string.
-FND40:	XOR	A	; A:HL = cluster count (24 bits).
-FND42:	SRL	B	; A:HL = clusters * sectors/cluster:
-	JR	Z,FND44	;   double once per power of two in B,
-	ADD	HL,HL	;   keeping the overflow in A (a FAT16
-	ADC	A,A	;   drive can exceed 65535 sectors).
-	JR	FND42
-FND44:	LD	D,L	; HL:DE = A:HL * 512 (the sector size)
-	LD	E,#00	;   = the size in bytes.
-	LD	L,H
-	LD	H,A
-	SLA	D
-	ADC	HL,HL
+;        FND50-FND80 are shared by the disk and file size functions: the
+; 32-bit byte count in HL:DE is divided by 1024 once for "K" or twice for
+; "M" (unit letter in AF') and rendered in decimal at ENVNAME.
 FND50:	LD	(VALUEL##),DE	; Store the 32-bit byte count.
 	LD	(VALUEH##),HL
 	EX	AF,AF'	; Get the unit letter.
@@ -601,22 +583,20 @@ FN_FILETOTAL::	LD	A,(HL)
 	LD	HL,(FILETOT2##)
 	JR	FND50
 
-;        Parses the "d:,b|k|m" argument of the @DISK* functions and gets
-; the drive's allocation information with a guarded _ALLOC call.
+;        Parses the "d:,b|k|m" argument of the @DISK* functions.
 ; On entry, HL points to the argument; the drive letter may be "@" for the
 ;               current drive and must be followed by ":".
-; On exit,  Cy set => bad argument or invalid drive. Otherwise HL = free
-;               clusters, DE = total clusters, B = sectors per cluster and
-;               AF' holds the upper-cased unit letter. IY is reloaded with
-;               REDIRST.
-GETALLOC:	LD	A,(HL)
+; On exit,  Cy set => bad argument. Otherwise E = drive (0 = current,
+;               1 = A:, the _DSPACE convention) and AF' holds the
+;               upper-cased unit letter.
+GSPARSE:	LD	A,(HL)
 	CALL	UC##
 	SUB	"@"	; "@" => 0 = current drive.
 	RET	C
 	CP	9	; Only drives up to H: are valid.
 	CCF
 	RET	C
-	LD	E,A	; E = drive for _ALLOC.
+	LD	E,A	; E = drive for _DSPACE.
 	INC	HL
 	LD	A,(HL)
 	CP	":"
@@ -628,39 +608,92 @@ GETALLOC:	LD	A,(HL)
 	RET	Z	; Unit letter is missing.
 	CALL	UC##
 	CP	"B"
-	JR	Z,GET10
+	JR	Z,GSP10
 	CP	"K"
-	JR	Z,GET10
+	JR	Z,GSP10
 	CP	"M"
 	SCF
 	RET	NZ	; Not a valid unit letter.
-GET10:	EX	AF,AF'	; Save the unit letter.
-	CALL	SETABT
-	LD	C,_ALLOC##
+GSP10:	EX	AF,AF'	; Save the unit letter.
+	OR	A	; NC => parsed successfully.
+	RET
+
+;        Gets the free (A = 0) or total (A = 1) space on drive E with a
+; guarded _DSPACE call, which reports a 32-bit kilobyte count in HL:DE
+; plus up to 512 extra bytes in BC when the allocation unit is not a
+; whole number of kilobytes. IY is reloaded with REDIRST.
+; On exit,  Cy set => bad drive. Otherwise HL:DE = the space as a 32-bit
+;               byte count.
+GSCALL:	CALL	SETABT
+	LD	C,_DSPACE##
 	CALL	BDOS
 	CALL	RSTABT
 	LD	IY,REDIRST##
-	LD	B,A	; B = sectors per cluster.
-	INC	A
-	SCF
-	RET	Z	; A was FF => invalid drive.
 	OR	A
+	SCF
+	RET	NZ	; Error => Cy.
+	LD	A,#0A	; HL:DE = KB * 1024 + the extra
+GSC10:	SLA	E	;   bytes in BC = the byte count.
+	RL	D
+	ADC	HL,HL
+	DEC	A
+	JR	NZ,GSC10
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL
+	RET	NC
+	INC	HL
+	OR	A	; NC (A is 0 here).
 	RET
 
-;        %@DISKTOTAL[d:,b|k|m]%: the total size of a drive, from the total
-; cluster count.
-FN_DISKTOTAL::	CALL	GETALLOC
-	EX	DE,HL	; HL = total clusters.
-	JP	FND20
+;        %@DISKTOTAL[d:,b|k|m]%: the total size of a drive. The total
+; reported by _DSPACE is always real: never affected by the reduced/zero
+; allocation information mode, and correct beyond 32MB on FAT16.
+FN_DISKTOTAL::	CALL	GSPARSE
+	JP	C,FND90	; Bad argument => null string.
+	LD	A,#01
+	CALL	GSCALL
+	JP	C,FND90
+	JP	FND50
+
+;        %@DISKFREE[d:,b|k|m]%: the free space on a drive ("@:" = current
+; drive) in bytes, kilobytes or megabytes. Under the zero allocation
+; information mode this is 0, as reported by the kernel.
+FN_DISKFREE::	CALL	GSPARSE
+	JP	C,FND90
+	XOR	A
+	CALL	GSCALL
+	JP	C,FND90
+	JP	FND50
 
 ;        %@DISKUSED[d:,b|k|m]%: the space in use on a drive: total minus
-; free clusters.
-FN_DISKUSED::	CALL	GETALLOC
+; free bytes.
+FN_DISKUSED::	CALL	GSPARSE
 	JP	C,FND90
-	EX	DE,HL
-	OR	A
-	SBC	HL,DE	; HL = total - free clusters.
-	JP	FND40
+	PUSH	DE	; Save the drive number.
+	LD	A,#01
+	CALL	GSCALL	; HL:DE = total bytes.
+	POP	BC	; C = drive number.
+	JP	C,FND90
+	PUSH	HL
+	PUSH	DE	; Stack: the total byte count.
+	LD	E,C
+	XOR	A
+	CALL	GSCALL	; HL:DE = free bytes.
+	POP	BC	; BC = total low word.
+	JR	NC,FNDU10
+	POP	HL	; Bad drive now (?): clean up the
+	JP	FND90	;   stack and return a null string.
+FNDU10:	LD	A,C	; Used = total - free: first the
+	SUB	E	;   low word into DE, keeping the
+	LD	E,A	;   borrow...
+	LD	A,B
+	SBC	A,D
+	LD	D,A
+	EX	(SP),HL	; HL = total high; stack: free high.
+	POP	BC	; BC = free high word.
+	SBC	HL,BC	;   ...then the high word.
+	JP	FND50
 
 ;        %@FILEDATE[filespec]% and %@FILETIME[filespec]%: the date or time
 ; of last modification of a file (one shared body; Cy in AF' selects the

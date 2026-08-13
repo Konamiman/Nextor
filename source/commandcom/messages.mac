@@ -110,6 +110,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"INKEY .... reads character into environment item",13,10
 	DEFB	"INPUT .... reads string into environment item",13,10
 	DEFB	"KMODE .... sets or resets ",34,"Kanji Mode",34,13,10
+	DEFB	"LOCK ..... locks/unlocks a drive",13,10
 	DEFB	"MD ....... see MKDIR",13,10
 	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
 	DEFB	"MKDIR .... creates a new sub-directory",13,10
@@ -121,6 +122,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"PAUSE .... prompts for a keypress",13,10
 	DEFB	"POPD ..... restores the current drive and directory",13,10
 	DEFB	"PUSHD .... stores the current drive and directory",13,10
+	DEFB	"RALLOC ... displays/sets the reduced allocation information mode",13,10
 	DEFB	"RAMDISK .. displays/sets the size of the RAM disk",13,10
 	DEFB	"RD ....... see RMDIR",13,10
 	DEFB	"REM ...... remark... Ignores the following text.",13,10
@@ -144,6 +146,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"VOL ...... displays/sets disk volume name",13,10
 	DEFB	"XCOPY .... copies files from a directory tree",13,10
 	DEFB	"XDIR ..... displays filenames in a directory tree",13,10
+	DEFB	"Z80MODE .. displays/sets the Z80 access mode for a legacy driver",13,10
 	DEFB	13,10
 	DEFB	"Help for other MSX-DOS features is also available.",13,10
 	DEFB	"The standard topics are:",13,10
@@ -159,7 +162,7 @@ MESSAGES::	DEFB	"Yy",0
 
 	DEFB	"Insert COMMAND2.COM disk in drive ",0,":",0
 	DEFB	"Destroy all data on RAM disk (Y/N)? ",0
-	DEFB	"Wrong version of MSX-DOS, system halted",0
+	DEFB	"COMMAND2.COM:Wrong version of Nextor",0
 	DEFB	"Terminate batch file (Y/N)? ",0
 	DEFB	"Insert batch file disk in drive ",0,":",0
 	DEFB	"Redirection error: ",0
@@ -184,5 +187,8 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	" total TPA memory",0
 	DEFB	" total history buffer",0
 	DEFB	" total alias memory",0
-	DEFB	" total variable swap memory",0,0,0,0,0
+	DEFB	" total variable swap memory",0
+	DEFB	"COMMAND2.COM: Wrong version of NEXTOR.SYS",0
+	DEFB	"Zero allocation information mode is active, no space information to report",0
+	DEFB	"Press any key... ",0,0
 

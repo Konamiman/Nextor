@@ -16,8 +16,24 @@
 	JP	START
 
 BANNER:	DEFB	13
-	DEFB	"MSX-DOS 2  COMMAND version 2.41",13,10
-	DEFB	"Copyright (c) 1995-1997 by C.P.U.",13,10,10,26
+	DEFB	"Nextor command interpreter "
+	INCLUDE	version.inc
+	DEFB	13,10
+	DEFB	"(c) 2026 by Konamiman",13,10
+	DEFB	13,10
+	DEFB	"Based on:",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.31",13,10
+	DEFB	"(c) 1991 by ASCII Corporation",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.41",13,10
+	DEFB	"(c) 1997 by C.P.U.",13,10
+	DEFB	13,10
+	DEFB	"Inspired by:",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.44",13,10
+	DEFB	"(c) 2010 by The New Image",13,10
+	DEFB	10,26
 
 COPYBACK:	LD	SP,#F51F
 SAVETPA:	LD	HL,#00
@@ -335,23 +351,53 @@ MAXBUFLEN::	DEFW	 4096
 START::	LD	SP,BOOTSTRAP##
 	LD	A,(#37)
 	EX	AF,AF'
+	LD	B,#5A	; _DOSVER with the magic numbers:
+	LD	HL,#1234	;   only Nextor returns the extended
+	LD	DE,#ABCD	;   version information in IX/IY.
+	LD	IX,#00
 	LD	C,_DOSVER##
 	CALL	BDOS
-	LD	A,#01
-	CP	B
-	JR	NC,STA10
-	CP	D
-	JR	C,STA20
-STA10:	CALL	RPRCRLF
+	LD	A,#01	; The kernel must be DOS 2
+	CP	B	;   compatible. (A DOS 1 kernel that
+	JR	NC,STA10	;   ignores _DOSVER leaves B=5Ah:
+	PUSH	IX	;   that is caught by IXh below.)
+	POP	BC	; B = IXh, C = IXl.
+	LD	A,B
+	CP	#01	; IXh = 1 => the kernel is Nextor
+	JR	NZ,STA10	;   (0 => plain MSX-DOS 2).
+	LD	A,C	; IXl = Nextor kernel major version
+	CP	#03	;   (from ROM, cannot be spoofed):
+	JR	C,STA10	;   must be at least 3.
+	LD	A,D	; NEXTOR.SYS major version (BCD):
+	CP	#03	;   must be at least 3 as well.
+	JR	NC,STA20
+	LD	A,#50	; 'Wrong version of NEXTOR.SYS'.
+	JR	STA15
+STA10:	LD	A,#35	; 'Wrong version of Nextor'.
+STA15:	PUSH	AF
+	CALL	RPRCRLF
 	LD	A,#0D
 	CALL	DMESS##
-	LD	A,#35
+	POP	AF
 	CALL	DMESS##
 	LD	A,#0E
 	CALL	DMESS##
 	CALL	RPRCRLF
-	DI
-	HALT
+	CALL	RPRCRLF
+	LD	A,#52	; 'Press any key... ', wait for
+	CALL	DMESS##	;   the key and drop to disk
+	LD	C,_INNOE##	;   BASIC (the same strategy
+	CALL	BDOS	;   NEXTOR.SYS follows).
+	XOR	A	; Clear the FCBs and the command
+	LD	(#80),A	;   tail, as LDCOME does: disk
+	LD	HL,#80	;   BASIC auto-runs any file name
+	LD	B,#24	;   it finds in the FCB at 5Ch,
+STA17:	DEC	HL	;   and at this point that area
+	LD	(HL),A	;   holds leftovers from the
+	DJNZ	STA17	;   program loader.
+	LD	SP,#F51F
+	CALL	#F368
+	JP	#4022
 
 STA20:	LD	DE,#00
 	PUSH	DE
@@ -385,12 +431,11 @@ STA40:	LD	B,A
 	INC	A
 	CALL	ALL_SEG##
 	JR	NC,STA50
-	LD	A,#0D
-	CALL	DMESS##
-	LD	A,#42
-	CALL	DMESSCR##
-	DI
-	HALT
+	LD	A,.NORAM##	; No free mapper segment: exit to
+	LD	(ERR_TO_BASIC),A	;   BASIC and let the kernel
+	LD	SP,#F51F	;   explain the error there,
+	CALL	#F368	;   instead of freezing the
+	JP	#4022	;   machine.
 
 STA50:	LD	(MAPPAGE##),A
 	LD	(RTYCNT),A

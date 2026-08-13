@@ -278,50 +278,110 @@ FRE20:	ADD	A,"@"
 	CALL	VOL
 	RET	NZ
 	LD	A,(ENVNAME##)
-	SUB	"@"
-	LD	E,A
-	LD	C,_ALLOC##
-	CALL	BDOS
-	LD	B,A
-	PUSH	DE
-	PUSH	HL
-	EX	DE,HL
+	SUB	"@"	; Drive number, 1 = A: (the
+	LD	E,A	;   _DSPACE convention).
+	CALL	ZSUPP?	; Zero alloc mode active for it ?
+	JR	NC,FRE30
+	LD	A,#51	; Then there is nothing to report.
+	JP	DMESSCR##
+FRE30:	PUSH	DE	; Save the drive number.
+	LD	A,#01
+	CALL	GETDSP	; HL:DE = total bytes.
+	POP	BC	; C = drive number.
+	RET	NZ
 	PUSH	BC
+	PUSH	HL
+	PUSH	DE	; Stack: drive, total.
 	CALL	COMPUTE
 	LD	A,#3E
 	CALL	DMESSCR##
-	POP	BC
 	POP	DE
-	POP	HL
-	PUSH	DE
-	SBC	HL,DE
-	PUSH	BC
+	POP	HL	; HL:DE = total again.
+	POP	BC	; C = drive number.
+	PUSH	HL
+	PUSH	DE	; Stack: total.
+	LD	E,C
+	XOR	A
+	CALL	GETDSP	; HL:DE = free bytes.
+	POP	BC	; BC = total low word.
+	LD	A,C	; Used = total - free: first the
+	SUB	E	;   low word into BC, keeping the
+	LD	C,A	;   borrow...
+	LD	A,B
+	SBC	A,D
+	LD	B,A
+	EX	DE,HL	; DE = free high, HL = free low.
+	EX	(SP),HL	; HL = total high; stack: free low.
+	SBC	HL,DE	;   ...then the high word.
+	PUSH	DE	; Stack: free low, free high.
+	LD	D,B
+	LD	E,C	; HL:DE = used bytes.
 	CALL	COMPUTE
 	LD	A,#3F
 	CALL	DMESSCR##
-	POP	BC
 	POP	HL
+	POP	DE	; HL:DE = free bytes.
 	CALL	COMPUTE
 	LD	A,#40
 	JP	DMESSCR##
 
-COMPUTE:	XOR	A	; A:HL = cluster count (24 bits).
-COM10:	SRL	B	; A:HL = clusters * sectors/cluster:
-	JR	Z,COM20	;   double once per power of two in B,
-	ADD	HL,HL	;   keeping the overflow in A (a FAT16
-	ADC	A,A	;   drive can exceed 65535 sectors).
-	JR	COM10
-COM20:	LD	D,L	; HL:DE = A:HL * 512 (the sector size)
-	LD	E,#00	;   = the size in bytes.
-	LD	L,H
-	LD	H,A
-	SLA	D
-	ADC	HL,HL
-	LD	(VALUEL##),DE
-	LD	(VALUEH##),HL
+COMPUTE:	LD	(VALUEL##),DE	; VALUE = the 32-bit byte count in
+	LD	(VALUEH##),HL	;   HL:DE.
 	LD	A," "
-	CALL	PRLEN2##
+	JP	PRLEN2##
+
+;        Get the free (A = 0) or total (A = 1) space on drive E (1 = A:)
+; with _DSPACE, which reports a 32-bit kilobyte count in HL:DE plus up to
+; 512 extra bytes in BC when the allocation unit is not a whole number of
+; kilobytes.
+; On exit,  Z  => HL:DE = the space as a 32-bit byte count.
+;           NZ => A = error code from _DSPACE.
+GETDSP:	LD	C,_DSPACE##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,#0A	; HL:DE = KB * 1024 + the extra
+GDS10:	SLA	E	;   bytes in BC = the byte count.
+	RL	D
+	ADC	HL,HL
+	DEC	A
+	JR	NZ,GDS10
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL
+	RET	NC
+	INC	HL
+	XOR	A
 	RET
+
+;        Test whether the zero allocation information mode suppresses the
+; free space figure for drive E (1 = A:): the ZALLOC environment item must
+; be "ON" (case-insensitive) and the drive's bit must be set in the
+; reduced allocation information mode vector (_RALLOC). The FAT scan is
+; skipped by the kernel in that case, so the "free space" it reports is a
+; meaningless 0.
+; On exit,  Cy set => suppressed. DE is preserved.
+ZSUPP?:	PUSH	DE
+	LD	HL,ZALLOC$
+	CALL	ON?##	; NC => ZALLOC is "ON".
+	JR	C,ZSUP10
+	XOR	A	; Get the reduced allocation
+	LD	C,_RALLOC##	;   information mode vector:
+	CALL	BDOS	;   L = drives A: to H: bitmask.
+	POP	DE
+	PUSH	DE
+	LD	A,L
+	LD	B,E	; Rotate the drive's bit (number
+ZSUP05:	RRA	;   E-1) into the carry.
+	DJNZ	ZSUP05
+	POP	DE
+	RET
+
+ZSUP10:	OR	A	; Not suppressed => NC.
+	POP	DE
+	RET
+
+ZALLOC$:	DEFB	"ZALLOC",0
 
 @DIR::	PUSH	HL
 	CALL	TFORM##
@@ -539,19 +599,11 @@ DIR_DONE:	RET	NZ
 FILE::	CALL	DMESS##
 	LD	A,(LOGDRV2##)	; Get drive of first filename parsed.
 	LD	E,A
-	LD	C,_ALLOC##	; Get allocation information.
-	CALL	BDOS
-	LD	B,A	; B=sectors/cluster, HL=clusters free.
-	DEFB	#3E
-FIL10:	ADD	HL,HL
-	SRL	B	;   free bytes (B is always a power
-	JR	NZ,FIL10	;   of 2) so HL = no. free sectors.
-	LD	E,#00	; Multiply by sectory size (512) into
-	LD	D,L	;   HLDE to get the number of free
-	LD	L,H	;   bytes.
-	LD	H,E
-	SLA	D
-	ADC	HL,HL
+	CALL	ZSUPP?	; Zero alloc mode active => display
+	JP	C,LPRINT##	;   nothing about the free space.
+	XOR	A
+	CALL	GETDSP	; HL:DE = free bytes.
+	JP	NZ,LPRINT##
 	LD	(VALUEL##),DE	; Save in 32 bit number buffer.
 	LD	(VALUEH##),HL
 	CALL	PRLEN##	; Print no. bytes or Ks.

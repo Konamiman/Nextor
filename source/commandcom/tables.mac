@@ -160,6 +160,10 @@ CMDTAB::	DEFB	2
 	DEFW	@HELP##
 
 	DEFB	4
+	DEFB	"LOCK"
+	DEFW	@LOCK##
+
+	DEFB	4
 	DEFB	"MODE"
 	DEFW	@MODE##
 
@@ -296,6 +300,10 @@ CMDTAB::	DEFB	2
 	DEFW	@MEMORY##
 
 	DEFB	6
+	DEFB	"RALLOC"
+	DEFW	@RALLOC##
+
+	DEFB	6
 	DEFB	"RENAME"
 	DEFW	@RENAME##
 
@@ -318,6 +326,10 @@ CMDTAB::	DEFB	2
 	DEFB	7
 	DEFB	"RAMDISK"
 	DEFW	@RAMDISK##
+
+	DEFB	7
+	DEFB	"Z80MODE"
+	DEFW	@Z80MODE##
 
 ;        The terminating zero also doubles as the shared empty string: the
 ; %var% expander and the variable functions return DE -> CMDTEND for a null
