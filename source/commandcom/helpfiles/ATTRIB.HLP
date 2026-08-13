@@ -1,4 +1,4 @@
-ATTRIB                                                    [Enhanced]
+ATTRIB                                                  [2.20, 2.40]
 ------
 
 Format:      ATTRIB +|-R|H|S|A [/S] [/H] [/P] compound-filespec

@@ -1,0 +1,4 @@
+# The COMMAND2.COM help files are MSX text files: CRLF line endings
+# and a trailing CTRL-Z, all to be preserved verbatim (no end of line
+# normalization - core.autocrlf would strip the CRs on commit).
+source/commandcom/helpfiles/*.HLP -text

@@ -1,4 +1,4 @@
-COMMAND2                                                [Compatible]
+COMMAND2                                                      [2.20]
 --------
 
 Format:      COMMAND2 [command]
@@ -11,7 +11,7 @@ Use:         command  is  any command that can normally be typed  at
              COMMAND2  is simply the name of the command interpreter
         on disk,  and can be executed as a normal transient program.
         In   normal  use  it  gets  loaded  and  executed  once   by
-        MSXDOS2.SYS,  and  this provides the ability to perform  all
+        NEXTOR.SYS,  and  this provides the ability to perform  all
         the commands available.
 
              Advanced  users may,  however,  wish to invoke  another
@@ -31,7 +31,7 @@ Use:         command  is  any command that can normally be typed  at
         command is given (see the EXIT command). If an error code is
         given  to  this  EXIT command,  then  the  original  command
         interpreter or program will receive it and,  in the case  of
-        COMMAND2.COM  and  MSXDOS2.SYS,  print an appropriate  error
+        COMMAND2.COM  and  NEXTOR.SYS,  print an appropriate  error
         message (see HELP ERRORS).
 
              If  a command  is given  as a parameter to COMMAND2.COM
@@ -61,6 +61,11 @@ Use:         command  is  any command that can normally be typed  at
         which  is freed again when it exits.  This depends partly on
         the  number  of environment items,  and is  typically  about
         1.5K.
+
+             COMMAND2.COM 3.0 requires a Nextor kernel version  3.0
+        or later and a NEXTOR.SYS version 3.0  or  later.  When  any
+        of the two is older,  a message is printed and,  after a key
+        press, the computer drops to the disk BASIC interpreter.
 
              When COMMAND2.COM executes a transient program,  it may
         have to re-load itself off disk since the program is allowed

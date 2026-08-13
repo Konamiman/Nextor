@@ -1,4 +1,4 @@
-VER                                                     [Compatible]
+VER                                                      [2.20, 3.0]
 ---
 
 Format:      VER
@@ -6,26 +6,19 @@ Format:      VER
 Purpose:     Displays the system's version numbers.
 
 Use:         The version numbers of the three main components of the
-        MSX-DOS  disk  system are  displayed.  Each  version  number
-        consists  of three digits.  The first digit is the main MSX-
-        DOS version number and for MSX-DOS 2 will always be  2.  The
-        second  digit  is  the version number and  will  change  for
-        future  versions that have,  for example,  had  extra  major
-        features  added.  The  last digit is the release number  and
-        will  change with different releases of the same version  of
-        the  system which have had minor changes,  improvements  and
-        corrections made.
+        Nextor disk system are displayed:  the Nextor kernel (in the
+        ROM of the machine or of a cartridge),  NEXTOR.SYS  and  the
+        command interpreter itself.
 
 Examples:
 
         VER
-        MSX-DOS kernel version 2.31
-        MSXDOS2.SYS version 2.31
-        COMMAND2.COM version 2.44
-        (c) 1989 by MSX Association
-        (c) 1995 by C.P.U.
-        (c) 2010 by The New Image
+        Nextor kernel version 3.0.0
+        NEXTOR.SYS version 3.00
+        Nextor command interpreter 3.0
 
-             The  version numbers of all the components of the  MSX-
-        DOS disk system are printed out.
+        TYPE COMMAND2.COM for more details
+
+             The version numbers of all the components of the Nextor
+        disk system are printed out.
 

@@ -1,4 +1,4 @@
-XCOPY                                                   [Compatible]
+XCOPY                                                         [2.20]
 -----
 
 Format:      XCOPY [filespec [filespec]] [options]

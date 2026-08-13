@@ -1,4 +1,4 @@
-COPY                                                      [Enhanced]
+COPY                                                    [2.20, 2.40]
 ----
 
 Format:      COPY [/S] [/H] [/P] [/A] [/B] [/V] [/T] source dest

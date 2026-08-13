@@ -1,4 +1,4 @@
-DIR                                                       [Enhanced]
+DIR                                          [2.20, 2.40, 2.41, 3.0]
 ---
 
 Format:      DIR [/S] [/H] [/W] [/P] [/2] [compound-filespec]
@@ -74,6 +74,12 @@ Use:         The  compound-filespec specifies which files are to  be
 
              If the /P option is given,  then the output will  pause
         at the bottom of the screen until a key is pressed.
+
+             The volume line at the start of the listing is followed
+        by a note about the drive mapping when it is a  special  one
+        (see HELP VOL),  and the free space figure  at  the  end  is
+        omitted  when  the  drive is in zero allocation  information
+        mode (see HELP RALLOC).
 
 Examples:
 

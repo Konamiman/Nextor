@@ -122,6 +122,11 @@ EDITING COMMAND LINES
         preter  and  MSX-DOS  use  different lists  for storing  the
         commands.
 
+*            The list is kept in the shell RAM segment: when it  has
+        been given back with the SHELLRAM command,  the list  is not
+        available and the recalling keys do nothing  (see  HELP
+        SHELLRAM).
+
              If a previous command line is changed,  then it will be
         used  as the new command line and added to the bottom of the
         list.  If it was not changed,  then it will not be added  to

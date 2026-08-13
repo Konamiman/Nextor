@@ -1,4 +1,4 @@
-CDPATH                                                         [New]
+CDPATH                                                        [2.40]
 ------
 
 Format:      CDPATH [[+|-] [d:]path [[d:]path [[d:]path...]]]

@@ -1,4 +1,4 @@
-IF                                                        [Enhanced]
+IF                                                [2.20, 2.40, 2.41]
 --
 
 Format:      IF [NOT] EXIST [d:][path]filename [THEN] command

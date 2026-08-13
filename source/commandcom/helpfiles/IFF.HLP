@@ -1,4 +1,4 @@
-IFF                                                            [New]
+IFF                                                     [2.40, 2.41]
 ---
 
 Format:      IFF [NOT] EXIST [d:][path]filename [THEN] [command]

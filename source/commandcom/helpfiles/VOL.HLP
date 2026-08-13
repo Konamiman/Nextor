@@ -1,4 +1,4 @@
-VOL                                                     [Compatible]
+VOL                                                      [2.20, 3.0]
 ---
 
 Format:      VOL [d:][volname]
@@ -12,6 +12,10 @@ Use:         If no parameters are given,  or if only a drive name is
              If  a  volname is given,  then the volume name  of  the
         specified  or  current  drive is changed  to  the  specified
         volume name.
+
+             When the drive is mapped to a disk  image file,  to the
+        RAM disk,  or is a ghost drive of another one,  a note about
+        it is printed after the volume line.
 
 Examples:
 

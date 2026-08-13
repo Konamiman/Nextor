@@ -1,4 +1,4 @@
-ALIAS                                                          [New]
+ALIAS                                                         [2.40]
 -----
 
 Format:      ALIAS [/P] [name] [separator] [value] | /R |
@@ -33,6 +33,10 @@ Use:         If no  parameters are given, then all currently defined
         space is full. The free alias space is 14K initially.
 
              HELP ALI gives more information about aliases.
+
+             The alias list is kept in the shell  RAM segment:  when
+        it has been given back with SHELLRAM OFF,  ALIAS only prints
+        'Shell RAM is off' (see HELP SHELLRAM).
 
 Examples:
 

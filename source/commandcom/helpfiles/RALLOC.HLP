@@ -1,0 +1,44 @@
+RALLOC                                                         [3.0]
+------
+
+Format:      RALLOC [d: [ON | OFF]]
+
+Purpose:     Displays  or  sets  the reduced  allocation information
+        mode of a drive.
+
+Use:         If no parameters are given,  then the drives that  have
+        the mode enabled are listed.
+
+             If only a drive is given,  then the state of  the  mode
+        for that drive is displayed.
+
+             If ON or OFF is also given, then the mode is enabled or
+        disabled for the drive.
+
+             While the mode is enabled for a drive,  the amounts  of
+        total and free space reported for it by the older,  MSX-DOS1
+        style function calls are limited to 32 megabytes, so that
+        the sector counts derived from them fit in 16 bits  and  old
+        programs (including Disk BASIC) are not confused by  a  very
+        large drive.  Programs using the newer function  calls,  and
+        commands such as DIR and FREE, always see the real amounts.
+
+             Additionally,  when the ZALLOC environment item is  set
+        to ON,  the free space of the drives with the  mode  enabled
+        is reported as zero  instead of  being computed, avoiding  a
+        potentially slow scan of the whole allocation  table  ('zero
+        allocation information mode').  DIR then omits the free
+        space figure and FREE prints a note instead  of  the   space
+        information.
+
+Examples:
+
+        RALLOC
+        A: B:
+
+             The mode is currently enabled for drives A: and B:.
+
+        RALLOC C: ON
+
+             The mode is enabled for drive C:.
+

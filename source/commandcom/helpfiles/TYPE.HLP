@@ -1,4 +1,4 @@
-TYPE                                                      [Enhanced]
+TYPE                                                    [2.20, 2.40]
 ----
 
 Format:      TYPE [/S] [/H] [/P] [/B] compound-filespec | device

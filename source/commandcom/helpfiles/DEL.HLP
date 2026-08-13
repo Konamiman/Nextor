@@ -1,4 +1,4 @@
-DEL                                                       [Enhanced]
+DEL                                                     [2.20, 2.40]
 ---
 
 Format:      DEL [/S] [/H] [/P] compound-filespec

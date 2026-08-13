@@ -1,4 +1,4 @@
-FREE                                                           [New]
+FREE                                                     [2.40, 3.0]
 ----
 
 Format:      FREE [d:]
@@ -12,6 +12,14 @@ Use:          If  a drive  is given,  then the  volume name  of that
 
              If  no drive is given, then the default drive is assum-
         ed.
+
+             When the drive is mapped to a disk  image file,  to the
+        RAM disk,  or is a ghost drive of another one,  a note about
+        it is printed after the volume line.
+
+             When the drive is in zero allocation  information  mode
+        (see HELP RALLOC),  no space information is available and  a
+        note is printed instead of the figures.
 
 
 Examples:

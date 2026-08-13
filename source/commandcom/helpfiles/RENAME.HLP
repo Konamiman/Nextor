@@ -1,4 +1,4 @@
-RENAME                                                    [Enhanced]
+RENAME                                                  [2.20, 2.44]
 ------
 
 Format:      RENAME [/S] [/H] [/P] compound-filespec filename
@@ -26,6 +26,9 @@ Use:         The  compound-filespec specifies  the files that are to
         with an error message and the rename operation will continue
         with the next file. If many errors occur, then /P will cause
         the output to pause at the end of the screen.
+
+             This command existed in the original MSX-DOS 2, was  re-
+        moved in COMMAND2.COM 2.40 and is back since version 2.44.
 
 Examples:
 

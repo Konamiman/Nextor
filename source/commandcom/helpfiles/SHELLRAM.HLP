@@ -1,0 +1,59 @@
+SHELLRAM                                                       [3.0]
+--------
+
+Format:      SHELLRAM [ON | OFF]
+
+Purpose:     Displays or sets the use of a RAM segment for  extended
+        shell features.
+
+Use:         COMMAND2.COM normally allocates one 16K segment of  the
+        mapped RAM and keeps the command history,  the alias list
+        and its own state during the execution of transient programs
+        in it.
+
+             If no parameters are given,  then the current state  is
+        displayed.
+
+             SHELLRAM OFF gives the segment back to the system,  for
+        users who need every RAM segment they can get for some other
+        program.  The command history,  the aliases and the  %_SHELL%
+        variable stop working (ALIAS, HISTORY  and  MEMORY  report
+        'Shell RAM is off'),  and the TPA shrinks by  about  1K,
+        which COMMAND2.COM uses to save its state below its resident
+        code, as versions older than 2.40 did.
+
+             SHELLRAM ON returns to the normal state,  allocating  a
+        RAM segment again.  The command history and the  alias  list
+        come back empty,  unless a segment left over from a previous
+        shell could be adopted.  'Not enough memory' is reported and
+        nothing changes when no free segment exists.
+
+             The state is recorded in the SHELLRAM environment item,
+        which  is  read  when  the  command  interpreter  starts: it
+        survives entering the BASIC interpreter  and  coming    back
+        with CALL SYSTEM.  Setting the item directly with SET   also
+        works,  taking effect the next  time the interpreter is
+        loaded (see HELP ENV on Environment Items).
+
+             The state can not be changed from a shell  that  shares
+        its segment with an outer shell (see HELP COMMAND2 on invok-
+        ing a second command interpreter).
+
+             When no free RAM segment exists at the time the command
+        interpreter starts,  it starts with the shell RAM off, as if
+        SHELLRAM OFF had been given.  This automatic fallback is not
+        recorded in the environment item,  so the normal state    is
+        attempted again on the next start.
+
+Examples:
+
+        SHELLRAM
+        Shell RAM is ON
+
+             No parameters were given,  so the current state is dis-
+        played, in this case the normal one.
+
+        SHELLRAM OFF
+
+             The RAM segment is given back to the system.
+

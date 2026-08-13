@@ -1,4 +1,4 @@
-MEMORY                                                         [New]
+MEMORY                                                   [2.40, 3.0]
 ------
 
 Format:      MEMORY [/K] [/P]
@@ -24,15 +24,20 @@ Use:         MEMORY displays information about the system RAM.
              Finally, the  amount of  total and  free alias  RAM are
         listed and  the total  and free  variables memory.  When the
         variables memory has become too  small no  new shell  can be
-        started. The total amount is always  16 384 minus  the total
-        amount of history RAM minus an extra 6 bytes, which yields a
-        total of 15,354 bytes.
+        started.  The history,  alias and variable swap areas  share
+        one 16K RAM segment (see HELP SHELLRAM),  so  resizing   the
+        history buffer with HISTORY also moves the alias area.
 
              If the  /K option  is given,  then all figures of 1,024
         bytes and over are represented in a kilobyte unit.
 
              The /P option can be given to cause the output to pause
         at the bottom of the screen until a key is pressed.
+
+             When the shell RAM segment has been  given  back   with
+        SHELLRAM OFF,  the TPA figure (which is then about 1K small-
+        er) is followed by 'Shell RAM is off' instead of the  histo-
+        ry, alias and variable swap figures.
 
 Examples:
 

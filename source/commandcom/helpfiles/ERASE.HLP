@@ -1,4 +1,4 @@
-ERASE                                                     [Enhanced]
+ERASE                                                   [2.20, 2.44]
 ---
 
 Format:      ERASE [/S] [/H] [/P] compound-filespec
@@ -32,6 +32,9 @@ Use:         The  compound-filespec specifies which files are to  be
              If files are deleted unintentionally on a disk that was
         formatted  under  MSX-DOS 2,  then the UNDEL command may  be
         used immediately afterwards to restore them again.
+
+             This command existed in the original MSX-DOS 2, was  re-
+        moved in COMMAND2.COM 2.40 and is back since version 2.44.
 
 Examples:
 

@@ -1,4 +1,4 @@
-SET                                                       [Enhanced]
+SET                                               [2.20, 2.40, 2.44]
 ---
 
 Format:      SET [/P] [name] [separator] [value]

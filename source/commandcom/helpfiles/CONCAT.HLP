@@ -1,4 +1,4 @@
-CONCAT                                                    [Enhanced]
+CONCAT                                                  [2.20, 2.40]
 ------
 
 Format:      CONCAT [/S] [/H] [/P] [/A] [/B] [/V] source filespec

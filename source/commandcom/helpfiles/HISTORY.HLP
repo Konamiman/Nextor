@@ -1,4 +1,4 @@
-HISTORY                                                        [New]
+HISTORY                                                 [2.40, 2.41]
 -------
 
 Format:      HISTORY [n] [/D] [/P]
@@ -21,6 +21,11 @@ Use:         HISTORY displays all the commands stored in the history
         the buffer should be at least 128  and can  be an  most 4095
         bytes.  The buffer  will be  cleared automatically  when the
         size is adjusted.
+
+             The history is kept in the shell RAM segment:  when  it
+        has been given back with SHELLRAM OFF,  HISTORY only  prints
+        'Shell RAM is off' and the command recalling  keys  of   the
+        editor do nothing (see HELP SHELLRAM).
 
 Examples:
 

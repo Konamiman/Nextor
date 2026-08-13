@@ -1,4 +1,4 @@
-CHDIR                                                     [Enhanced]
+CHDIR                                                   [2.20, 2.40]
 -----
 
 Format:      CHDIR [[d:]path|-]

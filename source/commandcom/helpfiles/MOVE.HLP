@@ -1,4 +1,4 @@
-MOVE                                                      [Enhanced]
+MOVE                                                    [2.20, 2.40]
 ----
 
 Format:      MOVE [/S] [/H] [/P] compound-filespec [path]
