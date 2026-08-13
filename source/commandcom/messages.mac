@@ -86,8 +86,11 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"CPU ...... displays/sets the CPU mode",13,10
 	DEFB	"DATE ..... displays/sets the current date",13,10
 	DEFB	"DEL ...... see ERASE",13,10
+	DEFB	"DEVINFO .. displays the devices handled by a disk driver",13,10
 	DEFB	"DIR ...... displays the file names on a disk",13,10
 	DEFB	"DISKCOPY . copies a whole disk to another",13,10
+	DEFB	"DRIVERS .. displays the disk drivers present in the system",13,10
+	DEFB	"DRVINFO .. displays what every drive is assigned to",13,10
 	DEFB	"DSKCHK ... displays/sets the current disk check status",13,10
 	DEFB	"ECHO ..... prints the following text",13,10
 	DEFB	"ECHOS .... prints the following text without a trailing CR/LF",13,10

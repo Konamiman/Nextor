@@ -49,7 +49,7 @@ prerequisites:
 # The link order must match the physical layout of the program
 RELS := start.rel cli.rel tables.rel intvar.rel cmd.rel files.rel dirs.rel \
 	copy.rel io.rel batch.rel misc.rel editor.rel messages.rel var.rel
-SDK_RELS := dos_calls.rel dos_errors.rel
+SDK_RELS := dos_calls.rel dos_errors.rel driver_const.rel
 
 COMMAND3.COM: \
 	$(SDK_RELS) \
@@ -70,6 +70,14 @@ dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
 
 dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
+
+driver_const.rel: \
+	driver_const.mac \
+	../../sdk/asm/constants/driver_routines.inc \
+	../../sdk/asm/constants/driver_result_codes.inc \
+	../../sdk/asm/constants/driver_device_queries.inc
+
+	$(call assemble,driver_const.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
 clean:

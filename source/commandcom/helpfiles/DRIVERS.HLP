@@ -1,0 +1,30 @@
+DRIVERS                                                        [3.0]
+-------
+
+Format:      DRIVERS
+
+Purpose:     Displays information about the disk drivers present  in
+        the system.
+
+Use:         For every disk driver: its name and version (or  'Legacy
+        MSX-DOS driver' for drivers that are not  Nextor  ones),  the
+        slot it lives in (with the RAM segment after a  colon,   when
+        the driver is loaded in RAM) and the range of  drive  letters
+        that were assigned to it at boot time.
+
+             The same function is provided by the DRIVERS.COM  exter-
+        nal tool, which also works on older Nextor versions.
+
+Examples:
+
+        DRIVERS
+        Nextor internal SD driver v1.2 on slot 2
+        Drives assigned at boot time: 2, from A: to B:
+
+        Turbo-R FDD v3.0 on slot 3-2:4
+        Drives assigned at boot time: 1, C:
+
+             Two drivers are present: one in  the  ROM  of  slot   2,
+        with drives A: and B:,  and one loaded in RAM segment 4  with
+        its master slot being 3-2, with drive C:.
+

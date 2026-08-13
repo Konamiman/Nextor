@@ -1,0 +1,50 @@
+DEVINFO                                                        [3.0]
+-------
+
+Format:      DEVINFO slot[-subslot][:segment]
+             DEVINFO 0
+
+Purpose:     Displays information about the devices handled by a
+        disk driver.
+
+Use:         The slot argument selects the Nextor driver  to  query:
+        a primary slot number (0 to 3),  followed by a dash  and   a
+        subslot number when the slot is expanded,  and by  a   colon
+        and a RAM segment number when the driver is loaded  in  RAM.
+        A plain 0 selects the slot of the primary Nextor controller.
+
+             For every device handled by the driver, the   following
+        information is displayed,  each item only  when  the  driver
+        provides it:  the device number,  the  manufacturer,  device
+        and medium names,  the serial number,  the device type,  the
+        capacity  and  the  flags  (removable  or  fixed, read only,
+        floppy disk).
+
+             The capacity is only displayed for online block devices
+        with 512 byte sectors that report their total sector  count;
+        devices that are currently  offline  are  reported  as such.
+
+             The driver must be a Nextor driver:  'Invalid    device
+        driver' is reported for a legacy MSX-DOS one.
+
+             The same function is provided by the DEVINFO.COM exter-
+        nal tool, which also works on older Nextor versions.
+
+Examples:
+
+        DEVINFO 2
+        Device number 1
+          Device manufacturer: Konamiman
+          Device name: Cool SD reader
+          Medium name: Super SD card
+          Device serial number: 12345
+          Block device, 3813MB, removable
+
+             The devices of the Nextor driver in slot  2  (a  single
+        SD card reader) are displayed.
+
+        DEVINFO 1:4
+
+             The devices of the Nextor driver loaded in RAM  segment
+        4, whose master slot is 1, are displayed.
+

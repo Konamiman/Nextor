@@ -3499,46 +3499,15 @@ MDRDEV:	CALL	GETCH##	; Optional device number.
 	RET	NZ
 	LD	A,E
 	LD	(ENVNAME##+5),A
-	CALL	GETCH##	; Optional slot[-subslot][:segment].
-	JR	Z,MDMAP
-	CALL	GET8##	; Primary slot, 0 to 3.
+	CALL	GETCH##	; Optional slot[-subslot][:segment]
+	JR	Z,MDMAP	;   (see PARSLT further down).
+	CALL	PARSLT
 	RET	NZ
-	LD	A,E
-	CP	#04
-	LD	A,.IPARM##
-	RET	NC
-	LD	A,(HL)	; A subslot may follow.
-	CP	"-"
-	JR	NZ,MDR40
-	INC	HL
-	PUSH	DE	; (GET8 zeroes DE while parsing.)
-	CALL	GET8##
-	POP	BC	; C = primary slot.
-	RET	NZ
-	LD	A,E
-	CP	#04
-	LD	A,.IPARM##
-	RET	NC
-	LD	A,E	; Slot byte = expanded flag +
-	ADD	A,A	;   subslot + primary slot.
-	ADD	A,A
-	OR	C
-	OR	#80
-	JR	MDR50
-MDR40:	LD	A,E	; With no subslot, a plain 0 means
-	OR	A	;   the master disk ROM slot.
-	JR	NZ,MDR50
-	LD	A,(#F348)
-MDR50:	LD	(ENVNAME##+3),A	; The driver slot.
-	LD	A,(HL)	; The segment may follow, after
-	CP	":"	;   a colon (RAM loaded drivers).
-	JR	NZ,MDR60
-	INC	HL
-	CALL	GET8##
-	RET	NZ
-	LD	A,E
-	LD	(ENVNAME##+4),A
-MDR60:	CALL	GETCH##	; Nothing else may follow.
+	LD	A,D	; The driver slot...
+	LD	(ENVNAME##+3),A
+	LD	A,E	; ...and segment (FFh when not
+	LD	(ENVNAME##+4),A	;   given: a driver in ROM).
+	CALL	GETCH##	; Nothing else may follow.
 	LD	A,.INP##
 	RET	NZ
 	;fall through into MDMAP
@@ -3706,6 +3675,652 @@ MDF40:	XOR	A	; Locate the file; directories,
 	LD	HL,XBUF1##	;   XBUF1 on the drive.
 	LD	C,_MAPDRV##
 	JP	BDOS
+
+		SUBTTL	DRIVERS
+;        The DRIVERS command (new as an internal command in 3.0; it has
+; existed as the DRIVERS.COM tool since Nextor 2.0): lists the disk
+; drivers present in the system, one _GDRVR index at a time until the
+; first error. For each driver: its description (see PRDRV below) and
+; the drives assigned to it at boot time.
+@DRIVERS::	AND	(HL)	; No parameters allowed.
+	LD	A,.INP##
+	RET	NZ
+	LD	B,#01	; Driver index, counted from 1.
+DLS10:	PUSH	BC
+	LD	A,B
+	LD	HL,ENVDATA##
+	LD	C,_GDRVR##
+	CALL	BDOS
+	POP	BC
+	OR	A
+	JR	NZ,DLS90	; First error: end of the list.
+	PUSH	BC
+	LD	IX,ENVDATA##
+	CALL	PRDRV
+	LD	A,(ENVDATA##+2)	; Number of drives assigned at
+	OR	A	;   boot time.
+	JR	NZ,DLS20
+	LD	DE,NODRV$	; None at all.
+	CALL	DMSCR##
+	JR	DLS40
+DLS20:	LD	DE,BOOTD$	; 'Drives assigned at boot
+	CALL	PRTSTR##	;   time: n'... (PRTSTR comes
+	LD	A,(ENVDATA##+2)	;   back with A destroyed!)
+	ADD	A,"0"
+	CALL	PRCHAR##
+	LD	A,","
+	CALL	PRCHAR##
+	CALL	SPACE##
+	LD	A,(ENVDATA##+2)
+	CP	#01	; ...then 'X:' for a single
+	JR	NZ,DLS30	;   drive...
+	LD	A,(ENVDATA##+3)
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	LPRINT##
+	JR	DLS40
+DLS30:	LD	DE,FROMD$	; ...or 'from X: to Y:'.
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+3)
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	DE,TOD$
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+2)
+	LD	C,A
+	LD	A,(ENVDATA##+3)
+	ADD	A,C
+	DEC	A
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	LPRINT##
+DLS40:	CALL	LPRINT##	; A blank line between drivers.
+	POP	BC
+	INC	B
+	JP	DLS10
+DLS90:	XOR	A	; The first _GDRVR error just ends
+	RET	;   the listing.
+
+		SUBTTL	DRVINFO
+;        The DRVINFO command (new as an internal command in 3.0; it has
+; existed as the DRVINFO.COM tool since Nextor 2.0): for every drive
+; letter (A: to H:) that is assigned, displays what it is assigned to:
+; the RAM disk, another drive (ghost drives), a mounted file (with its
+; read only state), or a driver (see PRDRV) plus the device number
+; (Nextor drivers) or the relative unit (legacy drivers).
+;        The _GDLI letter buffer lives at ENVDATA and the _GDRVR
+; driver buffer at ENVDATA+64; as in the tool, the driver info is not
+; requested again when the drive is on the same slot and segment as
+; the previous one (the mounted file case invalidates that cache,
+; since it reuses the letter buffer).
+@DRVINFO::	AND	(HL)	; No parameters allowed.
+	LD	A,.INP##
+	RET	NZ
+	LD	A,#FF	; Invalidate the driver cache.
+	LD	(ENVDATA##+64),A
+	LD	(ENVDATA##+65),A
+	LD	B,#00	; Drive, counted from 0.
+DIN10:	PUSH	BC
+	LD	A,B
+	LD	HL,ENVDATA##
+	LD	C,_GDLI##
+	CALL	BDOS
+	POP	BC
+	OR	A
+	RET	NZ
+	LD	A,(ENVDATA##)	; Unassigned drives are skipped
+	OR	A	;   silently.
+	JP	Z,DIN80
+	PUSH	BC
+	LD	DE,DRVIS1$	; 'Drive X: is assigned to:'
+	CALL	PRTSTR##
+	LD	A,B
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	DE,DRVIS2$
+	CALL	DMSCR##
+	LD	A,(ENVDATA##)
+	CP	#04	; The RAM disk.
+	JR	NZ,DIN20
+	LD	DE,RAMDK$
+	CALL	DMSCR##
+	JP	DIN70
+DIN20:	CP	#05	; A ghost drive.
+	JR	NZ,DIN30
+	LD	DE,GHOSTD$
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+1)
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	CALL	LPRINT##
+	JP	DIN70
+DIN30:	CP	#03	; A mounted file.
+	JR	NZ,DIN40
+	LD	DE,FILED$	; 'File <path> on drive X:'
+	CALL	PRTSTR##	;   (' (read only)').
+	LD	DE,ENVDATA##+4
+	CALL	PRTSTR##
+	LD	DE,ONDRVD$
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+1)
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	A,(ENVDATA##+2)	; Bit 0 = mounted read only.
+	AND	#01
+	JR	Z,DIN35
+	LD	DE,ROD$
+	CALL	PRTSTR##
+DIN35:	CALL	LPRINT##
+	LD	A,#FF	; The letter buffer was reused:
+	LD	(ENVDATA##+64),A	;   invalidate the driver cache.
+	LD	(ENVDATA##+65),A
+	JR	DIN70
+DIN40:	LD	A,(ENVDATA##+1)	; A device or a relative unit:
+	LD	D,A	;   get the controlling driver's
+	LD	A,(ENVDATA##+2)	;   information (D = slot,
+	LD	E,A	;   E = segment), unless it is
+	LD	A,(ENVDATA##+64)	;   the same driver as for the
+	CP	D	;   previous drive.
+	JR	NZ,DIN45
+	LD	A,(ENVDATA##+65)
+	CP	E
+	JR	Z,DIN50
+DIN45:	XOR	A
+	LD	HL,ENVDATA##+64
+	LD	C,_GDRVR##
+	CALL	BDOS
+	OR	A
+	JR	NZ,DIN90
+DIN50:	LD	IX,ENVDATA##+64
+	CALL	PRDRV
+	LD	A,(ENVDATA##+64+4)	; Nextor driver (bit 0): device
+	AND	#01	;   number; legacy: relative unit.
+	JR	Z,DIN60
+	LD	DE,DEVN$	; 'Device n'
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+4)
+	LD	L,A
+	LD	H,#00
+	CALL	MEMNUM
+	CALL	LPRINT##
+	JR	DIN70
+DIN60:	LD	DE,RELU$	; 'Relative unit n'
+	CALL	PRTSTR##
+	LD	A,(ENVDATA##+3)
+	ADD	A,"0"
+	CALL	PRCHAR##
+	CALL	LPRINT##
+DIN70:	CALL	LPRINT##	; A blank line between drives.
+	POP	BC
+DIN80:	INC	B
+	LD	A,B
+	CP	#08
+	JP	C,DIN10
+	XOR	A
+	RET
+
+DIN90:	LD	E,A	; Error from _GDRVR: report it.
+	POP	BC
+	LD	A,E
+	OR	A
+	RET
+
+		SUBTTL	DEVINFO
+;        The DEVINFO command (new as an internal command in 3.0; it
+; has existed as the DEVINFO.COM tool since Nextor 2.0):
+;
+;          DEVINFO slot[-subslot][:segment]|0
+;
+;        Displays the devices handled by the Nextor driver in the
+; given slot, by calling its DEVICE_QUERY routine directly with
+; _CDRVR (with the Nextor 3 awareness flag set in the slot byte). For
+; every device number from 1 up that the driver recognises: the
+; manufacturer, device and medium names and the serial number (each
+; one only when the driver provides it), the device type, the
+; capacity (for block devices with 512 byte sectors that are online
+; and report their sector count) and the flags (removable or fixed,
+; read only, floppy).
+;        Scratch layout: ENVNAME +0/+1 = driver slot/segment, +2 to
+; +9 = the _CDRVR register block (F,A,B,C,D,E,L,H), +19 = the device
+; number. The buffer that the DRIVER itself writes the query results
+; to (strings are ASCIIZ; GET_PARAMS uses the first 12 bytes: type,
+; sector size, sector count, flags at +7) must NOT be in page 1:
+; while the driver runs, page 1 holds the driver itself, and the
+; kernel maps the TPA segment in page 2 (always) and page 0 (when it
+; can) for exactly this purpose. ENVDATA lives in page 1, so a page 2
+; TPA scratch address is used instead.
+CDBUF	EQU	#9000	; Page 2 TPA scratch for _CDRVR.
+@DEVINFO::	AND	(HL)	; The slot argument is mandatory.
+	LD	A,.NOPAR##
+	RET	Z
+	CALL	PARSLT
+	RET	NZ
+	CALL	GETCH##	; Nothing else may follow.
+	LD	A,.INP##
+	RET	NZ
+	LD	A,D	; The slot...
+	LD	(ENVNAME##+0),A
+	LD	A,E	; ...and segment of the driver.
+	LD	(ENVNAME##+1),A
+	PUSH	DE
+	XOR	A	; The driver must exist...
+	LD	HL,ENVDATA##
+	LD	C,_GDRVR##
+	CALL	BDOS
+	POP	DE
+	OR	A
+	RET	NZ
+	LD	A,(ENVDATA##+4)	; ...and be a Nextor driver.
+	AND	%10000000
+	LD	A,.IDRVR##
+	RET	Z
+	LD	A,#01	; The first device number.
+	LD	(ENVNAME##+19),A
+DVI10:	LD	A,DEVICE_QUERY.STR_MANUFACTURER##
+	CALL	DVQSTR
+	RET	C	; (error from _CDRVR itself)
+	CP	DRIVER.RESULT_INVALID_DEVICE##
+	JP	Z,DVI90	; No such device: try the next.
+	PUSH	AF	; 'Device number n' (the result
+	LD	DE,DEVNO$	;   of the manufacturer query is
+	CALL	PRTSTR##	;   used after the header line).
+	LD	A,(ENVNAME##+19)
+	LD	L,A
+	LD	H,#00
+	CALL	MEMNUM
+	CALL	LPRINT##
+	POP	AF
+	LD	DE,MANUF$
+	CALL	DVPSTR
+	LD	A,DEVICE_QUERY.STR_DEVICE_NAME##
+	CALL	DVQSTR
+	RET	C
+	LD	DE,DEVNAM$
+	CALL	DVPSTR
+	LD	A,DEVICE_QUERY.STR_MEDIUM_NAME##
+	CALL	DVQSTR
+	RET	C
+	LD	DE,MEDIUM$
+	CALL	DVPSTR
+	LD	A,DEVICE_QUERY.STR_SERIAL_NUMBER##
+	CALL	DVQSTR
+	RET	C
+	LD	DE,SERIAL$
+	CALL	DVPSTR
+	LD	C,#00	; The device parameters.
+	LD	A,DEVICE_QUERY.GET_PARAMS##
+	CALL	DVQRY
+	RET	C
+	OR	A
+	JR	Z,DVI20
+	CP	DRIVER.RESULT_NOT_IMPLEMENTED##
+	JP	NZ,DVI80	; Other error: skip the details.
+	LD	HL,CDBUF	; Not implemented: all-zero
+	LD	DE,CDBUF+1	;   default parameters.
+	LD	BC,#0B
+	LD	(HL),#00
+	LDIR
+DVI20:	LD	C,#00	; Is the device available ?
+	LD	A,DEVICE_QUERY.GET_AVAILABILITY##
+	CALL	DVQRY
+	RET	C
+	OR	A
+	JR	Z,DVI30	; B = the availability.
+	CP	DRIVER.RESULT_NOT_IMPLEMENTED##
+	JP	NZ,DVI80
+	LD	B,#01	; Not implemented: assume online.
+DVI30:	LD	A,B
+	PUSH	AF	; The device type.
+	LD	A,(CDBUF)
+	LD	DE,BLKDEV$
+	OR	A
+	JR	Z,DVI40
+	LD	DE,CDROM$
+	DEC	A
+	JR	Z,DVI40
+	LD	DE,UNKDEV$
+DVI40:	CALL	PRTSTR##
+	POP	AF	; Offline: say so, no capacity.
+	OR	A
+	JR	NZ,DVI50
+	LD	DE,OFFLIN$
+	CALL	PRTSTR##
+	JR	DVI70
+DVI50:	LD	A,(CDBUF)	; The capacity, for online block
+	OR	A	;   devices with 512 byte sectors
+	JR	NZ,DVI70	;   and a known sector count.
+	LD	HL,(CDBUF+1)
+	LD	DE,#0200
+	OR	A
+	SBC	HL,DE
+	JR	NZ,DVI70
+	LD	DE,(CDBUF+3)	; HL:DE = the sector count
+	LD	HL,(CDBUF+5)	;   (zero: unknown, e.g. floppy
+	LD	A,H	;   drives - print nothing).
+	OR	L
+	OR	D
+	OR	E
+	JR	Z,DVI70
+	SRL	H	; Halve: kilobytes.
+	RR	L
+	RR	D
+	RR	E
+	LD	C,"K"	; Show at most 4 digits: go to
+	LD	A,H	;   the next unit at 10240 or
+	OR	L	;   more (as the tool does).
+	JR	NZ,DVI55
+	LD	A,D
+	CP	#28	; 10240 = 2800h.
+	JR	C,DVI60
+DVI55:	LD	E,D	; Divide by 1024: megabytes.
+	LD	D,L
+	LD	L,H
+	LD	H,#00
+	SRL	L
+	RR	D
+	RR	E
+	SRL	L
+	RR	D
+	RR	E
+	LD	C,"M"
+	LD	A,L
+	OR	A
+	JR	NZ,DVI57
+	LD	A,D
+	CP	#28
+	JR	C,DVI60
+DVI57:	LD	E,D	; Divide by 1024: gigabytes.
+	LD	D,L
+	SRL	D
+	RR	E
+	SRL	D
+	RR	E
+	LD	C,"G"
+DVI60:	PUSH	BC	; ', n' and the unit and 'B'.
+	LD	A,","
+	CALL	PRCHAR##
+	CALL	SPACE##
+	LD	L,E
+	LD	H,D
+	CALL	MEMNUM
+	POP	BC
+	LD	A,C
+	CALL	PRCHAR##
+	LD	A,"B"
+	CALL	PRCHAR##
+DVI70:	LD	A,(CDBUF+7)	; The flags: removable/fixed,
+	LD	C,A	;   read only, floppy. (PRTSTR
+	LD	DE,FIXED$	;   preserves BC.)
+	BIT	0,C
+	JR	Z,DVI72
+	LD	DE,REMOV$
+DVI72:	CALL	PRTSTR##
+	BIT	1,C
+	JR	Z,DVI74
+	LD	DE,RDONLY$
+	CALL	PRTSTR##
+DVI74:	BIT	2,C
+	JR	Z,DVI76
+	LD	DE,FLOPPY$
+	CALL	PRTSTR##
+DVI76:	CALL	LPRINT##	; End the type/flags line.
+DVI80:	CALL	LPRINT##	; A blank line between devices.
+DVI90:	LD	A,(ENVNAME##+19)	; On to the next device number.
+	INC	A
+	LD	(ENVNAME##+19),A
+	CP	#FF
+	JP	C,DVI10
+	XOR	A
+	RET
+
+;        Query a string of the current device: A = the sub-string
+; code. DVQRY is the generic entry: A = the query code, C = the value
+; for the C register of the call. On exit, Cy => error from _CDRVR
+; itself, A = the error code; NC => A = the driver's result (which
+; comes back in the high byte of IX), and B = the returned B (the
+; availability, for GET_AVAILABILITY).
+DVQSTR:	LD	C,A	; C = the sub-string code.
+	LD	A,DEVICE_QUERY.GET_STRING##
+DVQRY:	LD	HL,ENVNAME##+2	; Build the register block:
+	LD	(HL),#00	;   F = 0,
+	INC	HL
+	LD	(HL),A	;   A = the query code,
+	INC	HL
+	LD	A,(ENVNAME##+19)	;   B = the device number,
+	LD	(HL),A
+	INC	HL
+	LD	(HL),C	;   C = the sub-string code,
+	INC	HL
+	LD	(HL),#00	;   D = 0,
+	INC	HL
+	LD	(HL),#FF	;   E = the buffer size,
+	INC	HL
+	LD	DE,CDBUF	;   HL = the results buffer (in
+	LD	(HL),E	;   page 2, see above).
+	INC	HL
+	LD	(HL),D
+	LD	DE,DRIVER.DEVICE_QUERY_ENTRY##
+	LD	HL,ENVNAME##+2
+	LD	A,(ENVNAME##+1)	; B = the driver segment,
+	LD	B,A
+	LD	A,(ENVNAME##+0)	; A = the slot, with the Nextor 3
+	OR	%00010000	;   awareness flag.
+	LD	C,_CDRVR##
+	CALL	BDOS
+	OR	A
+	JR	Z,DVQ10
+	SCF	; _CDRVR itself failed.
+	RET
+DVQ10:	PUSH	IX	; The driver's result, with Cy
+	POP	AF	;   clear.
+	OR	A
+	RET
+
+;        Print the label at (DE) and then the string that a device
+; query left in ENVDATA, when its result in A says it is there (also
+; accepting a truncated string, which the tool meant to do but did
+; not). No output at all otherwise.
+DVPSTR:	OR	A
+	JR	Z,DVP10
+	CP	DRIVER.RESULT_TRUNCATED_STRING##
+	RET	NZ
+DVP10:	CALL	PRTSTR##
+	LD	DE,CDBUF
+	CALL	PRTRIM
+	JP	LPRINT##
+
+;        Print the ASCIIZ string at (DE), with its trailing spaces
+; removed (cut off in place: the buffer is scratch).
+PRTRIM:	LD	H,D
+	LD	L,E
+PRT10:	LD	A,(HL)	; Find the terminating zero.
+	OR	A
+	INC	HL
+	JR	NZ,PRT10
+	DEC	HL
+PRT20:	LD	A,H	; Walk back over the trailing
+	CP	D	;   spaces, never moving before
+	JR	NZ,PRT30	;   the start of the string.
+	LD	A,L
+	CP	E
+	JR	Z,PRT35
+PRT30:	DEC	HL
+	LD	A,(HL)
+	CP	" "
+	JR	Z,PRT20
+	INC	HL
+PRT35:	LD	(HL),#00
+	JP	PRTSTR##
+
+;        Parse a slot specification at (HL): slot[-subslot][:segment],
+; where a plain 0 with no subslot means the master disk ROM slot.
+; Used by MAPDRV and DEVINFO.
+; On exit, NZ => error, A = the error code; Z => D = the slot byte,
+; E = the segment (FFh when not given), HL past the specification.
+PARSLT:	CALL	GET8##	; Primary slot, 0 to 3.
+	RET	NZ
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,(HL)	; A subslot may follow.
+	CP	"-"
+	JR	NZ,PSL10
+	INC	HL
+	PUSH	DE	; (GET8 zeroes DE while parsing.)
+	CALL	GET8##
+	POP	BC	; C = the primary slot.
+	RET	NZ
+	LD	A,E
+	CP	#04
+	LD	A,.IPARM##
+	RET	NC
+	LD	A,E	; Slot byte = expanded flag +
+	ADD	A,A	;   subslot + primary slot.
+	ADD	A,A
+	OR	C
+	OR	#80
+	JR	PSL20
+PSL10:	LD	A,E	; With no subslot, a plain 0
+	OR	A	;   means the master disk ROM
+	JR	NZ,PSL20	;   slot.
+	LD	A,(#F348)
+PSL20:	LD	D,A
+	LD	E,#FF	; Segment FFh = in ROM, unless
+	LD	A,(HL)	;   one is given after a colon.
+	CP	":"
+	JR	NZ,PSL30
+	INC	HL
+	PUSH	DE	; (GET8 corrupts both DE and B
+	CALL	GET8##	;   while parsing.)
+	POP	BC	; B = the slot byte.
+	RET	NZ
+	LD	D,B
+PSL30:	XOR	A	; Z: parsed fine.
+	RET
+
+;        Print the description of the driver whose _GDRVR buffer is at
+; (IX): the name (32 characters at +8, padded with spaces - trimmed in
+; place, the buffer is scratch) and the version at +5/+6/+7 (the
+; revision only when not zero) for a Nextor driver (bit 7 of the flags
+; at +4 set), or 'Legacy MSX-DOS driver'; then ' on slot ' and the
+; slot from +0 (as p or p-s), with ':segment' from +1 appended when it
+; is not FFh (drivers loaded in RAM); then a CRLF.
+PRDRV:	BIT	7,(IX+4)
+	JR	Z,PRD30
+	PUSH	IX
+	POP	HL
+	LD	DE,#08
+	ADD	HL,DE
+	PUSH	HL	; The start of the name.
+	LD	DE,#20
+	ADD	HL,DE	; One past its end.
+	LD	B,#20
+PRD10:	DEC	HL	; Find the last character that is
+	LD	A,(HL)	;   not a space.
+	CP	" "
+	JR	NZ,PRD20
+	DJNZ	PRD10
+PRD20:	INC	HL	; Cut the padding off and print
+	LD	(HL),#00	;   what remains.
+	POP	DE
+	CALL	PRTSTR##
+	CALL	SPACE##
+	LD	A,"v"
+	CALL	PRCHAR##
+	LD	A,(IX+5)	; Main version number.
+	ADD	A,"0"
+	CALL	PRCHAR##
+	LD	A,"."
+	CALL	PRCHAR##
+	LD	A,(IX+6)	; Secondary version number.
+	ADD	A,"0"
+	CALL	PRCHAR##
+	LD	A,(IX+7)	; Revision number, only when it
+	OR	A	;   is not zero.
+	JR	Z,PRD40
+	PUSH	AF
+	LD	A,"."
+	CALL	PRCHAR##
+	POP	AF
+	ADD	A,"0"
+	CALL	PRCHAR##
+	JR	PRD40
+PRD30:	LD	DE,LEGCY$
+	CALL	PRTSTR##
+PRD40:	LD	DE,ONSLT$	; ' on slot ' and the slot, as
+	CALL	PRTSTR##	;   PRSLOT of the SDK prints it.
+	LD	B,(IX+1)	; B = the segment.
+	LD	A,(IX)
+	PUSH	BC
+	PUSH	AF
+	AND	%00000011
+	ADD	A,"0"
+	CALL	PRCHAR##
+	POP	AF
+	BIT	7,A	; Expanded: '-' and the subslot.
+	JR	Z,PRD50
+	RRCA
+	RRCA
+	AND	%00000011
+	PUSH	AF
+	LD	A,"-"
+	CALL	PRCHAR##
+	POP	AF
+	ADD	A,"0"
+	CALL	PRCHAR##
+PRD50:	POP	BC
+	LD	A,B	; Segment FFh = in ROM: nothing;
+	CP	#FF	;   else ':' and the number.
+	JR	Z,PRD60
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	L,B
+	LD	H,#00
+	CALL	MEMNUM
+PRD60:	JP	LPRINT##
+
+; The strings of the DRIVERS and DRVINFO commands.
+LEGCY$:	DEFB	"Legacy MSX-DOS driver",0
+ONSLT$:	DEFB	" on slot ",0
+NODRV$:	DEFB	"No drives assigned at boot time",0
+BOOTD$:	DEFB	"Drives assigned at boot time: ",0
+FROMD$:	DEFB	"from ",0
+TOD$:	DEFB	" to ",0
+DRVIS1$:	DEFB	"Drive ",0
+DRVIS2$:	DEFB	": is assigned to:",0
+RAMDK$:	DEFB	"RAM disk",0
+GHOSTD$:	DEFB	"Ghost drive of ",0
+FILED$:	DEFB	"File ",0
+ONDRVD$:	DEFB	" on drive ",0
+ROD$:	DEFB	" (read only)",0
+DEVN$:	DEFB	"Device ",0
+RELU$:	DEFB	"Relative unit ",0
+
+; The strings of the DEVINFO command.
+DEVNO$:	DEFB	"Device number ",0
+MANUF$:	DEFB	"  Device manufacturer: ",0
+DEVNAM$:	DEFB	"  Device name: ",0
+MEDIUM$:	DEFB	"  Medium name: ",0
+SERIAL$:	DEFB	"  Device serial number: ",0
+BLKDEV$:	DEFB	"  Block device",0
+CDROM$:	DEFB	"  CD-ROM",0
+UNKDEV$:	DEFB	"  Unknown type",0
+OFFLIN$:	DEFB	", offline",0
+REMOV$:	DEFB	", removable",0
+FIXED$:	DEFB	", fixed",0
+RDONLY$:	DEFB	", read-only",0
+FLOPPY$:	DEFB	", floppy disk",0
 
 		SUBTTL	RALLOC
 ;        The RALLOC command (new in 3.0): RALLOC [d: [ON|OFF]].
