@@ -302,14 +302,17 @@ RSTLINE:	PUSH	AF
 
 ;        CTRL-DEL: empty the history buffer by resetting its pointers, and
 ; beep as feedback.
-CTRLDEL:	PUSH	HL
+CTRLDEL:	LD	A,(SHRAMFL##)	; No history to clear without the
+	OR	A	;   mapper segment (SHELLRAM OFF):
+	JR	NZ,CTD10	;   just beep.
+	PUSH	HL
 	LD	HL,BUFADDR
 	CALL	SETPUTADDR	; Next line will be stored at the start,
 	CALL	SETRDADDR	;   history cursor there as well,
 	DEC	HL
 	CALL	SETENDADDR	;   end of data = BUFADDR-1: no data.
 	POP	HL
-	LD	A,7
+CTD10:	LD	A,7
 	CALL	PRCHAR##	; Beep.
 	JP	RDLINE2
 
@@ -927,7 +930,10 @@ RET30:	CALL	BLKCURS	; Insert mode off, block cursor back.
 ;
 ; On entry, HL -> length byte of the line. Empty lines are not stored.
 ;
-HISPUT:	LD	A,(HL)
+HISPUT:	LD	A,(SHRAMFL##)	; Nowhere to store it without the
+	OR	A	;   mapper segment (SHELLRAM OFF).
+	RET	NZ
+	LD	A,(HL)
 	OR	A
 	RET	Z	; Don't store empty lines.
 	LD	B,A	; B = character count.
@@ -1021,7 +1027,10 @@ WRCHR::	PUSH	DE
 ; is erased and replaced by that entry, and INSFLAG bit 2 marks it as a
 ; recalled, not yet modified line.
 ;
-CURUP:	PUSH	HL
+CURUP:	LD	A,(SHRAMFL##)	; No history without the mapper
+	OR	A	;   segment (SHELLRAM OFF): ignore.
+	JP	NZ,RDLINE
+	PUSH	HL
 	CALL	GETENDADDR
 	LD	DE,BUFADDR
 	CALL	COMPARE4##	; Any history stored at all?
@@ -1060,7 +1069,10 @@ CUR50:	POP	DE
 ;        Cursor down: recall the next history line, by skipping forward
 ; past the end of the current entry, then displaying from there via CUR30.
 ;
-CURDOWN:	PUSH	HL
+CURDOWN:	LD	A,(SHRAMFL##)	; No history without the mapper
+	OR	A	;   segment (SHELLRAM OFF): ignore.
+	JP	NZ,RDLINE
+	PUSH	HL
 	CALL	GETENDADDR
 	LD	DE,BUFADDR
 	CALL	COMPARE4##	; Any history stored at all?

@@ -133,6 +133,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"RMDIR .... removes empty sub-directories",13,10
 	DEFB	"RNDIR .... renames sub-directories",13,10
 	DEFB	"SET ...... displays/sets environment strings",13,10
+	DEFB	"SHELLRAM . displays/sets the use of a RAM segment for shell features",13,10
 	DEFB	"SHIFT .... shifts arguments for a batch file one step to the left",13,10
 	DEFB	"THEN ..... executes the following command",13,10
 	DEFB	"TIME ..... displays/sets the current time",13,10
@@ -190,5 +191,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	" total variable swap memory",0
 	DEFB	"COMMAND2.COM: Wrong version of NEXTOR.SYS",0
 	DEFB	"Zero allocation information mode is active, no space information to report",0
-	DEFB	"Press any key... ",0,0
+	DEFB	"Press any key... ",0
+	DEFB	"Shell RAM is ",0
+	DEFB	"Shell RAM state can not be changed from a nested shell",0
 

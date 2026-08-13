@@ -117,7 +117,12 @@ IV_DRIVEMAP::	LD	C,_LOGIN##
 ; saved in the mapper segment below the save pointer kept at VAREND (see
 ; cli.mac); the level is recovered by dividing the amount of space in use
 ; by the size of one saved image.
-IV_SHELL::	CALL	SETPG2##	; Map the mapper segment at page 2.
+IV_SHELL::	LD	A,(SHRAMFL##)	; Without the mapper segment no
+	OR	A	;   saved images can be counted:
+	JR	Z,IVSH0	;   report level 0.
+	XOR	A
+	JR	IVC10
+IVSH0:	CALL	SETPG2##	; Map the mapper segment at page 2.
 	LD	HL,#3FFF
 	LD	DE,(VAREND+#8000)	; Saved state stack pointer.
 	RES	7,D	; Strip the page 2 address bit.

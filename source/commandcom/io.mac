@@ -206,7 +206,17 @@ MSG20:	LD	A,(DE)
 ;               are returned and BC = 0.
 ;           HL and DE are preserved.
 ;
-FNDALIAS::	PUSH	DE	; Save the two buffer pointers.
+FNDALIAS::	LD	A,(SHRAMFL##)	; No segment (SHELLRAM OFF): the list
+	OR	A	;   is empty - return null name
+	JR	Z,FND100	;   and value strings and BC = 0,
+	XOR	A	;   as FND120 would.
+	LD	(DE),A
+	LD	(HL),A
+	LD	B,A
+	LD	C,A
+	RET
+
+FND100:	PUSH	DE	; Save the two buffer pointers.
 	PUSH	HL
 	CALL	SETPG2	; Alias segment into page 2.
 	CALL	GETALIADDR##	; HL = alias area offset, made into
@@ -269,7 +279,14 @@ FND130:	LD	E,(HL)	; DE = record length.
 ;               string if the alias is not defined - with DE preserved.
 ;               Returns Z (there is no failure path).
 ;
-GETALIAS::	PUSH	DE	; Save value buffer pointer.
+GETALIAS::	LD	A,(SHRAMFL##)	; No segment (SHELLRAM OFF): no alias
+	OR	A	;   is defined - return a null
+	JR	Z,GET50	;   string as the value.
+	XOR	A
+	LD	(DE),A
+	RET
+
+GET50:	PUSH	DE	; Save value buffer pointer.
 	PUSH	HL	; Save name pointer.
 	CALL	SETPG2	; Alias segment into page 2.
 	CALL	GETALIADDR##	; HL = alias area offset, made into
@@ -319,7 +336,14 @@ GET90:	POP	DE	; Not defined: return a null string
 ;               was never set so the list still ends before it), but a
 ;               replaced alias has already been deleted by then.
 ;
-SETALIAS::	PUSH	DE	; Save value pointer.
+SETALIAS::	LD	A,(SHRAMFL##)	; No segment (SHELLRAM OFF): no alias
+	OR	A	;   can be stored.
+	JR	Z,SET10
+	LD	A,.NORAM##
+	OR	A
+	RET
+
+SET10:	PUSH	DE	; Save value pointer.
 	PUSH	HL	; Save name pointer.
 	CALL	SETPG2	; Alias segment into page 2.
 	CALL	GETALIADDR##	; HL = alias area offset, made into

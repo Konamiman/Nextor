@@ -1701,7 +1701,10 @@ CPYFN:	LD	A,(DE)
 	POP	HL
 	CALL	LDCOME
 	RET	NZ
-	CALL	SETPG2##
+	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the variables are
+	OR	A	;   not pushed onto the segment's
+	JR	NZ,EXE50	;   swap stack but saved whole
+	CALL	SETPG2##	;   below the resident code.
 	LD	DE,(ALIEND+#8000)
 	LD	HL,(VAREND+#8000)
 	RES	7,H
@@ -1730,7 +1733,14 @@ CPYFN:	LD	A,(DE)
 	LD	HL,EXITADDR##-1
 	LD	BC,EXITADDR##-BOOTSTRAP##+1
 	LDDR
-	LD	HL,#FFD8
+	JR	EXE60
+
+EXE50:	LD	DE,(EXITADDR##)	; SHELLRAM OFF: the whole variable
+	LD	HL,BUFFER1##-1	;   region goes below the resident
+	LD	BC,BUFFER1##-BOOTSTRAP##	;   code (the ENDTPA ceiling
+	LDDR	;   keeps the slot out of the
+			;   TPA), as COMMAND 2.31 did.
+EXE60:	LD	HL,#FFD8
 	ADD	HL,DE
 	EX	DE,HL
 	LD	E,#08
@@ -2142,6 +2152,7 @@ EXPERT$::	DEFB	"EXPERT",0
 ALIAS$::	DEFB	"ALIAS",0
 SEPAR$::	DEFB	"SEPAR",0
 EXPAND$::	DEFB	"EXPAND",0
+SHRAM$::	DEFB	"SHELLRAM",0
 PUSHD$::	DEFB	"PUSHD",0
 TEMPFN:	DEFB	"%PIPE00.$$$"
 DPROMPT$::	DEFB	"%_CWD%>",0

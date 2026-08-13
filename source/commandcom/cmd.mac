@@ -164,13 +164,16 @@ IDRV:	LD	A,.IDRV##
 
 @BASIC::	CALL	LDCOME##
 	RET	NZ
+	LD	A,(SHRAMFL##)	; No segment to tidy up when SHELLRAM
+	OR	A	;   is OFF.
+	JR	NZ,BAS10
 	LD	HL,VAREND	; Release variable memory
 	LD	A,#FF	;   (reset VAREND to BFFFh, the
 	CALL	WRCHR##	;   segment top: nothing swapped).
 	INC	HL
 	LD	A,#BF
 	CALL	WRCHR##
-	LD	SP,#F51F
+BAS10:	LD	SP,#F51F
 	CALL	#F368
 	JP	#4022
 
@@ -950,13 +953,21 @@ MEM40:	LD	HL,(EXITADDR##)	; Compute the TPA available to a
 	SBC	HL,DE
 	LD	L,#06
 	DEC	H
-	LD	(VALUEL##),HL
+	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the save slot for
+	OR	A	;   the variable region eats into
+	JR	Z,MEM45	;   the TPA as well.
+	LD	DE,BUFFER1##-EXITADDR##
+	SBC	HL,DE
+MEM45:	LD	(VALUEL##),HL
 	LD	HL,#00	; (32-bit high word = 0.)
 	LD	(VALUEH##),HL
 	CALL	PRINT32
 	LD	A,#4C	; ' total TPA memory'.
 	CALL	DMESSCR##
 	CALL	LPRINT##
+	LD	A,(SHRAMFL##)	; Without the mapper segment there
+	OR	A	;   is no history, alias or swap
+	JP	NZ,SHROFF	;   memory to report.
 	CALL	GETBUFLEN##	; Total size of the history buffer.
 	PUSH	HL
 	LD	(VALUEL##),HL
@@ -2273,7 +2284,12 @@ DST10:	LD	A,(HL)	; An option must be /P, which pages
 ; whole list, /S file saves the alias area to a file and /L file loads such
 ; a file back, replacing all current aliases. An alias file starts with the
 ; 12-byte signature 'Alias File'+^Z, which /L checks.
-@ALIAS::	AND	(HL)	; No parameters => list all.
+@ALIAS::	LD	E,A	; Aliases live in the mapper
+	LD	A,(SHRAMFL##)	;   segment: 'Shell RAM is
+	OR	A	;   off' when there is none.
+	JP	NZ,SHROFF
+	LD	A,E
+	AND	(HL)	; No parameters => list all.
 	JR	NZ,ALI180
 ALI130:	LD	BC,#00	; Start with the first alias.
 ALI140:	LD	HL,ENVNAME##	; Get the name and value of the
@@ -2488,7 +2504,12 @@ PRS80:	XOR	A
 ;        A number (128..4095) sets a new size for the history buffer. The
 ; alias area, which follows the history buffer in the segment, is moved up
 ; or down to make this possible, and the history itself is cleared.
-@HISTORY::	AND	(HL)	; Print the history if no
+@HISTORY::	LD	E,A	; The history lives in the mapper
+	LD	A,(SHRAMFL##)	;   segment: 'Shell RAM is
+	OR	A	;   off' when there is none.
+	JP	NZ,SHROFF
+	LD	A,E
+	AND	(HL)	; Print the history if no
 	JP	Z,HIS30	;   parameters.
 	LD	A,(HL)	; Check for /D or /P.
 	CP	"/"
@@ -2918,6 +2939,122 @@ DSK30:	INC	DE	; Skip DE past the matched word.
 	LD	A,#01	; A = 1 => set.
 	LD	C,_DSKCHK##
 	JP	BDOS
+
+		SUBTTL	SHELLRAM
+;        The SHELLRAM command (new in 3.0): SHELLRAM [ON|OFF].
+;        COMMAND2 normally allocates one 16K mapper segment and keeps the
+; command history, the alias list and the variable swap stack in it (see
+; command.inc). SHELLRAM OFF gives that segment back to the system, for users
+; who need every mapper segment they can get for some other program:
+; history, aliases and %_SHELL% stop working and the TPA shrinks by the
+; size of the variable region, whose save slot moves below the resident
+; code, as in COMMAND 2.31. SHELLRAM ON (the default state, unless no free
+; segment was left at boot) re-enables everything, with an empty history
+; and alias list unless a marked segment could be re-adopted. With no
+; arguments the current state is displayed.
+;        SHELLRAM OFF is refused in a nested shell when outer shells share
+; the segment: their saved variable images live on its swap stack and
+; would be lost. (The stack pointer sits at its top, BFFFh, only when no
+; image is stored, which is exactly the safe case.)
+@SHELLRAM::	AND	(HL)
+	JR	NZ,SHR20
+	LD	A,(SHRAMFL##)	; No arguments: display the state.
+	OR	A
+	LD	HL,ONWORD$##+1
+	JR	Z,SHR10
+	LD	HL,OFFWORD$##+1
+SHR10:	LD	A,#53	; Print 'Shell RAM is ' and
+	CALL	DMESS##	;   the state.
+	EX	DE,HL
+	JP	DMSCR##
+
+SHR20:	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$##	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#00	; 0 => ON.
+	CALL	COMPARE##
+	JR	NC,SHR30
+	INC	B	; Ready for OFF check.
+	DEC	C	; FF => OFF.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
+	RET	C
+SHR30:	INC	DE	; Skip DE past the matched word.
+	DJNZ	SHR30
+	INC	DE
+	EX	DE,HL
+	LD	A,(HL)	; A separator and nothing else may
+	CALL	SEP?##	;   follow it.
+	LD	A,.IPARM##
+	RET	NZ
+	CALL	GETCH##
+	LD	A,.INP##
+	RET	NZ
+	LD	A,(SHRAMFL##)	; Already in the requested state ?
+	OR	A	;   Then there is nothing to do.
+	JR	Z,SHR40	;   (SHRAMFL is 0/1, C is 0/FF:
+	LD	A,#FF	;   normalise before comparing.)
+SHR40:	CP	C
+	JP	Z,SHRENV	; (Still record the state: a SET
+			;   may have left the item saying
+			;   otherwise.)
+	INC	C	; C was FF => switch OFF.
+	JR	Z,SHR50
+	CALL	FINDSEG##	; Switch ON: re-adopt the marked
+	LD	A,.NORAM##	;   segment, or allocate and
+	RET	C	;   initialise a fresh one; 'Not
+	XOR	A	;   enough memory' if none is
+	LD	(SHRAMFL##),A	;   free.
+	CALL	SETSHR##	; Sync the stub and the ceiling.
+	JR	SHRENV	; Record the state.
+
+SHR50:	CALL	SETPG2##	; Switch OFF: refused when saved
+	LD	HL,(VAREND+#8000)	;   variable images of outer
+	CALL	RSTPG2##	;   shells are on the swap stack.
+	LD	DE,#BFFF
+	OR	A
+	SBC	HL,DE
+	JR	Z,SHR60
+	LD	A,#54	; 'Cannot be changed from a
+	CALL	DMESSCR##	;   nested shell'.
+	XOR	A
+	RET
+
+SHR60:	LD	A,(MAPPAGE##)	; Give the segment back and forget
+	CALL	FRE_SEG##	;   it (RTYCNT = 0: nothing left
+	XOR	A	;   to re-adopt).
+	LD	(RTYCNT),A
+	INC	A
+	LD	(SHRAMFL##),A
+	CALL	SETSHR##	; Sync the stub and the ceiling.
+	;fall through into SHRENV
+
+;        Record the current state in the 'SHELLRAM' environment item.
+; The item is read at startup, which is what makes the state survive a
+; BASIC + CALL SYSTEM round trip (environment strings live in the
+; kernel, not in the TPA). Any error is ignored.
+SHRENV:	LD	A,(SHRAMFL##)
+	OR	A
+	LD	DE,ONWORD$##+1
+	JR	Z,SHRE10
+	LD	DE,OFFWORD$##+1
+SHRE10:	LD	HL,SHRAM$##
+	LD	C,_SENV##
+	CALL	BDOS
+	XOR	A
+	RET
+
+;        Report that a feature is unavailable because the mapper segment
+; has been given back: print 'Shell RAM is off' and return no
+; error.
+SHROFF:	LD	A,#53
+	CALL	DMESS##
+	LD	DE,OFFWORD$##+1
+	CALL	DMSCR##
+	XOR	A
+	RET
 
 		SUBTTL	LOCK
 ;        The LOCK command (new in 3.0): LOCK [d: [ON|OFF]].

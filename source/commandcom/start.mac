@@ -62,9 +62,14 @@ RELOAD:	LD	A,(HL)
 	LD	(RGETADR+1),HL
 	POP	HL
 	DEC	HL
-	LD	DE,EXITADDR##-1
-	LD	BC,EXITADDR##-BOOTSTRAP##
-	LDDR
+	LD	A,(SHRAMF)	; With SHELLRAM OFF the whole variable
+	OR	A	;   region BOOTSTRAP..BUFFER1-1 was
+	LD	DE,EXITADDR##-1	;   saved below the resident code;
+	LD	BC,EXITADDR##-BOOTSTRAP##	;   with SHELLRAM ON only the 9 bytes
+	JR	Z,RLD10	;   below EXITADDR are (the rest is
+	LD	DE,BUFFER1##-1	;   popped from the mapper segment
+	LD	BC,BUFFER1##-BOOTSTRAP##	;   at MAPCALL1 further down).
+RLD10:	LDDR
 	LD	HL,BOOTSTRAP##
 	LD	DE,#00
 	LD	BC,#08
@@ -90,6 +95,9 @@ RELOAD:	LD	A,(HL)
 REL10:	LD	(ERR1+1),A
 	LD	A,C
 	LD	(ERR2+1),A
+	LD	A,(SHRAMF)	; With SHELLRAM OFF there is no mapper
+	OR	A	;   segment to pop variables from
+	JR	NZ,RLD20	;   (all restored above already).
 MAPCALL1:	LD	A,#00
 MAPADDR1:	CALL	#00
 	LD	HL,(VAREND+#8000)
@@ -104,7 +112,7 @@ MAPADDR1:	CALL	#00
 	LDDR
 MAPCALL2:	LD	A,#00
 MAPADDR2:	CALL	#00
-	LD	A,#01
+RLD20:	LD	A,#01
 	LD	BC,_REDIR##
 	CALL	BDOS
 	LD	A,B
@@ -308,6 +316,13 @@ MKS10:	LD	A,(BC)
 
 CSUM1:	DEFW	#00
 CSUM2:	DEFW	#00
+SHRAMF:	DEFB	#00	; NZ => SHELLRAM OFF. The stub reads it
+			;   before any variable has been
+			;   restored, so it lives here in the
+			;   stub itself, not in the variable
+			;   area; SETSHR keeps the relocated
+			;   copy at the top of the TPA in
+			;   sync with SHRAMFL.
 
 RPRCODE:	CALL	RGETADR
 RPR10:	LD	A,(DE)
@@ -429,63 +444,23 @@ STA20:	LD	DE,#00
 	LD	HL,#00
 	LD	(#80),HL
 STA30:	CALL	SETLANG##
-	LD	A,(RTYCNT)
-	OR	A
-	JR	Z,STA40
-	LD	HL,MAGICW	; Trust the remembered segment
-	CALL	RD_SEG##	;   number only if the segment
-	CP	"C"	;   carries the magic mark (RTYCNT
-	JR	NZ,STA40	;   is a repurposed BIOS byte:
-	LD	A,(RTYCNT)	;   anything else writing it would
-	LD	HL,MAGICW+1	;   leave a corrupt pointer).
-	CALL	RD_SEG##
-	CP	"2"
-	JR	NZ,STA40
-	LD	A,(RTYCNT)
-	LD	(MAPPAGE##),A
-	JR	STA60
+	LD	HL,SHRAM$##	; 'SHELLRAM' environment item OFF:
+	CALL	OFF?##	;   honour it, without touching
+	JR	NC,STA45	;   RTYCNT (a marked segment stays
+	CALL	FINDSEG	;   adoptable). The item survives
+	JR	NC,STA55	;   BASIC round trips, unlike
+	XOR	A	;   anything in the TPA.
+	LD	(RTYCNT),A	; No free segment: the remembered
+			;   mark, if any, was no good.
+STA45:	LD	A,#01	; Run with SHELLRAM OFF, silently
+	LD	(SHRAMFL##),A	;   (the SHELLRAM command shows
+	LD	(SHRAMF),A	;   the state; 2.4x froze the
+	JR	STA60	;   machine when no segment was
+			;   free).
 
-STA40:	LD	B,A
-	INC	A
-	CALL	ALL_SEG##
-	JR	NC,STA50
-	LD	A,.NORAM##	; No free mapper segment: exit to
-	LD	(ERR_TO_BASIC),A	;   BASIC and let the kernel
-	LD	SP,#F51F	;   explain the error there,
-	CALL	#F368	;   instead of freezing the
-	JP	#4022	;   machine.
-
-STA50:	LD	(MAPPAGE##),A
-	LD	(RTYCNT),A
-	LD	HL,MAGICW	; Mark the segment as initialised
-	LD	A,"C"	;   (see the RTYCNT check above).
-	CALL	WRCHR##
-	INC	HL
-	LD	A,"2"
-	CALL	WRCHR##
-	LD	HL,BUFADDR
-	CALL	SETPUTADDR##
-	CALL	SETRDADDR##
-	DEC	HL
-	CALL	SETENDADDR##
-	LD	HL,#0400
-	CALL	SETBUFLEN##
-	LD	HL,BUFADDR+#0400
-	PUSH	HL
-	CALL	SETALIADDR##
-	LD	HL,BUFADDR+#0400+#2800
-	CALL	SETALIEND##
-	POP	HL
-	XOR	A
-	CALL	WRCHR##
-	INC	HL
-	CALL	WRCHR##
-	LD	HL,VAREND
-	LD	A,#FF
-	CALL	WRCHR##
-	INC	HL
-	LD	A,#BF
-	CALL	WRCHR##
+STA55:	XOR	A	; SHELLRAM ON, the normal state.
+	LD	(SHRAMFL##),A
+	LD	(SHRAMF),A
 STA60:	LD	HL,#00
 	LD	DE,BOOTSTRAP##
 	LD	BC,#08
@@ -570,7 +545,12 @@ STA140:	LD	A,(DE)
 	LD	BC,START-COPYBACK+EXITADDR##-BOOTSTRAP##
 	OR	A
 	SBC	HL,BC
-	LD	(SAVETPA+1),HL
+	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the whole variable
+	OR	A	;   region is saved below the
+	JR	Z,STA125	;   resident code, not just 9 bytes
+	LD	BC,BUFFER1##-EXITADDR##	;   of it: keep the save slot out
+	SBC	HL,BC	;   of the TPA.
+STA125:	LD	(SAVETPA+1),HL
 	LD	(ENDTPA##),HL
 	CALL	CHKMEM
 	LD	HL,START-1
@@ -662,6 +642,9 @@ STA180:	CALL	PUTENV
 	LD	HL,EXPAND$##
 	LD	DE,ON$##
 	CALL	PUTENV
+	LD	HL,SHRAM$##	; (Only materialises the default:
+	LD	DE,ON$##	;   a surviving OFF is preserved,
+	CALL	PUTENV	;   PUTENV never overwrites.)
 	LD	HL,TABORD$##
 	LD	DE,DTABORD$##
 	CALL	PUTENV
@@ -677,6 +660,103 @@ STA180:	CALL	PUTENV
 	LD	C,_SENV##
 	CALL	BDOS
 	JP	CLI##
+
+;        Adopt the mapper segment remembered in RTYCNT (when it carries
+; the "C2" magic mark), or allocate a fresh one and initialise its
+; header: empty history buffer (1K), empty alias list (10K) and empty
+; variable swap stack (top at BFFFh). Called at boot and by SHELLRAM ON.
+; On exit, NC => MAPPAGE and RTYCNT set up; Cy => no free segment.
+;
+FINDSEG::	LD	A,(RTYCNT)
+	OR	A
+	JR	Z,FSG10
+	LD	HL,MAGICW	; Trust the remembered segment
+	CALL	RD_SEG##	;   number only if the segment
+	CP	"C"	;   carries the magic mark (RTYCNT
+	JR	NZ,FSG10	;   is a repurposed BIOS byte:
+	LD	A,(RTYCNT)	;   anything else writing it would
+	LD	HL,MAGICW+1	;   leave a corrupt pointer).
+	CALL	RD_SEG##
+	CP	"2"
+	JR	NZ,FSG10
+	LD	A,(RTYCNT)
+	LD	(MAPPAGE##),A
+	OR	A	; NC: adopted as it is.
+	RET
+
+FSG10:	LD	B,#00	; Allocate a system segment from
+	LD	A,#01	;   any mapper slot. (2.4x passed
+	CALL	ALL_SEG##	;   whatever A and B held here,
+	RET	C	;   which happened to work.)
+	LD	(MAPPAGE##),A
+	LD	(RTYCNT),A
+	LD	HL,MAGICW	; Mark the segment as initialised
+	LD	A,"C"	;   (see the RTYCNT check above).
+	CALL	WRCHR##
+	INC	HL
+	LD	A,"2"
+	CALL	WRCHR##
+	LD	HL,BUFADDR
+	CALL	SETPUTADDR##
+	CALL	SETRDADDR##
+	DEC	HL
+	CALL	SETENDADDR##
+	LD	HL,#0400
+	CALL	SETBUFLEN##
+	LD	HL,BUFADDR+#0400
+	PUSH	HL
+	CALL	SETALIADDR##
+	LD	HL,BUFADDR+#0400+#2800
+	CALL	SETALIEND##
+	POP	HL
+	XOR	A
+	CALL	WRCHR##
+	INC	HL
+	CALL	WRCHR##
+	LD	HL,VAREND
+	LD	A,#FF
+	CALL	WRCHR##
+	INC	HL
+	LD	A,#BF
+	CALL	WRCHR##
+	OR	A	; NC: freshly initialised.
+	RET
+
+;        Bring everything that depends on the SHELLRAM state in sync with a
+; freshly changed SHRAMFL (called by the SHELLRAM command): the stub's own
+; flag byte, both in the low image and in the relocated copy at the top
+; of the TPA (the address of that copy is (EXITADDR)+1), the TPA
+; ceiling in ENDTPA, and the stack address the stub loads at child exit
+; time (SAVETPA+1), again in both copies. With SHELLRAM OFF the ceiling
+; drops by the size of the variable region, so that transient programs
+; cannot overwrite the save slot below the resident code.
+;
+SETSHR::	LD	A,(SHRAMFL##)
+	LD	(SHRAMF),A	; The low image copy of the flag...
+	PUSH	AF
+	LD	HL,(EXITADDR##)
+	LD	BC,SHRAMF-COPYBACK+1	; ...and the relocated one.
+	ADD	HL,BC
+	LD	(HL),A
+	LD	HL,(EXITADDR##)	; The SHELLRAM ON ceiling: just below
+	LD	BC,EXITADDR##-BOOTSTRAP##	;   the 9 variable bytes saved
+	OR	A	;   under the resident code.
+	SBC	HL,BC
+	POP	AF
+	OR	A
+	JR	Z,SXF10
+	LD	BC,BUFFER1##-EXITADDR##	; SHELLRAM OFF: the save slot for the
+	SBC	HL,BC	;   rest of the variable region
+SXF10:	LD	(ENDTPA##),HL	;   lies below those bytes.
+	LD	(SAVETPA+1),HL	; Low image copy...
+	EX	DE,HL
+	LD	HL,(EXITADDR##)	; ...and relocated copy of the
+	LD	BC,SAVETPA+1-COPYBACK+1	;   stub's stack address.
+	ADD	HL,BC
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	RET
 
 CHKMEM:	PUSH	HL
 	PUSH	DE
