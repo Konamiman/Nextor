@@ -739,9 +739,69 @@ DVOL:	PUSH	AF	; Save volume name found flag.
 	POP	AF	; Get volume name flag.
 	OR	A
 	LD	A,#12	; Print 'has no name' if no volume
-	JP	NZ,DMESSCR##	;   name found.
-	LD	A,#13	; Print 'is'.
+	JR	Z,DVO10	;   name found, else 'is' and the
+	CALL	DMESSCR##	;   volume name from the FIB.
+	JR	DRVINF
+DVO10:	LD	A,#13
 	CALL	DMESS##
 	LD	DE,FIB1##+1
-	JP	DMSCR##	; Print volume name from FIB.
+	CALL	DMSCR##
+
+;        Print the mapping particulars of the drive just reported on,
+; when it is not an ordinary driver-mapped drive: a mounted disk image
+; file, the RAM disk or a ghost drive (_GDLI tells which apply).
+; Ordinary drives print nothing. (A "partition mapping pending" state
+; cannot be seen here: the drive access that produced the volume line
+; either resolved the mapping or failed the whole command.)
+DRVINF:	LD	A,(FIB1##+#19)	; The drive, counted from 0 for
+	DEC	A	;   _GDLI.
+	LD	HL,XBUF1##	; 64 byte drive info buffer.
+	LD	C,_GDLI##
+	CALL	BDOS
+	OR	A
+	JR	NZ,DRI08
+	LD	A,(XBUF1##)	; The drive status decides:
+	CP	#03	;   3 = a mounted image file;
+	JR	Z,DRI30
+	CP	#04	;   4 = the RAM disk;
+	JR	Z,DRI20
+	CP	#05	;   5 = a ghost drive.
+	JR	Z,DRI10
+DRI08:	XOR	A	; Nothing special to report.
+	RET
+
+DRI10:	LD	DE,GHOST$	; ' Ghost drive of X:'.
+	CALL	PRTSTR##
+	LD	A,(XBUF1##+1)	; The main drive, counted from 0.
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	JP	LPRINT##
+
+DRI20:	LD	DE,RAMDD$	; ' Drive mapped to the RAM disk'.
+	JP	DMSCR##
+
+DRI30:	LD	DE,MFILE1$	; ' Drive mapped to file X on Y:',
+	CALL	PRTSTR##	;   plus ' (read only)' when the
+	LD	DE,XBUF1##+4	;   mount is read-only.
+	CALL	PRTSTR##
+	LD	DE,MFILE2$
+	CALL	PRTSTR##
+	LD	A,(XBUF1##+1)	; The host drive, counted from 0.
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	A,(XBUF1##+2)	; Bit 0 = read-only mount.
+	RRA
+	JP	NC,LPRINT##
+	LD	DE,MFILE3$
+	JP	DMSCR##
+
+GHOST$:	DEFB	" Ghost drive of ",0
+RAMDD$:	DEFB	" Drive mapped to the RAM disk",0
+MFILE1$:	DEFB	" Drive mapped to file ",0
+MFILE2$:	DEFB	" on ",0
+MFILE3$:	DEFB	" (read only)",0
 

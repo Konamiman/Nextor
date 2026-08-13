@@ -380,10 +380,12 @@ SET60:	LD	A,(HL)	;   word counts itself). Copy the
 	LD	(DE),A	;   name...
 	INC	HL
 	PUSH	HL
-	LD	HL,(ALIEND)	; Hit the end of the alias space ?
-	SET	7,H	;   (2.41 quirk: this reads TPA
-	SBC	HL,DE	;   address ALIEND = #0C, not the
-	POP	HL	;   header word at ALIEND+#8000)
+	LD	HL,(ALIEND+#8000)	; Hit the end of the alias
+	SET	7,H	;   space ? The header word is read
+	OR	A	;   directly: the alias segment is
+	SBC	HL,DE	;   in page 2 here. (2.41 read the
+	POP	HL	;   TPA address ALIEND = #0C, so
+			;   the check never worked.)
 	JR	Z,SET90
 	INC	DE
 	INC	BC

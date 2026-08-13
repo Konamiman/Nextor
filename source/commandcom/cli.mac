@@ -862,8 +862,16 @@ RPC130:	CP	"]"
 	CALL	REPLACE
 	JR	RPC150
 
-RPC140:	INC	A	; No matching ']': force NZ, and
-	POP	HL	;   give up on this % construct.
+RPC140:	POP	HL	; No matching ']': discard the
+	POP	HL	;   argument start, the name length
+	POP	HL	;   and the name pointer, and give
+	JP	RP28	;   up on this % construct,
+			;   re-emitting it as plain text.
+			;   (2.41 fell into RPC150 here,
+			;   loading the name length into IX
+			;   - the output pointer - and
+			;   leaving the stack skewed.)
+
 RPC150:	POP	IX	; Scratch buffer pointer back.
 	JP	NZ,RP29
 	POP	BC	; Recover the name length, and

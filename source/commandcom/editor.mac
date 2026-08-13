@@ -237,7 +237,10 @@ BACKSPC:	LD	A,(HL)
 	JP	Z,RDLINE2	; Empty line: nothing to delete.
 	LD	A,(INSPOS##)
 	OR	A
-	JR	Z,BAC10	; At the start: skip the cursor move.
+	JP	Z,RDLINE2	; At the start of the line there is
+			;   nothing to the left to delete
+			;   (2.41 deleted the character
+			;   under the cursor instead).
 	DEC	A
 	LD	(INSPOS##),A
 	LD	A,29

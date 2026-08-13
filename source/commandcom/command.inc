@@ -59,4 +59,10 @@ BUFLEN:	EQU	ENDADDR+#02	; Size of the history buffer.
 VAREND:	EQU	BUFLEN+#02	; End of the variable swap area.
 ALIADDR:	EQU	VAREND+#02	; Start of the alias list.
 ALIEND:	EQU	ALIADDR+#02	; End of the alias list.
-BUFADDR:	EQU	ALIEND+#02	; Start of the free buffer area.
+MAGICW:	EQU	ALIEND+#02	; "C2" once the segment has been
+			;   initialised: RTYCNT remembers the
+			;   segment number across re-loads and
+			;   is a repurposed BIOS byte, so its
+			;   value is only trusted when the
+			;   segment carries this mark.
+BUFADDR:	EQU	MAGICW+#02	; Start of the free buffer area.

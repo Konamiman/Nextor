@@ -108,11 +108,10 @@ IBB10:	LD	A,.EOF##	; End of batch file.
 GETBATCHR:	LD	A,(BATHNDL##)
 	CP	#FE	; Reading from a .BTM ?
 	JR	NZ,INBCHAR	; No: read from the .BAT file buffer.
-	CALL	GET_P2##	; Save page-2 segment (precaution
-	LD	(TMPPAGE##),A	;   only: RD_SEG leaves page 2 alone).
 	LD	A,(BATPAGE##)
 	LD	HL,(BATLINADDR##)	; Read the next character out of the
-	CALL	RD_SEG##	;   .BTM segment.
+	CALL	RD_SEG##	;   .BTM segment (RD_SEG leaves the
+			;   paging alone).
 	LD	C,A
 	INC	HL
 	LD	(BATLINADDR##),HL	; Bump the read position.

@@ -270,7 +270,15 @@ CMPSUM:	LD	A,(BC)
 	SBC	HL,DE
 	RET
 
-MKSUM:	LD	BC,(STACK##-START)/4
+MKSUM:	LD	BC,0+(STACK##-START)/4	; The 0+ forces an immediate:
+			;   an operand starting with "(" is
+			;   a memory reference, so 2.4x's
+			;   LD BC,(STACK-START)/4 actually
+			;   loaded the count from a code
+			;   address (a latent bug that made
+			;   the re-load checksum meaningless
+			;   or, with unlucky layouts like
+			;   ours, permanently mismatched).
 	EXX
 	LD	BC,START
 	LD	HL,#00
@@ -424,6 +432,16 @@ STA30:	CALL	SETLANG##
 	LD	A,(RTYCNT)
 	OR	A
 	JR	Z,STA40
+	LD	HL,MAGICW	; Trust the remembered segment
+	CALL	RD_SEG##	;   number only if the segment
+	CP	"C"	;   carries the magic mark (RTYCNT
+	JR	NZ,STA40	;   is a repurposed BIOS byte:
+	LD	A,(RTYCNT)	;   anything else writing it would
+	LD	HL,MAGICW+1	;   leave a corrupt pointer).
+	CALL	RD_SEG##
+	CP	"2"
+	JR	NZ,STA40
+	LD	A,(RTYCNT)
 	LD	(MAPPAGE##),A
 	JR	STA60
 
@@ -439,6 +457,12 @@ STA40:	LD	B,A
 
 STA50:	LD	(MAPPAGE##),A
 	LD	(RTYCNT),A
+	LD	HL,MAGICW	; Mark the segment as initialised
+	LD	A,"C"	;   (see the RTYCNT check above).
+	CALL	WRCHR##
+	INC	HL
+	LD	A,"2"
+	CALL	WRCHR##
 	LD	HL,BUFADDR
 	CALL	SETPUTADDR##
 	CALL	SETRDADDR##
