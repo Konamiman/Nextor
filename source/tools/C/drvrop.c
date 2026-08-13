@@ -382,7 +382,14 @@ void DoInstall(char** argv, int argc)
     AsmCall(mapperTable + MAP_GET_P1, &regs, REGS_NONE, REGS_AF);
     savedP1Segment = regs.Bytes.A;
 
-    /* Switch to allocated segment */
+    /* Switch to allocated segment. The slot of the mapper the segment
+       was allocated in must be enabled at page 1 too (via the ENASLT
+       entry that MSX-DOS provides at 0024h): it may not be the primary
+       mapper, and the mapper support PUT_P1 routine sets the segment
+       register only, not the slot. */
+    regs.Bytes.A = allocSlot;
+    regs.Bytes.H = 0x40;
+    AsmCall(0x0024, &regs, REGS_MAIN, REGS_NONE);
     regs.Bytes.A = allocSegment;
     AsmCall(mapperTable + MAP_PUT_P1, &regs, REGS_AF, REGS_NONE);
 
@@ -398,7 +405,10 @@ void DoInstall(char** argv, int argc)
     /* Copy driver code to 4100h */
     memcpy((byte*)0x4100, BUFFER, bytesRead);
 
-    /* Restore page 1 */
+    /* Restore page 1: the normal RAM slot and the original segment */
+    regs.Bytes.A = *((byte*)0xF342); /* RAMAD1 */
+    regs.Bytes.H = 0x40;
+    AsmCall(0x0024, &regs, REGS_MAIN, REGS_NONE);
     regs.Bytes.A = savedP1Segment;
     AsmCall(mapperTable + MAP_PUT_P1, &regs, REGS_AF, REGS_NONE);
 
