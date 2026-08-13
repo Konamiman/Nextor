@@ -244,7 +244,7 @@ Nextor drivers can flag the devices they control as being floppy disk drives. Wh
 
 * **Formatting from BASIC:** The disk in a floppy disk drive controlled by a Nextor driver can be formatted with the `CALL FORMAT` command. This command lists all the available floppy disk drives (both those controlled by MSX-DOS drivers and those mapped to floppy disk devices on Nextor drivers) and lets you format the disk in any of them; the available format choices (for example "single side / double side") depend on the driver. Except when running in MSX-DOS 1 mode, an MSX-DOS 2 boot sector is generated on the disk after it is formatted. See _[3.6.3. The CALL FORMAT command](#363-the-call-format-command)_.
 
-The `FORMAT` command built into COMMAND2.COM (the one available at the DOS prompt) can only format disks in drives controlled by MSX-DOS drivers; it can't format disks in floppy disk drives controlled by Nextor drivers (that's because of changes in the disk formatting API exposed by the kernel that COMMAND2.COM is unaware of). Use `CALL FORMAT` from BASIC (or a custom tool) to format those.
+The `FORMAT` command built into COMMAND2.COM (the one available at the DOS prompt) can format disks in floppy disk drives controlled by both MSX-DOS and Nextor drivers, starting with COMMAND2.COM 3.0. Note that all the 2.x versions of COMMAND2.COM can only format disks in drives controlled by MSX-DOS drivers; that's because of changes in the disk formatting API exposed by the kernel that these older versions are unaware of. When using a 2.x version of COMMAND2.COM, use `CALL FORMAT` from BASIC (or a custom tool) to format disks in floppy disk drives controlled by Nextor drivers.
 
 #### 2.5.1. Ghost drives
 
