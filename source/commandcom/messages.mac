@@ -112,6 +112,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"KMODE .... sets or resets ",34,"Kanji Mode",34,13,10
 	DEFB	"LOCK ..... locks/unlocks a drive",13,10
 	DEFB	"MD ....... see MKDIR",13,10
+	DEFB	"MEM ...... displays a compact memory mapper listing",13,10
 	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
 	DEFB	"MKDIR .... creates a new sub-directory",13,10
 	DEFB	"MODE ..... changes the screen mode",13,10

@@ -944,21 +944,8 @@ MEM30:	CALL	LPRINT##
 	INC	HL
 	JR	MEM20
 
-MEM40:	LD	HL,(EXITADDR##)	; Compute the TPA available to a
-	LD	DE,#FFD8	;   transient program: the bottom
-	ADD	HL,DE	;   of the resident code less a
-	LD	L,#08	;   margin for the program loader,
-	LD	DE,#09	;   rounded down.
-	OR	A
-	SBC	HL,DE
-	LD	L,#06
-	DEC	H
-	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the save slot for
-	OR	A	;   the variable region eats into
-	JR	Z,MEM45	;   the TPA as well.
-	LD	DE,BUFFER1##-EXITADDR##
-	SBC	HL,DE
-MEM45:	LD	(VALUEL##),HL
+MEM40:	CALL	GETTPA	; Compute the TPA available to a
+	LD	(VALUEL##),HL	;   transient program.
 	LD	HL,#00	; (32-bit high word = 0.)
 	LD	(VALUEH##),HL
 	CALL	PRINT32
@@ -1129,6 +1116,226 @@ PRI10:	PUSH	HL	; /K: print as 'nK', or as 'n
 	POP	DE
 	POP	HL
 	RET
+
+		SUBTTL	MEM
+;        The MEM command (new in 3.0): a compact memory mapper listing,
+; modelled on the MEM.COM tool and sized to fit a 40 column screen.
+;        For every mapper in the DOS 2 mapper variable table located at
+; startup (MAPTAB, entries of 8 bytes: slot, total, free, user and
+; system allocated segment counts, 3 unused; a zero slot byte ends the
+; table): the slot, the total memory, the reserved memory (user plus
+; system allocations) and the free memory, in kilobytes. Then the
+; totals over all mappers, the RAM disk size (only when one exists)
+; and the TPA end address with the equivalent size in kilobytes.
+@MEM::	AND	(HL)	; No parameters allowed.
+	LD	A,.INP##
+	RET	NZ
+	LD	HL,#00
+	LD	(FILECNT##),HL	; The three running totals (DIR's
+	LD	(FILETOT1##),HL	;   counters borrowed as scratch:
+	LD	(FILETOT2##),HL	;   total, reserved, free).
+	LD	DE,MEMHDR$	; The header line.
+	CALL	DMSCR##
+	LD	IX,(MAPTAB##)
+MMM10:	LD	A,(IX)	; A zero slot byte ends the table.
+	OR	A
+	JR	Z,MMM40
+	PUSH	AF	; The slot, right-aligned under
+	CALL	SPACE##	;   the 'Slot' label: ' p-s' for
+	POP	AF	;   an expanded slot (bit 7 set),
+	BIT	7,A	;   '   p' for a primary one.
+	JR	NZ,MMM20
+	PUSH	AF
+	CALL	SPACE##
+	CALL	SPACE##
+	POP	AF
+	AND	%00000011
+	ADD	A,"0"
+	JR	MMM30
+MMM20:	PUSH	AF
+	AND	%00000011
+	ADD	A,"0"
+	CALL	PRCHAR##
+	LD	A,"-"
+	CALL	PRCHAR##
+	POP	AF
+	AND	%00001100
+	RRCA	; The subslot, from bits 2-3.
+	RRCA
+	ADD	A,"0"
+MMM30:	CALL	PRCHAR##
+	CALL	SPACE##	; The first column starts one
+			;   character left of the others
+			;   (32 column screens!).
+	LD	L,(IX+1)	; Total memory.
+	LD	H,#00
+	LD	DE,FILECNT##
+	CALL	MEMCOL
+	LD	A,(IX+3)	; Reserved memory: user plus
+	ADD	A,(IX+4)	;   system allocated segments.
+	LD	L,A
+	LD	H,#00
+	LD	DE,FILETOT1##
+	CALL	MEMCOL
+	LD	L,(IX+2)	; Free memory.
+	LD	H,#00
+	LD	DE,FILETOT2##
+	CALL	MEMCOL
+	CALL	LPRINT##
+	LD	DE,#08	; On to the next table entry.
+	ADD	IX,DE
+	JR	MMM10
+
+MMM40:	LD	DE,MEMALL$	; The totals line: after the
+	CALL	PRTSTR##	;   longer 'Total:' label the
+	LD	HL,(FILECNT##)	;   first column is one character
+	CALL	MEMCL3	;   narrower, so it still aligns.
+	LD	HL,(FILETOT1##)
+	CALL	MEMCL2
+	LD	HL,(FILETOT2##)
+	CALL	MEMCL2
+	CALL	LPRINT##
+	CALL	LPRINT##
+	LD	B,#FF	; RAM disk size: B = FFh only
+	LD	C,_RAMD##	;   asks, B comes back as the
+	CALL	BDOS	;   size in segments.
+	LD	A,B
+	OR	A	; No RAM disk: no line at all.
+	JR	Z,MMM50
+	LD	DE,MEMRD$	; 'RAM disk size: '
+	CALL	PRTSTR##
+	LD	L,B	; (PRTSTR preserves BC, but comes
+	LD	H,#00	;   back with A = 0.)
+	ADD	HL,HL	; Segments to kilobytes.
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	CALL	MEMNUM	; (Compact, no padding, here.)
+	LD	A,"K"
+	CALL	PRCHAR##
+	CALL	LPRINT##
+MMM50:	LD	DE,MEMTPA$	; 'TPA end address: '
+	CALL	PRTSTR##
+	CALL	GETTPA
+	PUSH	HL
+	LD	A,H	; Four hexadecimal digits.
+	CALL	PRHEX2
+	POP	HL
+	PUSH	HL
+	LD	A,L
+	CALL	PRHEX2
+	LD	DE,MEMTPA2$	; 'h' and the 'TPA size: ' line.
+	CALL	PRTSTR##
+	POP	HL
+	LD	A,H	; Kilobytes: the address divided
+	RRCA	;   by 1024.
+	RRCA
+	AND	%00111111
+	LD	L,A
+	LD	H,#00
+	CALL	MEMNUM
+	LD	A,"K"
+	CALL	PRCHAR##
+	JP	LPRINT##
+
+;        Print HL, a number of 16K segments, as a nine character
+; column (the kilobyte count right-aligned in eight characters plus a
+; 'K') and add the kilobytes to the 16-bit accumulator at (DE).
+; Preserves IX.
+MEMCOL:	ADD	HL,HL	; Segments to kilobytes.
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,(DE)	; Add them to the accumulator.
+	ADD	A,L
+	LD	(DE),A
+	INC	DE
+	LD	A,(DE)
+	ADC	A,H
+	LD	(DE),A
+	;fall through into MEMCL2
+
+;        Print HL, a number of kilobytes, as a nine character column
+; (MEMCL2, where MEMCOL falls in), or as an eight character one
+; (MEMCL3, which drops one leading padding character - safe, a 16-bit
+; kilobyte count has at most five digits).
+MEMCL2:	PUSH	IX
+	CALL	MEMREN
+	LD	DE,XBUF1##
+	JR	MEMCL9
+
+MEMCL3:	PUSH	IX
+	CALL	MEMREN
+	LD	DE,XBUF1##+1
+MEMCL9:	CALL	PRTSTR##
+	LD	A,"K"
+	CALL	PRCHAR##
+	POP	IX
+	RET
+
+;        Render HL as eight space-padded decimal characters in XBUF1.
+MEMREN:	LD	(VALUEL##),HL
+	LD	HL,#00
+	LD	(VALUEH##),HL
+	LD	DE,VALUEL##
+	LD	A," "	; ' ' = padding character.
+	LD	IX,XBUF1##
+	JP	D32##
+
+;        Print HL as a plain decimal number, no padding.
+MEMNUM:	LD	IX,XBUF1##
+	PUSH	IX
+	CALL	D16##
+	POP	DE
+	JP	PRTSTR##
+
+;        Print A as two hexadecimal digits.
+PRHEX2:	PUSH	AF
+	RRCA
+	RRCA
+	RRCA
+	RRCA
+	CALL	PRHEX1
+	POP	AF
+PRHEX1:	AND	%00001111
+	ADD	A,"0"
+	CP	"9"+1
+	JR	C,PRHEX0
+	ADD	A,"A"-"9"-1
+PRHEX0:	JP	PRCHAR##
+
+;        Compute the TPA available to a transient program: the bottom
+; of the resident code less a margin for the program loader, rounded
+; down to the CP/M compatible xx06 shape of the (0006) vector that a
+; child program sees. With SHELLRAM OFF the save slot for the variable
+; region eats into the TPA as well (subtracted before the rounding so
+; that the shape is kept).
+GETTPA:	LD	HL,(EXITADDR##)
+	LD	DE,#FFD8
+	ADD	HL,DE
+	LD	A,(SHRAMFL##)
+	OR	A
+	JR	Z,GTP10
+	LD	DE,BUFFER1##-EXITADDR##
+	SBC	HL,DE
+GTP10:	LD	L,#08
+	LD	DE,#09
+	OR	A
+	SBC	HL,DE
+	LD	L,#06
+	DEC	H
+	RET
+
+; The strings of the MEM command. The 32 character wide layout: the
+; slot in columns 1-4, the first number column ending at column 14
+; (nine characters wide after a slot, eight after 'Total:') and two
+; more nine character columns.
+MEMHDR$:	DEFB	"Slot     Total Reserved     Free",13,10
+	DEFB	"----     ----- --------     ----",13,10,0
+MEMALL$:	DEFB	13,10,"Total:",0
+MEMRD$:	DEFB	"RAM disk size: ",0
+MEMTPA$:	DEFB	"TPA end address: ",0
+MEMTPA2$:	DEFB	"h",13,10,"TPA size: ",0
 
 		SUBTTL	GOTO, GOSUB, RETURN, END
 ;        The batch file flow control commands (all new in 2.40). They work
