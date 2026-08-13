@@ -359,8 +359,9 @@ DEV_READ_RAM:
 	ld	de,TMP_SEC##	;DE = sector number pointer
 	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	pop	iy		;IY = slot:segment
-	call	CALL_MAP##
-;
+	or	a		;NC = read (the CP 0FFh above left
+	call	CALL_MAP##	; the carry set, and CALL_MAP
+;				; passes the flags to the driver)
 DEV_READ_DONE:
 	pop	hl
 	pop	de
@@ -900,7 +901,9 @@ AAD_SAW_VALID_PART equ 19  ;Nonzero if the device currently being examined
 AAD_DEV_HAS_MAPPED equ 20  ;Nonzero if the device currently being examined
                            ;has a valid partition already mapped to a drive
 
-AAD_SIZE equ 21
+AAD_DRIVER_SEGMENT equ 21 ;Driver RAM segment, FFh for ROM drivers
+
+AAD_SIZE equ 22
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_IS_AUTOASPART equ 7
@@ -922,6 +925,13 @@ AUTO_ASSIGN:
     pop iy
     ld a,(iy+UD_SLOT##)
     ld (ix+AAD_DRIVER_SLOT),a
+    ld (ix+AAD_DRIVER_SEGMENT),0FFh
+    ld a,(DOS_VER##)    ;DOS 1 mode has no RAM drivers (and its
+    or a                ;"unit descriptor" has no segment field)
+    jr z,AUTO_ASSIGN_ROMDRV
+    ld a,(iy+UD_RAM_SEGMENT##)
+    ld (ix+AAD_DRIVER_SEGMENT),a
+AUTO_ASSIGN_ROMDRV:
 
 	bit AAFLAG_IS_AUTOASPART,d
 	jr nz,DO_AUTO_COMMON
@@ -932,11 +942,8 @@ AUTO_ASSIGN:
 	push ix
 	ld hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
-	ld a,(iy+UD_SLOT##)
-	ld_ iyh,a
 	ld a,DRIVER_QUERY.GET_MAX_DEVICE##
-	ld	ix,CALDRV##
-	call	CALSLT
+	call	AA_CALLDRV
 	or a
 	jr z,AUTO_ASSIGN_GOT_MAX_DEV
 	ld b,DEFAULT_MAX_DEVICE_NUMBER
@@ -1016,17 +1023,12 @@ AA_DLOOP:
 	;--- Obtain device information
 
 AA_GET_DEVINFO:
-	ld	a,(ix+AAD_DRIVER_SLOT)
-	ld_ iyh,a
 	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF##)
 	ld	c,(ix+AAD_LOOP_DEVICE_NUMBER)
 	ld  a,DEVICE_QUERY.GET_PARAMS##
-	push	ix
-	ld	ix,CALDRV##
-	call	CALSLT
-	pop	ix
+	call	AA_CALLDRV
 	call CHECK_DEVQ_GET_PARAMS_ERROR
 	jp	nz,AA_LLOOP_NEXT	;No device available
 
@@ -1128,7 +1130,9 @@ AA_PXLOOP:
 AA_PX_1ST:
 	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
     ld	c,(ix+AAD_DRIVER_SLOT)
-    ld  b,0FFh
+    ld  b,(ix+AAD_DRIVER_SEGMENT)   ;FFh for ROM drivers: F_GPART's
+                                    ;DEV_READ would CALDRV into the
+                                    ;RAM slot otherwise
 
     push ix
     call F_GPART
@@ -1196,6 +1200,7 @@ AA_PX_KILLEMU:
 
 	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
     ld  c,(ix+AAD_DRIVER_SLOT)
+    ld  b,(ix+AAD_DRIVER_SEGMENT)
     ld de,0
 	ld	(TMP_SEC##),de
 	ld	(TMP_SEC##+2),de
@@ -1214,6 +1219,7 @@ AA_PX_DOEMU:
     push hl
     pop iy
     ld c,(ix+AAD_DRIVER_SLOT)
+    ld b,(ix+AAD_DRIVER_SEGMENT)
     ld a,(iy+POFF_CHS_START)
     ;ld b,(iy+POFF_CHS_START+1)
     ld h,(iy+POFF_CHS_START+2)
@@ -1279,6 +1285,7 @@ AA_PLOOP_OKTYPE:
     ld  (ix+AAD_CURR_PART_SECTOR+2),l
     ld  (ix+AAD_CURR_PART_SECTOR+3),h
     ld  c,(ix+AAD_DRIVER_SLOT)
+    ld  b,(ix+AAD_DRIVER_SEGMENT)
 
 	call	AA_RSEC
 	jr	nz,AA_PLOOP_NEXT
@@ -1523,6 +1530,11 @@ AA_DO_ASSIGN_NO_FOK:
 	ld	b,(iy+UD_SLOT##)
 	ld	c,(iy+UD_PHYSICAL_UNIT##)
 	push	bc
+	ld	e,(iy+UD_RAM_SEGMENT##)	;Preserve the driver RAM segment
+	push	de			;(FFh for ROM drivers): losing it
+					;here would make every later call
+					;for the drive take the ROM driver
+					;path into the RAM slot.
 
 	ld	a,(iy+UD_DFLAGS##)
 	push	iy	;First clear the current unit descriptor
@@ -1535,12 +1547,13 @@ AA_DO_ASSIGN_NO_FOK:
 	ldir
 	ld	(iy+UD_DFLAGS##),a
 
+	pop	de
+	ld	(iy+UD_RAM_SEGMENT##),e
 	pop	bc
 	ld	(iy+UD_SLOT##),b
 	ld	(iy+UD_PHYSICAL_UNIT##),c
 	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
 	ld	(iy+UD_DEVICE_NUMBER##),a
-	ld	(iy+UD_RAM_SEGMENT##),0FFh
 
     ld  l,(ix+AAD_CAND_PART_SECTOR)
     ld  h,(ix+AAD_CAND_PART_SECTOR+1)
@@ -1640,6 +1653,7 @@ TRY_RAM_EMU:
     inc sp          ;Discard saved segment number without affecting any register
     inc sp
 
+    ld b,0FFh       ;The master disk ROM is never a RAM driver
     jp GO_EMU
 
 TRY_RAM_EMU_NO_SIG:
@@ -1652,6 +1666,7 @@ TRY_RAM_EMU_NO_SIG:
 ;This subroutine reads (AA_RSEC) or writes (AA_WSEC) a sector from the device to SECBUF.
 ;Input: A  = Device number
 ;       C  = Driver slot
+;       B  = Driver RAM segment, FFh for ROM drivers
 ;       (TMP_SEC) = sector number
 ;Output: NZ on error
 ;Preserves IX
@@ -1663,15 +1678,52 @@ AA_WSEC:
 AA_RSEC:
     or a
 AA_DOSEC:
-	ld_ iyh,c
+	push	af		;Save device number and the
+	ld	a,b		; read/write carry flag.
+	ld_	iyl,a		;IYl = segment, IYh = slot
+	ld_	iyh,c		;(for AA_CALLDRV2).
 	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
+	pop	af
+	jr	AA_CALLDRV2	;Call DEV_RW
+
+;Call the driver entry point stored in (BK4_ADD), with the inter-slot
+;CALDRV mechanism for ROM drivers or via CALL_MAP for RAM loaded
+;drivers (calling CALDRV in the slot of a RAM driver would jump into
+;arbitrary memory: RAM slots have no kernel).
+;Input: IX = AAD frame, slot and segment are taken from it
+;           (AA_CALLDRV2: IYh = slot, IYl = segment instead)
+;       (BK4_ADD) = driver entry point address
+;       AF, BC, DE, HL = parameters for the driver routine
+;Output: results from the driver routine, flags set from A
+;Preserves IX
+
+AA_CALLDRV:
+	push	af
+	ld	a,(ix+AAD_DRIVER_SEGMENT)
+	ld_	iyl,a
+	ld	a,(ix+AAD_DRIVER_SLOT)
+	ld_	iyh,a
+	pop	af
+AA_CALLDRV2:
 	push	ix
+	push	af
+	ld_	a,iyl
+	cp	0FFh
+	jr	nz,AA_CALLDRV_RAM
+	pop	af		;ROM driver: CALSLT -> CALDRV.
 	ld	ix,CALDRV##
-	call	CALSLT	;Call DEV_RW
+	call	CALSLT
+	pop	ix
+	or	a
+	ret
+AA_CALLDRV_RAM:
+	pop	af		;RAM driver: call via CALL_MAP.
+	ld	ix,(BK4_ADD##)
+	call	CALL_MAP##
 	pop	ix
 	or	a
 	ret
@@ -1803,6 +1855,7 @@ upb_not_found:					;If anything was wrong with
 ;
 ; A = Device number
 ; C = Driver slot number
+; B = Driver RAM segment number, FFh for ROM drivers
 ; HLDE = Absolute device sector where the file starts
 ;
 ; It first reads the contents of the file (only the first sector)

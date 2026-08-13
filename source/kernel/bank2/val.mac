@@ -100,9 +100,12 @@ MAXCLUS_12BITS	equ	4095
 ;
 ;
 
-    ; Reject all format operations for non-FDD Nextor drives.
-    ; Choices 1-9 are rejected by fmt_devcmd_routine,
-    ; choices FBh-FFh are rejected here.
+    ; Reject the physical format choices (1-9) for non-FDD Nextor
+    ; drives; fmt_devcmd_routine would reject them anyway, this just
+    ; fails earlier. The boot sector / quick format choices (FBh-FFh)
+    ; are allowed on any drive with a valid FAT12/16 filesystem, as
+    ; they work through regular sector I/O (e.g. FORMAT /Q or the FDh
+    ; choice on a hard disk / SD card partition).
 
 		push	hl
 		pop	iy
@@ -110,6 +113,8 @@ MAXCLUS_12BITS	equ	4095
 		jr	z,fmt_ok_gate
 		bit	UF_FDD,(iy+UD_DFLAGS##)
 		jr	nz,fmt_ok_gate
+		cp	0FBh
+		jr	nc,fmt_ok_gate
 		ld	a,.IFORM##
 		ret
 fmt_ok_gate:
