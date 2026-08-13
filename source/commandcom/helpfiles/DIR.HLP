@@ -92,14 +92,14 @@ Examples:
               Volume in drive A: is MSX-DOS 2
               Directory of A:\
 
-             MSXDOS2  SYS r    4096 86-06-19  2:45p
-             COMMAND2 COM r   10496 86-06-19  2:46p
+             NEXTOR   SYS r    4455 86-06-19  2:45p
+             COMMAND3 COM r   10496 86-06-19  2:46p
              UTILS           <dir>  86-06-19  2:50p
              HELP            <dir>  86-06-19  2:50p
               14K in 2 files   222K free
 
-        The   disk  thus  contains  the  two  MSX-DOS  system  files
-        MSXDOS2.SYS and COMMAND2.COM,  which are read only,  and two
+        The   disk  thus  contains  the  two  Nextor  system  files
+        NEXTOR.SYS and COMMAND3.COM,  which are read only,  and two
         directories called UTILS and HELP.
 
         DIR B:\HELP/W
@@ -127,8 +127,8 @@ Examples:
              No main filename was given,  and so defaults to *. Thus
         this command is equivalent to the command DIR *.COM.
 
-        DIR COMMAND2
+        DIR COMMAND3
 
              No extension was given,  so this defaults to  .*.  Thus
-        this command is equivalent to the command DIR COMMAND2.*.
+        this command is equivalent to the command DIR COMMAND3.*.
 

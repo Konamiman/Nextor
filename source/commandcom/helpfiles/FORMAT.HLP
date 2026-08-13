@@ -41,8 +41,8 @@ Use:         The specified  drive is  formatted, and all data on the
         on  the disk,  and the maximum amount of disk space will  be
         free. The disk will not have a volume name, but can be given
         one with the VOL command.  To turn the disk into a boot disk
-        so  that  MSX-DOS  can  be started up  from  it,  the  files
-        NEXTOR.SYS and COMMAND2.COM must be copied onto it with  the
+        so  that  Nextor  can  be started up  from  it,  the  files
+        NEXTOR.SYS and COMMAND3.COM must be copied onto it with  the
         COPY command.
 
 Examples:

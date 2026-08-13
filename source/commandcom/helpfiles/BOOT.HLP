@@ -3,15 +3,15 @@ BOOT                                                          [2.44]
 
 Format:      BOOT d:
 
-Purpose:     Assigns a new MSX-DOS boot drive.
+Purpose:     Assigns a new Nextor boot drive.
 
-Use:         Simply changes the  drive used  to reboot  MSX-DOS from
+Use:         Simply changes the  drive used  to reboot  Nextor from
         BASIC.
 
 Examples:
 
         BOOT B:
 
-             MSX-DOS will attempt to reboot from drive B: or will be
+             Nextor will attempt to reboot from drive B: or will be
         redirected to the default drive.
 

@@ -1,20 +1,20 @@
 BATCH FILES
 -----------
 
-             When a command is given to MSX-DOS and it is not one of
+             When a command is given to Nextor and it is not one of
         the  internal commands,  a file of that name is searched for
         with  an  extension  of COM,  BAT or  BTM, or  any specified
         executable  extension. If not found in the current directory
         then the current search path is searched (see HELP PATH). If
         a COM  file is  found, then  it is loaded and executed. If a
-        BAT  or BTM  file is found, then MSX-DOS starts execution of
+        BAT  or BTM  file is found, then Nextor starts execution of
         the batch  file. If  an executable  extension is found, then
         the associated command is executed.
 
              A  batch  file is a text file that contains a  list  of
         commands,  and these commands are read from the file a  line
         at  a  time  and executed as though they were typed  at  the
-        keyboard.  Several  MSX-DOS  commands are in  fact  provided
+        keyboard.  Several  Nextor  commands are in  fact  provided
         mainly for use in batch files, such as ECHO and PAUSE.
 
              There are to types of batch files: with a BAT extension
@@ -80,7 +80,7 @@ BATCH FILES
         file  execution continues with the next command in the batch
         file.
 
-             After MSX-DOS has executed a command in batch file,  it
+             After Nextor has executed a command in batch file,  it
         may  need  to  read the next command in the batch  file  off
         disk.  If the correct disk is not in the drive when it comes
         to  do  this,  then a prompt is  issued.  For  example,  the
@@ -145,24 +145,24 @@ BATCH FILES
                  First parameter: powerful
                  First parameter: command
 
-             When  MSX-DOS starts up for the first time,  a  special
+             When  Nextor starts up for the first time,  a  special
         batch   file  called  AUTOEXEC.BAT  is  looked  for  and  is
-        executed if found. This may contain any MSX-DOS command, and
+        executed if found. This may contain any Nextor command, and
         usually contains once-only initialization commands,  such as
         a RAMDISK command to set up a RAM disk.
 
              One % parameter is passed to AUTOEXEC.BAT as  %1.  This
-        the  drive that MSX-DOS booted from and is in the form of  a
+        the  drive that Nextor booted from and is in the form of  a
         normal drive letter followed by a colon.
 
              Another  special  batch  file is  REBOOT.BAT.  This  is
-        executed  when MSX-DOS is re-booted after using  some  other
+        executed  when Nextor is re-booted after using  some  other
         application  (such  as  the built-in  MSX  BASIC).  As  with
         AUTOEXEC.BAT  files,  the single %1 parameter passed is  the
-        drive from which MSX-DOS was re-booted.
+        drive from which Nextor was re-booted.
 
              Usually  some  commands need to be  performed  whenever
-        MSX-DOS  is booted,  whether for the first time or  sometime
+        Nextor  is booted,  whether for the first time or  sometime
         later,  and these are put in the REBOOT batch file. They can
         then  be executed from the AUTOEXEC batch file by ending  it
         with  the command REBOOT %1.  An example of a  command  that
@@ -179,24 +179,24 @@ BATCH FILES
 
              If  it  is desired to 'nest' batch files  i.e. to  pass
         control back to the first batch file above, then this can be
-        done with the COMMAND2 command (see HELP COMMAND2),  passing
+        done with the COMMAND3 command (see HELP COMMAND3),  passing
         the  name  of the second batch file as the  parameter.  Then
         when  the  second batch file ends,  the first  one  will  be
-        continued with the command after the COMMAND2 command.
+        continued with the command after the COMMAND3 command.
 
              A typical AUTOEXEC batch file is as follows:
 
                   ECHO AUTOEXEC executing
                   RAMDISK 100
                   RAMDISK
-                  COPY COMMAND2.COM H:\
+                  COPY COMMAND3.COM H:\
                   REBOOT %1
 
              A typical REBOOT batch file is as follows:
 
                   ECHO REBOOT executing
                   PATH H:\, %1\UTILS, %1\BATCH
-                  SET SHELL=H:\COMMAND2.COM
+                  SET SHELL=H:\COMMAND3.COM
                   SET TEMP=H:\
                   H:
 
@@ -204,7 +204,7 @@ BATCH FILES
         "AUTOEXEC executing" is printed,  and then a RAM disk is set
         up with a maximum size of 100K.  Another RAMDISK command  is
         then  given which will print out the actual size of RAM disk
-        created.  The COPY command then copies COMMAND2.COM onto the
+        created.  The COPY command then copies COMMAND3.COM onto the
         RAM  disk so that it can load and re-load  quickly.  Finally
         the  REBOOT batch file is executed,  with the  %1  parameter
         (the boot drive) passed to it.
@@ -212,9 +212,9 @@ BATCH FILES
              The REBOOT batch file prints a message and then sets  a
         PATH. The first item in the path refers to the RAM disk that
         was created by the AUTOEXEC batch file,  and the other items
-        refer  to  directories  on the disk from which  MSX-DOS  was
+        refer  to  directories  on the disk from which  Nextor  was
         booted  (i.e. %1).  The SHELL environment item is set up  so
-        that COMMAND2.COM can re-load quickly off the RAM disk,  and
+        that COMMAND3.COM can re-load quickly off the RAM disk,  and
         the TEMP environment item is set up so that temporary piping
         files  are created on the RAM disk. Finally, the RAM disk is
         made the default drive.

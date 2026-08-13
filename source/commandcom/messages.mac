@@ -1,5 +1,5 @@
 	name('messages')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Message strings
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -72,7 +72,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"ATTRIB ... changes the attributes of files",13,10
 	DEFB	"BASIC .... goes into MSX disk BASIC",13,10
 	DEFB	"BEEP ..... makes beeping sound",13,10
-	DEFB	"BOOT ..... assigns a new MSX-DOS boot drive",13,10
+	DEFB	"BOOT ..... assigns a new Nextor boot drive",13,10
 	DEFB	"BUFFERS .. displays/sets the number of disk buffers",13,10
 	DEFB	"CD ....... see CHDIR",13,10
 	DEFB	"CDD ...... displays/sets the current directory and drive",13,10
@@ -96,7 +96,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"ENDIFF ... restores Command Mode",13,10
 	DEFB	"ERA ...... see ERASE",13,10
 	DEFB	"ERASE .... deletes files",13,10
-	DEFB	"EXIT ..... exits COMMAND2.COM",13,10
+	DEFB	"EXIT ..... exits COMMAND3.COM",13,10
 	DEFB	"FIXDISK .. updates MSX-DOS 1 disks to MSX-DOS 2",13,10
 	DEFB	"FORMAT ... formats a disk",13,10
 	DEFB	"FREE ..... displays total, used and free disk space",13,10
@@ -143,14 +143,14 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"TYPE ..... displays the contents of files",13,10
 	DEFB	"TYPEWW ... displays the contents of files with long lines wordwrapped",13,10
 	DEFB	"UNDEL .... recovers deleted files",13,10
-	DEFB	"VER ...... displays MSX-DOS version numbers",13,10
+	DEFB	"VER ...... displays Nextor version numbers",13,10
 	DEFB	"VERIFY ... displays/sets the current verify state",13,10
 	DEFB	"VOL ...... displays/sets disk volume name",13,10
 	DEFB	"XCOPY .... copies files from a directory tree",13,10
 	DEFB	"XDIR ..... displays filenames in a directory tree",13,10
 	DEFB	"Z80MODE .. displays/sets the Z80 access mode for a legacy driver",13,10
 	DEFB	13,10
-	DEFB	"Help for other MSX-DOS features is also available.",13,10
+	DEFB	"Help for other Nextor features is also available.",13,10
 	DEFB	"The standard topics are:",13,10
 	DEFB	13,10
 	DEFB	"ALI ...... aliases and executable extensions",13,10
@@ -162,9 +162,9 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"SYNTAX ... notation used in command descriptions",13,10
 	DEFB	0
 
-	DEFB	"Insert COMMAND2.COM disk in drive ",0,":",0
+	DEFB	"Insert COMMAND3.COM disk in drive ",0,":",0
 	DEFB	"Destroy all data on RAM disk (Y/N)? ",0
-	DEFB	"COMMAND2.COM:Wrong version of Nextor",0
+	DEFB	"COMMAND3.COM:Wrong version of Nextor",0
 	DEFB	"Terminate batch file (Y/N)? ",0
 	DEFB	"Insert batch file disk in drive ",0,":",0
 	DEFB	"Redirection error: ",0
@@ -190,7 +190,7 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	" total history buffer",0
 	DEFB	" total alias memory",0
 	DEFB	" total variable swap memory",0
-	DEFB	"COMMAND2.COM: Wrong version of NEXTOR.SYS",0
+	DEFB	"COMMAND3.COM: Wrong version of NEXTOR.SYS",0
 	DEFB	"Zero allocation information mode is active, no space information to report",0
 	DEFB	"Press any key... ",0
 	DEFB	"Shell RAM is ",0

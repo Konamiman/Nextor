@@ -30,13 +30,13 @@ Examples:
         drive.
 
         MOVE /H /P E:*.COM \
-        COMMAND2.COM -- File exists
+        COMMAND3.COM -- File exists
 
              All files matching *.COM,  both hidden and not  hidden,
         in  the current directory of drive E:  are moved to the root
-        directory  of  that drive.  The  file  COMMAND2.COM  already
+        directory  of  that drive.  The  file  COMMAND3.COM  already
         existed  in  the root directory,  so the error was  printed.
-        Neither of the COMMAND2.COM files were moved or altered.  If
+        Neither of the COMMAND3.COM files were moved or altered.  If
         many  such errors had occurred then a prompt would have been
         printed after a screen full.
 

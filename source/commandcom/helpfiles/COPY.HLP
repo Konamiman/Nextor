@@ -80,7 +80,7 @@ Use:         The definition of the source is:
         Items) will free up sufficient memory.
 
              Note  that the COPY command is simpler than that in MS-
-        DOS  and  MSX-DOS  1 because  it  cannot  concatenate  (join
+        DOS  and  Nextor  1 because  it  cannot  concatenate  (join
         together) files.  To do this,  a CONCAT command is available
         (see the CONCAT command).
 
@@ -91,9 +91,9 @@ Examples:
              The  file FILE1 is copied from the current directory of
         the current drive to the current directory of drive B:.
 
-        COPY /H  MSXDOS2.SYS + COMMAND2.COM  B:
+        COPY /H  NEXTOR.SYS + COMMAND3.COM  B:
 
-             The  two hidden files MSXDOS2.SYS and COMMAND2.COM  are
+             The  two hidden files NEXTOR.SYS and COMMAND3.COM  are
         copied to drive B:, thus making it a booting disk.
 
         COPY A:\DIR1 B:\DIR1 /V

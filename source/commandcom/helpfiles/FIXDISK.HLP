@@ -12,13 +12,13 @@ Use:         The  default or specified drive specifies the drive  on
         to full MSX-DOS 2 compatibility,  but may also be useful for
         updating other disks of a similar format.
 
-             Although  the disk format used by MSX-DOS 1 and MSX-DOS
+             Although  the disk format used by MSX-DOS 1 and Nextor
         2  is standardized,  MSX-DOS 1 does not use the  information
         stored on certain parts of the disk (the boot sector) and so
-        this  information  is not necessarily correct on  MSX-DOS  1
+        this  information  is not necessarily correct on  Nextor  1
         disks.  This can cause problems when MSX-DOS 2 is used  with
         these disks.  Additionally, the MSX-DOS 2 UNDEL command will
-        only  work  with disks that were formatted using  MSX-DOS  2
+        only  work  with disks that were formatted using  Nextor  2
         (i.e. disks  that have a 'volume id' in the boot sector) and
         so will not work with MSX-DOS 1 disks or disks formatted  on
         other  systems.
@@ -45,10 +45,10 @@ Use:         The  default or specified drive specifies the drive  on
 Examples:
 
         FIXDISK B: /S
-        Disk in drive B: will only be able to boot MSX-DOS
+        Disk in drive B: will only be able to boot Nextor
         Press any key to continue...
 
-             Drive  B:  will  be  updated  to  be  fully  MSX-DOS  2
+             Drive  B:  will  be  updated  to  be  fully  Nextor  2
         compatible.  Since  the disk may have been a boot disk  from
         another  system,  a  prompt  is issued before  the  disk  is
         actually updated.

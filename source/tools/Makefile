@@ -92,8 +92,8 @@ DATA.REL: \
 # `make tools-disk` creates bin/tools/nextor.dsk: a 720K double sided 3.5"
 # FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
 # NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
-# .COM file present in bin/tools (which includes COMMAND2.COM), a README.TXT
-# (sourced from tools-disk-readme.txt), the COMMAND2.COM help files from
+# .COM file present in bin/tools (which includes COMMAND3.COM), a README.TXT
+# (sourced from tools-disk-readme.txt), the COMMAND3.COM help files from
 # ../commandcom/helpfiles in a HELP directory, and any files supplied via
 # the EXTRA_FILES variable. The image is recreated from scratch on every
 # run using mformat, mmd and mcopy from the mtools package, plus dd to
@@ -118,7 +118,7 @@ DATA.REL: \
 # files that don't exist make the build fail. Typical usage is
 # EXTRA_FILES=MSXDOS.SYS,COMMAND.COM for a disk that also boots to the DOS
 # prompt in MSX-DOS 1 mode (in Nextor/MSX-DOS 2 mode the disk is already
-# bootable thanks to the COMMAND2.COM built by this repository).
+# bootable thanks to the COMMAND3.COM built by this repository).
 #
 # The current (invocation) directory is taken from the PWD environment
 # variable, which (unlike CURDIR) survives make -C. It does NOT survive the
@@ -139,7 +139,7 @@ EXTRA_MISSING = $(filter-out $(wildcard $(EXTRA_FILES_ABS)),$(EXTRA_FILES_ABS))
 # in C/Makefile).
 C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
 
-DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND2.COM $(COMS) $(C_COMS)
+DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM $(COMS) $(C_COMS)
 DISK_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(DISK_REQUIRED)))),$(DISK_REQUIRED))
 
 # Everything with a .COM extension goes in the disk. $(sort ...) also removes
@@ -148,7 +148,7 @@ DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)
 
 MTOOLS := mformat mmd mcopy
 
-# The COMMAND2.COM help files, stored in the HELP directory of the disk.
+# The COMMAND3.COM help files, stored in the HELP directory of the disk.
 HELPFILES_DIR := ../commandcom/helpfiles
 HELPFILES = $(wildcard $(HELPFILES_DIR)/*.HLP)
 
@@ -200,7 +200,7 @@ tools-disk: $(BOOTSECT_BIN)
 #
 # `make tools-zip` creates bin/tools/tools.zip with every .COM file present
 # in bin/tools (the same set of command line tools that goes in the disk
-# image), without NEXTOR.SYS and without COMMAND2.COM. As with tools-disk,
+# image), without NEXTOR.SYS and without COMMAND3.COM. As with tools-disk,
 # the tools are expected to have been built already: if any is missing the
 # build fails. Use the tools-zip target of ../Makefile to build the tools
 # and create the archive in one go. The archive is recreated from scratch
@@ -212,9 +212,9 @@ ZIP_REQUIRED := $(COMS) $(C_COMS)
 ZIP_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(ZIP_REQUIRED)))),$(ZIP_REQUIRED))
 
 # The .COM files to pack: everything that goes in the disk image except
-# COMMAND2.COM (in either letter case, in case the filesystem preserved a
+# COMMAND3.COM (in either letter case, in case the filesystem preserved a
 # lowercase copy).
-ZIP_COMS = $(filter-out $(BIN_TOOLS)/COMMAND2.COM $(BIN_TOOLS)/command2.com,$(DISK_COMS))
+ZIP_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com,$(DISK_COMS))
 
 .PHONY: tools-zip
 

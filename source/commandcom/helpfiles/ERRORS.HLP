@@ -88,15 +88,15 @@ DISK ERRORS
              An  attempt was made to access an 80 track disk in a 40
         track drive or a double sided disk in a single sided  drive.
         This  basically  means that the disk is not compatible  with
-        the drive.  Note that MSX-DOS can read a 40 track disk in  a
+        the drive.  Note that Nextor can read a 40 track disk in  a
         80 track drive, but if the disk is written to in an 80 track
         drive  then it may not be possible to read it again in a  40
         track drive.
 
         Not a DOS disk
 
-             The  disk is not a format that MSX-DOS  can  read.  For
-        example,  although  MSX-DOS  can  execute CP/M  programs  it
+             The  disk is not a format that Nextor  can  read.  For
+        example,  although  Nextor  can  execute CP/M  programs  it
         cannot access CP/M disks.
 
         Not ready
@@ -106,7 +106,7 @@ DISK ERRORS
 
         Sector not found
 
-             MSX-DOS  tried  to  read or  write  to  a  non-existent
+             Nextor  tried  to  read or  write  to  a  non-existent
         sector. May indicate that the disk has been corrupted.
 
         Seek error
@@ -137,7 +137,7 @@ DISK ERRORS
 
         Wrong disk and Wrong disk for file
 
-             MSX-DOS accessed a disk once and subsequently needed to
+             Nextor accessed a disk once and subsequently needed to
         access  it  again,  but  found that the  drive  contained  a
         different  one.  The  correct disk should  be  inserted  and
         'Retry' selected.
@@ -181,7 +181,7 @@ COMMAND ERRORS
         Piping error:
 
              The error occurred during a piping operation,  probably
-        in  connection  with the temporary files  that  COMMAND2.COM
+        in  connection  with the temporary files  that  COMMAND3.COM
         creates  (see  HELP  IO  on  Redirection  and  Piping).  For
         example,  the TEMP environment item did not refer to a valid
         drive or directory (see HELP ENV on Environment Items).
@@ -216,7 +216,7 @@ COMMAND ERRORS
         filename is  printed followed  by the  error message and the 
         command then continues. For example:
 
-                  COMMAND2.COM -- File cannot be copied onto itself
+                  COMMAND3.COM -- File cannot be copied onto itself
 
              The  possible command errors that can be given are,  in
         alphabetical order, as follows:
@@ -465,7 +465,7 @@ COMMAND ERRORS
 
         Not enough memory, system halted
 
-             This  special  error message is  printed  when  MSX-DOS
+             This  special  error message is  printed  when  Nextor
         attempts  to  start  up and finds that there is  not  enough
         memory to continue.  As the message suggests,  the  computer
         must then be reset. This should not normally occur.
@@ -502,7 +502,7 @@ COMMAND ERRORS
 
              An attempt was made to create a file which would, if it
         was  created,  overwrite a file that is marked as  a  system
-        file.  System  files  are not used in MSX-DOS,  and are  not
+        file.  System  files  are not used in Nextor,  and are  not
         shown  by  the  DIR command or  accessible  from  any  other
         commands,  and  so this error should not normally occur with
         commands.
@@ -521,16 +521,16 @@ COMMAND ERRORS
 
         Wrong version of command
 
-             After  executing a program,  COMMAND2.COM tried to  re-
-        load itself from the COMMAND2.COM file on disk, and found it
+             After  executing a program,  COMMAND3.COM tried to  re-
+        load itself from the COMMAND3.COM file on disk, and found it
         was  not  the same version.  A prompt is  then  printed  and
-        COMMAND2.COM will attempt to re-load itself again.
+        COMMAND3.COM will attempt to re-load itself again.
 
-        Wrong version of MSX-DOS, system halted
+        Wrong version of Nextor, system halted
 
-             This  special  error  message is printed  when  MSX-DOS
+             This  special  error  message is printed  when  Nextor
         attempts to starts up and finds that some other part of  the
-        MSX-DOS  system has a version number earlier than  required.
+        Nextor  system has a version number earlier than  required.
         As  the message suggests,  the computer must then be  reset.
         This should not normally occur.
 
@@ -538,7 +538,7 @@ COMMAND ERRORS
         The  numbers corresponding to the errors above start at  255
         and decrease. If an error number is received for which there
         is  no  message,  then it is printed.  Numbers above 64  are
-        reserved  for  future version of MSX-DOS and so  are  called
+        reserved  for  future version of Nextor and so  are  called
         'system errors' and numbers below 63 can be used by external
         commercially   available  programs  and  are  called   'user
         errors'. User errors below 32 never print a message. The two
@@ -581,7 +581,7 @@ PROMPT MESSAGES
         destroyed.  A  response of 'N' or control-STOP or  control-C
         will abort the command.
 
-        Disk in drive A: will only be able to boot MSX-DOS
+        Disk in drive A: will only be able to boot Nextor
         Press any key to continue...
 
              This  prompt is given by the FIXDISK  command,  and  is
@@ -595,21 +595,21 @@ PROMPT MESSAGES
         ing all  the files  in a  directory, and is issued to reduce
         the risk of accidentally deleting a lot of files.
 
-        Insert COMMAND2.COM disk in drive A:
+        Insert COMMAND3.COM disk in drive A:
         Press any key to continue
 
              This  may occur after running a program, and requires a
-        disk containing  COMMAND2.COM in  the root  directory to  be
+        disk containing  COMMAND3.COM in  the root  directory to  be
         present  in the specified drive. After inserting the disk in
-        the drive (which is the drive from which MSX-DOS was origin-
+        the drive (which is the drive from which Nextor was origin-
         ally booted) and pressing a key, the system will continue as
-        normal. If, for some reason, the file COMMAND2.COM cannot be
+        normal. If, for some reason, the file COMMAND3.COM cannot be
         found on the drive which it originally booted from, pressing
-        a valid driveletter key will cause COMMAND2.COM to boot from
+        a valid driveletter key will cause COMMAND3.COM to boot from
         another drive,  for example  a disk  drive instead of a hard
-        disk.  If COMMAND2.COM has been copied somewhere else (eg. a
+        disk.  If COMMAND3.COM has been copied somewhere else (eg. a
         RAM disk)  then the  SHELL environment item can be set up to
-        make  COMMAND2.COM re-load  from there instead (see HELP ENV
+        make  COMMAND3.COM re-load  from there instead (see HELP ENV
         on Environment Items).
 
         Insert batch file disk in drive A:
@@ -633,7 +633,7 @@ PROMPT MESSAGES
 
         Terminate batch file (Y/N)?
 
-             When MSX-DOS aborts a command prematurely (such as when
+             When Nextor aborts a command prematurely (such as when
         the  control-STOP  or  control-C key  is  pressed)  and  the
         command  was  executing  in a batch  file,  this  prompt  is
         issued. If the response is 'Y' then the batch file will also

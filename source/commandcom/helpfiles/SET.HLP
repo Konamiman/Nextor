@@ -47,7 +47,7 @@ Examples:
         DATE = yy-mm-dd
         TEMP = A:\
         HELP = A:\HELP
-        SHELL = A:\COMMAND2.COM
+        SHELL = A:\COMMAND3.COM
 
              No parameters were given,  so all the  currently
         set  environment  items were printed,  in  this  case

@@ -1,5 +1,5 @@
 	name('editor')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Command line editor
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -18,7 +18,7 @@
 ;        EDLINE is the line editor proper, called from INLI unless the EXPAND
 ; environment item is OFF. It replaces the plain _BUFIN line input with
 ; insert/overwrite editing, word movement, filename completion on TAB and a
-; command history kept in COMMAND2's mapper RAM segment.
+; command history kept in COMMAND3's mapper RAM segment.
 ;
 ; On entry, DE -> a _BUFIN style buffer: byte 0 = maximum length, byte 1 =
 ;               returned length, characters from byte 2 onwards.
@@ -840,7 +840,7 @@ ERRBEEP:	LD	A,7
 
 		SUBTTL	History buffer
 ;
-;        The command history lives in COMMAND2's mapper RAM segment as a
+;        The command history lives in COMMAND3's mapper RAM segment as a
 ; circular buffer of zero-terminated lines: BUFLEN bytes (default 1024,
 ; settable with the HISTORY command) starting at BUFADDR. Three pointers,
 ; kept in the segment as well, control it: PUTADDR = where the next line
@@ -1004,13 +1004,13 @@ HISNEXT::	PUSH	HL
 	LD	HL,BUFADDR	; Was at ENDADDR: wrap to the start.
 	JR	HIS100
 
-;        Read the byte at address HL of COMMAND2's mapper segment into A.
+;        Read the byte at address HL of COMMAND3's mapper segment into A.
 ; Corrupts AF only.
 RDCHR:	LD	A,(MAPPAGE##)	; Segment number of the mapper segment.
 	CALL	RD_SEG##
 	RET
 
-;        Write A to the byte at address HL of COMMAND2's mapper segment.
+;        Write A to the byte at address HL of COMMAND3's mapper segment.
 ; All registers are preserved.
 WRCHR::	PUSH	DE
 	PUSH	AF
@@ -1090,7 +1090,7 @@ CUR70:	CALL	HISNEXT	;   then past the terminator(s) onto
 ;        Abort routine installed while tab completion accesses the disk:
 ; discard the return address of the aborted BDOS call and return NZ from
 ; it, so that TABFIRST/TABNEXT's error checks unwind and the editor just
-; beeps instead of COMMAND2 aborting the whole line input.
+; beeps instead of COMMAND3 aborting the whole line input.
 ;
 ABEXIT7:	POP	DE	; Drop the aborted call's return address.
 	OR	#01	; NZ: report an error.

@@ -11,7 +11,7 @@ Use:         When a  string is specified, it will be displayed. Next
         name is specified by envname.
 
              Usually the  string will  be read from the keyboard. If
-        so,  all standard  editing facilities,  provided by MSX-DOS,
+        so,  all standard  editing facilities,  provided by Nextor,
         are available to enter or edit the string.
 
              Note that the environment item name must be preceded by

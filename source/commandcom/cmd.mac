@@ -1,5 +1,5 @@
 	name('cmd')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Non-disk commands
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -888,8 +888,8 @@ QWARN2$:	DEFB	" is NOT a floppy disk.",13,10,"Are you sure? (y/n) ",0
 ; by the system and in use by the user (from the mapper table provided by
 ; the DOS 2 mapper support routines); the TPA size available to a transient
 ; program; and the total and free sizes of the three areas carved out of
-; COMMAND2's private mapper segment: the command history buffer, the alias
-; area and the variable swap space used for running nested COMMAND2's.
+; COMMAND3's private mapper segment: the command history buffer, the alias
+; area and the variable swap space used for running nested COMMAND3's.
 ;        /K prints figures of 1K and over in kilobytes, /P pages the
 ; output.
 @MEMORY::	AND	(HL)	; Parse options first if present.
@@ -3047,10 +3047,10 @@ RDSLOT:	EX	DE,HL
 	RET
 
 VERMSG:	
-	DEFB	"Nextor command interpreter "
+	DEFB	"COMMAND3.COM version "
 	INCLUDE	version.inc
 	DEFB	13,10,13,10
-	DEFB	"TYPE COMMAND2.COM for more details",13,10,0
+	DEFB	"TYPE COMMAND3.COM for more details",13,10,0
 
 		SUBTTL	VERIFY
 ;******************************************************************************
@@ -3149,7 +3149,7 @@ DSK30:	INC	DE	; Skip DE past the matched word.
 
 		SUBTTL	SHELLRAM
 ;        The SHELLRAM command (new in 3.0): SHELLRAM [ON|OFF].
-;        COMMAND2 normally allocates one 16K mapper segment and keeps the
+;        COMMAND3 normally allocates one 16K mapper segment and keeps the
 ; command history, the alias list and the variable swap stack in it (see
 ; command.inc). SHELLRAM OFF gives that segment back to the system, for users
 ; who need every mapper segment they can get for some other program:

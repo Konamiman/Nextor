@@ -9,7 +9,7 @@ Use:         The filespec specifies which files are to be  undeleted
         if possible, and defaults to *.*.
 
              Files  can only be undeleted if they have been  deleted
-        using  MSX-DOS 2  on  an  MSX-DOS 2 formatted disk and if no
+        using  Nextor  on  an  MSX-DOS 2 formatted disk and if no
         disk  allocation  has  taken  place  since  the   file   was
         originally deleted, which usually means that they have to be
         undeleted immediately after they have been deleted.

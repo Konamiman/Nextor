@@ -1,5 +1,5 @@
 	name('cli')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	The command loop
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -271,7 +271,7 @@ CLI20:	LD	A,#3C
 	LD	A,B	;   ering from this situation.
 	JP	Z,EXIT##	; Else give error.
 ERROR:	LD	SP,BOOTSTRAP##	; Set up SP again in case an abort.
-	LD	(ABORTERR##),A	; Save error for terminating COMMAND2.
+	LD	(ABORTERR##),A	; Save error for terminating COMMAND3.
 	LD	B,A	; B=error code.
 	PUSH	BC	; Save it for later.
 	LD	DE,ENVNAME##	; DE -> buffer to get message into.

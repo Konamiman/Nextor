@@ -1,9 +1,9 @@
 # Top level makefile for Nextor.
 # It builds the kernel base file, the standalone ROM drivers, NEXTOR.SYS,
-# COMMAND2.COM and the command line tools. The generated files are copied
+# COMMAND3.COM and the command line tools. The generated files are copied
 # under bin/: kernel-base (kernel base files), roms (standalone ROMs),
 # ram-drivers (the example RAM driver) and tools (the command-line tools,
-# NEXTOR.SYS and COMMAND2.COM). The makefiles in each subdirectory can be
+# NEXTOR.SYS and COMMAND3.COM). The makefiles in each subdirectory can be
 # used independently as well.
 #
 # Set NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180-compatible kernel
@@ -27,10 +27,10 @@ all:
 	$(MAKE) -C tools/C
 
 # Build the full matrix in one go: all six kernel base variants and both
-# standalone ROMs for each of them, plus NEXTOR.SYS, COMMAND2.COM and the
+# standalone ROMs for each of them, plus NEXTOR.SYS, COMMAND3.COM and the
 # assembler and C command-line tools. The drivers' own `everything` target
 # builds every kernel base variant as it goes (it recurses into ../kernel per
-# variant), so no separate kernel pass is needed here. NEXTOR.SYS, COMMAND2.COM
+# variant), so no separate kernel pass is needed here. NEXTOR.SYS, COMMAND3.COM
 # and the .COM tools have no build variants, so they are built once.
 everything:
 	$(MAKE) -C drivers everything
@@ -39,7 +39,7 @@ everything:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-# Build NEXTOR.SYS, COMMAND2.COM and all the command line tools, then pack
+# Build NEXTOR.SYS, COMMAND3.COM and all the command line tools, then pack
 # them into the bin/tools/nextor.dsk disk image.
 # The disk recipe itself lives in tools/Makefile (see its tools-disk target
 # for the details, including the EXTRA_FILES variable);
@@ -57,14 +57,14 @@ tools-disk:
 
 # Build all the command line tools, then pack them into the
 # bin/tools/tools.zip archive (just the tools: no NEXTOR.SYS and no
-# COMMAND2.COM there, so no NEXTOR.SYS build either - see the tools-zip
+# COMMAND3.COM there, so no NEXTOR.SYS build either - see the tools-zip
 # target in tools/Makefile).
 tools-zip:
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 	$(MAKE) -C tools tools-zip
 
-# Everything tools-related in one go: NEXTOR.SYS, COMMAND2.COM and all the
+# Everything tools-related in one go: NEXTOR.SYS, COMMAND3.COM and all the
 # command line tools, the bin/tools/nextor.dsk disk image and the
 # bin/tools/tools.zip archive. Accepts the same EXTRA_FILES variable as
 # tools-disk.

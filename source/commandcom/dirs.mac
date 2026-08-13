@@ -1,5 +1,5 @@
 	name('dirs')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	File and directory manipulation commands
 	INCLUDE	command.inc
 ;******************************************************************************

@@ -1,6 +1,6 @@
 This disk contains NEXTOR.SYS and the Nextor command line tools.
 
-If a COMMAND2.COM file is present too, the disk can be used to
+If a COMMAND3.COM file is present too, the disk can be used to
 boot straight to the DOS prompt on a computer with a Nextor
 kernel ROM.
 

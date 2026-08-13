@@ -16,7 +16,7 @@ Use:         If no parameters are given,  then the drives that  have
         disabled for the drive.
 
              While the mode is enabled for a drive,  the amounts  of
-        total and free space reported for it by the older,  MSX-DOS1
+        total and free space reported for it by the older,  Nextor1
         style function calls are limited to 32 megabytes, so that
         the sector counts derived from them fit in 16 bits  and  old
         programs (including Disk BASIC) are not confused by  a  very

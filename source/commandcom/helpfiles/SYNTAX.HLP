@@ -1,7 +1,7 @@
 SYNTAX NOTATION
 ---------------
 
-             The  HELP command provides a description of the MSX-DOS
+             The  HELP command provides a description of the Nextor
         commands using the following notation:
 
 Words in upper case
@@ -67,7 +67,7 @@ path
 filename
 
              This indicates that the name of a file is required, the
-        syntax  of  which  is similar to MS-DOS and  MSX-DOS  1.  An
+        syntax  of  which  is similar to MS-DOS and  Nextor  1.  An
         ambiguous  filename  is  one  that  contains  '*'  and   '?'
         characters and may match more than one file on disk,  whilst
         one that does not contain these is an unambiguous filename.
@@ -142,7 +142,7 @@ volname
 
 device
 
-             This indicates one of the five standard MSX-DOS devices
+             This indicates one of the five standard Nextor devices
         is required. These and their meaning are:
 
              CON  - screen/keyboard I/O

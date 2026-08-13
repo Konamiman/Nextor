@@ -12,8 +12,8 @@ Use:         If  no  drives  are  given,   then  all  current  drive
         which this refers is printed.
 
              If both drives are given,  then the first drive is  the
-        drive  which MSX-DOS currently uses,  and the second is  the
-        drive which MSX-DOS will subsequently use.
+        drive  which Nextor currently uses,  and the second is  the
+        drive which Nextor will subsequently use.
 
 Examples:
 

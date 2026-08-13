@@ -132,7 +132,7 @@ Use:         TO is an extended Change Directory command (compare with
         filename character will be left unaltered.
 
 
-             WARNING:  When  using other  programs than  the COMMAND2
+             WARNING:  When  using other  programs than  the COMMAND3
         interpreter for deleting subdirectories, the file TO.LST will
         not be  updated. Use TO /S before using TO to change a direc-
         tory,  otherwise it  may occur that TO puts the computer in a

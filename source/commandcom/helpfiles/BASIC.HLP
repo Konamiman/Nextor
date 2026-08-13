@@ -12,7 +12,7 @@ Use:         Program is the name of a BASIC program on disk.
         disk has been set up, then it can still be used from BASIC.
 
              The  BASIC  command _SYSTEM("command") can be  used  to
-        return to MSX-DOS,  and the optional command,  which can  be
+        return to Nextor,  and the optional command,  which can  be
         any command mentioned in this manual,  will be executed.  If
         the  command  is  not  given,   then  a  batch  file  called
         REBOOT.BAT  will be  searched  for  and  executed  (see HELP

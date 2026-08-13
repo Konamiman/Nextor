@@ -17,12 +17,12 @@ Use:         The slot argument selects the disk driver to operate
 
              While the mode is enabled,  Nextor switches the CPU  to
         Z80 mode before every access to the driver and restores  the
-        previous CPU mode afterwards.  This allows  legacy   MSX-DOS
+        previous CPU mode afterwards.  This allows  legacy   Nextor
         drivers that are not compatible with the R800 CPU to work on
         an MSX Turbo-R.
 
              The mode exists on the MSX Turbo-R  only,  and only for
-        MSX-DOS (legacy) drivers:  for any other machine  or  driver
+        Nextor (legacy) drivers:  for any other machine  or  driver
         'Invalid device driver' is reported.
 
 Examples:

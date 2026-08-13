@@ -1,5 +1,5 @@
 ;
-;        This file is included by all the major COMMAND2.COM source files.
+;        This file is included by all the major COMMAND3.COM source files.
 ; It defines the MSX-DOS and BIOS entry points and workarea addresses used
 ; by the program, and the offsets of the control words kept in the mapper
 ; segment that holds the command history and the alias space.
@@ -46,7 +46,7 @@ EXTBIO:	EQU	#FFCA	; Extended BIOS hook.
 
 ;------- Mapper segment control words
 ;
-;        COMMAND2.COM keeps the command history, the alias list and the
+;        COMMAND3.COM keeps the command history, the alias list and the
 ; variable swap area in a RAM mapper segment, switched into page 2 while
 ; it is accessed. These are the offsets of the 16-bit control words kept
 ; at the bottom of that segment, so each one lives at offset+#8000 (see

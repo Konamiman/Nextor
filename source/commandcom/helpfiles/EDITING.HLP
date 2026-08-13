@@ -1,19 +1,19 @@
 EDITING COMMAND LINES
 ---------------------
 
-             When  typing  in a command line to  MSX-DOS,  a  simple
+             When  typing  in a command line to  Nextor,  a  simple
         editing facility is available for correction of mistakes  or
         the re-entering and editing of previous commands.
 
              There are  two types  of editing  facilities: the  ones
-        provided  by MSX-DOS  and the  ones provided  by the command
+        provided  by Nextor  and the  ones provided  by the command
         interpreter. The  next paragraphs  describe both  types. The
         paragraphs  preceded  by  a '*'  only apply  to the  command
         interpreter editing facilities.
 
              An  environment item  called EXPAND exists which can be
         set to  OFF (by  using the  SET EXPAND OFF command) to cause
-        COMMAND2.COM to use the standard MSX-DOS editing facilities.
+        COMMAND3.COM to use the standard Nextor editing facilities.
         The command SET EXPAND ON will restore the normal state.
 
              Typing  ordinary  characters at the keyboard cause  the
@@ -119,7 +119,7 @@ EDITING COMMAND LINES
         1024  characters.  The list  can be  cleared with  CTRL-DEL.
         CTRL-INS will add the entered line to the bottom of the list
         and clear the line, without executing it. The command inter-
-        preter  and  MSX-DOS  use  different lists  for storing  the
+        preter  and  Nextor  use  different lists  for storing  the
         commands.
 
 *            The list is kept in the shell RAM segment: when it  has
@@ -140,7 +140,7 @@ EDITING COMMAND LINES
 
              The features described here (except for the ones marked
         with an  '*') are  in fact  available to  many programs that
-        MSX-DOS can execute. In any program that does 'line inputs',
+        Nextor can execute. In any program that does 'line inputs',
         each  line can  be edited as described above. Previous lines
         can be  recalled for  re-entering and  editing, although the
         list  of  previous  lines  will  of course  include previous

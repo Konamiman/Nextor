@@ -1,5 +1,5 @@
 	name('io')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Console I/O and mapper access
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -177,7 +177,7 @@ MSG20:	LD	A,(DE)
 
 ;******************************************************************************
 ;
-;        Alias storage (new in 2.40). The alias list lives in COMMAND2's
+;        Alias storage (new in 2.40). The alias list lives in COMMAND3's
 ; private 16K mapper segment, together with the command history buffer
 ; and the variable swap area (see command.inc for the segment's header
 ; words). Each alias is a record: a length word (the total record
@@ -580,7 +580,7 @@ JMPADDR:	CALL	#00	; (address patched in above)
 	POP	BC
 	RET
 
-;        SETPG2 switches page 2 to COMMAND2's private mapper segment
+;        SETPG2 switches page 2 to COMMAND3's private mapper segment
 ; (MAPPAGE, the history/alias segment), first saving the number of the
 ; segment that was there in TMPPAGE; RSTPG2 puts that one back. Every
 ; SETPG2 must be paired with an RSTPG2 before anything else runs: there
@@ -588,7 +588,7 @@ JMPADDR:	CALL	#00	; (address patched in above)
 ; pair does not nest.
 ;
 SETPG2::	CALL	GET_P2	; Save the current page-2 segment
-	LD	(TMPPAGE##),A	;   and switch to COMMAND2's own.
+	LD	(TMPPAGE##),A	;   and switch to COMMAND3's own.
 	LD	A,(MAPPAGE##)
 	CALL	PUT_P2
 	RET

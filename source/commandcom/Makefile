@@ -1,6 +1,6 @@
-# Makefile for COMMAND2.COM
+# Makefile for COMMAND3.COM
 #
-# The generated COMMAND2.COM file is copied to the bin/tools directory.
+# The generated COMMAND3.COM file is copied to the bin/tools directory.
 #
 # The modules are assembled as separate REL modules linked with LK80 (same
 # scheme as NEXTOR.SYS). The code base is the COMMAND2.COM 2.41 port,
@@ -33,7 +33,7 @@ define assemble_as
 	@$(N80) $(1) $(2) $(3)
 endef
 
-commandcom: COMMAND2.COM
+commandcom: COMMAND3.COM
 
 .PHONY: commandcom prerequisites clean
 
@@ -51,12 +51,12 @@ RELS := start.rel cli.rel tables.rel intvar.rel cmd.rel files.rel dirs.rel \
 	copy.rel io.rel batch.rel misc.rel editor.rel messages.rel var.rel
 SDK_RELS := dos_calls.rel dos_errors.rel
 
-COMMAND2.COM: \
+COMMAND3.COM: \
 	$(SDK_RELS) \
 	$(RELS)
 
-	@$(LK80) --output-file COMMAND2.COM --code 0100h $(SDK_RELS) $(RELS)
-	$(call copy_to_bin,COMMAND2.COM)
+	@$(LK80) --output-file COMMAND3.COM --code 0100h $(SDK_RELS) $(RELS)
+	$(call copy_to_bin,COMMAND3.COM)
 
 .SECONDEXPANSION:
 $(RELS): \

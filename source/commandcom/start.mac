@@ -1,11 +1,11 @@
 	name('start')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Startup, reload and initialisation
 	INCLUDE	command.inc
 ;******************************************************************************
 ;
 ;        Program entry point and banner, the code that keeps a copy of the
-; CLI at the top of the TPA and re-loads COMMAND2.COM from disk after a
+; CLI at the top of the TPA and re-loads COMMAND3.COM from disk after a
 ; transient program has overwritten it, and the once-only initialisation.
 ;
 ;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
@@ -16,7 +16,8 @@
 	JP	START
 
 BANNER:	DEFB	13
-	DEFB	"Nextor command interpreter "
+	DEFB	"COMMAND3 - Nextor command interpreter",13,10
+	DEFB	"Version "
 	INCLUDE	version.inc
 	DEFB	13,10
 	DEFB	"(c) 2026 by Konamiman",13,10
@@ -365,7 +366,7 @@ RPRCHR:	PUSH	HL
 	RET
 
 SHELL$:	DEFB	"SHELL",0
-DSHELL$:	DEFB	"A:\COMMAND2.COM",0
+DSHELL$:	DEFB	"A:\COMMAND3.COM",0
 DHELP$::	DEFB	"A:\HELP",0
 DROOT$:	DEFB	"A:\",0
 

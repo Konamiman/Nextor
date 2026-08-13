@@ -1,10 +1,10 @@
 REDIRECTION AND PIPING
 ----------------------
 
-             COMMAND2.COM provides facilities called redirection and
+             COMMAND3.COM provides facilities called redirection and
         piping  as is described hereafter.  However,  an environment
         item  REDIR  exists which can be set to OFF  (by  using  SET
-        REDIR   OFF  command)  to  cause  COMMAND2.COM  bypass   any
+        REDIR   OFF  command)  to  cause  COMMAND3.COM  bypass   any
         interpretation  of  redirection  or  piping  symbols.   When
         command  line  is executed in this way,  these  symbols  are
         passed to the command as it is typed.  The command SET REDIR
@@ -12,12 +12,12 @@ REDIRECTION AND PIPING
 
 REDIRECTION
 
-             Most  commands,  CP/M  programs  and  MSX-DOS  programs
+             Most  commands,  CP/M  programs  and  Nextor  programs
         output  text  to  the screen by  writing  to  the  'standard
         output',  and  read  from the keyboard by reading  from  the
-        'standard input'. COMMAND2.COM, however, provides facilities
+        'standard input'. COMMAND3.COM, however, provides facilities
         for  changing the standard input and standard output for the
-        duration of the command to refer to other MSX-DOS devices or
+        duration of the command to refer to other Nextor devices or
         to files on disk by including one or more of the redirection
         symbols  <,  >  and >> on the command line,  followed  by  a
         filename.
@@ -49,7 +49,7 @@ REDIRECTION
         continue.
 
              When  redirection information is given on  the  command
-        line,  it  is used by COMMAND2.COM to set up the redirection
+        line,  it  is used by COMMAND3.COM to set up the redirection
         and then removed from the command line. Thus in the examples
         above,  the  ECHO  command  will not  echo  the  redirection
         symbols or the filename.
@@ -78,7 +78,7 @@ PIPING
              Piping is  indicated on  the command line by separating
         the two commands by the | symbol. The command to the left of
         the | symbol will be performed first, and its output will be
-        redirected to a temporary file created by COMMAND2.COM. Then
+        redirected to a temporary file created by COMMAND3.COM. Then
         the  second  command  will be  performed, with  its standard
         input  redirected  from  the same  temporary file.  When the
         second command ends, the temporary file will be deleted. The
@@ -98,22 +98,22 @@ PIPING
              It  is not possible to use pipes on either the input or
         the output of batch files directly. It is, however, possible
         to use piping with batch files if they are executed with the
-        COMMAND2  command (see HELP COMMAND2) since it is  then  the
-        COMMAND2 command that is being redirected and not the  batch
+        COMMAND3  command (see HELP COMMAND3) since it is  then  the
+        COMMAND3 command that is being redirected and not the  batch
         file.
 
              As mentioned above,  in order to pipe the output of one
         command into the input of another,  temporary files will  be
-        created  and deleted by COMMAND2.COM.  The location of these
+        created  and deleted by COMMAND3.COM.  The location of these
         temporary  files is specified by the TEMP  environment  item
         (see  HELP ENV  on  Environment  Items),  and  this  may  be
         changed  to  refer to any drive and directory  (for  example
         piping  will be speeded up considerably if TEMP refers to  a
         directory  on a RAM disk).  By default,  TEMP refers to  the
         root  directory of the boot disk.  The filename used for the
-        temporary  file is created by COMMAND2.COM,  so TEMP  should
+        temporary  file is created by COMMAND3.COM,  so TEMP  should
         specify just the drive and directory. The filename is of the
         form %PIPExxx.$$$  where  xxx is a three digit number chosen
-        by COMMAND2.COM to avoid clashes with any other files in the
+        by COMMAND3.COM to avoid clashes with any other files in the
         TEMP directory.
 

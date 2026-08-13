@@ -3,13 +3,13 @@ ALIASES AND EXECUTABLE EXTENSIONS
 
 ALIASES
 
-             COMMAND2.COM  provides a facility called aliasing as is
+             COMMAND3.COM  provides a facility called aliasing as is
         described  hereafter.  However,  an  environment item  ALIAS
         exists which  can be set to OFF (by using SET ALIAS OFF com-
-        mand) to cause COMMAND2.COM bypass aliasing. The command SET
+        mand) to cause COMMAND3.COM bypass aliasing. The command SET
         ALIAS ON will restore the normal state.
 
-             MSX-DOS maintains  a list  of 'aliases'.  An alias is a
+             Nextor maintains  a list  of 'aliases'.  An alias is a
         named  command that has a value associated with it. Whenever
         the command  is entered  on the command line, it will be re-
         placed by the value associated with that command.

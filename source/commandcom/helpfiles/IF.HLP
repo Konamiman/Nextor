@@ -62,15 +62,15 @@ Use:         If NOT is given, then the command will be executed only
 
 Examples:
 
-        IF EXIST A:\COMMAND2.COM ECHO COMMAND2.COM was found!
+        IF EXIST A:\COMMAND3.COM ECHO COMMAND3.COM was found!
 
-             If there  is a  file called COMMAND2.COM in the root of
-        drive  A:, then  the text  "COMMAND2.COM was found!" will be
+             If there  is a  file called COMMAND3.COM in the root of
+        drive  A:, then  the text  "COMMAND3.COM was found!" will be
         displayed.
 
-        IF NOT EXIST H:\COMMAND2.COM COPY A:\COMMAND2.COM H:\
+        IF NOT EXIST H:\COMMAND3.COM COPY A:\COMMAND3.COM H:\
 
-             If  COMMAND2.COM does not exist in the root of drive H:
+             If  COMMAND3.COM does not exist in the root of drive H:
         then it  will be  copied from  the root of drive A: to drive
         H:.
 

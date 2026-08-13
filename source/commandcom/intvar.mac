@@ -1,5 +1,5 @@
 	name('intvar')
-	TITLE	MSX-DOS 2 - COMMAND2.COM
+	TITLE	Nextor - COMMAND3.COM
 	SUBTTL	Internal variables and variable functions
 	INCLUDE	command.inc
 ;******************************************************************************
@@ -112,7 +112,7 @@ IV_DRIVEMAP::	LD	C,_LOGIN##
 	LD	C,L
 	JP	FNP10	; Render C as binary digits.
 
-;        %_SHELL%: the shell nesting level, "0" for the original COMMAND2.
+;        %_SHELL%: the shell nesting level, "0" for the original COMMAND3.
 ; Whenever a transient command is run, the region EXITADDR to BUFFER1-1 is
 ; saved in the mapper segment below the save pointer kept at VAREND (see
 ; cli.mac); the level is recovered by dividing the amount of space in use
@@ -269,7 +269,7 @@ IV_DATE::	EX	AF,AF'	; Save it.
 	INC	DE	; Skip the leading space.
 	RET
 
-;        %_DOSVER%: the COMMAND2.COM version, as a fixed string.
+;        %_DOSVER%: the COMMAND3.COM version, as a fixed string.
 IV_DOSVER::	LD	DE,DOSVER$
 	RET
 
@@ -337,7 +337,7 @@ IVT20:	LD	(IX),#00
 ;        SETABT and RSTABT bracket a "guarded" BDOS call. SETABT installs
 ; DSKERR as the disk error handler and ABRT as the abort routine (both in
 ; cli.mac), so that a disk error or abort condition during the call makes
-; it return to its caller with A = #FF instead of aborting COMMAND2. Both
+; it return to its caller with A = #FF instead of aborting COMMAND3. Both
 ; routines preserve all the main registers.
 SETABT:	PUSH	BC
 	PUSH	DE
