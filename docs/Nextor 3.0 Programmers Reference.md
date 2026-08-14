@@ -909,7 +909,7 @@ Returned by [the `_DRVRO` function](#315-driver-operations-_drvro-7fh) when the 
 
 * Command interpreter not found (.NOCMD, 0AEh)
 
-Used by `NEXTOR.SYS` to signal that `COMMAND2.COM` was not found and thus a jump to the BASIC environment was forced.
+Used by `NEXTOR.SYS` to signal that no command interpreter (neither `COMMAND3.COM` nor `COMMAND2.COM`) was found and thus a jump to the BASIC environment was forced.
 
 * Incompatible DOS version (.IDOSV, 0ADh)
 
