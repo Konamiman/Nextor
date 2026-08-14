@@ -1,0 +1,39 @@
+Z80MODE                                                        [3.0]
+-------
+
+Format:      Z80MODE slot[-subslot] [ON | OFF]
+
+Purpose:     Displays or sets the Z80 access mode of a  legacy  disk
+        driver.
+
+Use:         The slot argument selects the disk driver to operate
+        on:  a primary slot number (0 to 3),  followed by a dash and
+        a subslot number when the slot is expanded.  A plain 0 means
+        the slot of the master disk ROM.
+
+             If no ON or OFF is given,  the current  state  of   the
+        mode  for that driver is displayed;  otherwise the  mode  is
+        enabled or disabled.
+
+             While the mode is enabled,  Nextor switches the CPU  to
+        Z80 mode before every access to the driver and restores  the
+        previous CPU mode afterwards.  This allows  legacy   Nextor
+        drivers that are not compatible with the R800 CPU to work on
+        an MSX Turbo-R.
+
+             The mode exists on the MSX Turbo-R  only,  and only for
+        Nextor (legacy) drivers:  for any other machine  or  driver
+        'Invalid device driver' is reported.
+
+Examples:
+
+        Z80MODE 1
+        OFF
+
+             The mode is currently disabled for the  driver  in slot
+        1.
+
+        Z80MODE 3-2 ON
+
+             The mode is enabled for the driver in slot 3-2.
+

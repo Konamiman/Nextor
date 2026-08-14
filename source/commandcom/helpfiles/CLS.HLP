@@ -1,0 +1,16 @@
+CLS                                                           [2.20]
+---
+
+Format:      CLS
+
+Purpose:     Clears the screen.
+
+Use:         Simply clears the screen and homes the cursor.
+
+Examples:
+
+        CLS
+
+             The  screen  is cleared,  and another  command  can  be
+        typed.
+

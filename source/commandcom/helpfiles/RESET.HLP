@@ -1,0 +1,16 @@
+RESET                                                         [2.40]
+-----
+
+Format:      RESET
+
+Purpose:     Resets the system.
+
+Use:         Simply resets the MSX system.
+
+Examples:
+
+        RESET
+
+             The system is reset and Nextor will be restarted (when
+        available).
+
