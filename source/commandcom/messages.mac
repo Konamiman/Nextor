@@ -120,7 +120,6 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
 	DEFB	"MKDIR .... creates a new sub-directory",13,10
 	DEFB	"MODE ..... changes the screen mode",13,10
-	DEFB	"MORE ..... pipelining command pausing output per screen",13,10
 	DEFB	"MOVE ..... moves files on a disk",13,10
 	DEFB	"MVDIR .... moves sub-directories",13,10
 	DEFB	"PATH ..... displays/sets the command search path",13,10
@@ -145,7 +144,6 @@ MESSAGES::	DEFB	"Yy",0
 	DEFB	"TO ....... changes to another directory",13,10
 	DEFB	"TREE ..... displays directories in a tree format",13,10
 	DEFB	"TYPE ..... displays the contents of files",13,10
-	DEFB	"TYPEWW ... displays the contents of files with long lines wordwrapped",13,10
 	DEFB	"UNDEL .... recovers deleted files",13,10
 	DEFB	"VER ...... displays Nextor version numbers",13,10
 	DEFB	"VERIFY ... displays/sets the current verify state",13,10
