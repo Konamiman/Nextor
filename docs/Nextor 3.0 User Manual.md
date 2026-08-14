@@ -505,7 +505,7 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if the `NEXTOR.SYS` (or `MSXDOS2.SYS`) file and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present).
+2.  Otherwise, if `NEXTOR.SYS` and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present). When `NEXTOR.SYS` is missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
 
 3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
@@ -1326,7 +1326,7 @@ Additionally, there are two brand new internal commands:
 
 * `MEM`: displays a compact memory mapper listing: one line per mapper with its slot and its total, reserved and free memory, followed by the totals, the RAM disk size (when one exists) and the end address and size of the TPA. For more detailed information the classic `MEMORY` command is still there.
 
-* `SHELLRAM`: enables or disables the osage of an extra RAM segment by `COMMAND3.COM`, see below for the details.
+* `SHELLRAM`: enables or disables the usage of an extra RAM segment by `COMMAND3.COM`, see below for the details.
 
 #### 3.10.3. The SHELLRAM command
 

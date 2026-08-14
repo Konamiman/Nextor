@@ -124,7 +124,7 @@ Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on 
 
 * New internal command `MEM`: displays a compact memory mapper listing that fits in 32 columns.
 
-* New internal command `SHELLRAM`: allows to free the RAM segment that the interpreter normally allocates for the command history and the aliases, for users who need every RAM segment they can get.
+* New internal command `SHELLRAM`: allows freeing the RAM segment that the interpreter normally allocates for the command history and the aliases, for users who need every RAM segment they can get.
 
 * The `FORMAT` command now works for drives mapped to floppy disk devices handled by Nextor drivers (`COMMAND2.COM` can only format drives controlled by legacy MSX-DOS drivers), and gains a new `/Q` switch that performs a quick format: only the allocation table and the root directory are cleared.
 

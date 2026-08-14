@@ -120,15 +120,17 @@ SETP::	PUSH	HL
 	LD	BC,#014B	; Get the output height.
 	LD	A,#04	;   (0 => 'infinite').
 	CALL	BDOS
-	LD	A,E	; Get width.
-	LD	(COLMAX##),A
-	LD	A,D	; Get height.
-	POP	BC
+	JR	NZ,SETP20	; Ignore it if error (shouldn't occur):
+	LD	A,E	;   COLMAX/ROWMAX keep their values.
+	LD	(COLMAX##),A	; Save width.
+	LD	A,D	; Get height: 0 ('infinite') gives
+	OR	A	;   ROWMAX = 0 = paging off, else
+	JR	Z,SETP10	;   height-1 = lines to print before
+	DEC	A	;   the next pause.
+SETP10:	LD	(ROWMAX##),A	; Save height in /P line count.
+SETP20:	POP	BC
 	POP	DE
 	POP	HL
-	RET	NZ	; Ignore it if error (shouldn't occur).
-	DEC	A
-	LD	(ROWMAX##),A	; Save height in /P line count.
 	RET
 
 		SUBTTL  DMESS
@@ -416,11 +418,19 @@ SET60:	LD	A,(HL)	;   word counts itself). Copy the
 	OR	A	; ...up to and including the null.
 	JR	NZ,SET60
 	POP	HL	; HL = the value.
-SET70:	LD	A,(HL)	; Copy the value likewise, giving up
-	LD	(DE),A	;   if DE runs off the top of page 2
-	INC	HL	;   (#C000).
-	BIT	6,D
-	JR	NZ,SET100
+SET70:	PUSH	HL	; Copy the value likewise, giving up
+	LD	HL,(ALIEND+#8000)	;   when DE reaches the end of the
+	SET	7,H	;   alias space, less the room for
+	DEC	HL	;   the 2-byte terminator record
+	DEC	HL	;   written below. (2.41 only stopped
+	DEC	HL	;   at the top of page 2, #C000, so a
+	OR	A	;   long value could overrun into the
+	SBC	HL,DE	;   variable swap area first.)
+	POP	HL
+	JR	C,SET100
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
 	INC	DE
 	INC	BC
 	OR	A

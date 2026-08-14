@@ -166,7 +166,7 @@ MESSAGES::	DEFB	"Yy",0
 
 	DEFB	"Insert COMMAND3.COM disk in drive ",0,":",0
 	DEFB	"Destroy all data on RAM disk (Y/N)? ",0
-	DEFB	"COMMAND3.COM:Wrong version of Nextor",0
+	DEFB	"COMMAND3.COM: Wrong version of Nextor",0
 	DEFB	"Terminate batch file (Y/N)? ",0
 	DEFB	"Insert batch file disk in drive ",0,":",0
 	DEFB	"Redirection error: ",0

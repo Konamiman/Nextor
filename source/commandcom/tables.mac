@@ -24,9 +24,10 @@
 ;        Each entry is a length byte, the item text and one flag byte, the
 ; FDFLAGS value to use: b0 => complete files, b1 => complete directories,
 ; b2 => switch to the other kind when the first one has no more matches.
-;        The table has no terminator of its own: the scan relies on the
-; ascending length order to give up before running into CMDTAB. When no
-; entry matches (or TABORDER is not set) the default is %00000011.
+;        The table ends with an explicit zero length byte, which the
+; scan takes as 'no match' (without it, an unmatched TABORDER value long
+; enough would run the scan into CMDTAB). When no entry matches (or
+; TABORDER is not set) the default is %00000011.
 ORDTAB::	DEFB	3
 	DEFB	"DIR"
 	DEFB	%00000010	; Directories only.
@@ -46,6 +47,8 @@ ORDTAB::	DEFB	3
 	DEFB	8
 	DEFB	"FILE,DIR"
 	DEFB	%00000101	; Files first, then directories.
+
+	DEFB	0	; End of the table.
 
 ;        The internal command table, scanned by the command dispatcher
 ; (DC10 in cli.mac) against the first word of the command line.

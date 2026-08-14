@@ -215,12 +215,24 @@ D16::	XOR	A	; No leading characters.
 	LD	DE,VALUEL##
 		SUBTTL  D32
 D32::	EXX
-	LD	E,A	; E=lead char.
-	LD	D,"0"	; D='0' to save bytes.
-	EXX
+	LD	C,A	; C'=lead char, applied only from the
+	LD	E,#00	;   10,000,000 entry on (see D32.10):
+	LD	D,"0"	;   the two larger entries never emit
+	EXX	;   it, so the classic 8-position
+			;   padded fields keep their width for
+			;   values below 100,000,000.
 	LD	HL,P10TAB	; Giant 32-bit power-of-ten table.
 D32.10:	LD	A,(HL)	; LSB from table.
-	DEC	A	; Last entry ?
+	CP	#80	; The 10,000,000 entry (the only one
+	JR	NZ,D32.14	;   with LSB #80) ?
+	EXX	; Yes: start emitting the lead char,
+	LD	A,E	;   unless a digit from the two larger
+	OR	A	;   entries already switched the lead
+	JR	NZ,D32.12	;   char to '0'.
+	LD	E,C
+D32.12:	EXX
+	LD	A,(HL)
+D32.14:	DEC	A	; Last entry ?
 	JR	NZ,D32.20	; Go if not.
 	EXX	; Else force leading char to '0'.
 	LD	E,D
@@ -259,10 +271,12 @@ DMI20:	EXX
 	LD	(IX),#00
 	RET
 
-P10TAB:	DEFB	#80,#96,#98,#00	; 10,000,000
+P10TAB:	DEFB	#00,#CA,#9A,#3B	; 1,000,000,000
+	DEFB	#00,#E1,#F5,#05	; 100,000,000
+	DEFB	#80,#96,#98,#00	; 10,000,000
 	DEFB	#40,#42,#0F,#00	; 1,000,000
 	DEFB	#A0,#86,#01,#00	; 100,000
-	DEFB	#10,#27,#00,#00
+	DEFB	#10,#27,#00,#00	; 10,000
 	DEFB	#E8,#03,#00,#00	; 1,000
 	DEFB	#64,#00,#00,#00	; 100
 	DEFB	#0A,#00,#00,#00	; 10

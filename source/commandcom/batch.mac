@@ -117,8 +117,12 @@ GETBATCHR:	LD	A,(BATHNDL##)
 	LD	(BATLINADDR##),HL	; Bump the read position.
 	CP	#1A	; End of the .BTM ?
 	JR	NZ,GET100
-	LD	A,(BATPAGE##)	; Yes: release its mapper segment.
-	CALL	FRE_SEG##
+	CALL	FREEBTM	; Yes: release its mapper segment.
+			;   (FREEBTM and not a bare FRE_SEG:
+			;   BATPAGE must be zeroed too, or the
+			;   command loop would free the - by
+			;   then possibly reallocated - segment
+			;   a second time when the batch ends.)
 GET100:	XOR	A	; No error.
 	RET
 
@@ -230,9 +234,11 @@ OPE20:	DEC	HL
 	LD	B,A	; Allocate one 16K segment: A=1 =>
 	INC	A	;   system segment, B=0 => any slot.
 	CALL	ALL_SEG##
-	LD	(BATPAGE##),A	; Remember the segment number.
-	LD	A,.NORAM##
-	RET	C	; No free segment => .NORAM error.
+	JR	NC,OPE15	; No free segment => .NORAM error
+	LD	A,.NORAM##	;   with NZ. A is undefined when
+	OR	A	;   ALL_SEG fails, so BATPAGE must be
+	RET		;   left at 0 (nothing to release).
+OPE15:	LD	(BATPAGE##),A	; Remember the segment number.
 	LD	DE,FIB1##
 	LD	A,#01	; Open the file, read only.
 	LD	C,_OPEN##
@@ -273,7 +279,9 @@ OPE20:	DEC	HL
 ; record that there is none. Returns A=0 and Z set.
 ;
 FREEBTM::	LD	A,(BATPAGE##)
-	CALL	FRE_SEG##
+	OR	A	; No .BTM segment allocated (or
+	RET	Z	;   already released) => nothing to
+	CALL	FRE_SEG##	;   do; never give FRE_SEG a 0.
 	XOR	A
 	LD	(BATPAGE##),A	; 0 => no .BTM segment allocated.
 	RET

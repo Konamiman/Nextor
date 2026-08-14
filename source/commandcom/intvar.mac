@@ -475,14 +475,15 @@ FNA50:	CALL	RSTABT
 	LD	(DE),A
 	RET
 
-;        Attribute letter/attribute bit pairs for @ATTRIB. There is no
-; explicit terminator: the FNA20 scan stops at the first zero byte after
-; the table.
+;        Attribute letter/attribute bit pairs for @ATTRIB, ended by an
+; explicit zero byte: the FNA20 scan then ignores an unknown attribute
+; letter instead of matching it against the code bytes that follow.
 ATTRTAB:	DEFB	"R",#01
 	DEFB	"H",#02
 	DEFB	"S",#04
 	DEFB	"D",#10
 	DEFB	"A",#20
+	DEFB	#00
 
 ;        %@CHAR[n]%: a one character string containing the character with
 ; ASCII value n. A null string if n is not a valid number below 256.
@@ -1141,7 +1142,11 @@ FNL30:	CALL	GET8##	; E = n.
 FNL40:	LD	HL,XBUF1##
 	PUSH	HL
 	LD	B,E
-	JR	FNM30	; Cut after E characters.
+	LD	A,E	; n = 0 keeps no characters: cut at
+	OR	A	;   the very start (FNM30's DJNZ
+	JP	Z,FNM40	;   would take B=0 as 256 and keep
+	JP	FNM30	;   the whole string). Cut after E
+			;   characters otherwise.
 
 ;        %@RIGHT[string,n]%: the last n characters of the string; the
 ; whole string when n is larger than its length.

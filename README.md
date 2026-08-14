@@ -46,7 +46,7 @@ Nextor requires Linux to be built. It should work on macOS too, but that hasn't 
 
 To build Nextor you'll need:
 
-* `make`. On Debian/Ubuntu-ish systems you can just `apt-get install make`.
+* `make`, GNU make version 4.3 or newer (the kernel makefile uses grouped targets, introduced in that version). On Debian/Ubuntu-ish systems you can just `apt-get install make`.
 * [The Nestor80 tools](https://github.com/Konamiman/Nestor80). Go to [the releases section](https://github.com/Konamiman/Nestor80/releases) and download the appropriate variant of the latest version for the assembler (N80), the linker (LK80) and the library manager (LB80).
 * [SDCC](http://sdcc.sourceforge.net/) **v4.2 or newer**, for FDISK and the command line tools written in C. On Debian/Ubuntu-ish systems you can just `apt-get install sdcc`.
 * `objcopy` from [the binutils package](https://www.gnu.org/software/binutils/). On Debian/Ubuntu-ish systems you can just `apt-get install binutils`.
