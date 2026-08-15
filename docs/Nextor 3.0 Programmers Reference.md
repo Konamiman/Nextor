@@ -371,7 +371,7 @@ This function returns the total or free space for a drive. The space information
 
 The "extra space in bytes" result will be different from zero only when the minimum allocation unit of the drive is not a whole number of kilobytes. In case of FAT drives, it will be non-zero (specifically, it will be 512) only when the drive uses one sector per cluster and the cluster count is odd. For example, for a drive having one sector per cluster and 15 free clusters, this function will return HL=0, DE=7 and BC=512 when called with A=0 for that drive.
 
-The space information returned by this function is always real, it is not affected by the reduced/zero allocation information mode.
+The total space returned by this function is always real. The free space returned is also real even if the drive has the reduced allocation information mode active; however, if the drive has the zero allocation information mode active, then the free space returned will be zero.
 
 ### 3.7. Lock/unlock a drive, or get lock state for a drive (_LOCK, 77h)
 

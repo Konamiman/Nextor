@@ -97,12 +97,15 @@ fformat_size_ok:
 	ld	a,b
 	dec	a		;A = 0-based drive number
 	ld	hl,DRVTBL##
-fformat_drvtbl:
-	sub	(hl)		;Subtract driver's count
-	jr	c,fformat_found_drv
+	ld	d,4		;DRVTBL has four entries: a drive not
+fformat_drvtbl:			; assigned to a driver at boot time
+	sub	(hl)		; (e.g. the RAM disk) must not walk
+	jr	c,fformat_found_drv	; past the table.
 	inc	hl
 	inc	hl		;Next DRVTBL entry
-	jr	fformat_drvtbl
+	dec	d
+	jr	nz,fformat_drvtbl
+	jp	fformat_pop_iform	;Not a driver drive: can't format.
 fformat_found_drv:
 	add	a,(hl)		;A = 0-based relative drive within driver
 	ld	(BUF+102),a	;Save for CHOICE call
@@ -776,6 +779,19 @@ dcb_size_ok:
 	ld	a,(iy+UD_DFLAGS##)
 	bit	UF_DBD,a
 	jr	nz,dcb_nextor
+
+	;--- The RAM disk unit has no disk driver: its UD_SLOT is not a
+	;    driver slot, so falling into the MSX-DOS driver code below
+	;    would CALSLT into a garbage slot. It cannot be formatted.
+
+	bit	UF_RDD,a
+	jr	z,dcb_msxdos
+	pop	de
+	pop	bc
+	ld	a,.IFORM##
+	or	a		;NZ
+	ret
+dcb_msxdos:
 
 	;--- MSX-DOS driver: call CHOICE (4019h) via CALSLT,
 	;    then copy ROM string to buffer using RDSLT.

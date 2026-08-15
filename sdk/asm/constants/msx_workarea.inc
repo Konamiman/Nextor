@@ -28,6 +28,9 @@ CSRX	equ	0F3DDh
 ;Function-key display flag (0 = hidden).
 CNSDFG	equ	0F3DEh
 
+;BASIC line tokenization ("crunch") buffer (318 bytes).
+KBUF	equ	0F41Fh
+
 ;BASIC line input buffer; commonly reused as scratch space.
 BUF	equ	0F55Eh
 

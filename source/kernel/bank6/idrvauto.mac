@@ -486,8 +486,11 @@ IDRV_NOCP:
 
 	call	GET_P2##
 	push	af		;Save current page 2 segment
-	ld	a,(IDRV_SEG)
-	call	PUT_P2##
+	ld	a,(IDRV_SLOT)	;Enable the mapper slot the segment
+	ld	h,80h		;was allocated in at page 2: it may
+	call	ENASLT		;not be the primary mapper, and
+	ld	a,(IDRV_SEG)	;PUT_P2 sets the segment register
+	call	PUT_P2##	;only, not the slot.
 
 	ld	hl,8000h
 	ld	de,8001h
@@ -507,8 +510,11 @@ IDRV_NOCP:
 	ldir
 IDRV_NOINI:
 
-	pop	af		;Restore page 2
+	pop	af		;Restore page 2: the segment...
 	call	PUT_P2##
+	ld	a,(RAMAD2##)	;...and the normal RAM slot.
+	ld	h,80h
+	call	ENASLT
 
 	;* Open file
 	;  BASIC_DOS6 never returns on error (aborts to BASIC error handler)
@@ -550,9 +556,13 @@ IDRV_RDLOOP:
 
 	push	hl		;Save bytes-read count
 
-	;Map segment to page 2
+	;Map segment to page 2 (both the slot of the mapper it was
+	;allocated in, which may not be the primary one, and the segment)
 	call	GET_P2##
 	push	af		;Save current page 2 segment
+	ld	a,(IDRV_SLOT)
+	ld	h,80h
+	call	ENASLT
 	ld	a,(IDRV_SEG)
 	call	PUT_P2##
 
@@ -568,9 +578,12 @@ IDRV_RDLOOP:
 	ld	d,a		;DE = 8100h + offset = destination
 	ldir
 
-	;Restore page 2
+	;Restore page 2: the segment and the normal RAM slot
 	ex	af,af'		;Recover saved page 2 segment
 	call	PUT_P2##
+	ld	a,(RAMAD2##)
+	ld	h,80h
+	call	ENASLT
 
 	;Update offset
 	pop	hl		;Bytes-read count
