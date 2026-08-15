@@ -1,8 +1,8 @@
 # Top level makefile for Nextor.
 # It builds the kernel base file, the standalone ROM drivers, NEXTOR.SYS,
 # COMMAND3.COM and the command line tools. The generated files are copied
-# under bin/: kernel-base (kernel base files), roms (standalone ROMs),
-# ram-drivers (the example RAM driver) and tools (the command-line tools,
+# under bin/: kernel-base (kernel base files), drivers (standalone ROMs
+# and the example RAM driver) and tools (the command-line tools,
 # NEXTOR.SYS and COMMAND3.COM). The makefiles in each subdirectory can be
 # used independently as well.
 #
@@ -86,6 +86,9 @@ clean:
 	$(MAKE) -C tools/C clean
 
 # Clear everything: the source-tree intermediates (via `clean`) plus the
-# generated outputs under <repo>/bin.
+# generated outputs under <repo>/bin. The roms and ram-drivers directories
+# are no longer generated (their content goes to drivers now), but they are
+# still removed so that checkouts that built with the old layout get
+# properly cleaned.
 distclean: clean
-	rm -rf ../bin/kernel-base ../bin/roms ../bin/ram-drivers ../bin/tools
+	rm -rf ../bin/kernel-base ../bin/drivers ../bin/roms ../bin/ram-drivers ../bin/tools

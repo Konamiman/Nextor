@@ -172,6 +172,22 @@ CR	EQU	0DH
 ;
 ;
 ;
+;------------------------------------------------------------------------------
+;
+;        This message is printed at startup if the kernel that loaded
+; MSX-DOS.SYS is not Nextor 3 or later (e.g. it is Nextor 2 or a plain
+; MSX-DOS 2). After printing it, MSX-DOS.SYS waits for a key press and
+; then jumps to disk BASIC.
+;
+;
+	MSG	BADKRNL
+	 DEFB	CR,LF
+	 DEFB	"このNEXTOR.SYSにはNextor 3の",1
+	 DEFB	"カーネルが必要です。",CR,LF,CR,LF
+	 DEFB	"キーを押してください... ",0
+;
+;
+;
 	.strenc default
 
 	END

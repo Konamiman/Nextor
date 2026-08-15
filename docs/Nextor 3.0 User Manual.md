@@ -531,6 +531,8 @@ The boot procedure for MSX-DOS 1 mode is the same as for the normal (MSX-DOS 2 c
 
 * After the automatic mapping procedure, the `NEXTOR.SYS` and command interpreter search step is omitted.
 
+* The boot sector step considers all the drives, not only drive A:, so the first drive (in drive letter order, skipping the ghost halves of ghost drive pairs, see _[2.5.1. Ghost drives](#251-ghost-drives)_) that holds a disk with a valid boot sector is booted, and it becomes the default drive, so that `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. The same search is performed when entering `CALL SYSTEM` from Disk BASIC. This is unlike the original MSX-DOS 1, which could boot only from drive A:, and mimics the behavior of the normal MSX-DOS 2 compatible mode.
+
 Partitions of 16MB or less created with the built-in disk partitioning tool will have three sectors per FAT or less, so these can be used in MSX-DOS 1 mode.
 
 Remember that MSX-DOS 1 can boot the DOS environment (`MSXDOS.SYS` and `COMMAND.COM`) if the computer has at least 64K of RAM. Otherwise, only Disk BASIC can be used.

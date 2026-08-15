@@ -22,9 +22,11 @@
 #   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
 #                                 ".CTRL_INV"
 #
-# Outputs are copied to <repo>/bin/kernel-base (kernel base files),
-# <repo>/bin/roms (standalone ROMs), and <repo>/bin/ram-drivers (RAM
-# drivers).
+# All generated files (standalone ROMs, RAM drivers and the assembly
+# intermediates) go to <repo>/bin/drivers; nothing is left in this
+# source directory. The kernel base file is published to
+# <repo>/bin/kernel-base, the same location the kernel makefile
+# copies it to.
 #
 # The N80 and MKNEXROM binaries to use can be overriden with environment
 # variables, e.g.:
@@ -47,6 +49,9 @@ endif
 
 export N80_ARGS=--no-show-banner --verbosity 0
 
+BIN_DRIVERS := ../../bin/drivers
+BIN_KERNEL_BASE := ../../bin/kernel-base
+
 _VARIANT_DEFINES :=
 _VARIANT_SUFFIX :=
 
@@ -65,23 +70,21 @@ _VARIANT_DEFINES += INVERT_CTRL
 _VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
 endif
 
-UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
+UNDOC_MODE_STAMP := $(BIN_DRIVERS)/.build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
 
 $(UNDOC_MODE_STAMP):
-	@rm -f .build-variant*
+	@rm -f $(BIN_DRIVERS)/.build-variant*
 	@touch $@
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
+	@$(N80) $(1) $(BIN_DRIVERS) $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
 endef
 
 # $(1)=output ROM, $(2)=driver bin, $(3)=mapper (chgbnk) bin
 define mknexrom_rom
 	@printf "\n\033[0;36mBuilding ROM %s\033[0m\n\n" $(1)
 	@$(MKNEXROM) $(NEXTOR_BASE) $(1) /d:$(2) /m:$(3)
-	@mkdir -p ../../bin/roms
-	@cp $(1) ../../bin/roms/$(1)
 endef
 
 
@@ -90,6 +93,11 @@ endef
 ###################
 
 .PHONY: all base ascii8 ascii16 ram-example clean FORCE
+
+# The rules defined earlier in the file have targets under $(BIN_DRIVERS);
+# their paths contain slashes, so make won't skip them when picking the
+# default goal (it only skips dot-prefixed targets without slashes).
+.DEFAULT_GOAL := all
 
 all: base ascii8 ascii16
 
@@ -129,7 +137,7 @@ TOOLS := $(N80) $(MKNEXROM) dd cat
 .PHONY: prerequisites
 
 prerequisites:
-	@mkdir -p ../../bin/kernel-base ../../bin/roms ../../bin/ram-drivers
+	@mkdir -p $(BIN_KERNEL_BASE) $(BIN_DRIVERS)
 	$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 
@@ -142,11 +150,14 @@ prerequisites:
 
 # Path to the kernel base file used as input by MKNEXROM. If NEXTOR_BASE
 # is set, use it as-is. Otherwise build it via the kernel Makefile and
-# stash a local copy named after the active variant.
+# publish a variant-named copy to bin/kernel-base (the same file the
+# kernel makefile itself publishes; recreating it here keeps the build
+# working after bin/ has been wiped while ../kernel/nextor_base.dat is
+# still up to date).
 
 ifeq ($(strip $(NEXTOR_BASE)),)
 
-LOCAL_BASE := Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
+LOCAL_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
 
 base: $(LOCAL_BASE)
 
@@ -163,8 +174,6 @@ base: $(LOCAL_BASE)
 
 $(LOCAL_BASE): ../kernel/nextor_base.dat
 	cp ../kernel/nextor_base.dat $@
-	@mkdir -p ../../bin/kernel-base
-	cp $@ ../../bin/kernel-base/$@
 
 NEXTOR_BASE := $(LOCAL_BASE)
 
@@ -180,25 +189,25 @@ endif
 ###  STANDALONE ROMS ###
 ########################
 
-ROM_ASCII8  := Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
-ROM_ASCII16 := Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
+ROM_ASCII8  := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
+ROM_ASCII16 := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
 
 ascii8:  $(ROM_ASCII8)
 ascii16: $(ROM_ASCII16)
 
-standalone-rom-driver.bin: \
+$(BIN_DRIVERS)/standalone-rom-driver.bin: \
 	$(UNDOC_MODE_STAMP) \
 	standalone-rom-driver.asm
 
 	$(call assemble,standalone-rom-driver.asm,--build-type abs --output-file-extension bin)
 
-chgbnk-ascii8.bin: \
+$(BIN_DRIVERS)/chgbnk-ascii8.bin: \
 	$(UNDOC_MODE_STAMP) \
 	chgbnk-ascii8.asm
 
 	$(call assemble,chgbnk-ascii8.asm,--build-type abs --output-file-extension bin)
 
-chgbnk-ascii16.bin: \
+$(BIN_DRIVERS)/chgbnk-ascii16.bin: \
 	$(UNDOC_MODE_STAMP) \
 	chgbnk-ascii16.asm
 
@@ -208,22 +217,25 @@ chgbnk-ascii16.bin: \
 # at 4000h (the first 256 bytes are reserved for the ROM header), so
 # we prepend 256 zero bytes before passing it to MKNEXROM.
 
-_standalone-rom-driver.bin: standalone-rom-driver.bin 256.bytes
-	cat 256.bytes standalone-rom-driver.bin > $@
+$(BIN_DRIVERS)/_standalone-rom-driver.bin: \
+	$(BIN_DRIVERS)/standalone-rom-driver.bin \
+	$(BIN_DRIVERS)/256.bytes
+
+	cat $(BIN_DRIVERS)/256.bytes $(BIN_DRIVERS)/standalone-rom-driver.bin > $@
 
 $(ROM_ASCII8): \
 	$(NEXTOR_BASE) \
-	_standalone-rom-driver.bin \
-	chgbnk-ascii8.bin
+	$(BIN_DRIVERS)/_standalone-rom-driver.bin \
+	$(BIN_DRIVERS)/chgbnk-ascii8.bin
 
-	$(call mknexrom_rom,$@,_standalone-rom-driver.bin,chgbnk-ascii8.bin)
+	$(call mknexrom_rom,$@,$(BIN_DRIVERS)/_standalone-rom-driver.bin,$(BIN_DRIVERS)/chgbnk-ascii8.bin)
 
 $(ROM_ASCII16): \
 	$(NEXTOR_BASE) \
-	_standalone-rom-driver.bin \
-	chgbnk-ascii16.bin
+	$(BIN_DRIVERS)/_standalone-rom-driver.bin \
+	$(BIN_DRIVERS)/chgbnk-ascii16.bin
 
-	$(call mknexrom_rom,$@,_standalone-rom-driver.bin,chgbnk-ascii16.bin)
+	$(call mknexrom_rom,$@,$(BIN_DRIVERS)/_standalone-rom-driver.bin,$(BIN_DRIVERS)/chgbnk-ascii16.bin)
 
 
 ########################
@@ -232,23 +244,22 @@ $(ROM_ASCII16): \
 
 # Example RAM driver (loadable .drv). Opt-in: not built by `make all`.
 
-ram-example: ram-driver-example.drv
+ram-example: $(BIN_DRIVERS)/ram-driver-example.drv
 
-ram-driver-example.drv: \
+$(BIN_DRIVERS)/ram-driver-example.drv: \
 	$(UNDOC_MODE_STAMP) \
 	ram-driver-example.asm
 
 	$(call assemble,ram-driver-example.asm,--build-type abs --output-file-extension drv)
-	@mkdir -p ../../bin/ram-drivers
-	cp $@ ../../bin/ram-drivers/$@
 
 
 ########################
 ###  COMMON          ###
 ########################
 
-256.bytes:
-	dd if=/dev/zero of=256.bytes bs=1 count=256
+$(BIN_DRIVERS)/256.bytes:
+	dd if=/dev/zero of=$@ bs=1 count=256
 
 clean:
-	rm -f *.bin *.drv *.ROM *.dat 256.bytes _standalone-rom-driver.bin .build-variant*
+	rm -f $(BIN_DRIVERS)/*.bin $(BIN_DRIVERS)/*.drv $(BIN_DRIVERS)/*.ROM \
+	    $(BIN_DRIVERS)/256.bytes $(BIN_DRIVERS)/.build-variant*

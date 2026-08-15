@@ -62,9 +62,9 @@ There are a number of makefiles that will take care of building the different co
 | --- | --- | --- | --- |
 | Kernel base file (the input for `mknexrom` to produce complete kernel ROMs) | `source/kernel` | none | `bin/kernel-base/Nextor-<version>.base.dat` |
 | Kernel base file, all six build variants¹ | `source/kernel` | `everything` | `bin/kernel-base/Nextor-<version>.base[.<variant>].dat`, six files |
-| Standalone ROMs² (ASCII8 and ASCII16) | `source/drivers` | none | `bin/roms/Nextor-<version>.StandaloneASCII8.ROM` and `...ASCII16.ROM` |
-| Standalone ROMs², all six build variants¹ | `source/drivers` | `everything` | `bin/roms/Nextor-<version>.StandaloneASCII{8,16}[.<variant>].ROM`, twelve files |
-| Example RAM-loadable driver | `source/drivers` | `ram-example` | `bin/ram-drivers/ram-driver-example.drv` |
+| Standalone ROMs² (ASCII8 and ASCII16) | `source/drivers` | none | `bin/drivers/Nextor-<version>.StandaloneASCII8.ROM` and `...ASCII16.ROM` |
+| Standalone ROMs², all six build variants¹ | `source/drivers` | `everything` | `bin/drivers/Nextor-<version>.StandaloneASCII{8,16}[.<variant>].ROM`, twelve files |
+| Example RAM-loadable driver | `source/drivers` | `ram-example` | `bin/drivers/ram-driver-example.drv` |
 | `NEXTOR.SYS`, plus its Japanese-messages variant | `source/nextor_sys` | none | `bin/tools/NEXTOR.SYS` and `bin/tools/NEXTOR.SYS.japanese` |
 | `COMMAND3.COM`, the command interpreter | `source/commandcom` | none | `bin/tools/COMMAND3.COM` |
 | Command line tools written in assembler | `source/tools` | none | `bin/tools`, one `.COM` file per tool |
@@ -84,14 +84,14 @@ Additionally, an "umbrella" makefile in `source` invokes the other makefiles in 
 
 | What do you want to build? | Target | Result |
 | --- | --- | --- |
-| Everything with a default target above: kernel base file, standalone ROMs, `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools | none | `bin/kernel-base`, `bin/roms`, `bin/tools` |
-| The same, but with the kernel base file and the standalone ROMs in all six variants¹ | `everything` | `bin/kernel-base`, `bin/roms`, `bin/tools` |
+| Everything with a default target above: kernel base file, standalone ROMs, `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools | none | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
+| The same, but with the kernel base file and the standalone ROMs in all six variants¹ | `everything` | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
 | `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools, then the disk image³ | `tools-disk` | `bin/tools`, including `nextor.dsk` |
 | All the command line tools, then the zip archive⁴ | `tools-zip` | `bin/tools`, including `tools.zip` |
 | `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools, then both the disk image³ and the zip archive⁴ | `tools-all` | `bin/tools`, including `nextor.dsk` and `tools.zip` |
 
 Note that the example RAM driver is the one thing no umbrella target builds: it is always an explicit `make ram-example` in `source/drivers`.
 
-Every makefile (the umbrella one included) also supports a `clean` target that removes the intermediate files from the source directories, and the umbrella makefile adds `distclean`, which additionally deletes the generated `bin/kernel-base`, `bin/roms`, `bin/ram-drivers` and `bin/tools` directories.
+Every makefile (the umbrella one included) also supports a `clean` target that removes the intermediate files from the source directories, and the umbrella makefile adds `distclean`, which additionally deletes the generated `bin/kernel-base`, `bin/drivers` and `bin/tools` directories.
 
 

@@ -166,6 +166,22 @@ CR	EQU	0DH
 	MSG	EREND					; Part (c)
 	 DEFB	0					;   (null in English).
 ;
+;
+;
+;------------------------------------------------------------------------------
+;
+;	 This message is printed at startup if the kernel that loaded
+; MSX-DOS.SYS is not Nextor 3 or later (e.g. it is Nextor 2 or a plain
+; MSX-DOS 2). After printing it, MSX-DOS.SYS waits for a key press and
+; then jumps to disk BASIC.
+;
+;
+	MSG	BADKRNL
+	 DEFB	CR,LF
+	 DEFB	'This version of NEXTOR.SYS requires',1
+	 DEFB	'a Nextor 3 kernel.',CR,LF,CR,LF
+	 DEFB	'Press any key... ',0
+;
 
 
 END_MSG:
