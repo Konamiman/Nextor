@@ -79,6 +79,9 @@ clean:
 	$(MAKE) -C tools/C clean
 
 # Clear everything: the source-tree intermediates (via `clean`) plus the
-# generated outputs under <repo>/bin.
+# generated outputs under <repo>/bin. The roms and ram-drivers directories
+# are no longer generated (their content goes to drivers now), but they are
+# still removed so that checkouts that built with the old layout get
+# properly cleaned.
 distclean: clean
-	rm -rf ../bin/kernel-base ../bin/drivers ../bin/tools
+	rm -rf ../bin/kernel-base ../bin/drivers ../bin/roms ../bin/ram-drivers ../bin/tools

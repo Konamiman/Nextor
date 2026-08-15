@@ -100,12 +100,15 @@ MAXCLUS_12BITS	equ	4095
 ;
 ;
 
-    ; Reject the physical format choices (1-9) for non-FDD Nextor
-    ; drives; fmt_devcmd_routine would reject them anyway, this just
-    ; fails earlier. The boot sector / quick format choices (FBh-FFh)
-    ; are allowed on any drive with a valid FAT12/16 filesystem, as
-    ; they work through regular sector I/O (e.g. FORMAT /Q or the FDh
-    ; choice on a hard disk / SD card partition).
+    ; For non-FDD Nextor drives, allow only the FBh-FDh choices
+    ; (quick format and boot sector rebuild preserving the disk
+    ; parameters): they work through regular sector I/O on any drive
+    ; with a valid FAT12/16 filesystem (e.g. FORMAT /Q or the FDh
+    ; choice on a hard disk / SD card partition). The physical format
+    ; choices (1-9) are rejected (fmt_devcmd_routine would reject them
+    ; anyway, this just fails earlier), and so are FEh-FFh: those
+    ; compose the boot sector from the floppy media ID table, which
+    ; would write floppy geometry over a partition's disk parameters.
 
 		push	hl
 		pop	iy
@@ -114,7 +117,10 @@ MAXCLUS_12BITS	equ	4095
 		bit	UF_FDD,(iy+UD_DFLAGS##)
 		jr	nz,fmt_ok_gate
 		cp	0FBh
-		jr	nc,fmt_ok_gate
+		jr	c,fmt_gate_rej
+		cp	0FEh
+		jr	c,fmt_ok_gate
+fmt_gate_rej:
 		ld	a,.IFORM##
 		ret
 fmt_ok_gate:
@@ -143,10 +149,12 @@ new_boot_sec:	push	af
 
 		ld	ix,UPB_BUF##
 
-		ld	d,a			; Try to read the boot sector
-		ld	e,a			; from the disk and if there
-		ld	bc,(DATA_SEG##) ; was any error then give up
-		ld	b,1         ; immediately.
+		ld	de,0		; Try to read the boot sector
+					; (sector 0) from the disk and
+					; if there was any error then
+					; give up immediately.
+		ld	bc,(DATA_SEG##)
+		ld	b,1
 		call	READ_UNIT
 
 		pop	bc

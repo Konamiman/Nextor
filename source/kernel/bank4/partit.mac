@@ -1088,7 +1088,7 @@ AA_NO_SKIP_AUTOMAP:
 	push	ix
 	push	iy
 	ld	h,(ix+AAD_DRIVER_SLOT)
-	ld	l,0FFh
+	ld	l,(ix+AAD_DRIVER_SEGMENT)
 	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
 	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
 	push	de
@@ -1322,7 +1322,7 @@ AA_SPC_OK:
 	push ix
 	push iy
 	ld h,(ix+AAD_DRIVER_SLOT)
-	ld l,0FFh   ;(ix+UD_RAM_SEGMENT##)
+	ld l,(ix+AAD_DRIVER_SEGMENT)
     ld e,(ix+AAD_UNIT_DESCRIPTOR)
     ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
     push de
@@ -1429,7 +1429,7 @@ AA_RECORD_FALLBACK:
 	push	ix
 	push	iy
 	ld	h,(ix+AAD_DRIVER_SLOT)
-	ld	l,0FFh
+	ld	l,(ix+AAD_DRIVER_SEGMENT)
 	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
 	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
 	push	de
