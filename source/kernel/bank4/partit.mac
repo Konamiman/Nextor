@@ -1678,16 +1678,16 @@ AA_WSEC:
 AA_RSEC:
     or a
 AA_DOSEC:
-	push	af		;Save device number and the
-	ld	a,b		; read/write carry flag.
-	ld_	iyl,a		;IYl = segment, IYh = slot
-	ld_	iyh,c		;(for AA_CALLDRV2).
+	ld	h,c		;IYh = slot, IYl = segment
+	ld	l,b		;(for AA_CALLDRV2).
+	push	hl
+	pop	iy
+
 	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
-	pop	af
 	jr	AA_CALLDRV2	;Call DEV_RW
 
 ;Call the driver entry point stored in (BK4_ADD), with the inter-slot
@@ -1702,12 +1702,12 @@ AA_DOSEC:
 ;Preserves IX
 
 AA_CALLDRV:
-	push	af
-	ld	a,(ix+AAD_DRIVER_SEGMENT)
-	ld_	iyl,a
-	ld	a,(ix+AAD_DRIVER_SLOT)
-	ld_	iyh,a
-	pop	af
+	push	de
+	ld	d,(ix+AAD_DRIVER_SLOT)
+	ld	e,(ix+AAD_DRIVER_SEGMENT)
+	push	de
+	pop	iy		;IYh = slot, IYl = segment
+	pop	de
 AA_CALLDRV2:
 	push	ix
 	push	af
