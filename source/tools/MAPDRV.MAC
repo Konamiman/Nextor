@@ -51,8 +51,8 @@ PT_EXT_LBA: equ 15
 	db	"    (useful for removable devices that are currently offline).",13,10
 	db	13,10
 	db	"If a valid filename is supplied after <drive>, the specified file will be",13,10
-	db      "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
-	db      "that contains a file that has been mapped. Prepend the filename with '/'",13,10
+	db  "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
+	db  "that contains a file that has been mapped. Prepend the filename with '/'",13,10
 	db	"if the first character of its name is a digit.",13,10
 	db	1Ah
 
@@ -461,8 +461,9 @@ CHKNEX21:
 	ld	a,c
 	cp	2
 	jr	c,CHK21_ERR
+	ret	nz	;Nextor 3 or later
 
-	push	iy
+	push	iy	;Nextor 2: require 2.1+
 	pop	bc
 	ld	a,b
 	or	a

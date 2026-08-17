@@ -1,0 +1,44 @@
+LOCK                                                           [3.0]
+----
+
+Format:      LOCK [d: [ON | OFF]]
+
+Purpose:     Locks or unlocks a drive.
+
+Use:         If no parameters are given,  then the drives  that  are
+        currently locked are listed.
+
+             If  only a drive is given,  then the lock state of that
+        drive is displayed.
+
+             If ON or OFF is also given,  then the drive  is  locked
+        or unlocked appropriately.
+
+             While a drive is locked,  Nextor assumes that the  disk
+        or storage device mapped to it never changes,  and skips the
+        media change checks that are otherwise performed every  time
+        the  drive  is  accessed.  This  speeds  up  access  to  the
+        removable devices (such as SD cards or USB storage) that are
+        used as fixed storage.  Locking a drive whose media  is then
+        actually changed can corrupt the new disk, so use with care.
+
+             The lock is released automatically when a disk error on
+        the drive is aborted.
+
+Examples:
+
+        LOCK
+        No drives are locked
+
+             No  parameters  were given,  so the locked  drives  are
+        listed; in this case no drive was locked.
+
+        LOCK B: ON
+
+             Drive B: is locked.
+
+        LOCK B:
+        B: is locked
+
+             Only a drive was given, so its lock state is printed.
+

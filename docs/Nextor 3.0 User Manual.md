@@ -142,6 +142,16 @@
 
 [3.9.5. Known bugs](#395-known-bugs)
 
+[3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)
+
+[3.10.1. How it is loaded](#3101-how-it-is-loaded)
+
+[3.10.2. The new internal commands](#3102-the-new-internal-commands)
+
+[3.10.3. The SHELLRAM command](#3103-the-shellram-command)
+
+[3.10.4. Other changes](#3104-other-changes)
+
 [4. Other improvements](#4-other-improvements)
 
 [4.1. load" in F7](#41-load-in-f7)
@@ -244,7 +254,7 @@ Nextor drivers can flag the devices they control as being floppy disk drives. Wh
 
 * **Formatting from BASIC:** The disk in a floppy disk drive controlled by a Nextor driver can be formatted with the `CALL FORMAT` command. This command lists all the available floppy disk drives (both those controlled by MSX-DOS drivers and those mapped to floppy disk devices on Nextor drivers) and lets you format the disk in any of them; the available format choices (for example "single side / double side") depend on the driver. Except when running in MSX-DOS 1 mode, an MSX-DOS 2 boot sector is generated on the disk after it is formatted. See _[3.6.3. The CALL FORMAT command](#363-the-call-format-command)_.
 
-The `FORMAT` command built into COMMAND2.COM (the one available at the DOS prompt) can only format disks in drives controlled by MSX-DOS drivers; it can't format disks in floppy disk drives controlled by Nextor drivers (that's because of changes in the disk formatting API exposed by the kernel that COMMAND2.COM is unaware of). Use `CALL FORMAT` from BASIC (or a custom tool) to format those.
+The `FORMAT` command built into `COMMAND3.COM` (the one available at the DOS prompt) can format disks in floppy disk drives controlled by both MSX-DOS and Nextor drivers. Note that the `FORMAT` command of `COMMAND2.COM` (any 2.x version) can only format disks in drives controlled by MSX-DOS drivers; that's because of changes in the disk formatting API exposed by the kernel that the old interpreter is unaware of. When using `COMMAND2.COM`, use `CALL FORMAT` from BASIC (or a custom tool) to format disks in floppy disk drives controlled by Nextor drivers.
 
 #### 2.5.1. Ghost drives
 
@@ -401,7 +411,9 @@ The `NEXTOR.SYS` file has been improved in several ways in Nextor 3. To begin wi
 
 Also, the resident code of `NEXTOR.SYS` is more compact than it was in Nextor 2, so slightly more free memory (TPA) is left for programs.
 
-Finally, when the DOS environment can't be loaded at boot time (e.g. because `COMMAND2.COM` is missing or incompatible), Nextor will now print a proper error message (for example "Command interpreter not found" or "Incompatible DOS version") before falling back to the BASIC prompt, instead of repeatedly asking the user for another disk or failing silently.
+Also, `NEXTOR.SYS` now loads the new `COMMAND3.COM` command interpreter when it is present in the boot drive, falling back to `COMMAND2.COM` otherwise; see _[3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)_.
+
+Finally, when the DOS environment can't be loaded at boot time (e.g. because the command interpreter is missing or incompatible), Nextor will now print a proper error message (for example "Command interpreter not found" or "Incompatible DOS version") before falling back to the BASIC prompt, instead of repeatedly asking the user for another disk or failing silently.
 
 ### 2.15. File mounting and disk emulation mode
 
@@ -430,7 +442,7 @@ Nextor consists of the following components:
 
 * The `NEXTOR.SYS` file, which is necessary in order to boot in the DOS prompt. This file has the role that `MSXDOS2.SYS` had in MSX-DOS 2 (in fact, `NEXTOR.SYS` is just an extended version of `MSXDOS2.SYS`).
 
-* The `COMMAND2.COM` file. There is no special command interpreter for Nextor; instead, the same command interpreter of MSX-DOS 2 is used (any version of `COMMAND2.COM` from 2.20 will do), and new features are handled by using external commands.
+* The `COMMAND3.COM` file, the command interpreter of Nextor 3: an evolution of the MSX-DOS 2 command interpreter with new Nextor-specific internal commands (see _[3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)_). The old `COMMAND2.COM` (any version from 2.20) can be used instead: `NEXTOR.SYS` falls back to it when `COMMAND3.COM` is not found, and in that case the Nextor-specific features must be handled by using the external command line tools.
 
 **Note:** two variants of the NEXTOR.SYS file exist. See _[4.3. Reduced NEXTOR.SYS without Japanese error messages](#43-reduced-nextorsys-without-japanese-error-messages)_.
 
@@ -446,7 +458,7 @@ Therefore, in order to "install" Nextor, you have two options:
 
 2.  Burn a standalone version in a flash ROM cartridge, and use it together with your (MSX-DOS based) storage device controller in another slot.
 
-Also, you need to copy at least `NEXTOR.SYS` and `COMMAND2.COM` to your boot device (it is recommended to have the associated utilities available as well) unless you are happy in the BASIC prompt. More details about the boot procedure follow.
+Also, you need to copy at least `NEXTOR.SYS` and `COMMAND3.COM` (or `COMMAND2.COM`) to your boot device (it is recommended to have the associated utilities available as well) unless you are happy in the BASIC prompt. More details about the boot procedure follow.
 
 
 ### 3.2. Booting Nextor
@@ -493,7 +505,7 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if the `NEXTOR.SYS` (or `MSXDOS2.SYS`) and `COMMAND2.COM` files are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present).
+2.  Otherwise, if `NEXTOR.SYS` and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present). When `NEXTOR.SYS` is missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
 
 3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
@@ -517,7 +529,7 @@ The boot procedure for MSX-DOS 1 mode is the same as for the normal (MSX-DOS 2 c
 
 * During the automatic mapping procedure, only the MSX-DOS 1 compatible partitions will be examined. These are FAT12 partitions with three or less sectors per FAT.
 
-* After the automatic mapping procedure, the `NEXTOR.SYS` and `COMMAND2.COM` search step is omitted.
+* After the automatic mapping procedure, the `NEXTOR.SYS` and command interpreter search step is omitted.
 
 * The boot sector step considers all the drives, not only drive A:, so the first drive (in drive letter order, skipping the ghost halves of ghost drive pairs, see _[2.5.1. Ghost drives](#251-ghost-drives)_) that holds a disk with a valid boot sector is booted, and it becomes the default drive, so that `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. The same search is performed when entering `CALL SYSTEM` from Disk BASIC. This is unlike the original MSX-DOS 1, which could boot only from drive A:, and mimics the behavior of the normal MSX-DOS 2 compatible mode.
 
@@ -560,6 +572,8 @@ This section explains how to use these tools. Note however that you can also get
 All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
 
 Please note that none of these tools work in MSX-DOS 1 mode; however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
+
+Note also that when `COMMAND3.COM` is the command interpreter, the `MAPDRV`, `DRIVERS`, `DEVINFO`, `DRVINFO`, `LOCK`, `RALLOC` and `Z80MODE` tools are available as internal commands with the same names, syntax and behavior, so the `.COM` files are not needed: typing the bare command name runs the internal version, as with any internal command (see _[3.10.2. The new internal commands](#3102-the-new-internal-commands)_). The `.COM` tools are still supplied because they also work with `COMMAND2.COM` and with older Nextor versions.
 
 Some of the tools admit a `<driver location>` parameter. The actual syntax for this parameter is `<slot>[-<subslot>][:<segment>]|0`, with the following meaning:
 
@@ -887,7 +901,7 @@ None of this applies to MSX-DOS 1 mode, in this mode only integer (16 bit) secto
 
 `CALL FORMAT` is the standard Disk BASIC command to format a floppy disk: it lists all the available floppy disk drives and, once a drive is selected, presents a numbered list of the available format choices (for example "single side / double side").
 
-New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. Note that the `FORMAT` command of `COMMAND2.COM` still works only for drives controlled by MSX-DOS drivers.
+New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. The `FORMAT` command of `COMMAND3.COM` can format these drives too, but the one of the old `COMMAND2.COM` works only for drives controlled by MSX-DOS drivers.
 
 If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md#27-_format-67h)_ document for more details.
 
@@ -1279,6 +1293,72 @@ Some games will not work "out of the box" because they assume that only the flop
 
 * If you have more than one device in the primary Nextor controller (for example, for the MegaFlashROM SCC+ SD this means two SD cards, or one or two cards plus the ROM disk), Nextor will allocate one dummy drive letter for each extra device. MSX-DOS devices (if any) will then have drive letters assigned after these. For example, if you have three devices, A: is where the emulated disk image file is mounted, B: and C: are dummy, and D: is the internal floppy disk drive. These dummy drives will NOT have memory allocated for FAT buffers.
 
+
+### 3.10. The COMMAND3.COM command interpreter
+
+Nextor 3 comes with its own command interpreter: `COMMAND3.COM`. It is based on COMMAND 2.44, of which it keeps all the features (internal commands, aliases, command line editing and history, batch file enhancements, environment items, the HELP command, etc.), and adds functionality specific to Nextor 3, described in the following sections.
+
+`COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`: when run on an older Nextor or plain MSX-DOS 2 system it prints a "Wrong version of Nextor" message and drops to the BASIC prompt.
+
+The complete reference for every command is available through the `HELP` command; the help files are supplied in the `HELP` directory of the Nextor tools disk, and are found automatically when the system boots from that disk (for other locations, point the `HELP` environment item to the directory holding the files, e.g. `SET HELP=C:\HELP`). Alternatively, you can read them directly in [the help files directory in this repository](../source/commandcom/helpfiles).
+
+#### 3.10.1. How it is loaded
+
+At boot time `NEXTOR.SYS` searches the boot drive for `COMMAND3.COM` first, and falls back to `COMMAND2.COM` when it is not found. Any version of `COMMAND2.COM` from 2.20 works with Nextor 3; the features described in this section are simply not available with it, and the Nextor-specific functionality must be handled with the external command line tools instead (see _[3.4. The command line tools](#34-the-command-line-tools)_).
+
+#### 3.10.2. The new internal commands
+
+The following Nextor command line tools are now also internal commands of `COMMAND3.COM`, with the same names, syntax and behavior; typing the bare command name runs the internal version, no `.COM` file needed:
+
+* `MAPDRV`: maps a drive letter to a partition of a device, or mounts a disk image file on a drive (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_).
+
+* `DRIVERS`: displays the device drivers present in the system (see _[3.4.2. DRIVERS: the driver information tool](#342-drivers-the-driver-information-tool)_).
+
+* `DEVINFO`: displays the devices handled by a driver (see _[3.4.3. DEVINFO: the device information tool](#343-devinfo-the-device-information-tool)_).
+
+* `DRVINFO`: displays what every drive letter is assigned to (see _[3.4.4. DRVINFO: the drive information tool](#344-drvinfo-the-drive-information-tool)_).
+
+* `LOCK`: locks and unlocks drives (see _[3.4.5. LOCK: the drive lock and unlock tool](#345-lock-the-drive-lock-and-unlock-tool)_).
+
+* `RALLOC`: displays and sets the reduced allocation information mode (see _[3.4.6. RALLOC: the reduced/zero allocation information mode tool](#346-ralloc-the-reducedzero-allocation-information-mode-tool)_).
+
+* `Z80MODE`: displays and sets the Z80 access mode of a legacy driver (see _[3.4.7. Z80MODE: the Z80 access mode tool](#347-z80mode-the-z80-access-mode-tool)_).
+
+Additionally, there are two brand new internal commands:
+
+* `MEM`: displays a compact memory mapper listing: one line per mapper with its slot and its total, reserved and free memory, followed by the totals, the RAM disk size (when one exists) and the end address and size of the TPA. For more detailed information the classic `MEMORY` command is still there.
+
+* `SHELLRAM`: enables or disables the usage of an extra RAM segment by `COMMAND3.COM`, see below for the details.
+
+#### 3.10.3. The SHELLRAM command
+
+Like COMMAND 2.40 and later, `COMMAND3.COM` normally allocates one 16K RAM segment of the mapped RAM, and uses it to keep the command history, the alias list and its own state while transient programs execute. The new `SHELLRAM` internal command controls this behavior at run time:
+
+* `SHELLRAM` (no parameters) displays the current state.
+
+* `SHELLRAM OFF` gives the RAM segment back to the system, for users who need every RAM segment they can get for some other program. This has a price: the command history, the aliases and the `%_SHELL%` variable stop working (`ALIAS`, `HISTORY` and `MEMORY` report "Shell RAM is off"), and the TPA shrinks by about 1K, which the interpreter uses to save its state below its resident code, as the interpreter versions older than 2.40 did.
+
+* `SHELLRAM ON` returns to the normal state, allocating a RAM segment again. The command history and the alias list come back empty, unless a segment left over from a previous shell could be adopted. If no free segment exists, "Not enough memory" is reported and nothing changes.
+
+The state is recorded in the `SHELLRAM` environment item, which is read when the interpreter starts: the chosen state survives entering the BASIC interpreter and coming back with `CALL SYSTEM`. Setting the item directly (`SET SHELLRAM=OFF`) works too, taking effect the next time the interpreter is loaded.
+
+When no free RAM segment exists at the time the interpreter starts, it silently starts with the shell RAM off instead of refusing to run. This automatic fallback is not recorded in the environment item, so the normal state is attempted again on the next start; put a `SHELLRAM` invocation in your `AUTOEXEC.BAT` if you want to see the resulting state at boot time.
+
+The state can not be changed from a shell that shares its RAM segment with an outer shell (a secondary shell started with its own free segment available manages its own state normally).
+
+#### 3.10.4. Other changes
+
+Compared to COMMAND 2.44:
+
+* The `FORMAT` command now works for drives mapped to floppy disk devices handled by Nextor drivers, with the format choices supplied by the driver (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); until now it could only format drives controlled by legacy MSX-DOS drivers.
+
+* The `FORMAT` command gets a new `/Q` switch that performs a quick format of an already formatted disk: only the allocation table and the root directory are cleared. Add `/X` to skip the "Press any key" prompt. When applied to a drive mapped to a device that's not a floppy disk, an additional warning is shown, even with the `/X` switch.
+
+* `DIR` and `FREE` obtain the disk space figures through the new byte-based function of the Nextor kernel: the reported free space is now always the real one, even for drives in reduced allocation information mode (the 32MB cap of that mode only affects the classic ALLOC function, used by older interpreters and tools; see _[2.6. Reduced and zero allocation information mode](#26-reduced-and-zero-allocation-information-mode)_). For drives in zero allocation information mode, `FREE` explains that no space information is available and `DIR` omits the free space figure, instead of displaying a bogus value.
+
+* `VOL`, `DIR` and `FREE` print an informative note when the drive is mapped to a mounted disk image file, to the RAM disk, or is a ghost drive of another one.
+
+* The help files have been revised for Nextor 3: the new commands are included, and the first line of each file now lists the interpreter versions in which the command was introduced (multiple versions means that the command was updated in the newer versions).
 
 ## 4. Other improvements
 

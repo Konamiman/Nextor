@@ -1,0 +1,38 @@
+MEM                                                            [3.0]
+---
+
+Format:      MEM
+
+Purpose:     Displays a compact memory mapper listing.
+
+Use:         For every memory mapper in the system,  one   line   is
+        printed with its slot and its total,  reserved (used by  the
+        system or by user programs) and free memory,  in  kilobytes,
+        followed by a line with the totals over all the mappers.
+
+             Then the size of the RAM disk is printed (only when one
+        exists),  followed by the end address of the TPA (the memory
+        available  to  transient  programs,  which starts at address
+        0100h) and the equivalent TPA size.
+
+             The output is at most 32 characters wide,  so  that  it
+        also  looks  good  in  the 32 column screen modes.  For more
+        detailed information use the MEMORY command.
+
+Examples:
+
+        MEM
+        Slot     Total Reserved     Free
+        ----     ----- --------     ----
+         3-2     1024K      48K     976K
+           1       64K      64K       0K
+
+        Total:   1088K     112K     976K
+
+        RAM disk size: 128K
+        TPA end address: D706h
+        TPA size: 53K
+
+             A system with a 1024K memory mapper in slot 3-2  and  a
+        64K one in slot 1,  with a 128K RAM disk in use.
+

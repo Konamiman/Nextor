@@ -1,0 +1,807 @@
+	name('files')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Directory navigation and disk information commands
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        The CDD, CHDIR, PUSHD, POPD, FREE, DIR, MKDIR and VOL commands.
+;
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
+;
+;******************************************************************************
+@CDD::	SCF
+@CHDIR::	EX	AF,AF'
+	CALL	PRS
+	CALL	Z,GCHKEOL##
+	RET	NZ
+	LD	(HL),A
+	PUSH	DE
+	PUSH	BC
+	LD	B,C
+	LD	C,_GETCD##
+	LD	DE,ENVDATA##
+	CALL	BDOS
+	POP	BC
+	POP	DE
+	RET	NZ
+	EX	DE,HL
+	LD	A,(HL)
+	CP	"-"
+	JR	NZ,CHD10
+	INC	HL
+	CALL	GETCH##
+	LD	A,.IPARM##
+	RET	NZ
+	SET	0,B
+	LD	HL,DIRBUF##
+CHD10:	LD	A,C
+	BIT	0,B
+	LD	DE,ENVDATA##
+	JR	Z,CD
+	PUSH	HL
+	LD	A,(LOGDRV##)
+	LD	B,A
+	LD	DE,ENVDATA##
+	LD	C,_GETCD##
+	CALL	BDOS
+	POP	HL
+	LD	DE,XBUF1##
+	CALL	NCOPY##
+	LD	DE,XBUF1##
+	PUSH	DE
+	LD	BC,_PARSE##
+	CALL	BDOS
+	LD	A,C
+	LD	(LOGDRV##),A
+	POP	DE
+	LD	C,_CHDIR##
+	CALL	BDOS
+	JR	Z,CHD30
+	CP	.NODIR##
+	LD	HL,CDPATH$##
+	LD	DE,XBUF2##
+	CALL	Z,GENV3##
+	RET	NZ
+	EX	DE,HL
+CHD20:	CALL	GETCH##
+	LD	A,.NODIR##
+	RET	Z
+	LD	BC,ENVNAME##
+	CALL	CPYSTR##
+	RET	C
+	PUSH	HL
+	CALL	FNDDIR
+	POP	HL
+	JR	NZ,CHD20
+	EX	AF,AF'
+	SCF
+	EX	AF,AF'
+CHD30:	LD	BC,#40
+	LD	DE,DIRBUF##+3
+	LD	HL,ENVDATA##
+	LDIR
+	LD	C,_CURDRV##
+	CALL	BDOS
+	ADD	A,"A"
+	LD	(DIRBUF##),A
+	EX	AF,AF'
+	LD	A,0
+	JR	NC,CHD50
+	LD	A,(LOGDRV##)
+	DEC	A
+	LD	E,A
+CHD40:	LD	C,_SELDSK##
+	CALL	BDOS
+	LD	C,_ERROR##
+	CALL	BDOS
+	LD	A,B
+CHD50:	OR	A
+	RET
+
+CD:	ADD	A,"@"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	A,"\"
+	CALL	PRCHAR##
+	JP	DMSCR##
+
+FNDDIR:	LD	DE,ENVNAME##
+	LD	BC,_PARSE##
+	CALL	BDOS
+	SCF
+	RET	NZ
+	LD	A,C
+	LD	(LOGDRV##),A
+	LD	HL,XBUF1##
+	LD	A,B
+	AND	#18
+	JR	Z,FND100
+	LD	A,"\"
+	LD	(DE),A
+	INC	DE
+FND100:	CALL	NCOPY##
+	LD	DE,ENVNAME##
+	LD	C,_CHDIR##
+	JP	BDOS
+
+PRS::	LD	B,#00
+_PRS:	LD	C,_PARSE##
+	EX	DE,HL
+	PUSH	DE
+	CALL	BDOS
+	EX	DE,HL
+	POP	DE
+	RET	NZ
+	LD	A,(HL)
+	CALL	SEP?##
+	LD	A,.IPATH##
+	RET	NZ
+	LD	A,B
+	AND	#18
+	JR	NZ,PRS90
+	SET	5,B
+PRS90:	XOR	A
+	RET
+
+@PUSHD::	AND	(HL)
+	JR	Z,PUS20
+	CALL	@CDD
+	RET	NZ
+	LD	HL,DIRBUF##
+PUS10:	LD	DE,ENVNAME##
+	CALL	NCOPY##
+	DEC	DE
+	LD	A,";"
+	LD	(DE),A
+	INC	DE
+	PUSH	DE
+	LD	HL,PUSHD$##
+	CALL	GENV2##
+	EX	DE,HL
+	POP	DE
+	CALL	NCOPY##
+	LD	HL,PUSHD$##
+	LD	DE,ENVNAME##
+	LD	C,_SENV##
+	JP	BDOS
+
+PUS20:	LD	DE,XBUF1##+3
+	LD	A,(LOGDRV##)
+	LD	B,A
+	LD	C,_GETCD##
+	CALL	BDOS
+	RET	NZ
+	LD	A,(LOGDRV##)
+	ADD	A,"@"
+	LD	HL,XBUF1##+2
+	LD	(HL),"\"
+	DEC	HL
+	LD	(HL),":"
+	DEC	HL
+	LD	(HL),A
+	JR	PUS10
+
+@POPD::	AND	(HL)
+	JR	Z,POP10
+	LD	A,(HL)
+	CP	"/"
+	LD	A,.IPARM##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	CALL	UC##
+	CP	"N"
+	LD	A,.IOPT##
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	CALL	SEP?##
+	LD	A,.IOPT##
+	RET	NZ
+	CALL	GETCH##
+	LD	A,.INP##
+	RET	NZ
+	CALL	GETPOPD
+	XOR	A
+	RET
+
+POP10:	CALL	GETPOPD
+	RET	Z
+	PUSH	BC
+	LD	C,_CHDIR##
+	CALL	BDOS
+	POP	DE
+	RET	NZ
+	JP	CHD40
+
+GETPOPD:	LD	HL,PUSHD$##
+	CALL	GENV2##
+	LD	A,(DE)
+	OR	A
+	RET	Z
+	EX	DE,HL
+	LD	DE,ENVNAME##
+GET20:	LD	A,(HL)
+	OR	A
+	JR	Z,GET40
+	CP	";"
+	JR	Z,GET30
+	LDI
+	JR	GET20
+
+GET30:	INC	HL
+GET40:	XOR	A
+	LD	(DE),A
+	EX	DE,HL
+	LD	HL,PUSHD$##
+	LD	C,_SENV##
+	CALL	BDOS
+	RET	NZ
+	LD	DE,ENVNAME##+1
+	LD	A,(DE)
+	DEC	DE
+	CP	":"
+	JR	NZ,GET50
+	LD	A,(DE)
+	CALL	UC##
+	SUB	"A"
+	LD	C,A
+	INC	A
+	RET
+
+GET50:	LD	A,(LOGDRV##)
+	DEC	A
+	LD	C,A
+	INC	A
+	RET
+
+@FREE::	AND	(HL)
+	JR	NZ,FRE10
+	LD	A,(LOGDRV##)
+	JR	FRE20
+FRE10:	CALL	PARSDR##
+	CALL	Z,GCHKEOL##
+	RET	NZ
+	LD	A,D
+FRE20:	ADD	A,"@"
+	LD	HL,ENVNAME##
+	LD	E,L
+	LD	D,H
+	LD	(HL),A
+	INC	HL
+	LD	(HL),":"
+	INC	HL
+	LD	(HL),0
+	CALL	VOL
+	RET	NZ
+	LD	A,(ENVNAME##)
+	SUB	"@"	; Drive number, 1 = A: (the
+	LD	E,A	;   _DSPACE convention).
+	CALL	ZSUPP?	; Zero alloc mode active for it ?
+	JR	NC,FRE30
+	LD	A,#51	; Then there is nothing to report.
+	JP	DMESSCR##
+FRE30:	PUSH	DE	; Save the drive number.
+	LD	A,#01
+	CALL	GETDSP	; HL:DE = total bytes.
+	POP	BC	; C = drive number.
+	RET	NZ
+	PUSH	BC
+	PUSH	HL
+	PUSH	DE	; Stack: drive, total.
+	CALL	COMPUTE
+	LD	A,#3E
+	CALL	DMESSCR##
+	POP	DE
+	POP	HL	; HL:DE = total again.
+	POP	BC	; C = drive number.
+	PUSH	HL
+	PUSH	DE	; Stack: total.
+	LD	E,C
+	XOR	A
+	CALL	GETDSP	; HL:DE = free bytes.
+	POP	BC	; BC = total low word.
+	LD	A,C	; Used = total - free: first the
+	SUB	E	;   low word into BC, keeping the
+	LD	C,A	;   borrow...
+	LD	A,B
+	SBC	A,D
+	LD	B,A
+	EX	DE,HL	; DE = free high, HL = free low.
+	EX	(SP),HL	; HL = total high; stack: free low.
+	SBC	HL,DE	;   ...then the high word.
+	PUSH	DE	; Stack: free low, free high.
+	LD	D,B
+	LD	E,C	; HL:DE = used bytes.
+	CALL	COMPUTE
+	LD	A,#3F
+	CALL	DMESSCR##
+	POP	HL
+	POP	DE	; HL:DE = free bytes.
+	CALL	COMPUTE
+	LD	A,#40
+	JP	DMESSCR##
+
+COMPUTE:	LD	(VALUEL##),DE	; VALUE = the 32-bit byte count in
+	LD	(VALUEH##),HL	;   HL:DE.
+	LD	A," "
+	JP	PRLEN2##
+
+;        Get the free (A = 0) or total (A = 1) space on drive E (1 = A:)
+; with _DSPACE, which reports a 32-bit kilobyte count in HL:DE plus up to
+; 512 extra bytes in BC when the allocation unit is not a whole number of
+; kilobytes.
+; On exit,  Z  => HL:DE = the space as a 32-bit byte count.
+;           NZ => A = error code from _DSPACE.
+GETDSP:	LD	C,_DSPACE##
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,#0A	; HL:DE = KB * 1024 + the extra
+GDS10:	SLA	E	;   bytes in BC = the byte count.
+	RL	D
+	ADC	HL,HL
+	DEC	A
+	JR	NZ,GDS10
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL
+	RET	NC
+	INC	HL
+	XOR	A
+	RET
+
+;        Test whether the zero allocation information mode suppresses the
+; free space figure for drive E (1 = A:): the ZALLOC environment item must
+; be "ON" (case-insensitive) and the drive's bit must be set in the
+; reduced allocation information mode vector (_RALLOC). The FAT scan is
+; skipped by the kernel in that case, so the "free space" it reports is a
+; meaningless 0.
+; On exit,  Cy set => suppressed. DE is preserved.
+ZSUPP?:	PUSH	DE
+	LD	HL,ZALLOC$
+	CALL	ON?##	; NC => ZALLOC is "ON".
+	JR	C,ZSUP10
+	XOR	A	; Get the reduced allocation
+	LD	C,_RALLOC##	;   information mode vector:
+	CALL	BDOS	;   L = drives A: to H: bitmask.
+	POP	DE
+	PUSH	DE
+	LD	A,L
+	LD	B,E	; Rotate the drive's bit (number
+ZSUP05:	RRA	;   E-1) into the carry.
+	DJNZ	ZSUP05
+	POP	DE
+	RET
+
+ZSUP10:	OR	A	; Not suppressed => NC.
+	POP	DE
+	RET
+
+ZALLOC$:	DEFB	"ZALLOC",0
+
+@DIR::	PUSH	HL
+	CALL	TFORM##
+	CALL	DFORM##
+	POP	HL
+	LD	DE,ENVDATA##
+	PUSH	DE
+	CALL	NCOPY##
+	POP	HL
+	LD	DE,DIROPTS
+	CALL	PARSE##
+	CALL	Z,CHKEOL##
+	RET	NZ
+	LD	A,(LOGDRV2##)
+	ADD	A,"@"
+	LD	HL,ENVNAME##
+	LD	E,L
+	LD	D,H
+	LD	(HL),A
+	INC	HL
+	LD	(HL),":"
+	INC	HL
+	LD	(HL),#00
+	CALL	VOL
+	RET	NZ
+	LD	A,(OPTFLAG1##)
+	BIT	2,A
+	JR	NZ,DIR10
+	LD	HL,OPTFLAG2##
+	SET	4,(HL)
+DIR10:	SET	1,(IY+#08)
+	CALL	FIRST##
+	JR	Z,DIR25
+	CP	.NOFIL##
+	RET	NZ
+	XOR	A
+	SCF
+DIR25:	EX	AF,AF'
+	LD	C,_WPATH##	; Get and print whole path string.
+	LD	DE,ENVNAME##+1
+	CALL	BDOS
+	RET	NZ
+	LD	(HL),A	; Take off last item.
+	DEC	HL
+	LD	(HL),A	; Fiddle for root directory.
+	PUSH	DE
+	LD	A,#02	; Print 'Directory of'.
+	CALL	DMESS##
+	POP	DE	; DE -> whole path string.
+	LD	A,(LOGDRV2##)	; Get drive of first filename parsed.
+	CALL	CD	; Call the CHDIR command to print drive
+	CALL	LPRINT##	;   \ whole path string.
+	LD	HL,#00	; Zero accumulated file size.
+	LD	(VALUEL##),HL	; Low word.
+	LD	(VALUEH##),HL	; High word.
+	LD	(CNTFILE##),HL	; Zero number of files found count.
+	LD	BC,#014B	; Get the output width.
+	LD	A,#04
+	CALL	BDOS
+	JR	NZ,WIDE	; Error => wide (shouldn't occur).
+	OR	E	; 0 => very wide, so use 80 columns.
+	JR	NZ,SETCOL
+WIDE:	LD	A,#50
+SETCOL:	LD	(COLMAX2##),A	; Save number of output columns.
+	CP	#13
+	JR	NC,DIR30
+	LD	A,#13
+DIR30:	ADD	A,#03	; Allow for trailing separators not
+	RRCA	;   being printed after last filename.
+	RRCA	; Divide by 16 for number of filenames
+	RRCA	;   per line in /W format.
+	RRCA
+	AND	#0F
+	LD	B,A	; B'=max. number of filenames per line.
+	LD	C,#00	; C'=number on current line.
+	EXX
+	EX	AF,AF'
+DIR_LOOP:	JP	C,DIR_DONE
+	LD	HL,(CNTFILE##)
+	INC	HL
+	LD	(CNTFILE##),HL
+	CALL	DFILNAM
+	LD	HL,FIB1##+#15
+	LD	DE,VALUEL##
+	CALL	ADD32##
+	BIT	0,(IY+#05)
+	JP	NZ,DIRW
+	LD	A,#0F
+	CALL	MKMAXLEN
+	LD	A,(COLMAX2##)
+	CP	D
+	JP	C,DIR40
+	LD	C,(IX+#0E)
+	LD	A,"s"
+	BIT	2,C
+	CALL	SPACE?##
+	LD	A,"h"
+	BIT	1,C
+	CALL	SPACE?##
+	LD	A,"r"
+	BIT	0,C
+	CALL	SPACE?##
+	LD	A,#17
+	CALL	MKMAXLEN
+	LD	A,(COLMAX2##)
+	CP	D
+	JR	C,DIR40
+	BIT	4,C
+	JR	NZ,DIR20
+	LD	A," "
+	LD	DE,FIB1##+#15
+	LD	IX,XBUF1##
+	PUSH	IX
+	CALL	D32##
+	POP	DE
+	INC	DE
+	CALL	PRTSTR##
+	XOR	A
+DIR20:	LD	A,#03
+	CALL	NZ,DMESS##
+	LD	A,#20
+	CALL	MKMAXLEN
+	LD	A,(COLMAX2##)
+	CP	D
+	JR	C,DIR40
+	LD	HL,FIB1##+#12
+	LD	A,(HL)
+	DEC	HL
+	OR	(HL)
+	LD	A,#1F
+	CALL	Z,DMESS##
+	JR	Z,DIR40
+	LD	C,#00
+	LD	IX,XBUF1##+2
+	PUSH	IX
+	CALL	DDATE##
+	POP	DE
+	CALL	PRTSTR##
+	LD	A,#27
+	CALL	MKMAXLEN
+	LD	A,(COLMAX2##)
+	CP	D
+	JR	C,DIR40
+	LD	HL,FIB1##+#0F
+	LD	A,(HL)
+	INC	HL
+	OR	(HL)
+	LD	A,#25
+	CALL	Z,DMESS##
+	JR	Z,DIR40
+	LD	IX,XBUF1##+2
+	PUSH	IX
+	CALL	DTIME##
+	POP	DE
+	PUSH	AF
+	CALL	PRTSTR##
+	POP	AF
+	CALL	PRCHAR##
+DIR40:	BIT	3,(IY+#05)
+	JR	Z,DIR50
+	EXX
+	LD	A,C
+	OR	A
+	JR	Z,DIR60
+	LD	C,#00
+	EXX
+DIR50:	CALL	LPRINT##
+	JR	DIR_NEXT
+
+DIR60:	LD	C,#28
+	EXX
+	LD	A," "
+	CALL	PRCHAR##
+	LD	A," "
+	CALL	PRCHAR##
+	JR	DIR_NEXT
+
+DIRW:	EXX	; E=no. filenames on line, D=max. no.
+	INC	C	; Another filename printed.
+	LD	A,C
+	CP	B	; Last one on line just printed ?
+	JR	C,WSPC	; Print separating spaces if not.
+	CALL	LPRINT##	; Else print new line.
+	XOR	A	; Set current count back to 0, set NC.
+	LD	C,A
+WSPC:	EXX
+	LD	B,#04	; Print 4 spaces.
+	CALL	C,SPACES
+DIR_NEXT:	CALL	NEXT##
+	JP	DIR_LOOP
+
+DIR_DONE:	RET	NZ
+	EXX
+	OR	C
+	CALL	NZ,LPRINT##
+	LD	A,#04
+	CALL	DMESS##
+	CALL	PRLEN##
+	LD	A,#05
+	CALL	DMESS##
+	LD	HL,(CNTFILE##)
+	PUSH	HL
+	LD	IX,XBUF1##
+	PUSH	IX
+	CALL	D16##
+	POP	DE
+	CALL	PRTSTR##
+	POP	HL
+	DEC	HL
+	LD	A,H
+	OR	L
+	LD	A,#09
+	JR	Z,FILE
+	LD	A,#0A
+FILE::	CALL	DMESS##
+	LD	A,(LOGDRV2##)	; Get drive of first filename parsed.
+	LD	E,A
+	CALL	ZSUPP?	; Zero alloc mode active => display
+	JP	C,LPRINT##	;   nothing about the free space.
+	XOR	A
+	CALL	GETDSP	; HL:DE = free bytes.
+	JP	NZ,LPRINT##
+	LD	(VALUEL##),DE	; Save in 32 bit number buffer.
+	LD	(VALUEH##),HL
+	CALL	PRLEN##	; Print no. bytes or Ks.
+	LD	A,#06	; Print 'free'.
+	CALL	DMESS##
+	JP	LPRINT##
+
+DFILNAM:	LD	HL,FIB1##+1	; Point to filename to print.
+	LD	B,#08	; Print 8 characters of filename.
+	LD	A,(HL)	; '.' or '..' ?
+	CP	"."
+	JR	NZ,NODOTS	; Print filename if not.
+	INC	HL
+	CP	(HL)	; '..' ?
+	JR	NZ,DDOT	; Print one dot & 7 spaces if not.
+	DEC	B	; Else print two dots & 6 spaces,
+	CALL	PRCHAR##	; First dot.
+	LD	A,(HL)	; Second dot.
+	INC	HL
+DDOT:	CALL	PRCHAR##
+	CALL	SPACES
+	JR	DEXT
+
+NODOTS:	CALL	DEX10
+	LD	A,"."
+	LD	C," "
+	BIT	0,(IY+#05)
+	JR	Z,DEDOT
+	CP	(HL)
+	JR	NZ,NODOT
+	LD	C,A
+DEDOT:	CP	(HL)	; Skip '.' if there.
+	JR	NZ,NODOT
+	INC	HL
+NODOT:	LD	A,C
+	CALL	PRCHAR##	; Output character.
+DEXT:	LD	B,#03
+DEX10:	LD	A,(HL)
+	OR	A
+	JR	Z,SPACES
+	INC	HL
+	PUSH	AF
+	BIT	0,(IY+#05)
+	JR	Z,DEX20
+	LD	A,(FIB1##+14)
+	BIT	4,A
+	JR	Z,DEX20
+	POP	AF
+	CALL	MKLOWER##
+	PUSH	AF
+DEX20:	POP	AF
+	CP	"."
+	JR	NZ,SPA10
+	DEC	HL
+SPACES:	CALL	SPACE##
+	DJNZ	SPACES
+	RET
+
+SPA10:	CALL	PRCHAR##
+	DJNZ	DEX10
+	RET
+
+MKMAXLEN:	EXX
+	BIT	3,(IY+#05)
+	JR	Z,MKM10
+	ADD	A,C
+MKM10:	EXX
+	LD	D,A
+	RET
+
+DIROPTS:	DEFB	"W"
+	DEFB	#01
+	DEFB	"2"
+	DEFB	#08
+SPHOPTS::	DEFB	"S"
+	DEFB	#04
+	DEFB	"P"
+	DEFB	#00
+	DEFB	"H"
+	DEFB	#02
+	DEFB	0
+
+		SUBTTL  MKDIR
+;        This is the MD/MKDIR command routine, which simply parses a directory
+; path from the command line and creates it.
+@MKDIR::	AND	(HL)
+	LD	A,.NOPAR##	; 'Missing parameter' if no parameters
+	RET	Z	;   given.
+	CALL	PRS	; Parse directory path.
+	CALL	Z,GCHKEOL##	; Check for garbage.
+	RET	NZ	; Ret if error.
+	LD	(HL),A	; Make sure string is null terminated.
+	LD	A,B	; Give error if last item is null or
+	AND	#18	;   ambiguous (this test saves setting
+	LD	A,.IPATH##	;   up a template filname in a FIB).
+	RET	Z
+	BIT	5,B
+	RET	NZ
+	LD	BC,#1042	; Find new sub-directory.
+	LD	IX,FIB1##
+	JP	BDOS
+
+		SUBTTL  VOL
+;******************************************************************************
+;        Displays or sets the volume  name.   A  volume  name  is  changed  by
+; creating a new one which automatically deletes any existing one.
+;        The entry point DVOL is used by the DIR command to display the volume
+; name on the disk.
+@VOL::	LD	B,#08	; Parse a volume name.
+	CALL	_PRS
+	CALL	Z,GCHKEOL##	; Check for garbage at end of line.
+	RET	NZ
+	LD	(HL),A	; Ensure string is null terminated.
+	LD	IX,FIB1##
+	LD	C,_FNEW##
+	BIT	0,B
+	LD	B,#08
+	JP	NZ,BDOS	; Create new volume name if yes.
+VOL:	LD	IX,FIB1##
+	LD	BC,#0840
+	CALL	BDOS	; Look for volume name.
+	JR	Z,DVOL	; OK if no error or file not found.
+	CP	.NOFIL##
+	RET	NZ
+DVOL:	PUSH	AF	; Save volume name found flag.
+	LD	A,#10	; Print 'Volume in drive '.
+	CALL	DMESS##
+	LD	A,(FIB1##+#19)	; Get actual drive letter.
+	ADD	A,"@"
+	CALL	PRCHAR##	; Print it in ASCII.
+	LD	A,#11
+	CALL	DMESS##	; Print stuff after drive (': ').
+	POP	AF	; Get volume name flag.
+	OR	A
+	LD	A,#12	; Print 'has no name' if no volume
+	JR	Z,DVO10	;   name found, else 'is' and the
+	CALL	DMESSCR##	;   volume name from the FIB.
+	JR	DRVINF
+DVO10:	LD	A,#13
+	CALL	DMESS##
+	LD	DE,FIB1##+1
+	CALL	DMSCR##
+
+;        Print the mapping particulars of the drive just reported on,
+; when it is not an ordinary driver-mapped drive: a mounted disk image
+; file, the RAM disk or a ghost drive (_GDLI tells which apply).
+; Ordinary drives print nothing. (A "partition mapping pending" state
+; cannot be seen here: the drive access that produced the volume line
+; either resolved the mapping or failed the whole command.)
+DRVINF:	LD	A,(FIB1##+#19)	; The drive, counted from 0 for
+	DEC	A	;   _GDLI.
+	LD	HL,XBUF1##	; 64 byte drive info buffer.
+	LD	C,_GDLI##
+	CALL	BDOS
+	OR	A
+	JR	NZ,DRI08
+	LD	A,(XBUF1##)	; The drive status decides:
+	CP	#03	;   3 = a mounted image file;
+	JR	Z,DRI30
+	CP	#04	;   4 = the RAM disk;
+	JR	Z,DRI20
+	CP	#05	;   5 = a ghost drive.
+	JR	Z,DRI10
+DRI08:	XOR	A	; Nothing special to report.
+	RET
+
+DRI10:	LD	DE,GHOST$	; ' Ghost drive of X:'.
+	CALL	PRTSTR##
+	LD	A,(XBUF1##+1)	; The main drive, counted from 0.
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	JP	LPRINT##
+
+DRI20:	LD	DE,RAMDD$	; ' Drive mapped to the RAM disk'.
+	JP	DMSCR##
+
+DRI30:	LD	DE,MFILE1$	; ' Drive mapped to file X on Y:',
+	CALL	PRTSTR##	;   plus ' (read only)' when the
+	LD	DE,XBUF1##+4	;   mount is read-only.
+	CALL	PRTSTR##
+	LD	DE,MFILE2$
+	CALL	PRTSTR##
+	LD	A,(XBUF1##+1)	; The host drive, counted from 0.
+	ADD	A,"A"
+	CALL	PRCHAR##
+	LD	A,":"
+	CALL	PRCHAR##
+	LD	A,(XBUF1##+2)	; Bit 0 = read-only mount.
+	RRA
+	JP	NC,LPRINT##
+	LD	DE,MFILE3$
+	JP	DMSCR##
+
+GHOST$:	DEFB	" Ghost drive of ",0
+RAMDD$:	DEFB	" Drive mapped to the RAM disk",0
+MFILE1$:	DEFB	" Drive mapped to file ",0
+MFILE2$:	DEFB	" on ",0
+MFILE3$:	DEFB	" (read only)",0
+

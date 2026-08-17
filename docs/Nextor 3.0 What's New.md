@@ -26,6 +26,8 @@
 
 [2.10. New and changed tools and commands](#210-new-and-changed-tools-and-commands)
 
+[2.11. The new COMMAND3.COM command interpreter](#211-the-new-command3com-command-interpreter)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -47,7 +49,7 @@ Nextor 3.0 is the successor of Nextor 2.1. This document summarizes what has cha
 
 The most important change in Nextor 3 is the completely new, and incompatible at the driver API level, device driver system: **Nextor 2 drivers do not work on Nextor 3**, and vice versa, so running a Nextor 3 kernel requires a Nextor 3 version of the driver for your storage hardware (see _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_ for the list of available drivers). Consistent with this, a Nextor 3 kernel deactivates any Nextor 2 kernels it finds at boot time; having both kernel versions in the same machine is expected to be a temporary situation only, e.g. for flashing purposes. See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_ in the user manual.
 
-Beyond that, the highlights of Nextor 3 are: proper support for floppy disk drives (including ghost drives and `CALL FORMAT`), drivers that can be loaded in RAM at any time without flashing anything, a boot menu, and one drive letter assigned per active partition (instead of one per device) at boot. The rest of this document covers these and the other changes: first the ones everybody should know about, then the ones relevant to application developers, and finally a short note for driver developers. Note that the "Change history" section that used to exist in the user manual is gone; this document supersedes it for the 3.0 release.
+Beyond that, the highlights of Nextor 3 are: proper support for floppy disk drives (including ghost drives and `CALL FORMAT`), drivers that can be loaded in RAM at any time without flashing anything, a boot menu, one drive letter assigned per active partition (instead of one per device) at boot, and a new command interpreter, `COMMAND3.COM`. The rest of this document covers these and the other changes: first the ones everybody should know about, then the ones relevant to application developers, and finally a short note for driver developers. Note that the "Change history" section that used to exist in the user manual is gone; this document supersedes it for the 3.0 release.
 
 
 ## 2. General information
@@ -119,6 +121,20 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 * The `MAPDRV` tool and the `CALL MAPDRV` command can map a drive to a device while skipping the partition assignment (new "s" and -3 partition parameter values, respectively): the drive is attached to the device with no partition, and the first suitable partition is searched automatically on each access to the drive. This makes it possible to map a drive to an offline removable device, or to a device that hasn't been partitioned yet. See _[3.4.1. MAPDRV: the drive mapping tool](Nextor%203.0%20User%20Manual.md#341-mapdrv-the-drive-mapping-tool)_ and _[3.6.10. The CALL MAPDRV command](Nextor%203.0%20User%20Manual.md#3610-the-call-mapdrv-command)_.
 
 * Since logical units don't exist anymore, the tools and commands that used to take or display a logical unit number no longer do.
+
+### 2.11. The new COMMAND3.COM command interpreter
+
+Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on COMMAND 2.44 (so everything you know from it applies: internal commands, aliases, command line editing and history, batch file enhancements, the HELP command, etc.) but adds new features specific to Nextor 3:
+
+* New internal commands `MAPDRV`, `DRIVERS`, `DRVINFO`, `DEVINFO`, `LOCK`, `RALLOC` and `Z80MODE`: the Nextor command line tools of the same names are now built into the interpreter, no `.COM` file needed (the tools are still supplied, since they also work with older interpreter and Nextor versions).
+
+* New internal command `MEM`: displays a compact memory mapper listing that fits in 32 columns.
+
+* New internal command `SHELLRAM`: allows freeing the RAM segment that the interpreter normally allocates for the command history and the aliases, for users who need every RAM segment they can get.
+
+* The `FORMAT` command now works for drives mapped to floppy disk devices handled by Nextor drivers (`COMMAND2.COM` can only format drives controlled by legacy MSX-DOS drivers), and gains a new `/Q` switch that performs a quick format: only the allocation table and the root directory are cleared.
+
+`COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`, which loads it when present and falls back to loading `COMMAND2.COM` otherwise; any `COMMAND2.COM` from version 2.20 still works with Nextor 3, but without the new features. See _[3.10. The COMMAND3.COM command interpreter](Nextor%203.0%20User%20Manual.md#310-the-command3com-command-interpreter)_ in the user manual for the details.
 
 ## 3. Information for application developers
 

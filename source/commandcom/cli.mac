@@ -1,0 +1,2161 @@
+	name('cli')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	The command loop
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        The main command loop: prompting, reading and expanding the command
+; line (aliases, %-variables and %-parameters), command separators, I/O
+; redirection and piping, and dispatching to internal commands and to
+; .COM, .BAT and .BTM files.
+;
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
+;
+;******************************************************************************
+CLI::	LD	HL,#80
+	LD	C,(HL)
+	LD	B,#00
+	ADD	HL,BC
+	INC	HL
+	LD	(HL),B
+	SBC	HL,BC
+	CALL	GETCH##
+	LD	(CMDCHR1##),A
+	LD	(CMDCHR2##),A
+	EXX
+	LD	HL,TEMPFN
+	LD	DE,PIPEFN##
+	LD	BC,#07
+	LDIR
+	LD	A,R
+	AND	#07
+	ADD	A,"0"
+	LD	(DE),A
+	INC	DE
+	LD	C,#04
+	LDIR
+	XOR	A
+	LD	(REDIRID##),A
+	LD	(PIPEID##),A
+	LD	(INHNDL##),A
+	LD	(OUTHNDL##),A
+	LD	(XTRACRLF##),A
+	LD	L,A
+	LD	H,A
+	LD	(PIPEADDR##),HL
+	LD	(NEXTADDR##),HL
+	DEC	A
+	LD	(BATHNDL##),A
+	LD	(STRCODE##),A
+	LD	HL,CMDTEND##
+	LD	(LINEADDR##),HL
+	LD	HL,GOSUBLIST##
+	LD	(GOSUBADDR##),HL
+	LD	HL,IFFLIST##
+	LD	(IFFADDR##),HL
+	LD	D,H
+	LD	E,L
+	INC	DE
+	LD	BC,15
+	LD	(HL),#00
+	LDIR
+	LD	DE,CLI_ABORT
+	LD	C,_DEFAB##
+	CALL	BDOS
+CLI10:	LD	IY,REDIRST##
+	LD	(IY+#0E),#00
+	LD	(IY+#10),#00
+	LD	(IY+#00),#00
+	LD	(IY+#29),#00
+	LD	(IY+#2A),#00
+	LD	C,_CURDRV##
+	CALL	BDOS
+	INC	A
+	LD	(CURDRIVE##),A
+	LD	DE,(PIPEADDR##)	; Another command in the pipeline
+	LD	A,D	;   pending ?
+	OR	E
+	JP	NZ,REPIPE	; Go and execute it if yes.
+	LD	DE,(NEXTADDR##)	; Another ^-separated command
+	LD	A,D	;   pending (see MULTICMD) ?
+	OR	E
+	JP	NZ,CMD10	; Run it (aliasing is already done).
+	LD	HL,REDIR$	; REDIRST bit 7 set <= REDIR is OFF
+	CALL	OFF?##	;   (redirection/piping disabled).
+	CCF
+	SBC	A,A
+	LD	(REDIRST##),A
+	LD	HL,ALIAS$	; ALISTATE bit 7 set <= ALIAS is OFF
+	CALL	OFF?##	;   (alias expansion disabled).
+	CCF
+	SBC	A,A
+	LD	(ALISTATE##),A
+	LD	HL,SEPAR$	; SEPSTATE bit 7 set <= SEPAR is OFF
+	CALL	OFF?##	;   (^ separators disabled).
+	CCF
+	SBC	A,A
+	LD	(SEPSTATE##),A
+	EXX
+	LD	A,(HL)
+	OR	A
+	JP	NZ,CMD
+	LD	A,(BATHNDL##)
+	INC	A
+	JR	Z,NOBAT
+	LD	HL,ERRCODE##
+	LD	A,(HL)
+	LD	(HL),#00
+	OR	A
+	JR	Z,NOTEND
+	PUSH	AF
+	LD	A,(REDIRID2##)
+	LD	(REDIRID##),A
+	LD	HL,CMDTEND##
+	LD	(LINEADDR##),HL
+	LD	A,#FF
+	LD	(BATHNDL##),A
+	LD	A,(BATPAGE##)
+	OR	A
+	CALL	NZ,FREEBTM##
+	POP	AF
+	CP	.OKCMD##
+	JR	NZ,JERROR
+	XOR	A
+JERROR:	JP	ERROR
+
+NOTEND:	CALL	ECHO?##	; Batch file ECHO ON ?
+	JR	C,PRO20	; Go & read command if not.
+	SCF
+	JR	PROMPT	; Else print prompt & get command.
+
+NOBAT:	LD	A,(CMDCHR2##)	; If EXITF is NZ, then exit COMMAND.COM
+	OR	A	;   with the error code from the last
+	JR	Z,PROMPT	;   command, which is in ERR (NC).
+	LD	A,(ABORTERR##)	; If no error, then return .OKCMD,
+	OR	A	;   which does not produce an error
+	JR	NZ,JEXIT	;   but which is used by MSX-DOS.SYS to
+	LD	A,.OKCMD##	;   prevent a spurious re-load of
+JEXIT:	JP	EXIT##
+
+PROMPT:	PUSH	AF
+	LD	HL,XTRACRLF##
+	XOR	A
+	CP	(HL)
+	LD	(HL),A
+	CALL	NZ,LPRINT##
+	LD	HL,PROMPT$
+	CALL	GENV2##
+	LD	A,(DE)
+	OR	A
+	JR	Z,PRO6	; Use the default prompt if not set.
+	LD	B,#FF	; Else get the length of the value, to
+	PUSH	DE	;   compare it against the special
+PRO2:	INC	B	;   values "ON" and "OFF" (restored in
+	LD	A,(DE)	;   2.44 for compatibility with the
+	INC	DE	;   original COMMAND.COM).
+	OR	A
+	JR	NZ,PRO2
+	POP	DE
+	PUSH	DE
+	DEC	DE
+	LD	HL,ONWORD$##
+	CALL	COMPARE	; "ON" (however cased) selects the
+	POP	DE	;   default prompt, "%_CWD%>".
+	JR	NC,PRO6
+	PUSH	DE
+	DEC	DE
+	LD	HL,OFFWORD$##
+	CALL	COMPARE	; "OFF" selects the drive letter only,
+	POP	DE	;   "%_DISK%>".
+	JR	C,PRO10
+	LD	HL,OPROMPT$
+	LD	BC,9
+	JR	PRO8
+PRO6:	LD	HL,DPROMPT$
+	LD	BC,8
+PRO8:	PUSH	DE
+	LDIR
+	POP	DE
+PRO10:	LD	HL,BUFFER1##
+	LD	IX,XBUF3##
+	LD	(IX),#00
+	CALL	REPLACE
+	EX	DE,HL
+	INC	DE
+	CALL	PRTSTR##
+	POP	AF
+	JR	NC,GETCON
+PRO20:	CALL	INBAT##
+	JR	C,PRO20
+	JR	Z,GOTBAT
+	CP	.EOF##
+	JR	Z,BATEOF
+	PUSH	AF
+	CALL	LPRINT##
+	POP	AF
+	JP	ERROR
+
+BATEOF:	LD	A,.OKCMD##	; OKCMD => return no error.
+GOTBAT:	LD	(ERRCODE##),A
+	SCF	; Skip console read.
+GETCON:	CALL	NC,INLI##	; Read from console if not batch file.
+	INC	HL
+CMD:	EX	DE,HL
+	CALL	ALIASING
+	JP	NZ,ERROR
+CMD10:	CALL	MULTICMD
+	LD	HL,BUFFER1##
+	LD	IX,XBUF3##
+	LD	(IX),#00
+	CALL	REPLACE
+	JR	NZ,ERROR
+	EX	DE,HL
+	INC	DE
+	PUSH	DE
+	LD	A,(BATHNDL##)
+	INC	A
+	SCF
+	CALL	NZ,ECHO?##
+	CALL	NC,DMSCR##
+	LD	C,_FORK##
+	CALL	BDOS
+	POP	DE
+	JR	NZ,ERROR
+	LD	A,B
+	LD	(REDIRID##),A
+	LD	HL,BUFFER2##
+	CALL	REDIRECT
+	JR	NZ,ERROR
+	EX	DE,HL
+	INC	DE
+	XOR	A
+	LD	(INHNDL##),A
+	LD	(OUTHNDL##),A
+	LD	H,A
+	LD	L,A
+	LD	(PIPEADDR##),HL
+REPIPE:	PUSH	DE
+	CALL	PIPE	; Set up any piping.
+	POP	HL
+	JR	NZ,ERROR
+	PUSH	HL
+	CALL	UNQUOTE	; Remove quote characters.
+	POP	HL
+	CALL	DO_CMD	; Execute the command.
+	CP	.BADCMD##	; 'Unrecognized command' ?
+	JR	NZ,ERROR
+	LD	HL,UNKCMD$	; Then, if an alias UNKNOWN_CMD is
+	LD	DE,ENVDATA##	;   defined, its value replaces the
+	CALL	GETALIAS##	;   failed command line and is
+	JR	NZ,ERROR	;   dispatched again.
+	LD	A,(DE)
+	OR	A
+	JR	NZ,CMD10
+	LD	A,.BADCMD##	; No such alias: the usual error.
+	JR	ERROR
+
+UNKCMD$:	DEFB	"UNKNOWN_CMD",0	; Alias run on 'Unrecognized command'.
+
+CLI_ABORT::	CP	.INERR##	; Error on standard input ?
+	JR	Z,CLI20	; Go if yes.
+	CP	.OUTERR##	; Error on standard output ?
+	JR	NZ,ERROR	; Give error if not.
+	LD	A,#3D	; Error type = output error.
+	DEFB	#21
+CLI20:	LD	A,#3C
+	LD	(STRCODE##),A
+	LD	A,(REDIRID##)	; If not forked, then exit with error
+	OR	A	;   code since there's no way of recov-
+	LD	A,B	;   ering from this situation.
+	JP	Z,EXIT##	; Else give error.
+ERROR:	LD	SP,BOOTSTRAP##	; Set up SP again in case an abort.
+	LD	(ABORTERR##),A	; Save error for terminating COMMAND3.
+	LD	B,A	; B=error code.
+	PUSH	BC	; Save it for later.
+	LD	DE,ENVNAME##	; DE -> buffer to get message into.
+	CP	" "	; User error ?
+	JR	C,ERR10	; Go if yes (no message required).
+	CP	.OKCMD##	; Means command executed OK from
+	JR	Z,ERR10	;   COMMAND, so no msg for this either.
+	CP	#80	; Means 'Y' response from 'Terminate
+	JR	Z,ERR10	;   batch file ?' so no message.
+	LD	C,_EXPLAIN##	; Get message to (DE) from system.
+	CALL	BDOS
+	DEFB	#21
+ERR10:	XOR	A
+	LD	(DE),A
+	LD	BC,#FF5F	; Flush buffers for all drives.
+	LD	D,#00	; Flush but don't invalidate.
+	CALL	BDOS	;   (error ignored)
+	POP	BC	; B=error code.
+	LD	C,B	; And C.
+	LD	HL,CMDCHR1##
+	LD	A,(HL)	; Suppress error message (<>0 => yes) ?
+	LD	(HL),#00	;   (reset again for next time round)
+	OR	A
+	JR	NZ,TSTBAT	; Test for ending batch file if yes.
+	LD	A,B	; Get error code.
+	CP	.BADCMD##	; Turn off redirection if command abort
+	CALL	NZ,ABORT?	;   error or 'Unrecognized command'.
+	JR	NZ,NABERR
+	PUSH	BC
+	LD	BC,_REDIR##
+	LD	A,#01	; No redirection of error messages if
+	CALL	BDOS	;   command aborted prematurely.
+	POP	BC
+	LD	A,B
+	CP	.ABORT##	; Extra CR,LF if command aborted, but
+	JR	Z,NABERR	;   not if .ABORT or if .BADCMD.
+	CP	.BADCMD##
+	CALL	NZ,LPRINT##
+NABERR:	LD	A,(ENVNAME##)
+	OR	A	; Message given ?
+	JR	Z,TSTBAT	; Go if not.
+	CALL	LPRINT##	; CR, LF before error message.
+	LD	A,#0D	; Three stars before message.
+	CALL	DMESS##
+	LD	A,(STRCODE##)	; Get error type.
+	ADD	A,#01	; Print type message if not FF.
+	DEC	A
+	PUSH	AF
+	CALL	NC,DMESS##
+	LD	DE,ENVNAME##
+	CALL	PRTSTR##	; Print actual error message.
+	LD	A,#0E	; Followed by message after error.
+	CALL	DMESSCR##
+	POP	AF
+	CP	#3B	; If error from reading batch file,
+	JR	Z,TBF	;   then issue 'Terminate' prompt.
+	CP	#3A	; If piping error, then cancel all
+	JR	Z,NOPIPE	;   piping and issue prompt.
+TSTBAT:	LD	A,C	; Get error code.
+	CP	#80	; If it's .BATEND, then immediately
+	JR	Z,ENDBAT	;   terminate any executing batch file.
+	OR	A	; If it's a command abort error, then
+	JR	Z,NABORT	;   issue 'Terminate batch file' prompt
+	CALL	ABORT?	;   but only if the secondary error
+	JR	NZ,NABORT	;   code is non-zero.
+NOPIPE:	CALL	DELPIPE
+TBF:	LD	BC,_REDIR##	; Turn off redirection to
+	LD	A,#01	;   do 'Terminate batch file'
+	CALL	BDOS	;   prompting.
+	LD	A,(BATHNDL##)
+	INC	A
+	LD	A,#36	; Prompt 'Terminate batch file (Y/N)?'
+	CALL	NZ,YN##	;   and get response if in batch file.
+	JR	Z,NABORT	; Don't abort if response was 'N'.
+ENDBAT:	LD	HL,ERRCODE##	; BATEND=NZ => end batch file, if any.
+	LD	(HL),#80	; Error for 'batch file terminated'.
+NABORT:	LD	A,#3A	; Set error type to piping error.
+	LD	(STRCODE##),A
+	CALL	UNPIPE	; Tidy up if command was piped.
+	JP	NZ,ERROR
+	DEC	A	; Clear ERRTYPE.
+	LD	(STRCODE##),A
+	LD	DE,(PIPEADDR##)
+	LD	A,D	; Another command in pipe to execute ?
+	OR	E
+	JR	NZ,DONE	; Execute it if yes.
+	LD	HL,REDIRID##	; If forked, then do a join to cancel
+	LD	B,(HL)	;   redirection.
+	XOR	A
+	LD	(HL),A	; 0 => not forked.
+	OR	B
+	LD	C,_JOIN##
+	CALL	NZ,BDOS	; Join, and give error if any (should
+	JP	NZ,ERROR	;   not normally occur).
+	LD	HL,CMDTEND##	; No command to execute.
+	EXX
+DONE:	JP	CLI10
+
+ABORT?:	CP	.ABORT##	; Return Z if command abort error.
+	RET	Z
+	CP	.STOP##
+	RET	Z
+	CP	.CTRLC##
+	RET	Z
+	LD	A,(STRCODE##)	; Get error type.
+	CP	#3C	; If an input or output error then
+	RET	Z	;   command was aborted.
+	CP	#3D
+	RET
+
+DSKERR::	LD	A,#01	; Disk error routine for printing
+	RET	;   prompt just auto-aborts.
+
+ABRT::	POP	HL
+	LD	A,#FF
+	RET
+
+;******************************************************************************
+;
+;        The alias expansion engine (new in 2.40). Aliases are named
+; commands kept in the mapper segment (see io.mac); whenever the first
+; word of a command matches an alias name, the whole command - name and
+; parameters - is replaced by the alias value, which can refer to those
+; parameters as %n / %n&.
+;
+;        Each ^-separated command in the line is treated in turn: the
+; command is copied to ENVNAME, its first word upper-cased and looked
+; up with GETALIAS. If an alias exists, its value is expanded with
+; REPLACE - with LINEADDR temporarily pointed at the ENVNAME copy, so
+; that %n picks up the parameters typed after the alias name - and the
+; result is spliced into the line in place of the original command.
+; Scanning then resumes at the start of the spliced-in text, so the
+; result is itself alias-expanded again (recursive aliases; a _CONST
+; call in the loop gives CTRL-STOP a chance to break alias loops like
+; ALIAS A=B / ALIAS B=A). A command prefixed with @ is not expanded
+; (the @ is removed), and when the ALIAS environment item is OFF no
+; expansion is done at all (the line is just copied to LINEBUF).
+;
+; On entry, DE -> ASCIIZ command line.
+; On exit,  Z  => DE -> the expanded line, now copied to LINEBUF.
+;           NZ => A = .BUFUL (the line grew past 255 characters).
+;
+ALIASING::	PUSH	DE	; Save start of the command line.
+	XOR	A
+	BIT	7,(IY+#29)	; ALIAS OFF: no aliasing, just copy
+	JP	NZ,ALI100	;   the line to LINEBUF.
+ALI10:	LD	A,(DE)	; Skip spaces and ^ separators to the
+	INC	DE	;   start of the command word.
+	CP	" "
+	JR	Z,ALI10
+	CP	"^"
+	JR	Z,ALI10
+	DEC	DE
+	LD	HL,ENVNAME##
+	PUSH	DE	; Save start of this command.
+	LD	A,(DE)
+	CP	"@"	; @ prefix: no aliasing for this
+	JR	NZ,ALI30	;   command.
+	LD	L,E
+	LD	H,D
+ALI20:	INC	HL	; Remove the @ by shifting the rest
+	LD	A,(HL)	;   of the line down one place,
+	LD	(DE),A
+	INC	DE
+	OR	A
+	JR	NZ,ALI20
+	POP	DE
+	LD	C,#00	;   and go skip to the next command.
+	JR	ALI90
+
+ALI30:	LD	(HL),A	; Copy the whole command (up to the
+	INC	HL	;   end of the line or a ^) into
+	INC	DE	;   ENVNAME.
+	LD	A,(DE)
+	OR	A
+	JR	Z,ALI40
+	CP	"^"
+	JR	NZ,ALI30
+ALI40:	LD	(HL),#00
+	EX	DE,HL	; HL -> the terminator or ^ in the
+	CALL	GETCH##	;   line, ie. the rest of the line.
+	PUSH	HL	; Save it.
+	LD	HL,ENVNAME##
+	PUSH	HL
+	DEC	HL
+ALI50:	INC	HL	; Upper-case the copied command name
+	LD	A,(HL)	;   in place, up to the first space
+	CALL	MKUPPER	;   or / option (the alias lookup is
+	LD	(HL),A	;   an exact match).
+	OR	A
+	JR	Z,ALI60
+	CP	" "
+	JR	Z,ALI60
+	CP	"/"
+	JR	NZ,ALI50
+ALI60:	LD	A,(HL)	; Cut the name there, saving the
+	LD	(HL),#00	;   delimiter character,
+	LD	B,H
+	LD	C,L
+	POP	HL	; HL = ENVNAME = the name:
+	PUSH	AF
+	PUSH	BC
+	LD	DE,XBUF1##	;   look it up; the value goes to
+	CALL	GETALIAS##	;   XBUF1 (null if no such alias).
+	POP	BC
+	POP	AF
+	LD	(BC),A	; Put the delimiter back.
+	LD	HL,(LINEADDR##)	; Point LINEADDR (the %n source
+	LD	(FIB2##+1),HL	;   line) at the copied command, so
+	LD	HL,ENVNAME##	;   that %n in the alias value picks
+	LD	(LINEADDR##),HL	;   up the parameters typed after
+	LD	HL,XBUF2##	;   the alias name (FIB2+1 is just
+	CALL	REPLACE	;   scratch for the old LINEADDR),
+	LD	HL,(FIB2##+1)	;   expand the value from XBUF1 into
+	LD	(LINEADDR##),HL	;   XBUF2, and restore LINEADDR.
+	POP	HL	; HL = rest of the line.
+	LD	A,(XBUF1##)
+	POP	DE	; DE = start of this command.
+	LD	C,#00
+	OR	A	; Null value: no such alias, leave
+	JR	Z,ALI90	;   the command as it is.
+	PUSH	DE
+	CALL	NCOPY##	; Delete the command (name and all
+	POP	HL	;   parameters) by copying the rest
+	PUSH	HL	;   of the line down over it.
+	LD	DE,XBUF2##	; Then insert the expanded alias
+	LD	A,(DE)	;   value (length byte first) in its
+	OR	A	;   place, byte by byte.
+	JR	Z,ALI80
+	INC	DE
+ALI70:	LD	A,(DE)
+	OR	A
+	JR	Z,ALI80
+	LD	C,A
+	CALL	INSBYTE##
+	INC	HL
+	INC	DE
+	JR	ALI70
+
+ALI80:	LD	C,_CONST##	; Poll the console, so that CTRL-C /
+	CALL	BDOS	;   CTRL-STOP can break alias loops.
+	POP	DE	; Re-scan from the start of the
+	JP	ALI10	;   spliced-in text (recursion).
+
+ALI90:	CALL	RDCHAR	; Skip to the next command: find the
+	JR	Z,ALI100	;   next unquoted ^ (Z = end of the
+	JR	C,ALI90	;   line).
+	CP	"^"
+	JR	NZ,ALI90
+	JP	ALI10
+
+ALI100:	LD	B,A	; A=0, so B=0: 256 byte limit.
+	LD	DE,LINEBUF##	; Copy the expanded line to LINEBUF.
+	POP	HL
+ALI110:	LD	A,(HL)
+	LD	(DE),A
+	OR	A
+	JR	Z,ALI120
+	INC	HL
+	INC	DE
+	DEC	B
+	JR	NZ,ALI110
+	LD	A,.BUFUL##	; Line too long (over 255 chars).
+	RET
+
+ALI120:	LD	DE,LINEBUF##	; Return DE -> the expanded line,
+	XOR	A	;   no error.
+	RET
+
+;        Split off the first of several ^-separated commands (new in
+; 2.40): the line at (DE) is terminated at the first unquoted ^, and
+; the address of what follows is stored in NEXTADDR - the main loop
+; picks that up on the next time round, like a pipe continuation. No
+; splitting is done when the SEPAR environment item is OFF.
+;
+; On entry, DE -> ASCIIZ command line.
+; On exit,  DE is preserved; NEXTADDR = rest of the line, or 0 if none.
+;
+MULTICMD::	PUSH	DE
+	XOR	A
+	BIT	7,(IY+#2A)	; SEPAR OFF: no ^ splitting.
+	JR	NZ,MUL20
+	LD	C,#00	; Clear quotes flag.
+MUL10:	CALL	RDCHAR	; Find the first unquoted ^
+	JR	Z,MUL20	;   (Z = end of line: no separator).
+	JR	C,MUL10
+	CP	"^"
+	JR	NZ,MUL10
+	EX	DE,HL
+	DEC	HL	; Terminate the first command where
+	LD	(HL),#00	;   the ^ was,
+	INC	HL
+	CALL	GETCH##	;   skip blanks after it,
+	JR	NZ,MUL30	;   and save what follows - if
+MUL20:	LD	H,A	;   anything - in NEXTADDR (A=0
+	LD	L,A	;   here, so HL=0 = none).
+MUL30:	LD	(NEXTADDR##),HL
+	POP	DE
+	RET
+
+;        Remove the quote characters from the command line at (HL), in
+; place. Quotes (" or ') protect text from the expansion, redirection
+; and separator processing; by now they have served their purpose and
+; are removed in pairs, keeping the text between them. An unmatched
+; quote is removed too. Called just before DO_CMD.
+;
+UNQUOTE::	LD	A,(HL)	; Find the next quote character
+	INC	HL	;   (end of line: done).
+	OR	A
+	RET	Z
+	CP	#22
+	JR	Z,UNQ10
+	CP	"'"
+	JR	NZ,UNQUOTE
+UNQ10:	LD	B,A	; B = the quote character.
+	LD	D,H
+	LD	E,L
+	DEC	DE	; DE = position of the quote itself.
+UNQ20:	LD	A,(HL)	; Shift the quoted text down one
+	CP	B	;   place, over the opening quote,
+	JR	Z,UNQ30	;   until the closing quote.
+	LD	(DE),A
+	OR	A	; Unmatched quote: the rest of the
+	RET	Z	;   line has been shifted; done.
+	INC	HL
+	INC	DE
+	JR	UNQ20
+
+UNQ30:	PUSH	HL
+UNQ40:	INC	HL	; Closing quote: remove it as well
+	LD	A,(HL)	;   by shifting the rest of the line
+	LD	(DE),A	;   down over it,
+	INC	DE
+	OR	A
+	JR	NZ,UNQ40
+	POP	HL
+	DEC	HL	;   then continue scanning for more
+	JR	UNQUOTE	;   quoted sections.
+
+;******************************************************************************
+;
+;        The %-expansion engine (2.31's REPLACE, much extended in
+; 2.40/41). Copies the ASCIIZ string at (DE) into the buffer at (HL)
+; (which gets a length byte followed by the text and a null - the
+; WRCHAR format), expanding on the way:
+;
+;   %n, %n&    batch parameters (n = 0 to 255, decimal), taken from the
+;              command line saved at (LINEADDR) by EXPAND below. %n&
+;              gives parameter n and all the following ones; %& means
+;              %1&.
+;   %%         a single % character.
+;   %NAME%     the value of environment item NAME (via _GENV), nothing
+;              if it is not set. If _GENV rejects the name the text is
+;              copied unchanged (less the opening %).
+;   %_NAME%    an internal variable: the handler from IVTAB is called
+;              and returns DE -> the ASCIIZ value.
+;   %@FUN[arg]% a function: the argument is first run through REPLACE
+;              itself (into a fresh buffer carved out of the scratch
+;              area chained through IX), then the handler from FNTAB is
+;              called with HL -> the expanded argument, returning DE ->
+;              the ASCIIZ result.
+;
+;        While scanning for the % that closes a name, [ and ] are
+; counted and any % inside brackets is skipped, so constructs like
+; %@LEN[%PATH%]% nest properly. Characters inside single or double
+; quotes are copied without any expansion (RDCHAR keeps the quote state
+; in C). Unknown variable/function names expand to nothing.
+;
+;        Called on every command line, on the PROMPT string, and
+; recursively on alias values and function arguments.
+;
+; On entry, DE -> ASCIIZ input string.
+;           HL -> output buffer (the text is limited to 127 characters
+;                 by WRCHAR).
+;           IX -> scratch buffer for nested expansion; the top level
+;                 caller initialises it empty ((IX)=0, usually XBUF3).
+; On exit,  HL is preserved and points to the output length byte.
+;           Z => OK, NZ => error code in A (eg. .BUFUL).
+;
+REPLACE:	XOR	A
+	LD	(HL),A	; Initialise length byte.
+	LD	C,A	; Not in quotes initially.
+	LD	(FIB2##),A	; FIB2+0 is scratch: the %n& flag.
+REP10:	CALL	RDCHAR	; Get character.
+	JP	C,RP30	; Quoted characters are not expanded.
+	CP	"%"	; Start of a % construct ?
+	JP	NZ,RP30
+	LD	A,(DE)	; Look at what follows the %.
+	INC	DE
+	CP	"&"	; %& => all parameters (= %1&).
+	JR	Z,REP20
+	CP	"0"
+	JR	C,RP20	; Not a digit: try %name% etc.
+	CP	"9"+1
+	JR	NC,RP20
+	DEC	DE
+	PUSH	BC	; Save quotes flag,
+	PUSH	HL	;   output buffer pointer,
+	PUSH	DE	;   and command line pointer.
+	EX	DE,HL
+	CALL	GET8##	; Get the parameter number (0-255).
+	JR	Z,REP30
+	POP	DE	; Number no good: emit the digits as
+	POP	HL	;   ordinary text.
+	POP	BC
+	LD	A,(DE)
+	INC	DE
+	JR	RP20
+
+REP20:	PUSH	BC	; (as above)
+	PUSH	HL
+	PUSH	DE
+	EX	DE,HL
+	LD	A,#FF	; Flag 'expand all the following
+	LD	(FIB2##),A	;   parameters as well',
+	LD	E,#01	;   starting at parameter 1.
+REP30:	LD	A,E	; Parameter number, +1 as EXPAND
+	INC	A	;   wants it (1 => %0).
+	POP	DE	; Recover the pointers: DE = past
+	EX	DE,HL	;   the number (as left in HL by
+	POP	HL	;   GET8), HL = output buffer,
+	POP	BC	;   C = quotes flag.
+	PUSH	BC
+	PUSH	AF
+	LD	A,(DE)	; %n& (number followed by '&') ?
+	CP	"&"
+	JR	NZ,REP40
+	LD	A,#FF	; Yes: set the 'all following' flag
+	LD	(FIB2##),A	;   and swallow the &.
+	INC	DE
+REP40:	POP	AF
+	PUSH	DE
+	CALL	EXPAND	; Expand parameter(s) from (LINEADDR).
+	POP	DE
+	POP	BC
+	RET	NZ	; Return if error.
+	JR	REP10	; Continue with the rest of the line.
+
+RP20:	CP	"%"	; %% => a single %.
+	JP	Z,RP30
+	DEC	DE
+	PUSH	BC	; Save quotes flag and output buffer
+	PUSH	HL	;   pointer.
+	XOR	A
+	LD	(ENVNAME##),A
+	LD	L,E	; HL scans for the % that closes the
+	LD	H,D	;   name.
+	PUSH	DE	; Save start of the name.
+	LD	D,#00	; D = [] nesting depth.
+RPC10:	LD	A,(HL)
+	INC	HL
+	OR	A
+	JR	Z,RPC50	; End of line: no closing %.
+	CP	"["
+	JR	NZ,RPC20
+	INC	D
+RPC20:	CP	"]"
+	JR	NZ,RPC30
+	DEC	D
+RPC30:	INC	D	; (tests D without changing A)
+	DEC	D
+	JR	NZ,RPC10	; A % inside [] does not close the
+	CP	"%"	;   name - this is what lets
+	JR	NZ,RPC10	;   %@FUN[..%VAR%..]% nest.
+	POP	DE	; DE = start of the name.
+	PUSH	HL	; Save pointer past the closing %.
+	PUSH	DE
+	DEC	HL
+	LD	(HL),#00	; Make the name ASCIIZ (the closing
+	EX	DE,HL	;   % becomes the terminator).
+	LD	DE,ENVNAME##
+	LD	A,(HL)
+	CP	"_"	; %_name% => internal variable.
+	JP	Z,RPC60
+	CP	"@"	; %@FUN[..]% => function.
+	JP	Z,RPC100
+	LD	BC,#FF6B	; Else environment item: _GENV with
+	CALL	BDOS	;   B=255, value to ENVNAME.
+	JR	NZ,RP28	; Bad name: emit the text unchanged.
+	PUSH	IX
+RPC40:	POP	IX	; Common return path for env items,
+	POP	HL	;   internal variables and functions.
+	POP	HL	; Recover the pointer past the
+	EX	(SP),HL	;   closing %, swapping it with the
+RP22:	LD	A,(DE)	;   saved output pointer: HL = the
+	INC	DE	;   output buffer again. Then copy
+	CALL	WRCHAR	;   the ASCIIZ value at (DE) into
+	JR	NZ,RP23	;   the output, until the null (or
+	JR	C,RP22	;   an error).
+RP23:	POP	DE	; DE = past the closing %: continue
+	POP	BC	;   with the rest of the line.
+	RET	NZ	; Return if error.
+	JP	REP10
+
+RPC50:	POP	DE	; No closing %: drop the % and
+	JR	RP29	;   rescan from the character after.
+
+RP28:	POP	DE	; _GENV did not like the name: put
+	POP	HL	;   the closing % back and re-emit
+	DEC	HL	;   the text as it stands (less the
+	LD	(HL),"%"	;   opening %).
+RP29:	POP	HL
+	POP	BC
+	LD	A,(DE)
+	INC	DE
+RP30:	CALL	WRCHAR	; Put character in the output buffer.
+	RET	NZ	; Return if error.
+	JP	C,REP10	; Repeat for next character if not end.
+	RET	; Else return with no error.
+
+;        %_NAME%: look up an internal variable (%_CWD%, %_TIME%, ...).
+;
+RPC60:	EX	DE,HL	; DE = the name (at the '_').
+	PUSH	DE
+	LD	B,#FF	; Measure the name: B = length not
+RPC70:	INC	DE	;   counting the leading _ (IVTAB
+	INC	B	;   names are stored without it, and
+	LD	A,(DE)	;   COMPARE skips the character at
+	OR	A	;   (DE) itself).
+	JR	NZ,RPC70
+	POP	DE
+	LD	HL,IVTAB##-2	; Look the name up in the internal
+	XOR	A	;   variables table.
+RPC80:	JR	NZ,RPC90	; (NZ from COMPARE => name shorter
+	INC	HL	;   than the rest of the table,
+	INC	HL	;   which is sorted by length)
+	LD	A,(HL)
+	OR	A	; End of table: no such variable.
+	JR	Z,RPC90
+	CALL	COMPARE
+	JR	C,RPC80
+	LD	A,(HL)	; Found: fetch the handler address
+	INC	HL	;   and 'call' it with a return
+	LD	H,(HL)	;   address of RPC40 - the handler
+	LD	L,A	;   returns DE -> the ASCIIZ value,
+	PUSH	IX	;   which RPC40 copies to the
+	LD	DE,RPC40	;   output.
+	PUSH	DE
+	PUSH	HL
+	XOR	A	; Handlers are entered with A=0.
+	RET
+
+RPC90:	LD	DE,CMDTEND##	; Unknown name: the value is the
+	PUSH	IX	;   null string (CMDTEND is a zero
+	JP	RPC40	;   byte).
+
+;        %@FUN[argument]%: expand the argument, then call the function.
+;
+RPC100:	EX	DE,HL	; DE = the name (at the '@').
+	PUSH	DE
+	LD	B,#FF	; Measure the name up to the '[':
+RPC110:	INC	DE	;   B = length not counting the @
+	INC	B	;   (FNTAB names are stored without
+	LD	A,(DE)	;   it).
+	OR	A
+	JP	Z,RPC160	; No '[' at all: A=0 there makes
+	CP	"["	;   RPC160 give the null value.
+	JR	NZ,RPC110
+	EX	DE,HL	; HL -> after the '[', DE = ENVNAME.
+	INC	HL
+	PUSH	BC	; Save the name length,
+	PUSH	HL	;   and the start of the argument.
+	LD	D,#01	; D = bracket nesting depth.
+RPC120:	LD	A,(HL)	; Find the matching ']'.
+	INC	HL
+	OR	A
+	JR	Z,RPC140	; End of line: no closing ']'.
+	CP	"["
+	JR	NZ,RPC130
+	INC	D
+RPC130:	CP	"]"
+	JR	NZ,RPC120
+	DEC	D
+	JR	NZ,RPC120
+	DEC	HL	; Make the argument ASCIIZ (the ']'
+	LD	(HL),#00	;   becomes the terminator).
+	PUSH	IX	; Expand the argument itself with a
+	POP	HL	;   recursive REPLACE, into a fresh
+	POP	DE	;   buffer carved out just past the
+	PUSH	IX	;   text already in the scratch
+	LD	C,(HL)	;   buffer at IX:
+	LD	B,#00
+	ADD	HL,BC	;   new buffer = IX + (IX) + 2.
+	INC	HL
+	INC	HL
+	PUSH	HL
+	POP	IX
+	CALL	REPLACE
+	JR	RPC150
+
+RPC140:	POP	HL	; No matching ']': discard the
+	POP	HL	;   argument start, the name length
+	POP	HL	;   and the name pointer, and give
+	JP	RP28	;   up on this % construct,
+			;   re-emitting it as plain text.
+			;   (2.41 fell into RPC150 here,
+			;   loading the name length into IX
+			;   - the output pointer - and
+			;   leaving the stack skewed.)
+
+RPC150:	POP	IX	; Scratch buffer pointer back.
+	JP	NZ,RP29
+	POP	BC	; Recover the name length, and
+	LD	A,B	;   juggle the registers into: B =
+	EX	AF,AF'	;   name length (for COMPARE), BC =
+	LD	A,(HL)	;   the expanded argument buffer
+	LD	B,H	;   (via A'), A = the expanded
+	LD	C,L	;   argument's length.
+	EX	AF,AF'
+	LD	B,A
+	LD	A,H
+	EX	AF,AF'
+RPC160:	POP	DE	; DE = the function name (at '@').
+	OR	A	; No (or empty) [argument] => the
+	JP	Z,RPC90	;   null value.
+	LD	HL,FNTAB##-2	; Look the name up in the functions
+	XOR	A	;   table (same scheme as IVTAB
+RPC170:	JP	NZ,RPC90	;   above; not found => the null
+	INC	HL	;   value).
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JP	Z,RPC90
+	CALL	COMPARE
+	JR	C,RPC170
+	EX	AF,AF'	; Found: BC -> the expanded argument
+	LD	B,A	;   text (skipping its length byte),
+	INC	BC
+	PUSH	BC
+	LD	C,(HL)	; fetch the handler address,
+	INC	HL
+	LD	B,(HL)
+	POP	HL	; HL -> the argument, and 'call' the
+	LD	DE,RPC40	;   handler with RPC40 as return
+	PUSH	IX	;   address - it returns DE -> the
+	PUSH	DE	;   ASCIIZ result, which RPC40
+	PUSH	BC	;   copies to the output.
+	RET
+
+;        This routine is called during the command line parsing to expand  the
+; user's batch file replacable parameters, accessed as %0 to %9.
+;        When  the  batch  file  was  invoked, the command line was saved in a
+; buffer and the pointer PERC0 pointed to the start of it. When not in a batch
+; file,  PERC0  points  to a null (a dummy null command line) so that %0 to %9
+; are replaced by a null string.
+;        On entry, B is the number of the parameter, 1 to 10 for parameters %0
+; to %9. The length byte of the current command line is saved, and  the  first
+; parameter expanded from the command at (PERC0). Then B is decremented and if
+; not 0, then the old length byte is restored which causes the  just  expanded
+; parameter  to  be  ignored, and then the next parameter is expanded.  When B
+; decrements to 0 the length byte is  not  restored,  thus  making  the  newly
+; expanded  parameter part of the command line. This is not the most efficient
+; way of doing it but it is adequate.
+; On entry, B is the parameter number required (1 to 10).
+;           HL points to the length byte of the new expanded command line.
+; On exit,  HL is preserved and the parameter has been expanded.
+;           AF = error code.
+EXPAND:	LD	B,A	; Save parameter number, 1 => %0.
+	LD	C,#00	; Not in quotes initially.
+	LD	DE,(LINEADDR##)	; Point to parameter's command line.
+	LD	A,(HL)	; Save current length byte.
+	EX	AF,AF'
+EXP10:	CALL	RDCHAR
+	JR	C,EXP20
+	CP	"/"
+	JR	Z,GOTSEP
+	CALL	SEP?##
+	JR	NZ,EXP20
+GOTSEP:	EX	DE,HL
+	DEC	HL
+	PUSH	BC
+	CALL	GETCH##
+	POP	BC
+	EX	DE,HL
+	DJNZ	NXTPAR
+	LD	A,(FIB2##)
+	OR	A
+	RET	Z
+	DEC	DE
+	LD	A,(DE)
+	CALL	SEP?##
+	JR	Z,GOT10
+	INC	DE
+GOT10:	LD	A,(DE)
+	INC	DE
+	CALL	WRCHAR
+	RET	NZ
+	JR	C,GOT10
+	RET
+
+NXTPAR:	EX	AF,AF'
+	LD	(HL),A	; Restore old command line.
+	EX	AF,AF'
+	LD	A,(DE)	; Get first character of next param.
+	CP	"/"	; Fiddle to make sure / options are
+	JR	NZ,EXP10	;   separate parameters.
+	INC	DE
+EXP20:	CALL	WRCHAR	; Put character in buffer.
+	RET	NZ	; return if error.
+	JR	C,EXP10	; Repeat for next character if not end.
+	RET	; Else return with no error.
+
+		SUBTTL	REDIRECT
+;        This routine is called after all the other  parameter  expansion  has
+; been  performed when parsing a command line. It removes all re-direction and
+; piping information from the command line, so that commands and  programs  do
+; not know anything about them.
+; On entry, DE points to the first character of the ASCIIZ command line.
+;           HL points the start of a buffer for the new command line.
+; On exit,  AF = error code.
+;           HL is preserved, and points to the length byte of the new command.
+;       The actual entry point is at REDIRECT.
+BADFN:	LD	A,.IFNM##
+	OR	A
+	RET
+
+REDIRECT:	XOR	A
+	LD	(ENVDATA##),A	; No output redirection yet.
+	LD	(ENVNAME##),A	; No input redirection yet.
+	LD	C,A	; Clear quotes flag.
+	LD	(HL),A	; Initialise length byte.
+RED10:	CALL	RDCHAR
+	JR	C,NXTRED
+	BIT	7,(IY+#00)
+	JR	NZ,NXTRED
+	CP	"<"
+	JR	Z,RED20
+	CP	">"
+	JR	NZ,NXTRED
+	PUSH	DE
+	EXX
+	LD	HL,ENVDATA##
+	JR	RED30
+
+RED20:	PUSH	DE	; Save start of input filename.
+	EXX	; Save other registers.
+	LD	HL,ENVNAME##	; Copy input filename to BUFF2.
+RED30:	EX	(SP),HL	; Save buffer ptr, get filename.
+	PUSH	HL	; Save it again.
+	CP	(HL)	; Skip double >> and <<.
+	JR	NZ,NDBL
+	INC	HL
+NDBL:	CALL	GETCH##	; Remove spaces after > or <.
+	EX	DE,HL	; DE -> filename to parse.
+	LD	BC,_PARSE##	; Parse redirection filename.
+	LD	A,#39	; Error type = redirection.
+	LD	(STRCODE##),A
+	CALL	BDOS
+	EX	AF,AF'
+	LD	A,B	; Get parse flags.
+	POP	BC	; Get back pointer to filename start.
+	POP	HL	; Get back buffer pointer.
+	EX	AF,AF'
+	RET	NZ	; Return if error.
+	EX	AF,AF'
+	BIT	5,A
+	JR	NZ,BADFN	;   no filename and no extension.
+	AND	#18
+	JR	Z,BADFN
+	PUSH	DE	; Save pointer to terminating char.
+	EX	DE,HL	; HL -> end of filename, DE -> buffer.
+	SBC	HL,BC	; HL = size of filename.
+	PUSH	BC	; Save start of filename.
+	EX	(SP),HL	; Get start, save size.
+	POP	BC	; Get size.
+	JR	Z,NOFN	; Go if null filename.
+	LDIR	; Copy filename to buffer.
+NOFN:	XOR	A
+	LD	(DE),A	; Terminate with a null.
+	EXX	; Get back command line pointers.
+	POP	DE	; Continue after filename.
+	DEC	A
+	LD	(STRCODE##),A	; Normal errors again.
+	JR	RED10	; Continue with rest of command line.
+
+NXTRED:	CALL	WRCHAR
+	RET	NZ
+	JP	C,RED10
+	LD	A,#39
+	LD	(STRCODE##),A
+	EXX
+	LD	HL,ENVDATA##
+	LD	A,(HL)
+	OR	A
+	JR	Z,GOTOUT
+	PUSH	HL
+	LD	BC,#0145
+	CALL	BDOS
+	POP	HL
+	RET	NZ
+	LD	A,(HL)
+	CP	">"
+	JR	NZ,CRTOUT
+	INC	HL
+	PUSH	HL
+	CALL	GETCH##
+	EX	DE,HL
+	LD	C,_OPEN##
+	LD	A,#06
+	CALL	BDOS
+	POP	HL
+	CP	.NOFIL##
+	JR	Z,CRTOUT
+	OR	A
+	RET	NZ
+	LD	BC,#014A
+	LD	A,#02
+	SBC	HL,HL
+	LD	E,L
+	LD	D,H
+	CALL	BDOS
+	RET	NZ
+	JR	GOTOUT
+
+CRTOUT:	CALL	GETCH##	; Allow spaces etc. after '>' and '>>'.
+	EX	DE,HL
+	LD	BC,_CREATE##
+	LD	A,#06	; Inheritable, not read.
+	CALL	BDOS
+	RET	NZ	; Return if can't create it.
+GOTOUT:	LD	HL,ENVNAME##	; Point to input filename.
+	LD	A,(HL)
+	OR	A
+	JR	Z,GOTIN	; Go if no input redirection.
+	PUSH	HL
+	LD	BC,_CLOSE##	; Close standard input.
+	CALL	BDOS
+	POP	HL
+	RET	NZ	; Return if error.
+	LD	A,(HL)	; Double << ?
+	CP	"<"
+	JR	NZ,OPNIN	; Go if not.
+	INC	HL	; Skip last < character.
+OPNIN:	CALL	GETCH##	; Allow spaces after '<'.
+	EX	DE,HL
+	LD	C,_OPEN##	; Attempt to open file.
+	LD	A,#05	; Inheritable, not write.
+	CALL	BDOS
+	RET	NZ
+	BIT	7,B	; 'File not found' if this is
+	LD	A,.NOFIL##	;  sub-directory.
+	RET	NZ
+GOTIN:	EXX	; Restore command line pointers.
+	LD	A,#FF	; Error type = normal again.
+	LD	(STRCODE##),A
+	RET	; With error code.
+
+		SUBTTL	PIPE
+;       This routine is called to set up any piping that is necessary.
+; On entry, DE -> command line.
+; On exit, command is terminated at |.
+PIPE:	LD	A,#3A	; Set error type to piping error.
+	LD	(STRCODE##),A
+	XOR	A
+	LD	C,A	; Zero quotes flag.
+	LD	L,A
+	LD	H,A
+	LD	(PIPEADDR##),HL	; Assume no following command.
+	LD	A,(OUTHNDL##)	; Save current pipe output.
+	EX	AF,AF'
+RDPIPE:	CALL	RDCHAR
+	JR	C,NPIPE
+	BIT	7,(IY+#00)
+	JR	NZ,NPIPE
+	CP	"|"
+	JR	NZ,NPIPE
+	LD	L,E
+	LD	H,D
+	CALL	GETCH##
+	LD	(PIPEADDR##),HL
+	DEC	DE
+	XOR	A
+	LD	(DE),A
+	CALL	TEMPFILE
+	RET	NZ
+	LD	A,B
+	LD	(OUTHNDL##),A
+	JR	DOPIPE
+
+NPIPE:	OR	A	; End of command line ?
+	JR	NZ,RDPIPE	; Check next character for | if not.
+	LD	(OUTHNDL##),A	; Last in pipeline, so no output file.
+DOPIPE:	EX	AF,AF'
+	OR	A
+	JR	Z,FIRSTP	; Go if no previous command in pipe.
+	LD	(INHNDL##),A	; Else make last output this input.
+	LD	B,A
+	XOR	A	; Position file ptr to file start.
+	LD	L,A
+	LD	H,A
+	LD	E,A
+	LD	D,A
+	LD	C,_SEEK##
+	CALL	BDOS
+	RET	NZ
+FIRSTP:	LD	A,(OUTHNDL##)	; If no piping at all being done, then
+	LD	HL,INHNDL##	;   don't fork.
+	OR	(HL)
+	JR	Z,PIPRET
+	LD	C,_FORK##	; Do fork for piping.
+	CALL	BDOS
+	RET	NZ
+	LD	A,B
+	LD	(PIPEID##),A	; Save process id for pipe.
+	LD	A,(INHNDL##)	; Get input file handle.
+	OR	A	; First file in pipe ?
+	JR	Z,CLOSOUT	; Go if yes.
+	PUSH	AF	; Else close standard input and
+	LD	BC,_CLOSE##	;   dup the input handle.
+	CALL	BDOS
+	POP	BC
+	LD	C,_DUP##
+	CALL	Z,BDOS
+	RET	NZ
+CLOSOUT:	LD	A,(OUTHNDL##)	; Get output file handle.
+	OR	A	; Last file in pipe ?
+	JR	Z,PIPRET	; Go if yes.
+	PUSH	AF	; Else close standard output
+	LD	BC,#0145	;   and dup the output handle.
+	CALL	BDOS
+	POP	BC
+	LD	C,_DUP##
+	CALL	Z,BDOS
+	RET	NZ
+PIPRET:	LD	A,#FF	; Reset error type.
+	LD	(STRCODE##),A
+	XOR	A	; No error.
+	RET
+
+TEMPFILE:	LD	HL,PIPEFN##+7
+INCDIG:	LD	A,(HL)	;   temporary piping filename.
+	INC	A
+	LD	(HL),A
+	CP	"9"+1
+	JR	C,DIGOK	; Go if digit '0' - '9'.
+	LD	(HL),"0"	; If it was >='9', then set it to '0'
+	DEC	HL	;   and repeat for next character.
+	JR	INCDIG
+
+DIGOK:	LD	HL,TEMP$	; Read the TEMP environment string to
+	CALL	GENV2##	;   find out where to create it.
+	LD	BC,_PARSE##
+	CALL	BDOS
+	RET	NZ
+	LD	A,B	; A=parse flags.
+	AND	#18	; If non-null filename, then add a
+	JR	Z,NULLFN	;   '\'.
+	LD	A,"\"
+	LD	(DE),A
+	INC	DE
+NULLFN:	LD	HL,PIPEFN##	; Copy temporary filename to end of
+	LD	BC,#0C	;   TEMP pathname.
+	LDIR
+	XOR	A
+	LD	(DE),A	; Terminate the string.
+	LD	DE,ENVDATA##	; Attempt to create the file,
+	LD	BC,#8044	;   but don't overwrite any
+	LD	A,#04	;   existing file of the
+	CALL	BDOS	;   same name.
+	RET	Z
+	CP	.FILEX##	; If the file already exists, then
+	JR	Z,TEMPFILE	;   loop back and try another filename.
+	RET	; Else return the error.
+
+		SUBTTL	UNPIPE
+;        This routine is called after executing a command  and  printing  it's
+; error  message  if  appropriate,  and  it  deals  with  various  tidying  up
+; operations which are necessary after piping the output or input of a command
+; On exit, DE -> next command in pipe, or 0 if none.
+UNPIPE:	LD	HL,PIPEID##
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A	;   (not forked now)
+	OR	B
+	LD	C,_JOIN##
+	CALL	NZ,BDOS	; Do the join if yes.
+	RET	NZ
+	LD	HL,INHNDL##
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A
+	OR	B
+	LD	C,_HDELETE##
+	CALL	NZ,BDOS
+	RET
+
+DELPIPE:	LD	HL,#00	; Abandon pipe.
+	LD	(PIPEADDR##),HL
+	LD	HL,INHNDL##
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A
+	OR	B
+	LD	C,_HDELETE##	; Delete input pipe handle, if any.
+	CALL	NZ,BDOS	;   (error ignored)
+	LD	HL,OUTHNDL##
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A
+	OR	B
+	LD	C,_HDELETE##	; Delete output pipe handle, if any.
+	CALL	NZ,BDOS	;   (error ignored)
+	LD	HL,PIPEID##
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A
+	OR	B
+	LD	C,_JOIN##
+	CALL	NZ,BDOS	; Join, if forked.
+	RET
+
+;        Get the next command line character, tracking quoted text for
+; all the line scanning routines above. 2.31 additionally handled
+; 16-bit Kanji characters here through _CHKCHR; 2.41 assumes single
+; byte characters, and adds ' as a quote character.
+;
+; On entry, DE -> next character; C = quote state: the active quote
+;               character, or 0 when outside quotes (callers initialise
+;               it to 0).
+; On exit,  A = the character, DE advanced, C updated.
+;           Z, NC  => end of line (the null).
+;           Cy     => the character is quoted, or is a quote character
+;                     itself: not to be interpreted (the quotes stay in
+;                     the line until UNQUOTE removes them).
+;           NZ, NC => ordinary unquoted character.
+;
+RDCHAR::	LD	A,(DE)	; Get character.
+	INC	DE
+	OR	A	; End of line ?
+	RET	Z
+	INC	C	; In quotes at the moment ?
+	DEC	C
+	JR	Z,RDC10
+	CP	C	; Yes: only the matching quote
+	SCF	;   character ends them.
+	RET	NZ
+	LD	C,#00	; Closing quote: quotes off, but the
+	OR	A	;   quote itself returns Cy too.
+	SCF
+	RET
+
+RDC10:	LD	C,A	; Not in quotes: a " or ' opens
+	CP	#22	;   them (C = the quote character
+	JR	Z,RDC20	;   to match).
+	CP	"'"
+	JR	Z,RDC20
+	LD	C,#00	; Ordinary character: NZ, NC.
+	OR	A
+	RET
+
+RDC20:	OR	A	; Opening quote: Cy.
+	SCF
+	RET
+
+;        Write the character in A on the end of the command line whose
+; length byte is at (HL). Only AF is corrupted.
+;
+; On exit, NZ => A = .BUFUL (line longer than 127 characters).
+;          Z, Cy => character stored, not at the end of the line yet.
+;          Z, NC => the null terminator was stored: end of line.
+;
+WRCHAR:	BIT	7,(HL)
+	JR	NZ,BUFUL
+	PUSH	BC	; Save BC.
+	LD	C,(HL)
+	LD	B,#00	; BC = offset to next buffer position.
+	INC	BC
+	ADD	HL,BC
+	LD	(HL),A	; Put character in buffer.
+	SBC	HL,BC	; Restore HL.
+	POP	BC	; Restore BC.
+	OR	A	; Null (end of line) ?
+	RET	Z	; Return with no error if yes (NC).
+	INC	(HL)	; Else include character in length.
+	XOR	A	; No error, NC.
+	SCF	; Cy => not end of line.
+	RET
+
+BUFUL:	LD	A,.BUFUL##
+	RET	; NZ => error.
+
+		SUBTTL	DO_CMD
+XORET:	XOR	A
+	RET
+
+DO_CMD::	CALL	GETCH##
+	EX	DE,HL
+	PUSH	DE
+	LD	BC,_PARSE##
+	CALL	BDOS
+	LD	(IY+#0A),B
+	LD	(IY+#0B),C
+	EX	(SP),HL
+	EX	DE,HL
+	POP	BC
+	RET	NZ
+	SBC	HL,DE
+	LD	A,L
+	ADD	HL,DE
+	LD	(PATHLEN##),A
+	DEC	HL
+	LD	A,(HL)
+	INC	HL
+	CP	"\"
+	JR	NZ,DOC20
+	PUSH	HL
+	LD	HL,(IFFADDR##)
+	BIT	0,(HL)
+	POP	HL
+	JR	NZ,DOC20
+DOC10:	PUSH	DE
+	LD	HL,@CHDIR##
+	JR	DCC10
+DOC20:	LD	A,(PRSFLAGS##)
+	BIT	6,A
+	JR	NZ,DOC10
+	EXX
+	BIT	2,A
+	JR	Z,DOC30
+	BIT	0,A
+	JR	NZ,DOC30
+	EXX
+	CALL	GETCH##
+	JR	NZ,BADRV
+	LD	HL,(IFFADDR##)
+	BIT	0,(HL)
+	RET	NZ
+	LD	A,(LOGDRV##)
+	DEC	A
+	LD	E,A
+	LD	C,_SELDSK##
+	CALL	BDOS
+	LD	C,_ERROR##
+	CALL	BDOS
+	LD	A,B
+	RET
+
+DOC30:	BIT	0,A
+	JR	Z,XORET
+	BIT	3,A
+	JP	Z,BADCMDZ
+	AND	#40
+BADRV:	LD	A,.BADCMD##	;   or '..' given.
+	RET	NZ
+	EXX	; Get registers.
+	DEC	DE	; Point to length byte of command.
+	PUSH	HL	; Save pointer to start of parameters.
+	PUSH	BC	; Save pointer to start of last item.
+	LD	A,(PATHLEN##)	; Get length of first word.
+	LD	B,A	; B=length of command.
+	LD	HL,CMDTAB##-2	; First test for an internal command.
+	XOR	A	; Set Z for loop entry.
+DC10:	JR	NZ,NOTINT
+	INC	HL
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JR	Z,NOTINT
+	CALL	COMPARE
+	JR	C,DC10
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	POP	BC
+DCC10:	LD	BC,@ELSE##
+	SBC	HL,BC
+	ADD	HL,BC
+	JR	Z,DCC20
+	LD	BC,@ENDIFF##
+	OR	A
+	SBC	HL,BC
+	ADD	HL,BC
+	JR	Z,DCC20
+	LD	BC,@IFF##
+	OR	A
+	SBC	HL,BC
+	ADD	HL,BC
+	JR	Z,DCC20
+	PUSH	HL
+	LD	HL,(IFFADDR##)
+	BIT	0,(HL)
+	POP	HL
+	JR	Z,DCC20
+	POP	DE
+	XOR	A
+	RET
+
+DCC20:	LD	BC,@ECHO##
+	OR	A
+	SBC	HL,BC
+	ADD	HL,BC
+	JR	Z,DCC30
+	LD	BC,@ECHOS##
+	OR	A
+	SBC	HL,BC
+	ADD	HL,BC
+	EX	(SP),HL
+	JR	NZ,DCC40
+	EX	(SP),HL
+DCC30:	EX	(SP),HL
+	LD	A,(HL)
+	CALL	BLANK?##
+	JR	NC,DCC40
+	INC	HL
+	DEFB	#06
+DCC40:	OR	A
+	CALL	NC,GETCH##
+	XOR	A
+	LD	(DIRFLAG##),A
+	LD	B,A
+	DEC	A
+	RET
+
+;        Not an internal command, so look for a command file on disk.
+;        First, the user's drive/path is copied into ENVNAME and null
+; terminated. The filename - wildcards are allowed in it - is copied
+; into XBUF1, and if no extension was given '.*' is appended so that
+; any executable extension can match. The routine FNDCMD, which looks
+; for a command file on disk, then concatenates them again and does
+; 'search for first' and 'search for next' calls. If a .COM, .BAT or
+; .BTM file is found, then it is executed (EXECMD below); a file whose
+; extension is an 'executable extension' alias re-enters the dispatcher
+; from within FNDCMD instead (see GOTFIL). Otherwise, if a drive/path
+; was specified by the user, then an 'unrecognised command' error is
+; given. If the user did not give a drive/path, then the current PATH
+; is searched. Each path item in the PATH is copied in turn to ENVNAME
+; and FNDCMD again called. If any error occurs from FNDCMD whilst
+; searching the PATH items, then it is ignored and the next item
+; searched. Such errors are likely to be 'invalid drive' or 'invalid
+; pathname', which can result from invalid paths or non-existant paths
+; in the PATH string.
+;
+NOTINT:	POP	BC	; BC -> last item.
+	POP	HL	; HL -> start of parameters.
+	PUSH	HL
+	LD	HL,(IFFADDR##)	; In IFF 'skipping' mode external
+	BIT	0,(HL)	;   commands are not even looked
+	POP	HL	;   for.
+	RET	NZ
+	INC	DE	; DE -> first character of command.
+	PUSH	HL
+	PUSH	BC
+	PUSH	DE
+	EXX	; (the old HL/BC/DE stay in the
+	POP	DE	;   alternate set: HL' = parameters)
+	POP	HL	; HL -> start of last item.
+	PUSH	HL	; Save again.
+	XOR	A	; NC, A=0.
+	SBC	HL,DE	; Calculate size of given drive/path
+	LD	C,L	;   (NB. may be zero).
+	LD	B,H
+	LD	HL,ENVNAME##	; Copy given drive/path to ENVNAME.
+	EX	DE,HL
+	JR	Z,NDP	; Go if no drive/path.
+	LDIR
+NDP:	LD	(DE),A	; Terminate with a null.
+	POP	DE	; DE -> start of last item.
+	POP	HL	; HL -> terminating character.
+	SBC	HL,DE	; Calculate size of given filename.
+	LD	C,L
+	LD	B,H
+	LD	HL,XBUF1##	; Copy given filename to BUFF3.
+	PUSH	HL
+	EX	DE,HL
+	JR	Z,NFN	; Go if no filename (should not occur).
+	LDIR
+NFN:	LD	(DE),A	; Terminate with a null.
+	EX	DE,HL
+	POP	DE
+	BIT	4,(IY+#0A)	; If no extension was given, look
+	JR	NZ,GOTEXT	;   for '<command>.*' so that any
+	LD	(HL),"."	;   executable extension matches.
+	INC	HL
+	LD	(HL),"*"
+	INC	HL
+	LD	(HL),#00
+GOTEXT:	CALL	FNDCMD	; Look for command.
+	JR	Z,EXECMD	; Execute command if file found.
+	CP	.NOFIL##
+	RET	NZ	; Return error if not 'file not found'.
+	LD	A,(PRSFLAGS##)	; Get parse flags for command.
+	AND	#06	; If drive or path specified, then
+	LD	A,.BADCMD##	;   don't search the current PATH.
+	LD	HL,PATH$	; Get the current PATH environment
+	CALL	Z,GENV2##	;   string to BUFF1.
+	RET	NZ
+	EX	DE,HL	; HL -> PATH string in BUFF1.
+USEPTH:	CALL	GETCH##	; Ignore leading separators.
+BADCMDZ:	LD	A,.BADCMD##	; Command file not found if end of
+	RET	Z	;   PATH string.
+	LD	BC,ENVNAME##	; Copy next item to ENVNAME.
+	CALL	CPYSTR##
+	RET	C	; Return if fatal error.
+	LD	(VALUEL##),HL	; Save pointer to next item in PATH.
+	CALL	FNDCMD	; Look for command with this path.
+	LD	HL,(VALUEL##)	; If still not found, then look
+	JR	NZ,USEPTH	;   again with next item from PATH.
+
+;        A command file was found, so execute it. FIB1 is the File Info
+; Block for the file, and FILEBUF holds its parsed 8+3 name.
+;
+; On entry, C is set if a batch file (.BAT or .BTM) was found, else a
+;           .COM file (the FNDCMD/COMBAT flags).
+;
+EXECMD:	JR	NC,EXECOM	; Go and execute if a .COM file.
+	LD	HL,PIPEID##	; If batch command was piped, then
+	LD	B,(HL)	;   just ignore it by joining again
+	XOR	A	;   (batch files can't be piped).
+	LD	(HL),A
+	OR	B
+	LD	C,_JOIN##
+	CALL	NZ,BDOS	; (error ignored)
+	LD	A,(BATHNDL##)	; If not already in a batch file,
+	INC	A	;   then just open batch file.
+	JR	Z,OPNBAT
+	INC	A	; If the old batch file was a .BTM
+	CALL	Z,FREEBTM##	;   (#FE), release its segment.
+	LD	A,(REDIRID##)	; Join the newly-forked process.
+	LD	B,A
+	LD	C,_JOIN##
+	CALL	BDOS	; (error ignored)
+	LD	A,(REDIRID2##)	; Set up REDIRID to process id of
+	LD	(REDIRID##),A	;   first batch file.
+	LD	A,(BATHNDL##)	; Close the old batch file - unless
+	CP	#FE	;   it was a .BTM, which has no file
+	JR	Z,OPNBAT	;   handle.
+	LD	B,A
+	LD	C,_CLOSE##
+	CALL	BDOS	; (error ignored)
+OPNBAT:	LD	A,#3B	; Error type = batch file error.
+	LD	(STRCODE##),A
+	LD	HL,REDIRID##
+	LD	A,(HL)	; Save process id for batch process.
+	LD	(REDIRID2##),A
+	XOR	A
+	LD	(HL),A
+	LD	DE,FILEBUF##+7	; Is the batch file found a .BTM ?
+	LD	HL,BTMEXT$	;   (FILEBUF was parsed by COMBAT)
+	LD	B,(HL)
+	CALL	COMPARE
+	JR	C,OPN10	; No: open it as a plain .BAT file.
+	CALL	OPENBTM##	; Yes: load it whole into a mapper
+	LD	B,#FE	;   segment; the pseudo-handle #FE
+	JR	OPN20	;   marks 'batch file is a .BTM'.
+
+OPN10:	LD	DE,FIB1##	; Attempt to open new batch file
+	LD	A,#01	;   (can't write to it).
+	LD	C,_OPEN##
+	CALL	BDOS
+OPN20:	LD	(ERRCODE##),A	; End batch files if error (none
+	RET	NZ	;   open now !) but print error msg.
+	LD	L,A	; Initialise batch file buffer to
+	LD	H,A	;   empty.
+	LD	(BATLINLEN##),HL
+	DEC	A	; Reset error type.
+	LD	(STRCODE##),A
+	LD	A,B	; Remember handle for new batch file
+	LD	(BATHNDL##),A	;   (#FE for a .BTM).
+	EXX
+	PUSH	DE	; Get pointer to start of command
+	EXX	;   (kept in DE').
+	POP	HL
+	LD	DE,ORIGLINE##	; Copy command line to ORIGLINE and
+	LD	(LINEADDR##),DE	;   save pointer to start as %0.
+	CALL	NCOPY##
+	RET
+
+		SUBTTL	EXECOM
+EXECOM:	LD	HL,EXPERT$
+	CALL	ON?##	;   if "EXPERT" switch is ON.
+	JR	NC,EXPERT
+	LD	A,(FIB1##+25)	; Otherwise look at the media where
+	LD	L,A	;   the .COM file was found and
+	LD	DE,ENVDATA##	;   if it is formatted by MSX-DOS2
+	LD	C,_DPARM##	;   (by checking the volume_id field)
+	CALL	BDOS	;   we can proceed.
+	RET	NZ	; Report any errors.
+	LD	A,(ENVDATA##+20)	; We had better define "FIB_VOLUME_ID".
+	BIT	7,A	; This is not actuall a
+	LD	A,.BADVER##	;   "Wrong DOS version" what the error
+	RET	NZ	;   code was intended for.
+EXPERT:	LD	C,_FORK##
+	CALL	BDOS	;   so that the corresponding join will
+	RET	NZ	;   tidy up it's open files.
+	LD	A,B
+	LD	(EXECID##),A	; Save id of transient program process.
+	LD	DE,FIB1##	; Attempt to open command file.
+	LD	C,_OPEN##
+	LD	A,#01	; Read only.
+	CALL	BDOS
+	RET	NZ	; Return if error.
+	LD	A,B
+	EX	AF,AF'
+	LD	HL,ENVDATA##	; Set up whole path string in BUFF with
+	LD	A,(LOGDRV##)	;   a drive : \ at the start, so that
+	ADD	A,"@"	;   programs can find out where they
+	LD	(HL),A	;   were loaded from.
+	INC	HL
+	LD	(HL),":"
+	INC	HL
+	LD	(HL),"\"
+	INC	HL
+	EX	DE,HL
+	LD	C,_WPATH##
+	CALL	BDOS
+	RET	NZ
+	LD	DE,FIB1##+1	; Copy upper-case filename in FIB on
+CPYFN:	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	OR	A
+	JR	NZ,CPYFN
+	LD	DE,ENVDATA##
+	LD	HL,PROG$
+	LD	C,_SENV##
+	CALL	BDOS
+	EXX
+	PUSH	HL
+	EXX
+	POP	DE
+	PUSH	DE
+	LD	HL,PARAM$
+	LD	C,_SENV##
+	CALL	BDOS
+	POP	HL
+	CALL	LDCOME
+	RET	NZ
+	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the variables are
+	OR	A	;   not pushed onto the segment's
+	JR	NZ,EXE50	;   swap stack but saved whole
+	CALL	SETPG2##	;   below the resident code.
+	LD	DE,(ALIEND+#8000)
+	LD	HL,(VAREND+#8000)
+	RES	7,H
+	CALL	RSTPG2##
+	OR	A
+	SBC	HL,DE
+	LD	DE,BUFFER1##-EXITADDR##
+	CALL	COMPARE4##
+	LD	A,.NORAM##
+	RET	C
+	CALL	SETPG2##
+	LD	DE,(VAREND+#8000)
+	PUSH	DE
+	LD	HL,BUFFER1##-1
+	LD	BC,BUFFER1##-EXITADDR##
+	LDDR
+	EX	DE,HL
+	POP	DE
+	LD	(HL),D
+	DEC	HL
+	LD	(HL),E
+	DEC	HL
+	LD	(VAREND+#8000),HL
+	CALL	RSTPG2##
+	LD	DE,(EXITADDR##)
+	LD	HL,EXITADDR##-1
+	LD	BC,EXITADDR##-BOOTSTRAP##+1
+	LDDR
+	JR	EXE60
+
+EXE50:	LD	DE,(EXITADDR##)	; SHELLRAM OFF: the whole variable
+	LD	HL,BUFFER1##-1	;   region goes below the resident
+	LD	BC,BUFFER1##-BOOTSTRAP##	;   code (the ENDTPA ceiling
+	LDDR	;   keeps the slot out of the
+			;   TPA), as COMMAND 2.31 did.
+EXE60:	LD	HL,#FFD8
+	ADD	HL,DE
+	EX	DE,HL
+	LD	E,#08
+	LD	HL,(#06)
+	LD	L,E
+	LD	BC,#09
+	LDDR
+	PUSH	DE
+	INC	D
+	LD	E,#06
+	LD	(#06),DE
+	XOR	A
+	LD	(#03),A
+	LD	A,(CURDRIVE##)
+	DEC	A
+	LD	(#04),A
+	LD	DE,#00
+	LD	C,_DEFAB##
+	CALL	BDOS
+	POP	DE
+	DEC	D
+	LD	HL,LDCOME-1
+	LD	BC,#59
+	LDDR
+	INC	DE
+	PUSH	DE
+	RET
+
+	LD	SP,(ENDTPA##)
+	PUSH	DE
+	LD	HL,STACK##-1
+	LD	BC,STACK##-START##
+	LDDR
+	INC	DE
+	EX	DE,HL
+	EX	(SP),HL
+	DEC	H
+	PUSH	HL
+	EX	AF,AF'
+	LD	B,A
+	PUSH	BC
+	LD	C,_READ##
+	LD	DE,#0100
+	CALL	BDOS
+	POP	BC
+	POP	DE
+	JR	NZ,CPY10
+	SBC	HL,DE
+	LD	A,.NORAM##
+	JR	Z,CPY10
+	LD	C,_CLOSE##
+	CALL	BDOS
+	JR	NZ,CPY10
+	LD	DE,#80
+	LD	C,_SETDTA##
+	CALL	BDOS
+	LD	A,#FF
+	LD	(#37),A
+	LD	DE,(#01)
+	DEC	DE
+	DEC	DE
+	DEC	DE
+	DEC	DE
+	LD	HL,(#06)
+	LD	L,#00
+	LD	SP,HL
+	XOR	A
+	LD	B,A
+	LD	L,A
+	LD	H,A
+	LD	C,#FF
+	PUSH	HL
+	JP	#0100
+
+CPY10:	LD	B,A
+	LD	C,_TERM##
+	JP	BDOS
+
+LDCOME::	EX	DE,HL
+	LD	HL,#80	; Zero FCBs.
+	LD	B,#24
+	XOR	A
+FILFCB:	DEC	HL
+	LD	(HL),A
+	DJNZ	FILFCB
+	PUSH	DE	; Save ptr to start of parameters.
+	CALL	SETFCB	; Set up first FCB.
+	JR	NZ,FCBERR
+	EX	DE,HL	; Skip separators.
+	CALL	GETCH##
+	EX	DE,HL
+	LD	HL,#6C
+	CALL	SETFCB	; Set up second FCB.
+FCBERR:	POP	HL	; HL -> command line again.
+	RET	NZ
+	LD	BC,#80	; Copy & upper-case parameters to 80H.
+	XOR	A
+	LD	D,A	; Initialise character flags.
+	DEC	A
+	LD	(BC),A	; Initialise count.
+	INC	BC
+CPYCMD:	LD	E,(HL)	; Get character.
+	PUSH	HL
+	PUSH	BC
+	LD	HL,#80	; Increment count in anticipation.
+	INC	(HL)
+	LD	C,_CHKCHR##	; Get upper cased character.
+	LD	HL,UPPER$	; Upper case the character only
+	CALL	ON?##	;  if upper casing is ON.
+	CCF
+	SBC	A,A
+	CALL	NZ,BDOS
+	POP	BC
+	POP	HL
+	RET	NZ
+	OR	E	; Get character, test for end of line.
+	LD	(BC),A
+	RET	Z	; Ret with no error if done.
+	INC	BC	; Else do next.
+	INC	HL
+	JR	CPYCMD
+
+		SUBTTL	SETFCB
+SETFCB:	EX	DE,HL
+	CALL	GETCH##	; Skip separators.
+	EX	DE,HL
+	PUSH	HL	; Save FCB pointer.
+	LD	BC,_PARSE##
+	CALL	BDOS	; Do a parse path on parameter.
+	EX	DE,HL	; DE -> start of last item.
+	POP	HL	; Get pointer to CP/M FCB.
+	RET	NZ
+	BIT	2,B
+	JR	NZ,GOTDRV	; Go if yes, else use 0.
+	LD	C,#00	; 0 => use default drive.
+GOTDRV:	LD	(HL),C	; Set up drive.
+	INC	HL	; Then parse filename to set up FCB.
+	LD	C,_PFILE##
+	JP	BDOS	; Leaves DE -> terminating character.
+
+;        This routine is called to actually find a command file on
+; disk. The drive/path is in ENVNAME (and may be destroyed by this
+; routine) and the filename - which may contain wildcards - is in
+; XBUF1. The search includes hidden and system files, and returns the
+; first matching file that has a .COM, .BAT or .BTM extension or an
+; extension for which an 'executable extension' alias is defined; in
+; that last case GOTFIL below rebuilds the command line and re-enters
+; DO_CMD directly instead of returning. FIB1 is the File Info Block
+; for the file that was found, FILEBUF its parsed 8+3 name.
+;        (2.31 kept searching for a .COM file when a .BAT file matched
+; first; from 2.40 the first executable file found is the one used.)
+;
+; On return, NZ,  C => error from BDOS etc (.NOFIL if no suitable file).
+;             Z,  C => .BAT or .BTM file found.
+;             Z, NC => .COM file found.
+;
+FNDCMD:	LD	DE,ENVNAME##	; DE -> drive/path.
+	LD	BC,_PARSE##
+	CALL	BDOS	; Parse it.
+	SCF
+	RET	NZ	; Return with C & NZ if error.
+	LD	A,C
+	LD	(LOGDRV##),A	; Save drive for EXECOM.
+	LD	HL,XBUF1##	; Point to filename.
+	LD	A,B	; Get flags.
+	AND	#18	; Null last item (eg. A: or A:\) ?
+	JR	Z,FND10	; Just add filename to end if yes.
+	LD	A,"\"	; Else separate end of path & filename
+	LD	(DE),A	;   with a backslash.
+	INC	DE
+FND10:	CALL	NCOPY##	; Copy filename to end of path string.
+	EX	AF,AF'	; (2.31's 'batch file found' flag,
+	LD	DE,ENVNAME##	;   saved here with NC and no longer
+	LD	IX,FIB1##	;   changed during the search)
+	LD	B,#06	; Look also for hidden & system files.
+	LD	C,_FFIRST##
+FCMD10:	CALL	BDOS	; Search for file.
+	JR	Z,GOTFIL	; Go if file found.
+	CP	.NOFIL##
+	SCF	; Return C and NZ if error not
+	RET	NZ	;   'file not found'.
+	EX	AF,AF'	; AF' was saved above with NC, so
+	CCF	;   this always gives Cy here:
+	SBC	A,A	; FF => batch file not found.
+	AND	.NOFIL##	; Return .NOFILE, NZ and C if batch
+	SCF	;   file not found, else Z and C.
+	RET
+
+;        A file matching the command name was found. If its extension
+; is .COM, .BAT or .BTM, return to GOTEXT with the COMBAT flags.
+; Otherwise look for an 'executable extension' (new in 2.40): an alias
+; named '.EXT', ie. a dot plus the extension of the found file. If no
+; such alias exists, the directory search simply continues with the
+; next matching file. If it does exist, a new command line is built in
+; BUFFER1 as
+;
+;          <alias value> <drive/path><found filename> <parameters>
+;
+; and dispatched by re-entering DO_CMD (FNDCMD's return address is
+; dropped, so this recursion replaces the normal return). Note that
+; .COM/.BAT/.BTM always win: COMBAT checks them first, so those
+; extensions cannot be overridden by an alias.
+;
+GOTFIL:	LD	DE,FIB1##+1	; DE -> filename just found.
+	CALL	COMBAT	; Check for .COM, .BAT or .BTM:
+	RET	Z	;   return with its flags if so.
+	EXX	; The alternate registers hold the
+	PUSH	BC	;   command line pointers: save them
+	PUSH	DE	;   (the mapper calls inside
+	PUSH	HL	;   GETALIAS clobber HL').
+	EXX
+	LD	DE,BUFFER1##+1	; Build '.EXT' in BUFFER1: copy the
+	LD	HL,FILEBUF##+8	;   extension of the found file
+	LD	B,3	;   (up to 3 chars, space padded).
+GOT20:	LD	A,(HL)
+	CP	" "
+	JR	Z,GOT30
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	GOT20
+GOT30:	EX	DE,HL
+	LD	(HL),#00
+	LD	HL,BUFFER1##
+	LD	(HL),"."	; The leading dot.
+	LD	DE,ENVDATA##	; Look up the executable extension
+	CALL	GETALIAS##	;   alias; value to ENVDATA.
+	EXX
+	POP	HL	; Restore the saved alternate
+	POP	DE	;   registers.
+	POP	BC
+	EXX
+	LD	A,(DE)	; No such alias: go on searching
+	OR	A	;   with the next matching file.
+	LD	C,_FNEXT##
+	JR	Z,FCMD10
+	EX	DE,HL	; Found one: build the new command.
+	LD	DE,BUFFER1##	; Copy the alias value to BUFFER1
+	CALL	NCOPY##	;   (overwriting the '.EXT' name),
+	DEC	DE
+	LD	A," "	;   followed by a space.
+	LD	(DE),A
+	INC	DE
+	PUSH	DE	; Save the append position.
+	LD	DE,ENVNAME##	; Parse the search path in ENVNAME
+	PUSH	DE	;   and cut it at the start of the
+	LD	BC,_PARSE##	;   last item, leaving just the
+	CALL	BDOS	;   drive/path part (HL from _PARSE
+	LD	(HL),#00	;   -> start of last item).
+	POP	HL
+	POP	DE
+	CALL	NCOPY##	; Append the drive/path,
+	DEC	DE
+	LD	B,8	;   then the actual name of the
+	LD	HL,FILEBUF##	;   found file (8 chars, stop at
+GOT40:	LD	A,(HL)	;   the space padding)...
+	CP	" "
+	JR	Z,GOT50
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	GOT40
+GOT50:	LD	A,"."	;   ...a dot...
+	LD	(DE),A
+	INC	DE
+	LD	HL,FILEBUF##+8	;   ...and its extension (up to 3
+	LD	B,3	;   chars).
+GOT60:	LD	A,(HL)
+	CP	" "
+	JR	Z,GOT70
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	GOT60
+GOT70:	EXX	; Append the parameters of the
+	PUSH	HL	;   original command (kept in HL')
+	EXX	;   and terminate.
+	POP	HL
+	CALL	NCOPY##
+	EX	DE,HL
+	LD	(HL),#00
+	POP	HL	; Drop FNDCMD's return address and
+	LD	HL,BUFFER1##	;   dispatch the rebuilt command.
+	JP	DO_CMD
+
+;        Checks whether or not the filename at (DE) has an extension of
+; .COM, .BAT or .BTM. This is done by parsing the filename into an 11
+; byte buffer in an FCB format, so that the extension can be checked
+; easily. (The parsed name stays in FILEBUF; GOTFIL and OPNBAT use it
+; from there.)
+;
+; On exit, NZ,  C => error.
+;          NZ, NC => not .COM, .BAT or .BTM.
+;           Z,  C => .BAT or .BTM.
+;           Z, NC => .COM.
+;
+COMBAT:	LD	HL,FILEBUF##	; Point to buffer for filename.
+	LD	C,_PFILE##
+	CALL	BDOS
+	SCF	; Return with C and NZ if error.
+	RET	NZ
+	LD	DE,FILEBUF##+7	; Point to start of extension - 1.
+	LD	HL,COMEXT$	; Compare with COM.
+	LD	B,(HL)	; Length byte.
+	CALL	COMPARE
+	DEC	A	; Z & NC if COM.
+	RET	NC	; Return if COM, else DE -> 'BAT'.
+	CALL	COMPARE	; Compare with BAT.
+	DEC	A
+	CCF	; Return Z and C if BAT.
+	RET	Z
+	CALL	COMPARE	; Compare with BTM: return Z and C
+	DEC	A	;   if BTM, else NZ and NC.
+	CCF
+	RET
+
+;        The three executable extensions, length byte first, in the
+; order COMBAT compares them (COMPARE leaves HL past each string, so
+; they must stay adjacent).
+;
+COMEXT$:	DEFB	3
+	DEFB	"COM"
+BATEXT$:	DEFB	3
+	DEFB	"BAT"
+BTMEXT$:	DEFB	3
+	DEFB	"BTM"
+
+		SUBTTL	COMPARE
+;******************************************************************************
+;       This routine is used to compare two strings, mainly to decode commands
+; from the command table.
+;        The command at (DE) with length in B (and at (DE)) is  compared  with
+; the  string at (HL), length byte first. If the strings match, then the carry
+; is returned reset (NC). Otherwise, if the Z flag is not set  (NZ)  then  the
+; command had a length byte smaller than the string originally at (HL).
+; On exit,  BC and DE are not corrupted, and HL points to the byte after the
+;               string originally at (HL).
+COMPARE::	PUSH	BC
+	PUSH	DE
+	LD	A,B	; Get count.
+	LD	B,(HL)	; Get length from table.
+	CP	B	; Compare length bytes.
+	JR	C,CMP30	; Go with NZ to stop search.
+	INC	B	; Compare length bytes too.
+CMP10:	JR	C,CMP20	; Go if mismatch has occured.
+	SUB	(HL)	; Chars match ?
+	ADD	A,#FF	; NC => yes, else no.
+CMP20:	INC	HL	; Point to next char pair.
+	INC	DE
+	LD	A,(DE)
+	CALL	UC	; Upper case, carry not corrupted.
+	DJNZ	CMP10	; Compare next character.
+	SBC	A,A	; C & FF => no match.
+	INC	A	; Set Z if Cy set, Cy preserved.
+CMP30:	POP	DE
+	POP	BC
+	RET
+
+;        This highly complex routine upper cases the character in A,
+; without corrupting the carry flag. The characters '{', '|', '}' and
+; '~' are turned into the characters '[', '\', ']' and '_'
+; respectively. In the context in which this routine is used, this
+; does not matter since both sets of characters are invalid.
+;
+UC::	BIT	7,A	; Top bit set ?
+	RET	NZ	; Don't upper case if yes.
+	BIT	6,A	; 40H to 7FH ?
+	RET	Z	; Ret if not.
+	RES	5,A	; Ensure it's upper case.
+	RET
+
+;        Convert the character in A to lower case ('A'-'Z' only; any
+; other character is returned unchanged).
+;
+MKLOWER::	CP	"A"
+	RET	C
+	CP	"Z"+1
+	RET	NC
+	SET	5,A
+	RET
+
+;        Convert the character in A to upper case ('a'-'z' only; any
+; other character is returned unchanged).
+;
+MKUPPER::	CP	"a"
+	RET	C
+	CP	"z"+1
+	RET	NC
+	RES	5,A
+	RET
+
+DATE$::	DEFB	"DATE",0
+TIME$::	DEFB	"TIME",0
+ON$::	DEFB	"ON",0
+OFF$::	DEFB	"OFF",0
+ECHO$::	DEFB	"ECHO",0
+HELP$::	DEFB	"HELP",0
+PATH$::	DEFB	"PATH",0
+CDPATH$::	DEFB	"CDPATH",0
+PROMPT$::	DEFB	"PROMPT",0
+TABORD$::	DEFB	"TABORDER",0
+PARAM$:: DEFB	"PARAMETERS",0
+PROG$::	DEFB	"PROGRAM",0
+TEMP$::	DEFB	"TEMP",0
+UPPER$::	DEFB	"UPPER",0
+LOWER$::	DEFB	"LOWER",0
+REDIR$::	DEFB	"REDIR",0
+EXPERT$::	DEFB	"EXPERT",0
+ALIAS$::	DEFB	"ALIAS",0
+SEPAR$::	DEFB	"SEPAR",0
+EXPAND$::	DEFB	"EXPAND",0
+SHRAM$::	DEFB	"SHELLRAM",0
+PUSHD$::	DEFB	"PUSHD",0
+TEMPFN:	DEFB	"%PIPE00.$$$"
+DPROMPT$::	DEFB	"%_CWD%>",0
+OPROMPT$:	DEFB	"%_DISK%>",0
+DTABORD$::	DEFB	"BOTH",0
+

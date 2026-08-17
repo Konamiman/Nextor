@@ -169,7 +169,8 @@ endif
 	LD	(REBPAT),A	;   access the boot drive as %1).
 	LD	(AUTOCMD+1),A	; Load AUTOEXEC from the boot drive.
 	LD	(REBCMD+1),A	; Load REBOOT from the boot drive.
-	LD	(CMNDM),A	; Load COMMAND.COM from the boot drive.
+	LD	(CMNDM),A	; Load the command interpreter
+	LD	(CMND3),A	;   from the boot drive.
 ;
 ifndef ver880722
 	LD	DE,80H		; DE -> command line buffer.
@@ -328,11 +329,19 @@ REJOIN:	LD	BC,0*256+_JOIN; Reset file handles etc.
 ;
 	CALL	DERR		; Else print error message.
 	CALL	CRLF
-NPERR:	LD	DE,CMNDM	; DE -> '\COMMAND.COM'.
-	LD	C,_OPEN
+NPERR:	LD	DE,CMND3	; Attempt to open COMMAND3.COM
+	LD	C,_OPEN	;   first.
 	XOR	A
-	CALL	BDOS		; Attempt to open COMMAND.COM.
-	JR	NZ,LDERR	; Go if error.
+	CALL	BDOS
+	JR	Z,NPOPEN
+	CP	.NOFIL	; Fall back to COMMAND2.COM only
+	JP	NZ,LDERR	;   when COMMAND3.COM simply is
+	LD	DE,CMNDM	;   not there; report any other
+	LD	C,_OPEN	;   error.
+	XOR	A
+	CALL	BDOS		; Attempt to open COMMAND2.COM.
+	JP	NZ,LDERR	; Go if error.
+NPOPEN:
 ;
 	LD	DE,100H		; Else load program to here.
 	LD	HL,JBDOS-100H	; Maximum number of bytes loadable.
@@ -384,6 +393,7 @@ AUTPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
 REBCMD:	DEFB	16,'A:\REBOOT.BAT '	; A: patched to the boot drive.
 REBPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
 ;
+CMND3:	DEFB	'A:\COMMAND3.COM',0	; A: patched to the boot drive.
 CMNDM:	DEFB	'A:\COMMAND2.COM',0	; A: patched to the boot drive.
 CMDLEN	EQU	$-CMNDM
 ;

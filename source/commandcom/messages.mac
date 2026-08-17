@@ -1,0 +1,200 @@
+	name('messages')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Message strings
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        The string constants used all over the program, accessed through
+; a table of addresses.
+;
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
+;
+;******************************************************************************
+MESSAGES::	DEFB	"Yy",0
+	DEFB	"Nn",0
+	DEFB	" Directory of ",0
+	DEFB	" <dir> ",0
+	DEFB	" ",0
+	DEFB	" in ",0
+	DEFB	" free",0
+	DEFB	"K",0
+	DEFB	"K",0
+	DEFB	" file   ",0
+	DEFB	" files",9,0
+	DEFB	" byte",0
+	DEFB	" bytes",0
+	DEFB	"*** ",0
+	DEFB	0
+	DEFB	"Press any key to continue ",0
+	DEFB	" Volume in drive ",0
+	DEFB	": ",0
+	DEFB	"has no name",0
+	DEFB	"is ",0
+	DEFB	"Delete all files (Y/N)? ",0
+	DEFB	" -- ",0
+	DEFB	"Current date is ",0
+	DEFB	"Sun",0
+	DEFB	"Mon",0
+	DEFB	"Tues",0
+	DEFB	"Wednes",0
+	DEFB	"Thurs",0
+	DEFB	"Fri",0
+	DEFB	"Satur",0
+	DEFB	"day",0
+	DEFB	"                ",0
+	DEFB	"Enter new date",0
+	DEFB	": ",0
+	DEFB	" (",0
+	DEFB	")",0
+	DEFB	"Current time is",0
+	DEFB	"       ",0
+	DEFB	"Enter new time: ",0
+	DEFB	"Buffers is ",0
+	DEFB	"Verify is ",0
+	DEFB	"RAM disk is ",0
+	DEFB	"Drive name? (",0
+	DEFB	") ",0
+	DEFB	"All data on drive ",0
+	DEFB	": will be destroyed",0
+	DEFB	"      ",0
+	DEFB	" file copied",0
+	DEFB	" files copied",0
+
+	DEFB	"The following standard commands are available.",13,10
+	DEFB	"For more information on a specific command, type:",13,10
+	DEFB	"   HELP  command name",13,10
+	DEFB	13,10
+	DEFB	"ALIAS .... displays/sets aliases",13,10
+	DEFB	"ASSIGN ... logical to physical drive assignment",13,10
+	DEFB	"ATDIR .... changes the attributes of directories",13,10
+	DEFB	"ATTRIB ... changes the attributes of files",13,10
+	DEFB	"BASIC .... goes into MSX disk BASIC",13,10
+	DEFB	"BEEP ..... makes beeping sound",13,10
+	DEFB	"BOOT ..... assigns a new Nextor boot drive",13,10
+	DEFB	"BUFFERS .. displays/sets the number of disk buffers",13,10
+	DEFB	"CD ....... see CHDIR",13,10
+	DEFB	"CDD ...... displays/sets the current directory and drive",13,10
+	DEFB	"CDPATH ... displays/sets the directory search path",13,10
+	DEFB	"CHDIR .... displays/sets the current directory",13,10
+	DEFB	"CHKDSK ... checks the integrity of a disk",13,10
+	DEFB	"CLS ...... clears the screen",13,10
+	DEFB	"COLOR .... changes screen colors",13,10
+	DEFB	"CONCAT ... joins files together",13,10
+	DEFB	"COPY ..... copies files",13,10
+	DEFB	"CPU ...... displays/sets the CPU mode",13,10
+	DEFB	"DATE ..... displays/sets the current date",13,10
+	DEFB	"DEL ...... see ERASE",13,10
+	DEFB	"DEVINFO .. displays the devices handled by a disk driver",13,10
+	DEFB	"DIR ...... displays the file names on a disk",13,10
+	DEFB	"DISKCOPY . copies a whole disk to another",13,10
+	DEFB	"DRIVERS .. displays the disk drivers present in the system",13,10
+	DEFB	"DRVINFO .. displays what every drive is assigned to",13,10
+	DEFB	"DSKCHK ... displays/sets the current disk check status",13,10
+	DEFB	"ECHO ..... prints the following text",13,10
+	DEFB	"ECHOS .... prints the following text without a trailing CR/LF",13,10
+	DEFB	"ELSE ..... toggles Command Mode",13,10
+	DEFB	"END ...... ends batch file execution [.BTM]",13,10
+	DEFB	"ENDIFF ... restores Command Mode",13,10
+	DEFB	"ERA ...... see ERASE",13,10
+	DEFB	"ERASE .... deletes files",13,10
+	DEFB	"EXIT ..... exits COMMAND3.COM",13,10
+	DEFB	"FIXDISK .. updates MSX-DOS 1 disks to MSX-DOS 2",13,10
+	DEFB	"FORMAT ... formats a disk",13,10
+	DEFB	"FREE ..... displays total, used and free disk space",13,10
+	DEFB	"GOSUB .... calls a batch file sub-routine [.BTM]",13,10
+	DEFB	"GOTO ..... continues batch file from label [.BTM]",13,10
+	DEFB	"HELP ..... gives help information on a command",13,10
+	DEFB	"HERTZ .... sets the VDP VBlank refresh speed",13,10
+	DEFB	"HISTORY .. displays the command history list or resizes the history buffer",13,10
+	DEFB	"IF ....... executes command if equation is true",13,10
+	DEFB	"IFF ...... sets Command Mode ON if equation is true",13,10
+	DEFB	"INKEY .... reads character into environment item",13,10
+	DEFB	"INPUT .... reads string into environment item",13,10
+	DEFB	"KMODE .... sets or resets ",34,"Kanji Mode",34,13,10
+	DEFB	"LOCK ..... locks/unlocks a drive",13,10
+	DEFB	"MAPDRV ... maps a drive to a device and partition or mounts a file",13,10
+	DEFB	"MD ....... see MKDIR",13,10
+	DEFB	"MEM ...... displays a compact memory mapper listing",13,10
+	DEFB	"MEMORY ... displays the amount and status of system RAM",13,10
+	DEFB	"MKDIR .... creates a new sub-directory",13,10
+	DEFB	"MODE ..... changes the screen mode",13,10
+	DEFB	"MOVE ..... moves files on a disk",13,10
+	DEFB	"MVDIR .... moves sub-directories",13,10
+	DEFB	"PATH ..... displays/sets the command search path",13,10
+	DEFB	"PAUSE .... prompts for a keypress",13,10
+	DEFB	"POPD ..... restores the current drive and directory",13,10
+	DEFB	"PUSHD .... stores the current drive and directory",13,10
+	DEFB	"RALLOC ... displays/sets the reduced allocation information mode",13,10
+	DEFB	"RAMDISK .. displays/sets the size of the RAM disk",13,10
+	DEFB	"RD ....... see RMDIR",13,10
+	DEFB	"REM ...... remark... Ignores the following text.",13,10
+	DEFB	"REN ...... see RENAME",13,10
+	DEFB	"RENAME ... renames files",13,10
+	DEFB	"RESET .... resets system",13,10
+	DEFB	"RETURN ... returns from a batch file sub-routine [.BTM]",13,10
+	DEFB	"RMDIR .... removes empty sub-directories",13,10
+	DEFB	"RNDIR .... renames sub-directories",13,10
+	DEFB	"SET ...... displays/sets environment strings",13,10
+	DEFB	"SHELLRAM . displays/sets the use of a RAM segment for shell features",13,10
+	DEFB	"SHIFT .... shifts arguments for a batch file one step to the left",13,10
+	DEFB	"THEN ..... executes the following command",13,10
+	DEFB	"TIME ..... displays/sets the current time",13,10
+	DEFB	"TO ....... changes to another directory",13,10
+	DEFB	"TREE ..... displays directories in a tree format",13,10
+	DEFB	"TYPE ..... displays the contents of files",13,10
+	DEFB	"UNDEL .... recovers deleted files",13,10
+	DEFB	"VER ...... displays Nextor version numbers",13,10
+	DEFB	"VERIFY ... displays/sets the current verify state",13,10
+	DEFB	"VOL ...... displays/sets disk volume name",13,10
+	DEFB	"XCOPY .... copies files from a directory tree",13,10
+	DEFB	"XDIR ..... displays filenames in a directory tree",13,10
+	DEFB	"Z80MODE .. displays/sets the Z80 access mode for a legacy driver",13,10
+	DEFB	13,10
+	DEFB	"Help for other Nextor features is also available.",13,10
+	DEFB	"The standard topics are:",13,10
+	DEFB	13,10
+	DEFB	"ALI ...... aliases and executable extensions",13,10
+	DEFB	"BATCH .... batch files",13,10
+	DEFB	"EDITING .. command line editing and re-entering",13,10
+	DEFB	"ENV ...... environment strings",13,10
+	DEFB	"ERRORS ... error messages and Abort, Retry errors",13,10
+	DEFB	"IO ....... redirection, piping and standard I/O",13,10
+	DEFB	"SYNTAX ... notation used in command descriptions",13,10
+	DEFB	0
+
+	DEFB	"Insert COMMAND3.COM disk in drive ",0,":",0
+	DEFB	"Destroy all data on RAM disk (Y/N)? ",0
+	DEFB	"COMMAND3.COM: Wrong version of Nextor",0
+	DEFB	"Terminate batch file (Y/N)? ",0
+	DEFB	"Insert batch file disk in drive ",0,":",0
+	DEFB	"Redirection error: ",0
+	DEFB	"Piping error: ",0
+	DEFB	"Batch file error: ",0
+	DEFB	"Standard input error: ",0
+	DEFB	"Standard output error: ",0
+	DEFB	" total disk space",0
+	DEFB	" used by files and directories",0
+	DEFB	" available disk space",0
+	DEFB	" = ",0
+	DEFB	"Not enough memory, system halted",0
+	DEFB	"CPU mode is ",0
+	DEFB	"Z80",0
+	DEFB	"R800-ROM",0
+	DEFB	"R800-RAM",0
+	DEFB	"DiskCheck is ",0
+	DEFB	" bytes",0
+	DEFB	" total RAM in Slot ",0
+	DEFB	" used by system",0
+	DEFB	" used by user",0
+	DEFB	" total TPA memory",0
+	DEFB	" total history buffer",0
+	DEFB	" total alias memory",0
+	DEFB	" total variable swap memory",0
+	DEFB	"COMMAND3.COM: Wrong version of NEXTOR.SYS",0
+	DEFB	"Zero allocation information mode is active, no space information to report",0
+	DEFB	"Press any key... ",0
+	DEFB	"Shell RAM is ",0
+	DEFB	"Shell RAM state can not be changed from a nested shell",0
+

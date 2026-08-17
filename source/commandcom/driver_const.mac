@@ -1,0 +1,25 @@
+	name('drvconst')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Driver interface constants
+;******************************************************************************
+;
+;        The Nextor driver interface constants (routine entry points,
+; DEVICE_QUERY subfunction codes and driver result codes), taken from
+; the SDK includes exactly as the kernel's data.mac does, so that the
+; DEVINFO command can talk to drivers through _CDRVR. Constants only:
+; this module contributes no bytes to the binary.
+;
+;******************************************************************************
+
+	module DRIVER
+
+	INCLUDE ../../sdk/asm/constants/driver_routines.inc
+	INCLUDE ../../sdk/asm/constants/driver_result_codes.inc
+
+	endmod
+
+	module DEVICE_QUERY
+
+	INCLUDE ../../sdk/asm/constants/driver_device_queries.inc
+
+	endmod

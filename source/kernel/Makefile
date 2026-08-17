@@ -272,7 +272,13 @@ bank2/val.rel: bank2/bootsect.mac
 
 bank6/b6.rel: bank2/b2labels.inc bank0/b0lab_b6.inc
 
-bank0/B0.BIN bank0/B0.SYM: \
+# The BIN+SYM pairs use grouped targets (&:, GNU make 4.3+): one LK80 run
+# produces both files. With the classic multi-target syntax make treats
+# them as two independent rules sharing a recipe, so under `make -j` the
+# two consumers (the BIN goes into nextor_base.dat, the SYM into the
+# generated label .inc files) fire the same link twice concurrently and
+# the runs collide on the output files.
+bank0/B0.BIN bank0/B0.SYM &: \
 	$(COMRELS) \
 	$(B0RELS) \
 	drv.rel \
@@ -333,7 +339,7 @@ bank2/b2.rel: \
 
 	$(call assemble,bank2/b2.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-bank2/B2.BIN bank2/B2.SYM: \
+bank2/B2.BIN bank2/B2.SYM &: \
 	$(COMRELS) \
 	$(B2RELS) \
 	bank2/b2.rel \
@@ -395,7 +401,7 @@ bank4/partit.rel: \
 
 	$(call assemble,bank4/partit.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-bank4/B4.BIN bank4/B4.SYM: \
+bank4/B4.BIN bank4/B4.SYM &: \
 	$(COMRELS) \
 	$(B4RELS) \
 	bank4/partit.rel \
@@ -422,7 +428,7 @@ bank5/B5.BIN: \
 			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b5.rel \
 			--code 7fd0h ../chgbnk.rel
 
-bank6/B6.BIN bank6/B6.SYM: \
+bank6/B6.BIN bank6/B6.SYM &: \
 	$(COMRELS) \
 	$(B6RELS) \
 	print_call_help.rel \

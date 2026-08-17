@@ -1,0 +1,795 @@
+	name('start')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Startup, reload and initialisation
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        Program entry point and banner, the code that keeps a copy of the
+; CLI at the top of the TPA and re-loads COMMAND3.COM from disk after a
+; transient program has overwritten it, and the once-only initialisation.
+;
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
+;
+;******************************************************************************
+	JP	START
+
+BANNER:	DEFB	13
+	DEFB	"COMMAND3 - Nextor command interpreter",13,10
+	DEFB	"Version "
+	INCLUDE	version.inc
+	DEFB	13,10
+	DEFB	"(c) 2026 by Konamiman",13,10
+	DEFB	13,10
+	DEFB	"Based on:",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.31",13,10
+	DEFB	"(c) 1991 by ASCII Corporation",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.41",13,10
+	DEFB	"(c) 1997 by C.P.U.",13,10
+	DEFB	13,10
+	DEFB	"Inspired by:",13,10
+	DEFB	13,10
+	DEFB	"COMMAND2.COM 2.44",13,10
+	DEFB	"(c) 2010 by The New Image",13,10
+	DEFB	10,26
+
+COPYBACK:	LD	SP,#F51F
+SAVETPA:	LD	HL,#00
+	DEC	HL
+	DEC	HL
+	LD	SP,HL
+	LD	HL,(#01)
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	PUSH	DE
+	EX	DE,HL
+	LD	DE,COPYBACK
+	LD	BC,RELOAD-COPYBACK
+	LDIR
+	PUSH	DE
+	LD	BC,START-RELOAD
+	LDIR
+	RET
+
+RELOAD:	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	LD	(RGETADR+1),HL
+	POP	HL
+	DEC	HL
+	LD	A,(SHRAMF)	; With SHELLRAM OFF the whole variable
+	OR	A	;   region BOOTSTRAP..BUFFER1-1 was
+	LD	DE,EXITADDR##-1	;   saved below the resident code;
+	LD	BC,EXITADDR##-BOOTSTRAP##	;   with SHELLRAM ON only the 9 bytes
+	JR	Z,RLD10	;   below EXITADDR are (the rest is
+	LD	DE,BUFFER1##-1	;   popped from the mapper segment
+	LD	BC,BUFFER1##-BOOTSTRAP##	;   at MAPCALL1 further down).
+RLD10:	LDDR
+	LD	HL,BOOTSTRAP##
+	LD	DE,#00
+	LD	BC,#08
+	LDIR
+	LD	DE,#00
+	LD	C,_DEFER##
+	CALL	BDOS
+	LD	DE,ABEXIT4
+	LD	C,_DEFAB##
+	CALL	BDOS
+	LD	HL,#0100
+	LD	(HL),#C3
+	INC	HL
+	LD	(HL),LOW START
+	INC	HL
+	LD	(HL),HIGH START
+	LD	A,(EXECID##)
+	LD	B,A
+	LD	C,_JOIN##
+	CALL	BDOS
+	JR	NZ,REL10
+	LD	A,B
+REL10:	LD	(ERR1+1),A
+	LD	A,C
+	LD	(ERR2+1),A
+	LD	A,(SHRAMF)	; With SHELLRAM OFF there is no mapper
+	OR	A	;   segment to pop variables from
+	JR	NZ,RLD20	;   (all restored above already).
+MAPCALL1:	LD	A,#00
+MAPADDR1:	CALL	#00
+	LD	HL,(VAREND+#8000)
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	EX	DE,HL
+	LD	(VAREND+#8000),HL
+	LD	DE,BUFFER1##-1
+	LD	BC,BUFFER1##-EXITADDR##
+	LDDR
+MAPCALL2:	LD	A,#00
+MAPADDR2:	CALL	#00
+RLD20:	LD	A,#01
+	LD	BC,_REDIR##
+	CALL	BDOS
+	LD	A,B
+	LD	(SETREDIR+1),A
+	LD	DE,ABEXIT5
+	LD	C,_DEFAB##
+	CALL	BDOS
+	CALL	CHKSUM
+	POP	HL
+	CALL	NZ,CPYCHK
+	JP	Z,SETREDIR
+	LD	HL,SHELL$
+	LD	DE,ENVDATA##
+	LD	B,#FF
+	LD	C,_GENV##
+	CALL	BDOS
+	JR	NZ,MAP10
+	LD	A,(DE)
+	OR	A
+	JR	Z,MAP10
+	PUSH	DE
+	LD	BC,_PARSE##
+	CALL	BDOS
+	POP	HL
+	JR	NZ,MAP10
+	LD	(DE),A
+	LD	A,#01
+	EX	DE,HL
+	LD	C,_OPEN##
+	CALL	BDOS
+	JR	Z,MAP20
+MAP10:	LD	DE,DSHELL$
+	LD	A,#01
+	LD	C,_OPEN##
+	CALL	BDOS
+	JR	NZ,ABE10
+MAP20:	LD	HL,START-#0100
+	XOR	A
+	LD	E,A
+	LD	D,A
+	LD	C,_SEEK##
+	PUSH	BC
+	CALL	BDOS
+	POP	BC
+	JR	NZ,ABE10
+	LD	DE,START
+	LD	HL,STACK##-START
+	LD	C,_READ##
+	PUSH	BC
+	CALL	BDOS
+	EX	AF,AF'
+	POP	BC
+	LD	C,_CLOSE##
+	CALL	BDOS
+	JR	NZ,ABE10
+	EX	AF,AF'
+	JR	NZ,ABE10
+	LD	A,.BADCOM##
+ABEXIT5:	LD	SP,(ENDTPA##)
+	PUSH	AF
+	CALL	CHKSUM
+	POP	BC
+	LD	A,B
+	JR	NZ,ABE10
+SETREDIR:	LD	B,#00
+	LD	C,_REDIR##
+	LD	A,#01
+	CALL	BDOS
+	LD	DE,CLI_ABORT##
+	LD	C,_DEFAB##
+	CALL	BDOS
+	LD	DE,ENVDATA##
+	XOR	A
+	LD	(DE),A
+	LD	HL,PARAM$##
+	LD	C,_SENV##
+	PUSH	DE
+	CALL	BDOS
+	POP	DE
+	LD	HL,PROG$##
+	LD	C,_SENV##
+	CALL	BDOS
+	LD	A,#FF
+	LD	(XTRACRLF##),A
+ERR1:	LD	A,#00
+ERR2:	LD	B,#00
+	JP	CLI_ABORT##
+
+ABEXIT4:	OR	A
+	LD	C,B
+	POP	HL
+	RET
+
+ABE10:	PUSH	AF
+	LD	A,#01
+	LD	BC,_REDIR##
+	CALL	BDOS
+	POP	AF
+	CP	.NOFIL##
+	JR	Z,ABE30
+	LD	DE,ENVDATA##
+	LD	B,A
+	PUSH	AF
+	LD	C,_EXPLAIN##
+	CALL	BDOS
+	POP	AF
+	PUSH	DE
+	CP	.STOP##
+	JR	Z,ABE20
+	CP	.CTRLC##
+ABE20:	CALL	Z,RPRCRLF
+	CALL	RPRCRLF
+	LD	A,#00
+	CALL	RPRCODE
+	POP	DE
+	CALL	RPRSTR
+	LD	A,#01
+	CALL	RPRCODE
+ABE30:	CALL	RPRCRLF
+	LD	A,#02
+	CALL	RPRCODE
+	LD	A,(DSHELL$)
+	CALL	RPRCHR
+	LD	A,#03
+	CALL	RPRCODE
+	CALL	RPRCRLF
+	LD	A,#04
+	CALL	RPRCODE
+ABE40:	LD	C,_CONST##
+	CALL	BDOS
+	PUSH	AF
+	LD	C,_INNOE##
+	CALL	BDOS
+	POP	AF
+	JR	NZ,ABE40
+	CALL	RPRCRLF
+	LD	A,L
+	AND	%11011111
+	CP	"A"
+	JP	C,MAP10
+	CP	"I"
+	JP	NC,MAP10
+	LD	(DSHELL$),A
+	JP	MAP10
+
+CPYCHK:	LD	DE,START
+	LD	BC,STACK##-START
+	LDIR
+CHKSUM:	CALL	MKSUM
+	LD	BC,CSUM1
+	PUSH	IX
+	EX	(SP),HL
+	CALL	CMPSUM
+	POP	HL
+	RET	NZ
+CMPSUM:	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A
+	OR	A
+	SBC	HL,DE
+	RET
+
+MKSUM:	LD	BC,0+(STACK##-START)/4	; The 0+ forces an immediate:
+			;   an operand starting with "(" is
+			;   a memory reference, so 2.4x's
+			;   LD BC,(STACK-START)/4 actually
+			;   loaded the count from a code
+			;   address (a latent bug that made
+			;   the re-load checksum meaningless
+			;   or, with unlucky layouts like
+			;   ours, permanently mismatched).
+	EXX
+	LD	BC,START
+	LD	HL,#00
+	PUSH	HL
+	POP	IX
+MKS10:	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A
+	ADD	IX,DE
+	LD	A,(BC)
+	INC	BC
+	LD	E,A
+	LD	A,(BC)
+	INC	BC
+	LD	D,A
+	ADC	HL,DE
+	EXX
+	DEC	BC
+	LD	A,B
+	OR	C
+	EXX
+	JR	NZ,MKS10
+	RET
+
+CSUM1:	DEFW	#00
+CSUM2:	DEFW	#00
+SHRAMF:	DEFB	#00	; NZ => SHELLRAM OFF. The stub reads it
+			;   before any variable has been
+			;   restored, so it lives here in the
+			;   stub itself, not in the variable
+			;   area; SETSHR keeps the relocated
+			;   copy at the top of the TPA in
+			;   sync with SHRAMFL.
+
+RPRCODE:	CALL	RGETADR
+RPR10:	LD	A,(DE)
+	OR	A
+	RET	Z
+	DEC	DE
+	CALL	RPRCHR
+	JR	RPR10
+
+RGETADR:	LD	DE,#00
+	LD	B,A
+	INC	B
+RGE10:	DEC	B
+	RET	Z
+RGE20:	LD	A,(DE)
+	DEC	DE
+	OR	A
+	JR	NZ,RGE20
+	JR	RGE10
+
+RPRSTR:	LD	A,(DE)
+	OR	A
+	RET	Z
+	CALL	RPRCHR
+	INC	DE
+	JR	RPRSTR
+
+RPRCRLF:	LD	A,#0D
+	CALL	RPRCHR
+	LD	A,#0A
+RPRCHR:	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A
+	LD	C,_CONOUT##
+	CALL	BDOS
+	POP	BC
+	POP	DE
+	POP	HL
+	RET
+
+SHELL$:	DEFB	"SHELL",0
+DSHELL$:	DEFB	"A:\COMMAND3.COM",0
+DHELP$::	DEFB	"A:\HELP",0
+DROOT$:	DEFB	"A:\",0
+
+MAXBUFLEN::	DEFW	 4096
+
+START::	LD	SP,BOOTSTRAP##
+	LD	A,(#37)
+	EX	AF,AF'
+	LD	B,#5A	; _DOSVER with the magic numbers:
+	LD	HL,#1234	;   only Nextor returns the extended
+	LD	DE,#ABCD	;   version information in IX/IY.
+	LD	IX,#00
+	LD	C,_DOSVER##
+	CALL	BDOS
+	LD	A,#01	; The kernel must be DOS 2
+	CP	B	;   compatible. (A DOS 1 kernel that
+	JR	NC,STA10	;   ignores _DOSVER leaves B=5Ah:
+	PUSH	IX	;   that is caught by IXh below.)
+	POP	BC	; B = IXh, C = IXl.
+	LD	A,B
+	CP	#01	; IXh = 1 => the kernel is Nextor
+	JR	NZ,STA10	;   (0 => plain MSX-DOS 2).
+	LD	A,C	; IXl = Nextor kernel major version
+	CP	#03	;   (from ROM, cannot be spoofed):
+	JR	C,STA10	;   must be at least 3.
+	LD	A,D	; NEXTOR.SYS major version (BCD):
+	CP	#03	;   must be at least 3 as well.
+	JR	NC,STA20
+	LD	A,#50	; 'Wrong version of NEXTOR.SYS'.
+	JR	STA15
+STA10:	LD	A,#35	; 'Wrong version of Nextor'.
+STA15:	PUSH	AF
+	CALL	RPRCRLF
+	LD	A,#0D
+	CALL	DMESS##
+	POP	AF
+	CALL	DMESS##
+	LD	A,#0E
+	CALL	DMESS##
+	CALL	RPRCRLF
+	CALL	RPRCRLF
+	LD	A,#52	; 'Press any key... ', wait for
+	CALL	DMESS##	;   the key and drop to disk
+	LD	C,_INNOE##	;   BASIC (the same strategy
+	CALL	BDOS	;   NEXTOR.SYS follows).
+	XOR	A	; Clear the FCBs and the command
+	LD	(#80),A	;   tail, as LDCOME does: disk
+	LD	HL,#80	;   BASIC auto-runs any file name
+	LD	B,#24	;   it finds in the FCB at 5Ch,
+STA17:	DEC	HL	;   and at this point that area
+	LD	(HL),A	;   holds leftovers from the
+	DJNZ	STA17	;   program loader.
+	LD	SP,#F51F
+	CALL	#F368
+	JP	#4022
+
+STA20:	LD	DE,#00
+	PUSH	DE
+	LD	C,_DEFAB##
+	CALL	BDOS
+	POP	DE
+	LD	C,_DEFER##
+	CALL	BDOS
+	LD	A,(BOOTDRV)
+	ADD	A,"@"
+	LD	(DHELP$),A
+	LD	(DSHELL$),A
+	LD	(DROOT$),A
+	LD	BC,#04
+	LD	DE,DIRBUF##
+	LD	HL,DROOT$
+	LDIR
+	LD	A,(#FBED)
+	BIT	1,A
+	JR	NZ,STA30
+	LD	HL,#00
+	LD	(#80),HL
+STA30:	CALL	SETLANG##
+	LD	HL,SHRAM$##	; 'SHELLRAM' environment item OFF:
+	CALL	OFF?##	;   honour it, without touching
+	JR	NC,STA45	;   RTYCNT (a marked segment stays
+	CALL	FINDSEG	;   adoptable). The item survives
+	JR	NC,STA55	;   BASIC round trips, unlike
+	XOR	A	;   anything in the TPA.
+	LD	(RTYCNT),A	; No free segment: the remembered
+			;   mark, if any, was no good.
+STA45:	LD	A,#01	; Run with SHELLRAM OFF, silently
+	LD	(SHRAMFL##),A	;   (the SHELLRAM command shows
+	LD	(SHRAMF),A	;   the state; 2.4x froze the
+	JR	STA60	;   machine when no segment was
+			;   free).
+
+STA55:	XOR	A	; SHELLRAM ON, the normal state.
+	LD	(SHRAMFL##),A
+	LD	(SHRAMF),A
+STA60:	LD	HL,#00
+	LD	DE,BOOTSTRAP##
+	LD	BC,#08
+	LDIR
+	LD	A,(MAPPAGE##)
+	LD	(MAPCALL1+1),A
+	CALL	GET_P2##
+	LD	(MAPCALL2+1),A
+	LD	HL,(MAPADDR##)
+	LD	DE,#24
+	ADD	HL,DE
+	LD	(MAPADDR1+1),HL
+	LD	(MAPADDR2+1),HL
+	CALL	MKSUM
+	LD	(CSUM1),IX
+	LD	(CSUM2),HL
+	LD	DE,(#06)
+	LD	BC,#0701
+STA70:	DEC	DE
+	DJNZ	STA70
+STA80:	PUSH	BC
+	EXX
+	POP	DE
+	CALL	FENV##
+	JR	NZ,STA110
+	OR	(HL)
+	JR	Z,STA120
+	CALL	GENV##
+	EXX
+	CALL	CHKMEM
+	LD	HL,ENVNAME##
+STA90:	LD	A,(HL)
+	INC	HL
+	LD	(DE),A
+	DEC	DE
+	OR	A
+	JR	NZ,STA90
+	LD	HL,ENVDATA##
+STA100:	LD	A,(HL)
+	INC	HL
+	LD	(DE),A
+	DEC	DE
+	OR	A
+	JR	NZ,STA100
+	EXX
+STA110:	EXX
+	INC	BC
+	JR	STA80
+
+STA120:	EXX
+	LD	(DE),A
+	DEC	DE
+	LD	HL,STRCODES
+	LD	C,#05
+	PUSH	DE
+	PUSH	DE
+STA130:	LD	A,(HL)
+	INC	HL
+	CALL	GETMSG##
+	EX	(SP),HL
+	EX	DE,HL
+	CALL	CHKMEM
+	EX	DE,HL
+STA140:	LD	A,(DE)
+	INC	DE
+	LD	(HL),A
+	DEC	HL
+	OR	A
+	JR	NZ,STA140
+	EX	(SP),HL
+	DEC	C
+	JR	NZ,STA130
+	POP	HL
+	POP	DE
+	LD	(HL),D
+	DEC	HL
+	LD	(HL),E
+	DEC	HL
+	EX	DE,HL
+	LD	L,E
+	LD	H,D
+	LD	BC,START-COPYBACK+EXITADDR##-BOOTSTRAP##
+	OR	A
+	SBC	HL,BC
+	LD	A,(SHRAMFL##)	; With SHELLRAM OFF the whole variable
+	OR	A	;   region is saved below the
+	JR	Z,STA125	;   resident code, not just 9 bytes
+	LD	BC,BUFFER1##-EXITADDR##	;   of it: keep the save slot out
+	SBC	HL,BC	;   of the TPA.
+STA125:	LD	(SAVETPA+1),HL
+	LD	(ENDTPA##),HL
+	CALL	CHKMEM
+	LD	HL,START-1
+	LD	BC,START-COPYBACK
+	LDDR
+	CALL	CHKMEM
+	LD	(EXITADDR##),DE
+	LD	C,E
+	LD	B,D
+	INC	BC
+	LD	HL,(#01)
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	(WARMBOOT##),DE
+	EXX
+	LD	DE,EXIT##
+	LD	C,_DEFAB##
+	CALL	BDOS
+	EXX
+	LD	(HL),B
+	DEC	HL
+	LD	(HL),C
+	EX	AF,AF'
+	OR	A
+	JR	Z,STA170
+	LD	HL,PROG$##
+	CALL	GENV2##
+	LD	HL,SHELL$
+	JR	NZ,STA150
+	LD	A,(DE)
+	OR	A
+	JR	NZ,STA160
+STA150:	LD	DE,DSHELL$
+	LD	C,_SENV##
+	CALL	BDOS
+	XOR	A
+STA160:	CALL	NZ,SENV2##
+STA170:	LD	HL,HELP$##
+	LD	DE,DHELP$
+	CALL	PUTENV
+	LD	HL,TEMP$##
+	LD	DE,DROOT$
+	CALL	PUTENV
+	LD	HL,DATE$##
+	LD	DE,DDATE1$
+	LD	A,(DATEFMT)
+	AND	#07
+	CP	#01
+	JR	C,STA180
+	LD	DE,DDATE2$
+	JR	Z,STA180
+	LD	DE,DDATE3$
+STA180:	CALL	PUTENV
+	LD	HL,TIME$##
+	LD	DE,DTIME$
+	CALL	PUTENV
+	LD	HL,PATH$##
+	LD	DE,DEMPTY$
+	CALL	PUTENV
+	LD	HL,CDPATH$##
+	LD	DE,DEMPTY$
+	CALL	PUTENV
+	LD	HL,PROMPT$##
+	LD	DE,DPROMPT$##
+	CALL	PUTENV
+	LD	HL,EXPERT$##
+	LD	DE,ON$##
+	CALL	PUTENV
+	LD	HL,ECHO$##
+	LD	DE,OFF$##
+	CALL	PUTENV
+	LD	HL,UPPER$##
+	LD	DE,OFF$##
+	CALL	PUTENV
+	LD	HL,LOWER$##
+	LD	DE,OFF$##
+	CALL	PUTENV
+	LD	HL,REDIR$##
+	LD	DE,ON$##
+	CALL	PUTENV
+	LD	HL,ALIAS$##
+	LD	DE,ON$##
+	CALL	PUTENV
+	LD	HL,SEPAR$##
+	LD	DE,ON$##
+	CALL	PUTENV
+	LD	HL,EXPAND$##
+	LD	DE,ON$##
+	CALL	PUTENV
+	LD	HL,SHRAM$##	; (Only materialises the default:
+	LD	DE,ON$##	;   a surviving OFF is preserved,
+	CALL	PUTENV	;   PUTENV never overwrites.)
+	LD	HL,TABORD$##
+	LD	DE,DTABORD$##
+	CALL	PUTENV
+	LD	DE,ENVDATA##
+	XOR	A
+	LD	(DE),A
+	LD	HL,PARAM$##
+	LD	C,_SENV##
+	PUSH	DE
+	CALL	BDOS
+	POP	DE
+	LD	HL,PROG$##
+	LD	C,_SENV##
+	CALL	BDOS
+	JP	CLI##
+
+;        Adopt the mapper segment remembered in RTYCNT (when it carries
+; the "C2" magic mark), or allocate a fresh one and initialise its
+; header: empty history buffer (1K), empty alias list (10K) and empty
+; variable swap stack (top at BFFFh). Called at boot and by SHELLRAM ON.
+; On exit, NC => MAPPAGE and RTYCNT set up; Cy => no free segment.
+;
+FINDSEG::	LD	A,(RTYCNT)
+	OR	A
+	JR	Z,FSG10
+	LD	HL,MAGICW	; Trust the remembered segment
+	CALL	RD_SEG##	;   number only if the segment
+	CP	"C"	;   carries the magic mark (RTYCNT
+	JR	NZ,FSG10	;   is a repurposed BIOS byte:
+	LD	A,(RTYCNT)	;   anything else writing it would
+	LD	HL,MAGICW+1	;   leave a corrupt pointer).
+	CALL	RD_SEG##
+	CP	"2"
+	JR	NZ,FSG10
+	LD	A,(RTYCNT)
+	LD	(MAPPAGE##),A
+	OR	A	; NC: adopted as it is.
+	RET
+
+FSG10:	LD	B,#00	; Allocate a system segment from
+	LD	A,#01	;   any mapper slot. (2.4x passed
+	CALL	ALL_SEG##	;   whatever A and B held here,
+	RET	C	;   which happened to work.)
+	LD	(MAPPAGE##),A
+	LD	(RTYCNT),A
+	LD	HL,MAGICW	; Mark the segment as initialised
+	LD	A,"C"	;   (see the RTYCNT check above).
+	CALL	WRCHR##
+	INC	HL
+	LD	A,"2"
+	CALL	WRCHR##
+	LD	HL,BUFADDR
+	CALL	SETPUTADDR##
+	CALL	SETRDADDR##
+	DEC	HL
+	CALL	SETENDADDR##
+	LD	HL,#0400
+	CALL	SETBUFLEN##
+	LD	HL,BUFADDR+#0400
+	PUSH	HL
+	CALL	SETALIADDR##
+	LD	HL,BUFADDR+#0400+#2800
+	CALL	SETALIEND##
+	POP	HL
+	XOR	A
+	CALL	WRCHR##
+	INC	HL
+	CALL	WRCHR##
+	LD	HL,VAREND
+	LD	A,#FF
+	CALL	WRCHR##
+	INC	HL
+	LD	A,#BF
+	CALL	WRCHR##
+	OR	A	; NC: freshly initialised.
+	RET
+
+;        Bring everything that depends on the SHELLRAM state in sync with a
+; freshly changed SHRAMFL (called by the SHELLRAM command): the stub's own
+; flag byte, both in the low image and in the relocated copy at the top
+; of the TPA (the address of that copy is (EXITADDR)+1), the TPA
+; ceiling in ENDTPA, and the stack address the stub loads at child exit
+; time (SAVETPA+1), again in both copies. With SHELLRAM OFF the ceiling
+; drops by the size of the variable region, so that transient programs
+; cannot overwrite the save slot below the resident code.
+;
+SETSHR::	LD	A,(SHRAMFL##)
+	LD	(SHRAMF),A	; The low image copy of the flag...
+	PUSH	AF
+	LD	HL,(EXITADDR##)
+	LD	BC,SHRAMF-COPYBACK+1	; ...and the relocated one.
+	ADD	HL,BC
+	LD	(HL),A
+	LD	HL,(EXITADDR##)	; The SHELLRAM ON ceiling: just below
+	LD	BC,EXITADDR##-BOOTSTRAP##	;   the 9 variable bytes saved
+	OR	A	;   under the resident code.
+	SBC	HL,BC
+	POP	AF
+	OR	A
+	JR	Z,SXF10
+	LD	BC,BUFFER1##-EXITADDR##	; SHELLRAM OFF: the save slot for the
+	SBC	HL,BC	;   rest of the variable region
+SXF10:	LD	(ENDTPA##),HL	;   lies below those bytes.
+	LD	(SAVETPA+1),HL	; Low image copy...
+	EX	DE,HL
+	LD	HL,(EXITADDR##)	; ...and relocated copy of the
+	LD	BC,SAVETPA+1-COPYBACK+1	;   stub's stack address.
+	ADD	HL,BC
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	RET
+
+CHKMEM:	PUSH	HL
+	PUSH	DE
+	LD	HL,ENVDATA##
+	OR	A
+	SBC	HL,DE
+	LD	DE,#F5FF
+	SBC	HL,DE
+	POP	DE
+	POP	HL
+	RET	C
+	LD	B,.NORAM##
+	LD	C,_TERM##
+	JP	BDOS
+
+PUTENV:	PUSH	DE
+	PUSH	HL
+	CALL	GENV2##
+	LD	A,(DE)
+	POP	HL
+	POP	DE
+	RET	NZ
+	OR	A
+	RET	NZ
+	LD	C,_SENV##
+	JP	BDOS
+
+DDATE1$:	DEFB	"yy-mm-dd",0
+DDATE2$:	DEFB	"mm-dd-yy",0
+DDATE3$:	DEFB	"dd-mm-yy",0
+DEMPTY$:	DEFB	";",0
+DTIME$:	DEFB	"24",0
+
+STRCODES:	DEFB	#0D,#0E,#32,#33,#0F
+

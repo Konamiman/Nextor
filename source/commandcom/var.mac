@@ -1,0 +1,129 @@
+	name('var')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Runtime variables
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        The runtime variables, allocated past the end of the binary image
+; (they are not part of the COMMAND3.COM file).
+;
+;        Based on COMMAND.COM 2.31, copyright (1986) IS Systems Ltd, and on
+; the COMMAND2.COM 2.40/2.41 additions by Fokke Post, whose source code was
+; released as freeware in 2003.
+;
+;******************************************************************************
+
+VAR	MACRO	NAME, SIZE
+NAME	 EQU	VARIABLES + VAR_OFFSET
+GLOBAL	 NAME
+VAR_OFFSET DEFL	VAR_OFFSET + (SIZE)
+	ENDM
+;
+VARIABLES EQU	$		; First address past the binary image
+VAR_OFFSET DEFL	0
+;
+	VAR	STACK, 256
+	VAR	BOOTSTRAP, 8
+	VAR	EXECID, 1
+	VAR	EXITADDR, 2
+	VAR	WARMBOOT, 2
+	VAR	CMDCHR1, 1
+	VAR	CMDCHR2, 1
+	VAR	BATPAGE, 1
+	VAR	MAPPAGE, 1
+	VAR	TMPPAGE, 1
+	VAR	SHRAMFL, 1	; NZ => SHELLRAM OFF: no mapper segment.
+	VAR	MSXVER, 1
+	VAR	MAPADDR, 2
+	VAR	MAPTAB, 2
+	VAR	STRCODE, 1
+	VAR	PIPEADDR, 2
+	VAR	NEXTADDR, 2
+	VAR	INHNDL, 1
+	VAR	OUTHNDL, 1
+	VAR	PIPEID, 1
+	VAR	PIPEFN, 12	; Was initialised to "            " (never relied upon)
+	VAR	IFFADDR, 2
+	VAR	IFFLIST, 17
+	VAR	GOSUBADDR, 2
+	VAR	GOSUBLIST, 16
+	VAR	FILECNT, 2
+	VAR	FILETOT1, 2
+	VAR	FILETOT2, 2
+	VAR	BATHNDL, 1
+	VAR	REDIRID2, 1
+	VAR	ERRCODE, 1
+	VAR	ORIGLINE, 130
+	VAR	LINEADDR, 2
+	VAR	BATBUF, 256
+	VAR	BATLINLEN, 2
+	VAR	BATLINADDR, 2
+	VAR	REDIRID, 1
+	VAR	ENDTPA, 2
+	VAR	DIRBUF, 3	; Was initialised to "A:\" (never relied upon)
+	VAR	UNUSED1, 64
+	VAR	LINEBUF, 256
+	VAR	BUFFER2, 131
+	VAR	BUFFER1, 131
+	VAR	PATHLEN, 1
+	VAR	ABORTERR, 1
+	VAR	FIB1, 64
+	VAR	FIB2, 64
+	VAR	FIB3, 64
+	VAR	LINEADDR2, 2
+	VAR	VALUEL, 2
+	VAR	VALUEH, 2
+	VAR	FILESFND, 2
+	VAR	CNTFILE, 2
+	VAR	ATTRIB1, 1
+	VAR	ATTRIB2, 1
+	VAR	OPTADDR, 2
+	VAR	LASTITEM, 2
+	VAR	SRCHADDR, 2
+	VAR	SRCHADDR2, 2
+	VAR	DESTADDR, 2
+	VAR	UNKNOWN2, 2
+	VAR	FILEDATE, 2
+	VAR	FILETIME, 2
+	VAR	FDFLAGS, 1	; b3 = match found; b2 = may switch file/dir; b1 = dirs; b0 = files
+	VAR	REDIRST, 1	; IY+#00
+	VAR	XTRACRLF, 1
+	VAR	UNUSED2, 1
+	VAR	OPTFLAG1, 1
+	VAR	OPTFLAG2, 1
+	VAR	OPTFLAG3, 1
+	VAR	OPTFLAG4, 1
+	VAR	UNKNOWN3, 1
+	VAR	DIRFLAG, 1
+	VAR	CURDRIVE, 1
+	VAR	PRSFLAGS, 1
+	VAR	LOGDRV, 1
+	VAR	LOGDRV2, 1
+	VAR	COLMAX2, 1
+	VAR	ROWMAX, 1
+	VAR	COLMAX, 1
+	VAR	COLCNT, 1
+	VAR	UNUSED3, 1
+	VAR	DATEFORM, 1
+	VAR	TIMEFORM, 1
+	VAR	TYPHNDL, 1
+	VAR	NULHNDL, 1
+	VAR	VFYSTATE, 1
+	VAR	COPYID, 1
+	VAR	DESTFLAGS, 1
+	VAR	FILEBUF, 11	; Was initialised to "           " (never relied upon)
+	VAR	POSITION, 2
+	VAR	INSFLAG, 1
+	VAR	APPENDF, 1
+	VAR	INSPOS, 1
+	VAR	ALISTATE, 1	; IY+#29
+	VAR	SEPSTATE, 1	; IY+#2A
+	VAR	MININSPOS, 1
+	VAR	TABSKIP, 1	; Consecutive "."/".." skips in TAB completion.
+	VAR	ENVDATA, 255
+	VAR	ENVNAME, 255
+	VAR	XBUF1, 255
+	VAR	XBUF2, 255
+	VAR	XBUF3, 255
+;
+; Total: 2867 bytes

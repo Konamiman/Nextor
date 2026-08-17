@@ -1,0 +1,24 @@
+VER                                                      [2.20, 3.0]
+---
+
+Format:      VER
+
+Purpose:     Displays the system's version numbers.
+
+Use:         The version numbers of the three main components of the
+        Nextor disk system are displayed:  the Nextor kernel (in the
+        ROM of the machine or of a cartridge),  NEXTOR.SYS  and  the
+        command interpreter itself.
+
+Examples:
+
+        VER
+        Nextor kernel version 3.0.0
+        NEXTOR.SYS version 3.00
+        Nextor command interpreter 3.0
+
+        TYPE COMMAND3.COM for more details
+
+             The version numbers of all the components of the Nextor
+        disk system are printed out.
+

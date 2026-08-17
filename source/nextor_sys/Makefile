@@ -54,9 +54,8 @@ NEXTOR.SYS: \
 	$(RELS) \
 	$(SDK_RELS) \
 	data.rel \
-	sys.mac
+	sys.rel
 
-	$(call assemble,sys.mac,--define-symbols NO_J_MSG)
 	@$(LK80) --output-file NEXTOR.SYS --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS)
 
@@ -64,11 +63,20 @@ NEXTOR.SYS.japanese: \
 	$(JRELS) \
 	$(SDK_RELS) \
 	data.rel \
-	sys.mac
+	sysj.rel
 
-	$(call assemble,sys.mac)
-	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel kmsg.rel end.rel
+	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sysj.rel real.rel sysj.rel messages.rel kmsg.rel end.rel
 	$(call copy_to_bin,NEXTOR.SYS.japanese)
+
+# sys.mac is assembled twice, once per NEXTOR.SYS variant, so each variant
+# gets its own distinctly named .rel file. Assembling to a shared sys.rel
+# from within the NEXTOR.SYS/NEXTOR.SYS.japanese recipes (as was done
+# before) makes the two assemblies race under `make -j`.
+sys.rel: sys.mac $(INCS)
+	$(call assemble_as,sys.mac,sys.rel,--define-symbols NO_J_MSG)
+
+sysj.rel: sys.mac $(INCS)
+	$(call assemble_as,sys.mac,sysj.rel)
 
 .SECONDEXPANSION:
 $(JRELS): \
