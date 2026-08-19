@@ -375,6 +375,11 @@ MAXBUFLEN::	DEFW	 4096
 START::	LD	SP,BOOTSTRAP##
 	LD	A,(#37)
 	EX	AF,AF'
+	XOR	A	; English messages until the command loop
+	LD	(LANG##),A	;   runs SETLANG; this also keeps the
+			;   re-load message copies made below
+			;   (STRCODES) English.
+	LD	(HINTMSG##),A	; No hint message pending (see ERROR).
 	LD	B,#5A	; _DOSVER with the magic numbers:
 	LD	HL,#1234	;   only Nextor returns the extended
 	LD	DE,#ABCD	;   version information in IX/IY.
@@ -444,7 +449,7 @@ STA20:	LD	DE,#00
 	JR	NZ,STA30
 	LD	HL,#00
 	LD	(#80),HL
-STA30:	CALL	SETLANG##
+STA30:	CALL	SETMAPPER##
 	LD	HL,SHRAM$##	; 'SHELLRAM' environment item OFF:
 	CALL	OFF?##	;   honour it, without touching
 	JR	NC,STA45	;   RTYCNT (a marked segment stays

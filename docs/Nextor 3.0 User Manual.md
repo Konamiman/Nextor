@@ -152,6 +152,8 @@
 
 [3.10.4. Other changes](#3104-other-changes)
 
+[3.10.5. Japanese messages](#3105-japanese-messages)
+
 [4. Other improvements](#4-other-improvements)
 
 [4.1. load" in F7](#41-load-in-f7)
@@ -445,6 +447,8 @@ Nextor consists of the following components:
 * The `COMMAND3.COM` file, the command interpreter of Nextor 3: an evolution of the MSX-DOS 2 command interpreter with new Nextor-specific internal commands (see _[3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)_). The old `COMMAND2.COM` (any version from 2.20) can be used instead: `NEXTOR.SYS` falls back to it when `COMMAND3.COM` is not found, and in that case the Nextor-specific features must be handled by using the external command line tools.
 
 **Note:** two variants of the NEXTOR.SYS file exist. See _[4.3. Reduced NEXTOR.SYS without Japanese error messages](#43-reduced-nextorsys-without-japanese-error-messages)_.
+
+**Note:** COMMAND3.COM displays its messages in Japanese when the kanji mode is active. See _[3.10.5. Japanese messages](#3105-japanese-messages)_.
 
 **Note:** starting with Nextor 2.1.0, the kernel will try to load `MSXDOS2.SYS` if `NEXTOR.SYS` is not found. However in this case the Nextor command line tools won't work.
 
@@ -1359,6 +1363,16 @@ Compared to COMMAND 2.44:
 * `VOL`, `DIR` and `FREE` print an informative note when the drive is mapped to a mounted disk image file, to the RAM disk, or is a ghost drive of another one.
 
 * The help files have been revised for Nextor 3: the new commands are included, and the first line of each file now lists the interpreter versions in which the command was introduced (multiple versions means that the command was updated in the newer versions).
+
+* The list of subjects printed by the `HELP` command when it is invoked with no parameters is no longer built into the interpreter: it is read from an `INDEX.HLP` file (`JINDEX.HLP`, with the text in Japanese, when the kanji mode is active), located in the help directory like any other help file. Both files are supplied in the `HELP` directory of the Nextor tools disk; when the file is not present, "File for HELP not found" is reported, as for any other missing help subject, followed by a hint telling that the help index is expected to be in the `INDEX.HLP` file in the directory given by the `HELP` environment item. This freed the space that allows the interpreter to carry its messages in both English and Japanese (see _[3.10.5. Japanese messages](#3105-japanese-messages)_).
+
+#### 3.10.5. Japanese messages
+
+`COMMAND3.COM` contains all its messages in both English and Japanese, like the `COMMAND2.COM` of the Japanese MSX-DOS 2 did: the Japanese messages are used while the kanji mode is active (`CALL KANJI` in the BASIC interpreter), and the English ones otherwise. The language is chosen with the same rules that the kernel and `NEXTOR.SYS` apply to the error messages: creating an `ERRLANG` environment item with the value `EN` forces the English messages even in kanji mode (see _[4.2. English error messages in kanji mode](#42-english-error-messages-in-kanji-mode)_). A language change (leaving or entering the kanji mode, or a `SET ERRLANG=EN`) takes effect at the next command.
+
+The help index displayed by `HELP` with no parameters follows the same rule with its own pair of files: `JINDEX.HLP` is used when the Japanese messages are active, falling back to `INDEX.HLP` when that file doesn't exist (see _[3.10.4. Other changes](#3104-other-changes)_).
+
+Fitting both message sets requires the space freed by moving the help index to those files: the interpreter, together with its work area (which includes its stack), must fit below address 8000h, because it maps its shell RAM segment at page 2 (8000h-BFFFh) while it accesses the command history, the alias list and the variable swap area (see _[3.10.3. The SHELLRAM command](#3103-the-shellram-command)_).
 
 ## 4. Other improvements
 

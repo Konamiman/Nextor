@@ -362,12 +362,55 @@ CPYSRCE:	LD	A,(BC)
 
 NULDEV:	DEFB	"NUL",0	; Name of NUL device for dummy dest.
 
+INDEX$:	DEFB	"INDEX",0,0	; Help index pseudo-subjects, 7 bytes
+JINDEX$:	DEFB	"JINDEX",0	;   each (copied with one LDIR).
+
+;        HELP with no subject displays the help index, which lives in the
+; INDEX.HLP file (JINDEX.HLP for the Japanese version) instead of in a
+; message since 3.00, so that the message table can carry both languages
+; and still leave the program below address 8000h (see the MAX_COM_SIZE
+; note in the Makefile). The index name is injected in the empty command
+; tail and processed as if the user had typed it, so the file is located
+; and displayed (and its absence reported) like any other help subject.
+; With the Japanese messages active, JINDEX.HLP is tried first and
+; INDEX.HLP is the fallback when that file does not exist. When the index
+; file is missing, a hint telling where it is expected to be is scheduled
+; to be printed after the 'File for HELP not found' error message
+; (HINTMSG, see ERROR in cli.mac).
+;
 @HELP::	CALL	SETP##
 	LD	A,(HL)
 	OR	A
-	LD	A,#31
-	JP	Z,DMESSCR##
+	JR	NZ,HLPGO	; Go if a subject was given.
+	LD	A,(LANG##)	; No subject: show the help index,
+	OR	A	;   from INDEX.HLP directly unless
+	JR	Z,HLPIDX	;   the Japanese messages are active.
 	PUSH	HL
+	LD	DE,JINDEX$
+	CALL	HLPINJ	; Try JINDEX.HLP.
+	POP	HL
+	OR	A	; Index shown?
+	RET	Z
+	CP	.NOHELP##	; Fall back to INDEX.HLP only when
+	RET	NZ	;   JINDEX.HLP was not found.
+HLPIDX:	LD	DE,INDEX$
+	CALL	HLPINJ	; Try INDEX.HLP.
+	OR	A	; Index shown?
+	RET	Z
+	CP	.NOHELP##	; Any other error is reported as is.
+	RET	NZ
+	LD	A,#55	; The index file is missing: have the
+	LD	(HINTMSG##),A	;   'the help index is in INDEX.HLP'
+	LD	A,.NOHELP##	;   hint printed after the error
+	OR	A	;   message (NZ, see ERROR in cli.mac).
+	RET
+
+HLPINJ:	PUSH	HL	; Inject the index name as the
+	EX	DE,HL	;   subject: HL = name, DE = the
+	LD	BC,#07	;   (empty) command tail.
+	LDIR
+	POP	HL	; HL -> the injected subject.
+HLPGO:	PUSH	HL
 	EXX
 	POP	DE
 	LD	BC,_PARSE##

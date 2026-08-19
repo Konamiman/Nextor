@@ -168,7 +168,11 @@ PRTS20:	LD	A,(DE)
 
 GETMSG::	LD	B,A
 	LD	DE,MESSAGES##
-	INC	B
+	LD	A,(LANG##)	; Use the Japanese messages while the
+	OR	A	;   Kanji mode is active (see SETLANG).
+	JR	Z,MSG05
+	LD	DE,JMESSAGES##
+MSG05:	INC	B
 MSG10:	DEC	B
 	RET	Z	; Return with DE -> message if found.
 MSG20:	LD	A,(DE)
@@ -176,6 +180,74 @@ MSG20:	LD	A,(DE)
 	OR	A
 	JR	NZ,MSG20
 	JR	MSG10
+
+		SUBTTL  SETLANG
+;        Refresh the message language: LANG is set nonzero, making GETMSG
+; use the Japanese messages, when the Kanji driver reports an active
+; Kanji mode and the ERRLANG environment item is not "EN". The kernel
+; checks that item on every SET and keeps the result in bit 3 of its
+; MFLAGS variable; the kernel error messages and NEXTOR.SYS apply the
+; same logic to their own messages.
+;        Called from the command loop, so a Kanji mode change (by the
+; external KMODE command or any program) or a SET ERRLANG=EN is picked up
+; at the next command. The startup and re-load messages are always
+; English: LANG is cleared at START and only refreshed from the command
+; loop, so the message copies made there for the resident re-load code
+; (STRCODES) keep the default language, as in 2.31.
+;        Every register, including the alternate set and IX/IY, is
+; preserved; the extended BIOS is called on the page-3 stack, like
+; SETMAPPER does (2.31's SETLANG worked the same way).
+;
+MFLAGS	EQU	#F2EF	; The kernel's miscellaneous flags variable
+			;   (see kernel/data.mac); bit 3 is kept set
+			;   while the ERRLANG environment item is "EN".
+SETLANG::	PUSH	AF	; Save every register, including the
+	PUSH	BC	;   alternate set and IX/IY.
+	PUSH	DE
+	PUSH	HL
+	EXX
+	EX	AF,AF'
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	PUSH	IX
+	PUSH	IY
+	EX	AF,AF'
+	EXX
+	XOR	A	; A = 0 is also the value returned by the
+	LD	H,A	;   call below when no Kanji driver
+	LD	L,A	;   answers it.
+	ADD	HL,SP	; Switch to the page-3 stack at
+	LD	SP,#F51F	;   #F51F, saving the current SP
+	PUSH	HL	;   on it.
+	LD	DE,#1100	; Extended BIOS, device #11 (Kanji
+	CALL	EXTBIO	;   driver), function 0: A = the
+	OR	A	;   current Kanji mode (0 => ANK).
+	JR	Z,SLANG10
+	LD	A,(MFLAGS)	; Kanji mode active: use the Japanese
+	AND	8	;   messages, unless ERRLANG=EN is
+	LD	A,#00	;   set in the environment.
+	JR	NZ,SLANG10
+	INC	A
+SLANG10:	LD	(LANG##),A
+	POP	HL	; Normal stack back.
+	LD	SP,HL
+	EXX
+	EX	AF,AF'
+	POP	IY
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	EX	AF,AF'
+	EXX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
 
 ;******************************************************************************
 ;
@@ -466,9 +538,11 @@ SET110:	LD	(BC),A	; Delete only: write a terminator
 ; preserved; the calls are made on the page-3 stack, which stays
 ; addressable while EXTBIO/RDSLT switch slots and pages about.
 ;        (2.31's SETLANG had this same skeleton but queried the Kanji
-; mode here; 2.40 replaced the query and the port kept the label.)
+; mode here; 2.40 replaced the query with these lookups. The Kanji query
+; lives again in SETLANG above, so this routine got the truthful name
+; SETMAPPER.)
 ;
-SETLANG::	PUSH	AF	; Save every register, including the
+SETMAPPER::	PUSH	AF	; Save every register, including the
 	PUSH	BC	;   alternate set and IX/IY.
 	PUSH	DE
 	PUSH	HL
@@ -520,7 +594,7 @@ SETLANG::	PUSH	AF	; Save every register, including the
 ;
 ;        Mapper support (new in 2.40). These are trampolines into the
 ; DOS 2 mapper support routines, whose jump table was located through
-; the extended BIOS by SETLANG above (MAPADDR). The entries used are:
+; the extended BIOS by SETMAPPER above (MAPADDR). The entries used are:
 ;
 ;          ALL_SEG (+#00): allocate a 16K segment. A=0/1 => user/system
 ;                          segment, B=0 => from any mapper slot.
