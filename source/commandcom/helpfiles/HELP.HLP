@@ -7,11 +7,13 @@ Purpose:     Provides on-line help for a Nextor feature.
 
 Use:         If no parameter is given,  then the list of  standard
         subjects on which help is available is printed,  read  from
-        the INDEX.HLP file in the help directory (JINDEX.HLP,  with
-        the text in Japanese,  when the kanji mode is active).  The
-        list includes all the commands and  the  major  system  fea-
-        tures.  Other non-standard help subjects may also be avail-
-        able with commercial programs.
+        the INDEX.HLP file in the help directory.  While the  kanji
+        mode is active (and the ERRLANG environment item is not set
+        to EN),  the Japanese JINDEX.HLP file is used instead, with
+        INDEX.HLP as the fallback when it does not exist.  The list
+        includes  all  the commands and the major system features.
+        Other  non-standard  help subjects may also be available
+        with commercial programs.
 
              If  a  subject  is specified,  then help text  on  this
         subject  is printed on the screen from a 'help  file'.  This
