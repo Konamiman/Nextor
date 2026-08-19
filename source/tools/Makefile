@@ -149,8 +149,16 @@ DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)
 MTOOLS := mformat mmd mcopy
 
 # The COMMAND3.COM help files, stored in the HELP directory of the disk.
+# JINDEX.HLP (the Japanese help index, shown by HELP with no arguments
+# when the Kanji mode is active) is generated from its UTF-8 source,
+# since the machine needs it in Shift-JIS; the other files are ASCII and
+# stored as they are.
 HELPFILES_DIR := ../commandcom/helpfiles
 HELPFILES = $(wildcard $(HELPFILES_DIR)/*.HLP)
+
+$(HELPFILES_DIR)/JINDEX.HLP: $(HELPFILES_DIR)/JINDEX.HLP.utf8
+	$(if $(shell which iconv),,$(error "ERROR: can't execute iconv, is it installed/in PATH?"))
+	@iconv -f UTF-8 -t SHIFT_JIS $< > $@
 
 # The boot sector code, assembled standalone from the kernel source (see
 # tools-disk-bootsect.mac) and linked at 0C01Eh, where boot sector code runs.
@@ -173,7 +181,7 @@ $(BOOTSECT_BIN): \
 # OEM name (8 bytes at offset 3, "NEXTOR3" padded with a space), zero the
 # sector from offset 30 (1Eh, right after the disk parameter block) to the
 # end (30+482=512), and install the boot sector code at that offset.
-tools-disk: $(BOOTSECT_BIN)
+tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
 	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
@@ -189,7 +197,7 @@ tools-disk: $(BOOTSECT_BIN)
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
 	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
 	@mmd -i $(TOOLS_DSK) ::HELP
-	@mcopy -i $(TOOLS_DSK) $(HELPFILES) ::HELP/
+	@mcopy -i $(TOOLS_DSK) $(filter-out %JINDEX.HLP,$(HELPFILES)) $(HELPFILES_DIR)/JINDEX.HLP ::HELP/
 	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
 		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
 	done)
@@ -229,3 +237,4 @@ tools-zip:
 
 clean:
 	for ext in REL rel SYM sym HEX COM bin; do find . -type f -name "*.$$ext" -delete; done
+	rm -f $(HELPFILES_DIR)/JINDEX.HLP

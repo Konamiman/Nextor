@@ -64,7 +64,10 @@ CLI::	LD	HL,#80
 	LD	DE,CLI_ABORT
 	LD	C,_DEFAB##
 	CALL	BDOS
-CLI10:	LD	IY,REDIRST##
+CLI10:	CALL	SETLANG##	; Refresh the message language.
+	XOR	A	; No hint message pending from the
+	LD	(HINTMSG##),A	;   previous command (see ERROR).
+	LD	IY,REDIRST##
 	LD	(IY+#0E),#00
 	LD	(IY+#10),#00
 	LD	(IY+#00),#00
@@ -325,6 +328,11 @@ NABERR:	LD	A,(ENVNAME##)
 	CALL	PRTSTR##	; Print actual error message.
 	LD	A,#0E	; Followed by message after error.
 	CALL	DMESSCR##
+	LD	HL,HINTMSG##	; Print the pending hint message,
+	LD	A,(HL)	;   if any (e.g. where the help
+	LD	(HL),#00	;   index file is expected to be),
+	OR	A	;   then forget it.
+	CALL	NZ,DMESSCR##
 	POP	AF
 	CP	#3B	; If error from reading batch file,
 	JR	Z,TBF	;   then issue 'Terminate' prompt.
