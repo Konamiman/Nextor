@@ -1,0 +1,224 @@
+	;--- crt0 for the DISKCOPY MSX-DOS tool.
+        ;
+	;    This is the SDK crt0_msxdos.asm (see sdk/C/code) with one
+	;    addition: a plain text banner right after a jump at 0x100, so
+	;    that "TYPE DISKCOPY.COM" displays the program description and
+	;    usage (the same convention as the assembler tools in
+	;    source/tools, and as the original DISKCOPY.COM binary).  The
+	;    banner is skipped by the jump at run time, and the memory it
+	;    occupies is recycled for the parameter pointers table (which
+	;    starts at 0x100), exactly as the standard crt0 recycles its
+	;    startup code.
+	;
+	;    Compile the program with --code-loc 0x480 (the banner makes
+	;    the header bigger than the 0x180 used with the standard crt0)
+	;    and --data-loc 0.
+
+	.globl	_main
+
+        .globl  l__INITIALIZER
+        .globl  s__INITIALIZED
+        .globl  s__INITIALIZER
+
+	.area _HEADER (ABS)
+
+        .org    0x0100  ;MSX-DOS .COM programs start address
+
+init:   jp      realinit
+
+        ;--- The banner, displayed by TYPE (the 0x1A stops it).  The
+        ;    leading CR makes TYPE overwrite the garbage characters it
+        ;    prints for the jump instruction bytes above.
+
+        .db     13
+        .ascii  "DISKCOPY v1.1 - Copy full disks sector by sector"
+        .db     13,10,13,10
+        .ascii  "Copies all the sectors of a disk to another disk of the same type,"
+        .db     13,10
+        .ascii  "overwriting the previous contents of the target disk."
+        .db     13,10,13,10
+        .ascii  "Usage: DISKCOPY src: [tgt:] [/X] [/S]"
+        .db     13,10,13,10
+        .ascii  "  When the target drive is omitted, the current drive is used."
+        .db     13,10
+        .ascii  "  Source and target may be the same drive: the copy is then done in"
+        .db     13,10
+        .ascii  "  passes, prompting to swap the disks."
+        .db     13,10,13,10
+        .ascii  '  /X: no prompts: no key waits and no "copy more disks" loop'
+        .db     13,10
+        .ascii  "  /S: copy the boot sector from the source disk too (by default the"
+        .db     13,10
+        .ascii  "      target disk keeps its own boot sector)"
+        .db     13,10,13,10
+        .ascii  "Works on drives handled by MSX-DOS drivers and, under Nextor 3 or"
+        .db     13,10
+        .ascii  "later, on floppy disk drives."
+        .db     13,10
+        .db     0x1A
+
+realinit:
+
+        ;--- Step 0: Move the stack to the top of the TPA (page 3).
+        ;    COMMAND already starts the program with SP just below
+        ;    (0006h), but making it exactly (0006h) is deterministic
+        ;    and gives up nothing: the program never returns through
+        ;    COMMAND's stack (it terminates with _TERM below), and the
+        ;    Kanji driver answers the EXTBIO calls made by the program
+        ;    with inter-slot calls that switch pages 0-2 out, so the
+        ;    stack must never live in the program area (same rule as
+        ;    the assembler tools).  The C code (kanji_probe) relies on
+        ;    this and does not switch stacks itself: switching SP UP to
+        ;    (0006h) mid-program would clobber the live stack data
+        ;    below it, which is exactly what an earlier version did
+        ;    (hanging the machine at startup with no output).
+
+        ld      sp,(#0x0006)
+
+        ;--- Step 1: Initialize globals
+
+        call    gsinit
+
+        ;--- Step 2: Build the parameter pointers table on 0x100,
+        ;    and terminate each parameter with 0.
+        ;    MSX-DOS places the command line length at 0x80 (one byte),
+        ;    and the command line itself at 0x81 (up to 127 characters).
+
+        ;* Check if there are any parameters at all
+
+        ld      a,(#0x80)
+        or      a
+        ld      c,#0
+        jr      z,cont
+
+        ;* Terminate command line with 0
+        ;  (DOS 2 does this automatically but DOS 1 does not)
+
+        ld      hl,#0x81
+        ld      bc,(#0x80)
+        ld      b,#0
+        add     hl,bc
+        ld      (hl),#0
+
+        ;* Copy the command line processing code to 0xC000 and
+        ;  execute it from there, this way the memory of the original code
+        ;  can be recycled for the parameter pointers table.
+        ;  (The space from 0x100 up to "cont" can be used,
+        ;   this is room for about 40 parameters.
+        ;   No real world application will handle so many parameters.)
+
+        ld      hl,#parloop
+        ld      de,#0xC000
+        ld      bc,#parloopend-#parloop
+        ldir
+
+        ;* Initialize registers and jump to the loop routine
+
+        ld      hl,#0x81        ;Command line pointer
+        ld      c,#0            ;Number of params found
+        ld      ix,#0x100       ;Params table pointer
+
+        ld      de,#cont        ;To continue execution at "cont"
+        push    de              ;when the routine RETs
+        jp      0xC000
+
+        ;>>> Command line processing routine begin
+
+        ;* Loop over the command line: skip spaces
+
+parloop: ld      a,(hl)
+        or      a       ;Command line end found?
+        ret     z
+
+        cp      #32
+        jr      nz,parfnd
+        inc     hl
+        jr      parloop
+
+        ;* Parameter found: add its address to params table...
+
+parfnd: ld      (ix),l
+        ld      1(ix),h
+        inc     ix
+        inc     ix
+        inc     c
+
+        ld      a,c     ;protection against too many parameters
+        cp      #40
+        ret     nc
+
+        ;* ...and skip chars until finding a space or command line end
+
+parloop2:       ld      a,(hl)
+        or      a       ;Command line end found?
+        ret     z
+
+        cp      #32
+        jr      nz,nospc        ;If space found, set it to 0
+                                ;(string terminator)...
+        ld      (hl),#0
+        inc     hl
+        jr      parloop         ;...and return to space skipping loop
+
+nospc:  inc     hl
+        jr      parloop2
+
+parloopend:
+
+        ;>>> Command line processing routine end
+
+        ;* Command line processing done. Here, C=number of parameters.
+
+cont:   ld      hl,#0x100
+        ld      d,#0
+        ld      e,c      ;Pass info as parameters to "main"
+
+        ;--- Step 3: Call the "main" function
+
+	push de
+	ld de,#_HEAP_start
+	ld (_heap_top),de
+	pop de
+
+	call    _main
+
+        ;--- Step 4: Program termination.
+        ;    Termination code for DOS 2 was returned on L.
+
+        ld      c,#0x62   ;DOS 2 function for program termination (_TERM)
+        ld      b,e
+        call    5      ;On DOS 2 this terminates; on DOS 1 this returns...
+        ld      c,#0x0
+        jp      5      ;...and then this one terminates
+                       ;(DOS 1 function for program termination).
+
+        ;--- Program code and data (global vars) start here
+
+	;* Place data after program code, and data init code after data
+
+	.area	_CODE
+	.area	_DATA
+_heap_top::
+	.dw 0
+
+        .area   _GSINIT
+gsinit::
+        ld	bc,#l__INITIALIZER
+        ld	a,b
+        or	a,c
+        jp	z,gsinext
+        ld	de,#s__INITIALIZED
+        ld	hl,#s__INITIALIZER
+        ldir
+gsinext:
+        .area   _GSFINAL
+        ret
+
+	;* These doesn't seem to be necessary... (?)
+
+        ;.area  _OVERLAY
+	;.area	_HOME
+        ;.area  _BSS
+	.area	_HEAP
+
+_HEAP_start::
