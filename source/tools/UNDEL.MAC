@@ -1,0 +1,4212 @@
+; UNDEL - Recover deleted files and subdirectories on a FAT12 or FAT16
+; filesystem.
+;
+; This is a port of the original MSX-DOS 2 UNDEL program by ASCII
+; Corporation (which lived in source/command/undel in older revisions of
+; this repository), adapted to the Nextor 3 tools convention (one
+; self-contained source file) and extended with FAT16 support:
+;
+; - All sector I/O is done with _RDDRV/_WRDRV (32 bit sector numbers);
+;   the _RDABS/_WRABS functions that the original program used are
+;   deprecated.
+; - On FAT12 drives the two FAT copies of interest (the live one and the
+;   stale last one, which the kernel deliberately leaves not updated while
+;   the disk is "dirty") are expanded to 16 bits per entry in RAM and
+;   accessed there, as in the original program.
+; - On FAT16 drives the FATs stay on disk and are read through a small
+;   sector cache (a FAT16 FAT can't fit in the TPA, much less two of them).
+;   The only in-scan mutation ("truncate a corrupt undeletable chain",
+;   i.e. set an entry of the merged view to zero) is recorded in an
+;   overlay bitmap; the live FAT rewrites of the undeleted chains are done
+;   by read-patch-write of FAT sectors through the sector buffer, which
+;   writes every FAT copy EXCEPT the stale last one (same discipline as
+;   the original, so UNDEL remains re-runnable).
+; - The three per-cluster working flags that the original kept in the top
+;   nybble of the expanded second FAT live now in three parallel bitmaps,
+;   for both filesystem types.
+; - The original program read the search pattern and the searched
+;   directory's start cluster from undocumented kernel-private fields of
+;   the file info block filled in by "find first". This port uses only
+;   documented calls: the pattern comes from _PFILE and the directory's
+;   start cluster is resolved once up front from the FIB start cluster
+;   field of the directory's own entry (via _FFIRST, with _GETCD helping
+;   for the current-directory and "."/".." cases).
+;
+; The program requires Nextor 2.1 or later (_RDDRV and the filesystem type
+; byte of _DPARM don't exist in older versions).
+;
+; NOTE: CHKDSK and UNDEL deliberately duplicate a fair amount of code (they
+; were already-diverged forks of a common ancestor when they were ported).
+; Sharing the common routines as linkable modules would be an improvement
+; opportunity.
+
+	jp	START
+
+	;	-------------------------------------------------------
+
+	db	13
+	db	"UNDEL for Nextor v1.0 - Recover deleted files",13,10
+	db	13,10
+	db	"Recovers files and subdirectories that were deleted on a FAT12 or FAT16",13,10
+	db	"disk. Requires Nextor 2.1 or later.",13,10
+	db	13,10
+	db	"Usage: UNDEL filespec",13,10
+	db	13,10
+	db	"       filespec: the file(s) to recover (wildcards allowed), or a",13,10
+	db	"                 directory: then all its deleted files are recovered.",13,10
+	db	"                 Use *.* for all deleted files in the current directory.",13,10
+	db	1Ah
+
+	;	-------------------------------------------------------
+
+MSX_DOS	equ	5
+
+;	ASCII control characters
+
+TAB	equ	09h
+LF	equ	0Ah
+CR	equ	0Dh
+CURLEFT	equ	1Dh	;"Cursor left" console control character
+
+;	Per-cluster working flags: three parallel bitmaps (the original
+;	program kept them in the top nybble of the expanded second FAT),
+;	accessed through the precomputed base pointers BM_P_UNDEL
+;	(undeletable cluster), BM_P_CHAIN (referred to by an undeletable
+;	cluster) and BM_P_REF (referred to by an allocated cluster).
+
+;	Bits and masks in the parse flags returned by _PARSE
+
+PF_AMB	equ	5	;Set if filename or extension is ambiguous
+PF_DOT	equ	6	;Set if "." or ".." is the last item
+
+PFM_F	equ	(1 SHL 3)	;Main filename specified
+PFM_E	equ	(1 SHL 4)	;Extension specified
+
+;	Bits in attributes byte
+
+AT_HID	equ	1	;Set => Hidden file
+AT_SYS	equ	2	;Set => System file
+AT_VOL	equ	3	;Set => Volume name entry
+AT_DIR	equ	4	;Set => Sub-directory entry
+AT_DEV	equ	7	;Set => Device
+
+ATM_HID	equ	(1 SHL AT_HID)
+ATM_SYS	equ	(1 SHL AT_SYS)
+ATM_DIR	equ	(1 SHL AT_DIR)
+ATM_ARC	equ	(1 SHL 5)
+
+;	Bits in MSX-DOS's CHKCHR flags
+
+CF_2ND	equ	2	;Set => second byte of a 16 bit character
+
+;	Offsets in file info blocks (documented fields only)
+
+FIB_ATTRIBUTES		equ	14	;Attributes byte
+FIB_START_CLUSTER	equ	19	;Start cluster
+
+;	Offsets in directory entries
+
+DR_ATTRIBUTES		equ	11	;Attributes byte
+DR_DELETED_FIRST_CHAR	equ	12	;First character of deleted filename
+DR_DATE			equ	24	;Date of last update
+DR_FIRST_CLUSTER	equ	26	;First cluster number
+DR_SIZE			equ	28	;File size
+
+;	Number of sectors of the FAT16 sector cache
+
+CACHE_SECT	equ	4
+
+;******************************************************************************
+
+START:
+	ld	sp,STACK	;Setup local stack.
+
+	call	INIT		;Initialise variables etc.
+
+	call	FIND_DIR	;Decode the command line, expand the search
+				; pattern and find the start cluster of the
+				; directory to search.
+
+	call	GET_UPB		;Determine disk parameters and check the
+				; undeletion preconditions.
+
+	call	SETUP_FAT	;Setup the FAT access layer (and read in
+				; and expand the FATs if they are FAT12 ones)
+
+	call	SCAN_FATS	;Locate any "deleted chains"
+
+	call	SCAN_DIR	;Scan directory for candidate entries
+
+	call	NAME_CHK	;Re-scan directory for name clashes
+
+	call	CLU_CHK		;Resolve cluster and name clashes
+
+	call	MOD_DIR		;Undelete the required directory entries
+				; and rebuild their chains in the live FAT
+
+	call	SAVE_FAT	;Write the modified FAT back out to disk
+
+	call	WR_CRLF		;Write a CR-LF and terminate with
+	xor	a		; zero error code.
+	jr	EXIT
+
+;------------------------------------------------------------------------------
+;
+;    These are the various routines for terminating the program.   "EXIT"  is
+; the  normal  exit  which  will  return the error code passed in register A.
+; This  is  used  for  sucessful  termination  (A=0)  and  for  errors  which
+; COMMAND.COM  can  print  out.  The other exits are for errors which are
+; specific to the undelete program.  For these, a message is printed and a
+; general error code in the range 1...31 is returned.
+
+CANT_UNDEL:
+	ld	b,__CANT_MSG	;Can't undelete on this disk.
+	ld	a,1
+	jr	abort_error
+
+WRONG_VER:
+	ld	b,__WVER_MSG	;Wrong version of MSX-DOS.
+	ld	a,2
+	jr	abort_error
+
+WRONG_NEXTOR:
+	ld	b,__NNEX_MSG	;Nextor 2.1 or later is required.
+	ld	a,2
+	jr	abort_error
+
+NOT_FAT:
+	ld	b,__NFAT_MSG	;Not a FAT12 or FAT16 filesystem.
+	ld	a,3
+
+abort_error:
+	push	af
+	call	PROG_CLEAR	;Erase any status line first.
+	ld	a,b
+	call	WR_MSG		;Print the error message and
+	pop	af		; exit with the error code.
+
+EXIT:
+	ld	b,a		;Re-boot MSX-DOS with an
+	push	bc		; error code, erasing any
+	call	PROG_CLEAR	; status line first.
+	pop	bc
+	ld	c,_TERM##
+	call	MSX_DOS
+	rst	0		;Should never get here!
+
+;******************************************************************************
+;
+INIT:
+;
+;    This routine is called once only when the program starts  up  to  do  any
+; initialisation which the program requires.  Its functions are as follows:
+;
+;	1.  Find out whether the Kanji screen mode is active (in which case
+;	      all messages will be printed in Japanese). This is done once
+;	      here instead of on every message lookup as in the original
+;	      program.
+;
+;	2.  Check that the system is Nextor 2.1 or later.
+;
+;	3.  Define a user error vector routine to enable the FAT reading and
+;	      writing routines to handle errors in any FAT copy.
+;
+;	4.  Record the address of the top of the TPA at "TPA_TOP".
+;
+	xor	a		;Ask the Kanji driver (if present) for the
+	ld	de,1100h	; current screen mode, via EXTBIO. If there
+				; is no Kanji driver A stays 0 (ANK mode).
+	exx
+	ex	af,af'
+	push	af		;Protect the alternate and index registers
+	push	bc		; from the EXTBIO call.
+	push	de
+	push	hl
+	push	ix
+	push	iy
+	ex	af,af'
+	exx
+
+	call	0FFCAh		;EXTBIO
+
+	exx
+	ex	af,af'
+	pop	iy
+	pop	ix
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ex	af,af'
+	exx
+
+	ld	(KANJI_FLAG),a	;Non-zero => print Japanese messages.
+
+	ld	b,05Ah		;Find out the MSX-DOS version number,
+	ld	hl,01234h	; passing the magic numbers that make
+	ld	de,0ABCDh	; Nextor return its own version number
+	ld	ix,0		; in IX/IY.
+	ld	c,_DOSVER##
+	call	MSX_DOS
+	or	a
+	jr	nz,WRONG_VER
+	ld	a,b		;Reject MSX-DOS kernel versions
+	cp	2		; below 2.
+	jr	c,WRONG_VER
+
+	push	ix
+	pop	bc		;B = IXh (1 if Nextor), C = IXl (major)
+	ld	a,b
+	dec	a		;Not Nextor at all?
+	jr	nz,WRONG_NEXTOR
+	ld	a,c
+	cp	3		;Nextor 3 or later is always fine.
+	jr	nc,nextor_ver_ok
+	cp	2		;Nextor 1.x (?) is too old.
+	jr	c,WRONG_NEXTOR
+	push	iy
+	pop	bc		;B = IYh = secondary version number:
+	ld	a,b		; Nextor 2.0 is too old, 2.1+ is fine.
+	or	a
+	jr	z,WRONG_NEXTOR
+nextor_ver_ok:
+
+	ld	de,ERV_ROUTINE	;Patch in the address of a
+	ld	c,_DEFER##	; user error routine.
+	call	MSX_DOS
+
+	ld	hl,(6)		;Record address of top of TPA
+	ld	(TPA_TOP),hl
+
+	ret
+
+;******************************************************************************
+;
+FIND_DIR:
+;
+;    This routine decodes the command line and works out two things: the
+; 11 character search pattern (FCB form, "?" wildcards) that the deleted
+; entries must match, and the start cluster number of the directory that
+; will be searched (FFFFh for the root directory), stored at "SRCH_DIR_CLU".
+;
+;    The original program obtained both as side effects of a "find first"
+; call, reading them from kernel-private fields of the file info block.
+; This port uses documented calls only:
+;
+;    - The pattern is expanded by _PFILE from the last item of the path
+;      (or set to eleven "?"s when the filename is null or the path turns
+;      out to be a directory).
+;    - If the path unambiguously names an existing subdirectory then the
+;      search happens inside it (matching everything), taking its start
+;      cluster from the documented FIB field filled in by _FFIRST.
+;    - Otherwise the directory containing the pattern is resolved: its
+;      path (the part before the last item) is looked up with _FFIRST and
+;      the start cluster taken from the same FIB field.  An empty part
+;      means the current directory.  The directory part is always
+;      normalised first into canonical text form - absolute, dot-free -
+;      starting from the root or from the _GETCD current directory (see
+;      CANON_TEXT); the normalised path is also what the "Files undeleted
+;      in" header displays.
+;
+;    The filespec is mandatory: with no arguments at all the usage text is
+; displayed and the program exits (recovering every deleted file of the
+; default drive's current directory is not something to do by accident;
+; this deviates from the original program on purpose, following the same
+; convention as CHKDSK).  An explicit target ("UNDEL B:", "UNDEL \",
+; "UNDEL *.*") still recovers everything it addresses.
+;
+	ld	hl,81h		;Point at command tail
+	call	SKIP_SPACE	;Skip any leading white space
+	or	a		;If there are no arguments at all
+	jr	nz,find_dir_go	; then display the usage text and
+	ld	a,__USAG_MSG	; exit successfully.
+	call	WR_MSG
+	xor	a
+	jp	EXIT
+find_dir_go:
+	ld	(PATH_ADR),hl	;Start of path.
+
+	ex	de,hl		;Start of path into DE.
+	ld	b,0		;Not a volume name.
+	ld	c,_PARSE##
+	call	MSX_DOS		;Parse the string
+	jp	nz,EXIT		; and give up if error
+
+	ld	(LAST_ITEM),hl	;Start of the last item of the path.
+	ld	a,c		;Logical drive number (defaulted
+	ld	(DRIVE),a	; if not given).
+	ld	a,b		;Parse flags.
+	ld	(PARSE_FLG),a
+
+	ex	de,hl		;Pointer to termination char.
+	call	SKIP_SPACE	;Ignore any trailing spaces.
+	or	a
+	ld	a,.IPARM##	;If any trailing characters
+	jp	nz,EXIT		; then exit with error.
+
+	call	PAT_ALL		;Default pattern: match everything.
+
+	ld	a,(PARSE_FLG)
+	bit	PF_DOT,a	;A path ending in "." or ".." names a
+	jp	nz,dir_is_path	; directory: search all of it.
+	and	PFM_F+PFM_E	;A null filename: search the path's
+	jp	z,RESOLVE_DIR	; directory for everything.
+
+	ld	de,(LAST_ITEM)	;Expand the filename item into the
+	ld	hl,SEARCH_PAT	; search pattern, with "*" wildcards
+	ld	c,_PFILE##	; turned into "?"s and upper-casing
+	call	MSX_DOS		; done by the kernel.
+
+	ld	a,(PARSE_FLG)
+	bit	PF_AMB,a	;Ambiguous: search the containing
+	jp	nz,RESOLVE_DIR	; directory for the pattern.
+
+;    An unambiguous name: if it is an existing subdirectory then search
+; inside it (for everything); if it is an existing file, or nothing with
+; that name exists, search the containing directory for the exact name.
+
+	ld	de,(PATH_ADR)
+	call	FFIRST_FIB
+	jr	nz,try_sub_err
+	bit	AT_DEV,(ix+FIB_ATTRIBUTES)
+	ld	a,.NOFIL##	;Devices can't be undeleted.
+	jp	nz,EXIT
+	bit	AT_DIR,(ix+FIB_ATTRIBUTES)
+	jp	z,RESOLVE_DIR	;An existing file.
+
+	call	PAT_ALL		;A subdirectory: search inside it,
+	call	DIR_FROM_FIB	; matching everything.
+	ld	de,0FFFFh	;Normalise the whole path text into
+	call	COPY_DIRPART	; DIRBUF, only for the "Files
+	jp	CANON_TEXT	; undeleted in" header display.
+
+try_sub_err:
+	cp	.NOFIL##	;"File not found" just means that no
+	jp	nz,EXIT		; (undeleted) entry with that name
+	jp	RESOLVE_DIR	; exists; other errors are fatal.
+
+;------------------------------------------------------------------------------
+;
+DIR_FROM_FIB:
+;
+;    Takes the search directory's start cluster from the (documented) start
+; cluster field of the FIB filled in by FFIRST_FIB.
+;
+	ld	l,(ix+FIB_START_CLUSTER)
+	ld	h,(ix+FIB_START_CLUSTER+1)
+	ld	a,h		;Cluster number 0 means the root
+	or	l		; directory (e.g. from the ".." entry
+	jr	nz,dir_clu_ok	; of a first level directory).
+	ld	hl,0FFFFh
+dir_clu_ok:
+	ld	(SRCH_DIR_CLU),hl
+	ret
+
+;------------------------------------------------------------------------------
+;
+FFIRST_FIB:
+;
+;    Does a "find first" on the ASCIIZ path pointed to by DE, with the result
+; in FIB.  Hidden and system files and subdirectories are included in the
+; search.
+;
+; Entry:     DE -> ASCIIZ drive/path/file string
+; Returns:   Z and (FIB) filled in, or NZ and A = error code
+; Corrupts:  AF,BC,DE,HL,IX
+;
+	ld	hl,null_name
+	ld	ix,FIB
+	ld	b,ATM_HID+ATM_SYS+ATM_DIR
+	ld	c,_FFIRST##
+	call	MSX_DOS
+	or	a
+	ret
+
+null_name:
+	db	0
+
+;------------------------------------------------------------------------------
+;
+;    Resolution of the directory that contains the search pattern.  The
+; directory part of the path is everything before the last item (or the
+; whole path, when it ends in a "." or ".." item and is therefore all
+; directory-speak).
+;
+dir_is_path:
+	ld	de,0FFFFh	;No copy bound: take the whole path.
+	jr	resolve_go
+
+RESOLVE_DIR:
+	ld	de,(LAST_ITEM)	;Copy the path text up to the last item.
+
+resolve_go:
+	call	COPY_DIRPART	;DIRBUF := "d:" + directory part text
+	call	CANON_TEXT	;Normalise it: absolute, dot-free, no
+				; trailing "\", empty = root.  This
+				; also resolves an empty part to the
+				; drive's current directory, and the
+				; result doubles as the path shown in
+				; the "Files undeleted in" header.
+	ld	a,(DIRBUF+2)
+	or	a
+	jr	nz,dir_by_name
+
+dir_root:
+	xor	a		;The root directory: empty display
+	ld	(DIRBUF+2),a	; path and the root marker as the
+	ld	hl,0FFFFh	; search directory.
+	ld	(SRCH_DIR_CLU),hl
+	ret
+
+dir_by_name:
+	ld	de,DIRBUF
+	call	FFIRST_FIB	;Find the directory's own entry and
+	jr	z,dir_entry_ok	; take its start cluster from it.
+	cp	.NOFIL##	;Report a missing directory as
+	jp	nz,EXIT		; "Directory not found".
+	ld	a,.NODIR##
+	jp	EXIT
+dir_entry_ok:
+	bit	AT_DIR,(ix+FIB_ATTRIBUTES)
+	jp	nz,DIR_FROM_FIB
+	ld	a,.NODIR##	;It exists but is not a directory.
+	jp	EXIT
+
+;------------------------------------------------------------------------------
+;
+COPY_DIRPART:
+;
+;    Copies the directory part of the path text (up to the bound in DE, or
+; the whole path when DE = FFFFh) into DIRBUF, prefixed with "d:" from the
+; parsed drive.
+;
+; Entry:     DE = copy bound (address of the last path item, or FFFFh)
+; Corrupts:  AF,BC,HL
+;
+	ld	hl,(PATH_ADR)
+	inc	hl		;Skip a drive prefix ("d:") in the
+	ld	a,(hl)		; source if present - DIRBUF carries
+	dec	hl		; its own.
+	cp	":"
+	jr	nz,no_drv_skip
+	inc	hl
+	inc	hl
+no_drv_skip:
+	push	hl
+	ld	hl,DIRBUF	;Set the DIRBUF drive prefix from
+	ld	a,(DRIVE)	; the parsed drive.
+	add	a,"A"-1
+	ld	(hl),a
+	inc	hl
+	ld	(hl),":"
+	pop	hl
+	ld	bc,DIRBUF+2
+copy_dir_loop:
+	push	hl		;Stop at the last item.  (For the
+	or	a		; whole-path case the bound is FFFFh,
+	sbc	hl,de		; which is never reached.)
+	pop	hl
+	jr	nc,copy_dir_end
+	ld	a,(hl)
+	or	a		;Stop at the end of the path text.
+	jr	z,copy_dir_end
+	cp	" "
+	jr	z,copy_dir_end
+	cp	TAB
+	jr	z,copy_dir_end
+	push	hl
+	ld	hl,DIRBUF+2+63	;Give up on a directory part longer
+	or	a		; than any valid path (the kernel
+	sbc	hl,bc		; would reject it anyway).
+	pop	hl
+	jr	c,dir_too_long
+	ld	(bc),a
+	inc	hl
+	inc	bc
+	jr	copy_dir_loop
+dir_too_long:
+	ld	a,.IPATH##
+	jp	EXIT
+copy_dir_end:
+	xor	a
+	ld	(bc),a		;Terminate the copied directory part.
+	ret
+
+;------------------------------------------------------------------------------
+;
+CANON_TEXT:
+;
+;    Normalises the directory path text in DIRBUF (after the "d:" prefix)
+; into canonical form: absolute, dot-free, without a trailing "\", empty
+; string = the root directory.  Works textually: start from the root
+; (absolute path) or from the drive's current directory (relative path,
+; obtained with _GETCD, which is absolute and dot-free by definition),
+; then process the items one by one: "." is dropped, ".." removes the
+; last component ("Invalid pathname" if there is none), anything else is
+; appended.  The result replaces the directory part in DIRBUF, ready for
+; the by-name lookup and for the "Files undeleted in" header display.
+;    (A previous implementation resolved the dots by finding an
+; arbitrary entry inside the directory and cutting the last item off its
+; _WPATH string; that falls apart when the entry found is the "." entry
+; itself, whose whole path IS the directory - the cut then removed a
+; real path component and e.g. "UNDEL B:." operated on the root.)
+;
+; Corrupts:  AF,BC,DE,HL
+;
+	ld	hl,DIRBUF+2	;HL = source path text.
+	ld	de,WPBUF	;DE = end of the output (a chain
+				; of "\ITEM" components; empty
+				; output = the root).
+	ld	a,(hl)
+	cp	"\"		;Absolute path: start with an
+	jr	nz,canon_rel	; empty output.
+	jr	canon_item
+
+canon_rel:
+	push	hl		;Relative path: start from the
+	ld	a,(DRIVE)	; current directory of the drive
+	ld	b,a		; (comes without a leading or
+	ld	de,WPBUF+1	; trailing "\").
+	ld	c,_GETCD##
+	call	MSX_DOS
+	pop	hl
+	jp	nz,EXIT
+	ld	a,"\"
+	ld	(WPBUF),a
+	ld	de,WPBUF	;Find the end of "\" + CWD; an
+	ld	a,(WPBUF+1)	; empty CWD means the root (empty
+	or	a		; output).
+	jr	z,canon_item
+canon_cwd_end:
+	inc	de
+	ld	a,(de)
+	or	a
+	jr	nz,canon_cwd_end
+
+canon_item:
+	ld	a,(hl)		;At the start of a path item.
+	or	a		;End of the path: done.
+	jr	z,canon_done
+	cp	"\"		;Skip the separators between
+	jr	nz,canon_item1	; items.
+	inc	hl
+	jr	canon_item
+canon_item1:
+	cp	"."
+	jr	nz,canon_name
+	inc	hl		;An item starting with "." can
+	ld	a,(hl)		; only be "." or ".." (the
+	cp	"."		; kernel's parser rejects any
+	jr	nz,canon_one_dot ; other name with a dot start).
+	inc	hl
+	call	canon_endchk
+	push	hl		;"..": remove the last component
+	ld	hl,WPBUF	; of the output; if there is
+	or	a		; none then the path climbs past
+	sbc	hl,de		; the root: invalid.
+	pop	hl
+	ld	a,.IPATH##
+	jp	z,EXIT
+canon_pop_loop:
+	dec	de		;Walk back to the "\" that
+	ld	a,(de)		; started the last component
+	cp	"\"		; (every component starts with
+	jr	nz,canon_pop_loop ; one, so this terminates).
+	jr	canon_item
+canon_one_dot:
+	call	canon_endchk	;".": nothing to do.
+	jr	canon_item
+
+canon_name:
+	ld	a,"\"		;Append "\" plus the item to
+	ld	(de),a		; the output.
+	inc	de
+	ld	c,0		;Fresh _CHKCHR flags for the item.
+canon_nchar:
+	ld	a,(hl)
+	or	a
+	jr	z,canon_done
+	cp	"\"
+	jr	z,canon_item
+	call	C_CH1		;Upper-case the character via the
+	ld	(de),a		; kernel (16-bit character aware),
+	inc	de		; so the displayed path is
+	inc	hl		; normalised like _GETCD output.
+	push	hl		;Bound: canonical paths never
+	ld	hl,WPBUF+63	; exceed 63 characters.
+	or	a
+	sbc	hl,de
+	pop	hl
+	jr	nc,canon_nchar
+	ld	a,.IPATH##
+	jp	EXIT
+
+canon_endchk:			;After a "." or ".." item only a
+	ld	a,(hl)		; separator or the end of the
+	or	a		; path may follow (guaranteed by
+	ret	z		; the kernel's parser, but guard
+	cp	"\"		; anyway).
+	ret	z
+	ld	a,.IPATH##
+	jp	EXIT
+
+canon_done:
+	xor	a		;Terminate the output.
+	ld	(de),a
+	ld	hl,WPBUF
+	ld	de,DIRBUF+2	;Copy the canonical path (possibly
+canon_copy:
+	ld	a,(hl)		; empty = the root) back behind
+	ld	(de),a		; the drive prefix.
+	inc	hl
+	inc	de
+	or	a
+	jr	nz,canon_copy
+	ret
+
+;------------------------------------------------------------------------------
+;
+PAT_ALL:
+;
+;    Fills the search pattern with eleven "?" characters (match everything).
+;
+; Corrupts:  AF,HL
+;
+	push	bc
+	ld	hl,SEARCH_PAT
+	ld	b,11
+pat_all_loop:
+	ld	(hl),"?"
+	inc	hl
+	djnz	pat_all_loop
+	pop	bc
+	ret
+
+;------------------------------------------------------------------------------
+
+SKIP_SPACE:
+	ld	a,(hl)
+	inc	hl		;Skip past any leading white
+	cp	" "		; space (spaces or tabs) in
+	jr	z,SKIP_SPACE	; the string pointed to by HL.
+	cp	TAB		;First non-space character is
+	jr	z,SKIP_SPACE	; returned in HL.
+	dec	hl
+	ret
+
+;******************************************************************************
+;
+GET_UPB:
+;
+;    This routine is called to get the disk parameters for the  drive  into  a
+; buffer.  Some initial checks on the feasibility of the undeletion  are  also
+; done here.  If the filesystem is not FAT12 or FAT16, or the disk has no
+; volume id, or only one FAT copy, then it is totally impossible to ever do
+; any undeletion from this disk and so an error message to that effect is
+; printed.  If this is OK but the dirty disk flag is zero then there are no
+; files to undelete and so the program is terminated with a "file not found"
+; error.  The routine also computes the per-filesystem constants used by the
+; FAT access layer.
+;
+	LD	A,(DRIVE)	;Do an MSX-DOS call to obtain
+	LD	L,A		; the disc parameters.
+	LD	DE,UD_IMAGE
+	LD	C,_DPARM##
+	CALL	MSX_DOS
+	JP	NZ,EXIT
+
+	ld	a,(FS_TYPE)	;Filesystem type reported by Nextor:
+	cp	2		; 0=FAT12, 1=FAT16, 255=other.
+	jp	nc,NOT_FAT
+	ld	(FS_FAT16),a
+
+	or	a
+	jr	z,fs_is_fat12
+	ld	hl,0FFF8h	;FAT16: lowest end of chain value
+	ld	(EOC_MIN),hl	; and the value stored to close a
+	ld	hl,0FFFFh	; truncated chain.
+	ld	(EOC_VAL),hl
+	jr	fs_common
+fs_is_fat12:
+	ld	hl,0FF8h	;FAT12: same two values.
+	ld	(EOC_MIN),hl
+	ld	hl,0FFFh
+	ld	(EOC_VAL),hl
+fs_common:
+
+	ld	a,(VOL_ID)	;If the disk has no volume id (Nextor
+	inc	a		; reports FFh) then the kernel does
+	jp	z,CANT_UNDEL	; not keep the last FAT copy stale
+				; and undeletion is impossible.
+	ld	a,(FAT_COPY)	;With only one FAT copy there is no
+	dec	a		; stale copy to recover chains from.
+	jp	z,CANT_UNDEL
+
+	ld	a,(DIRT_FLAG)	;If the disk is not dirty then all
+	or	a		; the FAT copies are identical and
+	ld	a,.NOFIL##	; there is nothing to undelete.
+	jp	z,EXIT
+
+;    Compute the number of sectors per FAT copy as (first root directory
+; sector - first FAT sector) / number of FAT copies.  The byte-sized field
+; of the _DPARM block can't be used because a 256 sector FAT16 FAT is
+; reported there as 0.
+
+	ld	hl,(RT_START)
+	ld	de,(FAT_START)
+	or	a
+	sbc	hl,de		;HL := total size of the FAT area
+	ld	a,(FAT_COPY)
+	ld	c,a
+	ld	b,0
+	ld	de,0
+fat_size_div:
+	or	a		;DE := HL / BC by repeated
+	sbc	hl,bc		; subtraction (the FAT area is
+	jr	c,fat_size_done	; small so this is fast enough).
+	inc	de
+	jr	fat_size_div
+fat_size_done:
+	ld	(FAT_SZ16),de
+
+	ld	hl,(FAT_START)	;Compute the first sector of the
+	ld	a,(FAT_COPY)	; last (stale) FAT copy.
+	dec	a
+last_fat_lp:
+	add	hl,de
+	dec	a
+	jr	nz,last_fat_lp
+	ld	(LAST_FAT_ST),hl
+
+	LD	A,(SEC_CLU)	;Work out the cluster shift
+	LD	B,-1		; factor, so that later
+loop_clu_sft:
+	INC	B		; calculations are easier.
+	RRCA			;Wait for a bit to "fall" off
+	JR	NC,loop_clu_sft	; the end.
+	LD	A,B
+	LD	(CLU_SHIFT),A
+	ret
+
+;******************************************************************************
+;
+SETUP_FAT:
+;
+;    This routine allocates and initialises the data structures of the FAT
+; access layer in the memory above the top of the program:
+;
+;    - Three parallel bitmaps (one bit per cluster) holding the per-cluster
+;      working flags FL_UNDEL/FL_CHAIN/FL_REF, for both filesystem types.
+;      On FAT16 a fourth bitmap follows: the "entry zapped" overlay (see
+;      GET_ENT2).
+;    - On FAT12, the two whole FATs of interest expanded to 16 bits per
+;      entry: the live FAT (read with multi-copy retries, never from the
+;      last copy) and the stale last FAT copy.
+;    - On FAT16, a small sector cache through which both FATs are read.
+;
+;    The candidate file list starts after these structures and grows upward,
+; checked against the top of the TPA.
+;
+	ld	hl,(TOT_CLU)	;Bitmap size in bytes :=
+	ld	de,7		; (total clusters + 7) / 8.
+	add	hl,de
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	ld	(BM_SIZE),hl
+
+	ld	hl,PROG_END	;The bitmaps start right after
+	ld	(BM_BASE),hl	; the program.
+
+	ld	de,(BM_SIZE)	;Precompute the base address of
+	ld	(BM_P_UNDEL),hl	; each of the three working flag
+	add	hl,de		; bitmaps (they are consulted
+	ld	(BM_P_CHAIN),hl	; constantly).
+	add	hl,de
+	ld	(BM_P_REF),hl
+
+	ld	hl,(BM_BASE)
+	ld	a,(FS_FAT16)	;Number of bitmaps: 3 working flag
+	add	a,3		; ones, plus the "zapped" overlay
+	ld	b,a		; one on FAT16.
+bm_end_loop:
+	add	hl,de		;HL := end of the bitmap area,
+	jp	c,out_of_memory	; giving up on 64K overflow.
+	djnz	bm_end_loop
+
+	push	hl		;Clear the whole bitmap area.
+	ld	de,PROG_END
+	or	a
+	sbc	hl,de
+	ld	b,h
+	ld	c,l		;BC := size of the area (never 0)
+	ld	hl,PROG_END
+	ld	(hl),0
+	ld	d,h
+	ld	e,l
+	inc	de
+	dec	bc
+	ld	a,b
+	or	c
+	jr	z,bm_clear_done
+	ldir
+bm_clear_done:
+	pop	hl		;HL := end of the bitmap area
+
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,setup_fat16
+
+;    FAT12: the two expanded FATs (2 bytes per entry) go after the bitmaps.
+
+	ld	(FAT_1_ADDR),hl	;Store address of the live FAT buffer
+	push	hl
+	ld	hl,(TOT_CLU)	;DE := total number of clusters * 2,
+	add	hl,hl		; which is the size of a whole FAT
+	ex	de,hl		; copy in memory (no overflow:
+	pop	hl		; FAT12 has at most 4085 clusters).
+	add	hl,de
+	jp	c,out_of_memory
+	ld	(FAT_2_ADDR),hl	;Store address of the stale FAT buffer
+	add	hl,de
+	jp	c,out_of_memory
+	jr	setup_fat_common
+
+;    FAT16: the sector cache goes after the bitmaps.
+
+setup_fat16:
+	push	hl
+	ld	de,(BM_SIZE)	;The "zapped" overlay bitmap is the
+	or	a		; last of the four.
+	sbc	hl,de
+	ld	(BM_ZAP),hl
+	pop	hl
+	ld	(CACHE_BASE),hl
+	ld	de,CACHE_SECT*512
+	add	hl,de
+	jp	c,out_of_memory
+
+setup_fat_common:
+	ld	(FILE_LIST),hl	;The candidate file list starts here
+	ld	de,(TPA_TOP)	; and grows upwards; check that we
+	or	a		; are still below the top of the
+	sbc	hl,de		; TPA.
+	jp	nc,out_of_memory
+
+	ld	a,(FS_FAT16)	;On FAT16 there are no FATs to load:
+	or	a		; entries are read (through the
+	ret	nz		; cache) on demand.
+
+;    Read in and expand the two FAT12 FATs, 3 nybbles per entry: first the
+; live copy (with multi-copy retries on read errors, never reading the last
+; copy), then the stale last copy (read errors there are fatal).
+
+	ld	hl,FAT_FLAGS
+	res	0,(hl)		;Flag "reading the live FAT copy".
+	ld	de,(FAT_START)	;DE := 1st sector of 1st FAT
+	ld	hl,(FAT_1_ADDR)	;HL -> buffer for the live FAT
+	call	READ_FAT
+
+	ld	hl,FAT_FLAGS
+	set	0,(hl)		;Flag "reading the last FAT copy".
+	ld	de,(LAST_FAT_ST) ;DE := 1st sector of the last FAT
+	ld	hl,(FAT_2_ADDR)	;HL -> buffer for the stale FAT
+				;Fall through into READ_FAT.
+
+;------------------------------------------------------------------------------
+;
+READ_FAT:
+;
+;    This  routine  reads  a  single  copy  of  the  FAT into a memory buffer,
+; expanding each entry to 16 bits.  It uses the subroutine "GET_NYBBLE"  which
+; returns  the  next  nybble from the FAT, reading in new sectors as required.
+; For each cluster from zero up to (TOT_CLU-1), three  nybbles  are  read  and
+; stored as the two byte entry.
+;
+; Entry:     DE = First sector number of FAT
+;	     HL = Address of memory buffer for FAT
+;
+	push	hl		;Save memory address
+	ld	bc,0		;Get nybble count to BC' and
+	exx			; sector number to DE'.
+	ld	bc,(TOT_CLU)	;BC := cluster count
+	pop	hl		;HL := memory address
+
+read_fat_loop:
+	call	GET_NYBBLE	;Get lowest nybble
+	ld	d,a
+	call	GET_NYBBLE	;Get next lowest nybble and
+	add	a,a		; multiply it by 16 to get
+	add	a,a		; it into the top half of a
+	add	a,a		; byte.
+	add	a,a
+	add	a,d		;Combine the two nybbles and
+	ld	(hl),a		; store in the next byte of
+	inc	hl		; the buffer.
+	call	GET_NYBBLE	;Get third nybble and store
+	ld	(hl),a		; as high byte of entry.
+	inc	hl
+	dec	bc
+	ld	a,b		;Decrement cluster count and
+	or	c		; loop until got all FAT
+	jr	nz,read_fat_loop ; entries.
+	ret
+
+out_of_memory:
+	ld	a,.NORAM##	;Exit the program with an
+	jp	EXIT		; "insufficient memory" error.
+
+;------------------------------------------------------------------------------
+;
+GET_NYBBLE:
+;
+;    This routine returns the next  nybble  from  the  bufferred  FAT  sector,
+; reading  in  the  next  sector  when  required.  BC' contains a count of the
+; number of unread nybbles in the sector buffer and register DE' is  the  next
+; sector  number  to  read.   Register  HL'  points to the current byte in the
+; sector buffer, but need not be defined if BC'=0 since  it  will  be  set  up
+; afresh when the new sector is read in.  The sectors are read either with the
+; multi-copy retry logic of "R_FAT_SECT" (live FAT) or plainly with
+; "READ_SECT" (stale last FAT copy), depending on bit 0 of "FAT_FLAGS".
+;
+; Entry:    BC' = Count on nybbles remaining in buffer 0...1023
+;	    DE' = Next logical sector to read
+;	    HL' = Current address in sector buffer (undefined in BC'=0)
+; Returns:  BC',DE',HL' = Updated appropriately
+;	     A  = Value of nybble (0...0Fh)
+;
+	exx
+	ld	a,b		;Skip if there are any nybbles
+	or	c		; left in the current sector
+	jr	nz,same_fat_sect
+
+	ld	hl,FAT_FLAGS	;Read sector (DE) either with
+	bit	0,(hl)		; multi-copy retries or as a plain
+	jr	nz,gn_last_fat	; single read, depending on the
+	call	R_FAT_SECT	; last FAT flag.
+	jr	gn_read_done
+gn_last_fat:
+	ld	(CUR_SEC),de	;Set up the 32 bit sector number
+	ld	hl,0		; for READ_SECT.
+	ld	(CUR_SEC+2),hl
+	call	READ_SECT
+gn_read_done:
+	inc	de		;Bump sector number
+	ld	bc,1024		;Re-initialise nybble count
+
+same_fat_sect:
+	xor	a		;Rotate next nybble out of the
+	rrd			; byte, with bits 4...7 clear
+	bit	0,c
+	jr	z,low_nybble	;If finished byte then step on
+	inc	hl		; to next byte
+low_nybble:
+	dec	bc		;Decrement nybble count
+	exx
+	ret
+
+;******************************************************************************
+;
+SCAN_FATS:
+;
+;    This routine does two passes through the FATs, in  order  to  establish
+; the chain structure within them and correct any corrupted chains.  The live
+; FAT is not altered at all here since it is the copy which will be written
+; back to disk if any files are undeleted.  (The original program used three
+; passes; the first two had no ordering dependency between them and are
+; fused here into one sequential sweep, which halves the FAT reads.)  The
+; "merged view" that the layer routine GET_ENT2 provides plays the role of
+; the original program's modified second FAT copy.  A language-neutral "NN%"
+; progress indicator is displayed while the scan runs (both passes are
+; driven by a descending cluster number).
+;
+; THE SWEEP (original passes 1 and 2) - Examines every cluster once:
+;	   * A cluster which is allocated in the live FAT is recorded so
+;	     that the merged view returns its live value (on FAT12 this
+;	     copies the live entry over the in-memory stale FAT, as the
+;	     original program did; on FAT16 the merge is implicit).  If its
+;	     value refers to a valid cluster number then the BM_P_REF flag
+;	     of the referenced cluster is set: that cluster is referenced
+;	     by an allocated cluster and therefore must not be part of an
+;	     undeleted chain.
+;	   * A cluster which is unallocated in the live FAT but allocated
+;	     in the stale last copy is "undeletable": its BM_P_UNDEL flag
+;	     is set.
+;
+; PASS 3 - Resolves any corruptions in the "undeletable" cluster chains.
+;	     Each "undeletable" entry is examined in turn (skipping runs of
+;	     non-undeletable clusters quickly with SKIP_CLR).  If it is an
+;	     end of chain cluster then it is left alone.  Otherwise if the
+;	     entry refers to an invalid cluster number, an allocated cluster
+;	     (BM_P_UNDEL clear) or a cluster which is in turn referred to by
+;	     another cluster (BM_P_REF set from the sweep or BM_P_CHAIN set
+;	     earlier during this pass), then the entry will be set to zero
+;	     to indicate a truncated file chain.
+;	   If none of these conditions is true then the entry must refer to
+;	     a reasonable looking "undeletable" cluster and so it is left
+;	     alone and the BM_P_CHAIN flag of the cluster to which it refers
+;	     is set.
+;
+;    This  results  in  the  "undeletable"  clusters  being  in  tidy   chains
+; terminated either by an "end of file" marker, or by a zero which indicates a
+; truncated chain.  The start of an "undeletable" chain will have its
+; BM_P_UNDEL flag set and both the BM_P_REF and BM_P_CHAIN flags clear.
+;
+;
+;	+++++++  THE SWEEP.  Undeletable and referenced clusters.  +++++++
+;
+	call	PROG_INIT	;Prepare the progress display,
+	ld	hl,0		; and reset the count of
+	ld	(UNDEL_CNT),hl	; undeletable clusters which
+	ld	de,(TOT_CLU)	; paces pass 3's percentage.
+sweep_loop:
+	dec	de
+	call	PROG_TICK
+	ld	a,d		;Stop when all clusters (down
+	or	a		; to number 2) have been
+	jr	nz,sweep_ok	; examined.
+	ld	a,e
+	cp	2
+	jr	c,sweep_done
+sweep_ok:
+	call	GET_ENT1	;HL := live FAT entry value.
+	ld	a,h
+	or	l
+	jr	z,sweep_unalloc
+	call	PUT_ENT2C	;Allocated: make the merged view
+				; return the live value.
+	push	de		;If its value refers to a valid
+	ex	de,hl		; cluster then flag that cluster
+	call	VALID_CLU	; as referenced.  (End of chain,
+	jr	nz,sweep_next	; bad and reserved values all
+	ld	hl,(BM_P_REF)	; fail the validity check.)
+	call	BM_SET
+sweep_next:
+	pop	de
+	jr	sweep_loop
+
+sweep_unalloc:
+	call	GET_STALE	;Unallocated in the live FAT: if
+	ld	a,h		; the stale copy has a value then
+	or	l		; the cluster is undeletable.
+	jr	z,sweep_loop
+	ld	hl,(UNDEL_CNT)	;Count it: pass 3 will visit
+	inc	hl		; exactly these clusters.
+	ld	(UNDEL_CNT),hl
+	ld	hl,(BM_P_UNDEL)
+	call	BM_SET
+	jr	sweep_loop
+
+sweep_done:
+
+;	+++++++  PASS 3.  Tidy up the undeletable chains.  +++++++
+
+	call	PROG_PASS3
+	ld	de,(TOT_CLU)
+pass_3_loop:
+	dec	de
+	call	PROG_TICK
+	ld	hl,(BM_P_UNDEL)	;Get next undeletable cluster
+	call	SKIP_CLR	; and exit when done the whole
+	jr	nz,pass_3_done	; FAT.
+	call	NEXT_CLU	;HL := merged value of the entry.
+
+	ld	a,h		;If it is an "end of file"
+	and	l		; cluster (FFFFh exactly; FAT16
+	inc	a		; clusters can use all 16 bits)
+	jr	z,pass_3_loop	; then leave it alone.
+
+	push	de
+	ex	de,hl		;Look at the cluster which this
+	call	VALID_CLU	; one refers to.  Jump to truncate
+	jr	nz,p3_invalid	; the chain if that cluster is:
+	ld	hl,(BM_P_UNDEL)	;    an invalid cluster number
+	call	BM_TEST		; OR an allocated cluster
+	jr	z,p3_invalid	; OR referenced by an allocated
+	ld	hl,(BM_P_REF)	;    cluster
+	call	BM_TEST		; OR already referenced by another
+	jr	nz,p3_invalid	;    undeletable cluster.
+	ld	hl,(BM_P_CHAIN)	;Mark the cluster as referenced
+	call	BM_TSET		; by an undeletable entry (in one
+	jr	nz,p3_invalid	; test-and-set operation).
+	pop	de
+	jr	pass_3_loop
+
+p3_invalid:
+	pop	de		;In any of the above invalid
+	call	PUT_ZAP		; situations, set the value of
+	jr	pass_3_loop	; the entry to zero to mark a
+				; truncated chain.
+pass_3_done:
+	ld	a,99		;FAT analysis done: hold 99% on
+	ld	(PROG_PCT),a	; screen through the quiet
+	jp	PROG_SHOW	; directory and recovery phases
+				; (every printer erases it first).
+
+;******************************************************************************
+;
+SCAN_DIR:
+;
+;    This routine does the first pass through the directory.  For  each  entry
+; it  calls the routine "CHECK_ENTRY" which adds the entry to the file list if
+; it looks like a good candidate for undeleting.   The  directory  scan  stops
+; when  a  "never  been used" entry is found.  A warning message is printed if
+; the directory chain is corrupted.
+;
+	ld	hl,(FILE_LIST)	;Initialise file list to
+	ld	(hl),0		; be empty.
+
+	ld	hl,(SRCH_DIR_CLU) ;Initialise a search of the
+	ld	(DIR_START),hl	; required directory.
+
+	call	DRE_START	;Get first directory entry
+	jr	scan_dir_go	; and jump to process it.
+scan_dir_loop:
+	call	DRE_NEXT	;Get next directory entry
+scan_dir_go:
+	jr	nz,scan_dir_end	;Exit if reached physical
+	ld	a,(hl)		; end of directory, or logical
+	or	a		; end (never been used entry).
+	jr	z,scan_dir_done
+	call	CHECK_ENTRY	;Process this one entry and
+	jr	scan_dir_loop	; loop back for next.
+
+scan_dir_end:
+	dec	a		;Skip if the directory chain
+	jr	z,scan_dir_done	; ended cleanly.
+	call	PROG_CLEAR	;Get the status line out of the
+	ld	a,__CRPT_MSG	; way and print a warning saying
+	call	WR_MSG		; the directory was corrupt.
+
+scan_dir_done:
+	ld	a,(MEM_FULL)	;If memory overflowed then
+	or	a		; print a warning message
+	jr	z,scan_dir_ok	; but carry on.
+	call	PROG_CLEAR	;(Status line out of the
+	ld	a,__FULL_MSG	; way first.)
+	call	WR_MSG
+scan_dir_ok:
+
+	ld	hl,(FILE_LIST)
+	ld	a,(hl)		;If no candidates were found
+	or	a		; then might as well give up
+	ld	a,.NOFIL##	; straight away.
+	jp	z,EXIT
+	ret
+
+;------------------------------------------------------------------------------
+;
+CHECK_ENTRY:
+;
+;    This routine is called during the first directory scan for every entry in
+; the directory.  The first section of code does some initial checks to decide
+; whether the entry is  a  candidate  for  undeletion.   These  tests  are  as
+; follows:  1.   Must  be a deleted entry (first byte 0E5h). 2.  Must not be a
+; volume name entry.  3.  The name (with the first character restored from
+; DR_DELETED_FIRST_CHAR) must match the search pattern. 4.  The cluster number
+; field must contain a valid cluster number. 5.  The cluster referred to must
+; be the start of an "undeletable" file chain.
+;
+;    If  all  of  these points are satisfied then the entry is a candidate for
+; undeletion so it is added to the file list in memory.
+;
+; Entry:      HL -> directory entry in question
+; Corrupts:  AF,BC,DE,HL
+;
+	ld	a,(hl)		;Do nothing if entry is
+	cp	0E5h		; not deleted
+	ret	nz
+
+	push	hl		;Ignore the entry if the saved
+	ld	de,DR_DELETED_FIRST_CHAR ; first character is zero: that
+	add	hl,de		; is the mark CHKDSK /F leaves on
+	ld	a,(hl)		; deleted entries ("cannot be
+	pop	hl		; undeleted").  Restoring a zero
+	or	a		; first character would truncate
+	ret	z		; the whole directory at this
+				; entry!
+
+	ld	de,ENT_BUF	;Copy the entry to a fixed
+	ld	bc,32		; buffer for ease of
+	ldir			; handling.
+
+	ld	a,(ENT_ATTR)	;Ignore entry if it is for
+	bit	AT_VOL,a	; a volume name.
+	ret	nz
+
+	ld	a,(ENT_DCHAR)	;Restore old first character
+	ld	(ENT_BUF),a	; to start of the name.
+	xor	a
+	ld	(ENT_DCHAR),a	;Zero deleted character byte.
+
+	ld	hl,ENT_BUF
+	ld	bc,11*256+0	;B=loop count, C=char flags
+uncase_loop:
+	ld	a,(hl)
+	call	C_CH1		;Use MSX-DOS's upper caseing
+	ld	(hl),a		; because of 16 bit characters.
+	inc	hl
+	djnz	uncase_loop
+
+	ld	de,ENT_BUF	;Compare the filename in the
+	ld	hl,SEARCH_PAT	; entry with the one we
+	call	CMP_FNAME	; are looking for and return
+	ret	nz		; if no match.
+
+	ld	de,(ENT_CLU)	;Get cluster from directory
+	call	VALID_CLU	; entry and return if it is
+	ret	nz		; not valid.
+
+	ld	hl,(BM_P_UNDEL)	;Must be an "undeletable"
+	call	BM_TEST		; cluster.
+	ret	z
+	ld	hl,(BM_P_CHAIN)	;Must be the start of a chain
+	call	BM_TEST
+	ret	nz
+	ld	hl,(BM_P_REF)	;Must not be referenced by
+	call	BM_TEST		; an allocated cluster
+	ret	nz
+
+;	---------------------------------------
+
+	ld	hl,(FILE_LIST)
+	ld	bc,1+32+SV_SIZE	;Step through files in the
+add_file_loop:
+	ld	a,(hl)		; file list until we find the
+	add	hl,bc		; zero which marks the end
+	or	a		; of the list.
+	jr	nz,add_file_loop
+
+	ld	de,(TPA_TOP)	;Test whether there is room
+	sbc	hl,de		; to allocate another item
+	jr	c,not_mem_full	; before the top of the TPA.
+	ld	a,0FFh		;If not then set the "memory
+	ld	(MEM_FULL),a	; full" flag and return.
+	ret
+
+not_mem_full:
+	add	hl,de		;Put in a zero to mark the
+	ld	(hl),0		; new end of the file list.
+
+	dec	hl
+	ex	de,hl		 ;Copy the search variables
+	ld	hl,SV_START+SV_SIZE-1 ; into the new item on the
+	ld	bc,SV_SIZE	 ; list.
+	lddr
+
+	ld	hl,ENT_BUF+32-1	;Copy the directory entry
+	ld	bc,32		; into the new item.
+	lddr
+
+	ld	a,080h		;Mark file item as being in
+	ld	(de),a		; use and clear other flags.
+	ret
+
+;******************************************************************************
+;
+NAME_CHK:
+;
+;    This routine does the second pass through the directory which rejects any
+; name  clashes  with already existing files in the directory.  Each directory
+; entry in turn is located and passed to "NAME_CHK_ENTRY"  which  will  reject
+; any candidate files in the list which exactly match the name from disk.
+;
+	ld	hl,(SRCH_DIR_CLU) ;Initialise a search of the
+	ld	(DIR_START),hl	; required directory.
+
+	call	DRE_START	;Get first directory entry
+	jr	scan2_dir_go	; and jump to process it.
+
+scan2_dir_loop:
+	call	DRE_NEXT	;Get next directory entry
+scan2_dir_go:
+	ret	nz		;Exit if reached physical
+	ld	a,(hl)		; end of directory, or logical
+	or	a		; end (never been used entry).
+	ret	z
+	call	NAME_CHK_ENTRY	;Process this one entry and
+	jr	scan2_dir_loop	; loop back for next.
+
+;------------------------------------------------------------------------------
+;
+NAME_CHK_ENTRY:
+;
+;    This  routine  checks  one  directory  entry  from disk for possible name
+; clashes.  It returns immediately if the entry is deleted or is for a  volume
+; id.  Otherwise the name in the directory entry is compared in turn with each
+; name in the candidate list and any candidates  which  match  are  marked  as
+; invalid by setting bit-6 of the flags byte (first byte of the item).
+;
+; Entry:       HL -> Directory entry in question
+; Corrupts:  AF,BC,DE,HL
+;
+	ld	a,(hl)		;Ignore this entry if it is
+	cp	0E5h		; deleted.
+	ret	z
+
+	ld	de,ENT_BUF	;Copy the entry to a fixed
+	ld	bc,32		; buffer for ease of
+	ldir			; handling.
+
+	ld	a,(ENT_ATTR)	;Ignore entry if it is for
+	bit	AT_VOL,a	; a volume name.
+	ret	nz
+
+	ld	hl,(FILE_LIST)	;Look through each item
+name_chk_loop:
+	ld	a,(hl)		; in the file list in turn.
+	or	a
+	ret	z		;Return when done whole list
+	push	hl
+	inc	hl
+	ld	de,ENT_BUF
+	call	CMP_FNAME	;If name in file list matches
+	pop	hl		; the name from disk then
+	jr	nz,no_name_clash ; set bit-6 of flags byte to
+	set	6,(hl)		; mark it as invalid.
+no_name_clash:
+	ld	bc,1+32+SV_SIZE
+	add	hl,bc		;Step onto next item in list
+	jr	name_chk_loop	; and loop back.
+
+;******************************************************************************
+;
+CLU_CHK:
+;
+;    This  routine  has  the  job of examining the list of candidate files for
+; undeletion (the "items") and resolving any cluster clashes.  Where a cluster
+; number  occurs  in  more  than  one  item it must select a single item to be
+; undeleted and reject all others.  It produces a byte of flags at  the  start
+; of  each item which indicate which items have been selected and also various
+; error flags on each one.
+;
+;	bit-7 - Clear => end of list
+;	bit-6 - Set => name clash with existing file in directory
+;	bit-5 - Set => file size wrong (only if bit-3 clear)
+;	bit-4 - Set => invalid directory (only if bit-3 set)
+;	bit-3 - Set => sub-directory,  clear => file
+;	bit-2 - Set => item has been un-deleted
+;	bit-1 - Set => item has been rejected (only if bit-0 set)
+;	bit-0 - Set => item has been examined
+;
+	ld	hl,(FILE_LIST)
+clu_chk_loop:
+	ld	a,(hl)		;Look at next item in list and
+	or	a		; return if end of list.
+	ret	z
+	bit	0,(hl)		;Ignore the item if it has
+	jp	nz,clu_chk_next	; already been examined.
+
+;	----------------------------------------
+
+	push	hl
+	ld	de,1+DR_FIRST_CLUSTER	;Get the cluster number from
+	add	hl,de		; out of this item and store
+	ld	e,(hl)		; it at CC_CLUSTER so we can
+	inc	hl		; look for same cluster
+	ld	d,(hl)		; clashes.
+	ld	(CC_CLUSTER),de
+	ld	bc,-1
+cc_size_loop:
+	inc	bc		;Count the number of clusters
+	call	NEXT_CLU	; in the chain and store it
+	ex	de,hl		; at CC_SIZE for checking the
+	jr	z,cc_size_loop	; size of files.
+	ld	(CC_SIZE),bc
+	pop	hl
+
+	xor	a		;Flag that directory validity
+	ld	(CC_DRCHK),a	; has not been checked yet.
+
+	call	EXAMINE_ENTRY	;Setup directory and file
+	push	hl		; flags for this item.
+	ld	d,h
+	ld	e,l		;DE := initial "old" item
+
+;	----------------------------------------
+
+cc_loop2:
+	ld	bc,1+32+SV_SIZE	;Step onto next item in list
+	add	hl,bc		; for comparison and exit the
+	ld	a,(hl)		; inner loop if end of list.
+	or	a
+	jr	z,cc_loop2_done
+
+	push	hl
+	ld	bc,1+DR_FIRST_CLUSTER	;Get the cluster number from
+	add	hl,bc		; this item compare with
+	ld	c,(hl)		; the cluster number for this
+	inc	hl		; iteration of the main loop.
+	ld	b,(hl)
+	ld	hl,(CC_CLUSTER)
+	or	a
+	sbc	hl,bc
+	pop	hl		;If wrong cluster number then
+	jr	nz,cc_loop2	; ignore this item.
+
+	push	de		;If correct cluster number
+	call	EXAMINE_ENTRY	; then set up the validity
+	pop	de		; flags for the new item.
+
+	ld	a,(CC_DRCHK)
+	ld	b,a		;B := directory checked flags
+
+	ld	a,(de)		;A := flags for old item.
+	bit	3,a		;If both old and new items
+	jr	z,old_not_dir	; are sub-directories then
+	bit	3,(hl)		; jump to check for name
+	jr	nz,chk_name	; clash & date/time.
+
+	bit	4,b		;If old item is a directory and
+	jr	z,reject_new	; new one is file then keep the
+	jr	reject_old	; directory if it is valid and
+				; the file if the directory
+				; was invalid.
+
+old_not_dir:
+	bit	3,(hl)		;If old item is file and new
+	jr	z,neither_dir	; item is directory then keep
+	bit	4,b		; the directory if it is valid
+	jr	z,reject_old	; and the file if the directory
+	jr	reject_new	; was invalid.
+
+neither_dir:
+	ld	a,(de)
+	xor	(hl)		;Both are files. If both sizes
+	bit	5,a		; are valid or both invalid,
+	jr	z,chk_name	; check for names & date/time.
+	bit	5,(hl)		;If one is valid and one is
+	jr	nz,reject_new	; invalid then reject whichever
+	jr	reject_old	; one is invalid.
+
+chk_name:
+	ld	a,(de)		;If both items are equally
+	xor	(hl)		; valid then see if one of them
+	bit	6,a		; has a name clash with a file
+	jr	z,chk_date_time	; in the directory.  If so
+	bit	6,(hl)		; then reject that one.
+	jr	nz,reject_new
+	jr	reject_old
+
+chk_date_time:
+	push	hl		;If neither or both items have
+	push	de		; a name clash then compare the
+	ld	bc,1+DR_DATE+1	; two dates and times and
+	add	hl,bc		; reject the older one of the
+	ex	de,hl		; two.
+	add	hl,bc		;HL & DE -> high byte of date
+	ex	de,hl		; in the two items.
+	ld	b,4
+	xor	a
+date_time_loop:
+	ld	a,(de)		;Loop to compare the four bytes
+	cp	(hl)		; of date and time until a
+	jr	nz,date_time_diff ; difference is found.
+	dec	hl
+	dec	de
+	djnz	date_time_loop
+date_time_diff:
+	pop	de		;Restore item pointers
+	pop	hl		;If old item date/time was
+	jr	c,reject_old	; lower then reject it, else
+				; reject the new item.
+
+reject_new:
+	set	1,(hl)		;Set flag to reject new item
+	jr	cc_loop2	; loop back to continue checks
+
+reject_old:
+	ex	de,hl		;Set flag to reject old item
+	set	1,(hl)		; get address of new item into
+	ld	h,d		; DE so it will become the
+	ld	l,e		; new "old" item.
+	jr	cc_loop2
+
+;	----------------------------------------
+
+cc_loop2_done:
+	pop	hl		;Inner loop finished so restore
+				; pointer to find next item
+				; to examine.
+clu_chk_next:
+	ld	de,1+32+SV_SIZE
+	add	hl,de		;Point to next item and loop
+	jp	clu_chk_loop	; back.
+
+;------------------------------------------------------------------------------
+;
+EXAMINE_ENTRY:
+;
+;     This subroutine is called by "CLU_CHK" above  to  set  up  the  validity
+; flags for a new item addressed by HL.  The "examined" flag (bit-0) is always
+; set to prevent the item being examined twice.  The attributes  of  the  item
+; are then examined since files and sub-directories are treated differently.
+;
+;    A  sub-directory  has the "sub-directory" flag (bit-3) set and its
+; validity checked by "CHECK_DIR", which sets the "invalid directory" flag
+; (bit-4) if the check fails.
+;
+;    For a file, the file size is divided by the cluster size and rounded  up.
+; This is compared with the length of the cluster chain in "CC_SIZE" and if it
+; is different then the file size is set to the correct value for the  cluster
+; chain and the "wrong size" flag (bit-5) is set.  In all cases for a file the
+; "sub-directory" flag (bit-3) is left clear.
+;
+; Entry:     HL = Address of flags byte of item to be examined
+; Corrupts:  AF,BC,DE
+;
+	set	0,(hl)		;Flag item has been examined
+	push	hl		;Must preserve item pointer
+	ld	de,1+DR_ATTRIBUTES
+	add	hl,de
+	bit	AT_DIR,(hl)	;Look at attributes and
+	jr	z,examine_file	; skip if it is a file.
+
+	ld	(hl),ATM_DIR	;SUB-DIRECTORY - set attributes
+	call	CHECK_DIR	;Check whether valid or not
+	pop	hl		; and mask the result into
+	or	(hl)		; the flags byte for this
+	ld	(hl),a		; item.
+	ret
+
+examine_file:
+	ld	(hl),ATM_ARC	;FILE - set default attributes
+	ld	de,DR_SIZE-DR_ATTRIBUTES
+	add	hl,de
+	push	hl
+	ld	e,(hl)		;Get file size from the item
+	inc	hl		; into BC:DE ready for
+	ld	d,(hl)		; determining the number of
+	inc	hl		; clusters which the file is
+	ld	c,(hl)		; supposed to have.
+	inc	hl
+	ld	b,(hl)
+
+	ld	a,d		;Decrement the file size
+	or	e		; to ensure partial clusters
+	dec	de		; are included properly.
+	jr	nz,ex_no_dec_carry
+	dec	bc
+ex_no_dec_carry:
+	ld	a,(CLU_SHIFT)	;Divide the file size - 1 by
+	add	a,9		; the cluster size which
+ex_byte_clu_loop:
+	srl	b		; is always a power of two.
+	rr	c		;This gives the number of
+	rr	d		; clusters - 1 in BC:DE
+	rr	e
+	dec	a
+	jr	nz,ex_byte_clu_loop
+
+	inc	de		;Increment the result by 1 to
+	ld	a,d		; get the actual number of
+	or	e		; clusters in the file.
+	jr	nz,ex_no_inc_carry
+	inc	bc
+ex_no_inc_carry:
+	ld	a,c		;File size must be wrong if
+	or	b		; more than 65535 clusters.
+	jr	nz,ex_invalid_size
+	ld	hl,(CC_SIZE)	;Compare result with actual
+	or	a		; number of clusters in chain
+	sbc	hl,de		; and return if it is correct.
+	jr	z,ex_valid_size
+
+ex_invalid_size:
+	ld	a,(CLU_SHIFT)	; FILE IS WRONG SIZE.
+	inc	a
+	ld	b,a		;Multiply the actual number of
+	ld	hl,(CC_SIZE)	; clusters by the cluster size
+	xor	a		; to get the actual size which
+ex_clu_byte_loop:
+	add	hl,hl		; the file is supposed to be.
+	adc	a,a
+	djnz	ex_clu_byte_loop
+
+	ex	de,hl
+	pop	hl		;Store the actual size of the
+	ld	(hl),0		; file in place of the wrong
+	inc	hl		; file size in the item.
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	inc	hl
+	ld	(hl),a
+	pop	hl		;Restore item pointer and set
+	set	5,(hl)		; "wrong size" flag.
+	ret
+
+ex_valid_size:
+	pop	hl		;File is correct size so
+	pop	hl		; restore pointer and return
+	ret			; with flags still clear.
+
+;------------------------------------------------------------------------------
+;
+CHECK_DIR:
+;
+;    This routine checks  that  the  sub-directory  starting  at  the  cluster
+; defined  in  "CC_CLUSTER"  is  valid.   If  "CC_DRCHK"  is non-zero then the
+; directory has already  been checked  so  this  value  is  returned directly.
+; Otherwise, all entries in the directory are examined.  The first two entries
+; must be "." and ".." with the correct cluster numbers and all other  entries
+; must  start  with  zero  (never been used) or 0E5h (deleted).  The result is
+; returned in register A and also stored in "CC_DRCHK" in case this routine is
+; called again.
+;
+; Entry:      None
+; Returns:    A = bit-3  always set to indicate sub-directory
+;		  bit-4 set if directory is invalid, clear if valid
+; Corrupts:   AF,BC,DE,HL
+;
+	ld	a,(CC_DRCHK)	;If directory has already been
+	or	a		; checked then return the
+	ret	nz		; result straight away.
+
+	ld	hl,(CC_CLUSTER)	;Set up to search the
+	ld	(DIR_START),hl	; sub-directory.
+
+	call	DRE_START	;Get first directory entry
+	jr	nz,invalid_dir	; and complain if none.
+	ld	de,dot_name
+	ld	bc,(CC_CLUSTER)	;Check that first entry is
+	call	CHECK_DOT_DIR	; "." with the correct cluster
+	jr	nz,invalid_dir	; number.  Reject if not.
+
+	call	DRE_NEXT	;Similarly check that the 2nd
+	jr	nz,invalid_dir	; entry is present & cluster
+	ld	de,dot_dot_name	; no. of main search dir.
+	ld	bc,(SRCH_DIR_CLU)
+	call	CHECK_DOT_DIR
+	jr	nz,invalid_dir	;Reject if not.
+
+check_dir_loop:
+	call	DRE_NEXT	;Loop through all other entries
+	jr	nz,valid_dir	; in the directory making sure
+	ld	a,(hl)		; that they start with zero
+	or	a		; (never been used) or 0E5h
+	jr	z,check_dir_loop ; (deleted).
+	cp	0E5h
+	jr	z,check_dir_loop
+
+invalid_dir:
+	ld	a,00011000b	;Set "directory checked" flag
+	jr	set_drchk	; and also set the "invalid
+valid_dir:			; directory" flag if the
+	ld	a,00001000b	; directory was dubious.
+set_drchk:
+	ld	(CC_DRCHK),a
+	ret
+
+dot_dot_name:
+	db	"..         "
+dot_name:
+	db	".          "
+
+;------------------------------------------------------------------------------
+;
+CHECK_DOT_DIR:
+;
+;    This  routine checks that a directory entry contains the name and cluster
+; number specified, and is a sub-directory.  If the required cluster number is
+; the root directory mark (FFFFh exactly; FAT16 cluster numbers can use all
+; 16 bits) then the cluster number in the directory must be zero (which is
+; how the root directory is indicated in "." and ".." entries).
+;
+; Entry:     HL -> directory entry as returned by "DRE_NEXT"
+;	     DE -> required name (11 bytes)
+;	     BC =  cluster number required
+; Returns:   Z-flag set (Z) => name and cluster match
+;		    clear (NZ) => name and cluster do not match
+; Corrupts:  AF,BC,DE,HL
+;
+	push	bc
+	ld	b,11
+check_dot_loop:
+	ld	a,(de)		;Loop to check 11 characters
+	cp	(hl)		; of name and jump to return
+	jr	nz,dot_fail_nz_1 ; NZ if any of them are wrong.
+	inc	hl
+	inc	de
+	djnz	check_dot_loop
+
+	ld	a,(hl)		;Test attributes byte and if
+	and	ATM_DIR		; it is not a sub-directory
+	cp	ATM_DIR		; then return NZ to indicate
+dot_fail_nz_1:
+	pop	bc		; failure.
+	ret	nz
+
+	ld	a,b		;If required cluster is the
+	and	c		; root directory mark then
+	inc	a		; set it to zero since
+	jr	nz,not_root_clu	; this is what is in entry.
+	ld	bc,0
+not_root_clu:
+
+	ld	de,DR_FIRST_CLUSTER-DR_ATTRIBUTES ;Get cluster number from
+	add	hl,de		; directory entry and compare
+	ld	e,(hl)		; it with the one passed in BC.
+	inc	hl
+	ld	d,(hl)
+	ex	de,hl
+	or	a
+	sbc	hl,bc		;Return Z or NZ as appropriate.
+	ret
+
+;******************************************************************************
+;
+MOD_DIR:
+;
+;    This  routine  goes  through  all  the  selected  items  for  undeletion,
+; modifying the live FAT appropriately and writing the undeleted directory
+; entry out to disk. Any items  which  clash  with  a  file  already  in  the
+; directory (including  ones  we  have just un-deleted) will be renamed as a
+; file of the form "FILEnnnn.UDL" by the routine "RENAME_ITEM".
+;
+	ld	hl,(FILE_LIST)
+mod_dir_loop:
+	ld	a,(hl)		;Look at next item in list and
+	or	a		; exit if end of list.
+	jp	z,mod_dir_done
+	bit	1,(hl)		;Ignore item if it has been
+	jp	nz,mod_dir_next	; rejected.
+
+	push	hl
+	call	PRINT_HDR	;Print the "Files undeleted in"
+				; header before the first name.
+	call	WR_NAME_ITEM	;Print name of item
+	pop	hl
+
+	bit	4,(hl)		;If item is an invalid sub-
+	jr	z,not_inv_dir	; directory then mark the
+	set	1,(hl)		; item as rejected.
+	push	hl
+	ld	a,__INV_MSG	;Print out "invalid sub-
+	call	WR_MSG		; directory" message and
+	call	WR_CRLF		; go on to the next item.
+	pop	hl
+	jp	mod_dir_next
+
+not_inv_dir:
+	bit	6,(hl)		;If name clash with file
+	ex	de,hl		; in directory then jump
+	jr	nz,must_rename	; to rename it.
+
+	ld	hl,(FILE_LIST)	;Check for name clash with
+chk_name2_loop:
+	bit	1,(hl)		; all previously un-deleted
+	jr	nz,chk_name2_next ; items.
+	bit	2,(hl)
+	jr	z,dont_rename	;Exit when reach this one.
+	push	hl
+	push	de
+	inc	hl		;Compare the names in the
+	inc	de		; two items and if they are
+	call	CMP_FNAME	; the same then jump to rename
+	pop	de		; the new item.
+	pop	hl
+	jr	z,must_rename
+chk_name2_next:
+	ld	bc,1+32+SV_SIZE	;Step onto next item and
+	add	hl,bc		; loop back.
+	jr	chk_name2_loop
+
+must_rename:
+	push	de		;If item requires renaming
+	call	RENAME_ITEM	; then do so & write out
+	pop	de		; a warning message.
+dont_rename:
+	ex	de,hl
+	set	2,(hl)		;Flag item un-deleted.
+
+	push	hl
+	bit	5,(hl)		;If file size was adjusted
+	ld	a,__SZA_MSG	; then print a warning
+	call	nz,WR_MSG	; message.
+	pop	hl
+
+	push	hl
+	bit	3,(hl)		;If item was a sub-directory
+	ld	a,__DIR_MSG	; then print a warning message
+	call	nz,WR_MSG
+	call	WR_CRLF		;Go to start of new line.
+	pop	hl
+
+	push	hl
+	ld	bc,1+32		;Load directory search
+	add	hl,bc		; variables back down from
+	ld	de,SV_START	; item so we can re-locate
+	ld	bc,SV_SIZE	; the directory entry.
+	ldir
+	call	DRE_SAME	;Find directory entry
+	ex	de,hl
+	pop	hl
+	push	hl		;Load the new directory entry
+	inc	hl		; from the item on top of the
+	ld	bc,32		; old one.
+	ldir
+	call	DIRTY_BUFFER	;Mark sector buffer as dirty
+
+	pop	hl
+	push	hl		;Get start cluster number
+	ld	bc,1+DR_FIRST_CLUSTER	; from the item.
+	add	hl,bc
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+
+;    Reconstruct the file chain in the live FAT: each cluster gets the value
+; that the merged stale view holds for it, except that a zero value (a chain
+; truncated by the FAT scan) is turned into an end of chain mark.  Stop once
+; an end of chain value has been written.
+
+undel_fat_loop:
+	call	GET_ENT2	;HL := chain link for this cluster.
+	ld	a,h
+	or	l
+	jr	nz,undel_not_null
+	ld	hl,(EOC_VAL)	;A zero entry marks a truncated
+				; chain: close the file here.
+undel_not_null:
+	push	hl
+	call	PUT_ENT1	;Write the value into the live FAT.
+	pop	hl
+	ex	de,hl		;DE := the value just written.
+	ld	hl,(EOC_MIN)	;If it was an end of chain mark then
+	or	a		; the chain is complete; otherwise
+	sbc	hl,de		; continue with the next cluster,
+	jr	c,undel_chain_done ; which is that value.
+	jr	nz,undel_fat_loop
+undel_chain_done:
+	pop	hl
+
+mod_dir_next:
+	ld	bc,1+32+SV_SIZE	;Step on to next item to
+	add	hl,bc		; undelete.
+	jp	mod_dir_loop
+
+mod_dir_done:
+	jp	FLUSH		;Flush any dirty buffers
+
+;------------------------------------------------------------------------------
+;
+RENAME_ITEM:
+;
+;    This routine is called when the item pointed to by DE must be renamed  as
+; a file of the form "FILEnnnn.UDL".  It checks that the intended new name does
+; not already exist in the directory.  If it does then the ASCII  number  is
+; incremented  and it tries again.  Once a suitable name has been found, it is
+; printed out along with a "renamed" message.
+;
+; Entry:      DE -> Item to be renamed
+; Corrupts:  AF,BC,DE,HL
+;
+	push	de
+
+rename_clash:
+	ld	hl,undel_name+7	;Increment the ASCII number
+undel_inc_loop:
+	inc	(hl)		; in the undelete filename
+	ld	a,(hl)		; ready for checking for
+	cp	"9"+1		; a clash.
+	jr	nz,rename_check
+	ld	(hl),"0"
+	dec	hl
+	jr	undel_inc_loop
+
+rename_check:
+	ld	hl,(SRCH_DIR_CLU) ;Initialise a search of the
+	ld	(DIR_START),hl	; directory.
+
+	call	DRE_START	;Get first directory entry
+	jr	ren_chk_go	; and jump to process it.
+
+ren_chk_loop:
+	call	DRE_NEXT	;Get next directory entry.
+ren_chk_go:
+	jr	nz,ren_chk_end	;Exit if reached physical
+	ld	a,(hl)		; end of directory, or logical
+	or	a		; end (never been used entry).
+	jr	z,ren_chk_end
+	cp	0E5h		;Ignore entry if it is
+	jr	z,ren_chk_loop	; deleted.
+
+	ex	de,hl		;Compare this entry with the
+	ld	hl,undel_name	; name we are intending to
+	call	CMP_FNAME	; use and loop back if not the
+	jr	nz,ren_chk_loop	; same.
+	jr	rename_clash	;Jump to try next number if
+				; there is a clash.
+
+ren_chk_end:
+	pop	de
+	push	de
+	inc	de		;Copy the new name into
+	ld	hl,undel_name	; the item ready for
+	ld	bc,11		; un-deletion.
+	ldir
+
+	ld	a,__REN_MSG	;Print a "renamed" message
+	call	WR_MSG		; followed by the new name
+	pop	hl		; of the file.
+	jp	WR_NAME_ITEM
+
+undel_name:
+	db	"FILE0000","UDL"
+
+;------------------------------------------------------------------------------
+;
+PRINT_HDR:
+;
+;    Prints the "Files undeleted in <path>" header, once, before the
+; first item of the list.  The path is the normalised absolute path of
+; the searched directory ("X:\DIR1\DIR2", or "X:\" for the root), as
+; left in DIRBUF by the resolution code (drive letter regenerated from
+; DRIVE; DIRBUF+2 holds "\DIR1\DIR2" or an empty string for the root).
+; The two localised message halves surround the path (their split point
+; differs between the two languages).
+;
+; Corrupts:  AF
+;
+	ld	a,(HDR_DONE)	;Only once.
+	or	a
+	ret	nz
+	push	hl
+	ld	a,1
+	ld	(HDR_DONE),a
+	call	PROG_CLEAR	;Get the status line out of
+				; the way of the report.
+	ld	a,__UND1_MSG
+	call	WR_MSG
+	ld	a,(DRIVE)	;The drive letter and colon...
+	add	a,"A"-1
+	call	WR_CHAR
+	ld	a,":"
+	call	WR_CHAR
+	ld	a,(DIRBUF+2)	;...then the normalised path
+	or	a		; ("\..." from the resolution
+	jr	nz,hdr_path	; code, or a lone "\" for the
+	ld	a,"\"		; root).
+	call	WR_CHAR
+	jr	hdr_tail
+hdr_path:
+	ld	hl,DIRBUF+2
+	call	WR_STRING
+hdr_tail:
+	ld	a,__UND2_MSG
+	call	WR_MSG
+	pop	hl
+	ret
+
+;------------------------------------------------------------------------------
+;
+WR_NAME_ITEM:
+;
+;    This routine prints out the name from an item pointed to by  HL.   It  is
+; left  justified and padded out with spaces to 12 characters to ensure a neat
+; display if any warning messages are needed.
+;
+; Entry:     HL -> item whose name is to be displayed
+; Corrupts:  AF,BC,DE,HL
+;
+	ld	c,12+1		;Initialise space counter
+
+	inc	hl
+	ld	a,(hl)		;If first character of filename
+	cp	05h		; is 05h then translate it
+	jr	nz,wni_no_e5	; into 0E5h for printing.
+	ld	a,0E5h
+wni_no_e5:
+	ld	b,8		;Character count for filename
+fname_loop:
+	inc	hl
+	cp	" "		;Print characters of filename
+	jr	z,no_name_space	; supressing spaces.
+	call	WR_CHAR		;Decrement space count in C
+	dec	c		; for every character printed.
+no_name_space:
+	ld	a,(hl)
+	djnz	fname_loop
+
+	cp	" "		;If extension is present
+	jr	z,no_extension	; then print a "." and
+	ld	a,"."		; decrement space count in
+	call	WR_CHAR		; register C.
+	dec	c
+	ld	a,(hl)
+
+	ld	b,3		;Exactly the same as the
+fext_loop:
+	inc	hl		; loop to print the filename
+	cp	" "		; but this one prints the
+	jr	z,no_ext_space	; three characters of the
+	call	WR_CHAR		; extension, supressing
+	dec	c		; spaces.
+no_ext_space:
+	ld	a,(hl)
+	djnz	fext_loop
+
+no_extension:
+	ld	b,c
+	jr	pad_space_st
+
+pad_space_loop:
+	ld	a," "		;Pad out with the required
+	call	WR_CHAR		; number of spaces to get to
+pad_space_st:
+	djnz	pad_space_loop	; 12 characters total.
+	ret
+
+;******************************************************************************
+;
+SAVE_FAT:
+;
+;    This routine writes the modified live FAT back to disk.
+;
+;    On FAT12 this involves packing the in-memory expanded entries back up
+; into 12 bits each by calling "PUT_NYBBLE" three times for each entry.  When
+; all entries have been written the last FAT sector is padded out with 0Fh
+; nybbles to keep things neat, and the buffers are flushed.
+;
+;    On FAT16 all the FAT modifications have already been done by read-patch-
+; write through the sector buffer, so only the final flush remains.
+;
+;    In both cases the writes go to every FAT copy EXCEPT the stale last one
+; (this is FLUSH_BUF's discipline), so that another UNDEL command can still
+; be issued afterwards.
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jp	nz,FLUSH
+
+	ld	de,(FAT_START)	;DE' := first sector of FAT
+	ld	bc,0		;BC' := initial nybble count
+	exx
+	ld	hl,(FAT_1_ADDR)	;HL -> start of live FAT in RAM
+	ld	bc,(TOT_CLU)	;BC := cluster count
+
+save_fat_loop:
+	ld	a,(hl)
+	call	PUT_NYBBLE	;Put lowest nybble of FAT
+	ld	a,(hl)		; entry in.
+	rlca
+	rlca
+	rlca
+	rlca			;Put next nybble of FAT entry
+	call	PUT_NYBBLE	; in.
+	inc	hl
+	ld	a,(hl)
+	call	PUT_NYBBLE	;Put highest nybble of FAT
+	inc	hl		; entry in
+	dec	bc
+	ld	a,b
+	or	c		;Loop back 'til done all
+	jr	nz,save_fat_loop ; entries
+
+pad_fat_loop:
+	exx			;Pad out last sector with
+	ld	a,b		; 0FFFh entries until the
+	or	c		; nybble count goes to zero.
+	jr	z,pad_fat_done
+	exx
+	ld	a,0Fh
+	call	PUT_NYBBLE
+	jr	pad_fat_loop
+
+pad_fat_done:
+	exx			;Back to the main register set.
+	jp	FLUSH		;Ensure all buffers written
+
+;------------------------------------------------------------------------------
+;
+PUT_NYBBLE:
+;
+;    This routine adds a single nybble to the bufferred FAT sector.  A  nybble
+; count is kept in BC' and a pointer in HL'.  If the nybble count is zero then
+; a new buffer is obtained for the sector  (and  HL'  need  not  be  valid  on
+; entry).  This will normally result in the old sector being written out.
+;
+; Entry:     BC' = Count of nybbles left in sector (0...1023)
+;	     DE' = Next logical sector number
+;	     HL' = Current location in buffer (undefined if BC'=0)
+;	      A  = Value of nybble to store (bits 4...7 ignored)
+; Returns:   BC',DE',HL' = updated accordingly
+; Corrupts:   AF,BC',DE',HL'
+;
+	push	af		;Save new nybble value
+	exx
+	ld	a,b		;If there is space left in
+	or	c		; current buffer then skip.
+	jr	nz,same_sector
+
+	call	G_FAT_BUFF	;If new sector needed then
+	call	DIRTY_BUFFER	; get a buffer for it and
+	inc	de		; mark it as dirty.
+	ld	bc,1024		;Re-initialise nybble counter.
+
+same_sector:
+	pop	af		;Get new nybble value.
+	rrd			;Rotate it into current byte
+	bit	0,c
+	jr	z,sv_low_nybble	;If finished byte then point
+	inc	hl		; on to next one.
+sv_low_nybble:
+	dec	bc
+	exx			;Restore main registers and
+	ret			; return.
+
+;******************************************************************************
+;
+;	THE FAT ACCESS LAYER
+;
+;    All the routines below preserve BC and DE and corrupt AF and HL (and
+; none of them touches the alternate register set).  Cluster numbers are
+; always passed in DE.  Two views of the FAT are provided:
+;
+;    - The LIVE view (GET_ENT1/PUT_ENT1): the first FAT copy (with the other
+;      non-last copies as read fallbacks, and written to every copy except
+;      the stale last one).
+;    - The MERGED view (GET_ENT2, and NEXT_CLU on top of it): the live value
+;      when the cluster is allocated, the stale last copy's value otherwise,
+;      and zero for entries "zapped" by pass 3 of SCAN_FATS.  This is
+;      equivalent to the modified second FAT copy that the original program
+;      kept in memory.
+;
+;------------------------------------------------------------------------------
+;
+VALID_CLU:
+;
+;    Checks whether a cluster number is valid for this disk.  Zero and one
+; are counted as invalid cluster numbers by this routine.
+;
+; Entry:     DE = Cluster number
+; Returns:    A = 00h (and Z)  if DE is a valid cluster number
+;             A = FFh (and NZ) if DE is an invalid cluster number
+; Corrupts:  AF,HL
+;
+	ld	a,e		;Check for cluster number
+	res	0,a		; zero or one and return
+	or	d		; NZ if it is one of these.
+	jr	nz,not_clu_0_1
+	dec	a
+	ret
+
+not_clu_0_1:
+	scf
+	ld	hl,(TOT_CLU)	;Check that the cluster
+	sbc	hl,de		; number is within the range
+	jr	nc,valid_clu_ok	; for this disk.
+	xor	a
+	dec	a		;Return A=FFh and NZ if
+	ret			; entry is out of range.
+
+valid_clu_ok:
+	xor	a		;Return with A=0 and Z-set.
+	ret
+
+;------------------------------------------------------------------------------
+;
+GET_ENT1:
+;
+;    Returns the value of a live FAT entry.  On FAT12 the value comes from
+; the expanded live FAT in memory; on FAT16 it is read from disk through the
+; sector cache.
+;
+; Entry:     DE = Cluster number (must be valid)
+; Returns:   HL = Value of the entry
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,GET_ENT1_16
+	ld	hl,(FAT_1_ADDR)	;FAT12: read the entry from
+	add	hl,de		; the expanded FAT in memory.
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ret
+
+GET_ENT1_16:
+	xor	a		;Cache load mode 0: live copy
+	jr	cache_ent_go	; (multi-copy read retries).
+
+;------------------------------------------------------------------------------
+;
+GET_STALE:
+;
+;    Returns the value of an entry of the stale last FAT copy.  Only used by
+; pass 1 of SCAN_FATS (and by the FAT16 merge in GET_ENT2).
+;
+; Entry:     DE = Cluster number (must be valid)
+; Returns:   HL = Value of the entry
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,GET_STALE_16
+	ld	hl,(FAT_2_ADDR)	;FAT12: read the entry from the
+	add	hl,de		; expanded stale FAT in memory.
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ret
+
+GET_STALE_16:
+	ld	a,1		;Cache load mode 1: stale last copy
+				; (plain read, errors are fatal).
+cache_ent_go:
+	ld	(CACHE_MODE),a
+	call	CACHE_ENT	;HL -> the 16 bit entry in the cache
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ret
+
+;------------------------------------------------------------------------------
+;
+GET_ENT2:
+;
+;    Returns the merged view of a FAT entry (see the layer comment above).
+;
+; Entry:     DE = Cluster number (must be valid)
+; Returns:   HL = Value of the entry
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,get_ent2_16
+	ld	hl,(FAT_2_ADDR)	;FAT12: pass 1 has already merged
+	add	hl,de		; the live values into the stale
+	add	hl,de		; FAT in memory, and pass 3 zaps
+	ld	a,(hl)		; entries there directly.
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ret
+
+get_ent2_16:
+	ld	hl,(BM_ZAP)	;Entry zapped (truncated chain)?
+	call	BM_TEST
+	jr	z,ge2_not_zap
+	ld	hl,0
+	ret
+ge2_not_zap:
+	call	GET_ENT1_16	;Allocated clusters read from the
+	ld	a,h		; live FAT (this is pass 1's merge,
+	or	l		; done on the fly); unallocated
+	ret	nz		; ones from the stale last copy.
+	jr	GET_STALE_16
+
+;------------------------------------------------------------------------------
+;
+PUT_ENT2C:
+;
+;    Pass 1 helper: records that a cluster is allocated in the live FAT, so
+; that the merged view returns the live value.  On FAT12 this copies the
+; value into the expanded stale FAT in memory (exactly what the original
+; program's pass 1 did); on FAT16 the merge in GET_ENT2 already prefers a
+; non-zero live entry, so there is nothing to do.
+;
+; Entry:     DE = Cluster number (must be valid), HL = live entry value
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	ret	nz
+	push	bc
+	push	de
+	ld	b,h
+	ld	c,l
+	ld	hl,(FAT_2_ADDR)
+	add	hl,de
+	add	hl,de
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+	pop	de
+	pop	bc
+	ret
+
+;------------------------------------------------------------------------------
+;
+PUT_ZAP:
+;
+;    Sets the merged view of a FAT entry to zero (used by pass 3 of
+; SCAN_FATS to truncate corrupted undeletable chains).  The live FAT and the
+; on-disk stale copy are not touched.
+;
+; Entry:     DE = Cluster number (must be valid)
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,put_zap_16
+	ld	hl,(FAT_2_ADDR)	;FAT12: zero the entry in the
+	add	hl,de		; merged in-memory FAT.
+	add	hl,de
+	ld	(hl),0
+	inc	hl
+	ld	(hl),0
+	ret
+put_zap_16:
+	ld	hl,(BM_ZAP)	;FAT16: record the change in
+	jp	BM_SET		; the overlay bitmap.
+
+;------------------------------------------------------------------------------
+;
+PUT_ENT1:
+;
+;    Writes a value into the live FAT entry of a cluster.  On FAT12 the
+; expanded live FAT in memory is updated (SAVE_FAT writes it out later).  On
+; FAT16 the FAT sector is read into the sector buffer (trying the other
+; non-stale copies on read errors), patched, and marked as a dirty FAT
+; sector, so that FLUSH_BUF writes it to every FAT copy except the stale
+; last one.
+;
+; Entry:     DE = Cluster number (must be valid), HL = value to write
+; Corrupts:  AF,HL
+;
+	ld	a,(FS_FAT16)
+	or	a
+	jr	nz,put_ent1_16
+	push	bc
+	push	de
+	ld	b,h		;BC := the value
+	ld	c,l
+	ld	hl,(FAT_1_ADDR)
+	add	hl,de
+	add	hl,de
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+	pop	de
+	pop	bc
+	ret
+
+put_ent1_16:
+	push	bc
+	push	de
+	push	hl		;Save the value to write
+	ld	hl,(FAT_START)	;HL := absolute sector number (in
+	ld	b,0		; the first FAT copy) of the
+	ld	c,d		; sector holding the entry.
+	add	hl,bc
+	push	hl		;Save the sector number
+
+	call	CACHE_INVAL	;The cache may hold this sector:
+				; invalidate it, since its contents
+				; are about to change.
+
+	ld	bc,(BUFFER_SECT) ;Skip the read if the sector is
+	or	a		; already in the sector buffer.
+	sbc	hl,bc		;(The high word can only be non
+	jr	nz,pe16_load	; zero for a data area sector,
+	ld	hl,(BUFFER_SECT+2) ; whose low word can still match:
+	ld	a,h		; check it too.)
+	or	l
+	jr	z,pe16_have
+
+pe16_load:
+	call	FLUSH_BUF	;Write out whatever the buffer
+	pop	hl		; holds, then read the FAT sector
+	push	hl		; into it (with multi-copy
+	ld	(BUFFER_SECT),hl ; retries).
+	ld	bc,(FAT_START)
+	or	a
+	sbc	hl,bc
+	ld	a,l		;A := FAT-relative sector number
+	ld	hl,0
+	ld	(BUFFER_SECT+2),hl
+	ld	de,BUFFER
+	call	R_FAT16
+
+pe16_have:
+	pop	hl		;Discard the saved sector number
+	pop	bc		;BC := the value to write
+	pop	de		;DE := the cluster number
+	push	de
+	ld	a,e		;Point HL at the entry within the
+	add	a,a		; buffer: BUFFER + (cluster AND
+	ld	l,a		; FFh) * 2.
+	ld	h,0
+	jr	nc,pe16_nc
+	inc	h
+pe16_nc:
+	ld	de,BUFFER
+	add	hl,de
+	ld	(hl),c		;Store the value.
+	inc	hl
+	ld	(hl),b
+	ld	a,00000011b	;Dirty + FAT sector: FLUSH_BUF
+	ld	(BUFFER_FLAG),a	; will write it to all the FAT
+	pop	de		; copies except the stale last
+	pop	bc		; one.
+	ret
+
+;------------------------------------------------------------------------------
+;
+NEXT_CLU:
+;
+;    This routine returns the merged view value for a specified cluster.
+;
+; Entry:     DE = Cluster number
+; Returns:   Z-flag set => HL = value of the entry.  If the entry is an end
+;                               of chain mark then HL=FFFFh.
+;            Z-flag clear => invalid cluster number (HL is undefined)
+;                            Note clusters 0 and 1 are invalid
+; Corrupts:  AF,HL
+;
+; (Unlike in the original program, the working flags of the cluster are NOT
+; returned here: the callers that need them use BM_TEST on the relevant
+; bitmap, which is cheaper than assembling all the flags on every FAT
+; read.)
+;
+	call	VALID_CLU	;Return NZ if invalid number.
+	ret	nz
+
+	call	GET_ENT2	;HL := value of the entry
+	push	de
+	push	hl
+	ld	de,(EOC_MIN)	;If the value is an end of chain
+	or	a		; mark (FF8h...FFFh on FAT12,
+	sbc	hl,de		; FFF8h...FFFFh on FAT16) then
+	pop	hl		; set HL to FFFFh to indicate
+	jr	c,next_clu_val	; end of chain.
+	ld	hl,0FFFFh
+next_clu_val:
+	pop	de
+	cp	a		;Return with Z-flag set.
+	ret
+
+;------------------------------------------------------------------------------
+;
+;    Generic bitmap bit operations.  The working flag bitmaps are accessed
+; through the base pointers precomputed by SETUP_FAT (BM_P_UNDEL,
+; BM_P_CHAIN, BM_P_REF); the FAT16 "zapped" overlay bitmap through BM_ZAP.
+;
+; Entry:     HL = bitmap base address
+;            DE = cluster number
+; Returns:   BM_TEST: Z => bit clear, NZ => bit set (A = masked byte)
+;            BM_TSET: as BM_TEST for the PREVIOUS state; the bit is set
+; Corrupts:  AF,HL
+;
+BM_TSET:
+	call	BM_LOCATE
+	push	bc
+	ld	b,a		;B := mask
+	ld	c,(hl)		;C := previous byte
+	or	(hl)		;Set the bit.
+	ld	(hl),a
+	ld	a,c		;Z/NZ from the previous state
+	and	b		; of the bit.
+	pop	bc
+	ret
+
+BM_TEST:
+	call	BM_LOCATE
+	and	(hl)
+	ret
+
+BM_SET:
+	call	BM_LOCATE
+	or	(hl)
+	ld	(hl),a
+	ret
+
+BM_LOCATE:			;HL = base, DE = cluster ->
+	push	de		; HL = byte address, A = bit mask
+	ld	a,e
+	and	7		;A := bit number within the byte
+	ex	de,hl		;DE := base, HL := cluster
+	srl	h		;HL := cluster / 8
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	add	hl,de		;HL := byte address
+	push	hl
+	ld	hl,BIT_MASKS	;A := 1 SHL bit number, from
+	add	a,l		; a lookup table.
+	ld	l,a
+	ld	a,h
+	adc	a,0
+	ld	h,a
+	ld	a,(hl)
+	pop	hl
+	pop	de
+	ret
+
+BIT_MASKS:
+	db	01h,02h,04h,08h,10h,20h,40h,80h
+
+;------------------------------------------------------------------------------
+;
+SKIP_CLR:
+;
+;    The workhorse of pass 3 of the FAT scan: starting at a candidate
+; cluster, it walks DOWNWARD past all the clusters whose bit in a given
+; bitmap is clear, and stops at the first cluster whose bit is set, or when
+; the walk goes below cluster 2.  A byte whose eight clusters all have clear
+; bits is skipped in one step, which makes scanning the (usually large)
+; regions of the disk with no undeletable clusters very fast.
+;
+; Entry:     HL = bitmap base address
+;            DE = candidate cluster number
+; Returns:   Z-flag set  => DE = first cluster (walking downward) whose bit
+;                           is set
+;            Z-flag clear => no such cluster >= 2 (the scan is finished);
+;                           DE is undefined
+; Corrupts:  AF,DE,HL
+;
+	push	bc
+skpc_check:
+	ld	a,d		;Below cluster 2? Then there is
+	or	a		; nothing left to scan.
+	jr	nz,skpc_ok
+	ld	a,e
+	cp	2
+	jr	c,skpc_none
+skpc_ok:
+	push	hl		;Save the bitmap base.
+	call	BM_LOCATE	;HL := byte address, A := mask
+	ld	c,a		;C := mask
+	ld	a,(hl)
+	ld	b,a		;B := bitmap byte
+	and	c
+	jr	nz,skpc_found	;Bit set: found our cluster.
+	ld	a,d		;Fast path: if the whole byte is
+	or	a		; clear, skip below it in one
+	jr	nz,skpc_fast_ok	; step (only when the cluster is
+	ld	a,e		; >= 8, so that the cluster
+	cp	8		; number cannot underflow).
+	jr	c,skpc_slow
+skpc_fast_ok:
+	ld	a,b
+	or	a
+	jr	nz,skpc_slow	;Byte is not 00h: go bit by bit.
+	ld	a,e		;DE := (DE AND NOT 7) - 1, i.e.
+	and	0F8h		; the highest cluster of the
+	ld	e,a		; next lower byte.
+	dec	de
+	pop	hl		;Restore base and reexamine.
+	jr	skpc_check
+
+skpc_slow:
+	dec	de		;Step down to the next cluster.
+	srl	c		;Shift the mask along; if it
+	jr	c,skpc_newbyte	; falls off, move to next byte.
+	ld	a,d		;Guard the bottom of the bitmap
+	or	a		; (clusters 0 and 1 are not
+	jr	nz,skpc_bit	; scanned).
+	ld	a,e
+	cp	2
+	jr	c,skpc_none1
+skpc_bit:
+	ld	a,b		;Test the next bit of the same
+	and	c		; (already fetched) byte.
+	jr	z,skpc_slow
+skpc_found:
+	pop	hl		;Found: return Z, DE = cluster.
+	pop	bc
+	xor	a
+	ret
+skpc_newbyte:
+	pop	hl		;Crossed a byte boundary:
+	jr	skpc_check	; recompute and carry on.
+skpc_none1:
+	pop	hl
+skpc_none:
+	pop	bc
+	or	1		;Return NZ: scan finished.
+	ret
+
+;------------------------------------------------------------------------------
+;
+;    Progress display for the FAT scanning passes: a percentage (language
+; neutral, so no localized messages are involved) redrawn in place on the
+; same line as the scan advances.  The pacing is work-based: each pass
+; declares how many loop iterations it will perform and the percentage
+; span it covers, and the percentage is bumped every PROG_STEP iterations.
+; The sweep covers 0...49% (one iteration per cluster) and pass 3 covers
+; 50...98% (one iteration per undeletable cluster, as counted during the
+; sweep).  When the scan finishes the display is left showing 99% during
+; the directory and recovery phases; every routine which prints anything
+; erases it first (see PROG_CLEAR and its callers).
+;
+PROG_INIT:
+	xor	a		;The sweep: TOT_CLU iterations
+	ld	(PROG_PCT),a	; spanning the first half of the
+	ld	hl,(TOT_CLU)	; percentage range.
+	ld	bc,50
+	jr	PROG_SETUP
+
+PROG_PASS3:
+	ld	hl,(UNDEL_CNT)	;Pass 3: one iteration per
+	ld	bc,49		; undeletable cluster, spanning
+				; the second half (to 98%).
+				;Fall through to PROG_SETUP.
+PROG_SETUP:
+;
+;    Arms the tick counter for a pass which will call PROG_TICK HL times
+; and must advance the percentage by BC points: PROG_STEP := HL / BC
+; (minimum 1) iterations per 1%.  Corrupts AF, BC, DE, HL.
+;
+	ld	de,0
+prog_div:
+	or	a
+	sbc	hl,bc
+	jr	c,prog_div_done
+	inc	de
+	jr	prog_div
+prog_div_done:
+	ld	a,d
+	or	e
+	jr	nz,prog_step_ok
+	inc	de
+prog_step_ok:
+	ld	(PROG_STEP),de
+	ld	(PROG_CNT),de
+	ret
+
+PROG_TICK:
+;
+;    Called on every iteration of the pass loops.  Bumps and redraws the
+; percentage each time another PROG_STEP iterations have been counted.
+; Preserves BC and DE, corrupts AF and HL.
+;
+	ld	hl,(PROG_CNT)	;Nothing to do until another
+	dec	hl		; PROG_STEP iterations have
+	ld	(PROG_CNT),hl	; been done.
+	ld	a,h
+	or	l
+	ret	nz
+	ld	hl,(PROG_STEP)	;Rearm the counter for the
+	ld	(PROG_CNT),hl	; next percentage point.
+	ld	a,(PROG_PCT)
+	cp	99		;Cap the counting at 99% (a
+	ret	nc		; pass overshoots its span when
+	inc	a		; its work is not an exact
+	ld	(PROG_PCT),a	; multiple of PROG_STEP).
+				;Fall through to PROG_SHOW.
+PROG_SHOW:
+;
+;    Displays or updates the percentage after the "Processing... " text.
+; The percentage always takes three characters ("NN%", with a leading
+; space below 10%), so once it is on screen an update just moves the
+; cursor three positions back and reprints it; the full line is only
+; drawn when it is not already there.  Corrupts AF.
+;
+	ld	a,(PROG_ACT)
+	cp	2		;Percentage already on screen:
+	jr	z,prog_rewind	; just rewind the cursor over it.
+	cp	1		;Prefix already on screen: the
+	jr	z,prog_append	; cursor is in place, append.
+	ld	a,CR		;Nothing on screen: draw the
+	call	WR_CHAR		; whole line.
+	ld	a,__PROC_MSG
+	call	WR_MSG
+prog_append:
+	ld	a,2
+	ld	(PROG_ACT),a
+	jr	prog_digits
+
+prog_rewind:
+	ld	a,CURLEFT	;Move the cursor back over the
+	call	WR_CHAR		; three percentage characters.
+	ld	a,CURLEFT
+	call	WR_CHAR
+	ld	a,CURLEFT
+	call	WR_CHAR
+
+prog_digits:
+	push	bc
+	ld	a,(PROG_PCT)	;Split the percentage (0...99)
+	ld	b,0		; into tens and units.
+prog_tens_loop:
+	cp	10
+	jr	c,prog_tens_done
+	sub	10
+	inc	b
+	jr	prog_tens_loop
+prog_tens_done:
+	ld	c,a		;C := units digit
+	ld	a,b
+	or	a		;Leading space instead of a
+	jr	z,prog_lead_space ; zero below 10%.
+	add	a,"0"
+	jr	prog_tens_put
+prog_lead_space:
+	ld	a," "
+prog_tens_put:
+	call	WR_CHAR
+	ld	a,c
+	add	a,"0"
+	call	WR_CHAR
+	pop	bc
+	ld	a,"%"
+	jp	WR_CHAR
+
+PROG_CLEAR:
+;
+;    Erases the status line, if one is being displayed.  Corrupts AF only.
+;
+	ld	a,(PROG_ACT)
+	or	a
+	ret	z
+	xor	a
+	ld	(PROG_ACT),a
+	push	bc
+	ld	a,CR
+	call	WR_CHAR
+	ld	b,20		;Enough blanks to cover the
+prog_clear_loop:
+	ld	a," "		; status line in either
+	call	WR_CHAR		; language.
+	djnz	prog_clear_loop
+	ld	a,CR
+	call	WR_CHAR
+	pop	bc
+	ret
+
+;------------------------------------------------------------------------------
+;
+CACHE_ENT:
+;
+;    Returns the address, within the FAT16 sector cache, of the FAT entry of
+; a cluster in the live FAT or in the stale last copy (per "CACHE_MODE"),
+; loading the corresponding FAT sector into the cache first if it is not
+; there.  The cache holds CACHE_SECT sectors, keyed by absolute sector
+; number and replaced round-robin; it is read-only, so nothing ever needs
+; to be written back when a sector is evicted.
+;
+; Entry:     DE = Cluster number (must be valid)
+;            (CACHE_MODE) = 0 for the live FAT, 1 for the stale last copy
+; Returns:   HL = Address of the (16 bit) FAT entry in the cache
+; Corrupts:  AF,HL
+;
+;    The slot base of the last accessed FAT sector is memoized: FAT
+; accesses come overwhelmingly in runs within the same sector (sequential
+; scans, chain walks), so the common case reduces to one compare and an
+; address computation.
+;
+	push	bc
+	push	de
+	ld	a,(CACHE_MODE)
+	or	a
+	ld	hl,(FAT_START)
+	jr	z,cache_base_ok
+	ld	hl,(LAST_FAT_ST)
+cache_base_ok:
+	ld	b,0		;HL := absolute sector number of
+	ld	c,d		; the FAT sector holding the
+	add	hl,bc		; entry.
+
+	ld	a,(G16_OK)	;Fast path: same FAT sector as
+	or	a		; the previous access?
+	jr	z,cache_slow
+	ld	bc,(G16_KEY)
+	or	a
+	sbc	hl,bc
+	add	hl,bc
+	jr	nz,cache_slow
+	ld	hl,(G16_BASE)	;HL := memoized slot base +
+	ld	a,e		; (cluster AND FFh) * 2.
+	add	a,a
+	ld	c,a
+	ld	a,0
+	adc	a,a
+	ld	b,a
+	add	hl,bc
+	pop	de
+	pop	bc
+	ret
+
+cache_slow:
+	xor	a		;Drop the memo while the slot is
+	ld	(G16_OK),a	; being looked up; record the new
+	ld	(G16_KEY),hl	; sector key.
+	ex	de,hl		;DE := the sector number.
+
+	ld	hl,CACHE_TAB	;Scan the cache slot table
+	ld	b,CACHE_SECT	; (3 bytes per slot: valid flag
+	ld	c,0		; and 16 bit sector number).
+cache_scan:
+	ld	a,(hl)		;Skip invalid slots.
+	or	a
+	jr	z,cache_miss1
+	inc	hl
+	ld	a,(hl)		;Compare the sector key.
+	cp	e
+	dec	hl
+	jr	nz,cache_miss1
+	inc	hl
+	inc	hl
+	ld	a,(hl)
+	dec	hl
+	dec	hl
+	cp	d
+	jr	z,cache_hit
+cache_miss1:
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	c
+	djnz	cache_scan
+
+	call	CACHE_LOAD	;Not cached: load it (C := slot)
+
+cache_hit:
+	ld	a,c		;HL := the slot's buffer address
+	add	a,a		; (CACHE_BASE + slot * 512),
+	ld	h,a		; memoized for the fast path.
+	ld	l,0
+	ld	bc,(CACHE_BASE)
+	add	hl,bc
+	ld	(G16_BASE),hl
+	ld	a,1
+	ld	(G16_OK),a
+	pop	de		;DE := cluster number again
+	push	de
+	ld	a,e		;HL += (cluster AND FFh) * 2
+	add	a,a		; = the address of the entry.
+	ld	c,a
+	ld	a,0
+	adc	a,a
+	ld	b,a
+	add	hl,bc
+	pop	de
+	pop	bc
+	ret
+
+;------------------------------------------------------------------------------
+;
+CACHE_LOAD:
+;
+;    Loads a FAT sector into a cache slot, chosen round-robin.  The slot is
+; only marked as holding valid data after the read has succeeded, so a
+; totally failed read (all FAT copies unreadable, error ignored by the user)
+; does not leave garbage marked as good.
+;
+; Entry:     DE = absolute sector number
+;            (CACHE_MODE) = 0 for the live FAT, 1 for the stale last copy
+; Returns:    C = cache slot number used
+; Corrupts:  AF,DE,HL
+;
+	push	de		;Save the sector number
+	xor	a		;A slot is being replaced, so
+	ld	(G16_OK),a	; drop the CACHE_ENT memo (it is
+				; refreshed on return).
+	ld	a,(CACHE_RR)	;C := slot to use, and advance
+	ld	c,a		; the round-robin counter.
+	inc	a
+	cp	CACHE_SECT
+	jr	c,cache_rr_ok
+	xor	a
+cache_rr_ok:
+	ld	(CACHE_RR),a
+
+	ld	a,c		;HL := slot table entry
+	add	a,a		; (3 bytes per slot).
+	add	a,c
+	ld	e,a
+	ld	d,0
+	ld	hl,CACHE_TAB
+	add	hl,de
+	ld	(hl),0		;Invalidate the slot while
+	inc	hl		; loading.
+	pop	de		;DE := sector number again
+	ld	(hl),e		;Store the sector key.
+	inc	hl
+	ld	(hl),d
+	dec	hl
+	dec	hl
+	push	hl		;Save the valid flag address
+	push	de		;Save the sector number
+
+	ld	a,c		;DE := address of the slot
+	add	a,a		; buffer (CACHE_BASE +
+	ld	h,a		; slot * 512).
+	ld	l,0
+	ld	de,(CACHE_BASE)
+	add	hl,de
+	ex	de,hl
+
+	pop	hl		;HL := sector number
+	ld	a,(CACHE_MODE)
+	or	a
+	jr	nz,cache_ld_stale
+
+	push	bc
+	ld	bc,(FAT_START)	;Live FAT: read with the multi-copy
+	or	a		; retries, from the FAT-relative
+	sbc	hl,bc		; sector number.
+	ld	a,l
+	pop	bc
+	call	R_FAT16
+	jr	cache_ld_done
+
+cache_ld_stale:
+	ld	(CUR_SEC),hl	;Stale last copy: plain read (a
+	ld	hl,0		; failure here is fatal, as it was
+	ld	(CUR_SEC+2),hl	; in the original program).
+	push	bc
+	call	DISK_RD
+	pop	bc
+cache_ld_done:
+	pop	hl
+	ld	(hl),1		;Mark the slot as valid.
+	ret
+
+;------------------------------------------------------------------------------
+;
+CACHE_INVAL:
+;
+;    Invalidates any cache slot holding a given absolute sector (used when
+; PUT_ENT1 is about to modify that sector on disk).
+;
+; Entry:     HL = absolute sector number
+; Corrupts:  AF
+;
+	push	bc
+	push	de
+	push	hl
+	xor	a		;The memoized sector might be
+	ld	(G16_OK),a	; the invalidated one: drop the
+				; memo.
+	ex	de,hl		;DE := the sector number
+	ld	hl,CACHE_TAB
+	ld	b,CACHE_SECT
+ci_loop:
+	inc	hl
+	ld	a,(hl)		;Compare the slot's sector key
+	cp	e		; (whether the slot is valid or
+	inc	hl		; not).
+	jr	nz,ci_next
+	ld	a,(hl)
+	cp	d
+	jr	nz,ci_next
+	dec	hl
+	dec	hl
+	ld	(hl),0		;Match: invalidate the slot.
+	inc	hl
+	inc	hl
+ci_next:
+	inc	hl
+	djnz	ci_loop
+	pop	hl
+	pop	de
+	pop	bc
+	ret
+
+;------------------------------------------------------------------------------
+;
+R_FAT16:
+;
+;    Reads one sector of the FAT16 live FAT into a buffer, trying all the
+; FAT copies EXCEPT the stale last one if there are read errors (see
+; R_FAT_SECT for the error handling logic).
+;
+; Entry:      A = FAT-relative sector number
+;            DE = target buffer address
+; Returns:   None
+; Corrupts:  AF,HL
+;
+	push	bc
+	push	de
+	ld	hl,(FAT_START)	;HL := absolute sector number
+	ld	c,a		; within the first FAT copy.
+	ld	b,0
+	add	hl,bc
+	ld	(RF_SEC),hl
+rf_retry:
+	ld	c,0		;Initial FAT copy number
+	ld	hl,(RF_SEC)
+rf_loop:
+	ld	(CUR_SEC),hl	;Set up the sector number for
+	ld	hl,0		; DISK_RD (FAT sectors always
+	ld	(CUR_SEC+2),hl	; fit in 16 bits).
+	ld	hl,MULT_FLAGS	;Set multi-sector read flag
+	set	0,(hl)		; and clear multi-sector error
+	res	1,(hl)	 	; flag.
+	pop	de		;DE := target buffer
+	push	de
+	push	bc
+	call	DISK_RD		;Try reading this FAT copy
+	pop	bc
+
+	ld	a,(MULT_FLAGS)
+	bit	1,a		;Finish if this copy of the
+	jr	z,rf_ok		; FAT was read OK.
+
+	call	PROG_CLEAR	;Get the status line out of the
+	ld	a,(MULT_FLAGS)	; way of the error message.
+	bit	4,a		;If this is the first error on
+	set	4,a		; this sector then set the flag
+	call	z,WR_CRLF	; and print a blank line.
+	ld	a,__RFT1_MSG	;Print a message saying
+	call	WR_MSG		; "Error reading FAT ".
+	inc	c
+	ld	a,c		;Increment the FAT number and
+	call	WR_BYTE		; display it.
+	ld	a,__FAT2_MSG
+	call	WR_MSG
+
+	ld	a,(FAT_COPY)	;If tried all FAT copies except
+	dec	a		; the stale last one then jump to
+	cp	c		; retry letting the error through
+	jr	z,rf_fail	; to the user.
+
+	ld	hl,(CUR_SEC)	;Add on the size of a FAT
+	ld	de,(FAT_SZ16)	; to the sector number to get
+	add	hl,de		; sector number of next copy.
+	jr	rf_loop		;Loop to do next FAT copy.
+
+rf_fail:
+	ld	hl,MULT_FLAGS	;All usable FAT copies failed.
+	set	2,(hl)		;Retry with a flag set to let the
+	jr	rf_retry	; first error through to the user.
+
+rf_ok:
+	xor	a		;Switch off error interception
+	ld	(MULT_FLAGS),a	; for normal reads & writes.
+	pop	de
+	pop	bc
+	ret
+
+;******************************************************************************
+;
+;	SECTOR I/O
+;
+;    Sector numbers are 32 bits wide (a FAT16 volume can have up to 8M
+; sectors) and are passed to READ_SECT, DISK_RD and DISK_WR in the CUR_SEC
+; variable.  All reads and writes use _RDDRV/_WRDRV (the _RDABS/_WRABS
+; functions are deprecated; _RDDRV/_WRDRV exist since Nextor 2.1, which
+; this program requires anyway).  On FAT12 volumes the high word of the
+; sector number is always zero.
+;
+;------------------------------------------------------------------------------
+;
+R_FAT_SECT:
+;
+;    (FAT12 only.)  This routine is called just as if it was "READ_SECT",
+; with a 16 bit FAT sector number in DE.  However if an error occurs in
+; reading the sector then an error is printed and it goes on to the next FAT
+; copy and so on.  The errors occur as "disk errors" which will be trapped by
+; the "ERV_ROUTINE" which will ignore the error but also set a flag which
+; this routine detects.  If all FAT copies fail then they are tried again but
+; with a flag set to allow the first error through to MSX-DOS's normal
+; Abort/Retry/Ignore handling.  This allows the user a chance to retry the
+; whole read, or to abort (ignore is rather dangerous).  Note that the last
+; copy of the FAT will not be read by this routine (it is stale by design).
+;
+; Entry:     DE = Logical sector number required
+; Returns:   DE = Preserved
+;            HL = Address of first byte of sector in buffer
+; Corrupts:  AF,BC,HL
+;
+fat_retry_loop:
+	push	de		;Remember FAT sector number
+	ld	c,0		;Initial FAT copy number
+
+fat_sect_loop:
+	ld	hl,MULT_FLAGS	;Set multi-sector read flag
+	set	0,(hl)		; and clear multi-sector error
+	res	1,(hl)		; flag.
+	push	bc
+	ld	(CUR_SEC),de	;Set up the 32 bit sector
+	ld	hl,0		; number for READ_SECT.
+	ld	(CUR_SEC+2),hl
+	call	READ_SECT	;Try reading a FAT copy
+	pop	bc
+
+	ld	a,(MULT_FLAGS)
+	bit	1,a		;Finish if this copy of the
+	jr	z,fat_read_ok	; FAT was read OK.
+
+	call	INVAL_BUFFER	;Don't leave the failed sector
+				; marked as bufferred, or the
+				; retries would silently return
+				; its garbage contents.
+	call	PROG_CLEAR	;Get the status line out of the
+	ld	a,(MULT_FLAGS)	; way of the error message.
+	bit	4,a		;If this is the first error on
+	set	4,a		; this sector then set the flag
+	call	z,WR_CRLF	; and print a blank line.
+	ld	a,__RFT1_MSG	;Print a message saying
+	call	WR_MSG		; "Error reading FAT ".
+	inc	c
+	ld	a,c		;Increment the FAT number and
+	call	WR_BYTE		; display it.
+	ld	a,__FAT2_MSG
+	call	WR_MSG
+
+	ld	a,(FAT_COPY)	;If tried all FAT copies except
+	dec	a		; the stale last one then jump
+	cp	c		; to retry, letting the error
+	jr	z,last_fat_fail	; through to the user.
+
+	ld	hl,(FAT_SZ16)	;Add on the size of a FAT
+	add	hl,de		; to the sector number to get
+	ex	de,hl		; sector number of next copy.
+	jr	fat_sect_loop	;Loop to do next FAT copy.
+
+last_fat_fail:
+	pop	de		;All usable FAT Copies failed.
+	ld	hl,MULT_FLAGS	;Set DE back to first sector again
+	set	2,(hl)		; and retry with a flag set to
+	jr	fat_retry_loop	; let the first error through
+				; to the user.
+
+fat_read_ok:
+	pop	de		;Restore sector number
+	xor	a		;Switch off error interception
+	ld	(MULT_FLAGS),a	; for normal reads & writes.
+	ld	hl,BUFFER	;Point HL at the buffer.
+	ret
+
+;------------------------------------------------------------------------------
+;
+READ_SECT:
+;
+;    This  is the general purpose sector read routine.  If the required sector
+; is already in the buffer then a pointer to it is  returned.   Otherwise  the
+; old sector in the buffer is written out if required and the new one read in.
+; Any  error  from  MSX-DOS will terminate the program, returning the error to
+; COMMAND.COM.
+;
+; Entry:     (CUR_SEC) = 32 bit logical sector number required
+; Returns:   HL = Address of first byte of sector in buffer
+; Corrupts:  AF,HL
+;
+	push	bc
+	push	de
+	ld	hl,(CUR_SEC)	;If required sector is already
+	ld	de,(BUFFER_SECT) ; in the buffer then just
+	or	a		; return a pointer to it.
+	sbc	hl,de
+	jr	nz,read_new_sect
+	ld	hl,(CUR_SEC+2)
+	ld	de,(BUFFER_SECT+2)
+	or	a
+	sbc	hl,de
+	jr	z,got_sector_ret
+
+read_new_sect:
+	ld	hl,(CUR_SEC)	;FLUSH_BUF uses CUR_SEC itself,
+	push	hl		; so preserve the new sector
+	ld	hl,(CUR_SEC+2)	; number around it.
+	push	hl
+	call	FLUSH_BUF	;Clear out old buffer
+	xor	a		;The buffer no longer holds a FAT
+	ld	(BUFFER_FLAG),a	; sector (or a dirty one).
+	pop	hl
+	ld	(CUR_SEC+2),hl	;Record new bufferred sector
+	ld	(BUFFER_SECT+2),hl
+	pop	hl
+	ld	(CUR_SEC),hl
+	ld	(BUFFER_SECT),hl
+
+	ld	de,BUFFER	;Read the sector into the
+	call	DISK_RD		; buffer.
+
+got_sector_ret:
+	pop	de
+	pop	bc
+	ld	hl,BUFFER	;Point HL at the buffer.
+	ret
+
+;------------------------------------------------------------------------------
+;
+;    GET_BUFF (FAT12 only, used when writing out the packed FAT) is just
+; like "READ_SECT" but does not actually read the sector from disc, it
+; just returns a buffer for the sector.  G_FAT_BUFF additionally marks the
+; buffer as holding a FAT sector, so that FLUSH_BUF writes all the copies
+; (except the stale last one).
+;
+; Entry:     DE = 16 bit logical sector number required
+; Returns:   DE = Preserved
+;            HL = Address of first byte of sector in buffer
+; Corrupts:  AF,HL
+;
+G_FAT_BUFF:
+	call	GET_BUFF	;Get a sector buffer
+	ld	a,(BUFFER_FLAG)
+	set	1,a		;Mark this buffer as being
+	ld	(BUFFER_FLAG),a	; for a FAT sector.
+	ret
+
+GET_BUFF:
+	push	bc
+	push	de
+	ld	hl,(BUFFER_SECT) ;If required sector is already
+	or	a		; in the buffer then just
+	sbc	hl,de		; return a pointer to it.
+	jr	nz,get_new_buff
+	ld	hl,(BUFFER_SECT+2)
+	ld	a,h
+	or	l
+	jr	z,get_buff_ret
+
+get_new_buff:
+	call	FLUSH_BUF	;Clear out old buffer
+	xor	a		;Clear the dirty and FAT sector
+	ld	(BUFFER_FLAG),a	; marks for the new sector.
+	pop	de
+	push	de
+	ld	(BUFFER_SECT),de ;Record new bufferred sector
+	ld	hl,0
+	ld	(BUFFER_SECT+2),hl
+
+get_buff_ret:
+	pop	de
+	pop	bc
+	ld	hl,BUFFER	;Point HL at the buffer.
+	ret
+
+;------------------------------------------------------------------------------
+;
+DIRTY_BUFFER:
+;
+;    This is an external routine which simply marks the sector buffer as dirty
+; so it will get written out.
+;
+; Entry:      None
+; Corrupts:   AF
+;
+	ld	a,(BUFFER_FLAG)	;Just mark sector buffer as
+	set	0,a		; dirty.
+	ld	(BUFFER_FLAG),a
+	ret
+
+;------------------------------------------------------------------------------
+;
+INVAL_BUFFER:
+;
+;    Marks the sector buffer as not holding any sector.  Corrupts nothing
+; (not even the flags).
+;
+	push	hl
+	ld	hl,0FFFFh
+	ld	(BUFFER_SECT),hl
+	ld	(BUFFER_SECT+2),hl
+	pop	hl
+	ret
+
+;------------------------------------------------------------------------------
+;
+FLUSH:
+;
+;    "FLUSH"  is  an external entry point which will flush all sector buffers.
+; Currently it is identical to FLUSH_BUF which is an internal routine.  Its
+; operation is complicated by the  handling  of  FAT  sectors  which  must  be
+; flushed out with multiple copies.  Note that FAT sectors are not written to
+; the last FAT copy, so more undeletion can still be done.
+;
+; Corrupts:    AF,HL
+;
+FLUSH_BUF:
+	ld	a,(BUFFER_FLAG)	;Do nothing if buffer does
+	bit	0,a		; not need writing out.
+	ret	z
+	res	0,a		;Clear the "dirty buffer" flag
+	ld	(BUFFER_FLAG),a
+
+	push	ix
+	push	de
+	push	bc
+	ld	b,0		;Set bit-0 of B if it is a FAT
+	bit	1,a		; sector and clear it other-
+	jr	z,not_fat_flush	; wise, to allow multiple
+	set	0,b		; copies to be written.
+not_fat_flush:
+
+flsh_fat_retry:
+	ld	c,0		;Initial FAT copy number
+	ld	hl,(BUFFER_SECT) ;Set up the 32 bit sector
+	ld	(CUR_SEC),hl	; number of the bufferred
+	ld	hl,(BUFFER_SECT+2) ; sector for DISK_WR.
+	ld	(CUR_SEC+2),hl
+flush_fat_loop:
+	ld	a,b		;Setup required error
+	ld	(MULT_FLAGS),a	; interception flags.
+
+	push	bc
+	ld	de,BUFFER	;Write the sector from the
+	call	DISK_WR		; buffer to disc.
+	pop	bc
+	ld	a,(MULT_FLAGS)
+	bit	0,a		;Exit if it was not a FAT
+	jr	z,flush_ret	; sector.
+
+	inc	c		;Increment FAT copy number.
+	bit	1,a		;Skip if this copy of the FAT
+	jr	z,no_fat_error	; was written out OK.
+	call	PROG_CLEAR	;Get the status line out of the
+				; way of the error message.
+	bit	4,b		;Leave a blank line if this
+	set	4,b		; is the first error on this
+	call	z,WR_CRLF	; FAT sector.
+	ld	a,__WFT1_MSG	;Display a message saying
+	call	WR_MSG		; "Error writing FAT ".
+	ld	a,c
+	call	WR_BYTE		;Display the FAT number.
+	ld	a,__FAT2_MSG
+	call	WR_MSG
+	jr	wr_fat_error
+
+no_fat_error:
+	set	3,b		;Flag one FAT copy written OK
+wr_fat_error:
+	res	2,b		;Don't let any more errors thru
+	ld	hl,(CUR_SEC)	;Add on the size of a FAT
+	ld	de,(FAT_SZ16)	; to the sector number to get
+	add	hl,de		; sector number of next copy
+	ld	(CUR_SEC),hl	; (FAT sectors always fit in
+				; 16 bits).
+
+	ld	a,(FAT_COPY)	;If not done all FAT copies
+	dec	a		; except the stale last one
+	cp	c		; yet then loop back to do
+	jr	nz,flush_fat_loop ; next one.
+
+	bit	3,b		;If no FAT copies were written
+	set	2,b		; then retry the whole lot with
+	jr	z,flsh_fat_retry ; a flag set to allow errors
+				; through to the user.
+
+flush_ret:
+	pop	bc
+	pop	de
+	pop	ix
+	xor	a		;Clear multi-sector flags to
+	ld	(MULT_FLAGS),a	; allow normal read/writes.
+	ret
+
+;------------------------------------------------------------------------------
+;
+;    DISK_RD and DISK_WR read/write one sector, at the 32 bit sector number
+; in CUR_SEC, into/from the buffer pointed to by DE, with _RDDRV/_WRDRV.
+; Any error terminates the program unless it was intercepted (and thus
+; turned into a success return) by ERV_ROUTINE.
+;
+; Entry:     DE = Buffer address, (CUR_SEC) = sector number
+; Corrupts:  AF,BC,DE,HL
+;
+DISK_RD:
+	ld	c,_SETDTA##	;The sector is transferred
+	call	MSX_DOS		; at the DTA.
+	ld	de,(CUR_SEC)
+	ld	hl,(CUR_SEC+2)
+	ld	a,(DRIVE)
+	dec	a		;Convert drive to 0=A:
+	ld	b,1		;Call to read one sector
+	ld	c,_RDDRV##	; from the disc.
+	call	MSX_DOS
+	jp	nz,EXIT		;Give up if error
+	ret
+
+DISK_WR:
+	ld	c,_SETDTA##	;The sector is transferred
+	call	MSX_DOS		; at the DTA.
+	ld	de,(CUR_SEC)
+	ld	hl,(CUR_SEC+2)
+	ld	a,(DRIVE)
+	dec	a		;Convert drive to 0=A:
+	ld	b,1		;Call to write one sector
+	ld	c,_WRDRV##	; to the disc.
+	call	MSX_DOS
+	jp	nz,EXIT		;Give up if error
+	ret
+
+;******************************************************************************
+;
+;	DIRECTORY SEARCHING
+;
+;------------------------------------------------------------------------------
+;
+DRE_START:
+;
+;    This routine is called to start the search of a directory.  The directory
+; is  specified by its start cluster number in the variable "DIR_START", which
+; will be FFFFh if it is the root directory.  Once it  has  done some fiddling
+; around  with  the cluster number, this routine jumps into DRE_NEXT to set up
+; the directory search variables.
+;
+; Returns:    Z-flag  set  =>  HL -> directory entry in sector buffer
+;             Z-flag clear =>  A=1 => end of directory reached (HL undefined)
+;                              A=2 => directory chain was corrupt (..  ..  )
+; Corrupts:   AF,BC,DE,HL
+;
+	ld	de,(DIR_START)	;Get start cluster number
+	ld	a,d		; and jump into "DRE_NEXT"
+	and	e		; if it is a sub-directory
+	inc	a		; (the root directory mark is
+	jr	nz,SUB_DRE_START ; FFFFh exactly; FAT16 cluster
+				; numbers can use all 16 bits).
+
+				;ROOT DIRECTORY
+
+	LD	HL,(RT_ENT)	;Number of root directory ents.
+	LD	B,4		;/16 -> number of full sectors.
+loop_sec_sft:
+	SRL	H
+	RR	L
+	DJNZ	loop_sec_sft
+	LD	A,L		;"RT_SEC".
+	PUSH	AF
+	LD	A,(RT_ENT)	;Find remainder when /16, to
+	AND	00001111b	; give "DIR_ODD".
+
+	ld	hl,(RT_START)	;Start at the first sector of
+	ld	(DIR_SECTOR),hl	; the root directory (32 bit
+	ld	hl,0		; sector number, high word
+	ld	(DIR_SECTOR+2),hl ; always zero for the root).
+	ld	hl,0FFFFh	;Set next cluster to the root
+				; directory mark to indicate
+				; that there is no next cluster.
+	jr	ROOT_DRE_START
+
+;------------------------------------------------------------------------------
+;
+DRE_SAME:
+	ld	hl,DIR_E_LEFT	;Bump entries left count to
+	inc	(hl)		; ensure we get same entry.
+
+DRE_NEXT:
+;
+;    This routine returns a pointer to the next entry in the  directory  being
+; searched.   If  the  physical  end  of  the  directory is reached, or if the
+; cluster chain is invalid then it returns NZ and the search must  stop.   The
+; root directory is treated as a single cluster of rather an odd size.
+;
+; Returns:    Z-flag  set  =>  HL -> directory entry in sector buffer
+;             Z-flag clear =>  A=1 => end of directory reached (HL undefined)
+;                              A=2 => directory chain was corrupt (..  ..  )
+; Corrupts:   AF,BC,DE,HL
+;
+	ld	a,(DIR_E_LEFT)	;Decrement number of entries
+	dec	a		; left and if non-zero then
+	jr	nz,same_dir_sector ; jump to use same sector.
+
+	ld	hl,(DIR_SECTOR)	;Bump the 32 bit current
+	inc	hl		; sector number.
+	ld	(DIR_SECTOR),hl
+	ld	a,h
+	or	l
+	jr	nz,no_dir_sec_carry
+	ld	hl,(DIR_SECTOR+2)
+	inc	hl
+	ld	(DIR_SECTOR+2),hl
+no_dir_sec_carry:
+	ld	a,(DIR_S_LEFT)	;Decrement number of sectors
+	dec	a		; left in this cluster and
+	jr	nz,same_cluster	; jump if non-zero.
+
+	ld	a,(DIR_ODD)	;If there is an odd sector at
+	or	a		; the end of this cluster then
+	jr	nz,odd_sector	; jump to process it.
+
+	ld	de,(DIR_NEXT_CLU) ;Get next cluster number and
+	ld	a,d		; if it is the end of directory
+	and	e		; mark (FFFFh exactly), return
+	inc	a		; NZ and A=1 to indicate end of
+	jr	nz,SUB_DRE_START ; directory reached.
+	ld	a,1
+	or	a
+	ret
+
+SUB_DRE_START:
+	call	NEXT_CLU	;Find next cluster number (HL) and
+	jr	z,sub_dre_ok	; return NZ and A=2 if the cluster
+	ld	a,2		; to search is invalid (corrupt
+	or	a		; directory chain).
+	ret
+sub_dre_ok:
+	call	CLU_TO_SEC	;Set DIR_SECTOR to the first
+				; sector of cluster DE.
+	ld	a,(SEC_CLU)	;Put number of sectors in this
+	PUSH	AF		; cluster on the stack.
+	xor	a		;Flag no odd sector
+
+ROOT_DRE_START:
+	ld	(DIR_ODD),a	;Record odd sector count
+	ld	(DIR_NEXT_CLU),hl ;Record next cluster number
+	pop	af		;A := number of sectors in
+				;     this cluster.
+
+same_cluster:
+	ld	b,512/32	;Get entry count for whole
+	or	a		; sector into B and skip if any
+	jr	nz,not_odd_sector ; whole sectors are left.
+
+odd_sector:
+	ld	a,(DIR_ODD)	;For an odd sector, get number
+	ld	b,a		; of entries into B and zero
+	xor	a		; it for next time round.
+	ld	(DIR_ODD),a
+	inc	a		;Sectors left = 1.
+
+not_odd_sector:
+	ld	(DIR_S_LEFT),a	;Record number of sectors left
+	ld	a,b		;Record total number of entries
+	ld	(DIR_ENT),a	; in this sector.
+
+same_dir_sector:
+	ld	(DIR_E_LEFT),a	;Record number of entries left
+	push	af		; in sector & save it for below
+	ld	hl,(DIR_SECTOR)	;Read the current directory
+	ld	(CUR_SEC),hl	; sector into the buffer.
+	ld	hl,(DIR_SECTOR+2)
+	ld	(CUR_SEC+2),hl
+	call	READ_SECT
+
+	pop	bc		;Calculate the entry number
+	ld	a,(DIR_ENT)	; within this sector from
+	sub	b		; total number of entries and
+	jr	start_ent_loop	; the entries left.
+
+dir_ent_loop:
+	ld	de,32
+	add	hl,de		;Loop to point HL at required
+	dec	a		; entry within this sector
+start_ent_loop:
+	jr	nz,dir_ent_loop	; in its buffer.
+
+	xor	a		;Return with Z-set to indicate
+	ret			; sucess.
+
+;------------------------------------------------------------------------------
+;
+CLU_TO_SEC:
+;
+;    This routine translates a cluster number passed in register DE to a 32
+; bit sector number which is stored in DIR_SECTOR.  No check on the validity
+; of  the  cluster  number  is done so this should be done before calling this
+; routine.
+;
+; Entry:     DE = Cluster number
+; Returns:   (DIR_SECTOR) = 32 bit sector number
+; Corrupts:  AF
+;
+	push	hl
+	push	de
+	push	bc
+	ex	de,hl		;HL := cluster number
+	dec	hl		;Decrement cluster number
+	dec	hl		; by two.
+
+	ld	a,(CLU_SHIFT)	;Shift cluster number left
+	and	a		; by the "cluster shift"
+	ld	b,a		; value from unit descriptor,
+	ld	a,0		; into A:HL (24 bits: up to
+	jr	z,clu_no_shift	; 8M sectors).
+clu_sft_loop:
+	add	hl,hl
+	adc	a,a
+	djnz	clu_sft_loop
+clu_no_shift:
+
+	ld	de,(DATA_START)	;Add on the first data sector
+	add	hl,de		; to get the final sector
+	adc	a,0		; number.
+	ld	(DIR_SECTOR),hl
+	ld	l,a
+	ld	h,0
+	ld	(DIR_SECTOR+2),hl
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+;******************************************************************************
+;
+CMP_FNAME:
+;
+;    This routine tests whether a filename pointed to by DE matches a possibly
+; ambiguous  filename pointed to by HL.  Both filenames are in FCB format (8+3
+; characters padded with spaces).  The  0E5h  fiddle  is  done  on  the  first
+; character of the (DE) filename, so that if this is 05h it will be translated
+; to 0E5h.  Each character of the filename pointed to  by  DE  will  be  upper
+; cased before comparison. The necessary  checks  for  16-bit  characters  are
+; included in this routine.
+;
+; Entry:      DE -> Filename to be tested (non-ambiguous)
+;             HL -> Required filename (may be ambigous)
+; Returns:  Z-flag set (Z) => filename matched
+;                      (NZ) => filename didn't match or was invalid
+; Corrupts:  AF,BC,DE,HL
+;
+	ld	a,(de)
+	cp	05h		;If first character of file
+	jr	nz,cmp_no_e5	; name is 05h then turn it
+	ld	a,0E5h		; into 0E5h (the usual fiddle).
+cmp_no_e5:
+	ld	bc,11*256+0	;B:=char count, C:=char flags
+cmp_fname_loop:
+	push	af
+	ld	a,(hl)		;Check character for 16-bit
+	call	C_CH1		; flags.
+	pop	af
+	cp	(hl)		;Skip if two characters are
+	jr	z,char_match	; the same.
+	bit	CF_2ND,c
+	ret	nz		;If not then match them if
+	ld	a,(hl)		; the one at (hl) is "?", but
+	cp	"?"		; not if it is 2nd byte of a
+	ret	nz		; 16-bit character.
+
+char_match:
+	inc	hl
+	inc	de		;Point to next character pair
+	ld	a,(de)		; and loop 'til done whole
+	djnz	cmp_fname_loop	; filename.
+
+	xor	a		;Return Z-set to indicate match
+	ret
+
+;------------------------------------------------------------------------------
+;
+C_CH1:
+;
+;        This routine does a call to MSX_DOS's check character routine.   This
+; is  in  order that 16 bit characters may be found and upper casing done, and
+; also to test for filename terminator characters.
+;
+; Entry:        A: The character.
+;               C: The flags.
+;
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	E,A		;Character into E.
+	LD	D,C		;Character flags.
+	LD	C,_CHKCHR##
+	CALL	MSX_DOS
+	LD	A,E		;The revised character.
+	POP	BC
+	LD	C,D		;Character flags.
+	POP	DE
+	POP	HL
+	RET
+
+;******************************************************************************
+;
+WR_BYTE:
+;
+;    This  routine  simply  prints  a  byte  in  decimal  with  leading zeroes
+; suppressed.  Currently it is only used to print the FAT number when  a  read
+; or  write  error  occurs.   The  actual  printing is done by a 16-bit number
+; printing routine which is not otherwise used.
+;
+; Entry:     A = Number to be printed
+; Returns:   None
+; Corrupts:  AF
+;
+	push	hl
+	ld	l,a		;Just put number in HL
+	ld	h,0		; and print out from there.
+	xor	a		;Supress leading zeroes.
+	call	WR_WORD
+	pop	hl
+	ret
+
+WR_WORD:
+	push	bc
+	push	de
+	ld	(LEAD_CHAR),a	;Save zero supression flag
+
+	ld	de,power_table
+wr_word_loop:
+	ld	a,(de)		;Get next value from power
+	ld	c,a		; of 10 table into BC.
+	inc	de
+	ld	a,(de)
+	ld	b,a
+	inc	de
+
+	bit	0,c		;If this is the last entry in
+	jr	z,not_last_digit ; the table then force leading
+	ld	a,"0"		; zero character to "0" to
+	ld	(LEAD_CHAR),a	; ensure that zero is printed.
+not_last_digit:
+	push	de
+	xor	a
+	ld	d,a
+divide_loop:
+	sbc	hl,bc		;Loop to divide HL by the
+	inc	d		; power of 10 in BC leaving
+	jr	nc,divide_loop	; the remainder in HL and
+	add	hl,bc		; result + 1 in D.
+
+	dec	d		;If it is zero then use
+	ld	a,(LEAD_CHAR)	; the leading zero character
+	jr	z,use_lead_char	; otherwise force the leading
+	ld	a,"0"		; zero character to "0" and
+	ld	(LEAD_CHAR),a	; convert the digit to ASCII.
+	add	a,d
+use_lead_char:
+	or	a		;Write the character out
+	call	nz,WR_CHAR	; unless it is null.
+
+	pop	de
+	bit	0,c		;Loop if not at end of
+	jr	z,wr_word_loop	; table yet.
+
+	pop	de
+	pop	bc
+	ret
+
+power_table:
+	dw	10000
+	dw	1000
+	dw	100
+	dw	10
+	dw	1
+
+LEAD_CHAR:
+	db	0
+
+;------------------------------------------------------------------------------
+;
+;    These are the standard output routines.  All console output  produced  by
+; the   program   goes  through  these  routines.   "WR_CHAR",  "WR_CRLF"  and
+; "WR_STRING" simply do the obvious functions, the string must be  pointed  to
+; by  HL  and  terminated  by  a  null.  "WR_MSG" is used to print the correct
+; language version of a specified message number (passed in register A).
+;
+; Corrupts:   AF,HL
+;
+WR_MSG:
+	CALL	GET_MSG_ADR	;Find absolute address of text.
+				;Fall through to WR_STRING.
+
+WR_STRING:
+	ld	a,(hl)		;Loop to write characters
+	or	a		; from the string until a
+	ret	z		; zero is reached.
+	inc	hl
+	call	WR_CHAR
+	jr	WR_STRING
+
+WR_CRLF:
+	ld	a,CR		;Send a CR-LF sequence to
+	call	WR_CHAR		; the default channel.
+	ld	a,LF
+
+WR_CHAR:
+	push	hl
+	push	de
+	push	bc
+	ld	e,a
+	ld	c,_CONOUT##
+	call	MSX_DOS
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+;******************************************************************************
+;
+ERV_ROUTINE:
+;
+;    This is the "user error routine" which MSX-DOS will call whenever a  disk
+; error  occurs.   If  bit-0  of  "MULT_FLAGS"  is  clear, or if ignore is not
+; allowed, then it returns the error to MSX-DOS's normal error  handling.   If
+; bit-2  is  set  then  it  is  cleared and the error let through to MSX-DOS's
+; normal handling.  This ensures that the user  is  given  the  opertunity  of
+; retrying totally failed FAT accesses.
+;
+;    Assuming  that  bit-0  is  set  and bit-2 is clear then the error will be
+; ignored (returns A=3) but a flag (bit-1) is set first so  that  the  calling
+; routine in UNDEL will realise that the error has occurred.
+;
+; Entry:       A =  Error code
+;              B =  Physical drive number
+;              C =  b1 - clear => IGNORE allowed
+;                         set  => IGNORE not allowed
+; Returns:     A =  0 if IGNORE not allowed, bit-0 clear or bit-2 set.
+;                   3 if IGNORE allowed, bit-0 set and bit-2 clear.
+;
+	bit	1,c		;If IGNORE is not allowed then
+	jr	nz,normal_error	; do MSX-DOS's normal error.
+
+	ld	hl,MULT_FLAGS	;If multi-copy flag is clear
+	bit	0,(hl)		; then do normal MSX-DOS error.
+	jr	z,normal_error
+
+	bit	2,(hl)		;If flag to let the error
+	res	2,(hl)		; through is set then clear
+	jr	nz,normal_error	; it and do normal error
+
+	set	1,(hl)		;If error interception required
+	ld	a,3		; then set the error flag and
+	ret			; ignore this error.
+
+normal_error:
+	xor	a		;Return A=0 to go on with
+	ret			; MSXDOS normal error handling.
+
+;******************************************************************************
+;
+GET_MSG_ADR:
+;
+;    This routine is used to find out the absolute address of a text message,
+; in English or in Japanese depending on the Kanji screen mode detected at
+; program startup.
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+	push	bc
+	ld	b,a		;Save message number.
+	ld	a,(KANJI_FLAG)	;Select the table for the
+	or	a		; language detected at startup.
+	ld	hl,MSG_TABLE
+	jr	z,got_msg_table
+	ld	hl,JMSG_TABLE
+got_msg_table:
+	ld	a,b
+	or	a		;If first message then found.
+	jr	z,got_msg_adr
+
+	ld	b,a		;Message number.
+lop_pass_msg:
+	ld	a,(hl)		;Bypass this message.
+	inc	hl
+	or	a		;Each message is terminated
+	jr	nz,lop_pass_msg	; by a zero.
+	djnz	lop_pass_msg
+
+got_msg_adr:
+	pop	bc
+	ret
+
+;******************************************************************************
+;
+;	THE TEXT MESSAGES
+;
+;    All the text is defined using the macro MSG, and this defines a label as
+; a number which is accessed throughout the utility.  The absolute address of
+; the text may then be found by passing this number in register A to the
+; routine GET_MSG_ADR, which will return the address in register HL.  So that
+; these labels are easily distinguishable elsewhere, they are prefixed by
+; '__'.
+;
+;    The Japanese table below MUST define exactly the same number of messages
+; in exactly the same order, since messages are identified by their ordinal
+; position in the table.
+;
+;------------------------------------------------------------------------------
+
+msg_num	DEFL	0
+
+MSG	MACRO	name,text
+__&name&_MSG	EQU	msg_num
+msg_num	DEFL	msg_num+1
+	DEFB	text,0
+	ENDM
+
+;------------------------------------------------------------------------------
+
+MSG_TABLE:
+
+MSG	WVER,	<CR,LF,"*** Wrong version of MSX-DOS",CR,LF>
+MSG	CANT,	<CR,LF,"*** Can't undelete on this disk",CR,LF>
+MSG	RFT1,	<"Error reading FAT ">
+MSG	WFT1,	<"Error writing FAT ">
+MSG	FAT2,	<CR,LF>
+MSG	CRPT,	<"Warning - directory is corrupt",CR,LF>
+MSG	FULL,	<"Warning - Memory full, search abbreviated",CR,LF>
+MSG	SZA,	<"  file size adjusted">
+MSG	REN,	<"  renamed as ">
+MSG	INV,	<"  invalid sub-directory">
+MSG	DIR,	<"  (sub-directory)">
+MSG	NNEX,	<CR,LF,"*** This program requires Nextor 2.1 or later",CR,LF>
+MSG	NFAT,	<CR,LF,"Disk is not a FAT12 or FAT16 disk",CR,LF>
+MSG	USAG,	<"Usage: UNDEL filespec",CR,LF,CR,LF,"filespec: the file(s) to recover (wildcards allowed), or a directory:",CR,LF,"          then all its deleted files are recovered.",CR,LF,"          Use *.* for all deleted files in the current directory.",CR,LF,CR,LF,"TYPE UNDEL.COM for more details.",CR,LF>
+MSG	PROC,	<"Processing... ">
+MSG	UND1,	<"Files undeleted in ">
+MSG	UND2,	<CR,LF,CR,LF>
+
+;------------------------------------------------------------------------------
+;
+;    The Japanese message table.  One entry per MSG of the English table
+; above, in the same order (the message number is the ordinal position in
+; the table).  The strings are converted to Shift-JIS at assembly time.
+;
+JMSG_TABLE:
+
+	.strenc	shift_jis
+
+	db	0Dh,0Ah,"*** MSX-DOSのバージョンが違います",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** このディスク上ではファイルの復活はできません",0Dh,0Ah,0
+	db	"FAT読み出しエラー ",0
+	db	"FAT書き込みエラー ",0
+	db	0Dh,0Ah,0
+	db	"警告 - ディレクトリが壊れています",0Dh,0Ah,0
+	db	"警告 - メモリがいっぱいです.検索が省略されました",0Dh,0Ah,0
+	db	" ファイルサイズが調整されました",0
+	db	" 新しい名前は ",0
+	db	" サブディレクトリが不正です",0
+	db	" (サブディレクトリ)",0
+	db	0Dh,0Ah,"*** このプログラムはNextor 2.1以降が必要です",0Dh,0Ah,0
+	db	0Dh,0Ah,"ディスクはFAT12でもFAT16でもありません",0Dh,0Ah,0
+	db	"使い方: UNDEL ファイル指定",0Dh,0Ah,0Dh,0Ah
+	db	"ファイル指定: 復活させるファイル(ワイルドカードも可能)、または",0Dh,0Ah
+	db	"ディレクトリ(その中の削除されたファイルを全て復活させます).",0Dh,0Ah
+	db	"カレントディレクトリの全ファイルを復活させるには *.* を指定します.",0Dh,0Ah,0Dh,0Ah
+	db	"詳細は TYPE UNDEL.COM で表示できます.",0Dh,0Ah,0
+	db	"処理中... ",0
+	db	0
+	db	" に復元されたファイル",0Dh,0Ah,0Dh,0Ah,0
+
+	.strenc	default
+
+;******************************************************************************
+;
+;	VARIABLES AND DATA AREAS
+;
+FAT_FLAGS:
+	db	0	;   b0   - set while reading last FAT copy
+			;b1...b7 - clear
+
+MULT_FLAGS:
+	db	0	;   b0   - set if accessing FAT sector
+			;   b1   - set if FAT sector error found
+			;   b2   - set to let FAT error through
+			;   b3   - set if any FAT copy written
+			;   b4   - set if error on this retry
+			;b5...b7 - clear
+
+MEM_FULL:
+	db	0	;Memory full flag in "SCAN_DIR"
+
+KANJI_FLAG:
+	db	0	;non 0 if the Kanji screen mode is active
+			; (print the Japanese messages)
+
+;------------------------------------------------------------------------------
+
+DRIVE:	db	0	;Logical drive used 1...26
+
+PARSE_FLG:
+	db	0	;Parse flags returned by _PARSE
+PATH_ADR:
+	dw	0	;Address of the path in the command tail
+LAST_ITEM:
+	dw	0	;Address of the last item of the path
+
+SEARCH_PAT:
+	ds	11,0	;Expanded search pattern (FCB form)
+SRCH_DIR_CLU:
+	dw	0	;Start cluster of the directory to search
+			; (FFFFh = root directory)
+
+TPA_TOP:
+	dw	0	;End of memory (top of the TPA)
+
+CC_CLUSTER:
+	dw	0	;Cluster number in "CLU_CHK"
+CC_SIZE:
+	dw	0	;Cluster count in "CLU_CHK"
+CC_DRCHK:
+	db	0	;"directory checked" flag in "CLU_CHK"
+
+FAT_1_ADDR:
+	dw	0	;Address of the expanded live FAT (FAT12)
+FAT_2_ADDR:
+	dw	0	;Address of the expanded stale FAT (FAT12)
+FILE_LIST:
+	dw	0	;Address of start of file list
+
+;------------------------------------------------------------------------------
+;
+;	FAT access layer variables
+;
+FS_FAT16:
+	db	0	;0 = FAT12, 1 = FAT16
+EOC_MIN:
+	dw	0	;Lowest end of chain value (FF8h/FFF8h)
+EOC_VAL:
+	dw	0	;End of chain value stored when closing a
+			; truncated chain (FFFh/FFFFh)
+FAT_SZ16:
+	dw	0	;Sectors per FAT copy (16 bit, derived; the byte
+			; sized _DPARM field reports a 256 sector FAT as 0)
+LAST_FAT_ST:
+	dw	0	;First sector of the last (stale) FAT copy
+BM_SIZE:
+	dw	0	;Size of each flag bitmap in bytes
+BM_BASE:
+	dw	0	;Address of the first flag bitmap
+BM_P_UNDEL:
+	dw	0	;Address of the "undeletable cluster" bitmap
+BM_P_CHAIN:
+	dw	0	;Address of the "referred to by an undeletable
+			; cluster" bitmap
+BM_P_REF:
+	dw	0	;Address of the "referred to by an allocated
+			; cluster" bitmap
+BM_ZAP:
+	dw	0	;Address of the "entry zapped" overlay bitmap
+			; (FAT16 only)
+CACHE_BASE:
+	dw	0	;Address of the FAT16 sector cache buffers
+CACHE_MODE:
+	db	0	;Cache load mode: 0 = live FAT, 1 = stale copy
+CACHE_TAB:
+	ds	CACHE_SECT*3,0	;Per slot: valid flag, 16 bit absolute sector
+CACHE_RR:
+	db	0	;Round-robin replacement counter
+G16_OK:
+	db	0	;Non-zero when the CACHE_ENT memo is valid
+G16_KEY:
+	dw	0	;Memoized absolute FAT sector number
+G16_BASE:
+	dw	0	;Memoized cache slot buffer address
+
+PROG_PCT:
+	db	0	;Progress display: current percentage
+PROG_STEP:
+	dw	0	;Progress display: iterations per 1%
+PROG_CNT:
+	dw	0	;Progress display: iterations left until
+			; the next percentage bump
+UNDEL_CNT:
+	dw	0	;Number of undeletable clusters found by
+			; the sweep (= pass 3's iteration count)
+PROG_ACT:
+	db	0	;Status line currently displayed: 0 = none,
+			; 1 = "Processing... " without percentage,
+			; 2 = same with the percentage appended.
+			; Any non 0 value is erased by PROG_CLEAR.
+HDR_DONE:
+	db	0	;non 0 => the "Files undeleted in" header has
+			; been printed
+
+CUR_SEC:
+	db	0,0,0,0	;32 bit sector number parameter for the sector
+			; I/O routines
+RF_SEC:
+	dw	0	;First-copy absolute sector, used by R_FAT16
+
+BUFFER_SECT:
+	db	0FFh,0FFh,0FFh,0FFh	;Current 32 bit sector number in
+					; buffer (FFFFFFFFh = none)
+BUFFER_FLAG:
+	db	0	;b0 - set => buffer is dirty
+			;b1 - set => FAT sector
+BUFFER:
+	ds	512,0	;Single sector buffer
+
+;------------------------------------------------------------------------------
+
+FIB:	ds	64,0	;File info block for the FFIRST_FIB searches
+
+DIRBUF:	ds	68,0	;"d:" + directory part of the path (ASCIIZ)
+WPBUF:	ds	66,0	;Work buffer for the canonicalisation of dotted
+			; directory paths (_GETCD writes up to 64 bytes
+			; at WPBUF+1)
+
+;------------------------------------------------------------------------------
+
+	ds	256,0	;I think this will just about
+STACK:			; be enough stack!
+
+;	--------------------------------
+
+UD_IMAGE:		;Copy of MSX-DOS's disc parameters (_DPARM).
+	db	0	;+0  Physical drive (not used)
+	dw	0	;+1  Sector size (not used, always 512)
+SEC_CLU:
+	db	0	;+3  Sectors per cluster.
+FAT_START:
+	dw	0	;+4  First sector of FAT
+FAT_COPY:
+	db	0	;+6  Number of copies of the FAT
+RT_ENT:
+	dw	0	;+7  Number of root directory entries.
+	dw	0	;+9  Number of logical sectors (0 if >= 65536)
+	db	0	;+11 Media descriptor byte.
+	db	0	;+12 Size of each FAT copy in sectors (not used:
+			;    unreliable, a 256 sector FAT16 FAT is
+			;    reported as 0.  See FAT_SZ16.)
+RT_START:
+	dw	0	;+13 First sector of root directory
+DATA_START:
+	dw	0	;+15 First data sector (cluster 2)
+TOT_CLU:
+	dw	0	;+17 Maximum cluster number + 1
+DIRT_FLAG:
+	db	0	;+19 Dirty disk flag (non-zero => dirty)
+VOL_ID:
+	db	0,0,0,0	;+20 Four byte volume id (FFh in first byte =>
+			;    no volume id)
+	db	0,0,0,0	;+24 Number of logical sectors, 32 bits (Nextor)
+FS_TYPE:
+	db	0	;+28 Filesystem: 0=FAT12, 1=FAT16, 255=other
+			;    (Nextor 2.1+)
+	db	0,0,0	;+29 Reserved
+
+CLU_SHIFT:
+	db	0	;Worked out internally.
+
+;	--------------------------------
+
+SV_START:
+
+DIR_START:
+	dw	0	;First cluster of directory (FFFFh = root)
+DIR_NEXT_CLU:
+	dw	0	;Next directory cluster (FFFFh = none)
+DIR_SECTOR:
+	db	0,0,0,0	;Current directory sector (32 bits)
+DIR_S_LEFT:
+	db	0	;Sectors left in current dir cluster
+DIR_E_LEFT:
+	db	0	;Entries left in current dir sector
+DIR_ENT:
+	db	0	;Total entries in current sector
+DIR_ODD:
+	db	0	;Number entries in partial sector
+
+SV_SIZE	equ	$-DIR_START	;Size of directory search variables
+
+;	--------------------------------
+
+ENT_BUF:
+	ds	11,0	;Buffer for a directory entry to
+ENT_ATTR:
+	ds	1,0	; make access easy and to ensure that
+ENT_DCHAR:
+	ds	1,0	; it will out last the sector buffer.
+	ds	9,0
+ENT_TIME:
+	ds	2,0
+ENT_DATE:
+	ds	2,0
+ENT_CLU:
+	ds	2,0
+ENT_SIZE:
+	ds	4,0
+
+;------------------------------------------------------------------------------
+;
+;	This label must be the last one of the program: it defines the
+; address from which general RAM usage (flag bitmaps, expanded FATs or
+; sector cache, and the candidate file list) starts.
+;
+PROG_END:
+
+	end
