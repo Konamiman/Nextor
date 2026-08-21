@@ -189,6 +189,11 @@ INIT:
 ;
 ;	4.  Record the address of the top of the TPA at "TPA_TOP".
 ;
+	ld	(SAVE_SP),sp	;The Kanji driver answers EXTBIO calls
+	ld	sp,(0006h)	; with inter-slot calls that may switch
+				; pages 0-2 out, so the stack must be in
+				; page 3 during the call: borrow the top
+				; of the TPA (nothing lives there yet).
 	xor	a		;Ask the Kanji driver (if present) for the
 	ld	de,1100h	; current screen mode, via EXTBIO. If there
 				; is no Kanji driver A stays 0 (ANK mode).
@@ -215,6 +220,8 @@ INIT:
 	pop	af
 	ex	af,af'
 	exx
+
+	ld	sp,(SAVE_SP)	;Back to the local stack.
 
 	ld	(KANJI_FLAG),a	;Non-zero => print Japanese messages.
 
@@ -4595,6 +4602,9 @@ DFAT_FLAG:
 KANJI_FLAG:
 	db	0	;non 0 if the Kanji screen mode is active
 			; (print the Japanese messages)
+SAVE_SP:
+	dw	0	;Saved stack pointer while the EXTBIO call
+			; runs on a borrowed page-3 stack
 
 ;------------------------------------------------------------------------------
 
