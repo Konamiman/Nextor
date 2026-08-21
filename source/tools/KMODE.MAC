@@ -56,7 +56,7 @@
 	;	-------------------------------------------------------
 
 	db	13
-	db	"KMODE - Set the Kanji screen mode",13,10
+	db	"KMODE v1.1 - Set the Kanji screen mode",13,10
 	db	13,10
 	db	"Sets the Kanji screen mode of the computer (requires a Kanji driver,",13,10
 	db	"built in Japanese MSX computers), and optionally saves it in the",13,10

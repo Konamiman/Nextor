@@ -61,7 +61,7 @@
 	;	-------------------------------------------------------
 
 	db	13
-	db	"FIXDISK - Rebuild the MSX-DOS 2 disk parameters of a disk",13,10
+	db	"FIXDISK v1.1 - Rebuild the MSX-DOS 2 disk parameters of a disk",13,10
 	db	13,10
 	db	"Rewrites the boot sector of a disk so that it has valid MSX-DOS 2",13,10
 	db	"disk parameters. The /S and /B options write a complete boot sector",13,10

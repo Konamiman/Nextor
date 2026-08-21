@@ -32,8 +32,9 @@
 ;   field of the directory's own entry (via _FFIRST, with _GETCD helping
 ;   for the current-directory and "."/".." cases).
 ;
-; The program requires Nextor 2.1 or later (_RDDRV and the filesystem type
-; byte of _DPARM don't exist in older versions).
+; The program requires Nextor (any version: _RDDRV/_WRDRV and the
+; filesystem type byte of _DPARM, which it relies on, exist since
+; Nextor 2.0).
 ;
 ; NOTE: CHKDSK and UNDEL deliberately duplicate a fair amount of code (they
 ; were already-diverged forks of a common ancestor when they were ported).
@@ -48,7 +49,7 @@
 	db	"UNDEL for Nextor v1.0 - Recover deleted files",13,10
 	db	13,10
 	db	"Recovers files and subdirectories that were deleted on a FAT12 or FAT16",13,10
-	db	"disk. Requires Nextor 2.1 or later.",13,10
+	db	"disk. Requires Nextor.",13,10
 	db	13,10
 	db	"Usage: UNDEL filespec",13,10
 	db	13,10
@@ -170,7 +171,7 @@ WRONG_VER:
 	jr	abort_error
 
 WRONG_NEXTOR:
-	ld	b,__NNEX_MSG	;Nextor 2.1 or later is required.
+	ld	b,__NNEX_MSG	;Nextor is required.
 	ld	a,2
 	jr	abort_error
 
@@ -206,7 +207,7 @@ INIT:
 ;	      here instead of on every message lookup as in the original
 ;	      program.
 ;
-;	2.  Check that the system is Nextor 2.1 or later.
+;	2.  Check that the system is Nextor.
 ;
 ;	3.  Define a user error vector routine to enable the FAT reading and
 ;	      writing routines to handle errors in any FAT copy.
@@ -267,16 +268,8 @@ INIT:
 	dec	a		;Not Nextor at all?
 	jr	nz,WRONG_NEXTOR
 	ld	a,c
-	cp	3		;Nextor 3 or later is always fine.
-	jr	nc,nextor_ver_ok
-	cp	2		;Nextor 1.x (?) is too old.
-	jr	c,WRONG_NEXTOR
-	push	iy
-	pop	bc		;B = IYh = secondary version number:
-	ld	a,b		; Nextor 2.0 is too old, 2.1+ is fine.
-	or	a
-	jr	z,WRONG_NEXTOR
-nextor_ver_ok:
+	cp	2		;Nextor 1.x (?) is too old; any
+	jr	c,WRONG_NEXTOR	; Nextor 2.0 or later is fine.
 
 	ld	de,ERV_ROUTINE	;Patch in the address of a
 	ld	c,_DEFER##	; user error routine.
@@ -3097,7 +3090,7 @@ rf_ok:
 ;    Sector numbers are 32 bits wide (a FAT16 volume can have up to 8M
 ; sectors) and are passed to READ_SECT, DISK_RD and DISK_WR in the CUR_SEC
 ; variable.  All reads and writes use _RDDRV/_WRDRV (the _RDABS/_WRABS
-; functions are deprecated; _RDDRV/_WRDRV exist since Nextor 2.1, which
+; functions are deprecated; _RDDRV/_WRDRV exist since Nextor 2.0, which
 ; this program requires anyway).  On FAT12 volumes the high word of the
 ; sector number is always zero.
 ;
@@ -3939,7 +3932,7 @@ MSG	SZA,	<"  file size adjusted">
 MSG	REN,	<"  renamed as ">
 MSG	INV,	<"  invalid sub-directory">
 MSG	DIR,	<"  (sub-directory)">
-MSG	NNEX,	<CR,LF,"*** This program requires Nextor 2.1 or later",CR,LF>
+MSG	NNEX,	<CR,LF,"*** This program requires Nextor",CR,LF>
 MSG	NFAT,	<CR,LF,"Disk is not a FAT12 or FAT16 disk",CR,LF>
 MSG	USAG,	<"Usage: UNDEL filespec",CR,LF,CR,LF,"filespec: the file(s) to recover (wildcards allowed), or a directory:",CR,LF,"          then all its deleted files are recovered.",CR,LF,"          Use *.* for all deleted files in the current directory.",CR,LF,CR,LF,"TYPE UNDEL.COM for more details.",CR,LF>
 MSG	PROC,	<"Processing... ">
@@ -3967,7 +3960,7 @@ JMSG_TABLE:
 	db	" 新しい名前は ",0
 	db	" サブディレクトリが不正です",0
 	db	" (サブディレクトリ)",0
-	db	0Dh,0Ah,"*** このプログラムはNextor 2.1以降が必要です",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** このプログラムはNextorが必要です",0Dh,0Ah,0
 	db	0Dh,0Ah,"ディスクはFAT12でもFAT16でもありません",0Dh,0Ah,0
 	db	"使い方: UNDEL ファイル指定",0Dh,0Ah,0Dh,0Ah
 	db	"ファイル指定: 復活させるファイル(ワイルドカードも可能)、または",0Dh,0Ah
@@ -4166,7 +4159,7 @@ VOL_ID:
 	db	0,0,0,0	;+24 Number of logical sectors, 32 bits (Nextor)
 FS_TYPE:
 	db	0	;+28 Filesystem: 0=FAT12, 1=FAT16, 255=other
-			;    (Nextor 2.1+)
+			;    (Nextor)
 	db	0,0,0	;+29 Reserved
 
 CLU_SHIFT:

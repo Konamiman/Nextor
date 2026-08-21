@@ -23,8 +23,9 @@
 ;   nybble of the expanded FAT entries live now in four parallel bitmaps,
 ;   for both filesystem types.
 ;
-; The program requires Nextor 2.1 or later (_RDDRV and the filesystem type
-; byte of _DPARM don't exist in older versions).
+; The program requires Nextor (any version: _RDDRV/_WRDRV and the
+; filesystem type byte of _DPARM, which it relies on, exist since
+; Nextor 2.0).
 ;
 ; NOTE: CHKDSK and UNDEL deliberately duplicate a fair amount of code (they
 ; were already-diverged forks of a common ancestor when they were ported).
@@ -39,7 +40,7 @@
 	db	"CHKDSK for Nextor v1.0- Check FAT12/FAT16 disk integrity",13,10
 	db	13,10
 	db	"Checks the integrity of the filesystem of a disk and optionally fixes",13,10
-	db	"the errors found. Requires Nextor 2.1 or later.",13,10
+	db	"the errors found. Requires Nextor.",13,10
 	db	13,10
 	db	"Usage: CHKDSK d: [/F]",13,10
 	db	13,10
@@ -146,7 +147,7 @@ WRONG_VER:
 	jr	abort_error
 
 WRONG_NEXTOR:
-	ld	b,__NNEX_MSG	;Nextor 2.1 or later is required.
+	ld	b,__NNEX_MSG	;Nextor is required.
 	ld	a,2
 	jr	abort_error
 
@@ -182,7 +183,7 @@ INIT:
 ;	      here instead of on every message lookup as in the original
 ;	      program.
 ;
-;	2.  Check that the system is Nextor 2.1 or later.
+;	2.  Check that the system is Nextor.
 ;
 ;	3.  Define a user error vector routine to enable R_FAT_SECT and
 ;	      FLUSH to handle errors in any FAT copy.
@@ -243,16 +244,8 @@ INIT:
 	dec	a		;Not Nextor at all?
 	jr	nz,WRONG_NEXTOR
 	ld	a,c
-	cp	3		;Nextor 3 or later is always fine.
-	jr	nc,nextor_ver_ok
-	cp	2		;Nextor 1.x (?) is too old.
-	jr	c,WRONG_NEXTOR
-	push	iy
-	pop	bc		;B = IYh = secondary version number:
-	ld	a,b		; Nextor 2.0 is too old, 2.1+ is fine.
-	or	a
-	jr	z,WRONG_NEXTOR
-nextor_ver_ok:
+	cp	2		;Nextor 1.x (?) is too old; any
+	jr	c,WRONG_NEXTOR	; Nextor 2.0 or later is fine.
 
 	ld	de,ERV_ROUTINE	;Patch in the address of a
 	ld	c,_DEFER##	; user error routine for FISH.
@@ -2968,7 +2961,7 @@ rf_ok:
 ;    Sector numbers are 32 bits wide (a FAT16 volume can have up to 8M
 ; sectors) and are passed to READ_SECT, DISK_RD and DISK_WR in the CUR_SEC
 ; variable.  All reads and writes use _RDDRV/_WRDRV (the _RDABS/_WRABS
-; functions are deprecated; _RDDRV/_WRDRV exist since Nextor 2.1, which
+; functions are deprecated; _RDDRV/_WRDRV exist since Nextor 2.0, which
 ; this program requires anyway).  On FAT12 volumes the high word of the
 ; sector number is always zero.
 ;
@@ -4433,7 +4426,7 @@ PMSG		<" hidden files",CR,LF>
 MSG	DIR,	<" directory",CR,LF>
 PMSG		<" directories",CR,LF>
 
-MSG	NNEX,	<CR,LF,"*** This program requires Nextor 2.1 or later",CR,LF>
+MSG	NNEX,	<CR,LF,"*** This program requires Nextor",CR,LF>
 
 MSG	NFAT,	<CR,LF,"Disk is not a FAT12 or FAT16 disk",CR,LF>
 
@@ -4551,7 +4544,7 @@ JMSG_TABLE:
 	db	"個のディレクトリ",0dh,0ah,0
 	db	"個のディレクトリ",0dh,0ah,0
 
-	db	0dh,0ah,"*** このプログラムはNextor 2.1以降が必要です",0dh,0ah,0
+	db	0dh,0ah,"*** このプログラムはNextorが必要です",0dh,0ah,0
 
 	db	0dh,0ah,"ディスクはFAT12でもFAT16でもありません",0dh,0ah,0
 
@@ -4797,7 +4790,7 @@ VOL_ID:
 	db	0,0,0,0	;+24 Number of logical sectors, 32 bits (Nextor)
 FS_TYPE:
 	db	0	;+28 Filesystem: 0=FAT12, 1=FAT16, 255=other
-			;    (Nextor 2.1+)
+			;    (Nextor)
 	db	0,0,0	;+29 Reserved
 
 CLU_SHIFT:
