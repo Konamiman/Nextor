@@ -22,13 +22,11 @@ Note that additionally to the `master` branch there are `v2.0` and `v2.1` branch
 
     * [**nextor_sys**](source/nextor_sys): The `NEXTOR.SYS` file.
 
-    * [**tools**](source/tools): The new command line tools created for Nextor.
+    * [**tools**](source/tools): The command line tools: the ones created for Nextor and the classic MSX-DOS tools (CHKDSK, UNDEL, DISKCOPY, FIXDISK, KMODE, XCOPY, XDIR), rewritten from the originals. The tools written in C live in [tools/C](source/tools/C).
 
     * [**drivers**](source/drivers): The standalone ROM driver and an example RAM driver.
 
     * [**commandcom**](source/commandcom): `COMMAND3.COM`, the command interpreter.
-
-    * [**command**](source/command): The command line tools that were originally supplied with MSX-DOS. These aren't currently included in the build pipeline.
 
 * [**sdk**](/sdk): Z80 assembler and C include files, helper routines and driver templates, intended to be used when developing Nextor drivers and Nextor-aware tools.
 

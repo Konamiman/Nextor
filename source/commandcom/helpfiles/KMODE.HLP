@@ -1,56 +1,57 @@
-KMODE                                                         [2.20]
+KMODE                                                    [2.20, 3.0]
 -----
 
-Format:      KMODE number|OFF
+Format:      KMODE mode
                 or
-             KMODE [number|OFF] /S [d:]
+             KMODE [mode] /S [d:]
 
-Purpose:     Sets  or resets  'Kanji Screen  Mode', or  updates boot
-        code so that it automatically installs Kanji Driver and then
-        selects screen mode.
+Purpose:     Sets the 'Kanji screen mode', or saves it in the boot
+        sector of a disk so that it is set automatically at boot
+        time.
 
-Use:         Number specifies the  'Kanji Screen Mode'.  The  number
-        ranges  from  0  to  3 and has the same meaning as its BASIC
-        counterpart  'CALL  KANJI<n>'  statement.   Specifying   OFF
-        restores  screen  mode  to  ANK  (MSX  native screen modes).
-        Unless Kanji Driver is installed (by  typing  CALL  KANJI<n>
-        statement  from  BASIC  or  automatically  by 'Kanji Boot'),
-        screen modes will not change.
+Use:         The mode is OFF for the ANK screen (the standard MSX
+        screen modes), or a number from 0 to 3 with the same
+        meaning as in the BASIC 'CALL KANJI<n>' statement.  A Kanji
+        driver (built into Japanese MSX computers) must be
+        installed for the screen mode to actually change: it is
+        installed by typing a CALL KANJI statement from BASIC, or
+        automatically when booting from a disk updated by KMODE /S.
 
-             If the /S option is specified then the boot code of the
-        default or specified drive is updated. In this case, if mode
-        is  not specified then current screen mode is used. When the
-        disk is  updated in  this way,  the boot code will always be
-        'Kanji  Boot' and  the disk  will no  longer be able to boot
-        MSX-DOS 1.
+             If the /S option is given, the boot code of the disk
+        in the default or specified drive is replaced by 'Kanji
+        boot' code, which installs the Kanji driver and then sets
+        the given screen mode at boot time.  If the mode is
+        omitted, the currently active mode is saved.  A disk
+        updated this way will no longer be able to boot MSX-DOS 1.
+        To help prevent accidents, a prompt is issued before the
+        disk is updated.
 
-             To  help prevent accidental updates of boot disks  from
-        other systems, a prompt is issued before updating a disk.
+             Disks with a standard (PC style) boot sector are
+        refused by /S: run FIXDISK /S on them first to give them an
+        MSX-DOS 2 boot sector, then use KMODE /S.
 
-             Note that  KMODE  is  a  transient  command,  and  must
-        therefore be loaded off disk.
+             The /S option works on drives handled by MSX-DOS
+        drivers and, under Nextor 3 or later, on floppy disk
+        drives.
 
 Examples:
 
         KMODE 3
 
-             'Kanji screen mode' will be set to 3 if  'Kanji driver'
+             The 'Kanji screen mode' is set to 3, if a Kanji driver
         is installed.
 
         KMODE OFF
 
-             Screen mode is set back to native MSX text screen.
+             The screen is set back to the native MSX text screen.
 
         KMODE /S B:
         Disk in drive B: will only be able to boot MSX-DOS 2
         Press any key to continue...
 
-             Drive B: will be updated to 'Kanji Boot'.  Since 'Kanji
-        Boot'  will not boot anything from disk,  a prompt is issued
-        before the disk is actually updated.
-
-             Booting from  this disk  will automatically install the
-        Kanji  Driver and then set screen mode, in this case, to ANK
-        (i.e. screen mode will not alter).
-
+             The boot code of the disk in drive B: is replaced with
+        'Kanji boot' code; a prompt is issued first.  Booting from
+        this disk will automatically install the Kanji driver and
+        then set the screen mode saved in the disk, in this case
+        the mode that was active when the KMODE command was given.
 

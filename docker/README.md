@@ -254,7 +254,7 @@ docker/make.sh all distclean       # remove every build artifact, incl. bin/
 
 `make.sh all tools-all` does everything tools-related in one go: NEXTOR.SYS and all the tools, the disk image and the zip archive. It accepts the same `EXTRA_FILES` variable as `tools-disk`. Note that the disk recipe lives in `source/tools`, but `make.sh tools tools-disk` won't work: the `tools` part maps to *both* tool Makefiles, and only `source/tools` has that target. Go through `all`, which builds everything the disk needs first.
 
-**Note:** the legacy `source/command/` suite (`COMMAND2.COM`, `MSXDOS2.SYS`, and the classic DOS utilities) is for now out of scope. It still builds with the CP/M-era Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`), which this image does **not** include - and the top-level `source/Makefile` doesn't build it either. Use the original vintage tools for that part of the repository.
+**Note:** the classic MSX-DOS command line tools (CHKDSK, UNDEL, DISKCOPY, FIXDISK, KMODE, XCOPY, XDIR) have been rewritten and now live in `source/tools` (and `source/tools/C`), so they build with the normal pipeline. The legacy `source/command/` tree they came from - which also held the `COMMAND2.COM` and `MSXDOS2.SYS` sources, and needed the CP/M-era Microsoft toolchain (`m80`/`l80`/`c80`/`xl80`) - has been removed from the repository; it remains available in the git history.
 
 The explicit equivalent, if you'd rather not use the wrapper, is just `make -C source/<part>` with the **repository root** mounted:
 
