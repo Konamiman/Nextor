@@ -792,15 +792,15 @@ QCHK:	LD	A,B
 	OR	A
 	RET	NZ	; (drive beyond the system maximum)
 	LD	A,(ENVDATA##)	; The drive status decides:
-	LD	DE,QNOMAP$	;   0 = unassigned and 2 = unused
+	LD	E,#59	;   0 = unassigned and 2 = unused
 	OR	A	;   => not mapped;
 	JR	Z,QCK30
 	CP	#02
 	JR	Z,QCK30
-	LD	DE,QRAMD$	;   4 = the RAM disk;
+	LD	E,#5A	;   4 = the RAM disk;
 	CP	#04
 	JR	Z,QCK30
-	LD	DE,QFILE$	;   3 = a mounted image file;
+	LD	E,#5B	;   3 = a mounted image file;
 	CP	#03
 	JR	Z,QCK30
 	PUSH	AF	; Save the drive status.
@@ -840,16 +840,18 @@ QCK06:	POP	AF	; A = the drive status again.
 QCK10:	XOR	A	; Go ahead: Z and NC.
 	RET
 
-QCK20:	LD	DE,QWARN1$	; Print the warning with the
-	CALL	PRTSTR##	;   drive letter in it and get
-	LD	A,B	;   an explicit confirmation.
+QCK20:	PUSH	BC	; Print the warning with the
+	LD	A,#5C	;   drive letter in it and get
+	CALL	DMESS##	;   an explicit confirmation.
+	POP	BC
+	LD	A,B
 	ADD	A,"@"
 	CALL	PRCHAR##
 	LD	A,":"
 	CALL	PRCHAR##
-	LD	DE,QWARN2$
-	CALL	PRTSTR##
 	PUSH	BC
+	LD	A,#5D
+	CALL	DMESS##
 	CALL	INCH##	; Answer key in L, echo + CRLF.
 	POP	BC
 	LD	A,L
@@ -861,8 +863,10 @@ QCK20:	LD	DE,QWARN1$	; Print the warning with the
 	JR	QCK40	; No: abort quietly.
 
 QCK30:	PUSH	DE	; Refused: print 'Drive X: ' and
-	LD	DE,QDRIVE$	;   the reason, then abort.
-	CALL	PRTSTR##
+	PUSH	BC	;   the reason (message number in
+	LD	A,#58	;   E), then abort.
+	CALL	DMESS##
+	POP	BC
 	LD	A,B
 	ADD	A,"@"
 	CALL	PRCHAR##
@@ -870,17 +874,11 @@ QCK30:	PUSH	DE	; Refused: print 'Drive X: ' and
 	CALL	PRCHAR##
 	CALL	SPACE##
 	POP	DE
-	CALL	DMSCR##
+	LD	A,E
+	CALL	DMESSCR##
 QCK40:	XOR	A	; Abort quietly: Z and Cy.
 	SCF
 	RET
-
-QDRIVE$:	DEFB	"Drive ",0
-QNOMAP$:	DEFB	"is not mapped",0
-QRAMD$:	DEFB	"is the RAM disk",0
-QFILE$:	DEFB	"is mapped to a disk image file",0
-QWARN1$:	DEFB	"WARNING: Drive ",0
-QWARN2$:	DEFB	" is NOT a floppy disk.",13,10,"Are you sure? (y/n) ",0
 
 		SUBTTL	MEMORY
 ;        The MEMORY command (new in 2.40) displays the state of the system
@@ -1134,8 +1132,8 @@ PRI10:	PUSH	HL	; /K: print as 'nK', or as 'n
 	LD	(FILECNT##),HL	; The three running totals (DIR's
 	LD	(FILETOT1##),HL	;   counters borrowed as scratch:
 	LD	(FILETOT2##),HL	;   total, reserved, free).
-	LD	DE,MEMHDR$	; The header line.
-	CALL	DMSCR##
+	LD	A,#5E	; The header line.
+	CALL	DMESSCR##
 	LD	IX,(MAPTAB##)
 MMM10:	LD	A,(IX)	; A zero slot byte ends the table.
 	OR	A
@@ -1186,8 +1184,8 @@ MMM30:	CALL	PRCHAR##
 	ADD	IX,DE
 	JR	MMM10
 
-MMM40:	LD	DE,MEMALL$	; The totals line: after the
-	CALL	PRTSTR##	;   longer 'Total:' label the
+MMM40:	LD	A,#5F	; The totals line: after the
+	CALL	DMESS##	;   longer 'Total:' label the
 	LD	HL,(FILECNT##)	;   first column is one character
 	CALL	MEMCL3	;   narrower, so it still aligns.
 	LD	HL,(FILETOT1##)
@@ -1202,10 +1200,12 @@ MMM40:	LD	DE,MEMALL$	; The totals line: after the
 	LD	A,B
 	OR	A	; No RAM disk: no line at all.
 	JR	Z,MMM50
-	LD	DE,MEMRD$	; 'RAM disk size: '
-	CALL	PRTSTR##
-	LD	L,B	; (PRTSTR preserves BC, but comes
-	LD	H,#00	;   back with A = 0.)
+	PUSH	BC	; 'RAM disk size: ' (DMESS eats
+	LD	A,#60	;   B, which holds the size).
+	CALL	DMESS##
+	POP	BC
+	LD	L,B
+	LD	H,#00
 	ADD	HL,HL	; Segments to kilobytes.
 	ADD	HL,HL
 	ADD	HL,HL
@@ -1214,8 +1214,8 @@ MMM40:	LD	DE,MEMALL$	; The totals line: after the
 	LD	A,"K"
 	CALL	PRCHAR##
 	CALL	LPRINT##
-MMM50:	LD	DE,MEMTPA$	; 'TPA end address: '
-	CALL	PRTSTR##
+MMM50:	LD	A,#61	; 'TPA end address: '
+	CALL	DMESS##
 	CALL	GETTPA
 	PUSH	HL
 	LD	A,H	; Four hexadecimal digits.
@@ -1224,8 +1224,8 @@ MMM50:	LD	DE,MEMTPA$	; 'TPA end address: '
 	PUSH	HL
 	LD	A,L
 	CALL	PRHEX2
-	LD	DE,MEMTPA2$	; 'h' and the 'TPA size: ' line.
-	CALL	PRTSTR##
+	LD	A,#62	; 'h' and the 'TPA size: ' line.
+	CALL	DMESS##
 	POP	HL
 	LD	A,H	; Kilobytes: the address divided
 	RRCA	;   by 1024.
@@ -1326,16 +1326,9 @@ GTP10:	LD	L,#08
 	DEC	H
 	RET
 
-; The strings of the MEM command. The 32 character wide layout: the
-; slot in columns 1-4, the first number column ending at column 14
-; (nine characters wide after a slot, eight after 'Total:') and two
-; more nine character columns.
-MEMHDR$:	DEFB	"Slot     Total Reserved     Free",13,10
-	DEFB	"----     ----- --------     ----",13,10,0
-MEMALL$:	DEFB	13,10,"Total:",0
-MEMRD$:	DEFB	"RAM disk size: ",0
-MEMTPA$:	DEFB	"TPA end address: ",0
-MEMTPA2$:	DEFB	"h",13,10,"TPA size: ",0
+; The strings of the MEM command (messages #5E-#62) live in
+; messages.mac/jmessages.mac, together with the description of the 32
+; character wide column layout.
 
 		SUBTTL	GOTO, GOSUB, RETURN, END
 ;        The batch file flow control commands (all new in 2.40). They work
@@ -3024,8 +3017,15 @@ VER10:	CALL	NC,PRCHAR##	; Print character from message.
 	INC	HL
 	LD	D,(HL)	; DE -> message.
 	CALL	DMSCR##	; Print message and CRLF.
-	LD	DE,VERMSG	; Finally print COMMAND.COM's message.
-	JP	DMSCR##
+	LD	A,#56	; Finally print COMMAND.COM's message:
+	CALL	DMESS##	;   'COMMAND3.COM version ' and the
+	LD	DE,VERNUM$	;   version number, a blank line, and
+	CALL	PRTSTR##	;   'TYPE COMMAND3.COM for more
+	CALL	LPRINT##	;   details'.
+	CALL	LPRINT##
+	LD	A,#57
+	CALL	DMESSCR##
+	JP	LPRINT##
 
 ;        Read the byte at address (HL) from the master disk ROM (entry
 ; _RDSLT) or from the slot given in A (entry RDSLOT), with the RDSLT BIOS
@@ -3046,11 +3046,9 @@ RDSLOT:	EX	DE,HL
 	POP	HL
 	RET
 
-VERMSG:	
-	DEFB	"COMMAND3.COM version "
+VERNUM$:
 	INCLUDE	version.inc
-	DEFB	13,10,13,10
-	DEFB	"TYPE COMMAND3.COM for more details",13,10,0
+	DEFB	0
 
 		SUBTTL	VERIFY
 ;******************************************************************************
@@ -3294,8 +3292,8 @@ LCK15:	INC	E
 	LD	A,D	; End the list, or say that no
 	OR	A	;   drive is locked at all.
 	JP	NZ,LPRINT##
-	LD	DE,NOLOCK$
-	JP	DMSCR##
+	LD	A,#63
+	JP	DMESSCR##
 
 LCK20:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
 	RET	NZ
@@ -3310,17 +3308,17 @@ LCK20:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
 	PUSH	DE
 	CALL	GETLCK
 	POP	DE
-	LD	HL,LOCKED$
+	LD	B,#64
 	JR	NZ,LCK25
-	LD	HL,NLOCKED$
+	LD	B,#65
 LCK25:	LD	A,E
 	ADD	A,"A"
 	CALL	PRCHAR##
 	LD	A,":"
 	CALL	PRCHAR##
 	CALL	SPACE##
-	EX	DE,HL
-	JP	DMSCR##
+	LD	A,B
+	JP	DMESSCR##
 
 LCK30:	PUSH	DE	; Save the drive (in D).
 	EX	DE,HL	; DE -> parameter.
@@ -3373,9 +3371,6 @@ GETLCK:	XOR	A
 GLK10:	OR	A	; NZ => locked.
 	RET
 
-NOLOCK$:	DEFB	"No drives are locked",0
-LOCKED$:	DEFB	"is locked",0
-NLOCKED$:	DEFB	"is not locked",0
 
 		SUBTTL	MAPDRV
 ;        The MAPDRV command (new as an internal command in 3.0; it has
@@ -3700,12 +3695,12 @@ DLS10:	PUSH	BC
 	LD	A,(ENVDATA##+2)	; Number of drives assigned at
 	OR	A	;   boot time.
 	JR	NZ,DLS20
-	LD	DE,NODRV$	; None at all.
-	CALL	DMSCR##
+	LD	A,#68	; None at all.
+	CALL	DMESSCR##
 	JR	DLS40
-DLS20:	LD	DE,BOOTD$	; 'Drives assigned at boot
-	CALL	PRTSTR##	;   time: n'... (PRTSTR comes
-	LD	A,(ENVDATA##+2)	;   back with A destroyed!)
+DLS20:	LD	A,#69	; 'Drives assigned at boot
+	CALL	DMESS##	;   time: n'...
+	LD	A,(ENVDATA##+2)
 	ADD	A,"0"
 	CALL	PRCHAR##
 	LD	A,","
@@ -3721,15 +3716,15 @@ DLS20:	LD	DE,BOOTD$	; 'Drives assigned at boot
 	CALL	PRCHAR##
 	CALL	LPRINT##
 	JR	DLS40
-DLS30:	LD	DE,FROMD$	; ...or 'from X: to Y:'.
-	CALL	PRTSTR##
+DLS30:	LD	A,#6A	; ...or 'from X: to Y:'
+	CALL	DMESS##	;   ('X: ~ Y:' in Japanese).
 	LD	A,(ENVDATA##+3)
 	ADD	A,"A"
 	CALL	PRCHAR##
 	LD	A,":"
 	CALL	PRCHAR##
-	LD	DE,TOD$
-	CALL	PRTSTR##
+	LD	A,#6B
+	CALL	DMESS##
 	LD	A,(ENVDATA##+2)
 	LD	C,A
 	LD	A,(ENVDATA##+3)
@@ -3778,23 +3773,25 @@ DIN10:	PUSH	BC
 	OR	A	;   silently.
 	JP	Z,DIN80
 	PUSH	BC
-	LD	DE,DRVIS1$	; 'Drive X: is assigned to:'
-	CALL	PRTSTR##
-	LD	A,B
-	ADD	A,"A"
+	LD	A,B	; 'Drive X: is assigned to:'
+	ADD	A,"A"	;   (the letter waits in C while
+	LD	C,A	;   DMESS eats the registers).
+	LD	A,#58
+	CALL	DMESS##
+	LD	A,C
 	CALL	PRCHAR##
-	LD	DE,DRVIS2$
-	CALL	DMSCR##
+	LD	A,#6C
+	CALL	DMESSCR##
 	LD	A,(ENVDATA##)
 	CP	#04	; The RAM disk.
 	JR	NZ,DIN20
-	LD	DE,RAMDK$
-	CALL	DMSCR##
+	LD	A,#6D
+	CALL	DMESSCR##
 	JP	DIN70
 DIN20:	CP	#05	; A ghost drive.
 	JR	NZ,DIN30
-	LD	DE,GHOSTD$
-	CALL	PRTSTR##
+	LD	A,#6E
+	CALL	DMESS##
 	LD	A,(ENVDATA##+1)
 	ADD	A,"A"
 	CALL	PRCHAR##
@@ -3804,12 +3801,12 @@ DIN20:	CP	#05	; A ghost drive.
 	JP	DIN70
 DIN30:	CP	#03	; A mounted file.
 	JR	NZ,DIN40
-	LD	DE,FILED$	; 'File <path> on drive X:'
-	CALL	PRTSTR##	;   (' (read only)').
+	LD	A,#6F	; 'File <path> on drive X:'
+	CALL	DMESS##	;   (' (read only)').
 	LD	DE,ENVDATA##+4
 	CALL	PRTSTR##
-	LD	DE,ONDRVD$
-	CALL	PRTSTR##
+	LD	A,#70
+	CALL	DMESS##
 	LD	A,(ENVDATA##+1)
 	ADD	A,"A"
 	CALL	PRCHAR##
@@ -3818,8 +3815,8 @@ DIN30:	CP	#03	; A mounted file.
 	LD	A,(ENVDATA##+2)	; Bit 0 = mounted read only.
 	AND	#01
 	JR	Z,DIN35
-	LD	DE,ROD$
-	CALL	PRTSTR##
+	LD	A,#71
+	CALL	DMESS##
 DIN35:	CALL	LPRINT##
 	LD	A,#FF	; The letter buffer was reused:
 	LD	(ENVDATA##+64),A	;   invalidate the driver cache.
@@ -3846,16 +3843,16 @@ DIN50:	LD	IX,ENVDATA##+64
 	LD	A,(ENVDATA##+64+4)	; Nextor driver (bit 0): device
 	AND	#01	;   number; legacy: relative unit.
 	JR	Z,DIN60
-	LD	DE,DEVN$	; 'Device n'
-	CALL	PRTSTR##
+	LD	A,#72	; 'Device n'
+	CALL	DMESS##
 	LD	A,(ENVDATA##+4)
 	LD	L,A
 	LD	H,#00
 	CALL	MEMNUM
 	CALL	LPRINT##
 	JR	DIN70
-DIN60:	LD	DE,RELU$	; 'Relative unit n'
-	CALL	PRTSTR##
+DIN60:	LD	A,#73	; 'Relative unit n'
+	CALL	DMESS##
 	LD	A,(ENVDATA##+3)
 	ADD	A,"0"
 	CALL	PRCHAR##
@@ -3932,30 +3929,30 @@ DVI10:	LD	A,DEVICE_QUERY.STR_MANUFACTURER##
 	CP	DRIVER.RESULT_INVALID_DEVICE##
 	JP	Z,DVI90	; No such device: try the next.
 	PUSH	AF	; 'Device number n' (the result
-	LD	DE,DEVNO$	;   of the manufacturer query is
-	CALL	PRTSTR##	;   used after the header line).
+	LD	A,#74	;   of the manufacturer query is
+	CALL	DMESS##	;   used after the header line).
 	LD	A,(ENVNAME##+19)
 	LD	L,A
 	LD	H,#00
 	CALL	MEMNUM
 	CALL	LPRINT##
 	POP	AF
-	LD	DE,MANUF$
+	LD	E,#75	; 'Device manufacturer: '
 	CALL	DVPSTR
 	LD	A,DEVICE_QUERY.STR_DEVICE_NAME##
 	CALL	DVQSTR
 	RET	C
-	LD	DE,DEVNAM$
+	LD	E,#76	; 'Device name: '
 	CALL	DVPSTR
 	LD	A,DEVICE_QUERY.STR_MEDIUM_NAME##
 	CALL	DVQSTR
 	RET	C
-	LD	DE,MEDIUM$
+	LD	E,#77	; 'Medium name: '
 	CALL	DVPSTR
 	LD	A,DEVICE_QUERY.STR_SERIAL_NUMBER##
 	CALL	DVQSTR
 	RET	C
-	LD	DE,SERIAL$
+	LD	E,#78	; 'Device serial number: '
 	CALL	DVPSTR
 	LD	C,#00	; The device parameters.
 	LD	A,DEVICE_QUERY.GET_PARAMS##
@@ -3982,19 +3979,20 @@ DVI20:	LD	C,#00	; Is the device available ?
 DVI30:	LD	A,B
 	PUSH	AF	; The device type.
 	LD	A,(CDBUF)
-	LD	DE,BLKDEV$
+	LD	E,#79	; 'Block device'
 	OR	A
 	JR	Z,DVI40
-	LD	DE,CDROM$
+	LD	E,#7A	; 'CD-ROM'
 	DEC	A
 	JR	Z,DVI40
-	LD	DE,UNKDEV$
-DVI40:	CALL	PRTSTR##
+	LD	E,#7B	; 'Unknown type'
+DVI40:	LD	A,E
+	CALL	DMESS##
 	POP	AF	; Offline: say so, no capacity.
 	OR	A
 	JR	NZ,DVI50
-	LD	DE,OFFLIN$
-	CALL	PRTSTR##
+	LD	A,#7C
+	CALL	DMESS##
 	JR	DVI70
 DVI50:	LD	A,(CDBUF)	; The capacity, for online block
 	OR	A	;   devices with 512 byte sectors
@@ -4059,20 +4057,21 @@ DVI60:	PUSH	BC	; ', n' and the unit and 'B'.
 	LD	A,"B"
 	CALL	PRCHAR##
 DVI70:	LD	A,(CDBUF+7)	; The flags: removable/fixed,
-	LD	C,A	;   read only, floppy. (PRTSTR
-	LD	DE,FIXED$	;   preserves BC.)
+	LD	C,A	;   read only, floppy. (DMESS
+	LD	E,#7E	;   preserves C.)
 	BIT	0,C
 	JR	Z,DVI72
-	LD	DE,REMOV$
-DVI72:	CALL	PRTSTR##
+	LD	E,#7D
+DVI72:	LD	A,E
+	CALL	DMESS##
 	BIT	1,C
 	JR	Z,DVI74
-	LD	DE,RDONLY$
-	CALL	PRTSTR##
+	LD	A,#7F
+	CALL	DMESS##
 DVI74:	BIT	2,C
 	JR	Z,DVI76
-	LD	DE,FLOPPY$
-	CALL	PRTSTR##
+	LD	A,#80
+	CALL	DMESS##
 DVI76:	CALL	LPRINT##	; End the type/flags line.
 DVI80:	CALL	LPRINT##	; A blank line between devices.
 DVI90:	LD	A,(ENVNAME##+19)	; On to the next device number.
@@ -4126,15 +4125,17 @@ DVQ10:	PUSH	IX	; The driver's result, with Cy
 	OR	A
 	RET
 
-;        Print the label at (DE) and then the string that a device
-; query left in ENVDATA, when its result in A says it is there (also
+;        Print the label whose message number is in E and then the
+; string that a device query left in ENVDATA, when its result in A
+; says it is there (also
 ; accepting a truncated string, which the tool meant to do but did
 ; not). No output at all otherwise.
 DVPSTR:	OR	A
 	JR	Z,DVP10
 	CP	DRIVER.RESULT_TRUNCATED_STRING##
 	RET	NZ
-DVP10:	CALL	PRTSTR##
+DVP10:	LD	A,E
+	CALL	DMESS##
 	LD	DE,CDBUF
 	CALL	PRTRIM
 	JP	LPRINT##
@@ -4256,10 +4257,10 @@ PRD20:	INC	HL	; Cut the padding off and print
 	ADD	A,"0"
 	CALL	PRCHAR##
 	JR	PRD40
-PRD30:	LD	DE,LEGCY$
-	CALL	PRTSTR##
-PRD40:	LD	DE,ONSLT$	; ' on slot ' and the slot, as
-	CALL	PRTSTR##	;   PRSLOT of the SDK prints it.
+PRD30:	LD	A,#66	; 'Legacy MSX-DOS driver'.
+	CALL	DMESS##
+PRD40:	LD	A,#67	; ' on slot ' and the slot, as
+	CALL	DMESS##	;   PRSLOT of the SDK prints it.
 	LD	B,(IX+1)	; B = the segment.
 	LD	A,(IX)
 	PUSH	BC
@@ -4290,37 +4291,8 @@ PRD50:	POP	BC
 	CALL	MEMNUM
 PRD60:	JP	LPRINT##
 
-; The strings of the DRIVERS and DRVINFO commands.
-LEGCY$:	DEFB	"Legacy MSX-DOS driver",0
-ONSLT$:	DEFB	" on slot ",0
-NODRV$:	DEFB	"No drives assigned at boot time",0
-BOOTD$:	DEFB	"Drives assigned at boot time: ",0
-FROMD$:	DEFB	"from ",0
-TOD$:	DEFB	" to ",0
-DRVIS1$:	DEFB	"Drive ",0
-DRVIS2$:	DEFB	": is assigned to:",0
-RAMDK$:	DEFB	"RAM disk",0
-GHOSTD$:	DEFB	"Ghost drive of ",0
-FILED$:	DEFB	"File ",0
-ONDRVD$:	DEFB	" on drive ",0
-ROD$:	DEFB	" (read only)",0
-DEVN$:	DEFB	"Device ",0
-RELU$:	DEFB	"Relative unit ",0
-
-; The strings of the DEVINFO command.
-DEVNO$:	DEFB	"Device number ",0
-MANUF$:	DEFB	"  Device manufacturer: ",0
-DEVNAM$:	DEFB	"  Device name: ",0
-MEDIUM$:	DEFB	"  Medium name: ",0
-SERIAL$:	DEFB	"  Device serial number: ",0
-BLKDEV$:	DEFB	"  Block device",0
-CDROM$:	DEFB	"  CD-ROM",0
-UNKDEV$:	DEFB	"  Unknown type",0
-OFFLIN$:	DEFB	", offline",0
-REMOV$:	DEFB	", removable",0
-FIXED$:	DEFB	", fixed",0
-RDONLY$:	DEFB	", read-only",0
-FLOPPY$:	DEFB	", floppy disk",0
+; The strings of the DRIVERS, DRVINFO and DEVINFO commands are
+; messages #66-#80 in messages.mac/jmessages.mac.
 
 		SUBTTL	RALLOC
 ;        The RALLOC command (new in 3.0): RALLOC [d: [ON|OFF]].
@@ -4352,8 +4324,8 @@ RAL15:	INC	A
 	LD	A,C	; End the list, or say that the
 	OR	A	;   mode is off everywhere.
 	JP	NZ,LPRINT##
-	LD	DE,NORAL$
-	JP	DMSCR##
+	LD	A,#84
+	JP	DMESSCR##
 
 RAL30:	CALL	PARSDR	; Parse 'd:' into D (1 = A:).
 	RET	NZ
@@ -4442,8 +4414,6 @@ GETRAL:	PUSH	DE
 	CALL	BDOS
 	POP	DE
 	RET
-
-NORAL$:	DEFB	"No drives are in reduced allocation information mode",0
 
 		SUBTTL	Z80MODE
 ;        The Z80MODE command (new in 3.0): Z80MODE slot[-subslot]|0

@@ -1,0 +1,616 @@
+; FIXDISK - Update an MSX-DOS 1 (or other non-MSX-DOS 2) disk to an
+; MSX-DOS 2 disk, rebuilding the boot sector disk parameters and
+; optionally (/S, /B) writing a complete boot sector with a volume id,
+; which enables undeletion. The files on the disk are preserved.
+;
+; This is a port of the original MSX-DOS 2 FIXDISK program by ASCII
+; Corporation (which lived in source/command/fixdisk in older revisions of
+; this repository), adapted to the Nextor 3 tools convention (one
+; self-contained source file with both message languages, Kanji mode
+; probed once at startup). All the heavy lifting is done by the kernel
+; through the special choices of the _FORMAT function:
+;
+;   - Default:  choice FEh = rebuild the disk parameters ONLY; the rest
+;               of the boot sector is preserved. No volume id is
+;               written, so the default run does NOT enable undeletion:
+;               use /S or /B for that. (Verified against the kernel
+;               code and real runs, 2026-08-21; this mimics the
+;               original tool, whose own documentation overpromised.)
+;   - /S:       choice FFh = write a full MSX-DOS 2 boot sector: the
+;               MSX-DOS 2 boot code plus the VOL_ID block with a
+;               volume id (this enables undeletion).
+;   - /B (new): choice FDh = write a standard (non MSX-specific) boot
+;               sector: an extended block with a volume id (this also
+;               enables undeletion), preserving the disk parameters and
+;               anything past the extended block. Since FDh requires
+;               the disk to already have valid FAT12/FAT16 boot
+;               parameters, a genuine MSX-DOS 1 disk (which reports
+;               "Not a DOS disk") is handled by doing an FEh call first
+;               and then retrying FDh. This choice exists in Nextor 3
+;               only.
+;
+; The drive letter is mandatory (deliberate change from the original
+; program, which operated on the current drive by default; same
+; convention as CHKDSK).
+;
+; The program works only when one of the following is true (checked in
+; CHECK_TARGET):
+;
+;   - The operating system is a plain MSX-DOS 2 (the original program's
+;     scope; the drive must accept the _FORMAT "choice string" probe,
+;     as in the original program).
+;   - The operating system is Nextor and the target drive is mapped to
+;     an MSX-DOS driver (same probe).
+;   - The operating system is Nextor 3 or later and the target drive is
+;     mapped to a device flagged as a floppy disk drive by its Nextor
+;     driver (or to a ghost drive, whose main drive is always such a
+;     device).
+;
+; On any other drive (hard disk partitions on Nextor devices, mounted
+; files, the RAM disk) the operation is refused: those boot sectors are
+; managed by Nextor and rebuilding them from the media ID would destroy
+; the real disk parameters.
+;
+; NOTE: KMODE and FIXDISK deliberately duplicate their startup, drive
+; gate and message machinery (as CHKDSK and UNDEL do). Sharing the
+; common routines as linkable modules would be an improvement
+; opportunity.
+
+	jp	START
+
+	;	-------------------------------------------------------
+
+	db	13
+	db	"FIXDISK v1.1 - Rebuild the MSX-DOS 2 disk parameters of a disk",13,10
+	db	13,10
+	db	"Rewrites the boot sector of a disk so that it has valid MSX-DOS 2",13,10
+	db	"disk parameters. The /S and /B options write a complete boot sector",13,10
+	db	"instead, including a volume id, which enables undeletion. The files",13,10
+	db	"on the disk are preserved.",13,10
+	db	13,10
+	db	"Usage: FIXDISK d: [/S|/B]",13,10
+	db	13,10
+	db	"       /S: write a full MSX-DOS 2 boot sector (boot code + volume id)",13,10
+	db	"       /B: write a standard boot sector (requires Nextor 3)",13,10
+	db	13,10
+	db	"Works on drives handled by MSX-DOS drivers and, under Nextor 3 or",13,10
+	db	"later, on floppy disk drives.",13,10
+	db	1Ah
+
+	;	-------------------------------------------------------
+
+MSX_DOS	equ	5
+
+;	ASCII control characters
+
+TAB	equ	09h
+LF	equ	0Ah
+CR	equ	0Dh
+
+EXTBIO	equ	0FFCAh	;Extended BIOS entry point
+KNJID	equ	11h	;Extended BIOS device number of the Kanji driver
+
+;******************************************************************************
+
+START:
+	ld	sp,(0006h)	;Stack at the top of the TPA (page 3): the
+				; Kanji driver answers EXTBIO calls with
+				; inter-slot calls that switch pages 0-2
+				; out, so the stack must not live in the
+				; program area.
+
+	call	INIT		;Kanji probe, version check.
+
+	call	PARSE		;Decode the command line.
+
+	call	CHECK_TARGET	;The OS/drive gate (see above).
+
+	ld	a,(CHOICE)	;The /B option needs the FDh
+	cp	0FDh		; format choice, which exists
+	jr	nz,choice_ok	; in Nextor 3 only.
+	ld	a,(NEXTOR_VER)
+	cp	3
+	jr	nc,choice_ok
+	ld	a,__NB3_MSG
+	call	WR_MSG
+	ld	a,3
+	jp	EXIT
+choice_ok:
+
+	ld	a,__DISK_MSG	;Print the "Disk in drive X:
+	call	WR_MSG		; will only be able to boot
+	ld	a,(DRIVE)	; MSX-DOS" warning (or the
+	add	a,'A'-1		; "standard boot sector" variant
+	call	WR_CHAR		; for /B) and wait for a key
+	ld	a,(CHOICE)	; press.
+	cp	0FDh
+	ld	a,__ONLY_MSG
+	jr	nz,prompt_msg_ok
+	ld	a,__ONLYB_MSG
+prompt_msg_ok:
+	call	WR_MSG
+	call	WR_CRLF
+	ld	a,__PRAK_MSG
+	call	WR_MSG
+	call	INCH
+	call	WR_CRLF
+
+	ld	a,(CHOICE)	;Do the operation. Any error
+	cp	0FDh		; code is returned to MSX-DOS,
+	jr	z,do_std_boot	; which prints the message.
+	call	DO_FORMAT	;A = choice (FEh or FFh).
+	jp	EXIT
+
+do_std_boot:
+	ld	a,0FDh		;/B: try the "standard boot
+	call	DO_FORMAT	; sector" choice directly first.
+	or	a
+	jp	z,EXIT
+	cp	.NDOS##		;"Not a DOS disk" = no valid
+	jp	nz,EXIT		; FAT12/16 boot parameters (a
+	ld	a,0FEh		; genuine MSX-DOS 1 disk): build
+	call	DO_FORMAT	; the parameters first, then
+	or	a		; retry the standard boot
+	jp	nz,EXIT		; sector.
+	ld	a,0FDh
+	call	DO_FORMAT
+	jp	EXIT
+
+DO_FORMAT:
+	push	af		;A = choice number
+	ld	a,(DRIVE)
+	ld	b,a		;B = drive number
+	pop	af
+	ld	c,_FORMAT##
+	jp	MSX_DOS
+
+;******************************************************************************
+;
+INIT:
+;
+;    This routine is called once only when the program starts  up  to  do  any
+; initialisation which the program requires.  Its functions are as follows:
+;
+;	1.  Find out whether the Kanji screen mode is active (in which case
+;	      all messages will be printed in Japanese).
+;
+;	2.  Check that the system is MSX-DOS 2 or better, and find out
+;	      whether it is Nextor (and which major version) for the
+;	      CHECK_TARGET gate.
+;
+	xor	a		;Ask the Kanji driver (if present) for the
+	ld	d,KNJID		; current screen mode, via EXTBIO. If there
+	ld	e,0		; is no Kanji driver A stays 0 (ANK mode).
+	call	CALL_EXTBIO
+	ld	(KANJI_FLAG),a	;Non-zero => print Japanese messages.
+
+	ld	b,05Ah		;Find out the MSX-DOS version number,
+	ld	hl,01234h	; passing the magic numbers that make
+	ld	de,0ABCDh	; Nextor return its own version number
+	ld	ix,0		; in IX/IY.
+	ld	c,_DOSVER##
+	call	MSX_DOS
+	or	a
+	jr	nz,WRONG_VER
+	ld	a,b		;Reject MSX-DOS kernel versions
+	cp	2		; below 2.
+	jr	c,WRONG_VER
+
+	push	ix
+	pop	bc		;B = IXh (1 if Nextor), C = IXl (major)
+	ld	a,b
+	dec	a		;Plain MSX-DOS 2: NEXTOR_VER
+	ret	nz		; keeps its initial zero.
+	ld	a,c
+	ld	(NEXTOR_VER),a	;Nextor: store the major version.
+	ret
+
+WRONG_VER:
+	ld	a,__WVER_MSG	;Print "Wrong version of MSX-DOS"
+	call	WR_MSG		; and exit with error code 1 (the
+	ld	a,1		; message is printed here because
+	jp	EXIT		; MSX-DOS 1 ignores error codes).
+
+;******************************************************************************
+;
+PARSE:
+;
+;    Decodes the command line: FIXDISK d: [/S|/B].  Sets the DRIVE and
+; CHOICE variables.  The drive letter is mandatory: with no arguments (or
+; with just a switch) the usage text is displayed and the program exits with
+; no error.
+;
+	ld	hl,81h		;Look at the command line.
+	call	GETCH
+	jr	z,SHOW_USAGE	;No arguments at all.
+	cp	'/'
+	jr	z,SHOW_USAGE	;A switch without a drive.
+
+	sub	'A'		;The drive letter...
+	jr	c,IPARM_EXIT
+	cp	'Z'-'A'+1
+	jr	nc,IPARM_EXIT
+	inc	a		;1 = A: etc.
+	ld	(DRIVE),a
+	inc	hl
+	ld	a,(hl)		;...must be followed by a colon.
+	cp	':'
+	jr	nz,IPARM_EXIT
+	inc	hl
+
+	call	GETCH		;Optional switch: /S or /B.
+	ret	z		;(The default choice is FEh.)
+	cp	'/'
+	jr	nz,IPARM_EXIT
+	inc	hl
+	ld	a,(hl)
+	call	UC0
+	cp	'S'
+	jr	nz,parse_not_s
+	ld	a,0FFh		;/S = full MSX-DOS 2 boot sector.
+	jr	parse_choice
+parse_not_s:
+	cp	'B'
+	jr	nz,IPARM_EXIT
+	ld	a,0FDh		;/B = standard boot sector.
+parse_choice:
+	ld	(CHOICE),a
+	inc	hl
+
+	call	GETCH		;Nothing else may follow.
+	ret	z
+	ld	a,.INP##	;"Too many parameters"
+	jp	EXIT
+
+SHOW_USAGE:
+	ld	a,__USAG_MSG	;Print the usage text and exit
+	call	WR_MSG		; successfully.
+	xor	a
+	jp	EXIT
+
+IPARM_EXIT:
+	ld	a,.IPARM##	;"Invalid parameter"
+	jp	EXIT
+
+;******************************************************************************
+;
+CHECK_TARGET:
+;
+;    Checks that the operation is possible on the drive in the DRIVE
+; variable, per the rules in the header comment:
+;
+;    - Plain MSX-DOS 2, or Nextor with the drive mapped to an MSX-DOS
+;      driver: the drive must accept the _FORMAT "get choice string" probe
+;      (choice 0), as in the original program.
+;    - Nextor 3 or later with the drive mapped to a Nextor driver: the
+;      device must be flagged as a floppy disk drive (DEV_QUERY
+;      "get device parameters", flags bit 2). Ghost drives are accepted
+;      directly (their main drive is always a floppy disk device).
+;
+;    Returns only if the drive is acceptable; otherwise the program exits
+; with an error message or a DOS error code.
+;
+	ld	a,(NEXTOR_VER)
+	or	a
+	jr	nz,ct_nextor
+ct_probe:
+	ld	a,(DRIVE)	;"Get choice string" probe: an
+	ld	b,a		; error (e.g. "Can't format this
+	xor	a		; drive") means the drive does
+	ld	c,_FORMAT##	; not support the operation.
+	call	MSX_DOS
+	or	a
+	ret	z
+	jp	EXIT		;Propagate the DOS error code.
+
+ct_nextor:
+	ld	a,(DRIVE)	;Ask Nextor about the drive
+	dec	a		; letter.
+	ld	hl,GDLI_BUF
+	ld	c,_GDLI##
+	call	MSX_DOS
+	or	a
+	jp	nz,EXIT		;e.g. "Invalid drive".
+
+	ld	a,(GDLI_BUF)	;Drive status:
+	cp	5		;5 = ghost drive, whose main
+	ret	z		;     drive is always a floppy
+				;     disk device: acceptable.
+	cp	1		;Anything but "assigned to a
+	jr	nz,ct_unsup	; storage device" (unassigned,
+				; mounted file, RAM disk): no.
+
+	ld	a,(GDLI_BUF+3)	;Relative drive number: FFh for
+	inc	a		; Nextor drivers, a real number
+	jr	nz,ct_probe	; for MSX-DOS drivers, which are
+				; acceptable on any Nextor (with
+				; the MSX-DOS 2 probe).
+
+	ld	a,(NEXTOR_VER)	;Drives on Nextor drivers are
+	cp	3		; only acceptable on Nextor 3
+	jr	c,ct_unsup	; or later...
+
+	ld	a,DEVICE_QUERY.GET_PARAMS##
+	ld	(REG_BUF+1),a	;...and only when the device is
+	ld	a,(GDLI_BUF+4)	; flagged as a floppy disk
+	ld	(REG_BUF+2),a	; drive. Ask the driver for the
+	ld	hl,DEV_BUF	; device parameters (the CDRVR
+	ld	(REG_BUF+6),hl	; register buffer layout is
+				; F,A,C,B,E,D,L,H: A = query
+				; code, C = device index,
+				; HL = parameters buffer).
+	ld	a,(GDLI_BUF+2)	;Driver segment (FFh = ROM).
+	ld	b,a
+	ld	a,(GDLI_BUF+1)	;Driver slot; bits 6-4 must be
+	or	00010000b	; 001 (Nextor 3 driver structure
+				; awareness flag).
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	hl,REG_BUF
+	ld	c,_CDRVR##
+	call	MSX_DOS
+	or	a
+	jr	nz,ct_unsup
+	push	ix		;A := the A returned by the
+	pop	af		; driver routine. Any result
+	or	a		; other than OK (including "not
+	jr	nz,ct_unsup	; implemented", which stands for
+				; default parameters with no
+				; flags) means "not a floppy".
+	ld	a,(DEV_BUF+7)	;Device flags, bit 2: the device
+	and	00000100b	; is a floppy disk drive.
+	ret	nz
+
+ct_unsup:
+	ld	a,__NSUP1_MSG	;"This operation is not
+	call	WR_MSG		; supported on drive X:",
+	ld	a,(DRIVE)	; exit with error code 2.
+	add	a,'A'-1
+	call	WR_CHAR
+	ld	a,__NSUP2_MSG
+	call	WR_MSG
+	ld	a,2
+	jp	EXIT
+
+;******************************************************************************
+;
+CALL_EXTBIO:
+;
+;    Calls the extended BIOS entry point with D = device, E = function and
+; A = argument, protecting the alternate and index registers.  Returns the
+; A output of the call; corrupts F, BC, DE, HL.
+;
+	exx
+	ex	af,af'
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	ix
+	push	iy
+	ex	af,af'
+	exx
+
+	call	EXTBIO
+
+	exx
+	ex	af,af'
+	pop	iy
+	pop	ix
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ex	af,af'
+	exx
+	ret
+
+;******************************************************************************
+;
+EXIT:
+	ld	b,a		;Terminate with the error code
+	ld	c,_TERM##	; passed in A.
+	call	MSX_DOS
+	rst	0		;Should never get here!
+
+;******************************************************************************
+;
+;	Command line helper routines (from the original program):
+;	GETCH returns in A the next non-separator character (upper cased),
+;	with HL pointing at it, and Z set if the end of the line was reached.
+;	UC0 upper cases the character in A.
+;
+GCH0:	inc	hl
+GETCH:	ld	a,(hl)		;Get character.
+	call	SEP_CHK
+	jr	nc,GCH0		;Skip if a valid separator character.
+	call	UC0
+	or	a
+	ret			;Else return with Z if end of line.
+
+UC0:	cp	'a'
+	ret	c
+	cp	'z'+1
+	ret	nc
+	and	not ('a'-'A')	;Make it upper cased.
+	ret
+
+SEP_CHK:
+	cp	','		;Comma is OK.
+	ret	z
+	cp	';'		;Semi-colon is OK.
+	ret	z
+	cp	'='		;Equals is OK.
+	ret	z
+	cp	' '		;Space is OK.
+	ret	z
+	cp	TAB		;Tab is OK.
+	ret	z
+	or	a		;Null (end of line) is OK, nothing else is.
+	scf
+	ret
+
+;------------------------------------------------------------------------------
+;
+INCH:
+;
+;    Waits for a fresh key press (gobbling up any pending one first), with no
+; echo.
+;
+	ld	c,_CONST##	;See if a key is pressed.
+	call	MSX_DOS
+	or	a
+	jr	z,inch_wait
+	ld	c,_INNOE##	;Gobble up the pending key
+	call	MSX_DOS		; and look again.
+	jr	INCH
+inch_wait:
+	ld	c,_INNOE##	;Wait for a fresh key press
+	jp	MSX_DOS		; (no echo).
+
+;------------------------------------------------------------------------------
+;
+;	Message output (same scheme as CHKDSK/UNDEL): WR_MSG prints the
+;	message whose number is passed in A, from the English or the
+;	Japanese table depending on the Kanji mode detected at startup.
+;
+WR_MSG:
+	call	GET_MSG_ADR	;Find absolute address of text.
+				;Fall through to WR_STRING.
+WR_STRING:
+	ld	a,(hl)		;Loop to write characters
+	or	a		; from the string until a
+	ret	z		; zero is reached.
+	inc	hl
+	call	WR_CHAR
+	jr	WR_STRING
+
+WR_CRLF:
+	ld	a,CR		;Send a CR-LF sequence to
+	call	WR_CHAR		; the default channel.
+	ld	a,LF
+
+WR_CHAR:
+	push	hl
+	push	de
+	push	bc
+	ld	e,a
+	ld	c,_CONOUT##
+	call	MSX_DOS
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+GET_MSG_ADR:
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+	push	bc
+	ld	b,a		;Save message number.
+	ld	a,(KANJI_FLAG)	;Select the table for the
+	or	a		; language detected at startup.
+	ld	hl,MSG_TABLE
+	jr	z,got_msg_table
+	ld	hl,JMSG_TABLE
+got_msg_table:
+	ld	a,b
+	or	a		;If first message then found.
+	jr	z,got_msg_adr
+
+	ld	b,a		;Message number.
+lop_pass_msg:
+	ld	a,(hl)		;Bypass this message.
+	inc	hl
+	or	a		;Each message is terminated
+	jr	nz,lop_pass_msg	; by a zero.
+	djnz	lop_pass_msg
+
+got_msg_adr:
+	pop	bc
+	ret
+
+;******************************************************************************
+;
+;	THE TEXT MESSAGES
+;
+;    The Japanese table below MUST define exactly the same number of messages
+; in exactly the same order as the English one, since messages are identified
+; by their ordinal position in the table.
+;
+;------------------------------------------------------------------------------
+
+msg_num	DEFL	0
+
+MSG	MACRO	name,text
+__&name&_MSG	EQU	msg_num
+msg_num	DEFL	msg_num+1
+	DEFB	text,0
+	ENDM
+
+;------------------------------------------------------------------------------
+
+MSG_TABLE:
+
+MSG	WVER,	<CR,LF,"*** Wrong version of MSX-DOS",CR,LF>
+MSG	NSUP1,	<CR,LF,"*** This operation is not supported on drive ">
+MSG	NSUP2,	<":",CR,LF>
+MSG	NB3,	<CR,LF,"*** The /B option requires Nextor 3 or later",CR,LF>
+MSG	DISK,	<"Disk in drive ">
+MSG	ONLY,	<": will only be able to boot MSX-DOS">
+MSG	ONLYB,	<": will get a standard boot sector">
+MSG	PRAK,	<"Press any key to continue... ">
+MSG	USAG,	<"Usage: FIXDISK d: [/S|/B]",CR,LF,CR,LF,"Rebuilds the MSX-DOS 2 disk parameters of the disk in the given drive.",CR,LF,"The files on the disk are preserved.",CR,LF,CR,LF,"/S: write a full MSX-DOS 2 boot sector instead (boot code plus a",CR,LF,"    volume id, which enables undeletion)",CR,LF,"/B: write a standard boot sector instead (also with a volume id;",CR,LF,"    requires Nextor 3 or later)",CR,LF,CR,LF,"TYPE FIXDISK.COM for more details",CR,LF>
+
+;------------------------------------------------------------------------------
+;
+;    The Japanese message table.  One entry per MSG of the English table
+; above, in the same order (the message number is the ordinal position in
+; the table).  The strings are converted to Shift-JIS at assembly time.
+;
+JMSG_TABLE:
+
+	.strenc	shift_jis
+
+	db	0Dh,0Ah,"*** MSX-DOSのバージョンが違います",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** ドライブ",0
+	db	": ではこの操作は出来ません",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** /BオプションはNextor 3以降が必要です",0Dh,0Ah,0
+	db	"ドライブ",0
+	db	": のディスクはMSX-DOSしか立ち上げることが出来なくなります",0
+	db	": のディスクのブートセクタは標準形式になります",0
+	db	"何かキーを押して下さい ",0
+	db	"使い方: FIXDISK d: [/S|/B]",0Dh,0Ah,0Dh,0Ah
+	db	"指定ドライブのディスクのMSX-DOS 2ディスクパラメータを再構築します。",0Dh,0Ah
+	db	"ディスク上のファイルは保存されます",0Dh,0Ah,0Dh,0Ah
+	db	"/S: 完全なMSX-DOS 2ブートセクタを書き込みます (ブートコードと、",0Dh,0Ah
+	db	"    ファイルの復活を可能にするボリュームID)",0Dh,0Ah
+	db	"/B: 標準ブートセクタを書き込みます (ボリュームIDも書き込まれます。",0Dh,0Ah
+	db	"    Nextor 3以降が必要)",0Dh,0Ah,0Dh,0Ah
+	db	"詳細は TYPE FIXDISK.COM で表示できます",0Dh,0Ah,0
+
+	.strenc	default
+
+;******************************************************************************
+;
+;	THE VARIABLES
+;
+KANJI_FLAG:
+	db	0	;Non-zero => print Japanese messages
+NEXTOR_VER:
+	db	0	;0 => plain MSX-DOS 2, else the Nextor major version
+DRIVE:
+	db	0	;Target drive (1 = A: etc)
+CHOICE:
+	db	0FEh	;_FORMAT choice: FEh default, FFh for /S, FDh for /B
+
+REG_BUF:
+	db	0,0,0,0,0,0,0,0	;Register buffer for _CDRVR (F,A,C,B,E,D,L,H)
+
+GDLI_BUF:
+	ds	64	;Buffer for _GDLI
+DEV_BUF:
+	ds	12	;Buffer for the DEV_QUERY device parameters
+
+	end

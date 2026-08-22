@@ -1,50 +1,54 @@
-CHKDSK                                                        [2.20]
+CHKDSK                                                   [2.20, 3.0]
 ------
 
-Format:      CHKDSK [d:] [/F]
+Format:      CHKDSK d: [/F]
 
-Purpose:     Checks the integrity of the files on the disk.
+Purpose:     Checks the integrity of the filesystem of a disk.
 
-Use:         The  integrity  of the data structures on disk  in  the
-        specified or current drive is checked and lost disk space is
-        checked for.  When errors are found on the disk,  corrective
-        action  is taken.  If lost clusters are found,  a prompt  is
-        issued  allowing the lost disk space to be either  converted
-        into  usable  disk  space or into files.  If the  latter  is
-        chosen,  then files of the form  FILE0000.CHK,  FILE0001.CHK
-        etc. will be created.
+Use:         The integrity of the filesystem data structures of the
+        disk in the specified drive is checked, and lost disk space
+        is searched for.  Both FAT12 and FAT16 volumes are handled,
+        and the drive letter is mandatory.  Progress is displayed
+        while the disk is examined, and a report of the space usage
+        of the drive is printed at the end.
 
-             If  the  /F option is not given,  then CHKDSK will  not
-        actually  write any corrections it makes to disk,  but  will
-        behave as though it has.  This allows CHKDSK to be  executed
-        to see what would be done to the disk if /F was given.
+             The checks cover invalid cluster numbers, files cross
+        linked with other files (illegally sharing disk space),
+        invalid directory entries, differences between the FAT
+        copies, and clusters marked as used that do not belong to
+        any file (lost clusters).
 
-             Disk space can become lost (i.e. lost clusters created)
-        when some programs are aborted. This applies particularly to
-        CP/M  programs.  It  is  recommended  that  CHKDSK  is  used
-        occasionally on all disks.
+             If lost clusters are found, a prompt is issued for
+        each lost chain allowing it to be either converted back
+        into usable free space or into a file.  In the latter case,
+        files of the form FILE0000.CHK, FILE0001.CHK etc. are
+        created in the root directory, containing the lost data.
 
-             Note  that  this  is  a  transient  command,  and  must
-        therefore be loaded off disk.
+             If the /F option is not given, then CHKDSK does not
+        actually write any correction to disk, but behaves as if it
+        had.  This allows CHKDSK to be executed to see what would
+        be done to the disk if /F was given.
+
+             Disk space can become lost (i.e. lost clusters
+        created) when some programs are aborted.  It is recommended
+        to run CHKDSK occasionally on all disks.
+
+             This program requires Nextor (any version).  Running
+        CHKDSK without arguments prints a parameter summary, and
+        TYPE CHKDSK.COM prints a description.
 
 Examples:
 
-        CHKDSK
-
-             The  disk in the current drive is  checked.  A  'status
-        report'  will  be  printed.  Any errors found  will  not  be
-        written to disk.
-
         CHKDSK B:
 
-             The disk in drive B:  is checked. Any errors found will
-        not be written to disk.
+             The disk in drive B: is checked.  Any errors found are
+        reported, but no correction is written to the disk.
 
-        CHKDSK/F
-        20 lost clusters found in 1 chain
-        Convert lost chains to files (Y/N) ?
+        CHKDSK B: /F
+        1 lost cluster found in 1 chain
+        Convert lost chain to a file (Y/N)?
 
-             The  disk  in the current drive was checked,  and  some
-        lost disk space found.  Since /F was given,  the corrections
-        will be written to disk and the lost space recovered.
+             The disk in drive B: was checked and some lost disk
+        space was found.  Since /F was given, the corrections are
+        written to the disk and the lost space is recovered.
 

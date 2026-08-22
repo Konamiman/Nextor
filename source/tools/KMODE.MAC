@@ -1,0 +1,856 @@
+; KMODE - Set the Kanji screen mode, optionally saving it in the boot
+; sector of a disk so that it is set at boot time.
+;
+; This is a port of the original MSX-DOS 2 KMODE program by ASCII
+; Corporation (which lived in source/command/kmode in older revisions of
+; this repository), adapted to the Nextor 3 tools convention (one
+; self-contained source file with both message languages, Kanji mode
+; probed once at startup).
+;
+; Without /S the program just switches the screen mode through the Kanji
+; driver extended BIOS (device 11h). This works on any MSX-DOS 2 or
+; Nextor system and involves no disk access at all.
+;
+; With /S the boot sector of the target disk is patched (read/modify/
+; write of sector 0) so that the boot code sets the screen mode: the
+; injected code feeds "CALL KANJI" statements to Disk BASIC (see the
+; boot code comments below). This overwrites whatever boot code the
+; disk had. The /S option is only allowed when one of the following
+; is true (checked in CHECK_TARGET):
+;
+;   - The operating system is a plain MSX-DOS 2 (the original program's
+;     scope; the drive must accept the _FORMAT "choice string" probe,
+;     as in the original program).
+;   - The operating system is Nextor and the target drive is mapped to
+;     an MSX-DOS driver (same probe).
+;   - The operating system is Nextor 3 or later and the target drive is
+;     mapped to a device flagged as a floppy disk drive by its Nextor
+;     driver (or to a ghost drive, whose main drive is always such a
+;     device).
+;
+; On any other drive (hard disk partitions on Nextor devices, mounted
+; files, the RAM disk) the boot-sector patch is refused: those boot
+; sectors are managed by Nextor and may live inside partitioned media.
+;
+; Disks with a standard (non MSX) boot sector are also refused (see
+; CHECK_STDBOOT): such disks boot MSX-DOS through the kernel without
+; running any boot sector code, and the patch would downgrade them to
+; the "DOS 1 disk" boot classification, leaving a disk that can only
+; boot Disk BASIC. FIXDISK /S converts them to an MSX-DOS 2 boot
+; sector, which KMODE accepts (and whose classification survives the
+; patch, so the disk keeps booting MSX-DOS with the mode set).
+;
+; The boot sector I/O uses _RDABS/_WRABS: although those functions are
+; deprecated in Nextor, they are the only ones available on plain
+; MSX-DOS 2, which this tool must support; the sector involved is always
+; the boot sector (sector 0), so their 16 bit sector number is not a
+; limitation.
+;
+; NOTE: KMODE and FIXDISK deliberately duplicate their startup, drive
+; gate and message machinery (as CHKDSK and UNDEL do). Sharing the
+; common routines as linkable modules would be an improvement
+; opportunity.
+
+	jp	START
+
+	;	-------------------------------------------------------
+
+	db	13
+	db	"KMODE v1.1 - Set the Kanji screen mode",13,10
+	db	13,10
+	db	"Sets the Kanji screen mode of the computer (requires a Kanji driver,",13,10
+	db	"built in Japanese MSX computers), and optionally saves it in the",13,10
+	db	"boot sector of a disk so that it is set at boot time.",13,10
+	db	13,10
+	db	"Usage: KMODE [mode] [/S [d:]]",13,10
+	db	13,10
+	db	"       mode: OFF for the ANK (normal) screen, 0 to 3 for KANJI0 to KANJI3",13,10
+	db	"       /S: save the mode in the boot sector of the given drive (default:",13,10
+	db	"           the current drive), overwriting its boot code. If the mode is",13,10
+	db	"           omitted, the currently active mode is saved.",13,10
+	db	13,10
+	db	"/S works on drives handled by MSX-DOS drivers and, under Nextor 3 or",13,10
+	db	"later, on floppy disk drives. Disks with a standard (non MSX) boot",13,10
+	db	"sector are refused: run FIXDISK /S on them first.",13,10
+	db	1Ah
+
+	;	-------------------------------------------------------
+
+MSX_DOS	equ	5
+
+;	ASCII control characters
+
+TAB	equ	09h
+LF	equ	0Ah
+CR	equ	0Dh
+
+EXTBIO	equ	0FFCAh	;Extended BIOS entry point
+KNJID	equ	11h	;Extended BIOS device number of the Kanji driver
+
+;******************************************************************************
+
+START:
+	ld	sp,(0006h)	;Stack at the top of the TPA (page 3), as
+				; in the original program: the Kanji driver
+				; answers EXTBIO calls (and switches screen
+				; modes) with inter-slot calls that switch
+				; pages 0-2 out, so the stack must not live
+				; in the program area.
+
+	call	INIT		;Kanji probe, version check.
+
+	call	PARSE		;Decode the command line.
+
+	ld	a,(SFLAG)	;No /S: just switch the screen
+	or	a		; mode and exit.
+	jr	nz,DO_SAVE
+
+	call	KNJ_CHK		;Z (message already printed) if
+	jr	z,mode_set_done	; there is no Kanji driver: this
+	ld	a,(MODE)	; is not an error. Otherwise set
+	ld	d,KNJID		; the screen mode with function 1
+	ld	e,1		; of the Kanji driver (A = 0 for
+	call	CALL_EXTBIO	; ANK, 1...4 for KANJI0...KANJI3).
+mode_set_done:
+	xor	a
+	jp	EXIT
+
+;------------------------------------------------------------------------------
+;
+;	The /S option: patch the boot sector of the target disk.
+;
+DO_SAVE:
+	call	CHECK_TARGET	;The OS/drive gate (see above).
+
+	ld	de,SECBUF	;Read the boot sector of the
+	ld	c,_SETDTA##	; target drive into SECBUF.
+	call	MSX_DOS
+	ld	c,_RDABS##
+	call	BOOT_RW
+	or	a
+	jp	nz,EXIT		;Give up on any disk error.
+
+	call	CHECK_STDBOOT	;Refuse standard boot sectors
+				; (see the routine).
+
+	ld	a,(MODE_EXP)	;If no mode was given in the
+	or	a		; command line then save the
+	jr	nz,save_mode_ok	; currently active mode, asking
+	xor	a		; the Kanji driver with function
+	ld	d,KNJID		; 0 (returns the mode in A; no
+	ld	e,0		; driver leaves A = 0 = ANK).
+	call	CALL_EXTBIO
+	ld	(MODE),a
+save_mode_ok:
+
+	ld	a,(MODE)	;For ANK mode the boot code
+	or	a		; template is already right (it
+	jr	z,mode_text_ok	; ends with a "CALL ANK").
+	cp	7Fh		;7Fh = no Kanji driver installed:
+	jr	z,mode_text_ok	; keep the ANK text too.
+	add	a,'0'-1		;For a KANJI mode, overwrite the
+	ld	hl,MODE_PATCH	; "CALL ANK" tail of the template
+	ld	(hl),a		; with the mode digit (making
+	inc	hl		; "CALL KANJIn") followed by an
+	ld	(hl),':'	; ERROR statement (anything that
+	inc	hl		; causes an error will do, see
+	ld	(hl),TK_ERROR	; the boot code comments).
+	inc	hl
+	ld	(hl),0
+mode_text_ok:
+
+	ld	a,__DISK_MSG	;Print the "Disk in drive X:
+	call	WR_MSG		; will only be able to boot
+	ld	a,(DRIVE)	; MSX-DOS 2" warning and wait
+	add	a,'A'-1		; for a key press.
+	call	WR_CHAR
+	ld	a,__ONLY_MSG
+	call	WR_MSG
+	call	WR_CRLF
+	ld	a,__PRAK_MSG
+	call	WR_MSG
+	call	INCH
+	call	WR_CRLF
+
+	ld	hl,1018h	;"JR $+18h": makes the boot entry
+	ld	(SECBUF+1Eh),hl	; point (offset 1Eh) jump to the
+				; new boot code at offset 30h.
+	ld	hl,BOOTCODE	;Overwrite the boot code with
+	ld	de,SECBUF+30h	; the new one.
+	ld	bc,BOOTLEN
+	ldir
+
+	ld	c,_WRABS##	;Write the boot sector back.
+	call	BOOT_RW
+	jp	EXIT		;A = error code (0 if none).
+
+BOOT_RW:
+	ld	a,(DRIVE)	;L := drive number (0 = A:),
+	dec	a		;DE := sector 0 (the boot
+	ld	l,a		;      sector),
+	ld	de,0		; H := one sector.
+	ld	h,1
+	jp	MSX_DOS
+
+;******************************************************************************
+;
+INIT:
+;
+;    This routine is called once only when the program starts  up  to  do  any
+; initialisation which the program requires.  Its functions are as follows:
+;
+;	1.  Find out whether the Kanji screen mode is active (in which case
+;	      all messages will be printed in Japanese).
+;
+;	2.  Check that the system is MSX-DOS 2 or better, and find out
+;	      whether it is Nextor (and which major version) for the
+;	      CHECK_TARGET gate.
+;
+	xor	a		;Ask the Kanji driver (if present) for the
+	ld	d,KNJID		; current screen mode, via EXTBIO. If there
+	ld	e,0		; is no Kanji driver A stays 0 (ANK mode).
+	call	CALL_EXTBIO
+	ld	(KANJI_FLAG),a	;Non-zero => print Japanese messages.
+
+	ld	b,05Ah		;Find out the MSX-DOS version number,
+	ld	hl,01234h	; passing the magic numbers that make
+	ld	de,0ABCDh	; Nextor return its own version number
+	ld	ix,0		; in IX/IY.
+	ld	c,_DOSVER##
+	call	MSX_DOS
+	or	a
+	jr	nz,WRONG_VER
+	ld	a,b		;Reject MSX-DOS kernel versions
+	cp	2		; below 2.
+	jr	c,WRONG_VER
+
+	push	ix
+	pop	bc		;B = IXh (1 if Nextor), C = IXl (major)
+	ld	a,b
+	dec	a		;Plain MSX-DOS 2: NEXTOR_VER
+	ret	nz		; keeps its initial zero.
+	ld	a,c
+	ld	(NEXTOR_VER),a	;Nextor: store the major version.
+	ret
+
+WRONG_VER:
+	ld	a,__WVER_MSG	;Print "Wrong version of MSX-DOS"
+	call	WR_MSG		; and exit with error code 1 (the
+	ld	a,1		; message is printed here because
+	jp	EXIT		; MSX-DOS 1 ignores error codes).
+
+;******************************************************************************
+;
+PARSE:
+;
+;    Decodes the command line: KMODE [mode] [/S [d:]] where mode is OFF or a
+; digit 0...3.  Sets the MODE, MODE_EXP, SFLAG and DRIVE variables.  With no
+; arguments at all the usage text is displayed and the program exits with no
+; error (deliberate change from the original program, which returned a
+; "Missing parameter" error; same convention as CHKDSK and UNDEL).
+;
+	ld	hl,81h		;Look at the command line.
+	call	GETCH
+	jr	z,SHOW_USAGE	;No arguments at all.
+	cp	'/'
+	jr	z,parse_switch	;No mode given: must be "/S ...".
+
+	cp	'O'		;"OFF" = the ANK (normal)
+	jr	nz,parse_digit	; screen, mode value 0.
+	inc	hl
+	ld	a,(hl)
+	call	UC0
+	cp	'F'
+	jr	nz,IPARM_EXIT
+	inc	hl
+	ld	a,(hl)
+	call	UC0
+	cp	'F'
+	jr	nz,IPARM_EXIT
+	inc	hl
+	xor	a
+	jr	got_mode
+
+parse_digit:
+	sub	'0'		;Digits 0...3 = KANJI0...KANJI3,
+	jr	c,IPARM_EXIT	; stored as mode values 1...4.
+	cp	3+1
+	jr	nc,IPARM_EXIT
+	inc	a
+	inc	hl
+got_mode:
+	ld	(MODE),a
+	ld	a,1
+	ld	(MODE_EXP),a
+
+	call	GETCH		;After the mode: end of line
+	ret	z		; or the /S switch.
+	cp	'/'
+	jr	nz,IPARM_EXIT
+
+parse_switch:
+	inc	hl		;Skip the '/'.
+	ld	a,(hl)
+	call	UC0
+	cp	'S'		;'S' is the only switch.
+	jr	nz,IPARM_EXIT
+	inc	hl
+	ld	a,1
+	ld	(SFLAG),a
+
+	call	GETCH		;Optional drive letter; the
+	jr	nz,parse_drive	; default is the current drive.
+	push	hl
+	ld	c,_CURDRV##
+	call	MSX_DOS
+	pop	hl
+	inc	a		;1 = A: etc.
+	ld	(DRIVE),a
+	ret
+
+parse_drive:
+	sub	'A'		;Drive letters A to P, as in
+	jr	c,IDRV_EXIT	; the original program.
+	cp	'P'-'A'+1
+	jr	nc,IDRV_EXIT
+	inc	a		;1 = A: etc.
+	ld	(DRIVE),a
+	inc	hl
+	ld	a,(hl)		;Skip an optional colon.
+	cp	':'
+	jr	nz,parse_tail
+	inc	hl
+parse_tail:
+	call	GETCH		;Nothing else may follow.
+	ret	z
+	ld	a,.INP##	;"Too many parameters"
+	jp	EXIT
+
+SHOW_USAGE:
+	ld	a,__USAG_MSG	;Print the usage text and exit
+	call	WR_MSG		; successfully.
+	xor	a
+	jp	EXIT
+
+IPARM_EXIT:
+	ld	a,.IPARM##	;"Invalid parameter"
+	jp	EXIT
+
+IDRV_EXIT:
+	ld	a,.IDRV##	;"Invalid drive"
+	jp	EXIT
+
+;******************************************************************************
+;
+CHECK_TARGET:
+;
+;    Checks that the boot sector of the drive in the DRIVE variable may be
+; patched, per the rules in the header comment:
+;
+;    - Plain MSX-DOS 2, or Nextor with the drive mapped to an MSX-DOS
+;      driver: the drive must accept the _FORMAT "get choice string" probe
+;      (choice 0), as in the original program.
+;    - Nextor 3 or later with the drive mapped to a Nextor driver: the
+;      device must be flagged as a floppy disk drive (DEV_QUERY
+;      "get device parameters", flags bit 2). Ghost drives are accepted
+;      directly (their main drive is always a floppy disk device).
+;
+;    Returns only if the drive is acceptable; otherwise the program exits
+; with an error message or a DOS error code.
+;
+	ld	a,(NEXTOR_VER)
+	or	a
+	jr	nz,ct_nextor
+ct_probe:
+	ld	a,(DRIVE)	;"Get choice string" probe: an
+	ld	b,a		; error (e.g. "Can't format this
+	xor	a		; drive") means the drive does
+	ld	c,_FORMAT##	; not support the operation.
+	call	MSX_DOS
+	or	a
+	ret	z
+	jp	EXIT		;Propagate the DOS error code.
+
+ct_nextor:
+	ld	a,(DRIVE)	;Ask Nextor about the drive
+	dec	a		; letter.
+	ld	hl,GDLI_BUF
+	ld	c,_GDLI##
+	call	MSX_DOS
+	or	a
+	jp	nz,EXIT		;e.g. "Invalid drive".
+
+	ld	a,(GDLI_BUF)	;Drive status:
+	cp	5		;5 = ghost drive, whose main
+	ret	z		;     drive is always a floppy
+				;     disk device: acceptable.
+	cp	1		;Anything but "assigned to a
+	jr	nz,ct_unsup	; storage device" (unassigned,
+				; mounted file, RAM disk): no.
+
+	ld	a,(GDLI_BUF+3)	;Relative drive number: FFh for
+	inc	a		; Nextor drivers, a real number
+	jr	nz,ct_probe	; for MSX-DOS drivers, which are
+				; acceptable on any Nextor (with
+				; the MSX-DOS 2 probe).
+
+	ld	a,(NEXTOR_VER)	;Drives on Nextor drivers are
+	cp	3		; only acceptable on Nextor 3
+	jr	c,ct_unsup	; or later...
+
+	ld	a,DEVICE_QUERY.GET_PARAMS##
+	ld	(REG_BUF+1),a	;...and only when the device is
+	ld	a,(GDLI_BUF+4)	; flagged as a floppy disk
+	ld	(REG_BUF+2),a	; drive. Ask the driver for the
+	ld	hl,DEV_BUF	; device parameters (the CDRVR
+	ld	(REG_BUF+6),hl	; register buffer layout is
+				; F,A,C,B,E,D,L,H: A = query
+				; code, C = device index,
+				; HL = parameters buffer).
+	ld	a,(GDLI_BUF+2)	;Driver segment (FFh = ROM).
+	ld	b,a
+	ld	a,(GDLI_BUF+1)	;Driver slot; bits 6-4 must be
+	or	00010000b	; 001 (Nextor 3 driver structure
+				; awareness flag).
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	hl,REG_BUF
+	ld	c,_CDRVR##
+	call	MSX_DOS
+	or	a
+	jr	nz,ct_unsup
+	push	ix		;A := the A returned by the
+	pop	af		; driver routine. Any result
+	or	a		; other than OK (including "not
+	jr	nz,ct_unsup	; implemented", which stands for
+				; default parameters with no
+				; flags) means "not a floppy".
+	ld	a,(DEV_BUF+7)	;Device flags, bit 2: the device
+	and	00000100b	; is a floppy disk drive.
+	ret	nz
+
+ct_unsup:
+	ld	a,__NSUP1_MSG	;"This operation is not
+	call	WR_MSG		; supported on drive X:",
+	ld	a,(DRIVE)	; exit with error code 2.
+	add	a,'A'-1
+	call	WR_CHAR
+	ld	a,__NSUP2_MSG
+	call	WR_MSG
+	ld	a,2
+	jp	EXIT
+
+;******************************************************************************
+;
+CHECK_STDBOOT:
+;
+;    Refuses to patch a disk whose boot sector (already read into SECBUF)
+; is a standard (non MSX) one, using the same classification test as the
+; Nextor kernel boot process (BSEC_TYPE in the kernel's init code): a
+; 16-bit total sector count of zero, or the extended boot signature (bits
+; 3 and 5 of the byte at 26h) together with the "FAT1" filesystem mark at
+; 36h. Such disks boot MSX-DOS directly through the kernel, without
+; running any boot sector code; the patch would both be useless and
+; downgrade them to the "DOS 1 disk" classification (it overwrites the
+; filesystem mark), leaving a disk that can only boot Disk BASIC.
+;
+;    An MSX-DOS 2 style (VOL_ID) boot sector can never match either test
+; (its byte at 26h is the dirty flag, 0 or 1), and a disk already patched
+; by KMODE no longer has the filesystem mark, so re-running KMODE on it
+; to change the saved mode still works.
+;
+;    Returns only if the disk is acceptable; otherwise the program exits
+; with an error message and code 4.
+;
+	ld	hl,(SECBUF+13h)	;A zero 16-bit total sector count
+	ld	a,h		; means a huge disk, which always
+	or	l		; has a standard boot sector.
+	jr	z,cs_standard
+	ld	a,(SECBUF+26h)	;Extended boot signature
+	and	28h		; present?
+	cp	28h
+	ret	nz
+	ld	hl,SECBUF+36h	;And the "FAT1" filesystem
+	ld	a,(hl)		; mark too?
+	cp	'F'
+	ret	nz
+	inc	hl
+	ld	a,(hl)
+	cp	'A'
+	ret	nz
+	inc	hl
+	ld	a,(hl)
+	cp	'T'
+	ret	nz
+	inc	hl
+	ld	a,(hl)
+	cp	'1'
+	ret	nz
+cs_standard:
+	ld	a,__NSTD1_MSG	;"The disk in drive X: has a
+	call	WR_MSG		; standard boot sector and would
+	ld	a,(DRIVE)	; no longer boot": exit with
+	add	a,'A'-1		; error code 4.
+	call	WR_CHAR
+	ld	a,__NSTD2_MSG
+	call	WR_MSG
+	ld	a,4
+	jp	EXIT
+
+;******************************************************************************
+;
+KNJ_CHK:
+;
+;    Checks whether the Kanji driver is installed.  Returns NZ if it is;
+; otherwise prints an explanation (not an error) and returns Z.
+;
+	ld	a,0FFh		;If there is no Kanji driver the
+	ld	d,KNJID		; EXTBIO call returns A unchanged
+	ld	e,0		; (FFh); a driver returns the
+	call	CALL_EXTBIO	; current mode (0...4) instead.
+	inc	a
+	ret	nz		;NZ => driver present.
+	ld	a,__NODRV_MSG	;"Kanji driver is not installed,
+	call	WR_MSG		; use CALL KANJI under BASIC".
+	xor	a		;Z => no driver.
+	ret
+
+;******************************************************************************
+;
+CALL_EXTBIO:
+;
+;    Calls the extended BIOS entry point with D = device, E = function and
+; A = argument, protecting the alternate and index registers.  Returns the
+; A output of the call; corrupts F, BC, DE, HL.
+;
+	exx
+	ex	af,af'
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	ix
+	push	iy
+	ex	af,af'
+	exx
+
+	call	EXTBIO
+
+	exx
+	ex	af,af'
+	pop	iy
+	pop	ix
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ex	af,af'
+	exx
+	ret
+
+;******************************************************************************
+;
+EXIT:
+	ld	b,a		;Terminate with the error code
+	ld	c,_TERM##	; passed in A.
+	call	MSX_DOS
+	rst	0		;Should never get here!
+
+;******************************************************************************
+;
+;	Command line helper routines (from the original program):
+;	GETCH returns in A the next non-separator character (upper cased),
+;	with HL pointing at it, and Z set if the end of the line was reached.
+;	UC0 upper cases the character in A.
+;
+GCH0:	inc	hl
+GETCH:	ld	a,(hl)		;Get character.
+	call	SEP_CHK
+	jr	nc,GCH0		;Skip if a valid separator character.
+	call	UC0
+	or	a
+	ret			;Else return with Z if end of line.
+
+UC0:	cp	'a'
+	ret	c
+	cp	'z'+1
+	ret	nc
+	and	not ('a'-'A')	;Make it upper cased.
+	ret
+
+SEP_CHK:
+	cp	','		;Comma is OK.
+	ret	z
+	cp	';'		;Semi-colon is OK.
+	ret	z
+	cp	'='		;Equals is OK.
+	ret	z
+	cp	' '		;Space is OK.
+	ret	z
+	cp	TAB		;Tab is OK.
+	ret	z
+	or	a		;Null (end of line) is OK, nothing else is.
+	scf
+	ret
+
+;------------------------------------------------------------------------------
+;
+INCH:
+;
+;    Waits for a fresh key press (gobbling up any pending one first), with no
+; echo.
+;
+	ld	c,_CONST##	;See if a key is pressed.
+	call	MSX_DOS
+	or	a
+	jr	z,inch_wait
+	ld	c,_INNOE##	;Gobble up the pending key
+	call	MSX_DOS		; and look again.
+	jr	INCH
+inch_wait:
+	ld	c,_INNOE##	;Wait for a fresh key press
+	jp	MSX_DOS		; (no echo).
+
+;------------------------------------------------------------------------------
+;
+;	Message output (same scheme as CHKDSK/UNDEL): WR_MSG prints the
+;	message whose number is passed in A, from the English or the
+;	Japanese table depending on the Kanji mode detected at startup.
+;
+WR_MSG:
+	call	GET_MSG_ADR	;Find absolute address of text.
+				;Fall through to WR_STRING.
+WR_STRING:
+	ld	a,(hl)		;Loop to write characters
+	or	a		; from the string until a
+	ret	z		; zero is reached.
+	inc	hl
+	call	WR_CHAR
+	jr	WR_STRING
+
+WR_CRLF:
+	ld	a,CR		;Send a CR-LF sequence to
+	call	WR_CHAR		; the default channel.
+	ld	a,LF
+
+WR_CHAR:
+	push	hl
+	push	de
+	push	bc
+	ld	e,a
+	ld	c,_CONOUT##
+	call	MSX_DOS
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+GET_MSG_ADR:
+;
+; ENTRY:    A  = message number.
+; EXIT:     HL = absolute address of text message.
+; CORRUPTS: A & HL only.
+;
+	push	bc
+	ld	b,a		;Save message number.
+	ld	a,(KANJI_FLAG)	;Select the table for the
+	or	a		; language detected at startup.
+	ld	hl,MSG_TABLE
+	jr	z,got_msg_table
+	ld	hl,JMSG_TABLE
+got_msg_table:
+	ld	a,b
+	or	a		;If first message then found.
+	jr	z,got_msg_adr
+
+	ld	b,a		;Message number.
+lop_pass_msg:
+	ld	a,(hl)		;Bypass this message.
+	inc	hl
+	or	a		;Each message is terminated
+	jr	nz,lop_pass_msg	; by a zero.
+	djnz	lop_pass_msg
+
+got_msg_adr:
+	pop	bc
+	ret
+
+;******************************************************************************
+;
+;	The boot code written to the target disk by the /S option
+;	(from the original program).
+;
+;	This is a boot code of 'Nihongo' MSX-DOS,  which is overwritten to the
+; current MSX-DOS boot code when /S option was specified.   This boot code has
+; number of dirty tricks to fake out MSX disk system and disk BASIC.  First it
+; attempts to install Kanji driver by feeding a 'CALL KANJI' statement to disk
+; BASIC.  If desired screen mode is 'ANK', this is followed by a 'CALL ANK' to
+; restore the screen mode to normal.  There  must  always  be  a  'CALL KANJI'
+; because Kanji driver's work RAM space is not allocated until 'CALL KANJI' is
+; invoked.  After the boot it is VERY difficult or memory wasting to  allocate
+; working space below HIMEM.  So it is here even for 'ANK' mode.
+;
+;	If 'CALL' statements ever gets error (i.e. Kanji driver does not exist
+; or so) the boot code get control over again through H.ERRO hook and, setting
+; DOSFLG to non-zero value to avoid 'Illegal function call' on MSX-DOS1, feeds
+; 'CALL SYSTEM' to start up false reboot sequence.  However, anyway, an 'error
+; statement' next to it gets error to start over the same sequence.  Otherwise
+; nobody will restore the H.ERRO hook.
+;
+;	there is nothing to do with the booting of MSX-DOS 2.  It starts up by
+; itself without the help of boot code.  However, if 'MSXDOS2.SYS' file is not
+; found or the media is booted on a MSX-DOS 1 system, the boot code is entered
+; again to load 'MSXDOS.SYS' file.  In that case, because there are none spare
+; for loading code,  disk BASIC is jumped to, setting DOSFLG to zero to reject
+; later 'CALL SYSTEM' on MSX-DOS 1.  MSX-DOS 2 doesn't care the DOSFLG.
+;
+TK_CALL	equ	0CAh	;BASIC token of CALL
+TK_ERROR equ	0A6h	;BASIC token of ERROR
+
+CALBAS	equ	0159h
+NEWSTT	equ	4601h
+BASIC	equ	4022h	;Disk BASIC entry in the DiskROM
+
+DOSFLG	equ	0F346h	;Zero => Disk BASIC, non-zero => MSX-DOS
+STKTOP	equ	0F674h
+HERRO	equ	0FFB1h	;H.ERRO hook
+
+;	The code is copied to offset 30h of the boot sector, and boot
+;	sectors are loaded and run at 0C000h.
+
+BOOTCODE:
+	.phase	0C030h
+
+	ccf
+	sbc	a,a
+	ld	(DOSFLG),a	;May get control under DOS1
+	jp	nc,BASIC	;If I was called to boot MSXDOS.SYS
+
+	ld	hl,HERRO	;Hook H.ERRO with a jump to
+	ld	(hl),0C3h	; BOOT_ERR ("JP" opcode).
+	inc	hl
+	ld	(hl),low BOOT_ERR
+	inc	hl
+	ld	(hl),high BOOT_ERR
+
+	ld	hl,BOOT_TEXT
+	jr	BOOT_GO
+
+BOOT_ERR:
+	ld	a,0C9h		;Restore the H.ERRO hook
+	ld	(HERRO),a	; ("RET" opcode).
+	ld	hl,BOOT_SYSTEM
+
+BOOT_GO:
+	ld	sp,(STKTOP)
+	ld	ix,NEWSTT
+	jp	CALBAS
+
+BOOT_TEXT:
+	defb	":",TK_CALL,"KANJI"
+
+	.dephase	;Define MODE_PATCH at its address within this
+MODE_PATCH:		; program, so that the code of the /S option
+			; can patch the template before copying it.
+	.phase	0C030h+($-BOOTCODE)
+
+	defb	":",TK_CALL,"ANK",":",TK_ERROR,0
+;   overlaid with <mode digit>,":",TK_ERROR,0 for a KANJI screen mode.
+
+BOOT_SYSTEM:
+	defb	":",TK_CALL,"SYSTEM",0
+
+	.dephase
+
+BOOTLEN	equ	$-BOOTCODE
+
+;******************************************************************************
+;
+;	THE TEXT MESSAGES
+;
+;    The Japanese table below MUST define exactly the same number of messages
+; in exactly the same order as the English one, since messages are identified
+; by their ordinal position in the table.
+;
+;------------------------------------------------------------------------------
+
+msg_num	DEFL	0
+
+MSG	MACRO	name,text
+__&name&_MSG	EQU	msg_num
+msg_num	DEFL	msg_num+1
+	DEFB	text,0
+	ENDM
+
+;------------------------------------------------------------------------------
+
+MSG_TABLE:
+
+MSG	WVER,	<CR,LF,"*** Wrong version of MSX-DOS",CR,LF>
+MSG	NSUP1,	<CR,LF,"*** This operation is not supported on drive ">
+MSG	NSUP2,	<":",CR,LF>
+MSG	NODRV,	<CR,LF,"*** Kanji driver is not installed",CR,LF,"*** use ",22h,"CALL KANJI",22h," under BASIC.",CR,LF>
+MSG	DISK,	<"Disk in drive ">
+MSG	ONLY,	<": will only be able to boot MSX-DOS 2">
+MSG	PRAK,	<"Press any key to continue... ">
+MSG	USAG,	<"Usage: KMODE [mode] [/S [d:]]",CR,LF,CR,LF,"mode: OFF for the ANK (normal) screen, 0 to 3 for KANJI0 to KANJI3",CR,LF,CR,LF,"/S: save the mode in the boot sector of the given drive (default: the",CR,LF,"    current drive), so that it is set at boot time. If the mode is",CR,LF,"    omitted, the currently active mode is saved.",CR,LF,CR,LF,"TYPE KMODE.COM for more details",CR,LF>
+MSG	NSTD1,	<CR,LF,"*** The disk in drive ">
+MSG	NSTD2,	<": has a standard boot sector and would",CR,LF,"*** no longer boot. Run FIXDISK /S on it first.",CR,LF>
+
+;------------------------------------------------------------------------------
+;
+;    The Japanese message table.  One entry per MSG of the English table
+; above, in the same order (the message number is the ordinal position in
+; the table).  The strings are converted to Shift-JIS at assembly time.
+;
+JMSG_TABLE:
+
+	.strenc	shift_jis
+
+	db	0Dh,0Ah,"*** MSX-DOSのバージョンが違います",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** ドライブ",0
+	db	": ではこの操作は出来ません",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** 漢字ドライバが組み込まれていません",0Dh,0Ah,"*** BASICで CALL KANJI を実行して下さい",0Dh,0Ah,0
+	db	"ドライブ ",0
+	db	": のディスクは日本語 MSX-DOS2 しか立ち上げられなくなります",0
+	db	"何かキーを押して下さい ",0
+	db	"使い方: KMODE [モード] [/S [d:]]",0Dh,0Ah,0Dh,0Ah
+	db	"モード: OFFはANK(通常)画面、0から3はKANJI0からKANJI3",0Dh,0Ah,0Dh,0Ah
+	db	"/S: ディスクのブートセクタにモードを保存し、起動時に設定される",0Dh,0Ah
+	db	"    ようにします (ドライブ省略時はカレントドライブ)。",0Dh,0Ah
+	db	"    モードを省略すると現在のモードが保存されます",0Dh,0Ah,0Dh,0Ah
+	db	"詳細は TYPE KMODE.COM で表示できます",0Dh,0Ah,0
+	db	0Dh,0Ah,"*** ドライブ",0
+	db	": のディスクは標準ブートセクタなので、変更すると起動",0Dh,0Ah
+	db	"*** できなくなります。先に FIXDISK /S を実行して下さい",0Dh,0Ah,0
+
+	.strenc	default
+
+;******************************************************************************
+;
+;	THE VARIABLES
+;
+KANJI_FLAG:
+	db	0	;Non-zero => print Japanese messages
+NEXTOR_VER:
+	db	0	;0 => plain MSX-DOS 2, else the Nextor major version
+DRIVE:
+	db	0	;Target drive for /S (1 = A: etc)
+MODE:
+	db	0	;Screen mode (0 = ANK, 1...4 = KANJI0...KANJI3)
+MODE_EXP:
+	db	0	;Non-zero => the mode was given in the command line
+SFLAG:
+	db	0	;Non-zero => the /S option was given
+
+REG_BUF:
+	db	0,0,0,0,0,0,0,0	;Register buffer for _CDRVR (F,A,C,B,E,D,L,H)
+
+GDLI_BUF:
+	ds	64	;Buffer for _GDLI
+DEV_BUF:
+	ds	12	;Buffer for the DEV_QUERY device parameters
+
+SECBUF:
+	ds	512	;Buffer for the boot sector
+
+	end

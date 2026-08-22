@@ -1,40 +1,49 @@
-UNDEL                                                         [2.20]
+UNDEL                                                    [2.20, 3.0]
 -----
 
-Format:      UNDEL [filespec]
+Format:      UNDEL filespec
 
-Purpose:     Recovers a previously deleted file.
+Purpose:     Recovers previously deleted files.
 
-Use:         The filespec specifies which files are to be  undeleted
-        if possible, and defaults to *.*.
+Use:         The filespec specifies which files are to be undeleted
+        if possible.  It may contain wildcards, and it may be a
+        directory: in that case all the deleted files directly
+        inside it are recovered.  The filespec is mandatory; use
+        *.* to recover all the deleted files of the current
+        directory.  Both FAT12 and FAT16 volumes are handled.
 
-             Files  can only be undeleted if they have been  deleted
-        using  Nextor  on  an  MSX-DOS 2 formatted disk and if no
-        disk  allocation  has  taken  place  since  the   file   was
-        originally deleted, which usually means that they have to be
+             Files can only be undeleted from disks that have a
+        'volume id' in their boot sector: disks formatted under
+        MSX-DOS 2 or Nextor, or updated with FIXDISK /S or /B.
+        Also, no disk allocation must have taken place since the
+        file was deleted, which usually means that files have to be
         undeleted immediately after they have been deleted.
 
-             Each deleted file and directory reference that is found
-        in the directory specified by the filespec will be undeleted
-        if it's name is matched by the filename in the filespec, and
-        if  undeletion is possible.  UNDEL can therefore be used  to
-        restore  a  directory  removed  with  the  'RD'  or  'RMDIR'
-        commands; to restore the contents of the directory a further
-        UNDEL  command  is  required specifying  the  now  undeleted
-        directory.
+             Each deleted file and directory reference found in the
+        directory specified by the filespec is undeleted if its
+        name is matched by the filename in the filespec, and if
+        undeletion is possible.  UNDEL can therefore be used to
+        restore a directory removed with the 'RD' or 'RMDIR'
+        commands; to restore the contents of the directory, a
+        further UNDEL command is required specifying the now
+        undeleted directory.
 
-             Note  that UNDEL is a transient command,  and therefore
-        must be loaded from disk.
+             Entries that a previous CHKDSK /F run has marked as
+        not recoverable are never undeleted.
+
+             This program requires Nextor (any version).  Running
+        UNDEL without arguments prints a parameter summary, and
+        TYPE UNDEL.COM prints a description.
 
 Examples:
 
         UNDEL B:FRED.MAC
 
-             Attempts  to  undelete  the  file  FRED.MAC  from   the
+             Attempts to undelete the file FRED.MAC from the
         current directory of drive B:.
 
         UNDEL A:\DIR1
 
-             All  undeletable  files  and directories  in  DIR1  are
+             All undeletable files and directories in DIR1 are
         undeleted.
 

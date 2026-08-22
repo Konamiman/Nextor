@@ -46,16 +46,42 @@ prerequisites:
 
 -include prerequisites
 
-# The link order must match the physical layout of the program
+# The link order must match the physical layout of the program.
+# COMMAND3.COM is a dual-language binary: it carries both the English
+# (messages.mac) and the Japanese (jmessages.mac) message tables and picks
+# one at run time from the Kanji mode and the ERRLANG environment item
+# (see GETMSG and SETLANG in io.mac).
 RELS := start.rel cli.rel tables.rel intvar.rel cmd.rel files.rel dirs.rel \
-	copy.rel io.rel batch.rel misc.rel editor.rel messages.rel var.rel
+	copy.rel io.rel batch.rel misc.rel editor.rel messages.rel \
+	jmessages.rel var.rel
 SDK_RELS := dos_calls.rel dos_errors.rel driver_const.rel
+
+# The transient image plus the runtime variables must end below address
+# #8000: COMMAND3 switches its private mapper segment into page 2
+# (#8000-#BFFF) while it accesses the alias list, the command history and
+# the variable swap area (SETPG2 in io.mac), so no part of the program -
+# and the variables area includes the stack - may live there. That limits
+# the .COM file to #8000 - #100 (the load address) - 2869 (the variables,
+# see the total in var.mac) = 29643 bytes. Carrying both message tables
+# only fits because the ~4K HELP index text lives in the INDEX.HLP and
+# JINDEX.HLP files (see @HELP in copy.mac) instead of in the tables.
+MAX_COM_SIZE := 29643
+
+define check_size
+	@size=$$(wc -c < $(1)); \
+	if [ $$size -gt $(MAX_COM_SIZE) ]; then \
+		echo "ERROR: $(1) is $$size bytes, the maximum is $(MAX_COM_SIZE): together with the runtime variables it would reach address 8000h, where the program must not live (see the MAX_COM_SIZE note in this Makefile)"; \
+		rm -f $(1); \
+		exit 1; \
+	fi
+endef
 
 COMMAND3.COM: \
 	$(SDK_RELS) \
 	$(RELS)
 
 	@$(LK80) --output-file COMMAND3.COM --code 0100h $(SDK_RELS) $(RELS)
+	$(call check_size,COMMAND3.COM)
 	$(call copy_to_bin,COMMAND3.COM)
 
 .SECONDEXPANSION:
