@@ -770,8 +770,9 @@ DRVINF:	LD	A,(FIB1##+#19)	; The drive, counted from 0 for
 DRI08:	XOR	A	; Nothing special to report.
 	RET
 
-DRI10:	LD	DE,GHOST$	; ' Ghost drive of X:'.
-	CALL	PRTSTR##
+DRI10:	CALL	SPACE##	; ' Ghost drive of X:'.
+	LD	A,#6E
+	CALL	DMESS##
 	LD	A,(XBUF1##+1)	; The main drive, counted from 0.
 	ADD	A,"A"
 	CALL	PRCHAR##
@@ -779,15 +780,15 @@ DRI10:	LD	DE,GHOST$	; ' Ghost drive of X:'.
 	CALL	PRCHAR##
 	JP	LPRINT##
 
-DRI20:	LD	DE,RAMDD$	; ' Drive mapped to the RAM disk'.
-	JP	DMSCR##
+DRI20:	LD	A,#81	; ' Drive mapped to the RAM disk'.
+	JP	DMESSCR##
 
-DRI30:	LD	DE,MFILE1$	; ' Drive mapped to file X on Y:',
-	CALL	PRTSTR##	;   plus ' (read only)' when the
+DRI30:	LD	A,#82	; ' Drive mapped to file X on Y:',
+	CALL	DMESS##	;   plus ' (read only)' when the
 	LD	DE,XBUF1##+4	;   mount is read-only.
 	CALL	PRTSTR##
-	LD	DE,MFILE2$
-	CALL	PRTSTR##
+	LD	A,#83
+	CALL	DMESS##
 	LD	A,(XBUF1##+1)	; The host drive, counted from 0.
 	ADD	A,"A"
 	CALL	PRCHAR##
@@ -796,12 +797,6 @@ DRI30:	LD	DE,MFILE1$	; ' Drive mapped to file X on Y:',
 	LD	A,(XBUF1##+2)	; Bit 0 = read-only mount.
 	RRA
 	JP	NC,LPRINT##
-	LD	DE,MFILE3$
-	JP	DMSCR##
-
-GHOST$:	DEFB	" Ghost drive of ",0
-RAMDD$:	DEFB	" Drive mapped to the RAM disk",0
-MFILE1$:	DEFB	" Drive mapped to file ",0
-MFILE2$:	DEFB	" on ",0
-MFILE3$:	DEFB	" (read only)",0
+	LD	A,#71
+	JP	DMESSCR##
 

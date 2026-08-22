@@ -37,6 +37,8 @@ VAR_OFFSET DEFL	0
 	VAR	MAPADDR, 2
 	VAR	MAPTAB, 2
 	VAR	STRCODE, 1
+	VAR	LANG, 1	; NZ => use the Japanese messages.
+	VAR	HINTMSG, 1	; Message to print after an error, 0 = none.
 	VAR	PIPEADDR, 2
 	VAR	NEXTADDR, 2
 	VAR	INHNDL, 1
@@ -126,4 +128,4 @@ VAR_OFFSET DEFL	0
 	VAR	XBUF2, 255
 	VAR	XBUF3, 255
 ;
-; Total: 2867 bytes
+; Total: 2869 bytes

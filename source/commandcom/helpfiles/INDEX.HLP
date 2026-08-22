@@ -1,0 +1,100 @@
+The following standard commands are available.
+For more information on a specific command, type:
+   HELP  command name
+
+ALIAS .... displays/sets aliases
+ASSIGN ... logical to physical drive assignment
+ATDIR .... changes the attributes of directories
+ATTRIB ... changes the attributes of files
+BASIC .... goes into MSX disk BASIC
+BEEP ..... makes beeping sound
+BOOT ..... assigns a new Nextor boot drive
+BUFFERS .. displays/sets the number of disk buffers
+CD ....... see CHDIR
+CDD ...... displays/sets the current directory and drive
+CDPATH ... displays/sets the directory search path
+CHDIR .... displays/sets the current directory
+CHKDSK ... checks the integrity of a disk
+CLS ...... clears the screen
+COLOR .... changes screen colors
+CONCAT ... joins files together
+COPY ..... copies files
+CPU ...... displays/sets the CPU mode
+DATE ..... displays/sets the current date
+DEL ...... see ERASE
+DEVINFO .. displays the devices handled by a disk driver
+DIR ...... displays the file names on a disk
+DISKCOPY . copies a whole disk to another
+DRIVERS .. displays the disk drivers present in the system
+DRVINFO .. displays what every drive is assigned to
+DSKCHK ... displays/sets the current disk check status
+ECHO ..... prints the following text
+ECHOS .... prints the following text without a trailing CR/LF
+ELSE ..... toggles Command Mode
+END ...... ends batch file execution [.BTM]
+ENDIFF ... restores Command Mode
+ERA ...... see ERASE
+ERASE .... deletes files
+EXIT ..... exits COMMAND3.COM
+FIXDISK .. updates MSX-DOS 1 disks to MSX-DOS 2
+FORMAT ... formats a disk
+FREE ..... displays total, used and free disk space
+GOSUB .... calls a batch file sub-routine [.BTM]
+GOTO ..... continues batch file from label [.BTM]
+HELP ..... gives help information on a command
+HERTZ .... sets the VDP VBlank refresh speed
+HISTORY .. displays the command history list or resizes the history buffer
+IF ....... executes command if equation is true
+IFF ...... sets Command Mode ON if equation is true
+INKEY .... reads character into environment item
+INPUT .... reads string into environment item
+KMODE .... sets or resets "Kanji Mode"
+LOCK ..... locks/unlocks a drive
+MAPDRV ... maps a drive to a device and partition or mounts a file
+MD ....... see MKDIR
+MEM ...... displays a compact memory mapper listing
+MEMORY ... displays the amount and status of system RAM
+MKDIR .... creates a new sub-directory
+MODE ..... changes the screen mode
+MOVE ..... moves files on a disk
+MVDIR .... moves sub-directories
+PATH ..... displays/sets the command search path
+PAUSE .... prompts for a keypress
+POPD ..... restores the current drive and directory
+PUSHD .... stores the current drive and directory
+RALLOC ... displays/sets the reduced allocation information mode
+RAMDISK .. displays/sets the size of the RAM disk
+RD ....... see RMDIR
+REM ...... remark... Ignores the following text.
+REN ...... see RENAME
+RENAME ... renames files
+RESET .... resets system
+RETURN ... returns from a batch file sub-routine [.BTM]
+RMDIR .... removes empty sub-directories
+RNDIR .... renames sub-directories
+SET ...... displays/sets environment strings
+SHELLRAM . displays/sets the use of a RAM segment for shell features
+SHIFT .... shifts arguments for a batch file one step to the left
+THEN ..... executes the following command
+TIME ..... displays/sets the current time
+TO ....... changes to another directory
+TREE ..... displays directories in a tree format
+TYPE ..... displays the contents of files
+UNDEL .... recovers deleted files
+VER ...... displays Nextor version numbers
+VERIFY ... displays/sets the current verify state
+VOL ...... displays/sets disk volume name
+XCOPY .... copies files from a directory tree
+XDIR ..... displays filenames in a directory tree
+Z80MODE .. displays/sets the Z80 access mode for a legacy driver
+
+Help for other Nextor features is also available.
+The standard topics are:
+
+ALI ...... aliases and executable extensions
+BATCH .... batch files
+EDITING .. command line editing and re-entering
+ENV ...... environment strings
+ERRORS ... error messages and Abort, Retry errors
+IO ....... redirection, piping and standard I/O
+SYNTAX ... notation used in command descriptions

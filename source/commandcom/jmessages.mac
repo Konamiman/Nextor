@@ -1,0 +1,198 @@
+	name('jmsg')
+	TITLE	Nextor - COMMAND3.COM
+	SUBTTL	Message strings (Japanese)
+	INCLUDE	command.inc
+;******************************************************************************
+;
+;        The Japanese version of the string constants used all over the
+; program. This module is always linked, together with the English
+; messages.mac: GETMSG (io.mac) walks the JMESSAGES table instead of
+; MESSAGES while the Kanji mode is active and the ERRLANG environment
+; item is not "EN" (see SETLANG in io.mac). The messages are looked up
+; by index, so they must be kept in exactly the same order as in
+; messages.mac.
+;
+;        The source text is UTF-8, converted to Shift-JIS in the assembled
+; binary by the .strenc directive; the machine must be in Kanji mode for
+; the messages to display properly (which it is whenever GETMSG selects
+; this table). Carrying both tables is only possible because the ~4K HELP
+; index text lives in the INDEX.HLP/JINDEX.HLP files instead of here:
+; the program must stay below address #8000 (see the MAX_COM_SIZE note
+; in the Makefile), which two in-memory index texts would not allow.
+;
+;        Based on the jtext.mac file of the Japanese COMMAND2.COM,
+; copyright (1986) IS Systems Ltd, with the messages added in the
+; COMMAND2.COM 2.40/2.41 era and in Nextor 3.0 newly translated.
+;
+;        Unlike in English, the DIR/MEMORY units ("Kバイト", "バイト") take
+; no leading space, and the day of the week is a "日".."土" stem plus the
+; "曜日" suffix (the slot the English messages use for "day"), which also
+; keeps the %_DOW% internal variable meaningful. The 'in n files' part of
+; the DIR totals ends with a CR/LF pair plus one space, so the free space
+; figure continues on a second line.
+;
+;******************************************************************************
+	.strenc	shift_jis
+
+JMESSAGES::	DEFB	"Yy",0
+	DEFB	"Nn",0
+	DEFB	" ディレクトリ ",0		; ' Directory of '
+	DEFB	" <dir> ",0
+	DEFB	" ",0
+	DEFB	"を",0			; ' in '
+	DEFB	"が使用可能です.",0	; ' free'
+	DEFB	"Kバイト",0		; 'K'
+	DEFB	"Kバイト",0		; 'K' (plural)
+	DEFB	"個のファイルで使用中",13,10	; ' file   '
+	DEFB	" ",0
+	DEFB	"個のファイルで使用中",13,10	; ' files',9
+	DEFB	" ",0
+	DEFB	"バイト",0		; ' byte'
+	DEFB	"バイト",0		; ' bytes'
+	DEFB	"*** ",0
+	DEFB	0
+	DEFB	"何かキーを押してください.",0	; 'Press any key to continue '
+	DEFB	" ドライブ",0		; ' Volume in drive '
+	DEFB	":のディスク",0		; ': '
+	DEFB	"にはボリューム名がありません",0	; 'has no name'
+	DEFB	"のボリューム名は ",0	; 'is '
+	DEFB	"全てのファイルを消去しますか (Y/N)? ",0	; 'Delete all files (Y/N)? '
+	DEFB	" -- ",0
+	DEFB	"現在の日付は ",0	; 'Current date is '
+	DEFB	"日",0			; 'Sun'
+	DEFB	"月",0			; 'Mon'
+	DEFB	"火",0			; 'Tues'
+	DEFB	"水",0			; 'Wednes'
+	DEFB	"木",0			; 'Thurs'
+	DEFB	"金",0			; 'Fri'
+	DEFB	"土",0			; 'Satur'
+	DEFB	"曜日",0		; 'day'
+	DEFB	"です",0		; (16 spaces: end of date line)
+	DEFB	"新しい日付を入力して下さい",0	; 'Enter new date'
+	DEFB	": ",0
+	DEFB	" (",0
+	DEFB	") ",0			; ')'
+	DEFB	"現在の時刻は",0	; 'Current time is'
+	DEFB	"です",0		; (7 spaces: end of time line)
+	DEFB	"新しい時刻を入力して下さい: ",0	; 'Enter new time: '
+	DEFB	"バッファ数は ",0	; 'Buffers is '
+	DEFB	"ベリファイは ",0	; 'Verify is '
+	DEFB	"RAMディスクは ",0	; 'RAM disk is '
+	DEFB	"ドライブ名は? (",0	; 'Drive name? ('
+	DEFB	") ",0
+	DEFB	"ドライブ ",0		; 'All data on drive '
+	DEFB	":上の全てのデータは消去されます",0	; ': will be destroyed'
+	DEFB	"      ",0
+	DEFB	"個のファイルをコピーしました",0	; ' file copied'
+	DEFB	"個のファイルをコピーしました",0	; ' files copied'
+
+; The HELP index text lived here until it was moved to the JINDEX.HLP
+; file (see INDEX.HLP in messages.mac); the slot is kept empty because
+; the messages are looked up by index.
+	DEFB	0
+
+	DEFB	"COMMAND3.COMの入ったディスクをドライブ ",0,": に入れて",0
+	DEFB	"RAMディスク上の全てのデータを消去しますか (Y/N)? ",0
+	DEFB	"COMMAND3.COM: Nextorのバージョンが違います",0
+	DEFB	"バッチ処理を中止しますか (Y/N)? ",0
+	DEFB	"バッチファイルの入ったディスクをドライブ ",0,":に入れて下さい",0
+	DEFB	"リダイレクトエラー: ",0
+	DEFB	"パイプエラー: ",0
+	DEFB	"バッチファイルエラー: ",0
+	DEFB	"標準入力エラー: ",0
+	DEFB	"標準出力エラー: ",0
+	DEFB	"がディスク全体の容量です.",0	; ' total disk space'
+	DEFB	"をファイルとディレクトリで使用中です.",0	; ' used by files and directories'
+	DEFB	"が使用可能です.",0	; ' available disk space'
+	DEFB	" = ",0
+	DEFB	"メモリが足りません.システムは停止しました",0	; 'Not enough memory, system halted'
+	DEFB	"CPUモードは ",0	; 'CPU mode is '
+	DEFB	"Z80",0
+	DEFB	"R800-ROM",0
+	DEFB	"R800-RAM",0
+	DEFB	"ディスクチェックは ",0	; 'DiskCheck is '
+	DEFB	"バイト",0		; ' bytes'
+	DEFB	"のRAMがスロット",0	; ' total RAM in Slot '
+	DEFB	"をシステムが使用中です.",0	; ' used by system'
+	DEFB	"をユーザが使用中です.",0	; ' used by user'
+	DEFB	"がTPAメモリの全容量です.",0	; ' total TPA memory'
+	DEFB	"がヒストリバッファの全容量です.",0	; ' total history buffer'
+	DEFB	"がエイリアスメモリの全容量です.",0	; ' total alias memory'
+	DEFB	"が変数スワップメモリの全容量です.",0	; ' total variable swap memory'
+	DEFB	"COMMAND3.COM: NEXTOR.SYSのバージョンが違います",0
+	DEFB	"アロケーション情報ゼロモードが有効です.容量情報はありません",0
+	DEFB	"キーを押してください... ",0	; 'Press any key... '
+	DEFB	"シェルRAMは ",0	; 'Shell RAM is '
+	DEFB	"ネストされたシェルからはシェルRAMの状態を変更できません",0
+
+; Message #55: hint printed after 'File for HELP not found' when HELP
+; was invoked with no subject and the index file is missing (copy.mac).
+	DEFB	"ヘルプの目次はJINDEX.HLP (またはINDEX.HLP) ファイルにあります.",13,10
+	DEFB	"ディレクトリは環境変数HELPで指定されます",0
+
+; Messages #56-#84: the strings of the Nextor 3 additions (VER, FORMAT,
+; MEM, LOCK, DRIVERS, DRVINFO, DEVINFO, RALLOC and the drive mapping
+; notes of DIR/VOL/FREE). Where the code prints the components of a
+; line in the English word order (e.g. 'Ghost drive of X:'), the
+; Japanese messages use a comma or particle-free phrasing that keeps
+; that order valid.
+	DEFB	"COMMAND3.COM バージョン ",0	; #56 (VER)
+	DEFB	"詳細を見るには TYPE COMMAND3.COM を実行してください",0	; #57 (VER)
+	DEFB	"ドライブ ",0	; #58 (FORMAT refusals, DRVINFO)
+	DEFB	"マップされていません",0	; #59 (FORMAT refusals)
+	DEFB	"RAMディスクです",0	; #5A (FORMAT refusals)
+	DEFB	"ディスクイメージファイルにマップされています",0	; #5B (FORMAT refusals)
+	DEFB	"警告: ドライブ ",0	; #5C (FORMAT confirmation)
+	DEFB	" はフロッピーディスクではありません.",13,10,"実行しますか? (y/n) ",0	; #5D
+
+; The MEM messages (#5E-#62): the column labels are right-aligned to
+; the same column edges as the English ones (14, 23 and 32; kanji
+; characters are two columns wide), and the totals label is six
+; columns wide like 'Total:', so the numbers keep their alignment.
+	DEFB	"スロット  合計   使用中     空き",13,10	; #5E (MEM)
+	DEFB	"--------  ----   ------     ----",13,10,0
+	DEFB	13,10,"合計: ",0	; #5F (MEM)
+	DEFB	"RAMディスクサイズ: ",0	; #60 (MEM)
+	DEFB	"TPA終了アドレス: ",0	; #61 (MEM)
+	DEFB	"h",13,10,"TPAサイズ: ",0	; #62 (MEM)
+
+	DEFB	"ロックされているドライブはありません",0	; #63 (LOCK)
+	DEFB	"ロックされています",0	; #64 (LOCK)
+	DEFB	"ロックされていません",0	; #65 (LOCK)
+
+	DEFB	"レガシーMSX-DOSドライバ",0	; #66 (DRIVERS, DRVINFO)
+	DEFB	", スロット ",0	; #67 (DRIVERS, DRVINFO)
+	DEFB	"起動時に割り当てられたドライブはありません",0	; #68 (DRIVERS)
+	DEFB	"起動時に割り当てられたドライブ: ",0	; #69 (DRIVERS)
+	DEFB	0	; #6A (DRIVERS: 'from X: to Y:' is 'X: ~ Y:')
+	DEFB	" ~ ",0	; #6B (DRIVERS)
+	DEFB	": の割り当て:",0	; #6C (DRVINFO)
+	DEFB	"RAMディスク",0	; #6D (DRVINFO)
+	DEFB	"ゴーストドライブ, 元は ",0	; #6E (DRVINFO, DIR/VOL/FREE)
+	DEFB	"ファイル ",0	; #6F (DRVINFO)
+	DEFB	", ドライブ ",0	; #70 (DRVINFO)
+	DEFB	" (読み取り専用)",0	; #71 (DRVINFO, DIR/VOL/FREE)
+	DEFB	"デバイス ",0	; #72 (DRVINFO)
+	DEFB	"相対ユニット ",0	; #73 (DRVINFO)
+
+	DEFB	"デバイス番号 ",0	; #74 (DEVINFO)
+	DEFB	"  デバイスの製造元: ",0	; #75 (DEVINFO)
+	DEFB	"  デバイス名: ",0	; #76 (DEVINFO)
+	DEFB	"  メディア名: ",0	; #77 (DEVINFO)
+	DEFB	"  デバイスのシリアル番号: ",0	; #78 (DEVINFO)
+	DEFB	"  ブロックデバイス",0	; #79 (DEVINFO)
+	DEFB	"  CD-ROM",0	; #7A (DEVINFO)
+	DEFB	"  種類不明",0	; #7B (DEVINFO)
+	DEFB	", オフライン",0	; #7C (DEVINFO)
+	DEFB	", リムーバブル",0	; #7D (DEVINFO)
+	DEFB	", 固定",0	; #7E (DEVINFO)
+	DEFB	", 読み取り専用",0	; #7F (DEVINFO)
+	DEFB	", フロッピーディスク",0	; #80 (DEVINFO)
+
+	DEFB	" RAMディスクにマップされたドライブ",0	; #81 (DIR/VOL/FREE)
+	DEFB	" マップ先ファイル: ",0	; #82 (DIR/VOL/FREE)
+	DEFB	", ドライブ ",0	; #83 (DIR/VOL/FREE)
+
+	DEFB	"縮小アロケーション情報モードのドライブはありません",0	; #84 (RALLOC)
+
+	.strenc	default
