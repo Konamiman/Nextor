@@ -307,7 +307,7 @@ The result of this procedure is a ready to use complete Nextor ROM file with you
 
 ### 3.2. Using the mknexrom utility
 
-Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 1K areas present in banks 0 and 3.
+Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 256 byte areas present at the end of banks 0 and 3.
 
 `mknexrom` is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](../docker/README.md).
 

@@ -173,7 +173,7 @@ int main(int argc, char* argv[])
 
 	char* mapperCode;
 	char mapperCodeBuffer[MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE];
-	char extraCode[EXTRA_CODE_SIZE];
+	char extraCode[EXTRA_CODE_SIZE] = { 0 };	//Zero-filled so that a short extra file is padded with zeros
 	char extraAreaCheck[EXTRA_CODE_SIZE];
 	char* dataBuffer[1024];
 
@@ -331,17 +331,21 @@ int main(int argc, char* argv[])
 		//An existing full ROM file may legitimately hold previous extra contents there, so skip the check.
 
 		if(!hasDriver) {
-			fseek(baseFile, (DOS2_EXTRA_BANK*BANK_SIZE)+EXTRA_ADDRESS, SEEK_SET);
-			readCount=fread(extraAreaCheck, 1, EXTRA_CODE_SIZE, baseFile);
-			if(readCount!=EXTRA_CODE_SIZE) {
-				printf("*** Can't read the extra code area from the base file\r\n");
-				DoExit(1);
-			}
-			for(i=0; i<EXTRA_CODE_SIZE; i++) {
-				if(extraAreaCheck[i]!=0) {
-					printf("*** The extra code area (0x%04X-0x%04X) is not empty in the base file, so the extra code can't be placed there.\r\n",
-						EXTRA_ADDRESS+0x4000, EXTRA_ADDRESS+0x4000+EXTRA_CODE_SIZE-1);
+			int extraBanks[2] = { DOS2_EXTRA_BANK, DOS1_EXTRA_BANK };
+			int bankIndex;
+			for(bankIndex=0; bankIndex<2; bankIndex++) {
+				fseek(baseFile, (extraBanks[bankIndex]*BANK_SIZE)+EXTRA_ADDRESS, SEEK_SET);
+				readCount=fread(extraAreaCheck, 1, EXTRA_CODE_SIZE, baseFile);
+				if(readCount!=EXTRA_CODE_SIZE) {
+					printf("*** Can't read the extra code area of bank %i from the base file\r\n", extraBanks[bankIndex]);
 					DoExit(1);
+				}
+				for(i=0; i<EXTRA_CODE_SIZE; i++) {
+					if(extraAreaCheck[i]!=0) {
+						printf("*** The extra code area (0x%04X-0x%04X) of bank %i is not empty in the base file, so the extra code can't be placed there.\r\n",
+							EXTRA_ADDRESS+0x4000, EXTRA_ADDRESS+0x4000+EXTRA_CODE_SIZE-1, extraBanks[bankIndex]);
+						DoExit(1);
+					}
 				}
 			}
 			fseek(baseFile, 0, SEEK_SET);
