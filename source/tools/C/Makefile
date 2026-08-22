@@ -25,7 +25,7 @@ COMS := EMUFILE.COM FSIZE.COM NEXBOOT.COM VSFT.COM EPTCFT.COM DRVROP.COM DRVTEST
 
 # Tools with their own build rule below (banner-bearing crt0, message
 # tables assembled with Nestor80), excluded from the generic rule.
-SPECIAL_COMS := DISKCOPY.COM
+SPECIAL_COMS := DISKCOPY.COM XDIR.COM XCOPY.COM
 
 c-tools: $(COMS) $(SPECIAL_COMS)
 
@@ -80,6 +80,40 @@ DISKCOPY.COM: \
 
 crt0_diskcopy.rel: crt0_diskcopy.mac
 	sdasz80 -o crt0_diskcopy.rel crt0_diskcopy.mac
+
+# XDIR: same scheme as DISKCOPY (own crt0 with the TYPE-able banner,
+# message tables assembled with Nestor80).
+XDIR.COM: \
+	xdir.c \
+	xdir_msgs.rel \
+	crt0_xdir.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
+
+	sdcc --code-loc 0x400 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
+	$(call hex2bin,xdir.ihx,$@)
+	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/xdir.com
+
+crt0_xdir.rel: crt0_xdir.mac
+	sdasz80 -o crt0_xdir.rel crt0_xdir.mac
+
+# XCOPY: same scheme as DISKCOPY (own crt0 with the TYPE-able banner,
+# message tables assembled with Nestor80).
+XCOPY.COM: \
+	xcopy.c \
+	xcopy_msgs.rel \
+	crt0_xcopy.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
+
+	sdcc --code-loc 0x500 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
+	$(call hex2bin,xcopy.ihx,$@)
+	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/xcopy.com
+
+crt0_xcopy.rel: crt0_xcopy.mac
+	sdasz80 -o crt0_xcopy.rel crt0_xcopy.mac
 
 # Message table files: assembled to SDCC relocatable format, so the C
 # code sees the tables as extern arrays.
