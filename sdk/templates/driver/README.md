@@ -53,13 +53,16 @@ The constants and helper routines you'll need are in the SDK: `asm/constants/dri
 
 ## Kernel variants
 
-`NEXTOR_BASE` selects which kernel your driver is fused with. There are six base-file variants (in the dev image they live in `/opt/nextor/kernel_base/`; the repository build names them `Nextor-X.Y.Z.base[<suffix>].dat`):
+`NEXTOR_BASE` selects which kernel your driver is fused with. There are twelve base-file variants (in the dev image they live in `/opt/nextor/kernel_base/`; the repository build names them `Nextor-X.Y.Z.base[<suffix>].dat`):
 
 ```text
 kernel_base.dat                    (default)
 kernel_base.NO_UNDOC.dat           (Z180-safe, no undocumented opcodes)
 kernel_base.SHIFT_INV.dat          kernel_base.CTRL_INV.dat
 kernel_base.NO_UNDOC.SHIFT_INV.dat kernel_base.NO_UNDOC.CTRL_INV.dat
+kernel_base[<suffix>].KANJI_INV.dat (each of the above with the "6" boot key
+                                   inverted: the Kanji driver is installed
+                                   at boot time unless the key is pressed)
 ```
 
 For a `.NO_UNDOC.` base, build with `make NO_UNDOC=1 NEXTOR_BASE=...` so the driver stays undoc-free too. Use the `ld_`, `cp_`, `or_`, ... macros from `undoc.inc` (already included) anywhere you'd otherwise touch `ixh/ixl/iyh/iyl`.

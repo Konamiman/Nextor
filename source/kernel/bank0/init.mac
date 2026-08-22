@@ -297,17 +297,23 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ;
     ; Bits are assigned to keys as follows:
     ;
-    ; 0: ..54321.
+    ; 0: .654321.
     ; 1: ..CS.... (C = CTRL, S = SHIFT)
     ;
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
 
-    ; Set INVERT_SHIFT and/or INVERT_CTRL at assembly time to invert
-    ; the meaning of the corresponding boot key. By default no key is
-    ; inverted.
+    ; Set INVERT_SHIFT, INVERT_CTRL and/or INVERT_KANJI (for the "6" key)
+    ; at assembly time to invert the meaning of the corresponding boot key.
+    ; By default no key is inverted.
 
-KEYS_INV_0: db 00h
+KEYS_INV_0_VALUE: defl 0
+
+    ifdef INVERT_KANJI
+KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+40h
+    endif
+
+KEYS_INV_0: db KEYS_INV_0_VALUE
 
 KEYS_INV_1_VALUE: defl 0
 
@@ -1743,6 +1749,8 @@ GO_BASIC:
 ;	Read the boot sector and pass control
 ;
 NO_TEXT::
+	call	KANJI_BOOT##		;Install the Kanji driver if the "6" key is
+KANJI_BOOT_RESUME::			; active (comes back here via the H.ERRO hook)
 	ld	hl,BASIC		;Set jump address when MSXDOS cannot
 	push	hl			; start.
 
@@ -3146,7 +3154,7 @@ DO_KEYS_INIT:
     call SCANKEYS
 
     ld a,(KEYS_INV_0)
-    and 00111110b
+    and 01111110b
     xor b
     ld b,a
 

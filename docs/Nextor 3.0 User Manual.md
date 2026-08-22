@@ -333,6 +333,8 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **5**: Make Nextor assign only one drive letter per Nextor driver, instead of the normal behavior of assigning one drive per suitable active partition found (see _[3.2. Booting Nextor](#32-booting-nextor)_). Drivers are informed of this request and could act on it, see _[4.5.3. Driver query 3: Get driver initialization parameters](Nextor%203.0%20Driver%20Development%20Guide.md#453-driver-query-3-get-driver-initialization-parameters)_.
 
+*  **6**: Install the Kanji driver before loading the DOS environment, in the same way as disks patched with the `KMODE.COM` tool did: the equivalent of `CALL KANJI` followed by `CALL ANK` is executed in BASIC, so the driver is installed (and the memory it needs is reserved, which is very difficult to do once the DOS environment is loaded) but the screen is left in ANK mode. This works in both MSX-DOS 2 and MSX-DOS 1 modes, and the boot process just continues normally if the computer doesn't have a Kanji driver (the failure of `CALL KANJI` is silently ignored).
+
 * **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable its second "ghost" drive, freeing some extra memory, especially in MSX-DOS 1 mode. 
 
 *  **SHIFT**: Prevent MSX-DOS kernels from booting, but allow Nextor kernels to boot normally. This is useful to disable the internal floppy disk drive in order to get some extra TPA memory, especially in MSX-DOS 1 mode.
@@ -352,6 +354,8 @@ Example: if your Nextor kernel is in primary slot 1, press Q to prevent it from 
 
 ![Nextor boot menu](img/BootMenu.png)
 
+In the menu, the numeric keys 0 to 6 toggle the boot keys with the same numbers, while 7 toggles the CTRL key and 8 toggles the SHIFT key.
+
 If you want to completely disable all Nextor kernels, press N at boot time to show the menu, release it, and press it again. This is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller (e.g. the internal floppy disk drive).
 
 #### 2.10.1. Boot key inverters
@@ -364,7 +368,7 @@ Here's how bits are assigned to each key:
 
 * First byte (offset 512):
 
-  * Bits 1 to 5: keys 1 to 5
+  * Bits 1 to 6: keys 1 to 6
 
 * Second byte (offset 513):
 
@@ -380,14 +384,15 @@ If you use `mknexrom` you need to supply a 16 bit hexadecimal value with the `/k
   * 3: 0008
   * 4: 0010
   * 5: 0020
+  * 6: 0040
   * CTRL: 2000
   * SHIFT: 1000
 
-e.g. `/k:3002` to invert the 1, CTRL and SHIFT keys.
+e.g. `/k:3002` to invert the 1, CTRL and SHIFT keys, or `/k:0040` to invert the 6 key (so that the Kanji driver is installed at boot time unless the key is pressed).
 
 The boot menu respects the key inversion encoded in the ROM, and will show inverted keys as already switched on (you can of course switch them off before continuing with the boot). For example, the boot menu screenshot displayed above is for a ROM that has the CTRL key inverted.
 
-The releases section of the Nextor repository and the development Docker image contain "CTRL_INV" and "SHIFT_INV" variants of the kernel base file; this is for convenience, especially for driver developers that don't use `mknexrom` for the build process.
+The releases section of the Nextor repository and the development Docker image contain "CTRL_INV" and "SHIFT_INV" variants of the kernel base file (with the CTRL and SHIFT keys inverted, respectively), as well as "KANJI_INV" variants (with the 6 key inverted) of these and of the non-inverted files; this is for convenience, especially for driver developers that don't use `mknexrom` for the build process.
 
 #### 2.10.2. One-time boot keys
 
