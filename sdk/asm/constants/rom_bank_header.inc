@@ -114,3 +114,14 @@
 ;   bank (7FD0h). Selects the bank whose number is in A.
 ;
 	const	CHGBNK,        7FD0h
+
+
+;-----------------------------------------------------------------------------
+;
+; * DRIVER_EXTRA_AREA - Start of the free area at the end of the kernel
+;   main banks (0 and 3), right before CHGBNK, that mknexrom fills with
+;   the contents of the file passed with the /e: option. The area is
+;   DRIVER_EXTRA_AREA_SIZE bytes long.
+;
+	const	DRIVER_EXTRA_AREA,      7ED0h
+	const	DRIVER_EXTRA_AREA_SIZE, 100h

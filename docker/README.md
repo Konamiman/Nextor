@@ -384,7 +384,7 @@ Override with `--build-arg NAME=value`:
 | `LK80_VERSION` / `LK80_TAG` | `1.1.0` / `n80-v1.3.3-lk80-v1.1` | linker release + its GitHub tag |
 | `LB80_VERSION` | `1.0` | librarian release |
 | `SDCC_VERSION` | `4.2.0` | recorded in the manifest/labels; `sdcc` itself comes from Debian apt (also 4.2.0), so this only relabels |
-| `MKNEXROM_VERSION` | `1.1` | recorded in the manifest; `mknexrom` is compiled from source |
+| `MKNEXROM_VERSION` | `1.2` | recorded in the manifest; `mknexrom` is compiled from source |
 | `DOTNET_TAG` | `8.0-bookworm-slim` | `dotnet/runtime` base image tag |
 
 Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.6`; the new version automatically flows into `manifest.json` and the labels. (`sdcc` is the apt package, so `SDCC_VERSION` only changes the recorded label, not the installed compiler.)
