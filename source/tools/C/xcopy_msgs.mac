@@ -67,7 +67,7 @@ _msgs_en:
 	msge	<CR,LF,"*** Wrong version of MSX-DOS">		;M_WVER
 
 	;M_USAG (one message, built from continuation lines):
-	msgp	<"Usage: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M]",CR,LF,CR,LF>
+	msgp	<"Usage: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M][/Dx]",CR,LF,CR,LF>
 	msgp	<"Copies the files matching src (a file, a directory or a pattern)",CR,LF>
 	msgp	<"to tgt (by default the current directory).",CR,LF,CR,LF>
 	msgp	<"/S: copy subdirectories too   /E: keep created empty subdirectories",CR,LF>
@@ -76,8 +76,24 @@ _msgs_en:
 	msgp	<"/T: give the copies the current date and time",CR,LF>
 	msgp	<"/A: only copy files with the archive attribute set",CR,LF>
 	msgp	<"/M: as /A, clearing the attribute on the copied source files",CR,LF>
+	msgp	<"/Dx: what to do with files already existing in the destination:",CR,LF>
+	msgp	<"     /DW overwrite (default)  /DK skip         /DN keep the newer",CR,LF>
+	msgp	<"     /DO keep the older       /DS keep smaller /DB keep bigger",CR,LF>
+	msgp	<"     /DD overwrite if the sizes differ         /DP ask per file",CR,LF>
 	msgp	<"System files are never copied.",CR,LF>
 	msge	<"TYPE XCOPY.COM for more details",CR,LF>	;M_USAG
+
+	;The duplicate file handling messages (/Dx, new in this port).
+	;The blank line before the /DP dialog is printed by the code
+	;(dup_prompt), not embedded in M_SRC: this keeps the dialog
+	;properly indented inside /S subdirectory levels and gives the
+	;same layout to both languages.
+	msge	<" - Skipped">					;M_SKIP
+	msge	<"Source: ">					;M_SRC
+	msge	<"Target: ">					;M_TGT
+	msge	<"(O)verwrite, (S)kip, (C)ancel, Over(W)rite all, S(K)ip all? ">	;M_DUPQ
+	msge	<" bytes">					;M_BYTES
+	msge	<" - Overwritten">				;M_OVER
 
 ;------------------------------------------------------------------------------
 ;	The Japanese messages: one entry per entry of the English table
@@ -103,7 +119,7 @@ _msgs_ja:
 	msgj	<CR,LF,"*** MSX-DOSのバージョンが違います">	;M_WVER
 
 	;M_USAG (one message, built from continuation lines):
-	msgp	<"使い方: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M]",CR,LF,CR,LF>
+	msgp	<"使い方: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M][/Dx]",CR,LF,CR,LF>
 	msgp	<"srcに一致するファイル (ファイル、ディレクトリ、パターン) を",CR,LF>
 	msgp	<"tgtにコピーします (省略時はカレントディレクトリ)。",CR,LF,CR,LF>
 	msgp	<"/S: サブディレクトリもコピーします",CR,LF>
@@ -115,8 +131,20 @@ _msgs_ja:
 	msgp	<"/T: コピーに現在の日付と時刻を付けます",CR,LF>
 	msgp	<"/A: アーカイブ属性のあるファイルのみコピーします",CR,LF>
 	msgp	<"/M: /Aと同じ、コピー後に属性をクリアします",CR,LF>
+	msgp	<"/Dx: コピー先に同名ファイルがある場合の動作:",CR,LF>
+	msgp	<"     /DW 上書き(省略時)  /DK スキップ  /DN 新しい方を残す",CR,LF>
+	msgp	<"     /DO 古い方を残す  /DS 小さい方を残す  /DB 大きい方を残す",CR,LF>
+	msgp	<"     /DD サイズが違えば上書き  /DP ファイルごとに確認",CR,LF>
 	msgp	<"システムファイルはコピーされません。",CR,LF>
 	msgj	<"詳細は TYPE XCOPY.COM で表示できます",CR,LF>	;M_USAG
+
+	;The duplicate file handling messages (/Dx, new in this port):
+	msgj	<" - スキップ">					;M_SKIP
+	msgj	<"コピー元: ">					;M_SRC
+	msgj	<"コピー先: ">					;M_TGT
+	msgj	<"上書き(O), スキップ(S), 中止(C), 全て上書き(W), 全てスキップ(K)? ">	;M_DUPQ
+	msgj	<" バイト">					;M_BYTES
+	msgj	<" - 上書き">					;M_OVER
 
 	.strenc	default
 

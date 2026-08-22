@@ -107,7 +107,7 @@ XCOPY.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
-	sdcc --code-loc 0x500 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
+	sdcc --code-loc 0x600 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
 	$(call hex2bin,xcopy.ihx,$@)
 	$(call copy_to_bin,$@)
 	@rm -f ../../../bin/tools/xcopy.com

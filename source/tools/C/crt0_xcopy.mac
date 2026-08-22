@@ -10,7 +10,7 @@
 	;    starts at 0x100), exactly as the standard crt0 recycles its
 	;    startup code.
 	;
-	;    Compile the program with --code-loc 0x500 (the banner makes
+	;    Compile the program with --code-loc 0x600 (the banner makes
 	;    the header bigger than the 0x180 used with the standard crt0)
 	;    and --data-loc 0.
 
@@ -37,7 +37,7 @@ init:   jp      realinit
         .db     13,10
         .ascii  "to tgt (by default the current directory)."
         .db     13,10,13,10
-        .ascii  "Usage: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M]"
+        .ascii  "Usage: XCOPY src [tgt] [/S][/E][/P][/W][/V][/H][/T][/A][/M][/Dx]"
         .db     13,10,13,10
         .ascii  "  /S: copy subdirectories too   /E: keep created empty subdirectories"
         .db     13,10
@@ -50,6 +50,14 @@ init:   jp      realinit
         .ascii  "  /A: only copy files with the archive attribute set"
         .db     13,10
         .ascii  "  /M: as /A, clearing the attribute on the copied source files"
+        .db     13,10
+        .ascii  "  /Dx: what to do with files already existing in the destination:"
+        .db     13,10
+        .ascii  "       /DW overwrite (default)  /DK skip         /DN keep the newer"
+        .db     13,10
+        .ascii  "       /DO keep the older       /DS keep smaller /DB keep bigger"
+        .db     13,10
+        .ascii  "       /DD overwrite if the sizes differ         /DP ask per file"
         .db     13,10
         .ascii  "  System files are never copied."
         .db     13,10,13,10

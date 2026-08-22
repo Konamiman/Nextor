@@ -9,6 +9,7 @@
  * displays).
  *
  * Syntax: XCOPY src [tgt] [/S] [/E] [/P] [/W] [/V] [/H] [/T] [/A] [/M]
+ *               [/Dx]
  *
  *   Copies the files matching 'src' (a file, a directory or a pattern)
  *   to 'tgt' (default: the current directory).  /S also copies the
@@ -22,6 +23,18 @@
  *   originals'; /A copies only files with the archive attribute set;
  *   /M is /A plus clearing that attribute on the source files after
  *   copying them.  System files are never copied.
+ *
+ *   The /Dx options say what to do when the destination file already
+ *   exists: /DW overwrites it (the default), /DK skips it, /DN keeps
+ *   the newer of the two files, /DO the older, /DS the smaller, /DB
+ *   the bigger, /DD overwrites only when the sizes differ, and /DP
+ *   shows both files (name, date and time, size) and asks: overwrite,
+ *   skip, cancel the whole run, or switch to /DW or /DK for the
+ *   remaining files.  A file skipped this way is listed with
+ *   " - Skipped" after its name, and a copy that replaces an existing
+ *   destination file is listed with " - Overwritten" (in every mode,
+ *   /Dx given or not).  On a tie (/DN, /DO: same date and time;
+ *   /DS, /DB: same size) the existing destination is kept.
  *
  * The copy strategy is inherited from the original program: within each
  * directory the source file handles are deliberately kept open until
@@ -44,6 +57,12 @@
  *   with no error, following the convention of the other ported tools
  *   (the original would happily copy the current directory onto
  *   itself, reporting each file as a duplicate).
+ *
+ * - The /Dx duplicate handling options are new in this port; the
+ *   original always overwrote an existing destination file, which
+ *   remains the default (/DW).  Files that replace an existing
+ *   destination are listed with " - Overwritten" (the original
+ *   printed just the name).
  *
  * Everything else works as the original: same syntax, same switches,
  * same messages (English and Japanese), same per-file output.  Like the
@@ -77,6 +96,7 @@
 #define FIB_TIME	15
 #define FIB_DATE	17
 #define FIB_CLUSTER	19
+#define FIB_SIZE	21
 #define FIB_DRIVE	25
 
 /* Bits in the attributes byte */
@@ -106,7 +126,20 @@
 enum {
     M_WAIT, M_FIL1, M_FIL2, M_COP, M_HID, M_RD_ONLY,
     M_T_DE, M_T_SE, M_T_RO, M_T_IN, M_T_FO, M_CCSD,
-    M_OPT, M_PROMPT, M_WVER, M_USAG
+    M_OPT, M_PROMPT, M_WVER, M_USAG,
+    M_SKIP, M_SRC, M_TGT, M_DUPQ, M_BYTES, M_OVER
+};
+
+/* Duplicate file handling modes (the /Dx options) */
+enum {
+    DUP_OVERWRITE,		/* /DW: always overwrite (the default) */
+    DUP_SKIP,			/* /DK: always skip */
+    DUP_NEWER,			/* /DN: keep the newer file */
+    DUP_OLDER,			/* /DO: keep the older file */
+    DUP_SMALLER,		/* /DS: keep the smaller file */
+    DUP_BIGGER,			/* /DB: keep the bigger file */
+    DUP_DIFF,			/* /DD: overwrite if the sizes differ */
+    DUP_PROMPT			/* /DP: ask for each file */
 };
 
 extern const byte msgs_en[];	/* defined in xcopy_msgs.mac */
@@ -132,6 +165,11 @@ bool time_flag;			/* true => stamp copies with now (/T) */
 bool hidden_flag;		/* true => copy hidden files too (/H) */
 bool s_ambig_flag;		/* true => ambiguous source filename */
 bool t_ambig_flag;		/* true => ambiguous target filename */
+
+byte dup_mode;			/* what to do with duplicate files (DUP_*) */
+bool dup_mode_set;		/* true => a /Dx option was given */
+bool dup_existed;		/* true => the file being copied replaces
+				   an existing destination file */
 
 byte verify_flag;		/* original verify setting, restored on
 				   every exit by the abort routine */
@@ -175,6 +213,10 @@ static byte sp_fib[FIB_LENGTH];	/* src_parse() result FIB */
 static byte dp_fib[FIB_LENGTH];	/* dst_parse() result FIB */
 static byte dp_tempfib[FIB_LENGTH];
 static char cmd_line[MAX_CMD_LEN];
+
+static byte dup_fib[FIB_LENGTH];/* the existing destination entry found
+				   by check_duplicate() */
+static char dup_path[MAX_CMD_LEN];
 
 extern byte HEAP_start;		/* first free byte after the program */
 
@@ -264,6 +306,29 @@ void put_unsigned(uint i)
     if (i >= 10)
         put_unsigned(i / 10);
     put_char((char)(i % 10) + '0');
+}
+
+void put_u32(ulong i)
+{
+    if (i >= 10)
+        put_u32(i / 10);
+    put_char((char)(i % 10) + '0');
+}
+
+/* put_2d: a number of at most two digits, zero padded */
+void put_2d(byte n)
+{
+    put_char('0' + n / 10);
+    put_char('0' + n % 10);
+}
+
+/* put_summary: the final " N file(s) copied" line */
+void put_summary(void)
+{
+    put_char(' ');
+    put_unsigned(f_count);
+    put_msg(f_count == 1 ? M_FIL1 : M_FIL2);	/* " file(s)" */
+    put_msg(M_COP);				/* " copied"  */
 }
 
 
@@ -637,6 +702,25 @@ void set_true(bool* flag)
     *flag = true;
 }
 
+/* set_dup_mode: the second character of a /Dx option */
+void set_dup_mode(char c)
+{
+    if (dup_mode_set) warning_opt();
+    dup_mode_set = true;
+    switch (c) {
+        case 'W': dup_mode = DUP_OVERWRITE; break;
+        case 'K': dup_mode = DUP_SKIP; break;
+        case 'N': dup_mode = DUP_NEWER; break;
+        case 'O': dup_mode = DUP_OLDER; break;
+        case 'S': dup_mode = DUP_SMALLER; break;
+        case 'B': dup_mode = DUP_BIGGER; break;
+        case 'D': dup_mode = DUP_DIFF; break;
+        case 'P': dup_mode = DUP_PROMPT; break;
+        case 0  : error(_IPARM);
+        default : error(_IOPT);
+    }
+}
+
 /* parse_flags: parses a set of flags of the form "/s/e /p"; the first
    character pointed to must be non-blank. */
 void parse_flags(char* ptr)
@@ -655,6 +739,7 @@ void parse_flags(char* ptr)
             case 'M': archive_flag = true;
                       set_true(&update_arc_flag);
                       break;
+            case 'D': set_dup_mode(upper(*(++ptr))); break;
             case 0  : error(_IPARM);
             default : error(_IOPT);
         }
@@ -873,6 +958,207 @@ void tell_attributes(byte attributes)
     if (attr_count != 0) put_char(')');
 }
 
+/* put_file_line: the indented file name plus its attributes (the line
+   printed for each file processed) */
+void put_file_line(byte level, byte* fib)
+{
+    put_spaces(level * 3);
+    put_string((char*)fib + FIB_FILE_NAME);
+    tell_attributes(fib[FIB_ATTRIBUTES]);
+}
+
+
+/*   D U P L I C A T E   F I L E   H A N D L I N G   */
+
+/* fib_size: a FIB's file size, as a 32 bit number */
+ulong fib_size(byte* fib)
+{
+    return (ulong)fib[FIB_SIZE]
+         | ((ulong)fib[FIB_SIZE + 1] << 8)
+         | ((ulong)fib[FIB_SIZE + 2] << 16)
+         | ((ulong)fib[FIB_SIZE + 3] << 24);
+}
+
+/* fib_stamp: a FIB's date and time, as one comparable 32 bit number
+   (newer file => bigger number) */
+ulong fib_stamp(byte* fib)
+{
+    return ((ulong)(fib[FIB_DATE] | (fib[FIB_DATE + 1] << 8)) << 16)
+         | (uint)(fib[FIB_TIME] | (fib[FIB_TIME + 1] << 8));
+}
+
+/* put_stamp: print a FIB's date and time as "2026/04/21 12:34:56" */
+void put_stamp(byte* fib)
+{
+    uint d, t;
+
+    d = fib[FIB_DATE] | (fib[FIB_DATE + 1] << 8);
+    t = fib[FIB_TIME] | (fib[FIB_TIME + 1] << 8);
+    put_unsigned((d >> 9) + 1980);
+    put_char('/');
+    put_2d((d >> 5) & 0x0F);
+    put_char('/');
+    put_2d(d & 0x1F);
+    put_char(' ');
+    put_2d(t >> 11);
+    put_char(':');
+    put_2d((t >> 5) & 0x3F);
+    put_char(':');
+    put_2d((t & 0x1F) << 1);
+}
+
+/* put_dup_line: one file of the /DP dialog: name, date/time, size */
+void put_dup_line(byte* fib)
+{
+    put_string((char*)fib + FIB_FILE_NAME);
+    put_string(", ");
+    put_stamp(fib);
+    put_string(", ");
+    put_u32(fib_size(fib));
+    put_msg(M_BYTES);			/* " bytes" */
+    newline();
+}
+
+/* to_fcb_name: a "NAME.EXT" string to the 11 character FCB form,
+   uppercased, with '*' expanded to '?'s */
+void to_fcb_name(const char* name, char* fcb)
+{
+    byte i;
+
+    for (i = 0; i < 11; i++) fcb[i] = ' ';
+    i = 0;
+    while (*name && *name != '.') {
+        if (*name == '*') { while (i < 8) fcb[i++] = '?'; }
+        else if (i < 8) fcb[i++] = upper(*name);
+        name++;
+    }
+    if (*name == '.') name++;
+    i = 8;
+    while (*name) {
+        if (*name == '*') { while (i < 11) fcb[i++] = '?'; }
+        else if (i < 11) fcb[i++] = upper(*name);
+        name++;
+    }
+}
+
+/* expand_name: the destination filename for a source filename: the
+   rename pattern with its wildcards filled from the source name (the
+   same expansion the "find new" DOS call performs), back as a
+   "NAME.EXT" string */
+void expand_name(const char* src, const char* pattern, char* out)
+{
+    char s_fcb[11], p_fcb[11];
+    byte i;
+    char c;
+    bool has_ext;
+
+    if (pattern[0] == '\0') {		/* no renaming */
+        while ((*out++ = *src++) != '\0') ;
+        return;
+    }
+    to_fcb_name(src, s_fcb);
+    to_fcb_name(pattern, p_fcb);
+    for (i = 0; i < 8; i++) {
+        c = p_fcb[i] == '?' ? s_fcb[i] : p_fcb[i];
+        if (c != ' ') *out++ = c;
+    }
+    has_ext = false;
+    for (i = 8; i < 11; i++) {
+        c = p_fcb[i] == '?' ? s_fcb[i] : p_fcb[i];
+        if (c != ' ') {
+            if (!has_ext) { *out++ = '.'; has_ext = true; }
+            *out++ = c;
+        }
+    }
+    *out = '\0';
+}
+
+/* check_duplicate: does the destination file for this source file
+   already exist?  The destination name is the source name passed
+   through the rename pattern; the directory to look in is t_fib (a
+   FIB, or the target path string at the top level).  Fills dup_fib
+   with the existing entry.  An existing entry that is not a plain file
+   (a subdirectory, a system file, a device) is not a duplicate: the
+   normal copy path reports those with the proper error message. */
+bool check_duplicate(byte* t_fib, byte* src_file)
+{
+    char dup_name[MAX_FIL_LEN];
+    char *p, *d;
+
+    expand_name((char*)src_file + FIB_FILE_NAME, tf_name, dup_name);
+    if (*t_fib == 0xFF) {		/* a FIB: search inside it */
+        if (first(t_fib, dup_name, dup_fib, 0x16)) return false;
+    } else {				/* the path string: replace its
+					   filename part with the name */
+        p = (char*)t_fib;
+        d = dup_path;
+        while (p < t_st_file) *d++ = *p++;
+        p = dup_name;
+        while ((*d++ = *p++) != '\0') ;
+        if (first(dup_path, null_file, dup_fib, 0x16)) return false;
+    }
+    return !(dup_fib[FIB_ATTRIBUTES]
+             & (MASK_SUB_DIR | MASK_SYSTEM | MASK_DEVICE));
+}
+
+/* dup_decision: apply an automatic /Dx mode to the duplicate found by
+   check_duplicate(): true = overwrite it.  Ties (same date and time,
+   same size) keep the existing destination. */
+bool dup_decision(byte* src_file)
+{
+    ulong s, t;
+
+    if (dup_mode == DUP_OVERWRITE) return true;
+    if (dup_mode == DUP_SKIP) return false;
+    if (dup_mode == DUP_NEWER || dup_mode == DUP_OLDER) {
+        s = fib_stamp(src_file);
+        t = fib_stamp(dup_fib);
+        return dup_mode == DUP_NEWER ? s > t : s < t;
+    }
+    s = fib_size(src_file);
+    t = fib_size(dup_fib);
+    if (dup_mode == DUP_DIFF) return s != t;
+    return dup_mode == DUP_SMALLER ? s < t : s > t;
+}
+
+/* dup_prompt: the /DP dialog for one duplicate file: show both files
+   and ask.  Returns true to overwrite; the "all" answers also change
+   dup_mode for the remaining files; Cancel prints the copied files
+   summary and terminates the program. */
+bool dup_prompt(byte level, byte* src_file)
+{
+    char ans;
+
+    newline();			/* a blank line before the dialog */
+    put_spaces(level * 3);
+    put_msg(M_SRC);			/* "Source: " */
+    put_dup_line(src_file);
+    put_spaces(level * 3);
+    put_msg(M_TGT);			/* "Target: " */
+    put_dup_line(dup_fib);
+    newline();
+    for (;;) {
+        put_spaces(level * 3);
+        put_msg(M_DUPQ);	/* "(O)verwrite, (S)kip, ...? " */
+        clr_in();
+        ans = upper(get_char());
+        newline();
+        if (ans == 'W') dup_mode = DUP_OVERWRITE;
+        if (ans == 'K') dup_mode = DUP_SKIP;
+        if (ans == 'O' || ans == 'W' || ans == 'S' || ans == 'K'
+                || ans == 'C')
+            break;
+        /* invalid answer: ask again */
+    }
+    newline();				/* the extra blank line */
+    if (ans == 'C') {			/* Cancel: stop the whole run */
+        put_summary();
+        terminate(0);
+    }
+    return ans == 'O' || ans == 'W';
+}
+
+
 /* pr_err: print " -- " plus a message, and close the (source) handle */
 void pr_err(byte msg, byte handle)
 {
@@ -950,6 +1236,9 @@ void copy_data(byte* src_file, byte* dst_dir, byte* dst_file, byte attr)
                 if ((err2_flag = set_file_attr(src_handle,
                                                attr & ~MASK_ARCHIVE)) != 0)
                     error(err2_flag);
+            if (dup_existed)		/* an existing destination file
+                                           was replaced */
+                put_msg(M_OVER);	/* " - Overwritten" */
             f_count++;
             break;
 
@@ -982,7 +1271,7 @@ void xcopy(byte level, byte* s_fib, byte* t_fib)
 
     byte err_flag, attributes;
     char ans;
-    bool do_it;
+    bool do_it, name_printed;
 
     fork_process();
 
@@ -997,29 +1286,46 @@ void xcopy(byte level, byte* s_fib, byte* t_fib)
                 && (hidden_flag || !(attributes & MASK_HIDDEN))
                 && ((attributes & MASK_ARCHIVE) || !archive_flag)) {
             /* a matching file to copy */
-            for (;;) {
-                put_spaces(level * 3);
-                put_string((char*)s_next_fib + FIB_FILE_NAME);
-                tell_attributes(attributes);
-                if (!prompt_flag) {
-                    do_it = true;
-                    break;
+            do_it = true;
+            name_printed = false;
+            if (prompt_flag) {
+                for (;;) {
+                    put_file_line(level, s_next_fib);
+                    put_msg(M_PROMPT);	/* " - Copy (Y/N)? " */
+                    clr_in();
+                    ans = get_char();
+                    if (no(ans)) {
+                        newline();
+                        do_it = false;
+                        break;
+                    }
+                    if (yes(ans)) {
+                        name_printed = true;  /* the prompt line doubles
+                                                 as the file line */
+                        break;
+                    }
+                    newline();		/* invalid answer: ask again */
                 }
-                put_msg(M_PROMPT);	/* " - Copy (Y/N)? " */
-                clr_in();
-                ans = get_char();
-                if (no(ans)) {
+            }
+            dup_existed = false;
+            if (do_it && check_duplicate(t_fib, s_next_fib)) {
+                dup_existed = true;
+                if (dup_mode == DUP_PROMPT) {
+                    if (name_printed) {	/* finish the /P prompt line */
+                        newline();
+                        name_printed = false;
+                    }
+                    do_it = dup_prompt(level, s_next_fib);
+                } else
+                    do_it = dup_decision(s_next_fib);
+                if (!do_it) {		/* skipped by the /Dx option */
+                    if (!name_printed) put_file_line(level, s_next_fib);
+                    put_msg(M_SKIP);	/* " - Skipped" */
                     newline();
-                    do_it = false;
-                    break;
                 }
-                if (yes(ans)) {
-                    do_it = true;
-                    break;
-                }
-                newline();		/* invalid answer: ask again */
             }
             if (do_it) {
+                if (!name_printed) put_file_line(level, s_next_fib);
                 copy_data(s_next_fib, t_fib, t_next_fib, attributes);
                 newline();
             }
@@ -1122,6 +1428,9 @@ int main(char** argv, int argc)
     subdirectory_flag = archive_flag = update_arc_flag = false;
     time_flag = hidden_flag = false;
     s_ambig_flag = t_ambig_flag = false;
+    dup_mode = DUP_OVERWRITE;
+    dup_mode_set = false;
+    dup_existed = false;
     f_count = 0;
     file_not_ensured = 0;
     null_file[0] = '\0';
@@ -1151,9 +1460,6 @@ int main(char** argv, int argc)
 
     xcopy(0, src_fib, dst_fib);
 
-    put_char(' ');
-    put_unsigned(f_count);
-    put_msg(f_count == 1 ? M_FIL1 : M_FIL2);	/* " file(s)"   */
-    put_msg(M_COP);				/* " copied"    */
+    put_summary();			/* " N file(s) copied" */
     return 0;
 }
