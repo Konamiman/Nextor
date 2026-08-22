@@ -190,7 +190,8 @@ cont:   ld      hl,#0x100
 	call    _main
 
         ;--- Step 4: Program termination.
-        ;    Termination code for DOS 2 was returned on L.
+        ;    Termination code for DOS 2 was returned on E by main
+        ;    (int returns land in DE under the SDCC __sdcccall(1) ABI).
 
         ld      c,#0x62   ;DOS 2 function for program termination (_TERM)
         ld      b,e

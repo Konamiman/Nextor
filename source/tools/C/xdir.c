@@ -443,6 +443,9 @@ void get_path(char** argv, int argc)
     st_file = parse_last;		/* start of the filename */
 
     cmd = st_file;
+    if (parse_end - cmd > FIL_NAME_LEN - 1)
+        error(_IFNM);			/* longer than any valid filename
+					   (and f_name cannot hold it) */
     for (i = 0; i < FIL_NAME_LEN + 1; i++) f_name[i] = '\0';
     for (i = 0; cmd < parse_end; i++) f_name[i] = *cmd++;
     ptr = cmd;				/* end of the filename */

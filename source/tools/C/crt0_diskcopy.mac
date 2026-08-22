@@ -45,7 +45,9 @@ init:   jp      realinit
         .db     13,10
         .ascii  "  passes, prompting to swap the disks."
         .db     13,10,13,10
-        .ascii  '  /X: no prompts: no key waits and no "copy more disks" loop'
+        .ascii  '  /X: no key waits and no "copy more disks" loop (the disk swap'
+        .db     13,10
+        .ascii  "      prompts of a same-drive copy are always given)"
         .db     13,10
         .ascii  "  /S: copy the boot sector from the source disk too (by default the"
         .db     13,10
@@ -183,7 +185,8 @@ cont:   ld      hl,#0x100
 	call    _main
 
         ;--- Step 4: Program termination.
-        ;    Termination code for DOS 2 was returned on L.
+        ;    Termination code for DOS 2 was returned on E by main
+        ;    (int returns land in DE under the SDCC __sdcccall(1) ABI).
 
         ld      c,#0x62   ;DOS 2 function for program termination (_TERM)
         ld      b,e

@@ -763,6 +763,9 @@ uint path_parse(char** cmd, char* path, char* fname, char** stfile)
     while (ptr < parse_end) *path++ = *ptr++;	/* path + filename */
     *path = '\0';
     ptr = parse_last;
+    if (parse_end - ptr > MAX_FIL_LEN - 1)
+        error(_IFNM);			/* longer than any valid filename
+					   (and fname cannot hold it) */
     while (ptr < parse_end) *fname++ = *ptr++;	/* filename alone */
     *fname = '\0';
 

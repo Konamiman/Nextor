@@ -77,7 +77,7 @@ _msgs_ja:
 	msgj	<":のボリューム名は ">			;M_VOL2
 	msgj	<":のディスクにはボリューム名がありません">  ;M_VOL3
 	msgj	<"拡張ディレクトリ ">			;M_XDIR
-	msgj	<CR,LF,"MSX-DOSのバージョンが違います">	;M_WVER
+	msgj	<CR,LF,"*** MSX-DOSのバージョンが違います">	;M_WVER
 
 	.strenc	default
 

@@ -29,7 +29,7 @@ SPECIAL_COMS := DISKCOPY.COM XDIR.COM XCOPY.COM
 
 c-tools: $(COMS) $(SPECIAL_COMS)
 
-.phony: prerequisites
+.PHONY: c-tools prerequisites
 
 TOOLS := sdcc sdasz80 objcopy N80
 
@@ -41,6 +41,26 @@ prerequisites:
 -include prerequisites
 
 SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
+
+# The banner crt0s place the whole startup code, banner included, in an
+# absolute area starting at 0x100, and the C code is linked right after
+# it (--code-loc).  The linker does NOT detect an overlap between the
+# two (the areas silently overwrite each other in the .ihx), so every
+# banner-carrying tool checks explicitly, from the "A _HEADER0" line of
+# the assembled crt0 .rel, that the header still ends below the code
+# location.  When a banner grows too big, raise --code-loc in the
+# tool's rule (and in the comment of its crt0 file).
+define check_header
+	@set -e; \
+	size=$$(grep -a '^A _HEADER0 ' $(1) | cut -d' ' -f4); \
+	addr=$$(grep -a '^A _HEADER0 ' $(1) | cut -d' ' -f8); \
+	end=$$(( $$(printf %d 0x$$addr) + $$(printf %d 0x$$size) )); \
+	loc=$$(printf %d $(2)); \
+	if [ $$end -gt $$loc ]; then \
+		printf 'ERROR: the %s header (banner + startup) ends at 0x%04X but --code-loc is %s: the banner has grown too big, raise --code-loc\n' $(1) $$end $(2); \
+		exit 1; \
+	fi
+endef
 
 # The trailing rm removes the lowercase-named copy that builds prior to the
 # uppercase renaming of the tools left in bin/tools, so that stale duplicates
@@ -73,6 +93,7 @@ DISKCOPY.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
+	$(call check_header,crt0_diskcopy.rel,0x480)
 	sdcc --code-loc 0x480 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_diskcopy.rel $(SDK_C_RELS) diskcopy_msgs.rel diskcopy.c
 	$(call hex2bin,diskcopy.ihx,$@)
 	$(call copy_to_bin,$@)
@@ -90,6 +111,7 @@ XDIR.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
+	$(call check_header,crt0_xdir.rel,0x400)
 	sdcc --code-loc 0x400 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
 	$(call hex2bin,xdir.ihx,$@)
 	$(call copy_to_bin,$@)
@@ -107,6 +129,7 @@ XCOPY.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
+	$(call check_header,crt0_xcopy.rel,0x600)
 	sdcc --code-loc 0x600 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
 	$(call hex2bin,xcopy.ihx,$@)
 	$(call copy_to_bin,$@)

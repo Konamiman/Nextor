@@ -376,6 +376,8 @@ void check_ver(void)
    parameters with no flags) means "not a floppy". */
 bool device_is_floppy(void)
 {
+    memset(reg_buf, 0, sizeof(reg_buf));	/* the unused registers must
+						   not carry garbage */
     reg_buf[1] = DEVICE_QUERY_GET_PARAMS;	/* A = query code */
     reg_buf[2] = gdli_buf[4];			/* C = device index */
     reg_buf[6] = (byte)((uint)dev_buf & 0xFF);	/* L,H = parameters buffer */
@@ -569,8 +571,8 @@ byte disk_rw(bool writing, uint sector, uint count, byte drive, byte* buffer)
     if (nextor_ver != 0) {
         regs.Bytes.A = drive - 1;
         regs.Bytes.B = (byte)count;
-        regs.UWords.DE = sector;	/* 32 bit sector number in DE:HL, */
-        regs.UWords.HL = 0;		/* always < 65536 here */
+        regs.UWords.DE = sector;	/* 32 bit sector number in HL:DE */
+        regs.UWords.HL = 0;		/* (high word); always < 65536 here */
         DosCall(writing ? _WRDRV : _RDDRV, &regs, REGS_MAIN, REGS_AF);
     } else {
         regs.Bytes.L = drive - 1;
