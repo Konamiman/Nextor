@@ -6,7 +6,7 @@
 # driver live in source/drivers; third-party drivers (Sunrise IDE,
 # MegaFlash ROM SCC+ SD...) have their own dedicated repositories.
 #
-# The build is controlled by three external variables (set via env or on
+# The build is controlled by four external variables (set via env or on
 # the make command line). Each variable, when non-empty, both defines a
 # symbol that gets passed to N80 via --define-symbols, and adds a
 # fragment to the output-filename suffix:
@@ -23,18 +23,25 @@
 #   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
 #                                 ".CTRL_INV". Inverts the meaning of
 #                                 the CTRL boot key.
+#   INVERT_KANJI               -> defines INVERT_KANJI, suffix fragment
+#                                 ".KANJI_INV". Inverts the meaning of the
+#                                 "6" boot key, so the Kanji driver is
+#                                 installed at boot time unless the key
+#                                 is pressed.
 #
 # Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1 make`
-# produces Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.SHIFT_INV.dat.
+# produces Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.SHIFT_INV.dat,
+# and `INVERT_KANJI=1 make` produces Nextor-$(NEXTOR_KERNEL_VERSION).base.KANJI_INV.dat.
 #
 # A single variant-specific stamp file (its filename encodes the active
 # variant signature) is listed as a prereq of every assembled .rel, so
 # switching variants forces a full reassembly and previously built .rels
 # from a different variant are never silently reused.
 #
-# `make everything` invokes make six times to build the kernel base file
-# for all six variant combinations (default, INVERT_SHIFT, INVERT_CTRL,
-# NO_UNDOC, NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL).
+# `make everything` invokes make twelve times to build the kernel base
+# file for all twelve variant combinations: the six combinations of
+# default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC, NO_UNDOC+INVERT_SHIFT and
+# NO_UNDOC+INVERT_CTRL, each one with and without INVERT_KANJI.
 #
 # The generated base files are copied to ../../bin/kernel-base.
 #
@@ -81,6 +88,11 @@ _VARIANT_DEFINES += INVERT_CTRL
 _VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
 endif
 
+ifneq ($(strip $(INVERT_KANJI)),)
+_VARIANT_DEFINES += INVERT_KANJI
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).KANJI_INV
+endif
+
 UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
 
 $(UNDOC_MODE_STAMP):
@@ -121,11 +133,12 @@ endef
 
 all: base ../../sdk/nextor-kernel-version.txt
 
-# `everything` builds the kernel base file across all six variant
-# combinations (default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
-# NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL). Each variant runs as a
-# recursive make invocation with the corresponding env vars set, so the
-# variant stamp inside the sub-make is correctly tracked.
+# `everything` builds the kernel base file across all twelve variant
+# combinations: default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
+# NO_UNDOC+INVERT_SHIFT and NO_UNDOC+INVERT_CTRL, each one with and
+# without INVERT_KANJI. Each variant runs as a recursive make invocation with
+# the corresponding env vars set, so the variant stamp inside the
+# sub-make is correctly tracked.
 #
 # Sub-makes within a single variant are incremental, but switching
 # variants between sub-makes forces a full reassembly (intrinsic to the
@@ -136,11 +149,17 @@ all: base ../../sdk/nextor-kernel-version.txt
 #
 # Sub-make failures don't abort the matrix — the loop collects the worst
 # exit code and exits with it at the end, so CI / release scripts see a
-# failure if any variant broke while still attempting all six.
+# failure if any variant broke while still attempting all twelve.
 .PHONY: everything
 everything:
 	@status=0; \
 	for args in \
+	    "INVERT_KANJI=1 INVERT_SHIFT=1" \
+	    "INVERT_KANJI=1 INVERT_CTRL=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
+	    "INVERT_KANJI=1" \
 	    "INVERT_SHIFT=1" \
 	    "INVERT_CTRL=1" \
 	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \

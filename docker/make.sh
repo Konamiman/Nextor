@@ -13,7 +13,7 @@ $prog - build a Nextor source part inside the dev image (repo root mounted).
 Usage: $prog <part> [make-args...]
 
   $prog kernel              build the default kernel base file
-  $prog kernel everything   all six kernel variants
+  $prog kernel everything   all twelve kernel variants
   $prog drivers             the standalone ROMs (ASCII8 + ASCII16)
   $prog drivers ram-example the opt-in example RAM disk driver (.drv)
   $prog nextor_sys          build NEXTOR.SYS

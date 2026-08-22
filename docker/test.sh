@@ -50,7 +50,7 @@ t "zip on PATH"                'command -v zip'
 # --- baked content --------------------------------------------------------
 t "NEXTOR_BASE file exists"    'test -f "$NEXTOR_BASE"'
 t "SDK present"                'test -d "$NEXTOR_SDK/asm" && test -d "$NEXTOR_SDK/C"'
-t "6 kernel base variants"     'test "$(ls /opt/nextor/kernel_base/kernel_base*.dat | wc -l)" -eq 6'
+t "12 kernel base variants"    'test "$(ls /opt/nextor/kernel_base/kernel_base*.dat | wc -l)" -eq 12'
 t "env version = built kernel" '[ -n "$NEXTOR_VERSION" ] && [ "$NEXTOR_VERSION" = "$(cat "$NEXTOR_SDK/nextor-kernel-version.txt")" ]'
 t "manifest matches version"   '[ "$NEXTOR_VERSION" = "$(grep -o "\"kernel_version\": \"[^\"]*\"" /opt/nextor/manifest.json | cut -d\" -f4)" ]'
 

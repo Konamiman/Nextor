@@ -61,6 +61,7 @@ KE_FLAG_HAS_VER:	equ	1
 KE_FLAG_BAD:	equ	7
 
 MAX_KERNELS:	equ	5
+NUM_KEYS:	equ	9	;Numeric key entries: 0-6, 7 (CTRL) and 8 (SHIFT)
 
 EXIT_ESC:	equ	0
 EXIT_ENTER:	equ	1
@@ -599,7 +600,7 @@ DM_AFTER_KERNELS:
 
 	;--- Numeric key entries ---
 
-	ld b,0			;B = key index (0-7)
+	ld b,0			;B = key index (0-8)
 DM_KEY_LOOP:
 	;Skip keys 2 and 4 on non-Turbo-R
 	ld a,b
@@ -620,7 +621,7 @@ DM_KEY_SHOW:
 DM_KEY_SKIP:
 	inc b
 	ld a,b
-	cp 8
+	cp NUM_KEYS
 	jr c,DM_KEY_LOOP
 
 	;--- Blank line ---
@@ -766,14 +767,14 @@ MIL_LOOP:
 	cp 'n'
 	jr z,MIL_N
 
-	;Check digits 0-7
+	;Check digits 0-8
 	cp '0'
 	jr c,MIL_CHECK_LETTER
-	cp '8'
+	cp '0'+NUM_KEYS
 	jr nc,MIL_CHECK_LETTER
 
 	;Digit key pressed
-	sub '0'			;A = key index 0-7
+	sub '0'			;A = key index 0-8
 
 	;Skip keys 2,4 on non-Turbo-R
 	cp 2
@@ -910,7 +911,7 @@ TK_GOT_INDEX:
 
 ;=============================================================================
 ;  TOGGLE_NUM_KEY - Toggle a numeric key option
-;  Input: A = key index (0-7)
+;  Input: A = key index (0-8)
 ;=============================================================================
 
 TOGGLE_NUM_KEY:
@@ -1039,7 +1040,7 @@ RAMKEYSIG_END:
 
 ;=============================================================================
 ;  DISPLAY_KEY_LINE - Display one numeric key option line
-;  Input: A = key index (0-7)
+;  Input: A = key index (0-8)
 ;=============================================================================
 
 DISPLAY_KEY_LINE:
@@ -1390,8 +1391,9 @@ KEY_BIT_TABLE:
 	db 0, 08h		;key 3: byte 0, bit 3
 	db 0, 10h		;key 4: byte 0, bit 4
 	db 0, 20h		;key 5: byte 0, bit 5
-	db 4, 20h		;key 6 (CTRL): byte 4, bit 5
-	db 4, 10h		;key 7 (SHIFT): byte 4, bit 4
+	db 0, 40h		;key 6: byte 0, bit 6
+	db 4, 20h		;key 7 (CTRL): byte 4, bit 5
+	db 4, 10h		;key 8 (SHIFT): byte 4, bit 4
 
 
 ;--- Numeric key description string pointers ---
@@ -1405,6 +1407,7 @@ KEY_STR_TABLE:
 	dw STR_KEY_5
 	dw STR_KEY_6
 	dw STR_KEY_7
+	dw STR_KEY_8
 ;               |--------|---------|---------|---------|
 STR_KEY_0:	db "Disable permanent disk emulation",0
 STR_KEY_1:	db "Boot in MSX-DOS 1 mode",0
@@ -1412,8 +1415,9 @@ STR_KEY_2:	db "Boot in MSX-DOS 1+R800 ROM mode",0
 STR_KEY_3:	db "Boot in MSX BASIC",0
 STR_KEY_4:	db "Boot in R800 ROM mode",0
 STR_KEY_5:	db "Reduced drive allocation mode",0
-STR_KEY_6:	db "Disable FDD ghost drives (CTRL)",0
-STR_KEY_7:	db "Disable MSX-DOS kernels (SHIFT)",0
+STR_KEY_6:	db "Install Kanji driver",0
+STR_KEY_7:	db "Disable FDD ghost drives (CTRL)",0
+STR_KEY_8:	db "Disable MSX-DOS kernels (SHIFT)",0
 
 
 ;--- Menu strings ---

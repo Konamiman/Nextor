@@ -11,7 +11,7 @@
 # The example RAM driver (ram-driver-example.asm) is opt-in via the
 # `ram-example` target.
 #
-# Build variants: same three knobs as the kernel Makefile. Each, when
+# Build variants: same four knobs as the kernel Makefile. Each, when
 # non-empty, both defines a symbol passed to N80 via --define-symbols
 # and adds a fragment to the output-filename suffix.
 #
@@ -21,6 +21,10 @@
 #                                 ".SHIFT_INV"
 #   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
 #                                 ".CTRL_INV"
+#   INVERT_KANJI               -> defines INVERT_KANJI, suffix fragment
+#                                 ".KANJI_INV" (the "6" boot key is inverted,
+#                                 so the Kanji driver is installed at
+#                                 boot time unless the key is pressed)
 #
 # All generated files (standalone ROMs, RAM drivers and the assembly
 # intermediates) go to <repo>/bin/drivers; nothing is left in this
@@ -70,6 +74,11 @@ _VARIANT_DEFINES += INVERT_CTRL
 _VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
 endif
 
+ifneq ($(strip $(INVERT_KANJI)),)
+_VARIANT_DEFINES += INVERT_KANJI
+_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).KANJI_INV
+endif
+
 UNDOC_MODE_STAMP := $(BIN_DRIVERS)/.build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
 
 $(UNDOC_MODE_STAMP):
@@ -104,19 +113,26 @@ all: base ascii8 ascii16
 FORCE:
 
 # `everything` builds the kernel base file and both standalone ROMs
-# across all six variant combinations (default, INVERT_SHIFT, INVERT_CTRL,
-# NO_UNDOC, NO_UNDOC+INVERT_SHIFT, NO_UNDOC+INVERT_CTRL). Each variant
-# runs as a recursive make invocation with the corresponding env vars
-# set. The default variant is built last so the on-disk intermediate
-# files are left in the non-inverted, undoc state.
+# across all twelve variant combinations: default, INVERT_SHIFT,
+# INVERT_CTRL, NO_UNDOC, NO_UNDOC+INVERT_SHIFT and NO_UNDOC+INVERT_CTRL,
+# each one with and without INVERT_KANJI. Each variant runs as a recursive make
+# invocation with the corresponding env vars set. The default variant is
+# built last so the on-disk intermediate files are left in the
+# non-inverted, undoc state.
 #
 # Sub-make failures don't abort the matrix — the loop collects the worst
 # exit code and exits with it at the end, so CI / release scripts see a
-# failure if any variant broke while still attempting all six.
+# failure if any variant broke while still attempting all twelve.
 .PHONY: everything
 everything:
 	@status=0; \
 	for args in \
+	    "INVERT_KANJI=1 INVERT_SHIFT=1" \
+	    "INVERT_KANJI=1 INVERT_CTRL=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
+	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
+	    "INVERT_KANJI=1" \
 	    "INVERT_SHIFT=1" \
 	    "INVERT_CTRL=1" \
 	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
@@ -170,7 +186,8 @@ base: $(LOCAL_BASE)
 	@$(MAKE) --no-print-directory -C ../kernel base \
 	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
 	    INVERT_SHIFT=$(INVERT_SHIFT) \
-	    INVERT_CTRL=$(INVERT_CTRL)
+	    INVERT_CTRL=$(INVERT_CTRL) \
+	    INVERT_KANJI=$(INVERT_KANJI)
 
 $(LOCAL_BASE): ../kernel/nextor_base.dat
 	cp ../kernel/nextor_base.dat $@

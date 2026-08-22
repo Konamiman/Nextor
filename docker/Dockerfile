@@ -9,7 +9,7 @@
 #
 # Contains the modern Nextor toolchain (N80/LK80/LB80, SDCC, mknexrom, make,
 # binutils, mtools, zip), the baked SDK (including the driver/tool project
-# templates under sdk/templates), and the six kernel base-file variants built
+# templates under sdk/templates), and the twelve kernel base-file variants built
 # from this repository's source.
 #
 # Nestor80 is the *framework-dependent* build (downloaded per target arch), so
@@ -161,7 +161,7 @@ RUN cat <<EOF > /opt/nextor/manifest.json
     "sdcc": "${SDCC_VERSION}",
     "mknexrom": "${MKNEXROM_VERSION}"
   },
-  "base_variants": ["default", "NO_UNDOC", "SHIFT_INV", "CTRL_INV", "NO_UNDOC.SHIFT_INV", "NO_UNDOC.CTRL_INV"]
+  "base_variants": ["default", "NO_UNDOC", "SHIFT_INV", "CTRL_INV", "NO_UNDOC.SHIFT_INV", "NO_UNDOC.CTRL_INV", "KANJI_INV", "NO_UNDOC.KANJI_INV", "SHIFT_INV.KANJI_INV", "CTRL_INV.KANJI_INV", "NO_UNDOC.SHIFT_INV.KANJI_INV", "NO_UNDOC.CTRL_INV.KANJI_INV"]
 }
 EOF
 
@@ -189,7 +189,7 @@ LABEL org.opencontainers.image.title="Nextor dev" \
       org.nextor.tool.lb80="${LB80_VERSION}" \
       org.nextor.tool.sdcc="${SDCC_VERSION}" \
       org.nextor.tool.mknexrom="${MKNEXROM_VERSION}" \
-      org.nextor.base-variants="default,NO_UNDOC,SHIFT_INV,CTRL_INV,NO_UNDOC.SHIFT_INV,NO_UNDOC.CTRL_INV"
+      org.nextor.base-variants="default,NO_UNDOC,SHIFT_INV,CTRL_INV,NO_UNDOC.SHIFT_INV,NO_UNDOC.CTRL_INV,KANJI_INV,NO_UNDOC.KANJI_INV,SHIFT_INV.KANJI_INV,CTRL_INV.KANJI_INV,NO_UNDOC.SHIFT_INV.KANJI_INV,NO_UNDOC.CTRL_INV.KANJI_INV"
 
 WORKDIR /work
 CMD ["bash"]

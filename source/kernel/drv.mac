@@ -1127,6 +1127,117 @@ PETB_SCAN:
 PETB_PREFIX:	db	13,10,"Error initializing DOS environment: ",13,10,"$"
 TWO_CRLF: db 13,10,13,10,"$"
 
+;-----------------------------------------------------------------------------
+;
+; KANJI_BOOT - Install the Kanji driver at boot time if the "6" boot key is active
+;
+; This does the same as the boot sector code that KMODE.COM writes to disks:
+; the BASIC statements "CALL KANJI:CALL ANK" are executed through the BASIC
+; interpreter, so that the Kanji driver gets installed (and its work area
+; allocated) but the screen is left in ANK mode; then the normal boot
+; sequence continues. The statements are followed by an ERROR statement,
+; and H.ERRO is hooked to KANJI_BOOT_ERROR, so that control comes back here
+; after the CALLs (or right away if CALL KANJI itself fails because there's
+; no Kanji driver, in which case the boot just continues silently).
+;
+; If the Kanji driver reserves memory by lowering HIMEM, the "real HIMEM"
+; that the kernel saved at initialization time (HIMSAV in DOS 2 mode; the
+; same address holds the "disk system bottom" in DOS 1 mode) is lowered by
+; the same amount, so that neither the DOS environment nor disk BASIC will
+; ever use the memory reserved by the driver.
+;
+; This routine is linked in both bank 0 and bank 3, so it can be called from
+; both the DOS 2 and the DOS 1 boot sequences. Since BASIC is entered with a
+; fresh stack, it must be called when the stack holds nothing that needs to
+; be preserved: if the key is active, control doesn't come back via RET but
+; via a jump to KANJI_BOOT_RESUME (defined by the caller's bank, it should be
+; placed right after the CALL) with SP=BOOTAD+512; if the key is not active,
+; the routine just returns.
+;
+; Input:  none
+; Output: none, all registers are corrupted
+
+H.ERRO	equ	0FFB1h		;BASIC error hook
+NEWSTT	equ	4601h		;BASIC "execute next statement" entry
+STKTOP	equ	0F674h		;BASIC stack top
+TOTEXT	equ	00D2h		;BIOS: force text mode
+ERAFNK	equ	00CCh		;BIOS: erase the function keys display
+BOOTAD	equ	0C000h		;Where the boot sector is loaded and executed
+
+KB_TOK_CALL	equ	0CAh	;BASIC token of CALL
+KB_TOK_ERROR	equ	0A6h	;BASIC token of ERROR
+
+;Scratch RAM: the boot sector area is free at this point (the boot sector,
+;if any, is read after this routine has finished, and the stack at
+;BOOTAD+512 is reset when BASIC is entered anyway).
+KB_TEXT_RAM	equ	BOOTAD		;Copy of the statements (KB_TEXT_END-KB_TEXT bytes)
+KB_SAVED_HOOK	equ	BOOTAD+32	;Previous contents of H.ERRO (5 bytes)
+KB_SAVED_HIMEM	equ	BOOTAD+37	;HIMEM before executing the statements (2 bytes)
+
+	public	KANJI_BOOT
+KANJI_BOOT:
+	ld	a,(BOOTKEYS##)
+	and	01000000b		;"6" key
+	ret	z
+
+	ld	hl,(HIMEM##)		;Remember HIMEM so that KANJI_BOOT_ERROR
+	ld	(KB_SAVED_HIMEM),hl	; can detect if the Kanji driver lowers it
+
+	ld	hl,H.ERRO		;Save the current contents of H.ERRO
+	ld	de,KB_SAVED_HOOK
+	ld	bc,5
+	ldir
+
+	ld	hl,H.ERRO		;Hook H.ERRO to KANJI_BOOT_ERROR
+	ld	(hl),0F7h		; via "RST 30h" (far call to our slot).
+	inc	hl			; The bank doesn't change while BASIC runs,
+	ld	a,(MASTER_SLOT##)	; so KANJI_BOOT_ERROR will run in the same
+	ld	(hl),a			; bank as the caller of KANJI_BOOT.
+	inc	hl
+	ld	(hl),low KANJI_BOOT_ERROR
+	inc	hl
+	ld	(hl),high KANJI_BOOT_ERROR
+	inc	hl
+	ld	(hl),0C9h
+
+	ld	hl,KB_TEXT		;The statements must be in RAM, since the
+	ld	de,KB_TEXT_RAM		; BASIC interpreter needs page 1 for itself
+	ld	bc,KB_TEXT_END-KB_TEXT
+	ldir
+
+	ld	sp,(STKTOP)		;Execute the statements. BASIC never returns
+	ld	hl,KB_TEXT_RAM		; from here: the ERROR statement (or an error
+	ld	ix,NEWSTT		; in CALL KANJI) triggers H.ERRO, which brings
+	jp	CALBAS			; us to KANJI_BOOT_ERROR.
+
+KB_TEXT:	db	":",KB_TOK_CALL,"KANJI:",KB_TOK_CALL,"ANK:",KB_TOK_ERROR,0
+KB_TEXT_END:
+
+KANJI_BOOT_ERROR:
+	ld	hl,KB_SAVED_HOOK	;Restore the previous contents of H.ERRO
+	ld	de,H.ERRO
+	ld	bc,5
+	ldir
+
+	call	TOTEXT			;Same as CALL SYSTEM does before rebooting
+	call	ERAFNK			; (page 0 is the BIOS ROM here, we come from BASIC)
+
+	ld	hl,(KB_SAVED_HIMEM)	;HL = HIMEM before - HIMEM now
+	ld	de,(HIMEM##)		;   = memory reserved by the Kanji driver
+	or	a
+	sbc	hl,de
+	jr	z,KB_RESUME		;Nothing reserved
+	jr	c,KB_RESUME		;HIMEM increased?! Shouldn't happen, ignore
+	ex	de,hl
+	ld	hl,(HIMSAV##)		;Lower the "real HIMEM" by the same amount,
+	or	a			; so that the reserved memory is never
+	sbc	hl,de			; reused by the DOS environment
+	ld	(HIMSAV##),hl		; or by disk BASIC
+
+KB_RESUME:
+	ld	sp,BOOTAD+512		;Same stack as the caller had
+	jp	KANJI_BOOT_RESUME##
+
 	finish	<DRV>
 ;
 	end

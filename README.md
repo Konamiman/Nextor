@@ -61,9 +61,9 @@ There are a number of makefiles that will take care of building the different co
 | What do you want to build? | Makefile directory | Target | Result |
 | --- | --- | --- | --- |
 | Kernel base file (the input for `mknexrom` to produce complete kernel ROMs) | `source/kernel` | none | `bin/kernel-base/Nextor-<version>.base.dat` |
-| Kernel base file, all six build variants¹ | `source/kernel` | `everything` | `bin/kernel-base/Nextor-<version>.base[.<variant>].dat`, six files |
+| Kernel base file, all twelve build variants¹ | `source/kernel` | `everything` | `bin/kernel-base/Nextor-<version>.base[.<variant>].dat`, twelve files |
 | Standalone ROMs² (ASCII8 and ASCII16) | `source/drivers` | none | `bin/drivers/Nextor-<version>.StandaloneASCII8.ROM` and `...ASCII16.ROM` |
-| Standalone ROMs², all six build variants¹ | `source/drivers` | `everything` | `bin/drivers/Nextor-<version>.StandaloneASCII{8,16}[.<variant>].ROM`, twelve files |
+| Standalone ROMs², all twelve build variants¹ | `source/drivers` | `everything` | `bin/drivers/Nextor-<version>.StandaloneASCII{8,16}[.<variant>].ROM`, twenty-four files |
 | Example RAM-loadable driver | `source/drivers` | `ram-example` | `bin/drivers/ram-driver-example.drv` |
 | `NEXTOR.SYS`, plus its Japanese-messages variant | `source/nextor_sys` | none | `bin/tools/NEXTOR.SYS` and `bin/tools/NEXTOR.SYS.japanese` |
 | `COMMAND3.COM`, the command interpreter | `source/commandcom` | none | `bin/tools/COMMAND3.COM` |
@@ -72,7 +72,7 @@ There are a number of makefiles that will take care of building the different co
 | Tools disk image³ | `source/tools` | `tools-disk` | `bin/tools/nextor.dsk` |
 | Tools zip archive⁴ | `source/tools` | `tools-zip` | `bin/tools/tools.zip` |
 
-¹ The six variants are: default, `INVERT_SHIFT` and `INVERT_CTRL`, each with and without `NO_UNDOC_CPU_INSTRUCTIONS`. See the comments at the beginning of the kernel makefile for the details.
+¹ The twelve variants are: default, `INVERT_SHIFT` and `INVERT_CTRL`, each with and without `NO_UNDOC_CPU_INSTRUCTIONS`, and each of these six with and without `INVERT_KANJI` (the "6" boot key inverted, so the Kanji driver is installed at boot time unless the key is pressed). See the comments at the beginning of the kernel makefile for the details.
 
 ² A standalone ROM is a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware. The `source/drivers` makefile builds the kernel base file too (by recursing into `source/kernel`), unless the `NEXTOR_BASE` variable points it to a pre-built one.
 
@@ -85,7 +85,7 @@ Additionally, an "umbrella" makefile in `source` invokes the other makefiles in 
 | What do you want to build? | Target | Result |
 | --- | --- | --- |
 | Everything with a default target above: kernel base file, standalone ROMs, `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools | none | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
-| The same, but with the kernel base file and the standalone ROMs in all six variants¹ | `everything` | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
+| The same, but with the kernel base file and the standalone ROMs in all twelve variants¹ | `everything` | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
 | `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools, then the disk image³ | `tools-disk` | `bin/tools`, including `nextor.dsk` |
 | All the command line tools, then the zip archive⁴ | `tools-zip` | `bin/tools`, including `tools.zip` |
 | `NEXTOR.SYS`, `COMMAND3.COM` and all the command line tools, then both the disk image³ and the zip archive⁴ | `tools-all` | `bin/tools`, including `nextor.dsk` and `tools.zip` |

@@ -14,19 +14,21 @@
 
 [2.4. The boot menu](#24-the-boot-menu)
 
-[2.5. One drive letter per active partition/offline device at boot](#25-one-drive-letter-per-active-partitionoffline-device-at-boot)
+[2.5. The Kanji driver can be installed at boot time](#25-the-kanji-driver-can-be-installed-at-boot-time)
 
-[2.6. Drivers are now distributed separately](#26-drivers-are-now-distributed-separately)
+[2.6. One drive letter per active partition/offline device at boot](#26-one-drive-letter-per-active-partitionoffline-device-at-boot)
 
-[2.7. Z180-compatible builds](#27-z180-compatible-builds)
+[2.7. Drivers are now distributed separately](#27-drivers-are-now-distributed-separately)
 
-[2.8. Better boot error messages](#28-better-boot-error-messages)
+[2.8. Z180-compatible builds](#28-z180-compatible-builds)
 
-[2.9. MSX-DOS 1 mode can boot from any drive](#29-msx-dos-1-mode-can-boot-from-any-drive)
+[2.9. Better boot error messages](#29-better-boot-error-messages)
 
-[2.10. New and changed tools and commands](#210-new-and-changed-tools-and-commands)
+[2.10. MSX-DOS 1 mode can boot from any drive](#210-msx-dos-1-mode-can-boot-from-any-drive)
 
-[2.11. The new COMMAND3.COM command interpreter](#211-the-new-command3com-command-interpreter)
+[2.11. New and changed tools and commands](#211-new-and-changed-tools-and-commands)
+
+[2.12. The new COMMAND3.COM command interpreter](#212-the-new-command3com-command-interpreter)
 
 [3. Information for application developers](#3-information-for-application-developers)
 
@@ -88,31 +90,35 @@ A brand new driver for the floppy disk controller built into the MSX Turbo-R com
 
 Pressing the N key while the machine boots opens the new boot menu, which lets you enable or disable each of the Nextor 3 kernels present in the machine, and turn the numeric boot keys on or off, without having to keep the corresponding keys pressed while booting. See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_.
 
-### 2.5. One drive letter per active partition/offline device at boot
+### 2.5. The Kanji driver can be installed at boot time
+
+A new boot key, 6, makes Nextor install the Kanji driver (the equivalent of `CALL KANJI` followed by `CALL ANK` in BASIC, so the driver is installed but the screen is left in ANK mode) before the DOS environment is loaded, in both MSX-DOS 2 and MSX-DOS 1 modes; this is what disks patched with `KMODE.COM` did. Like the other boot keys, it can be selected in the boot menu, set via the one-time boot keys mechanism, and inverted in the ROM (so that the driver is installed unless the key is pressed), either with `mknexrom /k:0040` or by using one of the new "KANJI_INV" kernel variants. See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_.
+
+### 2.6. One drive letter per active partition/offline device at boot
 
 At boot time Nextor 2 assigned one drive letter per storage device found, mapped to its first suitable partition. Nextor 3 instead assigns one drive letter to every FAT12 or FAT16 partition flagged as active on every device (in MSX-DOS 1 mode, only to MSX-DOS 1 compatible partitions: FAT12 with three or less sectors per FAT). A device that has suitable partitions but none of them flagged as active still gets one drive letter, mapped to its first suitable partition, as in Nextor 2.
 
 The handling of offline devices at boot has been revised too: removable devices get a drive letter even if no medium is inserted, while fixed devices that are offline don't get any. Devices that are online but don't hold any mappable partition also get one drive letter. Drives assigned in these last two ways have no partition attached initially: accessing them returns an error, and a partition is searched automatically on each access until one is found (e.g. after the device is partitioned, or after a medium is inserted). See _[3.2. Booting Nextor](Nextor%203.0%20User%20Manual.md#32-booting-nextor)_.
 
-### 2.6. Drivers are now distributed separately
+### 2.7. Drivers are now distributed separately
 
 The Nextor repository no longer contains the drivers for specific hardware, and no longer builds ready-to-use kernel ROMs for them: it builds only the Nextor kernel base file. Drivers are now developed and distributed independently, combining the driver code with the kernel base file to produce the final ROM; a RAM-loadable driver file, when applicable, is instead obtained by assembling the driver code on its own.
 
 The drivers that were part of Nextor 2 now live in their own git repositories, but driver developers are free to distribute their work in any other way (a dedicated web site, plain downloadable binaries, etc.). The list of known drivers and where to get each of them is maintained in _[Nextor 3.0 Known Drivers](Nextor%203.0%20Known%20Drivers.md)_.
 
-### 2.7. Z180-compatible builds
+### 2.8. Z180-compatible builds
 
 The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which avoids all the undocumented Z80 instructions so that the resulting kernel also works on machines with a Z180 processor. See [the main README file](../README.md) for how to build the kernel.
 
-### 2.8. Better boot error messages
+### 2.9. Better boot error messages
 
 When the DOS environment fails to load at boot time, NEXTOR.SYS no longer keeps asking the user to insert the proper disk or drops silently into BASIC: a proper error message, such as "Command interpreter not found" or "Incompatible DOS version", is printed as part of the initial BASIC prompt. Application programs can take advantage of the underlying mechanism too; see _[7.3. DOS environment load errors](Nextor%203.0%20Programmers%20Reference.md#73-dos-environment-load-errors)_ in the programmers reference.
 
-### 2.9. MSX-DOS 1 mode can boot from any drive
+### 2.10. MSX-DOS 1 mode can boot from any drive
 
 The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the disk in A: wasn't bootable the system dropped to Disk BASIC, and `CALL SYSTEM` behaved the same way. When booting in MSX-DOS 1 mode, Nextor 3 instead scans all the drives in order and boots from the first one holding a disk with a valid boot sector; that drive becomes the default drive, so `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. This matters in Nextor because the internal floppy disk drive isn't necessarily drive A:, e.g. when other storage devices take the first drive letters. See _[3.2.1. Booting in DOS 1 mode](Nextor%203.0%20User%20Manual.md#321-booting-in-dos-1-mode)_ in the user manual.
 
-### 2.10. New and changed tools and commands
+### 2.11. New and changed tools and commands
 
 * New [`DRVROP.COM`](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool) ("driver operations") command line tool, and new [`CALL IDRIVER`](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) and [`CALL UDRIVER`](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) BASIC commands: they install and uninstall drivers loaded in RAM (see _[2.2. Drivers loadable in RAM](#22-drivers-loadable-in-ram)_).
 
@@ -122,7 +128,7 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * Since logical units don't exist anymore, the tools and commands that used to take or display a logical unit number no longer do.
 
-### 2.11. The new COMMAND3.COM command interpreter
+### 2.12. The new COMMAND3.COM command interpreter
 
 Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on COMMAND 2.44 (so everything you know from it applies: internal commands, aliases, command line editing and history, batch file enhancements, the HELP command, etc.) but adds new features specific to Nextor 3:
 

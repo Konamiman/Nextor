@@ -9,24 +9,29 @@
 # Set NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180-compatible kernel
 # variant that avoids all undocumented Z80 opcodes (those that operate
 # on the high or low halves of IX/IY). See sdk/asm/macros/undoc.inc
-# for details. The flag is propagated only to the kernel and drivers
-# sub-builds; NEXTOR.SYS and the .COM tools contain no undoc opcodes
-# so the flag has no effect on them.
+# for details. Set INVERT_KANJI=1 to build a kernel variant with the "6" boot
+# key inverted (the Kanji driver is installed at boot time unless the
+# key is pressed); the generated files get a ".KANJI_INV" suffix. Both flags
+# are propagated only to the kernel and drivers sub-builds; NEXTOR.SYS
+# and the .COM tools contain no undoc opcodes and no boot key handling,
+# so the flags have no effect on them.
 
 # Absolute path so drivers/Makefile uses the kernel-built base verbatim
 # (via its NEXTOR_BASE branch) instead of recursing back into ../kernel.
 NEXTOR_BASE_ABS := $(abspath kernel/nextor_base.dat)
 
 all:
-	$(MAKE) -C kernel NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS)
+	$(MAKE) -C kernel NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
+	    INVERT_KANJI=$(INVERT_KANJI)
 	$(MAKE) -C drivers NEXTOR_BASE=$(NEXTOR_BASE_ABS) \
-	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS)
+	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
+	    INVERT_KANJI=$(INVERT_KANJI)
 	$(MAKE) -C nextor_sys
 	$(MAKE) -C commandcom
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 
-# Build the full matrix in one go: all six kernel base variants and both
+# Build the full matrix in one go: all twelve kernel base variants and both
 # standalone ROMs for each of them, plus NEXTOR.SYS, COMMAND3.COM and the
 # assembler and C command-line tools. The drivers' own `everything` target
 # builds every kernel base variant as it goes (it recurses into ../kernel per

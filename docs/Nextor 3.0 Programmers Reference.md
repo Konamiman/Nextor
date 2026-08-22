@@ -1077,7 +1077,7 @@ The one-time boot keys mechanism (see _[2.10.2. One-time boot keys](Nextor%203.0
 | A114h   | V | U | T | S | R | Q | P | O |
 | A115h   |   |   |CTRL|SHFT| Z | Y | X | W |
 
-Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 6 to 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
+Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 7 to 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
 
 ### 7.2. Disk emulation mode
 

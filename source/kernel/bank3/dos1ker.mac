@@ -4842,7 +4842,9 @@ A59E9:	ld	ix,M7E14		; start BASIC program in ROM
 A59ED:	call	A5C16			; initialize diskbasic
 	jp	CALBAS
 
-A59F3:	ld	hl,A5B3A
+A59F3:	call	KANJI_BOOT##		; install the Kanji driver if the "6" key is active
+KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
+	ld	hl,A5B3A
 	push	hl			; if quit anywhere start diskbasic
 	call	A5AE7			; read bootsector
 	ret	c			; failed, start diskbasic
