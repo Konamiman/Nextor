@@ -224,7 +224,7 @@ The Nextor kernel has an architecture that is based on the one of the MSX-DOS 2 
 
 * The MSX-DOS 1 kernel at bank 3 has been modified (by adding the page 0 code and the bank Id, amongst other things) so that it can perform calls to the device driver.
 
-* There is a 1K unused space at banks 0 and 3 (visible at addresses 7BD0h to 7FCFh). This space does not contain any kernel code and can be used to put any code or data that is required by the driver to be here. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
+* There is a 256 byte unused space at the end of banks 0 and 3 (visible at addresses 7ED0h to 7FCFh, right before the bank switching code). This space does not contain any kernel code and can be used to put any code or data that is required by the driver to be here. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
 * There are five entry points at kernel banks 0 and 3 (starting at address 7850h) that will be redirected to another five entry points in the driver bank. This way, the driver can provide code that will be accessible via direct inter-slot call to the kernel slot. See _[4.4.11. DIRECT_0...4 (4134h...4140h)](#4411-direct_04-4134h4140h)_ for more details.
 
@@ -245,8 +245,8 @@ Figure 3 shows a diagram with the structure of a Nextor kernel.
       |                     |                     |                     |
       |                     |                     |                     |
       |                     |                     |                     |
-7BD0h +---------------------+                     |                     |
-      |  Available 1K space |                     |                     |
+7ED0h +---------------------+                     |                     |
+      | Available 256 bytes |                     |                     |
       |  (on banks 0 and 3) |                     |                     |
 7FD0h +---------------------+---------------------+---------------------+
       | Bank switching code | Bank switching code | Bank switching code |
@@ -271,7 +271,7 @@ In order to create a complete Nextor kernel ROM that can be used in an MSX compu
 
 **Note:** ROM mappers that work with 8K banks instead of 16K banks are supported only if it is possible to select the bank visible at the first half of page 1 (4000h-5FFFh) by writing a single byte in a memory mapped port with a `LD(xxxx),A` instruction. This is the case of ASCII8, for example.
 
-* Optionally, the code that will be placed in the 1K unused space at banks 0 and 3 (see _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details).
+* Optionally, the code that will be placed in the 256 byte unused space at the end of banks 0 and 3 (see _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details).
 
 The procedure for creating the complete Nextor kernel ROM file consists basically of appending the driver code to the kernel base file, and then patching the resulting file with the appropriate bank switching code. This can be done manually, or by using the `mknexrom` utility. Both options are explained below.
 
@@ -291,7 +291,7 @@ In order to manually create a complete Nextor ROM file, the following recipe mus
 
 6.  If the driver code does not fit in one single bank, repeat steps 2-5 to append extra banks, increasing the bank ID for each bank as appropriate.
 
-7.  If necessary, patch the resulting file to add custom code or data at the 1K free space on banks 0 and 3. Put the contents of the file (up to 1K long) twice, at positions 3BD0h and FBD0h in the file.
+7.  If necessary, patch the resulting file to add custom code or data at the 256 byte free space on banks 0 and 3. Put the contents of the file (up to 256 bytes long) twice, at positions 3ED0h and FED0h in the file. Make sure that the area is empty (all zeros) in the kernel base file first: if it isn't, the kernel code has grown into it and the base file isn't compatible with this version of the guide.
 
 8.  If the mapper type of the target hardware is not ASCII16, patch the bank switching code of the kernel common code banks (the last 48 bytes of the first "K" 16K blocks of the resulting file, where "K" is the value obtained in step 3) with custom bank switching code.
 
@@ -307,7 +307,7 @@ The result of this procedure is a ready to use complete Nextor ROM file with you
 
 ### 3.2. Using the mknexrom utility
 
-Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 1K areas present in banks 0 and 3.
+Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 256 byte areas present at the end of banks 0 and 3.
 
 `mknexrom` is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](../docker/README.md).
 
@@ -341,7 +341,7 @@ Specifying a driver file is mandatory if a kernel base file without driver is sp
 
 _`<mapperfile>`_ is the file containing the bank switching code. If no mapper file is specified, the mapper code from the base file itself is appended to the driver code.
 
-_`<extrafile>`_ is the file containing the extra code or data for the resulting ROM file. This extra data can be up to 1K long and will be placed at position 0x3BD0 of banks 0 and 3; this means that this code or data will be visible to applications via standard inter-slot calls (such as RDSLT or CALSLT) to the kernel slot, at address 0x7BD0. See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
+_`<extrafile>`_ is the file containing the extra code or data for the resulting ROM file. This extra data can be up to 256 bytes long and will be placed at position 0x3ED0 of banks 0 and 3; this means that this code or data will be visible to applications via standard inter-slot calls (such as RDSLT or CALSLT) to the kernel slot, at address 0x7ED0. `mknexrom` refuses the file if the area is not empty in the kernel base file (this check is skipped when an existing full ROM file is being updated). See _[4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)_ for more details.
 
 `/8` must be used only if the ROM mapper uses 8K banks. _`<8K bank selection port address>`_ is the memory mapped port address that selects the 8K bank visible in the first half of page 1 (4000h-5FFFh); for example 6000h for the ASCII8 mapper. This will appropriately patch the generated ROM boot code to support this kind of mapper.
 
@@ -1105,7 +1105,9 @@ This section contains other useful information about the Nextor device driver st
 
 #### 4.7.1. The free space at kernel main bank
 
-The Nextor kernel has a 1K unused space at the two main banks (bank 0 when running in normal mode, bank 3 when running in MSX-DOS 1 mode) that can be filled with any kind of data or code useful for the driver. The main bank is permanently switched on the Kernel slot in normal circumstances (other banks are switched only for temporary code calls), therefore this area can be accessed via the standard slot accessing mechanisms (such as inter-slot call via `CALSLT`, inter-slot read via `RDSLT`, etc) even by software that is not aware of the Nextor bank paging mechanism. This space is visible starting at address 7BD0h.
+The Nextor kernel has a 256 byte unused space at the end of the two main banks (bank 0 when running in normal mode, bank 3 when running in MSX-DOS 1 mode) that can be filled with any kind of data or code useful for the driver. The main bank is permanently switched on the Kernel slot in normal circumstances (other banks are switched only for temporary code calls), therefore this area can be accessed via the standard slot accessing mechanisms (such as inter-slot call via `CALSLT`, inter-slot read via `RDSLT`, etc) even by software that is not aware of the Nextor bank paging mechanism. This space is visible at addresses 7ED0h to 7FCFh, right before the bank switching code; the `DRIVER_EXTRA_AREA` and `DRIVER_EXTRA_AREA_SIZE` constants in `sdk/asm/constants/rom_bank_header.inc` define its location and size, so that driver code (for example, a hook that must point to a stub in this area) doesn't need to hardcode the address.
+
+Note that in Nextor 2 this area was 1K long and started at 7BD0h; the first 768 bytes are now used by the kernel. A driver that placed code in the old area must be adjusted to the new location (anything that points into the area, such as hooks, must be updated), and its contents must fit in 256 bytes.
 
 There are two main cases in which it may be necessary to add custom contents to this area:
 

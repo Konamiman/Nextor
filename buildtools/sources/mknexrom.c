@@ -46,11 +46,13 @@
 
 
    <extrafile> is the file containing the extra code or data for the resulting ROM file. This extra data
-   will be placed at DOS 1 and DOS 2 kernel main banks at address 0x3BD0, this means that this code or data
+   will be placed at DOS 1 and DOS 2 kernel main banks at address 0x3ED0, this means that this code or data
    will be visible to applications via standard inter-slot calls (such as RDSLT or CALSLT) to the kernel
-   slot, at address 0x7BD0.
+   slot, at address 0x7ED0.
 
-   The maximum size for the extra file is 1K.
+   The maximum size for the extra file is 256 bytes. The area must be empty (all zeros) in the base file,
+   otherwise the kernel has code there and the extra file is refused (this check is skipped when
+   updating an existing full ROM file, since the area may already hold previous extra contents).
 
 
    <8K bank select address> must be specified if the ROM maps two 8K banks instead of one single 16K bank
@@ -101,6 +103,11 @@
 
    v1.1 (4/2023):
    Adjust signature for Nextor v3.
+
+   v1.2 (8/2026):
+   The free area for the extra code is now the last 256 bytes of the kernel main banks
+   (0x7ED0-0x7FCF) instead of 1K starting at 0x7BD0, the rest is used by the kernel.
+   The area must be empty in the base file for the extra code to be accepted.
 */
 
 
@@ -113,8 +120,8 @@
 #define BASE_BANK_COUNT_OFFSET 0xFE		//Offset in the base file of number of kernel banks
 #define DRIVER_BANK baseBankCount		//Index of the first driver bank
 #define MAPPER_CODE_SIZE 48				//Size of the bank change code
-#define EXTRA_CODE_SIZE 1024			//Size of the extra code for banks 0 and 3
-#define EXTRA_ADDRESS 0x3BD0			//Address of the extra code
+#define EXTRA_CODE_SIZE 256				//Size of the extra code for banks 0 and 3
+#define EXTRA_ADDRESS 0x3ED0			//Address of the extra code (visible at 0x7ED0)
 #define DRIVER_MIN_SIZE (256+16+13*3)	//Minimum size of the disk driver
 #define PAGE0_SIZE 256					//Size of the common page 0 code
 #define DOS2_EXTRA_BANK 0				//Bank for the extra code in DOS 2 mode
@@ -166,7 +173,8 @@ int main(int argc, char* argv[])
 
 	char* mapperCode;
 	char mapperCodeBuffer[MAPPER_CODE_SIZE + MAPPER_CODE_HEADER_SIZE];
-	char* extraCode[EXTRA_CODE_SIZE];
+	char extraCode[EXTRA_CODE_SIZE] = { 0 };	//Zero-filled so that a short extra file is padded with zeros
+	char extraAreaCheck[EXTRA_CODE_SIZE];
 	char* dataBuffer[1024];
 
 	char* driverSignature="NEXTORv3_DRIVER";
@@ -317,6 +325,31 @@ int main(int argc, char* argv[])
 			DoExit(1);
 		}
 		safeClose(extraFile);
+
+		//The area must be empty in a fresh base file: if it isn't, the kernel has grown into it
+		//(or this is a base file with a different layout) and writing the extra code would corrupt it.
+		//An existing full ROM file may legitimately hold previous extra contents there, so skip the check.
+
+		if(!hasDriver) {
+			int extraBanks[2] = { DOS2_EXTRA_BANK, DOS1_EXTRA_BANK };
+			int bankIndex;
+			for(bankIndex=0; bankIndex<2; bankIndex++) {
+				fseek(baseFile, (extraBanks[bankIndex]*BANK_SIZE)+EXTRA_ADDRESS, SEEK_SET);
+				readCount=fread(extraAreaCheck, 1, EXTRA_CODE_SIZE, baseFile);
+				if(readCount!=EXTRA_CODE_SIZE) {
+					printf("*** Can't read the extra code area of bank %i from the base file\r\n", extraBanks[bankIndex]);
+					DoExit(1);
+				}
+				for(i=0; i<EXTRA_CODE_SIZE; i++) {
+					if(extraAreaCheck[i]!=0) {
+						printf("*** The extra code area (0x%04X-0x%04X) of bank %i is not empty in the base file, so the extra code can't be placed there.\r\n",
+							EXTRA_ADDRESS+0x4000, EXTRA_ADDRESS+0x4000+EXTRA_CODE_SIZE-1, extraBanks[bankIndex]);
+						DoExit(1);
+					}
+				}
+			}
+			fseek(baseFile, 0, SEEK_SET);
+		}
 	}
 
 
@@ -529,8 +562,8 @@ int main(int argc, char* argv[])
 
 void DisplayInfo()
 {
-	printf("MKNEXROM v1.1 - Make a Nextor kernel ROM\r\n"
-		   "By Konamiman, 4/2023\r\n"
+	printf("MKNEXROM v1.2 - Make a Nextor kernel ROM\r\n"
+		   "By Konamiman, 8/2026\r\n"
 		   "\r\n"
 		   "Usage:\r\n"
 		   "mknexrom <basefile> [<newfile>] [/d:<driverfile>] [/m:<mapperfile>]\r\n"

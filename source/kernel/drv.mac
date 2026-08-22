@@ -36,6 +36,17 @@ endm
 
 ORIGIN	equ	7700h
 
+;The bank header constants (DRIVER_EXTRA_AREA is the one needed here, for the
+;ALIGN at the end of the file) come from the SDK. They are already exported
+;as public symbols by data.mac, so redefine `const` as a plain `equ` before
+;including the file to avoid duplicate public symbols at link time.
+
+const	macro	name,value
+name	equ	(value)
+	endm
+
+	INCLUDE ../../sdk/asm/constants/rom_bank_header.inc
+
     ALIGN 7700h
 ;
 ;       External Routines.
@@ -202,7 +213,7 @@ GETCURKEY:
     push ix
 	ld	ix,SCANKEYS
 	xor a
-	call	CALBNK##
+	call	CALBNK
     pop ix
     bit 6,h
     ld a,0FFh
@@ -552,7 +563,7 @@ DIO_DO_CALDRV:
 	ld	ix,DRIVER.READ_WRITE_ENTRY##
 	ex	af,af'
 	ld	a,DV_BANK##
-	call	CALBNK##
+	call	CALBNK
 	or a
 	ret z
 	scf
@@ -752,7 +763,7 @@ MOF_ENTRY_NOOP:
 DO_CALBNK:
 	ex	af,af'
 	ld	a,DV_BANK##
-	jp	CALBNK##
+	jp	CALBNK
 
 
 	;--- Jump here when an operation is requested
@@ -917,7 +928,7 @@ ASSIGN_PARTITION:
 	ld a,4
     ld d,0
 	ld	ix,AUTO_ASPART##
-	call	CALBNK##
+	call	CALBNK
 
     pop iy
 	pop hl
@@ -1032,8 +1043,8 @@ DEFDPB:
 	DW	7
 ;
 
-    ALIGN 7BD0h
-    ;Here goes the 1K free area at the end of banks 0 and 3
+    ;The kernel code shared by banks 0 and 3 that didn't fit elsewhere
+    ;goes from here up to DRIVER_EXTRA_AREA (see the end of this file).
 
 
 ;-----------------------------------------------------------------------------
@@ -1081,7 +1092,7 @@ _gp_found:
 	ld	ix,PROMPT##
 	ex	af,af'
 	xor	a		;Bank 0
-	call	CALBNK##
+	call	CALBNK
 	pop	iy
 
 	pop	hl
@@ -1237,6 +1248,20 @@ KANJI_BOOT_ERROR:
 KB_RESUME:
 	ld	sp,BOOTAD+512		;Same stack as the caller had
 	jp	KANJI_BOOT_RESUME##
+
+;-----------------------------------------------------------------------------
+;
+; Free area for the driver at the end of banks 0 and 3
+;
+; The 256 bytes from DRIVER_EXTRA_AREA up to CHGBNK (7FD0h)
+; are reserved for the code or data that the driver may supply via the
+; /e: option of mknexrom (see "The free space at kernel main bank" in the
+; Driver Development Guide), so no kernel code may be placed there. The ALIGN
+; pads with zeros up to the start of the area, and (more importantly) makes
+; the assembly fail with a "Code overwraps" error if the kernel code above
+; ever grows past it.
+
+    ALIGN DRIVER_EXTRA_AREA
 
 	finish	<DRV>
 ;

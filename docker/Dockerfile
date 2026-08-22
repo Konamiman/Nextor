@@ -30,7 +30,7 @@ ARG LK80_TAG=n80-v1.3.3-lk80-v1.1
 ARG LK80_VERSION=1.1.0
 ARG LB80_VERSION=1.0
 ARG SDCC_VERSION=4.2.0
-ARG MKNEXROM_VERSION=1.1
+ARG MKNEXROM_VERSION=1.2
 ARG NEXTOR_VERSION=unknown
 # Build revision: bumped when the toolchain changes but the kernel doesn't.
 # CI passes the real "rN"; local builds get "dev".
