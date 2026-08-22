@@ -31,7 +31,12 @@ endef
 
 uc = $(shell echo $(1) | tr a-z A-Z)
 
-COMS := CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM LOCK.COM MAPDRV.COM NSYSVER.COM RALLOC.COM
+COMS := CHKDSK.COM CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM FIXDISK.COM KMODE.COM LOCK.COM MAPDRV.COM NSYSVER.COM RALLOC.COM UNDEL.COM
+
+# Tools with their own link rule (see below), excluded from the generic
+# one-MAC-per-COM rule.
+SPECIAL_COMS := CHKDSK.COM UNDEL.COM
+GENERIC_COMS := $(filter-out $(SPECIAL_COMS),$(COMS))
 INCS := ../kernel/macros.inc ../kernel/const.inc
 SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
 SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot
@@ -52,7 +57,7 @@ prerequisites:
 -include prerequisites
 
 .SECONDEXPANSION:
-$(COMS): \
+$(GENERIC_COMS): \
 	$$(patsubst %.COM,%.MAC,$$@) \
 	$(INCS) \
 	$(SDK_RELS) \
@@ -61,6 +66,23 @@ $(COMS): \
 
 	$(call assemble,$(patsubst %.COM,%.MAC,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) DATA.REL $(patsubst %.COM,%.REL,$@) $(SHARED_RELS)
+	$(call copy_to_bin,$@)
+
+# CHKDSK is self-contained (it carries its own Nextor version check instead
+# of using CHK_NEXTOR, since it must run on Nextor 2.1) and its runtime data
+# (cluster flag bitmaps, expanded FAT or FAT sector cache, file list) starts
+# right at the end of the program, so it is linked without the SDK shared
+# routine modules: they would otherwise sit as dead code between the program
+# and its data area, wasting TPA space that big FAT16 volumes need.
+CHKDSK.COM: CHKDSK.MAC $(SDK_RELS)
+	$(call assemble,CHKDSK.MAC)
+	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) CHKDSK.REL
+	$(call copy_to_bin,$@)
+
+# UNDEL is self-contained for the same reasons as CHKDSK (see above).
+UNDEL.COM: UNDEL.MAC $(SDK_RELS)
+	$(call assemble,UNDEL.MAC)
+	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) UNDEL.REL
 	$(call copy_to_bin,$@)
 
 # Build rules for each individual SDK shared routine .asm file (one per public routine).
@@ -180,7 +202,11 @@ $(BOOTSECT_BIN): \
 # The dd invocations patch the boot sector created by mformat: they set the
 # OEM name (8 bytes at offset 3, "NEXTOR3" padded with a space), zero the
 # sector from offset 30 (1Eh, right after the disk parameter block) to the
-# end (30+482=512), and install the boot sector code at that offset.
+# end (30+482=512), install the boot sector code at that offset, and put a
+# random volume id (4 bytes in the 00h-7Fh range, like the kernel's FORMAT
+# generates) into the boot code's VOL_ID block at offset 39 (27h) - the
+# assembled code carries an FFh placeholder there, which the kernel reads
+# as "no volume id", disabling undeletion support for the disk.
 tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
@@ -192,6 +218,11 @@ tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
 	@dd if=/dev/zero of=$(TOOLS_DSK) bs=1 seek=30 count=482 conv=notrunc status=none
 	@dd if=$(BOOTSECT_BIN) of=$(TOOLS_DSK) bs=1 seek=30 conv=notrunc status=none
+
+	# Add a VOL_ID in the boot sector code, so that undeletion works on the disk.
+	# The kernel's FORMAT command generates a random 4-byte id in the 00h-7Fh range, so we do the same here.
+	@dd if=/dev/urandom bs=1 count=4 status=none | tr '\200-\377' '\000-\177' | dd of=$(TOOLS_DSK) bs=1 seek=39 conv=notrunc status=none
+
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
 	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::

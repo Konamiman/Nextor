@@ -5,6 +5,12 @@
 
 # The generated files are copied to the bin/tools directory.
 
+# Nestor80 is used to assemble the message table files of the bilingual
+# tools (*_msgs.mac -> SDCC relocatable format, linked with the C code).
+ifeq ($(strip $(N80)),)
+N80=N80
+endif
+
 define hex2bin
 	objcopy -I ihex -O binary $(1) $(2)
 endef
@@ -17,11 +23,15 @@ lc = $(shell echo $(1) | tr A-Z a-z)
 
 COMS := EMUFILE.COM FSIZE.COM NEXBOOT.COM VSFT.COM EPTCFT.COM DRVROP.COM DRVTEST.COM
 
-c-tools: $(COMS)
+# Tools with their own build rule below (banner-bearing crt0, message
+# tables assembled with Nestor80), excluded from the generic rule.
+SPECIAL_COMS := DISKCOPY.COM XDIR.COM XCOPY.COM
 
-.phony: prerequisites
+c-tools: $(COMS) $(SPECIAL_COMS)
 
-TOOLS := sdcc sdasz80 objcopy
+.PHONY: c-tools prerequisites
+
+TOOLS := sdcc sdasz80 objcopy N80
 
 prerequisites:
 	@mkdir -p ../../../bin/tools
@@ -31,6 +41,26 @@ prerequisites:
 -include prerequisites
 
 SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
+
+# The banner crt0s place the whole startup code, banner included, in an
+# absolute area starting at 0x100, and the C code is linked right after
+# it (--code-loc).  The linker does NOT detect an overlap between the
+# two (the areas silently overwrite each other in the .ihx), so every
+# banner-carrying tool checks explicitly, from the "A _HEADER0" line of
+# the assembled crt0 .rel, that the header still ends below the code
+# location.  When a banner grows too big, raise --code-loc in the
+# tool's rule (and in the comment of its crt0 file).
+define check_header
+	@set -e; \
+	size=$$(grep -a '^A _HEADER0 ' $(1) | cut -d' ' -f4); \
+	addr=$$(grep -a '^A _HEADER0 ' $(1) | cut -d' ' -f8); \
+	end=$$(( $$(printf %d 0x$$addr) + $$(printf %d 0x$$size) )); \
+	loc=$$(printf %d $(2)); \
+	if [ $$end -gt $$loc ]; then \
+		printf 'ERROR: the %s header (banner + startup) ends at 0x%04X but --code-loc is %s: the banner has grown too big, raise --code-loc\n' $(1) $$end $(2); \
+		exit 1; \
+	fi
+endef
 
 # The trailing rm removes the lowercase-named copy that builds prior to the
 # uppercase renaming of the tools left in bin/tools, so that stale duplicates
@@ -52,6 +82,67 @@ crt0_msxdos.rel: \
 
 	sdasz80 -o crt0_msxdos.rel ../../../sdk/C/code/crt0_msxdos.asm
 
+# DISKCOPY: uses its own crt0 (with the TYPE-able banner) and message
+# tables assembled from diskcopy_msgs.mac (Nestor80 converts the
+# Japanese table to Shift-JIS at assembly time via .strenc).  The
+# banner makes the header bigger, hence the higher --code-loc.
+DISKCOPY.COM: \
+	diskcopy.c \
+	diskcopy_msgs.rel \
+	crt0_diskcopy.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
+
+	$(call check_header,crt0_diskcopy.rel,0x480)
+	sdcc --code-loc 0x480 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_diskcopy.rel $(SDK_C_RELS) diskcopy_msgs.rel diskcopy.c
+	$(call hex2bin,diskcopy.ihx,$@)
+	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/diskcopy.com
+
+crt0_diskcopy.rel: crt0_diskcopy.mac
+	sdasz80 -o crt0_diskcopy.rel crt0_diskcopy.mac
+
+# XDIR: same scheme as DISKCOPY (own crt0 with the TYPE-able banner,
+# message tables assembled with Nestor80).
+XDIR.COM: \
+	xdir.c \
+	xdir_msgs.rel \
+	crt0_xdir.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
+
+	$(call check_header,crt0_xdir.rel,0x400)
+	sdcc --code-loc 0x400 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
+	$(call hex2bin,xdir.ihx,$@)
+	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/xdir.com
+
+crt0_xdir.rel: crt0_xdir.mac
+	sdasz80 -o crt0_xdir.rel crt0_xdir.mac
+
+# XCOPY: same scheme as DISKCOPY (own crt0 with the TYPE-able banner,
+# message tables assembled with Nestor80).
+XCOPY.COM: \
+	xcopy.c \
+	xcopy_msgs.rel \
+	crt0_xcopy.rel \
+	$(SDK_C_RELS) \
+	../../../sdk/C/includes/asmcall.h
+
+	$(call check_header,crt0_xcopy.rel,0x600)
+	sdcc --code-loc 0x600 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
+	$(call hex2bin,xcopy.ihx,$@)
+	$(call copy_to_bin,$@)
+	@rm -f ../../../bin/tools/xcopy.com
+
+crt0_xcopy.rel: crt0_xcopy.mac
+	sdasz80 -o crt0_xcopy.rel crt0_xcopy.mac
+
+# Message table files: assembled to SDCC relocatable format, so the C
+# code sees the tables as extern arrays.
+%_msgs.rel: %_msgs.mac
+	$(N80) $< $@ --build-type sdcc --no-show-banner --verbosity 0
+
 # SDK C library .rel files (compiled once, linked into every tool).
 asmcall.rel: ../../../sdk/C/code/asmcall.c ../../../sdk/C/includes/asmcall.h
 	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/asmcall.c
@@ -68,4 +159,4 @@ strcmpi.rel: ../../../sdk/C/code/strcmpi.c ../../../sdk/C/includes/strcmpi.h
 .PHONY: clean
 
 clean:
-	for ext in asm hex ihx lk lst map noi sym rel com COM; do find . -type f -name "*.$$ext" -delete; done
+	for ext in asm hex ihx lk lst map noi sym rel com COM; do find . -type f -name "*.$$ext" ! -name "crt0_*.asm" -delete; done

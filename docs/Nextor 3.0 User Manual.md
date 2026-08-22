@@ -92,6 +92,8 @@
 
 [3.4.14. One-time fix tools](#3414-one-time-fix-tools)
 
+[3.4.15. The classic MSX-DOS tools](#3415-the-classic-msx-dos-tools)
+
 [3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)
 
 [3.6. Extensions to BASIC](#36-extensions-to-basic)
@@ -569,7 +571,7 @@ When Nextor is running in MSX-DOS 1 mode, media changes are not managed for driv
 
 ### 3.4. The command line tools
 
-Nextor is supplied with a set of tools that allow managing the new capabilities available. All of these tools are `.COM` files intended to be executed from within the DOS prompt.
+Nextor is supplied with a set of tools that allow managing the new capabilities available. All of these tools are `.COM` files intended to be executed from within the DOS prompt. Besides these Nextor-specific tools, the classic transient tools of MSX-DOS 2 (CHKDSK, UNDEL, DISKCOPY, FIXDISK, KMODE, XCOPY and XDIR) are supplied too, see _[3.4.15. The classic MSX-DOS tools](#3415-the-classic-msx-dos-tools)_.
 
 This section explains how to use these tools. Note however that you can also get a summary of the parameters accepted by each tool by invoking it without parameters; more detailed help is available as well by displaying the desired file directly with the TYPE command (for example: `TYPE MAPDRV.COM`).
 
@@ -820,6 +822,29 @@ You can get the slot and segment a given driver is installed on by using the `DR
 #### 3.4.14. One-time fix tools
 
 There are a couple of extra tools that you will rarely use and are intended for one-time fix of partitions having wrong structural information: `EPTCFT.COM` (extended partition code fix tool) and `VSFT.COM` (volume size fix tool). Run them without arguments to get help on what they do and when to use them.
+
+
+#### 3.4.15. The classic MSX-DOS tools
+
+The transient tools that were part of the original MSX-DOS 2 distribution are also supplied with Nextor, rewritten and updated:
+
+* `CHKDSK.COM` checks the integrity of the filesystem of a disk and optionally (with `/F`) fixes the errors found. It now handles FAT16 volumes besides FAT12, and requires Nextor (any version).
+
+* `UNDEL.COM` recovers deleted files and directories, on both FAT12 and FAT16 volumes. It requires Nextor (any version).
+
+* `DISKCOPY.COM` copies a full disk to another, sector by sector. The source and the target may now be the same drive (the copy is made in several passes, prompting to swap the disks), and by default the boot sector of the target disk is preserved (a new `/S` switch copies it from the source too).
+
+* `FIXDISK.COM` rebuilds the MSX-DOS 2 disk parameters of a disk, preserving its files. The `/S` switch writes a complete MSX-DOS 2 boot sector instead, with a volume id (which is what enables undeletion on the disk), and the new `/B` switch (Nextor 3 or later only) writes a standard boot sector, also with a volume id.
+
+* `KMODE.COM` sets the Kanji screen mode of the computer and, with `/S`, saves it in the boot sector of a disk so that it is set automatically at boot time. Disks with a standard boot sector are refused by `/S` (run `FIXDISK /S` on them first).
+
+* `XCOPY.COM` copies files and directory trees, with switches for filtering, renaming, prompting and write verification. The new `/Dx` switch family controls what to do with files that already exist in the destination: overwrite, skip, keep the newer/older/smaller/bigger of the two files, overwrite only when the sizes differ, or ask for each file.
+
+* `XDIR.COM` lists a directory and all its subdirectories recursively, with the attributes and exact size of each file, the totals and the free space on the drive. Sizes and totals of any magnitude are displayed correctly on FAT16 volumes.
+
+All of these tools display their messages in Japanese when a Kanji screen mode is active, and in English otherwise. The tools that write disk sectors directly (`DISKCOPY`, `FIXDISK` and `KMODE /S`) work on drives handled by MSX-DOS drivers and, under Nextor 3 or later, also on drives mapped to floppy disk devices of Nextor drivers.
+
+Except for `XDIR` (which simply lists the current directory), running any of these tools without arguments displays a usage summary instead of acting on the current drive or directory, a deliberate change from the original versions. `TYPE` on the `.COM` file displays a longer description, and the help files supplied in the tools disk (`HELP <tool name>` from the command prompt) contain the full details.
 
 
 ### 3.5. The built-in partitioning tool

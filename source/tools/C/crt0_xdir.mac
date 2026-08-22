@@ -1,14 +1,18 @@
-	;--- crt0.asm for MSX-DOS
+	;--- crt0 for the XDIR MSX-DOS tool.
         ;
-	;    Allows "int main(char** argv, int argc)",
-	;    the returned value will be passed to _TERM on DOS 2,
-	;    argv is always 0x100 (the startup code memory is recycled).
-        ;    Overhead: 112 bytes.
+	;    This is the SDK crt0_msxdos.asm (see sdk/C/code) with one
+	;    addition: a plain text banner right after a jump at 0x100, so
+	;    that "TYPE XDIR.COM" displays the program description and
+	;    usage (the same convention as the assembler tools in
+	;    source/tools, and as the original XDIR.COM binary).  The
+	;    banner is skipped by the jump at run time, and the memory it
+	;    occupies is recycled for the parameter pointers table (which
+	;    starts at 0x100), exactly as the standard crt0 recycles its
+	;    startup code.
 	;
-        ;    Compile programs with --code-loc 0x180 --data-loc X
-        ;    X=0  -> global vars will be placed immediately after code
-        ;    X!=0 -> global vars will be placed at address X
-        ;            (make sure that X>0x100+code size)
+	;    Compile the program with --code-loc 0x400 (the banner makes
+	;    the header bigger than the 0x180 used with the standard crt0)
+	;    and --data-loc 0.
 
 	.globl	_main
 
@@ -20,9 +24,55 @@
 
         .org    0x0100  ;MSX-DOS .COM programs start address
 
+init:   jp      realinit
+
+        ;--- The banner, displayed by TYPE (the 0x1A stops it).  The
+        ;    leading CR makes TYPE overwrite the garbage characters it
+        ;    prints for the jump instruction bytes above.
+
+        .db     13
+        .ascii  "XDIR v1.1 - List a directory and all its subdirectories"
+        .db     13,10,13,10
+        .ascii  "Lists the files matching the filespec (all of them by default) in the"
+        .db     13,10
+        .ascii  "given directory and, recursively, in all its subdirectories, with"
+        .db     13,10
+        .ascii  "their attributes and sizes, followed by the totals and the free space"
+        .db     13,10
+        .ascii  "on the drive."
+        .db     13,10,13,10
+        .ascii  "Usage: XDIR [filespec] [/H]"
+        .db     13,10,13,10
+        .ascii  "  filespec: a drive, a directory, a file name or a pattern; by default"
+        .db     13,10
+        .ascii  "            the whole current directory is listed."
+        .db     13,10
+        .ascii  "  /H: also list hidden files and directories"
+        .db     13,10,13,10
+        .ascii  "Works on MSX-DOS 2 and Nextor."
+        .db     13,10
+        .db     0x1A
+
+realinit:
+
+        ;--- Step 0: Move the stack to the top of the TPA (page 3).
+        ;    COMMAND already starts the program with SP just below
+        ;    (0006h), but making it exactly (0006h) is deterministic
+        ;    and gives up nothing: the program never returns through
+        ;    COMMAND's stack (it terminates with _TERM below), and the
+        ;    Kanji driver answers the EXTBIO calls made by the program
+        ;    with inter-slot calls that switch pages 0-2 out, so the
+        ;    stack must never live in the program area (same rule as
+        ;    the assembler tools).  The C code (kanji_probe) relies on
+        ;    this and does not switch stacks itself: switching SP UP to
+        ;    (0006h) mid-program would clobber the live stack data
+        ;    below it.
+
+        ld      sp,(#0x0006)
+
         ;--- Step 1: Initialize globals
 
-init:   call    gsinit
+        call    gsinit
 
         ;--- Step 2: Build the parameter pointers table on 0x100,
         ;    and terminate each parameter with 0.
@@ -35,42 +85,42 @@ init:   call    gsinit
         or      a
         ld      c,#0
         jr      z,cont
-        
+
         ;* Terminate command line with 0
         ;  (DOS 2 does this automatically but DOS 1 does not)
-        
+
         ld      hl,#0x81
         ld      bc,(#0x80)
         ld      b,#0
         add     hl,bc
         ld      (hl),#0
-        
+
         ;* Copy the command line processing code to 0xC000 and
         ;  execute it from there, this way the memory of the original code
         ;  can be recycled for the parameter pointers table.
         ;  (The space from 0x100 up to "cont" can be used,
         ;   this is room for about 40 parameters.
         ;   No real world application will handle so many parameters.)
-        
+
         ld      hl,#parloop
         ld      de,#0xC000
         ld      bc,#parloopend-#parloop
         ldir
-        
+
         ;* Initialize registers and jump to the loop routine
-        
+
         ld      hl,#0x81        ;Command line pointer
         ld      c,#0            ;Number of params found
         ld      ix,#0x100       ;Params table pointer
-        
+
         ld      de,#cont        ;To continue execution at "cont"
         push    de              ;when the routine RETs
         jp      0xC000
-        
+
         ;>>> Command line processing routine begin
-        
+
         ;* Loop over the command line: skip spaces
-        
+
 parloop: ld      a,(hl)
         or      a       ;Command line end found?
         ret     z
@@ -87,17 +137,17 @@ parfnd: ld      (ix),l
         inc     ix
         inc     ix
         inc     c
-        
+
         ld      a,c     ;protection against too many parameters
         cp      #40
         ret     nc
-        
+
         ;* ...and skip chars until finding a space or command line end
-        
+
 parloop2:       ld      a,(hl)
         or      a       ;Command line end found?
         ret     z
-        
+
         cp      #32
         jr      nz,nospc        ;If space found, set it to 0
                                 ;(string terminator)...
@@ -109,9 +159,9 @@ nospc:  inc     hl
         jr      parloop2
 
 parloopend:
-        
+
         ;>>> Command line processing routine end
-        
+
         ;* Command line processing done. Here, C=number of parameters.
 
 cont:   ld      hl,#0x100
@@ -130,7 +180,7 @@ cont:   ld      hl,#0x100
         ;--- Step 4: Program termination.
         ;    Termination code for DOS 2 was returned on E by main
         ;    (int returns land in DE under the SDCC __sdcccall(1) ABI).
-                
+
         ld      c,#0x62   ;DOS 2 function for program termination (_TERM)
         ld      b,e
         call    5      ;On DOS 2 this terminates; on DOS 1 this returns...
