@@ -36,6 +36,8 @@ Note that additionally to the `master` branch there are `v2.0` and `v2.1` branch
 
 * [**docker**](/docker): The infrastructure to create the Nextor development [Docker](https://www.docker.com/) image.
 
+* [**categorized releases**](.github/categorized-releases): The infrastructure to create [the categorized releases page](https://konamiman.github.io/Nextor/releases/).
+
 ## How to build Nextor
 
 _For instructions on how to build Nextor using the Nextor development Docker image, see [README.md in the Docker directory](docker/README.md)_.
