@@ -355,7 +355,7 @@ Use the wrapper (runnable from anywhere - it locates the repo itself):
 ```sh
 docker/build.sh                       # tags 'nextor-dev'
 docker/build.sh -t my-nextor:test     # pass your own tag and/or build flags
-docker/build.sh --no-cache --build-arg N80_VERSION=1.3.6
+docker/build.sh --no-cache --build-arg N80_VERSION=1.3.7
 ```
 
 **Note:** `docker/build.sh` builds a **single-arch** image for your host (handy for local work). The multi-arch (amd64 + arm64) build lives in the publish workflow - see *Publishing*.
@@ -380,14 +380,16 @@ Override with `--build-arg NAME=value`:
 |---|---|---|
 | `NEXTOR_VERSION` | `unknown` | kernel version stamped into the image |
 | `NEXTOR_IMAGE_REVISION` | `dev` | image build revision (`rN`); CI sets the real value |
-| `N80_VERSION` | `1.3.5` | Nestor80 assembler release |
-| `LK80_VERSION` / `LK80_TAG` | `1.1.0` / `n80-v1.3.3-lk80-v1.1` | linker release + its GitHub tag |
-| `LB80_VERSION` | `1.0` | librarian release |
+| `N80_VERSION` | `1.3.6` | Nestor80 assembler release |
+| `LK80_VERSION` | `1.1.1` | Linkstor80 linker release |
+| `LB80_VERSION` | `1.0` | Libstor80 library manager release |
 | `SDCC_VERSION` | `4.2.0` | recorded in the manifest/labels; `sdcc` itself comes from Debian apt (also 4.2.0), so this only relabels |
 | `MKNEXROM_VERSION` | `1.2` | recorded in the manifest; `mknexrom` is compiled from source |
 | `DOTNET_TAG` | `8.0-bookworm-slim` | `dotnet/runtime` base image tag |
 
-Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.6`; the new version automatically flows into `manifest.json` and the labels. (`sdcc` is the apt package, so `SDCC_VERSION` only changes the recorded label, not the installed compiler.)
+The three Nestor80 tools are fetched from GitHub releases tagged `<tool>-v<version>` (`n80-v1.3.6`, `lk80-v1.1.1`, `lb80-v1.0`), so the version alone determines the download.
+
+Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.7`; the new version automatically flows into `manifest.json` and the labels. (`sdcc` is the apt package, so `SDCC_VERSION` only changes the recorded label, not the installed compiler.)
 
 ---
 
@@ -434,6 +436,8 @@ The official publish is the **`Publish image`** workflow (`.github/workflows/pub
 
 To avoid corrupting a build, the run **fails if the pinned `<version>-<rev>` tag already exists** unless you tick the **overwrite** checkbox, so re-running with the same revision is a deliberate choice, while bumping the revision (or moving the always-advancing `latest` / `major.minor` tags) is unaffected.
 
+For a throwaway build - say, trying a toolchain bump from a branch before committing to a real revision - tick the **test** checkbox. The run then pushes **only** `<version>-<rev>-test` (e.g. `3.0.0-beta1-r2-test`): no moving tags are touched, the immutability guard is skipped so a re-run simply overwrites the previous test image, and the baked-in image revision (`manifest.json`, labels) reads `r2-test` so the image identifies itself as a test build. Note that the workflow builds whatever branch or tag you select in the *Run workflow* dialog, so this is how to publish from a feature branch.
+
 **Note:** The first publish creates a **private** package; flip it to public once in the package's settings on GitHub if others should be able to pull it.
 
 ### The manual way
@@ -465,8 +469,8 @@ The advertised tag is the **kernel version**; image-only changes (a tool bump) r
 | `3.0.0` | an exact kernel version (moves to the newest revision of that kernel) |
 | `3.0` | newest `3.0.x` |
 | `latest` | newest stable |
-| `edge` | latest build from the development branch, no promises |
 | `3.0.0-r2` | a specific image revision (the kernel base files are byte-identical across `-rN` of the same kernel; only tools differ) |
+| `3.0.0-r2-test` | a throwaway test publish (workflow run with **test** ticked); freely overwritten, never referenced by a moving tag |
 
 Every component version is recorded in `manifest.json` and in OCI labels, so a moving tag is still fully traceable:
 

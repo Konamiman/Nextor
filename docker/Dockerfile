@@ -25,15 +25,16 @@
 # per-target-arch.
 
 ARG DOTNET_TAG=8.0-bookworm-slim
-ARG N80_VERSION=1.3.5
-ARG LK80_TAG=n80-v1.3.3-lk80-v1.1
-ARG LK80_VERSION=1.1.0
+# Nestor80 release tags follow <tool>-v<version> (n80-v1.3.6, lk80-v1.1.1,
+# lb80-v1.0), so the download URLs are derived from the versions alone.
+ARG N80_VERSION=1.3.6
+ARG LK80_VERSION=1.1.1
 ARG LB80_VERSION=1.0
 ARG SDCC_VERSION=4.2.0
 ARG MKNEXROM_VERSION=1.2
 ARG NEXTOR_VERSION=unknown
 # Build revision: bumped when the toolchain changes but the kernel doesn't.
-# CI passes the real "rN"; local builds get "dev".
+# CI passes the real "rN" ("rN-test" for a test publish); local builds get "dev".
 ARG NEXTOR_IMAGE_REVISION=dev
 
 # ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ ARG NEXTOR_IMAGE_REVISION=dev
 # architecture-independent kernel base files, shared by every target image.
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/runtime:${DOTNET_TAG} AS kernelbuild
-ARG N80_VERSION LK80_TAG LK80_VERSION LB80_VERSION BUILDARCH
+ARG N80_VERSION LK80_VERSION LB80_VERSION BUILDARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates unzip make binutils sdcc \
@@ -57,7 +58,7 @@ RUN set -eux; \
     base=https://github.com/Konamiman/Nestor80/releases/download; \
     mkdir -p /opt/nextor/bin; \
     curl -fsSL --retry 3 -o /tmp/n80.zip  "$base/n80-v${N80_VERSION}/N80_${N80_VERSION}_FrameworkDependant_${rid}.zip"; \
-    curl -fsSL --retry 3 -o /tmp/lk80.zip "$base/${LK80_TAG}/LK80_${LK80_VERSION}_FrameworkDependant_${rid}.zip"; \
+    curl -fsSL --retry 3 -o /tmp/lk80.zip "$base/lk80-v${LK80_VERSION}/LK80_${LK80_VERSION}_FrameworkDependant_${rid}.zip"; \
     curl -fsSL --retry 3 -o /tmp/lb80.zip "$base/lb80-v${LB80_VERSION}/LB80_${LB80_VERSION}_FrameworkDependant_${rid}.zip"; \
     unzip -o -j /tmp/n80.zip  N80  -d /opt/nextor/bin; \
     unzip -o -j /tmp/lk80.zip LK80 -d /opt/nextor/bin; \
@@ -91,7 +92,7 @@ RUN set -eux; \
 # the target-arch Nestor80 binaries and a target-arch mknexrom.
 # ---------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/runtime:${DOTNET_TAG} AS tools
-ARG N80_VERSION LK80_TAG LK80_VERSION LB80_VERSION TARGETARCH
+ARG N80_VERSION LK80_VERSION LB80_VERSION TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates unzip gcc libc6-dev \
@@ -106,7 +107,7 @@ RUN set -eux; \
     base=https://github.com/Konamiman/Nestor80/releases/download; \
     mkdir -p /opt/nextor/bin; \
     curl -fsSL --retry 3 -o /tmp/n80.zip  "$base/n80-v${N80_VERSION}/N80_${N80_VERSION}_FrameworkDependant_${rid}.zip"; \
-    curl -fsSL --retry 3 -o /tmp/lk80.zip "$base/${LK80_TAG}/LK80_${LK80_VERSION}_FrameworkDependant_${rid}.zip"; \
+    curl -fsSL --retry 3 -o /tmp/lk80.zip "$base/lk80-v${LK80_VERSION}/LK80_${LK80_VERSION}_FrameworkDependant_${rid}.zip"; \
     curl -fsSL --retry 3 -o /tmp/lb80.zip "$base/lb80-v${LB80_VERSION}/LB80_${LB80_VERSION}_FrameworkDependant_${rid}.zip"; \
     unzip -o -j /tmp/n80.zip  N80  -d /opt/nextor/bin; \
     unzip -o -j /tmp/lk80.zip LK80 -d /opt/nextor/bin; \
