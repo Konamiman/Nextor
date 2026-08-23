@@ -71,7 +71,7 @@ categories:
       file that [mknexrom](#build-tools/mknexrom) combines with a driver to produce a complete
       kernel ROM. This is what you need if you develop a driver or build a ROM for your
       device; if you just want a ready-made ROM, see [Drivers](#drivers) and the
-      [Known Drivers](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Known_Drivers.md)
+      [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md)
       list.
 
       Each release contains all the combinations of these variants, encoded in the file name:
@@ -92,7 +92,7 @@ categories:
       The release provides files with no key inverted, with SHIFT inverted (`SHIFT_INV`) and
       with CTRL inverted (`CTRL_INV`); each of the three comes with and without `NO_UNDOC` and
       with and without `KANJI_INV`, twelve files in total. See the
-      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_User_Manual.md#2101-boot-key-inverters)
+      [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md#2101-boot-key-inverters)
       for the details on the boot key inverters.
     assets: '(^|\n)Nextor-[^\n]*\.base(\.[^\n]*)?\.dat(\n|$)'
 
@@ -102,7 +102,7 @@ categories:
       Device drivers supplied with the Nextor repository itself. Drivers for specific storage
       devices (Sunrise IDE, MegaFlashROM SCC+ SD, ...) are maintained in their own repositories,
       see the
-      [Known Drivers](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Known_Drivers.md)
+      [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md)
       list.
     categories:
       - name: "Standalone ROMs"
@@ -123,7 +123,7 @@ categories:
         description: |
           A minimal device driver that can be loaded in RAM with the `DRVROP` tool, intended
           as a starting point and a test subject for developers of RAM-loadable drivers. See the
-          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Driver_Development_Guide.md).
+          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Driver_Development_Guide.md).
         assets: '(^|\n)ram-driver-example[^\n]*\.drv(\n|$)'
 
   - name: "NEXTOR.SYS"
@@ -142,7 +142,7 @@ categories:
       includes the most common Nextor tools as internal commands and displays its messages
       in Japanese when the Kanji mode is active. Used together with [NEXTOR.SYS](#nextorsys) to boot to the
       DOS prompt instead of BASIC. See the
-      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_User_Manual.md)
+      [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md)
       for the details.
     assets: '(^|\n)COMMAND3\.COM(\n|$)'
 
@@ -153,7 +153,7 @@ categories:
       disk image and the ZIP file contain all of them; the entries under
       [Individual tools](#tools/individual-tools) list the releases that contain each tool
       (either alone or as part of a full tools release). See the
-      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_User_Manual.md#34-the-command-line-tools)
+      [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md#34-the-command-line-tools)
       for the details on each tool.
     categories:
       - name: "Tools disk image"
@@ -290,7 +290,7 @@ categories:
           Combines a [kernel base](#kernel-base) file with a device driver (and optionally a
           bank switching routine and boot key inverters) to produce a complete Nextor kernel
           ROM. Required for building drivers, see the
-          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Driver_Development_Guide.md).
+          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Driver_Development_Guide.md).
         # Matched by name prefix: the assets carry the platform and may carry the version
         # (mknexrom.exe, mknexrom-1.2-linux-x64, ...).
         assets: '(^|\n)mknexrom'

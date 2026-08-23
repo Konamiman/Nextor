@@ -20,7 +20,7 @@
 
 ## About drivers
 
-This repository doesn't contain drivers for specific storage devices: only the standalone ROMs (whose driver is a dummy one that handles no devices) and the example RAM driver. Drivers for actual devices (Sunrise IDE, MegaFlashROM SCC+ SD, and others) are developed and released in their own repositories; see the [Known Drivers](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Known_Drivers.md) document for the list and where to get each one.
+This repository doesn't contain drivers for specific storage devices: only the standalone ROMs (whose driver is a dummy one that handles no devices) and the example RAM driver. Drivers for actual devices (Sunrise IDE, MegaFlashROM SCC+ SD, and others) are developed and released in their own repositories; see the [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md) document for the list and where to get each one.
 
 ## Looking for Nextor 2?
 
@@ -28,4 +28,4 @@ This page lists Nextor 3 releases only. The Nextor 2 releases (which include the
 
 ## Documentation
 
-The [Nextor 3.0 documentation](https://github.com/Konamiman/Nextor/tree/v3.0/docs) includes a [Getting Started Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Getting_Started_Guide.md), the [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_User_Manual.md), the [Programmers Reference](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Programmers_Reference.md) and the [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor_3.0_Driver_Development_Guide.md).
+The [Nextor 3.0 documentation](https://github.com/Konamiman/Nextor/tree/master/docs) includes a [Getting Started Guide](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Getting_Started_Guide.md), the [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md), the [Programmers Reference](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Programmers_Reference.md) and the [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Driver_Development_Guide.md).

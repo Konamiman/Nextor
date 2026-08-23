@@ -42,4 +42,4 @@ This builds what GitHub Pages publishes: the `docs` directory rendered by Jekyll
 
 ## Publishing
 
-For the site to be served, GitHub Pages must be enabled once by hand: **Settings > Pages > Source: Deploy from a branch**, branch `v3.0`, folder `/docs`. From then on every push to the branch republishes the site. Jekyll processes the whole `docs` directory, so the Markdown documentation gets published as HTML pages too (`docs/_config.yml` holds the few Jekyll settings); the releases page is plain HTML and is copied as it is.
+For the site to be served, GitHub Pages must be enabled once by hand: **Settings > Pages > Source: Deploy from a branch**, branch `master`, folder `/docs`. From then on every push to the branch republishes the site. Jekyll processes the whole `docs` directory, so the Markdown documentation gets published as HTML pages too (`docs/_config.yml` holds the few Jekyll settings); the releases page is plain HTML and is copied as it is.
