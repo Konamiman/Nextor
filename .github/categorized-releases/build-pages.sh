@@ -7,8 +7,9 @@
 # branch" sites (ghcr.io/actions/jekyll-build-pages, which runs the
 # github-pages gem with its standard plugins and theme), so what comes out is
 # what GitHub would publish, with one deliberate difference: the site is built
-# with an empty baseurl (GitHub uses /Nextor), so that it can be browsed from
-# the root of a local web server.
+# as if it were served at http://localhost:8000 (an empty baseurl and that url,
+# while GitHub uses https://konamiman.github.io/Nextor), so that it can be
+# browsed from the root of a local web server. The port is set below.
 #
 # Requirements:
 #   - Docker.
@@ -31,6 +32,7 @@ work="$repo_root/bin/pages-build"
 out="$repo_root/bin/pages-site"
 image="ghcr.io/actions/jekyll-build-pages:v1.0.13"
 repo="Konamiman/Nextor"
+port=8000   # Of the local web server the site is built for
 
 command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required" >&2; exit 1; }
 
@@ -48,12 +50,15 @@ if [ ! -f "$repo_root/docs/releases/index.html" ]; then
   echo "WARNING: docs/releases/index.html not found, the site will have no releases page (run generate.sh)" >&2
 fi
 
-# Assemble the Jekyll source: a copy of docs/ with the baseurl override
-# appended to the site configuration.
+# Assemble the Jekyll source: a copy of docs/ with the url and baseurl
+# overrides appended to the site configuration. Both matter: the theme
+# builds absolute URLs from them (e.g. the site title links to the site
+# root), and without them the metadata plugin would derive them for GitHub
+# (or, outside GitHub's build environment, for github.com).
 rm -rf "$work"
 mkdir -p "$work/src" "$work/out"
 cp -R "$repo_root/docs/." "$work/src/"
-printf '\n# Added by build-pages.sh for local browsing (GitHub uses /Nextor)\nbaseurl: ""\n' >> "$work/src/_config.yml"
+printf '\n# Added by build-pages.sh for local browsing (GitHub uses https://konamiman.github.io/Nextor)\nurl: "http://localhost:%s"\nbaseurl: ""\n' "$port" >> "$work/src/_config.yml"
 
 # Same environment the Actions runner gives the container. It runs as the
 # current user so that the output is owned by us and not by root.
@@ -78,5 +83,5 @@ rm -rf "$work"
 
 echo
 echo "Site built in $out. To browse it:"
-echo "  python3 -m http.server -d $out 8000"
-echo "then open http://localhost:8000 (the releases page is at /releases/)."
+echo "  python3 -m http.server -d $out $port"
+echo "then open http://localhost:$port (the releases page is at /releases/)."

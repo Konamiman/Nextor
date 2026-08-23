@@ -1,6 +1,6 @@
 # Nextor documentation
 
-The following documentation is available for Nextor:
+The following documentation is available for [Nextor](https://github.com/konamiman/Nextor/):
 
 * [What's New](Nextor_3.0_What's_New.md): A summary of the changes in Nextor 3.0, for people who are already familiar with Nextor 2.
 
