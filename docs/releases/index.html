@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nextor Releases</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>Nextor Releases</h1>
+        <p class="sidebar-description">Nextor kernel and tools releases, categorized by component type</p>
+        
+    <a href="https://github.com/Konamiman/Nextor" class="repo-link">
+      <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+        <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
+      </svg>
+      Go to repository
+    </a>
+  
+      </div>
+      <nav class="sidebar-nav">
+        <ul class="nav-tree">
+          
+    <li class="nav-item" data-category-id="index">
+      <div class="nav-link" onclick="selectCategory('index')">
+        <span class="nav-icon">
+          <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+            <path d="M0 1.75A.75.75 0 0 1 .75 1h4.253c1.227 0 2.317.59 3 1.501A3.743 3.743 0 0 1 11.006 1h4.245a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75h-4.507a2.25 2.25 0 0 0-1.591.659l-.622.621a.75.75 0 0 1-1.06 0l-.622-.621A2.25 2.25 0 0 0 5.258 13H.75a.75.75 0 0 1-.75-.75Zm7.251 10.324.004-5.073-.002-2.253A2.25 2.25 0 0 0 5.003 2.5H1.5v9h3.757a3.75 3.75 0 0 1 1.994.574ZM8.755 4.75l-.004 7.322a3.752 3.752 0 0 1 1.992-.572H14.5v-9h-3.495a2.25 2.25 0 0 0-2.25 2.25Z"></path>
+          </svg>
+        </span>
+        <span class="nav-name">Index</span>
+      </div>
+    </li>
+  
+          
+    <li class="nav-item" data-category-id="latest-page">
+      <div class="nav-link" onclick="selectCategory('latest-page')" title="0 releases / 0 assets">
+        <span class="nav-icon">
+          <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M8 1a7 7 0 0 1 7 7h-1.5A5.5 5.5 0 0 0 8 2.5V1Zm7 7a7 7 0 0 1-7 7v-1.5A5.5 5.5 0 0 0 13.5 8H15ZM8 15a7 7 0 0 1-7-7h1.5A5.5 5.5 0 0 0 8 13.5V15Z"/>
+            <path fill="currentColor" d="M8 4a.75.75 0 0 1 .75.75v2.69l1.78 1.78a.75.75 0 1 1-1.06 1.06l-2-2a.75.75 0 0 1-.22-.53V4.75A.75.75 0 0 1 8 4Z"/>
+            <path fill="currentColor" d="M2.5 3.5 5.5 8H-.5Z"/>
+          </svg>
+        </span>
+        <span class="nav-name">Latest</span>
+        <span class="nav-count">0/0</span>
+      </div>
+    </li>
+  
+          
+          
+        </ul>
+        <p class="no-categories">No matching categories</p>
+      </nav>
+      
+    <div class="sidebar-footer" data-listed-all="0" data-listed-nopre="0" data-listed-latest="0" data-listed-latestnopre="0" data-existing="13">
+      <span class="info-icon" title="13 releases exist in the repository, 0 listed on this site">ℹ️</span>
+      <span class="listed-count">0 of 13 releases listed</span>
+      <span class="last-update">Last update: 2026-08-23 08:42:42 UTC</span>
+      <span class="created-with">Created with <a href="https://github.com/Konamiman/github-categorized-releases">GitHub Categorized Releases</a></span>
+    </div>
+    
+    </aside>
+    <main class="main-content">
+      <div class="content-header">
+        <div class="content-header-top">
+          <h2 class="category-title" id="categoryTitle">Releases</h2>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            
+        <div class="expand-collapse-buttons">
+          <button class="expand-collapse-btn" onclick="expandAllReleases()" title="Expand all">
+            <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+              <path d="M8.177.677l2.896 2.896a.25.25 0 0 1-.177.427H8.75v3.25a.75.75 0 0 1-1.5 0V4H5.104a.25.25 0 0 1-.177-.427L7.823.677a.25.25 0 0 1 .354 0ZM5.104 12h2.146v-3.25a.75.75 0 0 1 1.5 0V12h2.146a.25.25 0 0 1 .177.427l-2.896 2.896a.25.25 0 0 1-.354 0l-2.896-2.896A.25.25 0 0 1 5.104 12Z"></path>
+            </svg>
+            Expand
+          </button>
+          <button class="expand-collapse-btn" onclick="collapseAllReleases()" title="Collapse all">
+            <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+              <path d="M7.823 4.677L5.177 7.323a.25.25 0 0 0 .177.427h2.146v1.5H5.354a.25.25 0 0 0-.177.427l2.646 2.646a.25.25 0 0 0 .354 0l2.646-2.646a.25.25 0 0 0-.177-.427H8.5v-1.5h2.146a.25.25 0 0 0 .177-.427L8.177 4.677a.25.25 0 0 0-.354 0Z"></path>
+            </svg>
+            Collapse
+          </button>
+        </div>
+  
+            <button class="theme-toggle" id="themeToggle" title="Toggle dark/light mode">
+              <span class="icon-sun">☀</span>
+              <span class="icon-moon" style="display: none;">☾</span>
+            </button>
+          </div>
+        </div>
+        <div class="content-controls">
+          <div class="filter-group">
+            <span class="filter-group-label">Filter:</span>
+            
+          <label class="filter-toggle">
+            <input type="checkbox" id="showPrereleases" checked onchange="togglePrereleases(this.checked)">
+            <span>Show prereleases</span>
+          </label>
+  
+            
+          <label class="filter-toggle">
+            <input type="checkbox" id="showLatestOnly" onchange="toggleLatestOnly(this.checked)">
+            <span>Show latest only</span>
+          </label>
+  
+          </div>
+          <div class="filter-group">
+            <span class="filter-group-label">Display:</span>
+            
+          <label class="filter-toggle">
+            <input type="checkbox" id="showAssets" checked onchange="toggleAssets(this.checked)">
+            <span>Show assets</span>
+          </label>
+  
+          </div>
+        </div>
+      </div>
+      <div class="category-description" id="categoryDescription">
+        <!-- Description will be inserted here by JavaScript -->
+      </div>
+      <div class="releases-list" id="releasesList">
+        <!-- Releases will be inserted here by JavaScript -->
+      </div>
+    </main>
+  </div>
+  <script>
+    const categoryData = {"latest-page":{"name":"Latest","description":"The most recent release of every component. Switch to the **Assets** view\nto get a flat list of the latest version of every downloadable file. Note that\n`tools.zip` contains all the tools' .COM files, and `nextor.dsk` is a disk image\nthat contains all the tools' .COM files plus NEXTOR.SYS and COMMAND3.COM.\n","releases":[],"assets":[],"children":[],"isLatestPage":true},"index":{"name":"Index","description":"","releases":[],"children":[],"isIndex":true}};
+    const categoryReleasesHtml = {"latest-page":"<p class=\"latest-empty\"><em>There are no releases marked as latest</em></p>","index":""};
+    const categoryDescriptionsHtml = {"latest-page":"<p>The most recent release of every component. Switch to the <strong>Assets</strong> view\nto get a flat list of the latest version of every downloadable file. Note that\n<code>tools.zip</code> contains all the tools&#39; .COM files, and <code>nextor.dsk</code> is a disk image\nthat contains all the tools&#39; .COM files plus NEXTOR.SYS and COMMAND3.COM.</p>\n","index":"<h1>Nextor releases</h1>\n<p><a href=\"https://github.com/Konamiman/Nextor\">Nextor</a> is an enhanced version of MSX-DOS 2 for MSX computers. Starting with Nextor 3, each component of the system is released separately, so this page groups the releases of <a href=\"https://github.com/Konamiman/Nextor/releases\">the Nextor repository</a> by component. Choose a component in the side menu to see its releases, or go to <strong>Latest</strong> to get the most recent version of everything in one place.</p>\n<h2>What&#39;s what</h2>\n<ul>\n<li><p><strong>Kernel base</strong>: the Nextor kernel without any device driver, as a <code>.dat</code> file. Driver developers combine it with their driver using <code>mknexrom</code> to produce a complete kernel ROM. Available in several variants (<code>NO_UNDOC</code>, <code>SHIFT_INV</code>, <code>CTRL_INV</code>, <code>KANJI_INV</code>), explained in the category itself.</p>\n</li>\n<li><p><strong>Drivers</strong>: the device drivers supplied with the Nextor repository.</p>\n<ul>\n<li><strong>Standalone ROMs</strong>: complete kernel ROMs with a dummy device driver that handles no devices, for computers and emulators where the storage devices are handled by other ROMs, or for testing drivers loaded in RAM.</li>\n<li><strong>Example RAM driver</strong>: a minimal driver loadable in RAM, intended as a template and a test subject for driver developers.</li>\n</ul>\n</li>\n<li><p><strong>NEXTOR.SYS</strong>: the DOS system file, Nextor&#39;s version of <code>MSXDOS2.SYS</code>, loaded from the boot drive to bring up the DOS environment (English and Japanese variants are available).</p>\n</li>\n<li><p><strong>COMMAND3.COM</strong>: the Nextor 3 command interpreter, an enhanced replacement for <code>COMMAND2.COM</code>.</p>\n</li>\n<li><p><strong>Tools</strong>: the command line tools (<code>.COM</code> files to be run from the DOS prompt). The <strong>Tools disk image</strong> is a bootable disk with <code>NEXTOR.SYS</code>, <code>COMMAND3.COM</code>, all the tools and the help files; the <strong>Tools ZIP file</strong> contains just the tools. Each tool has also its own entry, listing the releases that contain that particular tool.</p>\n</li>\n<li><p><strong>Build tools</strong>: tools that run on a PC, not on the MSX. Currently just <strong>mknexrom</strong>, the tool that produces kernel ROMs from a kernel base file and a driver.</p>\n</li>\n</ul>\n<h2>About drivers</h2>\n<p>This repository doesn&#39;t contain drivers for specific storage devices: only the standalone ROMs (whose driver is a dummy one that handles no devices) and the example RAM driver. Drivers for actual devices (Sunrise IDE, MegaFlashROM SCC+ SD, and others) are developed and released in their own repositories; see the <a href=\"https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Known%20Drivers.md\">Known Drivers</a> document for the list and where to get each one.</p>\n<h2>Looking for Nextor 2?</h2>\n<p>This page lists Nextor 3 releases only. The Nextor 2 releases (which include the kernel ROMs for all the drivers that used to live in this repository) are available directly in GitHub: <a href=\"https://github.com/Konamiman/Nextor/releases?q=v2.&expanded=true\">Nextor 2 releases</a>. The latest Nextor 2 version is <a href=\"https://github.com/Konamiman/Nextor/releases/tag/v2.1.4\">v2.1.4</a>.</p>\n<h2>Documentation</h2>\n<p>The <a href=\"https://github.com/Konamiman/Nextor/tree/v3.0/docs\">Nextor 3.0 documentation</a> includes a <a href=\"https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Getting%20Started%20Guide.md\">Getting Started Guide</a>, the <a href=\"https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20User%20Manual.md\">User Manual</a>, the <a href=\"https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Programmers%20Reference.md\">Programmers Reference</a> and the <a href=\"https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Driver%20Development%20Guide.md\">Driver Development Guide</a>.</p>\n"};
+  </script>
+  <script src="script.js"></script>
+  <script>
+    // Apply URL params and select initial category
+    applyUrlParams();
+    const initialHash = window.location.hash.slice(1);
+    // No hash or invalid hash -> use default (index if exists, otherwise first category)
+    selectCategory(initialHash && categoryData[initialHash] ? initialHash : 'index');
+    updateSidebarCounts();
+  </script>
+</body>
+</html>

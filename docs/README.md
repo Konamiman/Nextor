@@ -2,7 +2,7 @@
 
 The following documentation is available for Nextor:
 
-* [What's New](Nextor%203.0%20What's%20New.md): A summary of the changes in Nextor 3.0, for people who are already familiar with Nextor 2.
+* [What's New](<Nextor%203.0%20What's%20New.md>): A summary of the changes in Nextor 3.0, for people who are already familiar with Nextor 2.
 
 * [Getting Started Guide](Nextor%203.0%20Getting%20Started%20Guide.md): Step-by-step tutorial to get started with Nextor, either with an emulator or with real hardware.
 
@@ -21,3 +21,7 @@ Also the following documentation for MSX-DOS 2 (relevant also for Nextor) is pro
 * [MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)
 
 * [MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)
+
+## Downloads
+
+The binaries are published as [releases of the Nextor repository](https://github.com/Konamiman/Nextor/releases). Since each component (kernel base, standalone ROMs, NEXTOR.SYS, COMMAND3.COM, the tools...) is released separately, the [categorized releases page](https://konamiman.github.io/Nextor/releases/) is the easiest way to find the latest version of each one.

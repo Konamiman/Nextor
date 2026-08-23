@@ -1,0 +1,296 @@
+# Configuration for the categorized releases page, generated into
+# docs/releases by generate.sh (which runs
+# https://github.com/Konamiman/github-categorized-releases) and served
+# by GitHub Pages from the docs directory.
+#
+# Nextor 3 publishes each component (kernel base, standalone drivers,
+# NEXTOR.SYS, COMMAND3.COM, the tools, mknexrom...) as a separate release,
+# so the flat releases list in GitHub is hard to navigate. This page groups
+# the releases by component, matching each release by the names of its
+# assets (not by tag or title), so a release shows up under every component
+# it ships a file for: the single "all the tools" release appears under
+# every tool, while a release that ships just CHKDSK.COM appears under
+# CHKDSK only.
+#
+# Regex notes (all patterns are case-insensitive):
+#   - The "assets" matcher runs against the asset names joined by newlines,
+#     and the regex is compiled WITHOUT the multiline flag, so ^ and $ only
+#     hit the first and last asset. Every pattern below uses (^|\n) and
+#     (\n|$) instead to anchor a single asset name.
+#   - Single-quoted YAML strings keep backslashes as they are, so \. and \n
+#     reach the regex engine untouched.
+#
+# See README.md for how to regenerate the page and how to try changes to
+# this file against fake releases.
+
+site:
+  title: "Nextor Releases"
+  description: "Nextor kernel and tools releases, categorized by component type"
+  favicon: favicon.png          # Relative to this file; copied next to index.html
+  max-releases: false           # No hard limit, the cutoff date below is the only filter
+  main-page:
+    render: true
+    content-file: MAIN.md
+
+defaults:
+  # Nextor 3 releases start on 2026-09-01. The filter keeps releases
+  # published strictly AFTER the cutoff date (at 00:00 UTC), hence the
+  # previous day.
+  cutoff-date: "2026-08-31"
+  max-displayed: false          # Show every matching release
+  latest-match: newest
+
+# Nextor 2 releases (tagged v2.x) never belong to this page, whatever their
+# date: they are all-in-one releases that would otherwise show up under
+# every category. The main page links to them in GitHub.
+exclude:
+  tag: '^v2\.'
+
+# Aggregated "Latest" page: the newest release of every category, with an
+# assets view that works as a one-stop download list for Nextor 3.
+latest-page:
+  enable: true
+  title: "Latest"
+  description: |
+    The most recent release of every component. Switch to the **Assets** view
+    to get a flat list of the latest version of every downloadable file. Note that
+    `tools.zip` contains all the tools' .COM files, and `nextor.dsk` is a disk image
+    that contains all the tools' .COM files plus NEXTOR.SYS and COMMAND3.COM.
+
+# Releases matching no category at all. Kept visible so that a release with
+# unexpected asset names doesn't silently disappear from the page.
+unmatched:
+  show: true
+  name: "Other"
+
+categories:
+  - name: "Kernel base"
+    tooltip: "Kernel base files, the input for mknexrom"
+    description: |
+      The Nextor kernel without any device driver: a `Nextor-<version>.base[.<variant>].dat`
+      file that [mknexrom](#build-tools/mknexrom) combines with a driver to produce a complete
+      kernel ROM. This is what you need if you develop a driver or build a ROM for your
+      device; if you just want a ready-made ROM, see [Drivers](#drivers) and the
+      [Known Drivers](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Known%20Drivers.md)
+      list.
+
+      Each release contains all the combinations of these variants, encoded in the file name:
+
+      - No suffix: the default build.
+      - `NO_UNDOC`: built without undocumented Z80 instructions, so that the kernel also works
+        on machines with a Z180 processor.
+      - `SHIFT_INV`: the SHIFT boot key is inverted. Normally pressing SHIFT while booting
+        prevents the MSX-DOS kernels (typically the internal floppy disk drive) from booting;
+        in this variant they are disabled _unless_ SHIFT is pressed.
+      - `CTRL_INV`: the CTRL boot key is inverted. Normally pressing CTRL while booting makes
+        the internal floppy disk drive disable its second "ghost" drive, freeing some memory;
+        in this variant the ghost drive is disabled _unless_ CTRL is pressed.
+      - `KANJI_INV`: the "6" boot key is inverted. Normally pressing 6 while booting installs
+        the Kanji driver before the DOS environment is loaded; in this variant the Kanji
+        driver is installed _unless_ 6 is pressed.
+
+      The release provides files with no key inverted, with SHIFT inverted (`SHIFT_INV`) and
+      with CTRL inverted (`CTRL_INV`); each of the three comes with and without `NO_UNDOC` and
+      with and without `KANJI_INV`, twelve files in total. See the
+      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20User%20Manual.md#2101-boot-key-inverters)
+      for the details on the boot key inverters.
+    assets: '(^|\n)Nextor-[^\n]*\.base(\.[^\n]*)?\.dat(\n|$)'
+
+  - name: "Drivers"
+    tooltip: "Device drivers supplied with Nextor"
+    description: |
+      Device drivers supplied with the Nextor repository itself. Drivers for specific storage
+      devices (Sunrise IDE, MegaFlashROM SCC+ SD, ...) are maintained in their own repositories,
+      see the
+      [Known Drivers](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Known%20Drivers.md)
+      list.
+    categories:
+      - name: "Standalone ROMs"
+        tooltip: "Kernel ROMs with a dummy driver that handles no devices"
+        description: |
+          Complete Nextor kernel ROMs whose device driver is a dummy one that exposes no
+          devices, in ASCII8 and ASCII16 mapper flavors. A Nextor kernel ROM always needs a
+          driver; this one does nothing, so these ROMs are useful for running Nextor on a
+          computer or emulator where all the storage devices are handled by other ROMs
+          (you still get the Nextor features, such as FAT16 support, on those devices), or
+          for testing drivers loaded in RAM. Each ROM is built from the kernel base file of
+          the same version, and the same variants are available: see [Kernel base](#kernel-base)
+          for an explanation of the `NO_UNDOC`, `SHIFT_INV`, `CTRL_INV` and `KANJI_INV` suffixes.
+        assets: '(^|\n)Nextor-[^\n]*\.Standalone(ASCII8|ASCII16)[^\n]*\.ROM(\n|$)'
+
+      - name: "Example RAM driver"
+        tooltip: "Example of a driver loadable in RAM"
+        description: |
+          A minimal device driver that can be loaded in RAM with the `DRVROP` tool, intended
+          as a starting point and a test subject for developers of RAM-loadable drivers. See the
+          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Driver%20Development%20Guide.md).
+        assets: '(^|\n)ram-driver-example[^\n]*\.drv(\n|$)'
+
+  - name: "NEXTOR.SYS"
+    tooltip: "The DOS system file, Nextor's version of MSXDOS2.SYS"
+    description: |
+      The Nextor version of `MSXDOS2.SYS`: the system file that the kernel ROM loads from the
+      boot drive to bring up the MSX-DOS 2 compatible environment, needed (together with a
+      command interpreter like [COMMAND3.COM](#command3com)) to boot to the DOS prompt instead of BASIC.
+      `NEXTOR.SYS.japanese` is the variant with Japanese messages: rename it to `NEXTOR.SYS` to use it.
+    assets: '(^|\n)NEXTOR\.SYS(\.[^\n]*)?(\n|$)'
+
+  - name: "COMMAND3.COM"
+    tooltip: "The Nextor command interpreter"
+    description: |
+      The Nextor 3 command interpreter, an enhanced replacement for `COMMAND2.COM` that
+      includes the most common Nextor tools as internal commands and displays its messages
+      in Japanese when the Kanji mode is active. Used together with [NEXTOR.SYS](#nextorsys) to boot to the
+      DOS prompt instead of BASIC. See the
+      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20User%20Manual.md)
+      for the details.
+    assets: '(^|\n)COMMAND3\.COM(\n|$)'
+
+  - name: "Tools"
+    tooltip: "The command line tools"
+    description: |
+      The Nextor command line tools: `.COM` files to be run from the DOS prompt. The tools
+      disk image and the ZIP file contain all of them; the entries under
+      [Individual tools](#tools/individual-tools) list the releases that contain each tool
+      (either alone or as part of a full tools release). See the
+      [User Manual](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20User%20Manual.md#34-the-command-line-tools)
+      for the details on each tool.
+    categories:
+      - name: "Tools disk image"
+        tooltip: "Bootable disk image with NEXTOR.SYS, COMMAND3.COM and all the tools"
+        description: |
+          A bootable 720K floppy disk image containing [NEXTOR.SYS](#nextorsys) (plus the Japanese variant as
+          `NEXTORJ.SYS`), [COMMAND3.COM](#command3com), all the command line tools and the `COMMAND3.COM`
+          help files. Use it to boot straight to the DOS prompt on a computer or emulator
+          with a Nextor kernel ROM.
+        assets: '(^|\n)nextor[^\n]*\.dsk(\n|$)'
+
+      - name: "Tools ZIP file"
+        tooltip: "ZIP file with all the command line tools"
+        description: |
+          A ZIP file with all the command line tools (without [NEXTOR.SYS](#nextorsys) and [COMMAND3.COM](#command3com)),
+          for copying the tools to an existing Nextor disk or device.
+        assets: '(^|\n)tools[^\n]*\.zip(\n|$)'
+
+      - name: "Individual tools"
+        tooltip: "One entry per tool, with every release that contains it"
+        description: |
+          One entry per command line tool. Each one lists the releases that contain the
+          tool, either alone or as part of a full tools release, so the newest release
+          shown under a tool is where its latest version comes from.
+        categories:
+          - name: "CHKDSK"
+            description: "Checks the integrity of the filesystem of a disk (FAT12 or FAT16) and optionally fixes the errors found."
+            assets: '(^|\n)CHKDSK\.COM(\n|$)'
+
+          - name: "CONCLUS"
+            description: "Checks whether a file is stored in consecutive clusters, as required by the disk image files used in disk emulation mode."
+            assets: '(^|\n)CONCLUS\.COM(\n|$)'
+
+          - name: "DELALL"
+            description: "Performs a quick format of the filesystem visible on a given drive letter."
+            assets: '(^|\n)DELALL\.COM(\n|$)'
+
+          - name: "DEVINFO"
+            description: "Displays information about the devices controlled by a given Nextor driver."
+            assets: '(^|\n)DEVINFO\.COM(\n|$)'
+
+          - name: "DISKCOPY"
+            description: "Copies a full disk to another, sector by sector."
+            assets: '(^|\n)DISKCOPY\.COM(\n|$)'
+
+          - name: "DRIVERS"
+            description: "Displays information about the available MSX-DOS and Nextor drivers."
+            assets: '(^|\n)DRIVERS\.COM(\n|$)'
+
+          - name: "DRVINFO"
+            description: "Displays information about all the mapped drive letters."
+            assets: '(^|\n)DRVINFO\.COM(\n|$)'
+
+          - name: "DRVROP"
+            description: "Driver operations tool: installs and uninstalls drivers in RAM."
+            assets: '(^|\n)DRVROP\.COM(\n|$)'
+
+          - name: "DRVTEST"
+            description: "Driver test tool: invokes the driver and device queries of a Nextor driver (in ROM or in RAM) and displays the results, for driver developers."
+            assets: '(^|\n)DRVTEST\.COM(\n|$)'
+
+          - name: "EMUFILE"
+            description: "Creates disk emulation mode data files and enters disk emulation mode."
+            assets: '(^|\n)EMUFILE\.COM(\n|$)'
+
+          - name: "EPTCFT"
+            description: "Extended partition code fix tool, for one-time fixes of partitions with wrong structural information."
+            assets: '(^|\n)EPTCFT\.COM(\n|$)'
+
+          - name: "FASTOUT"
+            description: "Switches the fast STROUT mode on and off."
+            assets: '(^|\n)FASTOUT\.COM(\n|$)'
+
+          - name: "FIXDISK"
+            description: "Rebuilds the MSX-DOS 2 disk parameters of a disk, preserving its files."
+            assets: '(^|\n)FIXDISK\.COM(\n|$)'
+
+          - name: "FSIZE"
+            description: "Creates a file with a given size, or changes the size of an existing file."
+            assets: '(^|\n)FSIZE\.COM(\n|$)'
+
+          - name: "KMODE"
+            description: "Sets the Kanji screen mode, optionally saving it in the boot sector of a disk."
+            assets: '(^|\n)KMODE\.COM(\n|$)'
+
+          - name: "LOCK"
+            description: "Locks and unlocks drive letters."
+            assets: '(^|\n)LOCK\.COM(\n|$)'
+
+          - name: "MAPDRV"
+            description: "Maps a drive letter to a partition on a device controlled by a Nextor driver."
+            assets: '(^|\n)MAPDRV\.COM(\n|$)'
+
+          - name: "NEXBOOT"
+            description: "Configures the one-time boot keys for the next reset."
+            assets: '(^|\n)NEXBOOT\.COM(\n|$)'
+
+          - name: "NSYSVER"
+            description: "Changes the version number reported by NEXTOR.SYS."
+            assets: '(^|\n)NSYSVER\.COM(\n|$)'
+
+          - name: "RALLOC"
+            description: "Activates or deactivates the reduced allocation information mode for a drive."
+            assets: '(^|\n)RALLOC\.COM(\n|$)'
+
+          - name: "UNDEL"
+            description: "Recovers deleted files and directories, on both FAT12 and FAT16 volumes."
+            assets: '(^|\n)UNDEL\.COM(\n|$)'
+
+          - name: "VSFT"
+            description: "Volume size fix tool, for one-time fixes of partitions with wrong structural information."
+            assets: '(^|\n)VSFT\.COM(\n|$)'
+
+          - name: "XCOPY"
+            description: "Copies files and directory trees, with switches for filtering, renaming, prompting and write verification."
+            assets: '(^|\n)XCOPY\.COM(\n|$)'
+
+          - name: "XDIR"
+            description: "Lists a directory and all its subdirectories recursively."
+            assets: '(^|\n)XDIR\.COM(\n|$)'
+
+          - name: "Z80MODE"
+            description: "Activates or deactivates the Z80 access mode for an MSX-DOS driver (MSX Turbo-R only)."
+            assets: '(^|\n)Z80MODE\.COM(\n|$)'
+
+  - name: "Build tools"
+    tooltip: "Tools that run on the PC, for building kernel ROMs"
+    description: |
+      Tools that run on a PC (not on the MSX) and are used to build Nextor kernel ROMs.
+    categories:
+      - name: "mknexrom"
+        tooltip: "Combines a kernel base file and a driver into a kernel ROM"
+        description: |
+          Combines a [kernel base](#kernel-base) file with a device driver (and optionally a
+          bank switching routine and boot key inverters) to produce a complete Nextor kernel
+          ROM. Required for building drivers, see the
+          [Driver Development Guide](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20Driver%20Development%20Guide.md).
+        # Matched by name prefix: the assets carry the platform and may carry the version
+        # (mknexrom.exe, mknexrom-1.2-linux-x64, ...).
+        assets: '(^|\n)mknexrom'

@@ -1,0 +1,508 @@
+{
+  "_comment": "Fake releases for testing the categorized releases page locally. Same format as the --save-releases output of github-categorized-releases; releases must be listed in descending publication date order.",
+  "savedAt": "2026-09-03T00:00:00Z",
+  "repository": "Konamiman/Nextor",
+  "totalCount": 8,
+  "listedCount": 8,
+  "releases": [
+    {
+      "id": 250000001,
+      "name": "CHKDSK 1.2",
+      "tag": "chkdsk-v1.2",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/chkdsk-v1.2",
+      "body": "## Changes in this release\n\n* Fix the cluster count reported for FAT16 volumes bigger than 32M.\n* The `/F` switch now asks for confirmation before fixing cross-linked files.\n\nThis is a single-tool release: the [tools disk image and ZIP file](https://github.com/Konamiman/Nextor/releases/tag/tools-v3.0.0-beta1) still contain CHKDSK 1.1.",
+      "prerelease": false,
+      "draft": false,
+      "publishedAt": "2026-09-02T17:30:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "CHKDSK.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/chkdsk-v1.2/CHKDSK.COM",
+          "size": 7116
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000002,
+      "name": "Nextor kernel base 3.0.0-beta1",
+      "tag": "kernel-v3.0.0-beta1",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/kernel-v3.0.0-beta1",
+      "body": "## Nextor kernel base 3.0.0 beta 1\n\nFirst public beta of the Nextor 3 kernel. See [What's New](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20What's%20New.md) for the changes relative to Nextor 2.\n\nThis release contains the kernel base files only (the input for `mknexrom`). The standalone ROMs built from these files are in [their own release](https://github.com/Konamiman/Nextor/releases/tag/standalone-drivers-v1.0).\n\n## Variants\n\nAll the combinations of the `NO_UNDOC`, `SHIFT_INV`/`CTRL_INV` and `KANJI_INV` variants are included, see the file names.",
+      "prerelease": true,
+      "draft": false,
+      "publishedAt": "2026-09-01T16:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "Nextor-3.0.0-beta1.base.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.dat",
+          "size": 111240
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.KANJI_INV.dat",
+          "size": 113200
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.SHIFT_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.SHIFT_INV.dat",
+          "size": 113712
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.SHIFT_INV.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.SHIFT_INV.KANJI_INV.dat",
+          "size": 112200
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.CTRL_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.CTRL_INV.dat",
+          "size": 114656
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.CTRL_INV.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.CTRL_INV.KANJI_INV.dat",
+          "size": 112176
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.dat",
+          "size": 113896
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.KANJI_INV.dat",
+          "size": 110712
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.SHIFT_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.SHIFT_INV.dat",
+          "size": 112496
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.SHIFT_INV.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.SHIFT_INV.KANJI_INV.dat",
+          "size": 110216
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.CTRL_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.CTRL_INV.dat",
+          "size": 110920
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.base.NO_UNDOC.CTRL_INV.KANJI_INV.dat",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/kernel-v3.0.0-beta1/Nextor-3.0.0-beta1.base.NO_UNDOC.CTRL_INV.KANJI_INV.dat",
+          "size": 111128
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000003,
+      "name": "Standalone ROMs 1.0",
+      "tag": "standalone-drivers-v1.0",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/standalone-drivers-v1.0",
+      "body": "## Standalone ROMs 1.0\n\nComplete kernel ROMs with a dummy device driver that handles no devices, in ASCII8 and ASCII16 mapper flavors, built from [kernel base 3.0.0-beta1](https://github.com/Konamiman/Nextor/releases/tag/kernel-v3.0.0-beta1).\n\nThe same variants as for the kernel base files are available, see the file names.",
+      "prerelease": false,
+      "draft": false,
+      "publishedAt": "2026-09-01T15:30:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.SHIFT_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.SHIFT_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.SHIFT_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.SHIFT_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.SHIFT_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.SHIFT_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.SHIFT_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.SHIFT_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.CTRL_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.CTRL_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.CTRL_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.CTRL_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.CTRL_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.CTRL_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.CTRL_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.CTRL_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.SHIFT_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.SHIFT_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.SHIFT_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.SHIFT_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.SHIFT_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.SHIFT_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.SHIFT_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.SHIFT_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.CTRL_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.CTRL_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.CTRL_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.CTRL_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.CTRL_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII8.NO_UNDOC.CTRL_INV.KANJI_INV.ROM",
+          "size": 131072
+        },
+        {
+          "name": "Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.CTRL_INV.KANJI_INV.ROM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/standalone-drivers-v1.0/Nextor-3.0.0-beta1.StandaloneASCII16.NO_UNDOC.CTRL_INV.KANJI_INV.ROM",
+          "size": 131072
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000004,
+      "name": "Example RAM driver 1.0",
+      "tag": "ram-driver-example-v1.0",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/ram-driver-example-v1.0",
+      "body": "## Example RAM driver 1.0\n\nThe example RAM-loadable driver, to be installed with `DRVROP`. Intended as a template for driver developers and as a test subject for the RAM driver support of the Nextor 3 kernel.",
+      "prerelease": false,
+      "draft": false,
+      "publishedAt": "2026-09-01T15:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "ram-driver-example.drv",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/ram-driver-example-v1.0/ram-driver-example.drv",
+          "size": 1084
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000005,
+      "name": "NEXTOR.SYS 3.0.0-beta1",
+      "tag": "nextor-sys-v3.0.0-beta1",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/nextor-sys-v3.0.0-beta1",
+      "body": "## NEXTOR.SYS 3.0.0 beta 1\n\n* New file version number 3.0, see [Enhanced NEXTOR.SYS](https://github.com/Konamiman/Nextor/blob/v3.0/docs/Nextor%203.0%20User%20Manual.md#214-enhanced-nextorsys).\n\n`NEXTOR.SYS.japanese` is the variant with Japanese messages, rename it to `NEXTOR.SYS` to use it.",
+      "prerelease": true,
+      "draft": false,
+      "publishedAt": "2026-09-01T14:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "NEXTOR.SYS",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/nextor-sys-v3.0.0-beta1/NEXTOR.SYS",
+          "size": 14160
+        },
+        {
+          "name": "NEXTOR.SYS.japanese",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/nextor-sys-v3.0.0-beta1/NEXTOR.SYS.japanese",
+          "size": 14960
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000006,
+      "name": "COMMAND3.COM 3.0.0-beta1",
+      "tag": "command3-v3.0.0-beta1",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/command3-v3.0.0-beta1",
+      "body": "## COMMAND3.COM 3.0.0 beta 1\n\nFirst beta of the Nextor 3 command interpreter. The help files are included in the [tools disk image](https://github.com/Konamiman/Nextor/releases/tag/tools-v3.0.0-beta1).",
+      "prerelease": true,
+      "draft": false,
+      "publishedAt": "2026-09-01T13:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "COMMAND3.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/command3-v3.0.0-beta1/COMMAND3.COM",
+          "size": 16356
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000007,
+      "name": "Nextor tools 3.0.0-beta1",
+      "tag": "tools-v3.0.0-beta1",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/tools-v3.0.0-beta1",
+      "body": "## Nextor tools 3.0.0 beta 1\n\nAll the command line tools, plus:\n\n* `nextor.dsk`: bootable 720K disk image with `NEXTOR.SYS`, `NEXTORJ.SYS`, `COMMAND3.COM`, all the tools and the `COMMAND3.COM` help files.\n* `tools.zip`: just the tools.\n\nIndividual tools may get newer releases of their own, check the corresponding categories.",
+      "prerelease": true,
+      "draft": false,
+      "publishedAt": "2026-09-01T12:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "nextor.dsk",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/nextor.dsk",
+          "size": 737280
+        },
+        {
+          "name": "tools.zip",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/tools.zip",
+          "size": 85920
+        },
+        {
+          "name": "CHKDSK.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/CHKDSK.COM",
+          "size": 7872
+        },
+        {
+          "name": "CONCLUS.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/CONCLUS.COM",
+          "size": 6184
+        },
+        {
+          "name": "DELALL.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DELALL.COM",
+          "size": 4760
+        },
+        {
+          "name": "DEVINFO.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DEVINFO.COM",
+          "size": 1528
+        },
+        {
+          "name": "DISKCOPY.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DISKCOPY.COM",
+          "size": 6244
+        },
+        {
+          "name": "DRIVERS.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DRIVERS.COM",
+          "size": 4412
+        },
+        {
+          "name": "DRVINFO.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DRVINFO.COM",
+          "size": 5556
+        },
+        {
+          "name": "DRVROP.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DRVROP.COM",
+          "size": 6948
+        },
+        {
+          "name": "DRVTEST.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/DRVTEST.COM",
+          "size": 8760
+        },
+        {
+          "name": "EMUFILE.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/EMUFILE.COM",
+          "size": 4168
+        },
+        {
+          "name": "EPTCFT.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/EPTCFT.COM",
+          "size": 8244
+        },
+        {
+          "name": "FASTOUT.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/FASTOUT.COM",
+          "size": 7360
+        },
+        {
+          "name": "FIXDISK.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/FIXDISK.COM",
+          "size": 8404
+        },
+        {
+          "name": "FSIZE.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/FSIZE.COM",
+          "size": 8912
+        },
+        {
+          "name": "KMODE.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/KMODE.COM",
+          "size": 6924
+        },
+        {
+          "name": "LOCK.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/LOCK.COM",
+          "size": 3188
+        },
+        {
+          "name": "MAPDRV.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/MAPDRV.COM",
+          "size": 4804
+        },
+        {
+          "name": "NEXBOOT.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/NEXBOOT.COM",
+          "size": 8612
+        },
+        {
+          "name": "NSYSVER.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/NSYSVER.COM",
+          "size": 5900
+        },
+        {
+          "name": "RALLOC.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/RALLOC.COM",
+          "size": 8972
+        },
+        {
+          "name": "UNDEL.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/UNDEL.COM",
+          "size": 2284
+        },
+        {
+          "name": "VSFT.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/VSFT.COM",
+          "size": 6052
+        },
+        {
+          "name": "XCOPY.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/XCOPY.COM",
+          "size": 1928
+        },
+        {
+          "name": "XDIR.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/XDIR.COM",
+          "size": 8388
+        },
+        {
+          "name": "Z80MODE.COM",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/tools-v3.0.0-beta1/Z80MODE.COM",
+          "size": 7860
+        }
+      ],
+      "reactions": null
+    },
+    {
+      "id": 250000008,
+      "name": "mknexrom 1.2",
+      "tag": "mknexrom-v1.2",
+      "url": "https://github.com/Konamiman/Nextor/releases/tag/mknexrom-v1.2",
+      "body": "## mknexrom 1.2\n\n* Accept kernel base files with the Nextor 3 header.\n* New `/k` parameter to set the boot key inverters.\n\nBinaries for Windows, Linux and macOS; the source is in `buildtools/sources/mknexrom.c`.",
+      "prerelease": false,
+      "draft": false,
+      "publishedAt": "2026-09-01T11:00:00Z",
+      "author": {
+        "login": "Konamiman",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/1223028?v=4",
+        "url": "https://github.com/Konamiman"
+      },
+      "assets": [
+        {
+          "name": "mknexrom-1.2-windows-x64.exe",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/mknexrom-v1.2/mknexrom-1.2-windows-x64.exe",
+          "size": 64224
+        },
+        {
+          "name": "mknexrom-1.2-linux-x64",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/mknexrom-v1.2/mknexrom-1.2-linux-x64",
+          "size": 44448
+        },
+        {
+          "name": "mknexrom-1.2-macos-arm64",
+          "url": "https://github.com/Konamiman/Nextor/releases/download/mknexrom-v1.2/mknexrom-1.2-macos-arm64",
+          "size": 46408
+        }
+      ],
+      "reactions": null
+    }
+  ]
+}
