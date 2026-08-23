@@ -7,12 +7,14 @@ on:
       - 'sdk/**'
       - 'buildtools/**'
       - '.github/workflows/**'
+      - 'docker/Dockerfile'   # defines the Nestor80 tool versions this job installs
   push:
     paths:
       - 'source/**'
       - 'sdk/**'
       - 'buildtools/**'
       - '.github/workflows/**'
+      - 'docker/Dockerfile'   # defines the Nestor80 tool versions this job installs
     branches:
       - 'v**'
     tags:
@@ -28,18 +30,34 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y binutils gcc make curl mtools zip
-          
+
+          # SDCC 4.2.0. This is the one toolchain version that is NOT read from
+          # docker/Dockerfile (see the next step): the Docker image installs
+          # Debian's "sdcc" apt package, whose version is whatever Debian ships
+          # (SDCC_VERSION in the Dockerfile is only a label), while this job
+          # needs a specific upstream tarball because the Ubuntu runner's apt
+          # package is a different version. Keep both at 4.2.0 by hand.
           curl -Lo sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.2.0/sdcc-4.2.0-amd64-unknown-linux2.5.tar.bz2/download
           mkdir sdcc
           cd sdcc
           tar xjf ../sdcc.tar.bz2
           sudo cp -r sdcc-4.2.0/* /usr/local/
           sdcc -v
+      # The Nestor80 tool versions are defined ONCE, as the ARG defaults in
+      # docker/Dockerfile (the Docker image is the primary consumer). Read them
+      # from there so this job always builds with the same tools as the image.
+      - name: Read toolchain versions from docker/Dockerfile
+        run: |
+          for v in N80_VERSION LK80_VERSION LB80_VERSION; do
+            val="$(sed -nE "s/^ARG $v=(.+)$/\1/p" docker/Dockerfile)"
+            if [ -z "$val" ]; then
+              echo "::error::$v not found in docker/Dockerfile (expected a line 'ARG $v=<version>')" >&2
+              exit 1
+            fi
+            echo "$v=$val" >> "$GITHUB_ENV"
+            echo "$v=$val"
+          done
       - name: Install Nestor80
-        env:
-          N80_VERSION: '1.3.6'
-          LK80_VERSION: '1.1.1'
-          LB80_VERSION: '1.0'
         run: |
           curl -Lo n80.zip https://github.com/Konamiman/Nestor80/releases/download/n80-v${N80_VERSION}/N80_${N80_VERSION}_SelfContained_linux-x64.zip
           unzip n80.zip

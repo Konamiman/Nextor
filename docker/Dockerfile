@@ -27,6 +27,9 @@
 ARG DOTNET_TAG=8.0-bookworm-slim
 # Nestor80 release tags follow <tool>-v<version> (n80-v1.3.6, lk80-v1.1.1,
 # lb80-v1.0), so the download URLs are derived from the versions alone.
+# These three lines are the single source of truth for the Nestor80 versions:
+# .github/workflows/ci.yaml parses them (expects exactly "ARG NAME=value"), so
+# keep that form. SDCC is the exception -- see the comment in ci.yaml.
 ARG N80_VERSION=1.3.6
 ARG LK80_VERSION=1.1.1
 ARG LB80_VERSION=1.0
