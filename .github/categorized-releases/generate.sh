@@ -14,10 +14,14 @@
 # made of fake data can't be committed by accident. This is useful for trying
 # changes to the configuration against releases that don't exist yet.
 #
-# The generator (https://github.com/Konamiman/github-categorized-releases,
-# branch v1) is cloned into bin/categorized-releases on the first run; bin/
-# is gitignored. Node.js (20 or later) and git are required. Set GITHUB_TOKEN
-# to avoid the anonymous GitHub API rate limit (not needed with --fake).
+# The generator (https://github.com/Konamiman/github-categorized-releases)
+# is cloned into bin/categorized-releases on the first run, at the exact
+# version tag set in tool_ref below, so that the generated page is the same
+# wherever it is regenerated (bin/ is gitignored). To use a newer version,
+# change tool_ref and delete bin/categorized-releases so that it is cloned
+# again: the script never updates an existing clone. Node.js (20 or later)
+# and git are required. Set GITHUB_TOKEN to avoid the anonymous GitHub API
+# rate limit (not needed with --fake).
 #
 # Usage: ./generate.sh [--fake]
 
@@ -27,7 +31,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$here/../.." && pwd)"
 tool_dir="$repo_root/bin/categorized-releases"
 tool_repo="https://github.com/Konamiman/github-categorized-releases"
-tool_ref="v1"
+tool_ref="v1.1.0"   # Exact version tag, see the note above
 fake_releases="$here/fake-releases.json"
 
 for cmd in node git; do
