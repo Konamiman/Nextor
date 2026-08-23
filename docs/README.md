@@ -22,6 +22,8 @@ Also the following documentation for MSX-DOS 2 (relevant also for Nextor) is pro
 
 * [MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)
 
+This documentation is available [as a GitHub pages site](https://konamiman.github.io/Nextor/) too.
+
 ## Downloads
 
 The binaries are published as [releases of the Nextor repository](https://github.com/Konamiman/Nextor/releases). Since each component (kernel base, standalone ROMs, NEXTOR.SYS, COMMAND3.COM, the tools...) is released separately, the [categorized releases page](https://konamiman.github.io/Nextor/releases/) is the easiest way to find the latest version of each one.
