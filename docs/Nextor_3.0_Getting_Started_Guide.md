@@ -31,9 +31,9 @@ Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX co
 
 This document provides a walkthrough of the features that Nextor adds to MSX-DOS in the form of a step-by-step guide. In order to make it easier for everyone, this guide assumes that the blueMSX emulator will be used for the walkthrough together with an emulated Sunrise IDE controller. Users of other emulators will need to adapt the steps of _[2. Setting up blueMSX](#2-setting-up-bluemsx)_ appropriately; on the other hand, users of real MSX hardware should take a look at _[2.1. Setting up a real MSX](#21-setting-up-a-real-msx)_.
 
-The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level. Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to (or in parallel with) this document.
+The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level. Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor_3.0_User_Manual.md)_ prior to (or in parallel with) this document.
 
-Note: in this guide the MAPDRV, LOCK, RALLOC and DRIVERS commands will be used. These are internal commands of COMMAND3.COM, the command interpreter of Nextor 3, so no `.COM` file is needed to run them (they also exist as standalone tools, which work with older interpreter and Nextor versions as well); the DRVROP.COM tool will be used too. The other Nextor tools are simple enough for not needing a step-by-step usage explanation; remember however that all the commands and tools are explained in the _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_, that HELP followed by a command name gives the full details when the help files of the tools disk are available, and that you can get a parameters summary for any of the standalone tools by invoking it without parameters (the one exception is XDIR, which simply lists the current directory; use `TYPE XDIR.COM` instead).
+Note: in this guide the MAPDRV, LOCK, RALLOC and DRIVERS commands will be used. These are internal commands of COMMAND3.COM, the command interpreter of Nextor 3, so no `.COM` file is needed to run them (they also exist as standalone tools, which work with older interpreter and Nextor versions as well); the DRVROP.COM tool will be used too. The other Nextor tools are simple enough for not needing a step-by-step usage explanation; remember however that all the commands and tools are explained in the _[Nextor 3.0 User Manual](Nextor_3.0_User_Manual.md)_, that HELP followed by a command name gives the full details when the help files of the tools disk are available, and that you can get a parameters summary for any of the standalone tools by invoking it without parameters (the one exception is XDIR, which simply lists the current directory; use `TYPE XDIR.COM` instead).
 
 ## 2. Setting up blueMSX
 
@@ -97,7 +97,7 @@ then after a few seconds you'll see that the computer boots in the DOS prompt in
  
 ***What has happened?*** Nextor has assigned two drives to the Sunrise IDE driver: one for the master device (A:) and one for the slave device (B:), then it has assigned two drives to the floppy disk drive (C: and its ghost drive D:). Then it has attempted to search a suitable FAT12 or FAT16 partition in the hard disk attached to the master device in order to assign it to drive A:, but the hard disk has no partitions yet; as for the slave device, it's offline (not available). Therefore drive C:, assigned to the floppy disk, is the first "valid" drive, and so it is used as the boot drive.
 
-**Note:** If you had chosen/flashed the _.SunriseIDE.blueMSX.CTRL\_INV.ROM_ variant of the ROM file you would have only drive C: assigned to the floppy disk drive (no ghost drive in D:). This variant inverts the meaning of the CTRL key at boot time. See ["Boot key inverters" in the Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md#2101-boot-key-inverters).
+**Note:** If you had chosen/flashed the _.SunriseIDE.blueMSX.CTRL\_INV.ROM_ variant of the ROM file you would have only drive C: assigned to the floppy disk drive (no ghost drive in D:). This variant inverts the meaning of the CTRL key at boot time. See ["Boot key inverters" in the Nextor 3.0 User Manual](Nextor_3.0_User_Manual.md#2101-boot-key-inverters).
 
 b. Type BASIC and then CALL FDISK to invoke the device partitioning tool.
 
@@ -146,7 +146,7 @@ a. Assign partition 2 to drive E: by executing the following command:
 MAPDRV E: 2 1 0
 ```
 
-("2" is the second partition, and "1 0" means "device index 1 controlled by driver in the primary Nextor controller". MAPDRV is an internal command of COMMAND3.COM; see _[3.4.1. MAPDRV: the drive mapping tool](Nextor%203.0%20User%20Manual.md#341-mapdrv-the-drive-mapping-tool)_ in the Nextor 3.0 User Manual for more details.)
+("2" is the second partition, and "1 0" means "device index 1 controlled by driver in the primary Nextor controller". MAPDRV is an internal command of COMMAND3.COM; see _[3.4.1. MAPDRV: the drive mapping tool](Nextor_3.0_User_Manual.md#341-mapdrv-the-drive-mapping-tool)_ in the Nextor 3.0 User Manual for more details.)
 
 b. Perform a `DIR E:` command. Check that drive E: has indeed 25MB of free space.
 
@@ -324,7 +324,7 @@ d. Remove the floppy disk from the drive (if you are using blueMSX, select the `
 
 e. Execute `TYPE C:TEST` again. You will see the file contents again instead of getting a "Not Ready" error, even though the disk has been removed from the drive.
 
-***What has happened?*** Whenever Nextor is about to access the contents of a drive (this mostly matters for drives holding removable media, such as floppy disks), it first asks the driver if the associated storage media has changed. If the answer is "Yes" or "Not sure", then it takes the appropriate actions: for drives mapped to devices on Nextor drivers, it assigns the first available valid primary partition on the device to the drive (valid meaning a FAT12 or FAT16 partition that isn't mapped to another drive already); for drives handled by MSX-DOS drivers, it simply clears sector buffers and creates again the disk parameters block for the drive. (The "Not sure" response gets actually a special treatment; see _[3.3. Managing media changes](Nextor%203.0%20User%20Manual.md#33-managing-media-changes)_ in the Nextor 3.0 User Manual for more details.)
+***What has happened?*** Whenever Nextor is about to access the contents of a drive (this mostly matters for drives holding removable media, such as floppy disks), it first asks the driver if the associated storage media has changed. If the answer is "Yes" or "Not sure", then it takes the appropriate actions: for drives mapped to devices on Nextor drivers, it assigns the first available valid primary partition on the device to the drive (valid meaning a FAT12 or FAT16 partition that isn't mapped to another drive already); for drives handled by MSX-DOS drivers, it simply clears sector buffers and creates again the disk parameters block for the drive. (The "Not sure" response gets actually a special treatment; see _[3.3. Managing media changes](Nextor_3.0_User_Manual.md#33-managing-media-changes)_ in the Nextor 3.0 User Manual for more details.)
 
 When a drive is locked, Nextor will never ask the driver for device change status when accessing that drive, and will instead assume that the device will never change. This improves performance as it saves both CPU processing and device access.
 
@@ -367,7 +367,7 @@ f. Issue again the `DIR` and `DIR B:` commands. Notice that this time no free sp
 
 ## 9. Using the boot keys and the boot menu
 
-We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots, as well as the boot menu; see _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for a full list of the available keys.
+We have seen that if key "1" is kept pressed while the computer is booting, Nextor starts in MSX-DOS 1 mode. Now we'll see other useful keys that can be used to alter the way Nextor boots, as well as the boot menu; see _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for a full list of the available keys.
 
 a.	Reset your computer while keeping the "3" key pressed. You will see that the computer boots in the BASIC prompt.
 
@@ -389,7 +389,7 @@ e.	Reset your computer while keeping the "SHIFT" key pressed. Once in the DOS pr
 
 ![DRIVERS output showing no drives assigned to the floppy disk controller](img/gsg/DriversOneController.png)
 
-***What has happened?*** When the "SHIFT" key is kept pressed at boot time, all the storage controllers with an MSX-DOS kernel (including the floppy disk drive controller) will disable themselves, but Nextor will not. This is useful to maximize the amount of available memory, especially in MSX-DOS 1 mode, as shown in the next step. (There are boot keys to selectively disable the Nextor kernels as well, and the boot menu shown below can also be used for this; see _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for details)
+***What has happened?*** When the "SHIFT" key is kept pressed at boot time, all the storage controllers with an MSX-DOS kernel (including the floppy disk drive controller) will disable themselves, but Nextor will not. This is useful to maximize the amount of available memory, especially in MSX-DOS 1 mode, as shown in the next step. (There are boot keys to selectively disable the Nextor kernels as well, and the boot menu shown below can also be used for this; see _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for details)
 
 f.	Reset your computer while keeping the "1" and "3" keys pressed simultaneously. Once in the BASIC prompt, issue a `PRINT FRE(0)` command. You will see that there are about 20K free for BASIC code.
 
@@ -401,7 +401,7 @@ h.	Reset your computer while keeping the "N" key pressed. Instead of booting, th
 
 ![The Nextor boot menu](img/gsg/BootMenu.png)
 
-***What has happened?*** The boot menu, introduced in Nextor 3.0, allows you to configure how the system will boot without having to keep several keys pressed while the computer boots. The menu lists all the Nextor 3 kernels found in the system, and each one can be enabled or disabled for the current boot by pressing the key displayed next to it ("Q" in our case); it then lists a set of options equivalent to the boot keys we have seen in this section, which can be switched on and off by pressing the corresponding number key (an asterisk indicates the kernels and options that are currently switched on). Once you are done, press ENTER to boot applying your selection, ESC to cancel the menu and boot normally, or "N" to disable all the Nextor kernels and boot (this is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller). See _[2.10. Boot keys and the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for the details.
+***What has happened?*** The boot menu, introduced in Nextor 3.0, allows you to configure how the system will boot without having to keep several keys pressed while the computer boots. The menu lists all the Nextor 3 kernels found in the system, and each one can be enabled or disabled for the current boot by pressing the key displayed next to it ("Q" in our case); it then lists a set of options equivalent to the boot keys we have seen in this section, which can be switched on and off by pressing the corresponding number key (an asterisk indicates the kernels and options that are currently switched on). Once you are done, press ENTER to boot applying your selection, ESC to cancel the menu and boot normally, or "N" to disable all the Nextor kernels and boot (this is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller). See _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the Nextor 3.0 User Manual for the details.
 
 i.	In the boot menu, press "1" and then "5" (an asterisk will appear next to the "Boot in MSX-DOS 1 mode" and "Reduced drive allocation mode" entries), then press ENTER. You will boot in MSX-DOS 1 mode with one single drive assigned per driver, exactly as if you had kept the "1" and "5" keys pressed while the computer was booting - but this time keeping your hands free.
 
@@ -421,7 +421,7 @@ You will see the initialization messages printed by the driver, the slot and seg
 
 ![Initialization messages of the RAM driver, showing the slot and segment where it was installed and the drive that was mapped](img/gsg/InstallingRamDriver.png)
 
-***What has happened?*** The `DRVROP.COM` tool has allocated a segment from the memory mapper, loaded the driver file into it, and registered it in Nextor; from this point the driver works exactly like a driver embedded in ROM (it can even hook into the timer interrupt, hence the blinking CAPS LED). The `/m` flag has additionally mapped the first free drive letter to the first available device controlled by the new driver: a small RAM disk that lives in the driver's own RAM segment. See _[3.4.13. DRVROP: the driver operations tool](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool)_ in the Nextor 3.0 User Manual for the complete syntax of the tool.
+***What has happened?*** The `DRVROP.COM` tool has allocated a segment from the memory mapper, loaded the driver file into it, and registered it in Nextor; from this point the driver works exactly like a driver embedded in ROM (it can even hook into the timer interrupt, hence the blinking CAPS LED). The `/m` flag has additionally mapped the first free drive letter to the first available device controlled by the new driver: a small RAM disk that lives in the driver's own RAM segment. See _[3.4.13. DRVROP: the driver operations tool](Nextor_3.0_User_Manual.md#3413-drvrop-the-driver-operations-tool)_ in the Nextor 3.0 User Manual for the complete syntax of the tool.
 
 c. Issue a `DIR E:` command: you will see an empty drive with just a few kilobytes of free space. Copy a small file to it and verify that it is indeed a working drive, for example:
 
@@ -449,7 +449,7 @@ You will see the shutdown message printed by the driver, and the CAPS LED will s
 
 **Notes:**
 
-* Drivers can also be installed and uninstalled from BASIC, with the commands `CALL IDRIVER("RAMDRIVR.DRV",1)` and `CALL UDRIVER(<slot>,<segment>)` respectively; see _[3.6.12. The CALL IDRIVER command](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command)_ and _[3.6.13. The CALL UDRIVER command](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command)_ in the Nextor 3.0 User Manual.
+* Drivers can also be installed and uninstalled from BASIC, with the commands `CALL IDRIVER("RAMDRIVR.DRV",1)` and `CALL UDRIVER(<slot>,<segment>)` respectively; see _[3.6.12. The CALL IDRIVER command](Nextor_3.0_User_Manual.md#3612-the-call-idriver-command)_ and _[3.6.13. The CALL UDRIVER command](Nextor_3.0_User_Manual.md#3613-the-call-udriver-command)_ in the Nextor 3.0 User Manual.
 
 * RAM drivers don't work in MSX-DOS 1 mode, and they don't survive a computer reset. If you want a RAM driver to be always available, you can install it from your AUTOEXEC.BAT file.
 
