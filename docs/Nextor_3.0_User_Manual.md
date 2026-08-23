@@ -169,9 +169,9 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a description of the features that Nextor adds to MSX-DOS 2 and is intended primarily for end users, but it explains basic concepts that will be useful for developers as well. There are however two other documents aimed specifically at developers: _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ and _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_. The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level.
+This document provides a description of the features that Nextor adds to MSX-DOS 2 and is intended primarily for end users, but it explains basic concepts that will be useful for developers as well. There are however two other documents aimed specifically at developers: _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ and _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_. The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level.
 
-If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor%203.0%20What's%20New.md).
+If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor_3.0_What's_New.md).
 
 ### 1.1. Background
 
@@ -226,7 +226,7 @@ The driver's main purpose is to enumerate and access storage devices, but it als
 
 The following resources are available for Nextor device driver developers:
 
-*  The _[Nextor 3.0 Driver Development Guide](Nextor%203.0%20Driver%20Development%20Guide.md)_ document.
+*  The _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_ document.
 
 *  [A template driver](../sdk/templates/driver) that can be used as the skeleton for developing custom drivers.
 
@@ -315,7 +315,7 @@ Nextor introduces the _fast STROUT_ mode. When this mode is active, the string w
 
 ### 2.9. Extended mapper support routines
 
-MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides four new ones that allow reading data, writing data and calling routines with full slot and RAM segment number specification. See _[5. Extended mapper support routines](Nextor%203.0%20Programmers%20Reference.md#5-extended-mapper-support-routines)_ in the Nextor 3.0 Programmers Reference for details.
+MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides four new ones that allow reading data, writing data and calling routines with full slot and RAM segment number specification. See _[5. Extended mapper support routines](Nextor_3.0_Programmers_Reference.md#5-extended-mapper-support-routines)_ in the Nextor 3.0 Programmers Reference for details.
 
 ### 2.10. Boot keys and the boot menu
 
@@ -331,7 +331,7 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **4**: (for MSX Turbo-R only) Boot in R800-ROM mode, assign the largest mapper found as the primary mapper (instead of the internal mapper), and free the 64K allocated for the R800-DRAM mode. This is useful for using software that requires a huge amount of mapped RAM and can work only with the primary mapper; note however that the R800 CPU in ROM mode is significantly slower than in DRAM mode.
 
-*  **5**: Make Nextor assign only one drive letter per Nextor driver, instead of the normal behavior of assigning one drive per suitable active partition found (see _[3.2. Booting Nextor](#32-booting-nextor)_). Drivers are informed of this request and could act on it, see _[4.5.3. Driver query 3: Get driver initialization parameters](Nextor%203.0%20Driver%20Development%20Guide.md#453-driver-query-3-get-driver-initialization-parameters)_.
+*  **5**: Make Nextor assign only one drive letter per Nextor driver, instead of the normal behavior of assigning one drive per suitable active partition found (see _[3.2. Booting Nextor](#32-booting-nextor)_). Drivers are informed of this request and could act on it, see _[4.5.3. Driver query 3: Get driver initialization parameters](Nextor_3.0_Driver_Development_Guide.md#453-driver-query-3-get-driver-initialization-parameters)_.
 
 *  **6**: Install the Kanji driver before loading the DOS environment, in the same way as disks patched with the `KMODE.COM` tool did: the equivalent of `CALL KANJI` followed by `CALL ANK` is executed in BASIC, so the driver is installed (and the memory it needs is reserved, which is very difficult to do once the DOS environment is loaded) but the screen is left in ANK mode. This works in both MSX-DOS 2 and MSX-DOS 1 modes, and the boot process just continues normally if the computer doesn't have a Kanji driver (the failure of `CALL KANJI` is silently ignored).
 
@@ -400,7 +400,7 @@ There's yet another way to modify the Nextor booting procedure: the _one-time bo
 
 Being a RAM based mechanism, it's "one-time" in the sense that it won't work again on the next computer reset unless the signature and the key data are put in memory again. The signature is explicitly erased by Nextor after being read to make this behavior consistent.
 
-The `NEXBOOT.COM` tool (see _[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
+The `NEXBOOT.COM` tool (see _[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document.
 
 ### 2.11. Built-in partitioning tool
 
@@ -580,7 +580,7 @@ Nextor is supplied with a set of tools that allow managing the new capabilities 
 
 This section explains how to use these tools. Note however that you can also get a summary of the parameters accepted by each tool by invoking it without parameters; more detailed help is available as well by displaying the desired file directly with the TYPE command (for example: `TYPE MAPDRV.COM`).
 
-All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document.
+All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document.
 
 Please note that none of these tools work in MSX-DOS 1 mode; however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
 
@@ -746,7 +746,7 @@ This tool can be used on any drive, even those attached to MSX-DOS drivers. Note
 
 Some MSX-DOS command line applications are known to check the version number of MSXDOS2.SYS (`NEXTOR.SYS` in the case of Nextor) and refuse to work if this number is smaller than a certain value, typically 2.20. This was a problem in Nextor 2, in which the `NEXTOR.SYS` version number was 2.0 or 2.1.
 
-As a workaround for this issue, the `NEXTOR.SYS` version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document for more details). A command line tool that allows you to easily do this change has been created as well, its name is `NSYSVER.COM` and can be used as follows:
+As a workaround for this issue, the `NEXTOR.SYS` version number returned by the DOSVER function call is stored in RAM and can be changed easily (see the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document for more details). A command line tool that allows you to easily do this change has been created as well, its name is `NSYSVER.COM` and can be used as follows:
 
 ```
 NSYSVER <major version number>.<secondary version number>
@@ -937,7 +937,7 @@ None of this applies to MSX-DOS 1 mode, in this mode only integer (16 bit) secto
 
 New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. The `FORMAT` command of `COMMAND3.COM` can format these drives too, but the one of the old `COMMAND2.COM` works only for drives controlled by MSX-DOS drivers.
 
-If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md#27-_format-67h)_ document for more details.
+If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md#27-_format-67h)_ document for more details.
 
 #### 3.6.4. The CALL NEXTOR command
 
@@ -1268,7 +1268,7 @@ ATTRIB +R TOOLS.DSK --> Error
 
 Since version 2.1 Nextor allows booting in disk emulation mode. In this mode Nextor uses a disk image file (or a set of swappable files) as the boot device instead of a regular device. This is ideal for playing disks that were released on floppy disk and can't be run from a modern storage device, because they don't have a filesystem or because they need to run in MSX-DOS 1 mode.
 
-The technical details about how the disk emulation mode works are in the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document in case you are interested in building your own tool instead of using `EMUFILE.COM`.
+The technical details about how the disk emulation mode works are in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document in case you are interested in building your own tool instead of using `EMUFILE.COM`.
 
 
 #### 3.9.1. Entering and exiting the disk emulation mode

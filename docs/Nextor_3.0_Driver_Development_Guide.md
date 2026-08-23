@@ -115,9 +115,9 @@
 
 Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX computers. It is based on MSX-DOS 2.31, with which it is 100% compatible.
 
-This document provides a complete guide for programmers who want to develop device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor%203.0%20User%20Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor%203.0%20Programmers%20Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other than driver development.
+This document provides a complete guide for programmers who want to develop device drivers for Nextor. It is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor_3.0_User_Manual.md)_ prior to this document. Also, although not strictly necessary, it is recommended to take a look at the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document, which is a reference of the new features that Nextor adds to MSX-DOS 2 from a developer point of view other than driver development.
 
-Nextor 3 uses a driver structure that's similar, but not identical, to the one used by Nextor 2: drivers developed for Nextor 2 will need to be adapted to the new structure before they can be used in Nextor 3. This process is detailed in the _[Nextor 3.0 Driver Migration Guide](Nextor%203.0%20Driver%20Migration%20Guide.md)_.
+Nextor 3 uses a driver structure that's similar, but not identical, to the one used by Nextor 2: drivers developed for Nextor 2 will need to be adapted to the new structure before they can be used in Nextor 3. This process is detailed in the _[Nextor 3.0 Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md)_.
 
 ## 2. The Nextor kernel architecture
 
@@ -397,7 +397,7 @@ This section explains the routines and data that are available at page 0 (addres
 
 Remember that as explained in _[3. Creating a Nextor kernel ROM with embedded driver](#3-creating-a-nextor-kernel-rom-with-embedded-driver)_, the page 0 code becomes part of all the driver banks when the complete Nextor kernel ROM is generated.
 
-For drivers loaded in RAM the contents of this area are undefined as far as the kernel is concerned, but it can be used to pass initialization data when the driver is installed. See [the `_DRVRO` function call](Nextor%203.0%20Programmers%20Reference.md#315-driver-operations-_drvro-7fh) and _[4.5.6. Driver query 6: Initialize RAM driver](#456-driver-query-6-initialize-ram-driver)_ for details.
+For drivers loaded in RAM the contents of this area are undefined as far as the kernel is concerned, but it can be used to pass initialization data when the driver is installed. See [the `_DRVRO` function call](Nextor_3.0_Programmers_Reference.md#315-driver-operations-_drvro-7fh) and _[4.5.6. Driver query 6: Initialize RAM driver](#456-driver-query-6-initialize-ram-driver)_ for details.
 
 #### 4.2.1. GSLOT1 (402Dh)
 
@@ -685,11 +685,11 @@ The available sector numbers must range from zero to the number of available sec
 
 This routine must work for all block devices. If a non-block device supports reading and/or writing sectors, this routine may optionally work with that device as well.
 
-The `.IDEVN` error must be returned only for device numbers that don't exist in the driver. For a device that exists but is currently unavailable (for example a removable device with no medium inserted, or an empty card slot) the routine must return `.NRDY` instead; otherwise, accessing a drive mapped to an offline device will report the wrong error. This distinction didn't exist in Nextor 2, so it deserves special attention when porting old driver code (see [the driver migration guide](Nextor%203.0%20Driver%20Migration%20Guide.md)).
+The `.IDEVN` error must be returned only for device numbers that don't exist in the driver. For a device that exists but is currently unavailable (for example a removable device with no medium inserted, or an empty card slot) the routine must return `.NRDY` instead; otherwise, accessing a drive mapped to an offline device will report the wrong error. This distinction didn't exist in Nextor 2, so it deserves special attention when porting old driver code (see [the driver migration guide](Nextor_3.0_Driver_Migration_Guide.md)).
 
 If the device is a floppy disk drive (as reported by the driver via _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_) then the routine should use the media descriptor byte passed in C in order to determine the correct disk geometry. This byte is obtained from the disk's boot sector itself, so before it's available this routine will be called with C=0; the driver should assume a sensible default disk geometry in this case. For any other kind of device the value passed in C will be zero and should be ignored.
 
-The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](Nextor%203.0%20Programmers%20Reference.md#4-new-error-codes) and [the DOS errors SDK file](../sdk/asm/constants/dos_errors.inc).
+The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](Nextor_3.0_Programmers_Reference.md#4-new-error-codes) and [the DOS errors SDK file](../sdk/asm/constants/dos_errors.inc).
 
 #### 4.4.10. RESERVED_0/1/2 (412Bh/412Eh/4131h)
 
@@ -778,7 +778,7 @@ The kernel will invoke this query at boot time, giving the driver an opportunity
 Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=0 and HL=0.
 
 The "User is requesting reduced drive count" flag will be set if the user wants one single drive to be allocated per driver.
-This happens when the user keeps the 5 key pressed at boot time, when the one-time boot keys mechanism is used (for example via the `NEXBOOT.COM` tool), or when the 5 key is marked as active in [the boot menu](Nextor%203.0%20User%20Manual.md#210-boot-keys-and-the-boot-menu). The same flag is passed to _[4.5.4. Driver query 4: Initialize driver](#454-driver-query-4-initialize-driver)_ as well.
+This happens when the user keeps the 5 key pressed at boot time, when the one-time boot keys mechanism is used (for example via the `NEXBOOT.COM` tool), or when the 5 key is marked as active in [the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu). The same flag is passed to _[4.5.4. Driver query 4: Initialize driver](#454-driver-query-4-initialize-driver)_ as well.
 
 After this query returns the driver is free to use [`GWORK`](#425-gwork-4045h) at any time to obtain the address of the space reserved for the current slot at SLTWRK. The driver should act as follows regarding the page 3 work area:
 
@@ -890,7 +890,7 @@ This query is the equivalent of _[4.5.4. Driver query 4: Initialize driver](#454
 
 Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` plus B=0. Returning `RESULT_INIT_ERROR` will cause the kernel to skip the registration of this driver. 
 
-Drivers are loaded in RAM and initialized typically using either [the `CALL IDRIVER` command](Nextor%203.0%20User%20Manual.md#3612-the-call-idriver-command) or [the `DRVROP.COM` tool](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool), but custom loaders could be used too. When using these standard tools the first 256 bytes of the corresponding RAM segment (addresses 4000h-40FFh) may contain user-provided initialization data for the driver; by convention the byte at address 4000h holds the data length and the data itself starts at address 4001h. It's the responsibility of the driver developer to document which initialization data is supported or required by the driver, if any; if initialization data is required but not supplied, the driver should return `RESULT_INIT_ERROR`. See [the `_DRVRO` function call](Nextor%203.0%20Programmers%20Reference.md#315-driver-operations-_drvro-7fh) for details on the full process to load and initialize a driver in RAM, including the initialization data convention.
+Drivers are loaded in RAM and initialized typically using either [the `CALL IDRIVER` command](Nextor_3.0_User_Manual.md#3612-the-call-idriver-command) or [the `DRVROP.COM` tool](Nextor_3.0_User_Manual.md#3413-drvrop-the-driver-operations-tool), but custom loaders could be used too. When using these standard tools the first 256 bytes of the corresponding RAM segment (addresses 4000h-40FFh) may contain user-provided initialization data for the driver; by convention the byte at address 4000h holds the data length and the data itself starts at address 4001h. It's the responsibility of the driver developer to document which initialization data is supported or required by the driver, if any; if initialization data is required but not supplied, the driver should return `RESULT_INIT_ERROR`. See [the `_DRVRO` function call](Nextor_3.0_Programmers_Reference.md#315-driver-operations-_drvro-7fh) for details on the full process to load and initialize a driver in RAM, including the initialization data convention.
 
 This query **must not** initialize the screen or print any text directly. If the driver wants to show an initialization text, it must use the callback provided in register DE, as explained in _[4.5.4. Driver query 4: Initialize driver](#454-driver-query-4-initialize-driver)_.
 
@@ -904,9 +904,9 @@ Output: A  = RESULT_OK or RESULT_NOT_IMPLEMENTED
 
 This query is intended **only** for drivers loaded in RAM. Drivers in ROM must do nothing and return `RESULT_NOT_IMPLEMENTED` if they receive this query.
 
-This query will be invoked when the user requests to uninstall a driver installed in RAM, typically by using [the `CALL UDRIVER` command](Nextor%203.0%20User%20Manual.md#3613-the-call-udriver-command) or [the `DRVROP.COM` tool](Nextor%203.0%20User%20Manual.md#3413-drvrop-the-driver-operations-tool), but a custom loader could be used too.
+This query will be invoked when the user requests to uninstall a driver installed in RAM, typically by using [the `CALL UDRIVER` command](Nextor_3.0_User_Manual.md#3613-the-call-udriver-command) or [the `DRVROP.COM` tool](Nextor_3.0_User_Manual.md#3413-drvrop-the-driver-operations-tool), but a custom loader could be used too.
 
-The kernel will invoke this routine as a "courtesy", but the driver can't return an error from this query and thus it can't abort the uninstall process: regardless of what this routine returns, the kernel will unregister the driver and then the tool doing the uninstall (if it follows the rules) will free the corresponding RAM segment. The driver should always return either `RESULT_OK` or `RESULT_NOT_IMPLEMENTED` (which are equivalent), though, for compatibility with possible changes to these mechanics in future versions of Nextor. See [the `_DRVRO` function call](Nextor%203.0%20Programmers%20Reference.md#315-driver-operations-_drvro-7fh) for details on the full uninstall process.
+The kernel will invoke this routine as a "courtesy", but the driver can't return an error from this query and thus it can't abort the uninstall process: regardless of what this routine returns, the kernel will unregister the driver and then the tool doing the uninstall (if it follows the rules) will free the corresponding RAM segment. The driver should always return either `RESULT_OK` or `RESULT_NOT_IMPLEMENTED` (which are equivalent), though, for compatibility with possible changes to these mechanics in future versions of Nextor. See [the `_DRVRO` function call](Nextor_3.0_Programmers_Reference.md#315-driver-operations-_drvro-7fh) for details on the full uninstall process.
 
 This query **must not** initialize the screen or print any text directly. If the driver wants to show any informative text, it must use the callback provided in register DE, as explained in _[4.5.4. Driver query 4: Initialize driver](#454-driver-query-4-initialize-driver)_.
 
@@ -990,7 +990,7 @@ The information about cylinders, heads and sectors per track applies only to flo
 
 The "read only" flag should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dynamically write protected and write enabled should not be reported as a read-only device.
 
-If the "floppy disk drive" flag is set Nextor will treat the device differently in some aspects, see ["Support for floppy disks" in the user manual](Nextor%203.0%20User%20Manual.md#25-support-for-floppy-disks). If a driver reports a device as being a floppy disk it should implement the _[4.6.5. Device query 5: Get format choices for a floppy disk device](#465-device-query-5-get-format-choices-for-a-floppy-disk-device)_ and _[4.6.6. Device query 6: Format a floppy disk device](#466-device-query-6-format-a-floppy-disk-device)_ queries too.
+If the "floppy disk drive" flag is set Nextor will treat the device differently in some aspects, see ["Support for floppy disks" in the user manual](Nextor_3.0_User_Manual.md#25-support-for-floppy-disks). If a driver reports a device as being a floppy disk it should implement the _[4.6.5. Device query 5: Get format choices for a floppy disk device](#465-device-query-5-get-format-choices-for-a-floppy-disk-device)_ and _[4.6.6. Device query 6: Format a floppy disk device](#466-device-query-6-format-a-floppy-disk-device)_ queries too.
 
 #### 4.6.3. Device query 3: Get device status
 
@@ -1059,7 +1059,7 @@ Output: A = RESULT_OK: ok, format information provided
 
 This query is intended for floppy disk devices only. For any other device type (and for floppy disks if the driver doesn't support formatting) it should always return `RESULT_NOT_IMPLEMENTED`. If this query is implemented, _[4.6.6. Device query 6: Format a floppy disk device](#466-device-query-6-format-a-floppy-disk-device)_ must be implemented too.
 
-If there's only one way of formatting the disk, B=0 should be returned. If the choices are _single side/double side_ or _single side/double side double density/double side high density_, it should return B=1 or B=2 respectively (note that this is true regardless of the actual form factor or capacity of the disk). These are the most common options for formatting floppy disks so these return values should cover the majority of cases. [The `CALL FORMAT` command](Nextor%203.0%20User%20Manual.md#363-the-call-format-command) and [the `_FORMAT` function call](Nextor%203.0%20Programmers%20Reference.md#27-_format-67h) will use stock strings hardcoded in the Nextor kernel in these cases.
+If there's only one way of formatting the disk, B=0 should be returned. If the choices are _single side/double side_ or _single side/double side double density/double side high density_, it should return B=1 or B=2 respectively (note that this is true regardless of the actual form factor or capacity of the disk). These are the most common options for formatting floppy disks so these return values should cover the majority of cases. [The `CALL FORMAT` command](Nextor_3.0_User_Manual.md#363-the-call-format-command) and [the `_FORMAT` function call](Nextor_3.0_Programmers_Reference.md#27-_format-67h) will use stock strings hardcoded in the Nextor kernel in these cases.
 
 If none of the built-in choice sets works for a given device, or if the driver wants to provide a custom choice string, the driver can copy a custom string (ASCII, zero-terminated) in the buffer provided in HL, constrained to the buffer length passed in DE (Note: currently the Nextor kernel will copy up to 512 bytes even if the reported buffer size is bigger and the choice string is longer). Driver developers can use [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm) to easily copy custom choice strings to the supplied buffer address.
 
@@ -1121,7 +1121,7 @@ Note that whatever is placed in this area, it must be identical in both banks 0 
 
 ## 5. Testing drivers with DRVTEST.COM
 
-Nextor is distributed with `DRVTEST.COM`, a command line tool that exercises the driver queries and the device queries of a driver installed in the system (either embedded in ROM or loaded in RAM) directly from the DOS prompt. The tool invokes the `DRIVER_QUERY` and `DEVICE_QUERY` routines of the driver by using [the `_CDRVR` function call](Nextor%203.0%20Programmers%20Reference.md#311-call-a-routine-in-a-device-driver-_cdrvr-7bh) and prints the results, so there's no need to write a dedicated test program (or to reboot the system) in order to verify that a driver under development handles the queries as expected.
+Nextor is distributed with `DRVTEST.COM`, a command line tool that exercises the driver queries and the device queries of a driver installed in the system (either embedded in ROM or loaded in RAM) directly from the DOS prompt. The tool invokes the `DRIVER_QUERY` and `DEVICE_QUERY` routines of the driver by using [the `_CDRVR` function call](Nextor_3.0_Programmers_Reference.md#311-call-a-routine-in-a-device-driver-_cdrvr-7bh) and prints the results, so there's no need to write a dedicated test program (or to reboot the system) in order to verify that a driver under development handles the queries as expected.
 
 The usage syntax is as follows (run `DRVTEST ?` for a detailed explanation of all the options):
 

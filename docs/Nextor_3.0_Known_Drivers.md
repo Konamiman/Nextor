@@ -17,7 +17,7 @@ Additionally, the Nextor repository itself contains [the standalone ROM driver](
 
 Notes:
 
-* The Nextor 2 versions of these drivers (except the Turbo-R FDD driver, which is new in Nextor 3) remain available in [the v2.1 branch](https://github.com/Konamiman/Nextor/tree/v2.1/source/kernel/drivers) of the Nextor repository. Remember that Nextor 2 drivers don't work with Nextor 3 and vice versa; see [the Nextor 3.0 Driver Migration Guide](Nextor%203.0%20Driver%20Migration%20Guide.md) for how to adapt a Nextor 2 driver to Nextor 3.
+* The Nextor 2 versions of these drivers (except the Turbo-R FDD driver, which is new in Nextor 3) remain available in [the v2.1 branch](https://github.com/Konamiman/Nextor/tree/v2.1/source/kernel/drivers) of the Nextor repository. Remember that Nextor 2 drivers don't work with Nextor 3 and vice versa; see [the Nextor 3.0 Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md) for how to adapt a Nextor 2 driver to Nextor 3.
 
 * The OCM (One Chip MSX) driver that was part of Nextor 2 has been discontinued, since its source code is not available.
 

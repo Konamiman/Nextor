@@ -2,7 +2,7 @@
 
 Nextor is a disk operating system for MSX computers. It is built on top of the source code of MSX-DOS 2.31, released in 1991.
 
-If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](docs/Nextor%203.0%20What's%20New.md). If you are new to Nextor [the getting started guide](docs/Nextor%203.0%20Getting%20Started%20Guide.md) will be useful for you.
+If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](docs/Nextor_3.0_What's_New.md). If you are new to Nextor [the getting started guide](docs/Nextor_3.0_Getting_Started_Guide.md) will be useful for you.
 
 The source code of Nextor is published with permission from the MSX Licensing Corporation under certain terms. **Please take a moment to read [the license terms](LICENSE.md) for details**.
 
@@ -10,7 +10,7 @@ Please visit [the releases section](https://github.com/Konamiman/Nextor/releases
 
 ## Looking for the drivers?
 
-As of Nextor 3.0 this repository no longer contains Nextor drivers for specific hardware. Drivers that were part of the repository in Nextor 2 now live in their own separate repositories; other drivers are distributed by their developers in whatever way they choose. See [the known drivers document](docs/Nextor%203.0%20Known%20Drivers.md) for the list of available drivers and where to get each of them.
+As of Nextor 3.0 this repository no longer contains Nextor drivers for specific hardware. Drivers that were part of the repository in Nextor 2 now live in their own separate repositories; other drivers are distributed by their developers in whatever way they choose. See [the known drivers document](docs/Nextor_3.0_Known_Drivers.md) for the list of available drivers and where to get each of them.
 
 ## Repository structure
 
