@@ -49,7 +49,7 @@ You will want to keep two references at hand while migrating:
 
 * The _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_, which is the full specification of the new driver structure. This guide links to it liberally instead of repeating its contents.
 
-* [The dummy driver template](../sdk/templates/driver/driver.asm) supplied with [the Nextor SDK](../sdk/README.md), which contains per-routine comments of the form "this is the same as Nextor 2 X, except..." - a good companion when in doubt about a specific routine.
+* [The dummy driver template](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/templates/driver/driver.asm) supplied with [the Nextor SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md), which contains per-routine comments of the form "this is the same as Nextor 2 X, except..." - a good companion when in doubt about a specific routine.
 
 ## 2. What changed in a nutshell
 
@@ -114,7 +114,7 @@ Alternatively you can keep `org 4100h` and prepend 256 zero bytes to the assembl
 
 ### 3.2. Include the SDK files
 
-Add these includes at the top of the file (the paths are relative to the root of [the Nextor SDK](../sdk/README.md); you will pass the SDK location to the assembler in step _[3.10. Set up the new build](#310-set-up-the-new-build)_):
+Add these includes at the top of the file (the paths are relative to the root of [the Nextor SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md); you will pass the SDK location to the assembler in step _[3.10. Set up the new build](#310-set-up-the-new-build)_):
 
 ```
     INCLUDE asm/macros/undoc.inc
@@ -205,7 +205,7 @@ This is the heart of the compatibility layer: two dispatcher routines that map e
 
 The code shown throughout this step is the actual Sunrise IDE implementation, presented as a working example rather than as a recipe to follow literally. Depending on how your driver is architected, you may find that following a different strategy (e.g. dispatching with a jump table instead of a chain of `dec a`, merging adapters that end up doing the same thing, or rewriting a routine outright instead of wrapping the old one) is more convenient, and that's fine as long as the end result (adapter code that allows using the old routines under the new driver conventions) is the same.
 
-Also include [the SDK's `OUTPUT_STRING` helper](../sdk/asm/code/output_string.asm), which all the string-serving adapters rely on:
+Also include [the SDK's `OUTPUT_STRING` helper](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/code/output_string.asm), which all the string-serving adapters rely on:
 
 ```
     INCLUDE asm/code/output_string.asm
@@ -389,7 +389,7 @@ Notes:
 
 * **Watch out for the `.IDEVL` error in your old `DEV_RW`**: since Nextor 2 didn't distinguish nonexistent devices from devices that exist but are currently absent, old drivers commonly return `.IDEVL` for both; for example, for a card slot that was empty when the driver initialized. In Nextor 3 these are different results: `READ_WRITE` must return `.NRDY` ("not ready") when the device exists but is currently unavailable, reserving `.IDEVN` for device numbers that your driver never provides. The kernel is somewhat forgiving about this particular mistake (in MSX-DOS 1 mode it converts an `.IDEVN` result from `READ_WRITE` into the same "disk offline" error that `.NRDY` produces, and in MSX-DOS 2 mode the media change check reports an unavailable removable device as "not ready" before `READ_WRITE` is ever called), but don't rely on that: in MSX-DOS 2 mode, a device that isn't reported as removable, or a driver that doesn't implement the "get device status" query, will still surface `.IDEVN` ("Invalid device number") to the application instead of "Not ready". An easy way to get this right in the glue routine: validate the device number range yourself before calling the old `DEV_RW`, and afterwards translate an `.IDEVN` result to `.NRDY` (at that point the device number is known to be valid, so the old code can only mean "device absent"). That's exactly what the `READ_WRITE` routine quoted above does.
 
-* The `_IDEVL` and `_NRDY` symbols in the code above are the driver's own `EQU`s, carried over from its Nextor 2 version (`_IDEVL equ 0B5h`, `_NRDY equ 0FCh`); the SDK instead defines these codes as `.IDEVN` and `.NRDY` in [`dos_errors.inc`](../sdk/asm/constants/dos_errors.inc). Keeping your old `EQU`s is perfectly fine, just don't get confused by the two spellings of the same 0B5h value.
+* The `_IDEVL` and `_NRDY` symbols in the code above are the driver's own `EQU`s, carried over from its Nextor 2 version (`_IDEVL equ 0B5h`, `_NRDY equ 0FCh`); the SDK instead defines these codes as `.IDEVN` and `.NRDY` in [`dos_errors.inc`](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/constants/dos_errors.inc). Keeping your old `EQU`s is perfectly fine, just don't get confused by the two spellings of the same 0B5h value.
 
 * "Get device status" and "get device availability" are served here by one single routine, which is safe only because the old Sunrise IDE `DEV_STATUS` always answers "available, not changed": it keeps no per-call state. If your old `DEV_STATUS` does track medium changes (that is, if it can answer "changed" once and "not changed" afterwards), then the two queries **must** be separated, because asking for availability is not allowed to consume the change flag: _[4.6.4. Device query 4: Get device availability](Nextor_3.0_Driver_Development_Guide.md#464-device-query-4-get-device-availability)_ requires that the next "get device status" still reports the change. Serve the availability query with a presence test that doesn't touch the change tracking, or just return `RESULT_NOT_IMPLEMENTED` for it if the device is always present.
 
@@ -443,7 +443,7 @@ The way out is to leave the old code alone and adapt around it:
 
 2. Put a zero at the end of the meaningful content of that image, which turns the fixed-size padded string into a zero-terminated one (and drops the padding).
 
-3. Copy the result to the caller's buffer with [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm), which does the size-limited copy and returns the appropriate result code.
+3. Copy the result to the caller's buffer with [the `OUTPUT_STRING` routine from the SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/code/output_string.asm), which does the size-limited copy and returns the appropriate result code.
 
 In skeleton form:
 
@@ -513,7 +513,7 @@ If it does, two changes are needed:
 
 1. The hook is now opt-in: set bit 1 of B in the "get driver initialization parameters" adapter (`DO_DRVQ_GET_INIT_PARAMS` from step 3.5), e.g. with a `set 1,b` after the `rl b` line.
 
-2. The chaining convention changed: in Nextor 2 the handler used the alternate register D' as the chain flag (it was entered with D'=1, and returned D'=0 to prevent the kernel and system handlers from running); in Nextor 3 the flag lives in IYl instead, as described in _[4.4.4. EXTBIO (4119h)](Nextor_3.0_Driver_Development_Guide.md#444-extbio-4119h)_, and the handler doesn't get any preset value for the flag (as the IY register is used for the inter-slot call that invokes the handler). A small wrapper reproduces the old entry state and converts the result, so the legacy handler runs unmodified. This is the wrapper used by [the example RAM driver](../source/drivers/ram-driver-example.asm), where `_DO_EXTBIO` is the old-style handler:
+2. The chaining convention changed: in Nextor 2 the handler used the alternate register D' as the chain flag (it was entered with D'=1, and returned D'=0 to prevent the kernel and system handlers from running); in Nextor 3 the flag lives in IYl instead, as described in _[4.4.4. EXTBIO (4119h)](Nextor_3.0_Driver_Development_Guide.md#444-extbio-4119h)_, and the handler doesn't get any preset value for the flag (as the IY register is used for the inter-slot call that invokes the handler). A small wrapper reproduces the old entry state and converts the result, so the legacy handler runs unmodified. This is the wrapper used by [the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm), where `_DO_EXTBIO` is the old-style handler:
 
 ```
 DO_EXTBIO:
@@ -539,7 +539,7 @@ The last step is building the migrated driver with the Nextor 3 toolchain, which
 
 In the Nextor 2 era, drivers typically lived inside a fork of the Nextor kernel repository and were built by the kernel's own Makefile. In Nextor 3 drivers are standalone projects, organized and distributed however their developers prefer (the drivers that were part of Nextor 2 live in their own git repositories, but a dedicated web site or plain downloadable binaries are equally valid options), and build against two artifacts:
 
-* **The Nextor SDK** ([`sdk/` in the Nextor repository](../sdk/README.md), see also _[8.1. The Nextor SDK](Nextor_3.0_Programmers_Reference.md#81-the-nextor-sdk)_): the include files and helper code used in the steps above. The migrated drivers pull it in as a git submodule; both the Sunrise IDE and the Turbo-R FDD repositories have a `make setup` target that initializes the submodule as a blobless, sparse checkout of the `sdk/` directory only, so the full Nextor repository is never fetched.
+* **The Nextor SDK** ([`sdk/` in the Nextor repository](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md), see also _[8.1. The Nextor SDK](Nextor_3.0_Programmers_Reference.md#81-the-nextor-sdk)_): the include files and helper code used in the steps above. The migrated drivers pull it in as a git submodule; both the Sunrise IDE and the Turbo-R FDD repositories have a `make setup` target that initializes the submodule as a blobless, sparse checkout of the `sdk/` directory only, so the full Nextor repository is never fetched.
 
 * **The Nextor kernel base file** (`Nextor-<version>.base[.variant].dat`), distributed with the Nextor releases, pointed at by a `NEXTOR_BASE` variable in the Makefile.
 
@@ -555,7 +555,7 @@ Notes:
 
 * `--include-directory` must point to the SDK root so the `INCLUDE asm/...` lines from step 3.2 resolve correctly.
 
-* The bank switching code (`chgbnk`) is unchanged from Nextor 2, so you can keep using your existing file; the SDK also ships ready-made sources for the ASCII8 and ASCII16 mappers ([`asm/chgbnk/ascii8.asm`](../sdk/asm/chgbnk/ascii8.asm) and [`asm/chgbnk/ascii16.asm`](../sdk/asm/chgbnk/ascii16.asm)). The `/m:` parameter can be omitted for ASCII16, see _[3.2. Using the mknexrom utility](Nextor_3.0_Driver_Development_Guide.md#32-using-the-mknexrom-utility)_.
+* The bank switching code (`chgbnk`) is unchanged from Nextor 2, so you can keep using your existing file; the SDK also ships ready-made sources for the ASCII8 and ASCII16 mappers ([`asm/chgbnk/ascii8.asm`](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/chgbnk/ascii8.asm) and [`asm/chgbnk/ascii16.asm`](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/chgbnk/ascii16.asm)). The `/m:` parameter can be omitted for ASCII16, see _[3.2. Using the mknexrom utility](Nextor_3.0_Driver_Development_Guide.md#32-using-the-mknexrom-utility)_.
 
 * If you chose to keep `org 4100h` in step 3.1, prepend 256 zero bytes to `driver.bin` before invoking `mknexrom`.
 
@@ -563,7 +563,7 @@ Notes:
 
 * To support Z180-based MSX machines, assemble with `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS` (this activates the documented-instructions variants of the `undoc.inc` macros) and pair the result with a `.NO_UNDOC.` variant of the kernel base file.
 
-* Instead of installing a local toolchain you can build inside [the Nextor development Docker image](../docker/README.md) (see _[8.2. The Docker development image](Nextor_3.0_Programmers_Reference.md#82-the-docker-development-image)_), which provides N80, `mknexrom`, the SDK and the kernel base files. The migrated driver repositories include a `docker-build.sh` wrapper that does exactly this.
+* Instead of installing a local toolchain you can build inside [the Nextor development Docker image](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md) (see _[8.2. The Docker development image](Nextor_3.0_Programmers_Reference.md#82-the-docker-development-image)_), which provides N80, `mknexrom`, the SDK and the kernel base files. The migrated driver repositories include a `docker-build.sh` wrapper that does exactly this.
 
 The Makefiles of [the Sunrise IDE driver](https://github.com/Konamiman/SunriseIDE-Nextor-driver) and [the MSX Turbo-R FDD driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) are complete, commented, real-world examples of this setup.
 
@@ -571,11 +571,11 @@ The Makefiles of [the Sunrise IDE driver](https://github.com/Konamiman/SunriseID
 
 Nextor 3 drivers can also be loaded into a mapped RAM segment at runtime, with no ROM flashing involved; see _[4.5.6. Driver query 6: Initialize RAM driver](Nextor_3.0_Driver_Development_Guide.md#456-driver-query-6-initialize-ram-driver)_. The Turbo-R FDD driver builds both flavors from the same source file, selected by a `RAM_DRIVER` symbol (`make ram` runs a single N80 invocation with `--define-symbols RAM_DRIVER`; no kernel base file, bank switching code or mknexrom involved, the output is a plain `.drv` file). Under `if RAM_DRIVER`, the source:
 
-* skips the 256 byte dummy block: the source assembles at 4100h in both flavors, but only the ROM build gets the block prepended at build time (RAM drivers are loaded at 4100h directly). A RAM-only driver may also omit the `RESERVED_*` and `DIRECT_*` jump table entries, as [the example RAM driver](../source/drivers/ram-driver-example.asm) does;
+* skips the 256 byte dummy block: the source assembles at 4100h in both flavors, but only the ROM build gets the block prepended at build time (RAM drivers are loaded at 4100h directly). A RAM-only driver may also omit the `RESERVED_*` and `DIRECT_*` jump table entries, as [the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) does;
 
 * returns `RESULT_NOT_IMPLEMENTED` for driver queries 3 and 4, and implements driver queries 6 ("initialize RAM driver", which receives the slot and segment in B and C) and 7 ("shut down RAM driver") instead.
 
-The resulting file is loaded with [the `CALL IDRIVER` command](Nextor_3.0_User_Manual.md#3612-the-call-idriver-command) or [the `DRVROP.COM` tool](Nextor_3.0_User_Manual.md#3413-drvrop-the-driver-operations-tool). [The SDK driver template](../sdk/templates/driver/driver.asm) has this dual-target conditional structure already in place.
+The resulting file is loaded with [the `CALL IDRIVER` command](Nextor_3.0_User_Manual.md#3612-the-call-idriver-command) or [the `DRVROP.COM` tool](Nextor_3.0_User_Manual.md#3413-drvrop-the-driver-operations-tool). [The SDK driver template](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/templates/driver/driver.asm) has this dual-target conditional structure already in place.
 
 ## 5. Testing the migrated driver
 

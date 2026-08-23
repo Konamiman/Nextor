@@ -257,7 +257,7 @@ _Figure 3 - Nextor kernel structure ("K" is the kernel common code bank count)_
 
 Nextor will use the same rule as MSX-DOS 2 to decide which kernel will be the master if more than one kernel is found (the kernel with the highest version number will win). However this applies to other Nextor kernels only; Nextor will always override other MSX-DOS 1 or 2 kernels present in the system, regardless of their version number.
 
-In Nextor 2 the only way to use a device driver was to append it to a Nextor kernel ROM as explained below. Nextor 3 adds the ability to dynamically load drivers in RAM too. Except where otherwise noted, the information provided in this document applies to both drivers embedded in ROM and drivers loaded in RAM. See [the source of the example RAM driver](../source/drivers/ram-driver-example.asm) for a complete working example.
+In Nextor 2 the only way to use a device driver was to append it to a Nextor kernel ROM as explained below. Nextor 3 adds the ability to dynamically load drivers in RAM too. Except where otherwise noted, the information provided in this document applies to both drivers embedded in ROM and drivers loaded in RAM. See [the source of the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) for a complete working example.
 
 ## 3. Creating a Nextor kernel ROM with embedded driver
 
@@ -309,7 +309,7 @@ The result of this procedure is a ready to use complete Nextor ROM file with you
 
 Instead of manually performing all the steps needed to build a complete Nextor kernel ROM, it is usually more convenient to use the supplied `mknexrom` utility. This tool can be used to create a new Nextor kernel ROM file, but it also allows modifying an existing file by changing the mapper code and/or adding extra content in the free 256 byte areas present at the end of banks 0 and 3.
 
-`mknexrom` is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](../docker/README.md).
+`mknexrom` is supplied as a command-line executable file for Linux only, but the source code in standard C is provided as well, so it should be easy to port it to other platforms. The tool is also included in [the Nextor development Docker image](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md).
 
 The `mknexrom` tool usage syntax is as follows:
 
@@ -383,7 +383,7 @@ ret
 
 This section contains all the details needed in order to develop a device driver for Nextor. The necessary elements, their locations, and the required routine input and output parameters are explained.
 
-Note that [the source code of a dummy driver](../sdk/templates/driver/driver.asm) is supplied as part of [the Nextor development SDK](../sdk/README.md). You can use that file together with the supplied supporting files (the makefile and the bank switching code file) as the skeleton for developing your own driver.
+Note that [the source code of a dummy driver](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/templates/driver/driver.asm) is supplied as part of [the Nextor development SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md). You can use that file together with the supplied supporting files (the makefile and the bank switching code file) as the skeleton for developing your own driver.
 
 ### 4.1. One single driver model
 
@@ -393,7 +393,7 @@ Another important difference is that a Nextor 3 driver can tell apart devices th
 
 ### 4.2. Page 0 routines and data
 
-This section explains the routines and data that are available at page 0 (addresses 4000h-40FFh) of all the Nextor banks, including the driver bank(s). These routines may be useful helpers for the driver code. They are directly available only for drivers embedded in ROM; drivers loaded in RAM can still invoke them by performing an inter-slot call (with the BIOS routine `CALSLT`) to the Nextor kernel slot, but since `CALSLT` itself uses IX and IY (to hold the address of the routine to call and the target slot), input values can't be passed to the called routine in these registers. The _[4.2.7. CALLB0_IX_IY (404Bh)](#427-callb0_ix_iy-404bh)_ routine exists precisely to work around this limitation; see how [the example RAM driver](../source/drivers/ram-driver-example.asm) uses it to invoke the `CALBAS` routine in BIOS.
+This section explains the routines and data that are available at page 0 (addresses 4000h-40FFh) of all the Nextor banks, including the driver bank(s). These routines may be useful helpers for the driver code. They are directly available only for drivers embedded in ROM; drivers loaded in RAM can still invoke them by performing an inter-slot call (with the BIOS routine `CALSLT`) to the Nextor kernel slot, but since `CALSLT` itself uses IX and IY (to hold the address of the routine to call and the target slot), input values can't be passed to the called routine in these registers. The _[4.2.7. CALLB0_IX_IY (404Bh)](#427-callb0_ix_iy-404bh)_ routine exists precisely to work around this limitation; see how [the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) uses it to invoke the `CALBAS` routine in BIOS.
 
 Remember that as explained in _[3. Creating a Nextor kernel ROM with embedded driver](#3-creating-a-nextor-kernel-rom-with-embedded-driver)_, the page 0 code becomes part of all the driver banks when the complete Nextor kernel ROM is generated.
 
@@ -494,7 +494,7 @@ This routine is useful for code placed in [the free space at kernel main bank](#
 
 #### 4.2.7. CALLB0_IX_IY (404Bh)
 
-This routine does the same as [`CALLB0`](#423-callb0-403fh), but it reads the contents of registers IX and IY from `TMP_IX` (F1D2h) and `TMP_IY` (F1D4h) before invoking the routine at (BK4_ADD). Drivers loaded in RAM need to use this routine instead of `CALLB0` when invoking routines in the kernel ROM that make use of IX or IY; see for example how [the example RAM driver](../source/drivers/ram-driver-example.asm) uses it to invoke the `CALBAS` routine in BIOS.
+This routine does the same as [`CALLB0`](#423-callb0-403fh), but it reads the contents of registers IX and IY from `TMP_IX` (F1D2h) and `TMP_IY` (F1D4h) before invoking the routine at (BK4_ADD). Drivers loaded in RAM need to use this routine instead of `CALLB0` when invoking routines in the kernel ROM that make use of IX or IY; see for example how [the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) uses it to invoke the `CALBAS` routine in BIOS.
 
 
 #### 4.2.8. K_SIZE (40FEh)
@@ -554,7 +554,7 @@ This is the complete code for the driver header. The label names referenced in t
 
 This section describes the routines that a driver must implement. The routine name presented is the label jumped to in the jump table above, and the provided address is the one of the corresponding entry in the jump table. How the routines are actually arranged in the driver memory space (in ROM or RAM) is up to the driver developer, as long as they are past the driver header.
 
-Some of these routines return error codes that are referred to by name. For the corresponding numeric values see [the driver result codes file in the SDK](../sdk/asm/constants/driver_result_codes.inc).
+Some of these routines return error codes that are referred to by name. For the corresponding numeric values see [the driver result codes file in the SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/constants/driver_result_codes.inc).
 
 None of these routines need to preserve any of the registers not used to return data.
 
@@ -579,7 +579,7 @@ CALLB0: equ 403Fh
     call CALLB0
 ```
 
-For drivers loaded in RAM the process is a bit more convoluted and [the CALLB0_IX_IY routine](#427-callb0_ix_iy-404bh) must be used instead. See [the code for the example RAM driver](../source/drivers/ram-driver-example.asm) for a working example.
+For drivers loaded in RAM the process is a bit more convoluted and [the CALLB0_IX_IY routine](#427-callb0_ix_iy-404bh) must be used instead. See [the code for the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) for a working example.
 
 If the driver does not handle BASIC extended statements, this routine must simply set the carry flag and return.
 
@@ -689,7 +689,7 @@ The `.IDEVN` error must be returned only for device numbers that don't exist in 
 
 If the device is a floppy disk drive (as reported by the driver via _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_) then the routine should use the media descriptor byte passed in C in order to determine the correct disk geometry. This byte is obtained from the disk's boot sector itself, so before it's available this routine will be called with C=0; the driver should assume a sensible default disk geometry in this case. For any other kind of device the value passed in C will be zero and should be ignored.
 
-The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](Nextor_3.0_Programmers_Reference.md#4-new-error-codes) and [the DOS errors SDK file](../sdk/asm/constants/dos_errors.inc).
+The error codes returned are the same used by the Nextor function calls, see [the list in the Programmers Reference](Nextor_3.0_Programmers_Reference.md#4-new-error-codes) and [the DOS errors SDK file](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/constants/dos_errors.inc).
 
 #### 4.4.10. RESERVED_0/1/2 (412Bh/412Eh/4131h)
 
@@ -713,7 +713,7 @@ When these routines are entered, paging state will be the same as when the bank 
 
 If the driver does not implement any direct call code, it can simply fill these entry points with `RET` instructions, i.e. `ds 5*3,0C9h`.
 
-These entries are only really useful for ROM drivers. Drivers loaded in RAM should always use `CUSTOM_DRIVER_QUERY` to implement custom extensibility; in fact, drivers loaded in RAM may omit these entries (together with the `RESERVED_0/1/2` entries) from the jump table entirely, as [the example RAM driver](../source/drivers/ram-driver-example.asm) does.
+These entries are only really useful for ROM drivers. Drivers loaded in RAM should always use `CUSTOM_DRIVER_QUERY` to implement custom extensibility; in fact, drivers loaded in RAM may omit these entries (together with the `RESERVED_0/1/2` entries) from the jump table entirely, as [the example RAM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm) does.
 
 
 ### 4.5. Driver queries
@@ -751,7 +751,7 @@ This query allows the driver to provide some textual information about itself. I
 
 The returned string must be in ASCII and zero-terminated. The routine must return at most D bytes, this includes the terminating zero so actually D-1 characters will be returned. If the buffer is too small for the full string, `RESULT_TRUNCATED_STRING` must be returned. If D=0 is passed, nothing is copied to the buffer and `RESULT_TRUNCATED_STRING` is returned (callers can use this to check if a given string exists without actually retrieving it).
 
-Driver developers can use [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm) to easily implement this query.
+Driver developers can use [the `OUTPUT_STRING` routine from the SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/code/output_string.asm) to easily implement this query.
 
 #### 4.5.3. Driver query 3: Get driver initialization parameters
 
@@ -942,7 +942,7 @@ The returned string must be in ASCII and zero-terminated. The routine must retur
 
 "Device name" and "Medium name" differ in that the former is a "conceptual" name provided by the driver itself, while the latter is effectively retrieved from the device, when that's possible. For example, assume a driver that controls an SD card slot. Then the device name would always be the fixed string "SD card slot", and the medium name would be extracted from the inserted SD card (or if none is available, `RESULT_NOT_IMPLEMENTED` would be returned for the medium name query - but the device name query would still succeed in this case).
 
-Driver developers can use [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm) to easily implement this query, at least for fixed strings.
+Driver developers can use [the `OUTPUT_STRING` routine from the SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/code/output_string.asm) to easily implement this query, at least for fixed strings.
 
 
 #### 4.6.2. Device query 2: Get device parameters
@@ -1061,7 +1061,7 @@ This query is intended for floppy disk devices only. For any other device type (
 
 If there's only one way of formatting the disk, B=0 should be returned. If the choices are _single side/double side_ or _single side/double side double density/double side high density_, it should return B=1 or B=2 respectively (note that this is true regardless of the actual form factor or capacity of the disk). These are the most common options for formatting floppy disks so these return values should cover the majority of cases. [The `CALL FORMAT` command](Nextor_3.0_User_Manual.md#363-the-call-format-command) and [the `_FORMAT` function call](Nextor_3.0_Programmers_Reference.md#27-_format-67h) will use stock strings hardcoded in the Nextor kernel in these cases.
 
-If none of the built-in choice sets works for a given device, or if the driver wants to provide a custom choice string, the driver can copy a custom string (ASCII, zero-terminated) in the buffer provided in HL, constrained to the buffer length passed in DE (Note: currently the Nextor kernel will copy up to 512 bytes even if the reported buffer size is bigger and the choice string is longer). Driver developers can use [the `OUTPUT_STRING` routine from the SDK](../sdk/asm/code/output_string.asm) to easily copy custom choice strings to the supplied buffer address.
+If none of the built-in choice sets works for a given device, or if the driver wants to provide a custom choice string, the driver can copy a custom string (ASCII, zero-terminated) in the buffer provided in HL, constrained to the buffer length passed in DE (Note: currently the Nextor kernel will copy up to 512 bytes even if the reported buffer size is bigger and the choice string is longer). Driver developers can use [the `OUTPUT_STRING` routine from the SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/asm/code/output_string.asm) to easily copy custom choice strings to the supplied buffer address.
 
 #### 4.6.6. Device query 6: Format a floppy disk device
 

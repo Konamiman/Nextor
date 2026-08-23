@@ -108,7 +108,7 @@ The drivers that were part of Nextor 2 now live in their own git repositories, b
 
 ### 2.8. Z180-compatible builds
 
-The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which avoids all the undocumented Z80 instructions so that the resulting kernel also works on machines with a Z180 processor. See [the main README file](../README.md) for how to build the kernel.
+The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which avoids all the undocumented Z80 instructions so that the resulting kernel also works on machines with a Z180 processor. See [the main README file](https://github.com/Konamiman/Nextor/blob/HEAD/README.md) for how to build the kernel.
 
 ### 2.9. Better boot error messages
 
@@ -182,7 +182,7 @@ The Nextor-specific function calls available in MSX-DOS 1 mode are the same as i
 
 ### 3.5. The Nextor SDK and the Docker development image
 
-Nextor 3 ships with an SDK (Software Development Kit): a collection of assembler include files and C headers with the function call and error code constants, the driver structure definitions, helper macros and ready-to-use code snippets, plus project templates for drivers and for command line tools. It lives in the [`sdk`](../sdk) directory of the Nextor repository, and it is designed to be pulled into your own projects (e.g. as a git submodule); see [the SDK README file](../sdk/README.md) for the details.
+Nextor 3 ships with an SDK (Software Development Kit): a collection of assembler include files and C headers with the function call and error code constants, the driver structure definitions, helper macros and ready-to-use code snippets, plus project templates for drivers and for command line tools. It lives in the [`sdk`](https://github.com/Konamiman/Nextor/tree/HEAD/sdk) directory of the Nextor repository, and it is designed to be pulled into your own projects (e.g. as a git submodule); see [the SDK README file](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md) for the details.
 
 Additionally, a Docker image for Nextor development, with the required assembler and C compiler preinstalled, is published as `ghcr.io/konamiman/nextor-dev`. See _[8. Development helpers](Nextor_3.0_Programmers_Reference.md#8-development-helpers)_ in the programmers reference for an overview of both.
 

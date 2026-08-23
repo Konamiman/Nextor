@@ -10,7 +10,7 @@ The following documentation is available for [Nextor](https://github.com/konamim
 
 * [Programmers Reference](Nextor_3.0_Programmers_Reference.md): For application developers, contains a reference of the new function calls implemented by Nextor and the new and expanded Disk BASIC commands.
 
-* [Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md): You need this if you want to develop a device driver for Nextor. The [driver template project](../sdk/templates/driver) supplied with the Nextor SDK can be used as the foundation for a new driver.
+* [Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md): You need this if you want to develop a device driver for Nextor. The [driver template project](https://github.com/Konamiman/Nextor/tree/HEAD/sdk/templates/driver) supplied with the Nextor SDK can be used as the foundation for a new driver.
 
 * [Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md): Explains how to adapt an existing Nextor 2 device driver to Nextor 3.
 

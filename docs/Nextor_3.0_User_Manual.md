@@ -228,11 +228,11 @@ The following resources are available for Nextor device driver developers:
 
 *  The _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_ document.
 
-*  [A template driver](../sdk/templates/driver) that can be used as the skeleton for developing custom drivers.
+*  [A template driver](https://github.com/Konamiman/Nextor/tree/HEAD/sdk/templates/driver) that can be used as the skeleton for developing custom drivers.
 
-*  A command line utility, `mknexrom`, that will do all the work of embedding a device driver within the Nextor kernel ROM. It is provided as a standard C source file, [`mknexrom.c`](../buildtools/sources/mknexrom.c), and as a prebuilt Linux executable in [the releases section](https://github.com/Konamiman/Nextor/releases).
+*  A command line utility, `mknexrom`, that will do all the work of embedding a device driver within the Nextor kernel ROM. It is provided as a standard C source file, [`mknexrom.c`](https://github.com/Konamiman/Nextor/blob/HEAD/buildtools/sources/mknexrom.c), and as a prebuilt Linux executable in [the releases section](https://github.com/Konamiman/Nextor/releases).
 
-* [A Docker image](../docker/README.md) with all the tools and kernel base files needed for generating fully usable Nextor ROM files.
+* [A Docker image](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md) with all the tools and kernel base files needed for generating fully usable Nextor ROM files.
 
 In Nextor 2 drivers were always embedded in a ROM file with the Nextor kernel. Nextor 3 adds the ability to load drivers in RAM, see _[3.6.12. The CALL IDRIVER command](#3612-the-call-idriver-command)_ and _[3.4.13. DRVROP: the driver operations tool](#3413-drvrop-the-driver-operations-tool)_.
 
@@ -1334,7 +1334,7 @@ Nextor 3 comes with its own command interpreter: `COMMAND3.COM`. It is based on 
 
 `COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`: when run on an older Nextor or plain MSX-DOS 2 system it prints a "Wrong version of Nextor" message and drops to the BASIC prompt.
 
-The complete reference for every command is available through the `HELP` command; the help files are supplied in the `HELP` directory of the Nextor tools disk, and are found automatically when the system boots from that disk (for other locations, point the `HELP` environment item to the directory holding the files, e.g. `SET HELP=C:\HELP`). Alternatively, you can read them directly in [the help files directory in this repository](../source/commandcom/helpfiles).
+The complete reference for every command is available through the `HELP` command; the help files are supplied in the `HELP` directory of the Nextor tools disk, and are found automatically when the system boots from that disk (for other locations, point the `HELP` environment item to the directory holding the files, e.g. `SET HELP=C:\HELP`). Alternatively, you can read them directly in [the help files directory in this repository](https://github.com/Konamiman/Nextor/tree/HEAD/source/commandcom/helpfiles).
 
 #### 3.10.1. How it is loaded
 

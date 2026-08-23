@@ -1022,7 +1022,7 @@ In the case of Nextor the following applies:
 In versions of Nextor older than 2.1.0 the mapper support routines jump table area that is now used for the `RD_MAP`, `WR_MAP`, `CALL_MAP` and `CALL_MAPI` entry points was used for two different routines that are not available anymore, `BLK_ALLOC` and `BLK_FREE`; this represents a breaking change and existing applications making use of them will need changes.
 
 Although not used by Nextor anymore, the source code of these removed routines is kept as part of the Nextor code base
-(at [source/kernel/bank4/bkalloc.mac](../source/kernel/bank4/bkalloc.mac)). This way, if you have an application that makes use of these routines you can simply incorporate the code from that file to your application and call the routines directly.
+(at [source/kernel/bank4/bkalloc.mac](https://github.com/Konamiman/Nextor/blob/HEAD/source/kernel/bank4/bkalloc.mac)). This way, if you have an application that makes use of these routines you can simply incorporate the code from that file to your application and call the routines directly.
 
 You can read the documentation for the removed routines in [the Programmers Reference for Nextor 2.0](https://github.com/Konamiman/Nextor/blob/v2.0/docs/Nextor%202.0%20Programmers%20Reference.md#5-extended-mapper-support-routines).
 
@@ -1155,10 +1155,10 @@ The error codes currently used by the kernel for this mechanism are `.NOCMD` (0A
 
 ### 8.1. The Nextor SDK
 
-Nextor ships with a Software Development Kit (SDK): a collection of files containing constants, macros, data structure definitions and ready to use helper routines that make it easier to write Nextor-aware drivers and programs. It lives in the [`sdk`](../sdk) directory of the Nextor source repository, and it supports development in both assembler (for [Nestor80](https://github.com/Konamiman/Nestor80)) and C (for [SDCC](https://sdcc.sourceforge.net/)).
+Nextor ships with a Software Development Kit (SDK): a collection of files containing constants, macros, data structure definitions and ready to use helper routines that make it easier to write Nextor-aware drivers and programs. It lives in the [`sdk`](https://github.com/Konamiman/Nextor/tree/HEAD/sdk) directory of the Nextor source repository, and it supports development in both assembler (for [Nestor80](https://github.com/Konamiman/Nestor80)) and C (for [SDCC](https://sdcc.sourceforge.net/)).
 
-The [SDK's README file](../sdk/README.md) explains the general organization of the SDK files and how to bring it into your projects. You can look at the code comments in the SDK files themselves to know what kind of code, constants or macros each holds. Finally, if you are starting from scratch, [the `templates` directory in the SDK](../sdk/templates) can be useful for you in order to bootstrap your project.
+The [SDK's README file](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md) explains the general organization of the SDK files and how to bring it into your projects. You can look at the code comments in the SDK files themselves to know what kind of code, constants or macros each holds. Finally, if you are starting from scratch, [the `templates` directory in the SDK](https://github.com/Konamiman/Nextor/tree/HEAD/sdk/templates) can be useful for you in order to bootstrap your project.
 
 ### 8.2. The Docker development image
 
-As an alternative to installing Nestor80 and SDCC in your machine, you can use the dedicated Nextor development Docker image. The image is published as `ghcr.io/konamiman/nextor-dev`. See [the README file in the `docker` directory](../docker/README.md) for usage details.
+As an alternative to installing Nestor80 and SDCC in your machine, you can use the dedicated Nextor development Docker image. The image is published as `ghcr.io/konamiman/nextor-dev`. See [the README file in the `docker` directory](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md) for usage details.
