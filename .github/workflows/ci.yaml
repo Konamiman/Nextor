@@ -37,9 +37,8 @@ jobs:
           sdcc -v
       - name: Install Nestor80
         env:
-          N80_VERSION: '1.3.5'
-          LK80_TAG: 'n80-v1.3.3-lk80-v1.1'
-          LK80_VERSION: '1.1.0'
+          N80_VERSION: '1.3.6'
+          LK80_VERSION: '1.1.1'
           LB80_VERSION: '1.0'
         run: |
           curl -Lo n80.zip https://github.com/Konamiman/Nestor80/releases/download/n80-v${N80_VERSION}/N80_${N80_VERSION}_SelfContained_linux-x64.zip
@@ -48,7 +47,7 @@ jobs:
           rm N80
           rm n80.zip
 
-          curl -Lo lk80.zip https://github.com/Konamiman/Nestor80/releases/download/${LK80_TAG}/LK80_${LK80_VERSION}_SelfContained_linux-x64.zip
+          curl -Lo lk80.zip https://github.com/Konamiman/Nestor80/releases/download/lk80-v${LK80_VERSION}/LK80_${LK80_VERSION}_SelfContained_linux-x64.zip
           unzip lk80.zip
           sudo install -v LK80 /usr/local/bin
           rm LK80
