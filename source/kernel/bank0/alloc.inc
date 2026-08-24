@@ -1,7 +1,3 @@
-	.z80
-	name('alloc')
-	title	ALLOC - Allocate Memory in Page-3
-;
 ;-----------------------------------------------------------------------
 ;
 ;       ALLOC allocates specified amount of memory downward from current
@@ -17,18 +13,11 @@
 ; Note: HL and DE are corrupted by CLRFCB (FCB rebuild).
 ;       To get the base of the allocated area, read (HIMEM) after return.
 ;
-BOOTAD	equ	0C000h		;Where boot sector is executed
-;
-BOTTOM	equ	0FC48h		;Pointer to bottom of RAM
-HIMEM	equ	0FC4Ah		;Top address of RAM which can be used
 MEMSIZ	equ	0F672h		;Pointer to end of string space
-STKTOP	equ	0F674h		;Pointer to bottom of stack
 SAVSTK	equ	0F6B1h		;Pointer to valid stack bottom
-MAXFIL	equ	0F85Fh		;Maximum file number
 FILTAB	equ	0F860h		;Pointer to file pointer table
 NULBUF	equ	0F862h		;Pointer to buffer #0
 ;
-	public	ALLOC
 ALLOC:
 	ld	a,l		;is requested size 0?
 	or	h
@@ -87,12 +76,13 @@ ALLOC:
 	ld	(NULBUF),hl
 	ld	hl,(STKTOP)	;update STKTOP
 	add	hl,bc
+ifndef NO_DEFILE
 	jr	CLRFCB
 
 ;
 ;       Re-build BASIC's file structures
 ;
-DEFILE::
+DEFILE:
 	ld	a,1		;load default MAXFIL
 	ld	(MAXFIL),a
 	ld	hl,(HIMEM)
@@ -112,6 +102,7 @@ DEFILE::
 	add	hl,de
 	ld	(NULBUF),hl
 	pop	hl
+endif
 CLRFCB:
 	ld	(STKTOP),hl
 	dec	hl		;and SAVSTK
@@ -140,5 +131,3 @@ DSKFLL:
 	dec	a
 	jr	nz,DSKFLL
 	ret
-
-	end

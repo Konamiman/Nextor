@@ -1,0 +1,32 @@
+	.z80
+	name('alloc')
+	title	ALLOC - Allocate Memory in Page-3
+;
+;-----------------------------------------------------------------------
+;
+;       ALLOC allocates specified amount of memory downward from current
+;       HIMEM
+;
+; Inputs:
+;       HL = memory size to allocate
+; Outputs:
+;       if successful, carry flag reset, (HIMEM) is the beginning
+;                      of the allocated area
+;       otherwise, carry flag set, allocation not done.
+;
+; Note: HL and DE are corrupted by CLRFCB (FCB rebuild).
+;       To get the base of the allocated area, read (HIMEM) after return.
+;
+BOOTAD	equ	0C000h		;Where boot sector is executed
+;
+BOTTOM	equ	0FC48h		;Pointer to bottom of RAM
+HIMEM	equ	0FC4Ah		;Top address of RAM which can be used
+STKTOP	equ	0F674h		;Pointer to bottom of stack
+MAXFIL	equ	0F85Fh		;Maximum file number
+;
+	public	ALLOC
+
+NO_DEFILE	equ	-1
+	INCLUDE ../bank0/alloc.inc
+
+	end
