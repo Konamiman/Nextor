@@ -4829,6 +4829,9 @@ A59CB:	ld	sp,0C200H		; switch to a temporary stack, just above temp startbuffer
 	ld	ix,M7D17
 	jr	A59ED			; skip BASIC extension ROMs and transfer control
 
+; Entry address for SONY HB-11 HiTBit-U MENU
+	ALIGN	059DBh
+
 A59DB:	ld	hl,SLTATR
 	ld	b,040H
 A59E0:	ld	a,(hl)

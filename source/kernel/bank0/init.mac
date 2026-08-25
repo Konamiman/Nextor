@@ -1727,6 +1727,7 @@ WATLOP	equ	7D0Dh
 SRCBAS	equ	7DEEh
 BASROM	equ	0FBB1h
 ;
+BAS_HB11:
 	ld	a,(BASROM)
 	or	a
 	ld	ix,SRCBAS-5	;Because BASIC cartridge is no more enabled.
@@ -4018,5 +4019,8 @@ TIMI_NXT_AND_RAM::
 
 ;-----------------------------------------------------------------------------
 
+; Entry address for SONY HB-11 HiTBit-U MENU
+	ALIGN	59DBh
+	jp	BAS_HB11
 	end
 
