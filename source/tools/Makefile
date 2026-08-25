@@ -15,9 +15,7 @@ endif
 
 export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin --code-before-data
 
-define copy_to_bin
-	cp $(1) ../../bin/tools/$(2)
-endef
+BIN_TOOLS := ../../bin/tools
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
@@ -43,14 +41,22 @@ SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot 
 SHARED_RELS  := $(foreach n,$(SHARED_NAMES),$(call uc,$(n)).REL)
 RELS := $(SDK_RELS) DATA.REL $(SHARED_RELS)
 
-asm-tools: $(COMS)
+BIN_COMS := $(addprefix $(BIN_TOOLS)/,$(COMS))
 
-.phony: prerequisites
+asm-tools: $(BIN_COMS)
+
+# The bin/tools copies are targets of their own (not a side effect of the
+# link recipes), so they get re-created when bin/tools is missing or empty
+# even if the .COM files in this directory are up to date.
+$(BIN_COMS): $(BIN_TOOLS)/%.COM: %.COM
+	cp $< $@
+
+.PHONY: prerequisites
 
 TOOLS := N80 LK80
 
 prerequisites:
-	@mkdir -p ../../bin/tools
+	@mkdir -p $(BIN_TOOLS)
 	$(foreach exec,$(TOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 
@@ -66,7 +72,6 @@ $(GENERIC_COMS): \
 
 	$(call assemble,$(patsubst %.COM,%.MAC,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) DATA.REL $(patsubst %.COM,%.REL,$@) $(SHARED_RELS)
-	$(call copy_to_bin,$@)
 
 # CHKDSK is self-contained (it carries its own Nextor version check instead
 # of using CHK_NEXTOR, since it must run on Nextor 2.1) and its runtime data
@@ -77,13 +82,11 @@ $(GENERIC_COMS): \
 CHKDSK.COM: CHKDSK.MAC $(SDK_RELS)
 	$(call assemble,CHKDSK.MAC)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) CHKDSK.REL
-	$(call copy_to_bin,$@)
 
 # UNDEL is self-contained for the same reasons as CHKDSK (see above).
 UNDEL.COM: UNDEL.MAC $(SDK_RELS)
 	$(call assemble,UNDEL.MAC)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) UNDEL.REL
-	$(call copy_to_bin,$@)
 
 # Build rules for each individual SDK shared routine .asm file (one per public routine).
 define shared_rel_rule
@@ -147,7 +150,6 @@ DATA.REL: \
 # sub-shell that runs the recipes of ../Makefile, so its tools-disk target
 # passes WORKING_DIR explicitly instead.
 
-BIN_TOOLS := ../../bin/tools
 TOOLS_DSK := $(BIN_TOOLS)/nextor.dsk
 
 WORKING_DIR ?= $(or $(PWD),$(CURDIR))

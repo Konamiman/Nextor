@@ -18,9 +18,7 @@ export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --outpu
 # NO_UNDOC_CPU_INSTRUCTIONS build flag (see sdk/asm/macros/undoc.inc)
 # has no effect here and is intentionally not plumbed through.
 
-define copy_to_bin
-	cp $(1) ../../bin/tools/$(2)
-endef
+BIN_TOOLS := ../../bin/tools
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
@@ -32,14 +30,23 @@ define assemble_as
 	@$(N80) $(1) $(2) $(3)
 endef
 
-nextor-sys: NEXTOR.SYS NEXTOR.SYS.japanese
+SYS_FILES := NEXTOR.SYS NEXTOR.SYS.japanese
+BIN_SYS_FILES := $(addprefix $(BIN_TOOLS)/,$(SYS_FILES))
+
+nextor-sys: $(BIN_SYS_FILES)
+
+# The bin/tools copies are targets of their own (not a side effect of the
+# link recipes), so they get re-created when bin/tools is missing or empty
+# even if the linked files in this directory are up to date.
+$(BIN_SYS_FILES): $(BIN_TOOLS)/%: %
+	cp $< $@
 
 .PHONY: nextor-sys prerequisites
 
 TOOLS := N80 LK80
 
 prerequisites:
-	@mkdir -p ../../bin/tools
+	@mkdir -p $(BIN_TOOLS)
 	$(foreach exec,$(TOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 
@@ -57,7 +64,6 @@ NEXTOR.SYS: \
 	sys.rel
 
 	@$(LK80) --output-file NEXTOR.SYS --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sys.rel real.rel sys.rel messages.rel end.rel
-	$(call copy_to_bin,NEXTOR.SYS)
 
 NEXTOR.SYS.japanese: \
 	$(JRELS) \
@@ -66,7 +72,6 @@ NEXTOR.SYS.japanese: \
 	sysj.rel
 
 	@$(LK80) --output-file NEXTOR.SYS.japanese --code 0100h $(SDK_RELS) data.rel reloc.rel ver.rel ref.rel sysj.rel real.rel sysj.rel messages.rel kmsg.rel end.rel
-	$(call copy_to_bin,NEXTOR.SYS.japanese)
 
 # sys.mac is assembled twice, once per NEXTOR.SYS variant, so each variant
 # gets its own distinctly named .rel file. Assembling to a shared sys.rel
