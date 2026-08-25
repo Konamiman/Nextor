@@ -56,6 +56,8 @@ $(BIN_COMS): $(BIN_TOOLS)/%.COM: %.COM | $(BIN_TOOLS)
 $(BIN_TOOLS):
 	@mkdir -p $@
 
+.PHONY: asm-tools
+
 TOOLS := N80 LK80
 
 # Check that the required tools are available. This is done at parse time

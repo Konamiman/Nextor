@@ -132,6 +132,8 @@ endef
 ###  MAIN RULE  ###
 ###################
 
+.PHONY: all base
+
 all: base ../../sdk/nextor-kernel-version.txt
 
 # `everything` builds the kernel base file across all twelve variant
