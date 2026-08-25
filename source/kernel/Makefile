@@ -108,9 +108,10 @@ define hex2bin
     objcopy -I ihex -O binary $(1) $(2)
 endef
 
-define copy_to_bin
-	cp $(1) ../../bin/kernel-base/$(2)
-endef
+# The generated kernel base file is published to bin/kernel-base under a
+# name that encodes the kernel version and the build variant.
+BIN_KERNEL_BASE := ../../bin/kernel-base
+PUBLISHED_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
@@ -130,6 +131,8 @@ endef
 ###################
 ###  MAIN RULE  ###
 ###################
+
+.PHONY: all base
 
 all: base ../../sdk/nextor-kernel-version.txt
 
@@ -172,17 +175,28 @@ everything:
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
 
-.PHONY: prerequisites
-
-prerequisites:
-	@mkdir -p ../../bin/kernel-base
-	$(foreach exec,$(TOOLS),\
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
--include prerequisites
+base: $(PUBLISHED_BASE)
 
+# The published copy is a target of its own (not a side effect of the
+# nextor_base.dat recipe), so it gets re-created when bin/kernel-base is
+# missing or empty even if nextor_base.dat is up to date. The directory
+# itself is an order-only prerequisite: it gets created on demand, but its
+# timestamp changes never trigger a re-copy.
+$(PUBLISHED_BASE): nextor_base.dat | $(BIN_KERNEL_BASE)
+	cp $< $@
 
-base: nextor_base.dat
+$(BIN_KERNEL_BASE):
+	@mkdir -p $@
 
 # Publish the digested kernel version into the SDK, so driver developers (and
 # their makefiles) can read it without building anything or using Docker.
@@ -228,8 +242,6 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=80k
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
-
-	$(call copy_to_bin,nextor_base.dat,Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat)
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255

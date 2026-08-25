@@ -15,9 +15,7 @@ define hex2bin
 	objcopy -I ihex -O binary $(1) $(2)
 endef
 
-define copy_to_bin
-	cp $(1) ../../../bin/tools/$(2)
-endef
+BIN_TOOLS := ../../../bin/tools
 
 lc = $(shell echo $(1) | tr A-Z a-z)
 
@@ -27,18 +25,38 @@ COMS := EMUFILE.COM FSIZE.COM NEXBOOT.COM VSFT.COM EPTCFT.COM DRVROP.COM DRVTEST
 # tables assembled with Nestor80), excluded from the generic rule.
 SPECIAL_COMS := DISKCOPY.COM XDIR.COM XCOPY.COM
 
-c-tools: $(COMS) $(SPECIAL_COMS)
+BIN_COMS := $(addprefix $(BIN_TOOLS)/,$(COMS) $(SPECIAL_COMS))
 
-.PHONY: c-tools prerequisites
+c-tools: $(BIN_COMS)
+
+# The bin/tools copies are targets of their own (not a side effect of the
+# build recipes), so they get re-created when bin/tools is missing or empty
+# even if the .COM files in this directory are up to date. The directory
+# itself is an order-only prerequisite: it gets created on demand, but its
+# timestamp changes never trigger a re-copy.
+# The trailing rm removes the lowercase-named copy that builds prior to the
+# uppercase renaming of the tools left in bin/tools, so that stale duplicates
+# don't end up in the tools disk image.
+$(BIN_COMS): $(BIN_TOOLS)/%.COM: %.COM | $(BIN_TOOLS)
+	cp $< $@
+	@rm -f $(BIN_TOOLS)/$(call lc,$<)
+
+$(BIN_TOOLS):
+	@mkdir -p $@
+
+.PHONY: c-tools
 
 TOOLS := sdcc sdasz80 objcopy N80
 
-prerequisites:
-	@mkdir -p ../../../bin/tools
-	$(foreach exec,$(TOOLS),\
-		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
-
--include prerequisites
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
+	$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
 SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
 
@@ -62,9 +80,6 @@ define check_header
 	fi
 endef
 
-# The trailing rm removes the lowercase-named copy that builds prior to the
-# uppercase renaming of the tools left in bin/tools, so that stale duplicates
-# don't end up in the tools disk image.
 .SECONDEXPANSION:
 $(COMS): \
 	$$(call lc,$$(patsubst %.COM,%.c,$$@)) \
@@ -74,8 +89,6 @@ $(COMS): \
 
 	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(call lc,$(patsubst %.COM,%.c,$@))
 	$(call hex2bin,$(call lc,$(patsubst %.COM,%.ihx,$@)),$@)
-	$(call copy_to_bin,$@)
-	@rm -f ../../../bin/tools/$(call lc,$@)
 
 crt0_msxdos.rel: \
 	../../../sdk/C/code/crt0_msxdos.asm
@@ -96,8 +109,6 @@ DISKCOPY.COM: \
 	$(call check_header,crt0_diskcopy.rel,0x480)
 	sdcc --code-loc 0x480 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_diskcopy.rel $(SDK_C_RELS) diskcopy_msgs.rel diskcopy.c
 	$(call hex2bin,diskcopy.ihx,$@)
-	$(call copy_to_bin,$@)
-	@rm -f ../../../bin/tools/diskcopy.com
 
 crt0_diskcopy.rel: crt0_diskcopy.mac
 	sdasz80 -o crt0_diskcopy.rel crt0_diskcopy.mac
@@ -114,8 +125,6 @@ XDIR.COM: \
 	$(call check_header,crt0_xdir.rel,0x400)
 	sdcc --code-loc 0x400 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
 	$(call hex2bin,xdir.ihx,$@)
-	$(call copy_to_bin,$@)
-	@rm -f ../../../bin/tools/xdir.com
 
 crt0_xdir.rel: crt0_xdir.mac
 	sdasz80 -o crt0_xdir.rel crt0_xdir.mac
@@ -132,8 +141,6 @@ XCOPY.COM: \
 	$(call check_header,crt0_xcopy.rel,0x600)
 	sdcc --code-loc 0x600 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xcopy.rel $(SDK_C_RELS) xcopy_msgs.rel xcopy.c
 	$(call hex2bin,xcopy.ihx,$@)
-	$(call copy_to_bin,$@)
-	@rm -f ../../../bin/tools/xcopy.com
 
 crt0_xcopy.rel: crt0_xcopy.mac
 	sdasz80 -o crt0_xcopy.rel crt0_xcopy.mac

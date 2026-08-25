@@ -19,9 +19,7 @@ endif
 
 export LK80_ARGS=--no-show-banner --verbosity 0 --output-file-case lower --output-format bin
 
-define copy_to_bin
-	cp $(1) ../../bin/tools/$(2)
-endef
+BIN_TOOLS := ../../bin/tools
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
@@ -33,18 +31,32 @@ define assemble_as
 	@$(N80) $(1) $(2) $(3)
 endef
 
-commandcom: COMMAND3.COM
+commandcom: $(BIN_TOOLS)/COMMAND3.COM
 
-.PHONY: commandcom prerequisites clean
+# The bin/tools copy is a target of its own (not a side effect of the link
+# recipe), so it gets re-created when bin/tools is missing or empty even if
+# the COMMAND3.COM in this directory is up to date. The directory itself is
+# an order-only prerequisite: it gets created on demand, but its timestamp
+# changes never trigger a re-copy.
+$(BIN_TOOLS)/COMMAND3.COM: COMMAND3.COM | $(BIN_TOOLS)
+	cp $< $@
+
+$(BIN_TOOLS):
+	@mkdir -p $@
+
+.PHONY: commandcom clean
 
 TOOLS := N80 LK80
 
-prerequisites:
-	@mkdir -p ../../bin/tools
-	$(foreach exec,$(TOOLS),\
-		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
-
--include prerequisites
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
+	$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
 # The link order must match the physical layout of the program.
 # COMMAND3.COM is a dual-language binary: it carries both the English
@@ -82,7 +94,6 @@ COMMAND3.COM: \
 
 	@$(LK80) --output-file COMMAND3.COM --code 0100h $(SDK_RELS) $(RELS)
 	$(call check_size,COMMAND3.COM)
-	$(call copy_to_bin,COMMAND3.COM)
 
 .SECONDEXPANSION:
 $(RELS): \
