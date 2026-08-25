@@ -160,11 +160,10 @@ $(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 endif
 
-# The output directories are created on demand: every rule that writes
-# into one of them lists it as an order-only prerequisite, so that it
-# exists before the recipe runs but its timestamp changes never trigger
-# rebuilds.
-$(BIN_DRIVERS) $(BIN_KERNEL_BASE):
+# The output directory is created on demand: every rule that writes into
+# it lists it as an order-only prerequisite, so that it exists before the
+# recipe runs but its timestamp changes never trigger rebuilds.
+$(BIN_DRIVERS):
 	@mkdir -p $@
 
 
@@ -173,11 +172,8 @@ $(BIN_DRIVERS) $(BIN_KERNEL_BASE):
 ########################
 
 # Path to the kernel base file used as input by MKNEXROM. If NEXTOR_BASE
-# is set, use it as-is. Otherwise build it via the kernel Makefile and
-# publish a variant-named copy to bin/kernel-base (the same file the
-# kernel makefile itself publishes; recreating it here keeps the build
-# working after bin/ has been wiped while ../kernel/nextor_base.dat is
-# still up to date).
+# is set, use it as-is. Otherwise build it via the kernel Makefile, whose
+# `base` target publishes the variant-named copy to bin/kernel-base.
 
 ifeq ($(strip $(NEXTOR_BASE)),)
 
@@ -186,19 +182,15 @@ LOCAL_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_
 base: $(LOCAL_BASE)
 
 # Always re-invoke the kernel sub-make so source/kernel changes are
-# picked up. The sub-make is incremental and only touches
-# ../kernel/nextor_base.dat if something there actually changed; that
-# file's mtime drives whether $(LOCAL_BASE) (and the ROMs that depend
-# on it) need to rebuild.
-../kernel/nextor_base.dat: FORCE
+# picked up. The sub-make is incremental and only touches $(LOCAL_BASE)
+# if something there actually changed; that file's mtime drives whether
+# the ROMs that depend on it need to rebuild.
+$(LOCAL_BASE): FORCE
 	@$(MAKE) --no-print-directory -C ../kernel base \
 	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS) \
 	    INVERT_SHIFT=$(INVERT_SHIFT) \
 	    INVERT_CTRL=$(INVERT_CTRL) \
 	    INVERT_KANJI=$(INVERT_KANJI)
-
-$(LOCAL_BASE): ../kernel/nextor_base.dat | $(BIN_KERNEL_BASE)
-	cp ../kernel/nextor_base.dat $@
 
 NEXTOR_BASE := $(LOCAL_BASE)
 

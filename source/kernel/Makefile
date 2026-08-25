@@ -108,11 +108,10 @@ define hex2bin
     objcopy -I ihex -O binary $(1) $(2)
 endef
 
+# The generated kernel base file is published to bin/kernel-base under a
+# name that encodes the kernel version and the build variant.
 BIN_KERNEL_BASE := ../../bin/kernel-base
-
-define copy_to_bin
-	cp $(1) $(BIN_KERNEL_BASE)/$(2)
-endef
+PUBLISHED_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
@@ -184,15 +183,18 @@ $(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
 endif
 
-# bin/kernel-base, where the generated base file is published, is created
-# on demand: it is an order-only prerequisite of nextor_base.dat, so that
-# it exists before the copy but its timestamp changes never trigger a
-# rebuild.
+base: $(PUBLISHED_BASE)
+
+# The published copy is a target of its own (not a side effect of the
+# nextor_base.dat recipe), so it gets re-created when bin/kernel-base is
+# missing or empty even if nextor_base.dat is up to date. The directory
+# itself is an order-only prerequisite: it gets created on demand, but its
+# timestamp changes never trigger a re-copy.
+$(PUBLISHED_BASE): nextor_base.dat | $(BIN_KERNEL_BASE)
+	cp $< $@
+
 $(BIN_KERNEL_BASE):
 	@mkdir -p $@
-
-
-base: nextor_base.dat
 
 # Publish the digested kernel version into the SDK, so driver developers (and
 # their makefiles) can read it without building anything or using Docker.
@@ -215,8 +217,7 @@ nextor_base.dat: \
 	bank4/B4.BIN \
 	bank5/B5.BIN \
 	bank5/fdisk.dat \
-	bank6/B6.BIN \
-	| $(BIN_KERNEL_BASE)
+	bank6/B6.BIN
 
 	@for f in bank0/B0.BIN bank3/B3.BIN; do \
 		sz=$$(stat -c '%s' $$f); \
@@ -239,8 +240,6 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=80k
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
 	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
-
-	$(call copy_to_bin,nextor_base.dat,Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat)
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
