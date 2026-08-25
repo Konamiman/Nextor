@@ -37,20 +37,28 @@ nextor-sys: $(BIN_SYS_FILES)
 
 # The bin/tools copies are targets of their own (not a side effect of the
 # link recipes), so they get re-created when bin/tools is missing or empty
-# even if the linked files in this directory are up to date.
-$(BIN_SYS_FILES): $(BIN_TOOLS)/%: %
+# even if the linked files in this directory are up to date. The directory
+# itself is an order-only prerequisite: it gets created on demand, but its
+# timestamp changes never trigger a re-copy.
+$(BIN_SYS_FILES): $(BIN_TOOLS)/%: % | $(BIN_TOOLS)
 	cp $< $@
 
-.PHONY: nextor-sys prerequisites
+$(BIN_TOOLS):
+	@mkdir -p $@
+
+.PHONY: nextor-sys
 
 TOOLS := N80 LK80
 
-prerequisites:
-	@mkdir -p $(BIN_TOOLS)
-	$(foreach exec,$(TOOLS),\
-		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
-
--include prerequisites
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
+	$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
 INCS := ../kernel/macros.inc ../kernel/const.inc ../kernel/condasm.inc
 RELS := messages.rel real.rel ref.rel reloc.rel ver.rel end.rel

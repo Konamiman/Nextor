@@ -108,8 +108,10 @@ define hex2bin
     objcopy -I ihex -O binary $(1) $(2)
 endef
 
+BIN_KERNEL_BASE := ../../bin/kernel-base
+
 define copy_to_bin
-	cp $(1) ../../bin/kernel-base/$(2)
+	cp $(1) $(BIN_KERNEL_BASE)/$(2)
 endef
 
 define assemble
@@ -172,14 +174,22 @@ everything:
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
 
-.PHONY: prerequisites
-
-prerequisites:
-	@mkdir -p ../../bin/kernel-base
-	$(foreach exec,$(TOOLS),\
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
--include prerequisites
+# bin/kernel-base, where the generated base file is published, is created
+# on demand: it is an order-only prerequisite of nextor_base.dat, so that
+# it exists before the copy but its timestamp changes never trigger a
+# rebuild.
+$(BIN_KERNEL_BASE):
+	@mkdir -p $@
 
 
 base: nextor_base.dat
@@ -205,7 +215,8 @@ nextor_base.dat: \
 	bank4/B4.BIN \
 	bank5/B5.BIN \
 	bank5/fdisk.dat \
-	bank6/B6.BIN
+	bank6/B6.BIN \
+	| $(BIN_KERNEL_BASE)
 
 	@for f in bank0/B0.BIN bank3/B3.BIN; do \
 		sz=$$(stat -c '%s' $$f); \

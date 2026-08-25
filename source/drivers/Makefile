@@ -81,7 +81,7 @@ endif
 
 UNDOC_MODE_STAMP := $(BIN_DRIVERS)/.build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
 
-$(UNDOC_MODE_STAMP):
+$(UNDOC_MODE_STAMP): | $(BIN_DRIVERS)
 	@rm -f $(BIN_DRIVERS)/.build-variant*
 	@touch $@
 
@@ -150,14 +150,22 @@ everything:
 
 TOOLS := $(N80) $(MKNEXROM) dd cat
 
-.PHONY: prerequisites
-
-prerequisites:
-	@mkdir -p $(BIN_KERNEL_BASE) $(BIN_DRIVERS)
-	$(foreach exec,$(TOOLS),\
+# Check that the required tools are available. This is done at parse time
+# (not in a recipe) so that it runs before anything else regardless of the
+# make version: the former "-include prerequisites" trick relied on make
+# running a phony target's recipe at startup, which GNU make 4.4+ no longer
+# does. Skipped when just cleaning.
+ifneq ($(MAKECMDGOALS),clean)
+$(foreach exec,$(TOOLS),\
         $(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), is it installed/in PATH?")))
+endif
 
--include prerequisites
+# The output directories are created on demand: every rule that writes
+# into one of them lists it as an order-only prerequisite, so that it
+# exists before the recipe runs but its timestamp changes never trigger
+# rebuilds.
+$(BIN_DRIVERS) $(BIN_KERNEL_BASE):
+	@mkdir -p $@
 
 
 ########################
@@ -189,7 +197,7 @@ base: $(LOCAL_BASE)
 	    INVERT_CTRL=$(INVERT_CTRL) \
 	    INVERT_KANJI=$(INVERT_KANJI)
 
-$(LOCAL_BASE): ../kernel/nextor_base.dat
+$(LOCAL_BASE): ../kernel/nextor_base.dat | $(BIN_KERNEL_BASE)
 	cp ../kernel/nextor_base.dat $@
 
 NEXTOR_BASE := $(LOCAL_BASE)
@@ -214,19 +222,22 @@ ascii16: $(ROM_ASCII16)
 
 $(BIN_DRIVERS)/standalone-rom-driver.bin: \
 	$(UNDOC_MODE_STAMP) \
-	standalone-rom-driver.asm
+	standalone-rom-driver.asm \
+	| $(BIN_DRIVERS)
 
 	$(call assemble,standalone-rom-driver.asm,--build-type abs --output-file-extension bin)
 
 $(BIN_DRIVERS)/chgbnk-ascii8.bin: \
 	$(UNDOC_MODE_STAMP) \
-	chgbnk-ascii8.asm
+	chgbnk-ascii8.asm \
+	| $(BIN_DRIVERS)
 
 	$(call assemble,chgbnk-ascii8.asm,--build-type abs --output-file-extension bin)
 
 $(BIN_DRIVERS)/chgbnk-ascii16.bin: \
 	$(UNDOC_MODE_STAMP) \
-	chgbnk-ascii16.asm
+	chgbnk-ascii16.asm \
+	| $(BIN_DRIVERS)
 
 	$(call assemble,chgbnk-ascii16.asm,--build-type abs --output-file-extension bin)
 
@@ -236,21 +247,24 @@ $(BIN_DRIVERS)/chgbnk-ascii16.bin: \
 
 $(BIN_DRIVERS)/_standalone-rom-driver.bin: \
 	$(BIN_DRIVERS)/standalone-rom-driver.bin \
-	$(BIN_DRIVERS)/256.bytes
+	$(BIN_DRIVERS)/256.bytes \
+	| $(BIN_DRIVERS)
 
 	cat $(BIN_DRIVERS)/256.bytes $(BIN_DRIVERS)/standalone-rom-driver.bin > $@
 
 $(ROM_ASCII8): \
 	$(NEXTOR_BASE) \
 	$(BIN_DRIVERS)/_standalone-rom-driver.bin \
-	$(BIN_DRIVERS)/chgbnk-ascii8.bin
+	$(BIN_DRIVERS)/chgbnk-ascii8.bin \
+	| $(BIN_DRIVERS)
 
 	$(call mknexrom_rom,$@,$(BIN_DRIVERS)/_standalone-rom-driver.bin,$(BIN_DRIVERS)/chgbnk-ascii8.bin)
 
 $(ROM_ASCII16): \
 	$(NEXTOR_BASE) \
 	$(BIN_DRIVERS)/_standalone-rom-driver.bin \
-	$(BIN_DRIVERS)/chgbnk-ascii16.bin
+	$(BIN_DRIVERS)/chgbnk-ascii16.bin \
+	| $(BIN_DRIVERS)
 
 	$(call mknexrom_rom,$@,$(BIN_DRIVERS)/_standalone-rom-driver.bin,$(BIN_DRIVERS)/chgbnk-ascii16.bin)
 
@@ -265,7 +279,8 @@ ram-example: $(BIN_DRIVERS)/ram-driver-example.drv
 
 $(BIN_DRIVERS)/ram-driver-example.drv: \
 	$(UNDOC_MODE_STAMP) \
-	ram-driver-example.asm
+	ram-driver-example.asm \
+	| $(BIN_DRIVERS)
 
 	$(call assemble,ram-driver-example.asm,--build-type abs --output-file-extension drv)
 
@@ -274,7 +289,7 @@ $(BIN_DRIVERS)/ram-driver-example.drv: \
 ###  COMMON          ###
 ########################
 
-$(BIN_DRIVERS)/256.bytes:
+$(BIN_DRIVERS)/256.bytes: | $(BIN_DRIVERS)
 	dd if=/dev/zero of=$@ bs=1 count=256
 
 clean:
