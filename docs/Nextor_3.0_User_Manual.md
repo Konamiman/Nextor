@@ -171,7 +171,7 @@ Nextor is an enhanced version of MSX-DOS 2, the disk operating system for MSX co
 
 This document provides a description of the features that Nextor adds to MSX-DOS 2 and is intended primarily for end users, but it explains basic concepts that will be useful for developers as well. There are however two other documents aimed specifically at developers: _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ and _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_. The reader of this document is assumed to have experience with MSX-DOS 2 at least at the user level.
 
-If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor_3.0_What's_New.md).
+If you are already familiar with Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor_3.0_Whats_New.md).
 
 ### 1.1. Background
 

@@ -2,7 +2,7 @@
 
 The following documentation is available for [Nextor](https://github.com/konamiman/Nextor/):
 
-* [What's New](Nextor_3.0_What's_New.md): A summary of the changes in Nextor 3.0, for people who are already familiar with Nextor 2.
+* [What's New](Nextor_3.0_Whats_New.md): A summary of the changes in Nextor 3.0, for people who are already familiar with Nextor 2.
 
 * [Getting Started Guide](Nextor_3.0_Getting_Started_Guide.md): Step-by-step tutorial to get started with Nextor, either with an emulator or with real hardware.
 
