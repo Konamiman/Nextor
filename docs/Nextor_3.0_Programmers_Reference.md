@@ -109,7 +109,7 @@ This document provides a reference of the new features that Nextor adds to MSX-D
 
 The reader of this document is assumed to have experience developing applications for MSX in general and for MSX-DOS 2 in particular (specifically, familiarity with the information covered by [chapter 3 of _MSX2 Technical Handbook_](https://github.com/Konamiman/MSX2-Technical-Handbook/blob/master/md/Chapter3.md) and the _[MSX-DOS 2 Program Interface Specification](DOS2-PIS.TXT)_ and _[MSX-DOS 2 Function Codes Specification](DOS2-FCS.TXT)_ documents is assumed). Also, it is a good idea to get acquainted with Nextor by reading _[Nextor 3.0 User Manual](Nextor_3.0_User_Manual.md)_ prior to this document.
 
-If you are already familiar with developing for Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor_3.0_What's_New.md).
+If you are already familiar with developing for Nextor 2 you may want to take a look at [what's new in Nextor 3](Nextor_3.0_Whats_New.md).
 
 ## 2. Changes in existing function calls
 
