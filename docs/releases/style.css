@@ -10,6 +10,7 @@
   --link-color: #0969da;
   --badge-latest-bg: #1a7f37;
   --badge-prerelease-bg: #9a6700;
+  --badge-draft-bg: #6e7781;
   --tag-bg: #ddf4ff;
   --tag-color: #0969da;
   --sidebar-width: 280px;
@@ -29,6 +30,7 @@
     --link-color: #58a6ff;
     --badge-latest-bg: #238636;
     --badge-prerelease-bg: #9e6a03;
+    --badge-draft-bg: #6e7681;
     --tag-bg: #388bfd26;
     --tag-color: #58a6ff;
   }
@@ -47,6 +49,7 @@
   --link-color: #58a6ff;
   --badge-latest-bg: #238636;
   --badge-prerelease-bg: #9e6a03;
+  --badge-draft-bg: #6e7681;
   --tag-bg: #388bfd26;
   --tag-color: #58a6ff;
 }
@@ -541,6 +544,10 @@ body {
 
 .badge.prerelease {
   background: var(--badge-prerelease-bg);
+}
+
+.badge.draft {
+  background: var(--badge-draft-bg);
 }
 
 .release-meta {
