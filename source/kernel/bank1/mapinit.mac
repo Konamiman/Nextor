@@ -16,6 +16,7 @@ P2_REG		equ	0FEh
 P3_REG		equ	0FFh
 
 MSXVER	equ	002Dh
+CHGCPU	equ	0180h
 ;
 ;
 ;-----------------------------------------------------------------------------
@@ -151,7 +152,24 @@ if (BUILTIN AND STURBO)
 		ld	a,(BOOTKEYS##)
 		and	00010000b   ;4 key pressed?
 		ld	a,b
-		jr	nz,NOTR2
+		jr	z,NO4KEY
+
+		;"4" key pressed: the last four segments, which hold the R800 DRAM
+		;mode copies of the BIOS, the sub-ROM and the Kanji driver ROM, are
+		;about to be reused as the kernel code and data segments. So switch
+		;the CPU to R800 ROM mode right now: INIT does it too (CHECK_1KEY),
+		;but only after DOSINIT has already overwritten these segments, and
+		;if the CPU is still in DRAM mode at that point (e.g. because the
+		;internal MSX-DOS 2 kernel left it so after being disabled with
+		;SHIFT) the computer crashes.
+
+		push	af
+		ld	a,81h
+		call	CHGCPU
+		di ;CHGCPU enables interrupts but MAP_INIT must run with them disabled.
+		pop	af
+		jr	NOTR2
+NO4KEY:
 		sub	4
 NOTR2:
 endif
