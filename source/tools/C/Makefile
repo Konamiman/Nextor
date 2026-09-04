@@ -122,8 +122,8 @@ XDIR.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
-	$(call check_header,crt0_xdir.rel,0x400)
-	sdcc --code-loc 0x400 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
+	$(call check_header,crt0_xdir.rel,0x480)
+	sdcc --code-loc 0x480 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_xdir.rel $(SDK_C_RELS) xdir_msgs.rel xdir.c
 	$(call hex2bin,xdir.ihx,$@)
 
 crt0_xdir.rel: crt0_xdir.mac

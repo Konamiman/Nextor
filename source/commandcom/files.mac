@@ -383,7 +383,14 @@ ZSUP10:	OR	A	; Not suppressed => NC.
 
 ZALLOC$:	DEFB	"ZALLOC",0
 
-@DIR::	PUSH	HL
+;        DIR lists the sizes in K from a threshold given by the DIRK
+; environment item (see SETKMOD); DIRB is the same command with every
+; figure in bytes. Both share everything past the mode setup.
+@DIRB::	LD	A,#FF	; Bytes forced.
+	JR	DIR00
+@DIR::	XOR	A	; As the DIRK item says.
+DIR00:	PUSH	HL
+	CALL	SETKMOD
 	CALL	TFORM##
 	CALL	DFORM##
 	POP	HL
@@ -491,14 +498,7 @@ DIR_LOOP:	JP	C,DIR_DONE
 	JR	C,DIR40
 	BIT	4,C
 	JR	NZ,DIR20
-	LD	A," "
-	LD	DE,FIB1##+#15
-	LD	IX,XBUF1##
-	PUSH	IX
-	CALL	D32##
-	POP	DE
-	INC	DE
-	CALL	PRTSTR##
+	CALL	PRSIZE	; Print the size field.
 	XOR	A
 DIR20:	LD	A,#03
 	CALL	NZ,DMESS##
@@ -579,7 +579,7 @@ DIR_DONE:	RET	NZ
 	CALL	NZ,LPRINT##
 	LD	A,#04
 	CALL	DMESS##
-	CALL	PRLEN##
+	CALL	PRLENK	; Print the total, in bytes or Ks.
 	LD	A,#05
 	CALL	DMESS##
 	LD	HL,(CNTFILE##)
@@ -606,10 +606,216 @@ FILE::	CALL	DMESS##
 	JP	NZ,LPRINT##
 	LD	(VALUEL##),DE	; Save in 32 bit number buffer.
 	LD	(VALUEH##),HL
-	CALL	PRLEN##	; Print no. bytes or Ks.
+	CALL	PRLENK	; Print no. bytes or Ks.
 	LD	A,#06	; Print 'free'.
 	CALL	DMESS##
 	JP	LPRINT##
+
+;        Set up the size display mode for the listing (DIRKMODE, used by
+; PRSIZE and PRLENK through KMODE?). A = FF: every figure in bytes (DIRB).
+; A = 0: from the DIRK environment item. "0" or "OFF" (any case) selects
+; the file sizes in bytes, with the totals in K from 1K up (mode 0); a
+; number from 1 to 65535 is the size in K from which every figure is
+; shown in K (mode 1). The number, 0 included, may be followed by one or
+; two letters that replace the "K" suffix of the figures shown in K (case
+; preserved). Any other value (the item not existing included) selects
+; the default: threshold 10K, suffix "K".
+SETKMOD:	LD	(DIRKMODE##),A
+	OR	A
+	RET	NZ	; Bytes forced.
+	CALL	DEFSFX	; Suffix "K" unless DIRK says otherwise.
+	LD	HL,DIRK$
+	CALL	OFF?##	; Reads the item into XBUF2. NC => it
+	JR	C,SKM10	;   starts with "OFF", which is only
+	LD	A,(XBUF2##+3)	;   the real thing when nothing
+	OR	A	;   follows.
+	JR	Z,SKM25	; DIRK=OFF => mode 0.
+SKM10:	LD	HL,XBUF2##
+	CALL	GET16##	; DE = the number (else default).
+	JR	NZ,SKM20
+	PUSH	DE
+	LD	DE,DIRKSFX##	; Then up to two letters, which
+	LD	B,#02	;   must end the value.
+SKM12:	LD	A,(HL)
+	OR	A
+	JR	Z,SKM16
+	CP	"A"
+	JR	C,SKM14
+	CP	"Z"+1
+	JR	C,SKM13
+	CP	"a"
+	JR	C,SKM14
+	CP	"z"+1
+	JR	NC,SKM14
+SKM13:	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	SKM12
+	LD	A,(HL)	; Three letters or more => default.
+	OR	A
+	JR	NZ,SKM14
+SKM16:	LD	A,B	; Any letter => it is the suffix
+	CP	#02	;   (else the default "K" stays).
+	JR	Z,SKM18
+	XOR	A
+	LD	(DE),A
+SKM18:	POP	DE
+	LD	A,D	; DIRK=0 => mode 0.
+	OR	E
+	JR	NZ,SKM22
+SKM25:	LD	DE,#01	; Mode 0: totals in K from 1K up.
+	JR	SKM30
+SKM14:	POP	DE	; Invalid value: the default, with
+	CALL	DEFSFX	;   the "K" suffix restored.
+SKM20:	LD	DE,#0A	; Default threshold: 10K.
+SKM22:	LD	A,#01	; Mode 1: every figure in K from the
+	LD	(DIRKMODE##),A	;   threshold up.
+SKM30:	XOR	A	; A:DE = DE * 4, so the bytes 0, E,
+	SLA	E	;   D, A are DE * 1024 = the
+	RL	D	;   threshold in bytes.
+	RLA
+	SLA	E
+	RL	D
+	RLA
+	LD	HL,DIRKTHR##
+	LD	(HL),#00
+	INC	HL
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	LD	(HL),A
+	RET
+
+DEFSFX:	LD	HL,DIRKSFX##	; The default suffix: "K".
+	LD	(HL),"K"
+	INC	HL
+	LD	(HL),#00
+	RET
+
+DIRK$:	DEFB	"DIRK",0
+
+;        Decide how the 32-bit byte count at (DE) is displayed. On exit,
+; Cy set => in K: DE -> DIRKTMP, holding the count divided by 1024 and
+; rounded to the nearest (halves up); NC => in bytes, DE unchanged. That
+; is, bytes are not forced (DIRKMODE <> FF) and the count reaches the
+; threshold (DIRKTHR). BC and HL are preserved.
+KMODE?:	LD	A,(DIRKMODE##)
+	XOR	#FF	; Bytes forced => NC.
+	RET	Z
+	PUSH	HL
+	PUSH	BC
+	PUSH	DE
+	LD	HL,DIRKTHR##	; Count - threshold, for the borrow:
+	LD	B,#04	;   Cy => below the threshold.
+KM10:	LD	A,(DE)
+	SBC	A,(HL)
+	INC	DE
+	INC	HL
+	DJNZ	KM10
+	POP	DE
+	JR	C,KM40
+	INC	DE	; DIRKTMP = count / 256 (the three
+	LD	HL,DIRKTMP##	;   high bytes, then a 0)...
+	LD	B,#03
+KM20:	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	KM20
+	LD	(HL),#00
+	DEC	HL	; ...then / 4 more: HL -> its third
+	LD	B,#02	;   byte (the top one stays 0).
+KM30:	SRL	(HL)
+	DEC	HL
+	RR	(HL)
+	DEC	HL
+	RR	(HL)	; Cy = the bit shifted out.
+	INC	HL
+	INC	HL
+	DJNZ	KM30
+	LD	DE,DIRKTMP##
+	JR	NC,KM35	; Bit 9 of the count set => half a K
+	LD	HL,DIRKTMP##	;   or more left over: round up.
+	LD	B,#04
+KM32:	INC	(HL)
+	JR	NZ,KM35
+	INC	HL
+	DJNZ	KM32
+KM35:	SCF	; In K.
+	JR	KM45
+KM40:	OR	A	; In bytes (the borrow set Cy).
+KM45:	POP	BC
+	POP	HL
+	RET
+
+;        Print the size of the file in FIB1 as a right-aligned 7-column
+; field: the rounded K count followed by the suffix (DIRKSFX) when KMODE?
+; says so in mode 1, the bytes otherwise. Figures too big for the field
+; (10,000,000 bytes, or 1,000,000K with a one-letter suffix, and over)
+; widen it. BC' (the /W and /2 layout state) is kept.
+PRSIZE:	LD	DE,FIB1##+#15
+	LD	A,(DIRKMODE##)
+	XOR	#01	; Only mode 1 shows file sizes in K
+	JR	NZ,PRS02	;   (NC here: bytes).
+	CALL	KMODE?	; Cy => in K, DE -> the K count.
+PRS02:	PUSH	AF
+	LD	A," "	; 8-column space-padded number, the
+	LD	IX,XBUF1##	;   suffix appended when needed.
+	CALL	D32##
+	POP	AF
+	LD	DE,XBUF1##
+	LD	B,#01	; Leading spaces to drop: 1 for the
+	JR	NC,PRS10	;   bytes, 1 more per suffix letter
+	LD	HL,DIRKSFX##	;   for the K figure.
+PRS05:	LD	A,(HL)
+	LD	(IX),A
+	INC	IX
+	INC	HL
+	OR	A
+	JR	Z,PRS10
+	INC	B
+	JR	PRS05
+PRS10:	LD	A,(DE)
+	CP	" "
+	JR	NZ,PRS20
+	INC	DE
+	DJNZ	PRS10
+PRS20:	JP	PRTSTR##
+
+;        Print the 32-bit number at VALUEL/VALUEH as 'n byte(s)', or as
+; 'nK' (rounded, with the suffix from DIRK in place of the K) when KMODE?
+; says so: the DIR totals rules, unlike PRLEN's truncating rule that the
+; FREE command keeps.
+PRLENK:	LD	DE,VALUEL##
+	CALL	KMODE?	; Cy => in K, DE -> the K count.
+	LD	A,#85	; The suffix (DIRKSFX), then #85:
+	JR	C,PLK10	;   nothing, or 'bytes' in Japanese.
+	LD	HL,(VALUEL##)	; ' bytes', or ' byte' for exactly
+	DEC	HL	;   1.
+	LD	A,H
+	OR	L
+	LD	HL,(VALUEH##)
+	OR	H
+	OR	L
+	LD	A,#0C
+	JR	NZ,PLK10
+	LD	A,#0B
+PLK10:	PUSH	AF
+	XOR	A	; No padding.
+	LD	IX,XBUF1##
+	PUSH	IX
+	CALL	D32##
+	POP	DE
+	CALL	PRTSTR##
+	POP	AF
+	CP	#85
+	JR	NZ,PLK20
+	PUSH	AF
+	LD	DE,DIRKSFX##
+	CALL	PRTSTR##
+	POP	AF
+PLK20:	JP	DMESS##
 
 DFILNAM:	LD	HL,FIB1##+1	; Point to filename to print.
 	LD	B,#08	; Print 8 characters of filename.

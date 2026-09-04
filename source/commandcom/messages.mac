@@ -172,3 +172,5 @@ MESSAGES::	DEFB	"Yy",0
 
 	DEFB	"No drives are in reduced allocation information mode",0	; #84 (RALLOC)
 
+	DEFB	0	; #85 (DIR: after the K suffix of the totals; 'bytes' in Japanese)
+

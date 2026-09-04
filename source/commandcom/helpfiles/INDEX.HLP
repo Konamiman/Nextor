@@ -24,6 +24,7 @@ DATE ..... displays/sets the current date
 DEL ...... see ERASE
 DEVINFO .. displays the devices handled by a disk driver
 DIR ...... displays the file names on a disk
+DIRB ..... same as DIR, with the sizes always in bytes
 DISKCOPY . copies a whole disk to another
 DRIVERS .. displays the disk drivers present in the system
 DRVINFO .. displays what every drive is assigned to

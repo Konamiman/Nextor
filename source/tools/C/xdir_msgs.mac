@@ -49,15 +49,16 @@ _msgs_en:
 	msge	<" byte">				;M_SIZ1
 	msge	<" bytes">				;M_SIZ2
 	msge	<" in ">				;M_IN
-	msge	<"K in ">				;M_KIN
+	msge	<" in ">				;M_KIN (after the K suffix)
 	msge	<" file    ">				;M_FIL1
 	msge	<" files   ">				;M_FIL2
-	msge	<"K free",CR,LF>			;M_KFREE
+	msge	<" free",CR,LF>				;M_KFREE (after the K suffix)
 	msge	<"Volume in drive ">			;M_VOL1
 	msge	<": is ">				;M_VOL2
 	msge	<": has no name">			;M_VOL3
 	msge	<"X-Directory of ">			;M_XDIR
 	msge	<CR,LF,"*** Wrong version of MSX-DOS">	;M_WVER
+	msge	<" bytes free",CR,LF>			;M_BFREE
 
 ;------------------------------------------------------------------------------
 ;	The Japanese messages: one entry per entry of the English table
@@ -69,15 +70,16 @@ _msgs_ja:
 	msgj	<"バイト">				;M_SIZ1
 	msgj	<"バイト">				;M_SIZ2
 	msgj	<"が計">				;M_IN
-	msgj	<"Kバイトが計">				;M_KIN
+	msgj	<"バイトが計">				;M_KIN
 	msgj	<"ファイルで使用中",CR,LF>		;M_FIL1
 	msgj	<"ファイルで使用中",CR,LF>		;M_FIL2
-	msgj	<"Kバイトが使用可能",CR,LF>		;M_KFREE
+	msgj	<"バイトが使用可能",CR,LF>		;M_KFREE
 	msgj	<"ドライブ">				;M_VOL1
 	msgj	<":のボリューム名は ">			;M_VOL2
 	msgj	<":のディスクにはボリューム名がありません">  ;M_VOL3
 	msgj	<"拡張ディレクトリ ">			;M_XDIR
 	msgj	<CR,LF,"*** MSX-DOSのバージョンが違います">	;M_WVER
+	msgj	<"バイトが使用可能",CR,LF>		;M_BFREE
 
 	.strenc	default
 
