@@ -2795,12 +2795,31 @@ CALDRV_DEVBASED:
 		ld	a,(ix+UD_RAM_SEGMENT##)
 		cp	0FFh
 		ld	a,c			;Restore page-2 segment
-		jr	nz,CALDRV_RAM		;  (flags unaffected)
+		jp	nz,CALDRV_RAM		;  (flags unaffected)
+
+		; Route adopted Nextor 2 ROM drivers through the bank-6 facade
+		; while retaining the normal GO_DRV path (including turboR
+		; Z80-mode switching).
+		bit	UF_V2,(ix+UD_DFLAGS##)
+		jr	z,CALDRV_NATIVE_DEVICE
+
+		set	7,h			;Same driver entry address, in bank 6
+		ld	(BK4_ADD##),hl
+		ld	hl,CPBK_IY##
+		ld	c,(ix+UD_SLOT##)	;IYl = legacy slot, preserved through GO_DRV
+		push	af
+		ld	a,(MASTER_SLOT##)	;IYh = master slot for the facade call
+		ld	b,a
+		pop	af
+		jr	CALDRV_NEXT_HAVE_SLOT
+
+CALDRV_NATIVE_DEVICE:
 		ld	(BK4_ADD##),hl	;Call via CALDRV is needed
 		ld	hl,CALDRV##		;for Nextor drivers.
 CALDRV_NEXT:
 
 		ld	b,(ix+UD_SLOT##)	;Get disk driver slot number
+CALDRV_NEXT_HAVE_SLOT:
 		bit	UF_Z80,(ix+UD_FLAGS##)
 		call	PUT_P2##		;Put required segment in pg-2 (preserves flags)
 

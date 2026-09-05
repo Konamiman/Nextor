@@ -157,7 +157,7 @@ size	macro	name
 				;        bit 6: unit is mounted to a file
 	field	1,UD_DFLAGS	;More flags for the unit:
 				;        bit 0: unit is associated to a device in a Nextor driver
-				;               (if zero, all other bits are meaningless)
+				;               (if zero, bits 1-6 are meaningless)
                 ;        bit 1: the device is a floppy disk drive
                 ;        bit 2: the drive is removable
 				;        bit 3: partition assignment is pending for this drive
@@ -165,7 +165,8 @@ size	macro	name
 				;               (so that BUILD_UPB will not auto-assign partition)
 				;        bit 5: drive is a ghost drive
 				;        bit 6: drive was last accessed in ghost pair
-				;        bit 7: unit is the built-in kernel RAM disk
+				;        bit 7: unit is the built-in kernel RAM disk (if bit 0 clear),
+				;               or uses an adopted Nextor 2 driver (if bit 0 set)
 ;
 	field	1,UD_RAM_SEGMENT	;Segment number for RAM based drivers, FFh for ROM based drivers
 ;

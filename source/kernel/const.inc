@@ -257,7 +257,8 @@ UF_PAP	equ	3	;Set => drive is pending partition assignment
 UF_FOK	equ	4	;Set => value at UD_FSEC is valid
 UF_GHO	equ	5	;Set => drive is a ghost drive
 UF_GLA	equ	6	;Set => drive was last accessed in ghost pair
-UF_RDD	equ	7	;Set => unit is the built-in kernel RAM disk
+UF_RDD	equ	7	;Set => unit is the built-in kernel RAM disk (if UF_DBD is clear)
+UF_V2	equ	7	;Set => unit is a Nextor 2 driver (if UF_DBD is set)
 ;
 ;
 ;         MASKS FOR "UD_DFLAGS" BITS
@@ -270,6 +271,7 @@ UFM_FO	equ	(1 SHL UF_FOK)
 UFM_GH	equ	(1 SHL UF_GHO)
 UFM_GL	equ	(1 SHL UF_GLA)
 UFM_RD	equ	(1 SHL UF_RDD)
+UFM_V2	equ	(1 SHL UF_V2)
 ;
 ;
 ;                 BITS IN THE DISK EMULATION FLAGS BYTE

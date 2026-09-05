@@ -11,6 +11,19 @@
 ; Jump table to routines called from outside this bank.
 ; Must be at address 4100h and match the definition in data.mac.
 
+signature macro text
+	local	start
+start:
+	db	text,0
+	if	$-start ne 16
+	.error	<Invalid Nextor 2 compatibility signature size>
+	endif
+	endm
+
+ventry	macro	name
+	jp	?&name&##
+	endm
+
 jentry	macro	name
 	jp	?&name&##
 	endm

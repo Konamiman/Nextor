@@ -252,6 +252,7 @@ ram_ad	defl	DATABASE
 	var	KERNEX,4	;Nextor kernel slots,
                     ;bit 6 is set if timer interrupt routine is to be called
 					;bit 5 is set if the driver has an EXTBIO handler
+					;bit 4 is set if it is a Nextor v3 kernel
 	var	TM1_SAVE,5,F31E	;Save address for old interrupt hook (used in DOS 1 mode)
 ;
 ;	------------------------
@@ -403,6 +404,8 @@ ram_ad	defl	DATABASE
 	const	GWORK,4045h
 	const	CALDRV,4048h
 	const	CALLB0_IX_IY,404Bh
+	const	JPHL,4064h
+	const	JPIX,4063h
 	const	NXT3_SIGNATURE,407Bh
 
 ;-----------------------------------------------------------------------------
@@ -438,6 +441,14 @@ jentry	macro	name
 
 ram_ad	defl	4100h
 	INCLUDE	bank4/jtable.inc
+
+signature macro text
+	spare	16
+	endm
+
+ventry	macro	name
+	spare	3
+	endm
 
 ram_ad	defl	4100h
 	INCLUDE	bank6/jtable.inc

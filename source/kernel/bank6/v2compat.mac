@@ -1,0 +1,494 @@
+	.z80
+	name('v2compat')
+	title	Nextor 2 device-driver compatibility layer
+;******************************************************************************
+;
+	INCLUDE ../macros.inc
+	INCLUDE ../const.inc
+;
+; This adapter makes an already initialized Nextor 2 device-based driver look
+; like a Nextor 3 ROM driver.  The old kernel remains responsible for the
+; driver's work area and any hooks it installed during its own INIT pass.
+;
+; Runtime entries take the legacy kernel slot in IYl. IYh is available to
+; the caller for inter-slot transport (e.g. GO_DRV into the master ROM).
+; Runtime calls use the page-3 $CALSLT trampoline and therefore also work while
+; the user's TPA is visible in page 0.  All calls use the legacy kernel's public
+; CALDRV entry, so calls made by the driver back into its own Nextor 2 kernel
+; continue to resolve in that slot.
+;
+; Compatibility is limited to already initialized device-based ROM drivers in
+; DOS 2 mode.  Drivers requesting timer interrupts are not adopted, and old
+; EXTBIO handlers are not called.  Devices 1..7 are exposed as LUN 1 only;
+; availability is probed, while available media report change state unknown.
+; Default drive mappings identify configured devices even when they are empty.
+; Unsupported lifecycle, custom query and formatting operations are rejected.
+;
+
+V2_RDBANK		equ	403Ch
+V2_CALDRV		equ	4048h
+V2_DV_TYPE		equ	410Eh
+V2_DRV_NAME		equ	4110h
+V2_VERSION		equ	4133h
+V2_DRV_CONFIG		equ	4151h
+V2_DEV_RW		equ	4160h
+V2_DEV_INFO		equ	4163h
+V2_DEV_STATUS		equ	4166h
+V2_LUN_INFO		equ	4169h
+V2_MAX_DEVICE		equ	7
+V20_BK4_ADD		equ	0F84Ch	;Nextor 2.0 location (ARG+5)
+V21_BK4_ADD		equ	0F1D0h	;Nextor 2.1 location (beta 2 and later)
+
+;-----------------------------------------------------------------------------
+; Nextor 3 DRIVER_QUERY facade.
+
+	public	?V2_DRIVER_QUERY
+
+?V2_DRIVER_QUERY:
+	cp	DRIVER_QUERY.GET_VERSION##
+	jr	z,V2_DQ_VERSION
+	cp	DRIVER_QUERY.GET_STRING##
+	jr	z,V2_DQ_STRING
+	cp	DRIVER_QUERY.GET_MAX_DEVICE##
+	jr	z,V2_DQ_MAX_DEVICE
+
+	; The legacy driver is already initialized. Lifecycle operations have no
+	; generally safe translation in this facade.
+	ld	a,DRIVER.RESULT_NOT_IMPLEMENTED##
+	ret
+
+V2_DQ_VERSION:
+	ld	ix,V2_VERSION
+	call	V2_CALLDRV		;Old result: A.B.C
+	ld	d,c			;New result: B.C.D, A=RESULT_OK
+	ld	c,b
+	ld	b,a
+	xor	a
+	ret
+
+V2_DQ_STRING:
+	ld	a,b
+	cp	DRIVER_QUERY.STR_DRIVER_NAME##
+	jr	nz,V2_DQ_NOT_IMPLEMENTED
+	ld	c,0			;Select the driver header name
+	jp	V2_GET_STRING
+
+	public	?V2_NOT_IMPLEMENTED
+
+?V2_NOT_IMPLEMENTED:
+V2_DQ_NOT_IMPLEMENTED:
+	ld	a,DRIVER.RESULT_NOT_IMPLEMENTED##
+	ret
+
+V2_DQ_MAX_DEVICE:
+	ld	b,V2_MAX_DEVICE		;Nextor 2 device indices are 1..7
+	xor	a
+	ret
+
+;-----------------------------------------------------------------------------
+; Nextor 3 DEVICE_QUERY facade.  A Nextor 2 device may have several LUNs;
+; this compatibility path deliberately exposes LUN 1 only.
+
+	public	?V2_DEVICE_QUERY
+
+?V2_DEVICE_QUERY:
+	push	af
+	ld	a,c
+	dec	a
+	cp	V2_MAX_DEVICE
+	jr	nc,V2_DEVQ_INVALID_DEVICE
+	pop	af
+	cp	DEVICE_QUERY.GET_STRING##
+	jp	z,V2_DEVQ_STRING
+	cp	DEVICE_QUERY.GET_PARAMS##
+	jr	z,V2_DEVQ_PARAMS
+	cp	DEVICE_QUERY.GET_STATUS##
+	jp	z,V2_DEVQ_STATUS
+	cp	DEVICE_QUERY.GET_AVAILABILITY##
+	jp	z,V2_DEVQ_AVAILABILITY
+	ld	a,DRIVER.RESULT_NOT_IMPLEMENTED##
+	ret
+
+V2_DEVQ_INVALID_DEVICE:
+	pop	af
+	ld	a,DRIVER.RESULT_INVALID_DEVICE##
+	ret
+
+V2_DEVQ_PARAMS:
+	; Validation-only calls must not pass HL=0 to the old LUN_INFO routine.
+	; Either availability or a default mapping establishes device existence.
+	ld	a,h
+	or	l
+	jp	z,V2_DEVQ_AVAILABILITY
+
+V2_DEVQ_PARAMS_CALL:
+	push	bc
+	push	hl
+	ld	a,c			;Device number moved from C to A
+	ld	b,1			;Expose only legacy LUN 1
+	ld	ix,V2_LUN_INFO
+	call	V2_CALLDRV
+	pop	hl
+	pop	bc
+	or	a
+	ret	z
+	call	V2_CONFIGURED_DEVICE
+	or	a
+	ret	nz
+	; Keep an empty configured device eligible for automapping and later
+	; media checks. NOT_IMPLEMENTED would default to a fixed device instead.
+	ex	de,hl
+	ld	hl,V2_EMPTY_DEVICE_PARAMS
+	ld	bc,12
+	ldir
+	xor	a
+	ret
+
+V2_EMPTY_DEVICE_PARAMS:
+	db	0			;Block device
+	dw	512			;Sector size
+	dw	0,0			;Unknown sector count
+	db	1			;Removable
+	dw	0			;Unknown geometry
+	db	0,0
+
+V2_DEVQ_STATUS:
+	call	V2_DEVQ_AVAILABILITY
+	or	a
+	ret	nz
+	ld	a,b
+	or	a
+	ret	z			;Exists but unavailable: A=OK, B=0
+	; Always report unknown change state when available. DEV_STATUS may consume
+	; the legacy change flag (some drivers also clear it on read/write), so
+	; forwarding it would lose changes after an availability-only query.
+	ld	b,3
+	xor	a
+	ret
+
+V2_DEVQ_AVAILABILITY:
+	push	bc
+	ld	a,c
+	ld	b,1
+	ld	ix,V2_DEV_STATUS
+	call	V2_CALLDRV
+	pop	bc
+	or	a
+	jr	z,V2_DEVQ_UNAVAILABLE
+	ld	b,1			;Legacy status 1..3 all mean available
+	xor	a
+	ret
+
+V2_DEVQ_UNAVAILABLE:
+	; Nextor 2 normally skips status checks for fixed media. Drivers can
+	; therefore report status 0 even though LUN_INFO still succeeds.
+	; Accept that success for fixed media only; removable media must retain
+	; the unavailable status.
+	push	bc
+	ld	hl,-12
+	add	hl,sp
+	ld	sp,hl
+	push	hl
+	ld	a,c
+	ld	b,1
+	ld	ix,V2_LUN_INFO
+	call	V2_CALLDRV
+	pop	hl
+	ld	de,7
+	add	hl,de
+	ld	e,(hl)			;Flags, used only if LUN_INFO succeeded
+	ld	hl,12
+	add	hl,sp
+	ld	sp,hl
+	pop	bc
+	or	a
+	jr	nz,V2_DEVQ_CONFIGURED
+	ld	b,0
+	bit	0,e			;Removable: exists but unavailable
+	ret	nz
+	inc	b			;Fixed: successful LUN_INFO means available
+	ret
+
+V2_DEVQ_CONFIGURED:
+	; Failed status conflates absent and invalid. Consult default mappings.
+	call	V2_CONFIGURED_DEVICE
+	ld	b,0
+	ret
+
+; Input: C = device number. Output: A = OK if a default drive mapping names
+; this device (regardless of LUN), INVALID_DEVICE otherwise.
+; Preserves BC, DE, HL, IY.
+; DRV_CONFIG describes boot mappings, not a complete device enumeration.
+V2_CONFIGURED_DEVICE:
+	push	bc
+	push	de
+	push	hl
+	ld	e,c
+	push	de
+	ld	hl,V2_DV_TYPE
+	ld	ix,V2_RDBANK
+	call	V2_CALLDRV
+	pop	de
+	bit	2,a			;Never call an unimplemented header entry
+	jr	z,V2_CONFIG_INVALID
+
+	push	de
+	ld	bc,0			;DOS 2, normal (not reduced) drive count
+	ld	a,1			;Get number of drives at boot
+	ld	ix,V2_DRV_CONFIG
+	call	V2_CALLDRV
+	pop	de
+	or	a
+	jr	nz,V2_CONFIG_INVALID
+	ld	a,b
+	or	a
+	jr	z,V2_CONFIG_INVALID
+	; B = mappings remaining, E = requested device
+	ld	c,0			;Relative drive numbers start at zero
+V2_CONFIG_LOOP:
+	push	bc
+	push	de
+	ld	b,0			;DOS 2
+	ld	a,2			;Get default configuration for drive C
+	ld	ix,V2_DRV_CONFIG
+	call	V2_CALLDRV
+	pop	de
+	ld	d,b			;Save returned device before restoring BC
+	pop	bc
+	or	a
+	jr	nz,V2_CONFIG_NEXT
+	ld	a,d
+	cp	e
+	jr	z,V2_CONFIG_FOUND
+V2_CONFIG_NEXT:
+	inc	c
+	djnz	V2_CONFIG_LOOP
+V2_CONFIG_INVALID:
+	ld	a,DRIVER.RESULT_INVALID_DEVICE##
+	jr	V2_CONFIG_DONE
+V2_CONFIG_FOUND:
+	xor	a
+V2_CONFIG_DONE:
+	pop	hl
+	pop	de
+	pop	bc
+	ret
+
+;-----------------------------------------------------------------------------
+; Legacy strings: driver name at 4110h (32 bytes), DEV_INFO strings (64 bytes).
+; Nextor 2's hardware-derived device name is Nextor 3's medium name (index 2).
+; There is no legacy counterpart for Nextor 3's fixed device name (index 4).
+
+V2_DEVQ_STRING:
+	; Validate existence before interpreting the string index. An empty but
+	; configured device exists, although its hardware strings may be unavailable.
+	push	bc
+	push	de
+	push	hl
+	call	V2_DEVQ_AVAILABILITY
+	pop	hl
+	pop	de
+	pop	bc
+	or	a
+	ret	nz
+	ld	a,b
+	dec	a
+	cp	3			;Manufacturer, medium name, serial number
+	jp	nc,V2_DQ_NOT_IMPLEMENTED
+	jr	V2_GET_STRING
+
+; Input: C = device (0 for driver name), B = legacy string index,
+; D = caller's buffer size, HL = caller's buffer. Only temporary stack RAM.
+V2_GET_STRING:
+	push	hl
+	push	de
+	ld	hl,-65
+	add	hl,sp
+	ld	sp,hl
+	push	bc
+	ld	b,65
+	xor	a
+V2_STRING_CLEAR:
+	ld	(hl),a
+	inc	hl
+	djnz	V2_STRING_CLEAR
+	pop	bc
+	ld	hl,0
+	add	hl,sp
+	push	hl
+	call	V2_READ_STRING
+	pop	hl
+	or	a
+	jr	nz,V2_STRING_ERROR
+	; The zeroed scratch buffer accommodates drivers that return short strings
+	; or an early terminator, and terminates even a full 64-byte padded string.
+	call	V2_TRIM_STRING
+	ld	ix,65
+	add	ix,sp
+	ld	b,(ix+1)		;Saved D: caller's size, including terminator
+	ld	e,(ix+2)		;Saved HL: caller's destination
+	ld	d,(ix+3)
+	call	V2_OUTPUT_STRING
+	jr	V2_STRING_DONE
+V2_STRING_ERROR:
+	ld	a,DRIVER.RESULT_NOT_IMPLEMENTED##
+V2_STRING_DONE:
+	ld	hl,65
+	add	hl,sp
+	ld	sp,hl
+	pop	de
+	pop	hl
+	ret
+
+V2_READ_STRING:
+	ld	a,c
+	or	a
+	jr	z,V2_READ_DRIVER_NAME
+	ld	ix,V2_DEV_INFO
+	jp	V2_CALLDRV
+
+V2_READ_DRIVER_NAME:
+	ld	de,V2_DRV_NAME
+	ld	b,32
+V2_READ_NAME_LOOP:
+	push	bc
+	push	de
+	push	hl
+	ex	de,hl
+	ld	ix,V2_RDBANK
+	call	V2_CALLDRV
+	pop	hl
+	pop	de
+	pop	bc
+	ld	(hl),a
+	inc	hl
+	inc	de
+	djnz	V2_READ_NAME_LOOP
+	xor	a
+	ret
+
+; Strip outer space padding, including the leading padding on serial numbers.
+; Input/output: HL = zero-terminated string. Modifies AF, DE and the string.
+V2_TRIM_STRING:
+	ld	a,(hl)
+	cp	" "
+	jr	nz,V2_TRIM_START
+	inc	hl
+	jr	V2_TRIM_STRING
+V2_TRIM_START:
+	push	hl
+	ld	d,h
+	ld	e,l
+V2_TRIM_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,V2_TRIM_END
+	inc	hl
+	cp	" "
+	jr	z,V2_TRIM_LOOP
+	ld	d,h			;DE = byte after last non-space character
+	ld	e,l
+	jr	V2_TRIM_LOOP
+V2_TRIM_END:
+	ld	(de),a			;A=0
+	pop	hl
+	ret
+
+; Input: HL = source, DE = destination, B = size including terminator.
+; Output: A = OK or TRUNCATED_STRING. B=0 probes existence without writing.
+V2_OUTPUT_STRING:
+	ld	a,b
+	or	a
+	jr	z,V2_STRING_TRUNCATED
+V2_OUTPUT_LOOP:
+	ld	a,(hl)
+	or	a
+	ld	(de),a
+	ret	z
+	inc	hl
+	inc	de
+	djnz	V2_OUTPUT_LOOP
+	dec	de
+	xor	a
+	ld	(de),a
+V2_STRING_TRUNCATED:
+	ld	a,DRIVER.RESULT_TRUNCATED_STRING##
+	ret
+
+;-----------------------------------------------------------------------------
+; Nextor 3 READ_WRITE facade.
+
+	public	?V2_READ_WRITE
+
+?V2_READ_WRITE:
+	push	af
+	dec	a
+	cp	V2_MAX_DEVICE
+	jr	nc,V2_RW_INVALID_DEVICE
+	pop	af
+	ld	c,1			;Expose only legacy LUN 1
+	ld	ix,V2_DEV_RW
+	call	V2_CALLDRV
+	cp	.IDEVN##		;N2 conflates invalid and temporarily absent
+	ret	nz
+	ld	a,.NRDY##
+	ret
+
+V2_RW_INVALID_DEVICE:
+	pop	af
+	ld	b,0
+	ld	a,.IDEVN##
+	ret
+
+;-----------------------------------------------------------------------------
+; Call the legacy kernel's public driver API.
+;
+; Input: IX = legacy entry, IYl = legacy slot, AF/BC/DE/HL = parameters.
+; Preserves IY; corrupts V21_BK4_ADD and V20_BK4_ADD.
+V2_CALLDRV:
+	push	iy
+	ld	(V21_BK4_ADD),ix
+	ld	(V20_BK4_ADD),ix	;Compatibility with Nextor 2.0
+	push	af
+	ld_	a,iyl
+	ld_	iyh,a			;Target slot for $CALSLT
+	pop	af
+	ld	ix,V2_CALDRV
+	call	$CALSLT##
+	pop	iy
+	ret
+
+;-----------------------------------------------------------------------------
+; Identify an adopted Nextor 2 ROM driver from KERNEX.
+;
+; Input: A = slot address.
+; Output: Z for an adopted Nextor 2 kernel entry.
+; Preserves: BC, DE, HL, IX, IY.
+
+IS_V2_ROM_DRIVER::
+	push	bc
+	push	hl
+	and	10001111b
+	ld	c,a
+	ld	hl,KERNEX##
+	ld	b,4
+IS_V2_ROM_DRIVER_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,IS_V2_ROM_DRIVER_NEXT
+	bit	4,a
+	jr	nz,IS_V2_ROM_DRIVER_NEXT
+	and	10001111b
+	cp	c
+	jr	z,IS_V2_ROM_DRIVER_DONE
+IS_V2_ROM_DRIVER_NEXT:
+	inc	hl
+	djnz	IS_V2_ROM_DRIVER_LOOP
+	or	1
+IS_V2_ROM_DRIVER_DONE:
+	pop	hl
+	pop	bc
+	ret
+
+	finish <V2COMPAT>
+	end

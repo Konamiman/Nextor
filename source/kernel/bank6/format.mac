@@ -716,6 +716,14 @@ CALL_DEVICE_QUERY:
 	ld	a,(BUF+106)
 	cp	0FFh
 	jr	nz,CDQ_RAM
+	ld	a,(BUF+100)
+	call	IS_V2_ROM_DRIVER##
+	jr	nz,CDQ_ROM
+	ld	a,(BUF+100)
+	ld_	iyl,a		;Legacy slot for the facade
+	pop	af
+	jp	DRIVER.DEVICE_QUERY_ENTRY##	;Compatibility header in this bank
+
 CDQ_ROM:
 	pop	af
 

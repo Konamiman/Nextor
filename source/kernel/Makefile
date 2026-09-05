@@ -254,7 +254,7 @@ B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.re
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
-B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel)
+B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel v2compat.rel)
 
 lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,\
 	$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,\
@@ -324,7 +324,7 @@ bank0/B0.BIN bank0/B0.SYM &: \
 bank0/b0labels.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT|R_DSK[^[:space:]]+|R_GETDPB|R_CHOICE)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|CPBK_IY|PROMPT|R_DSK[^[:space:]]+|R_GETDPB|R_CHOICE)
 
 bank0/b0lab_b3.inc: \
 	bank0/B0.SYM
@@ -468,7 +468,7 @@ bank6/B6.BIN bank6/B6.SYM &: \
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel ../print_call_help.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel v2compat.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \

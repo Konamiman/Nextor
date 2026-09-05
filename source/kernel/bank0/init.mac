@@ -1470,7 +1470,11 @@ CLEAN1:
 	ld (SCANKEYS_RAM_BASE),a
 NO_CLEAN_SCANKEYS_RAM:
 
+	; Mark compatible Nextor 2 drivers to adopt.
+	call	ADOPT_V2_DRIVERS
+
 	; Clean up Nextor 2 kernel entries from DRVTBL## and KERNEX
+	ld	ix,CLEAN_KEEP_V2_COMPAT
 	call	CLEAN_V2_KERNELS
 
 	call	GET_DISKID_HL
@@ -2771,6 +2775,11 @@ if STURBO
 	ld	a,(P2_64K##)
 	call	PUT_P2##
 
+	;Nextor 2 device drivers are not supported in DOS 1 mode.
+	;Remove them before AUTODRV creates KERNEX_DOS1.
+	ld	ix,CLEAN_KEEP_V3_ONLY
+	call	CLEAN_V2_KERNELS
+
 	ld	hl,BOOT_TMP##
 	ld	(KERNEX_DOS1##),hl
 	ld	hl,AUTODRV##
@@ -2787,6 +2796,10 @@ if STURBO
 	jr	MK_DVB_TBL
 
 MK_EMU_TBL:
+	;Nextor 2 device drivers are not supported in disk emulation mode.
+	ld	ix,CLEAN_KEEP_V3_ONLY
+	call	CLEAN_V2_KERNELS
+
 	;We are in disk emulation mode.
 
 	;Force the screen frequency if the emulation flags request it,
@@ -3775,8 +3788,8 @@ FOURZEROS:	db	0,0,0,0
 
 ;-----------------------------------------------------------------------------
 ;
-; Remove Nextor 2 kernels from DRVTBL##, HOOKSAV and KERNEX tables.
-; Nextor 3 kernels are identified by bit 4 set in their KERNEX entry.
+; Clean up Nextor 2 kernels from DRVTBL##, HOOKSAV and KERNEX tables.
+; Input: IX = callback (A = KERNEX entry, return NZ to keep).
 ; Uses: AF, BC, DE, HL, BC', DE', HL'
 
 CLEAN_V2_KERNELS::
@@ -3818,13 +3831,10 @@ CLEAN_COMPACT_ENTRY:
 	call	GET_KERNEX_ENTRY	; Get KERNEX entry for this slot
 	pop	hl
 	pop	bc
-	jr	nz,CLEAN_COMPACT_COPY	; NZ = not in KERNEX, keep it (legacy)
+	call	z,JPIX##
+	jr	nz,CLEAN_COMPACT_COPY
 
-	; It's in KERNEX, check bit 4 for Nextor v3
-	bit	4,a
-	jr	nz,CLEAN_COMPACT_COPY	; Bit 4 set = Nextor v3, keep it
-
-	; Nextor v2 kernel: adjust DISKID and skip
+	; Unsupported kernel: adjust DISKID and skip
 	push	hl
 	call	GET_DISKID_HL
 	dec	(hl)
@@ -3867,8 +3877,9 @@ CLEAN_KERNEX_LOOP:
 
 CLEAN_KERNEX_ENTRY:
 	ld	a,(hl)
-	bit	4,a
-	jr	nz,CLEAN_KERNEX_COPY	; Copy Nextor v3 entry
+	or	a
+	call	nz,JPIX##
+	jr	nz,CLEAN_KERNEX_COPY	; Copy supported kernel
 	inc	hl
 	ret
 
@@ -3906,6 +3917,74 @@ GET_KERNEX_LOOP:
 	ret	z
 	inc	hl
 	djnz	GET_KERNEX_LOOP
+	ret
+
+; Keep native Nextor 3 kernels only.
+; Input: A = KERNEX entry.
+; Output: NZ if bit 4 identifies a Nextor 3 kernel.
+;
+CLEAN_KEEP_V3_ONLY:
+	bit	4,a
+	ret
+
+; Keep native Nextor 3 kernels and adopted Nextor 2 kernels.
+; Input: A = KERNEX entry, after ADOPT_V2_DRIVERS.
+; Output: NZ to keep the kernel, Z to remove it.
+;
+CLEAN_KEEP_V2_COMPAT:
+	and	00110000b		;Native V3 flag and V2 rejection marker
+	xor	00100000b		;Only rejected V2 entries yield zero
+	ret
+
+;-----------------------------------------------------------------------------
+;
+; Adopt compatible Nextor 2 device-based drivers in a separate KERNEX pass.
+; Clear the configuration flag (bit 5) of compatible V2 drivers, since it
+; is not an EXTBIO capability. Set it for rejected V2 drivers so cleaning
+; can identify them without probing the drivers again.
+; Uses: AF, BC, DE, HL, IX, IY, BC', DE', HL'.
+;
+V2_RDBANK		equ	403Ch
+V2_CALDRV		equ	4048h
+V2_DV_TYPE		equ	410Eh
+V20_BK4_ADD		equ	0F84Ch	;Nextor 2.0 location (ARG+5)
+V21_BK4_ADD		equ	0F1D0h	;Nextor 2.1 location (beta 2 and later)
+
+ADOPT_V2_DRIVERS:
+	ld	hl,KERNEX##
+	ld	b,4
+ADOPT_V2_DRIVERS_LOOP:
+	push	bc
+	push	hl
+	call	ADOPT_V2_DRIVERS_ENTRY
+	pop	hl
+	pop	bc
+	inc	hl
+	djnz	ADOPT_V2_DRIVERS_LOOP
+	ret
+ADOPT_V2_DRIVERS_ENTRY:
+	ld	a,(hl)
+	or	a
+	ret	z
+	bit	4,a			;Native Nextor 3 kernel
+	ret	nz
+	set	5,(hl)			;Mark Nextor 2 kernel incompatible initially
+	bit	6,a			;Requests TIMI
+	ret	nz
+	push	hl			;Keep the entry address across the legacy probe
+	and	10001111b
+	push	af
+	pop	iy			;IYh = target slot for BIOS CALSLT; IYl is unused
+	ld	hl,V2_RDBANK
+	ld	(V21_BK4_ADD),hl
+	ld	(V20_BK4_ADD),hl	;Compatibility with Nextor 2.0
+	ld	hl,V2_DV_TYPE
+	ld	ix,V2_CALDRV
+	call	CALSLT			;The page-3 $CALSLT trampoline is not installed yet
+	pop	hl
+	rrca				;Is device-based
+	ret	nc
+	res	5,(hl)			;Mark Nextor 2 kernel compatible
 	ret
 
 ;-----------------------------------------------------------------------------

@@ -1432,7 +1432,7 @@ AA_DO_ASSIGN:
 
 	ld a,(DOS_VER##)
 	or a
-	jr z,AA_DO_ASSDOS1
+	jp z,AA_DO_ASSDOS1
 
 	set	UF_FOK,(iy+UD_DFLAGS##)	;Tell that the partition information is valid
 
@@ -1485,6 +1485,14 @@ AA_DO_ASSIGN_NO_FOK:
 	or	UFM_DB		;Set "device based driver"
 	or	(iy+UD_DFLAGS##)	;Because the "FSEC OK" flag has already its value
 	ld	(iy+UD_DFLAGS##),a
+	ld	a,(ix+AAD_DRIVER_SEGMENT)
+	cp	0FFh
+	jr	nz,AA_DO_ASSIGN_NOT_V2
+	ld	a,(ix+AAD_DRIVER_SLOT)
+	call	IS_V2_ROM_DRIVER
+	jr	nz,AA_DO_ASSIGN_NOT_V2
+	set	UF_V2,(iy+UD_DFLAGS##)
+AA_DO_ASSIGN_NOT_V2:
 
 	ld	hl,$DPBLIST##
 	ld	c,(iy+UD_PHYSICAL_UNIT##)
@@ -1651,18 +1659,107 @@ AA_CALLDRV2:
 	ld_	a,iyl
 	cp	0FFh
 	jr	nz,AA_CALLDRV_RAM
-	pop	af		;ROM driver: CALSLT -> CALDRV.
+	ld_	a,iyh
+	call	IS_V2_ROM_DRIVER
+	jr	z,AA_CALLDRV_V2
+	pop	af			;Native ROM driver: CALSLT -> CALDRV.
 	ld	ix,CALDRV##
 	call	CALSLT
 	pop	ix
 	or	a
 	ret
+
+AA_CALLDRV_V2:
+	pop	af
+	call	AA_CALLDRV_V2_CALL
+	pop	ix
+	or	a
+	ret
+
 AA_CALLDRV_RAM:
 	pop	af		;RAM driver: call via CALL_MAP.
 	ld	ix,(BK4_ADD##)
 	call	CALL_MAP##
 	pop	ix
 	or	a
+	ret
+
+AA_CALLDRV_ROM_TPA:
+	push	ix
+	push	af
+	ld_	a,iyh
+	call	IS_V2_ROM_DRIVER
+	jr	z,AA_CALLDRV_V2_TPA
+	pop	af			;Native ROM driver: $CALSLT -> CALDRV.
+	ld	ix,CALDRV##
+	call	$CALSLT##
+	pop	ix
+	ret
+
+AA_CALLDRV_V2_TPA:
+	; CDRVR supplies an arbitrary address. Reject addresses beyond the
+	; end of the compatibility header to protect unrelated bank-6 code.
+	ld	ix,(BK4_ADD##)
+	ld_	a,ixh
+	cp	DRIVER.HEADER_END## SHR 8
+	jr	c,AA_CALLDRV_V2_VALID
+	jr	nz,AA_CALLDRV_V2_INVALID
+	ld_	a,ixl
+	cp	DRIVER.HEADER_END## AND 0FFh
+	jr	c,AA_CALLDRV_V2_VALID
+AA_CALLDRV_V2_INVALID:
+	pop	af
+	ld	a,DRIVER.RESULT_NOT_IMPLEMENTED##
+	pop	ix
+	ret
+AA_CALLDRV_V2_VALID:
+	pop	af
+	call	AA_CALLDRV_V2_CALL
+	pop	ix
+	ret
+
+; Enter bank 6 without replacing BK4_ADD or the caller's IY.
+; The facade takes the legacy slot in IYl, leaving IYh available for
+; inter-slot transports such as GO_DRV. Preserve the slot:segment pair.
+AA_CALLDRV_V2_CALL:
+	push	iy
+	ex	af,af'
+	ld_	a,iyh
+	ld_	iyl,a
+	ld	ix,(BK4_ADD##)	;Same entry address as a native Nextor 3 driver
+	ld	a,6
+	call	CALBNK##
+	pop	iy
+	ret
+
+
+; Input: A = slot address.
+; Output: Z for an adopted Nextor 2 kernel entry.
+; Preserves: BC, DE, HL, IX, IY.
+
+IS_V2_ROM_DRIVER:
+	push	bc
+	push	hl
+	and	10001111b
+	ld	c,a
+	ld	hl,KERNEX##
+	ld	b,4
+IS_V2_ROM_DRIVER_LOOP:
+	ld	a,(hl)
+	or	a
+	jr	z,IS_V2_ROM_DRIVER_NEXT
+	bit	4,a
+	jr	nz,IS_V2_ROM_DRIVER_NEXT
+	and	10001111b
+	cp	c
+	jr	z,IS_V2_ROM_DRIVER_DONE
+IS_V2_ROM_DRIVER_NEXT:
+	inc	hl
+	djnz	IS_V2_ROM_DRIVER_LOOP
+	or	1
+IS_V2_ROM_DRIVER_DONE:
+	pop	hl
+	pop	bc
 	ret
 
 
@@ -2723,8 +2820,7 @@ CDRV_NODOS1:
 
 CDRVR_ROM:
 	pop	af		;Input AF
-	ld	ix,CALDRV##
-	call	$CALSLT##
+	call	AA_CALLDRV_ROM_TPA
 	jr	CDRVR_RESULT
 
 CDRVR_RAM:
@@ -3427,6 +3523,14 @@ MAP_SPEC_SETFLAGS:
 	or	UFM_FD		;Set floppy disk flag
 MAP_SPEC_NOFDD:
 	ld	(ix+UD_DFLAGS##),a
+	ld	a,(ix+UD_RAM_SEGMENT##)
+	inc	a
+	jr	nz,MAP_SPEC_NOT_V2
+	ld	a,(ix+UD_SLOT##)
+	call	IS_V2_ROM_DRIVER
+	jr	nz,MAP_SPEC_NOT_V2
+	set	UF_V2,(ix+UD_DFLAGS##)
+MAP_SPEC_NOT_V2:
 
 	call	MAYBE_CREATE_GHOST_DOS2
 	xor	a

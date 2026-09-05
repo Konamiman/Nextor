@@ -163,10 +163,11 @@ CALLB0_IX_IY:
 ; Call routine in bank 4 (or 6 if bit 15 of BK4_ADD is set).
 ; Routine address is placed in BK4_ADD (bit 15 is cleared before use).
 ; IY is set to RAM_BASE for the called routine.
+; CPBK_IY passes the caller's IY instead.
 ; All registers except IX and alternate are passed to the routine.
 
 C4PBK::	ld	iy,RAM_BASE##
-		ex	af,af'
+CPBK_IY::	ex	af,af'
 		push	hl
 		ld	hl,BK4_ADD##+1	;Point to high byte of address
 		ld	a,(hl)

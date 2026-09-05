@@ -393,7 +393,9 @@ SGD2_NO_SHIFT:
 SGD2_SETUP_GHOST:
 	ld	a,(ix+UD_DEVICE_NUMBER##)
 	ld	(iy+UD_DEVICE_NUMBER##),a
-	ld	a,UFM_DB+UFM_FD+UFM_RM+UFM_FO+UFM_GH
+	ld	a,(ix+UD_DFLAGS##)
+	and	UFM_V2
+	or	UFM_DB+UFM_FD+UFM_RM+UFM_FO+UFM_GH
 	ld	(iy+UD_DFLAGS##),a
 
 	;Set "last accessed" flag on the real drive
