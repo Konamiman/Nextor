@@ -6061,32 +6061,9 @@ DRVI_NOMOUNT:
 	pop	ix
 OK_INFO:
 
-	;* Print driver name and version number
-
-	bit	7,(ix+4)
-	jr	z,IS_LEGACY
+	;* Print driver name, version number and slot
 
 	call	PRINT_DRVINFO
-
-	jr	OK_NAME
-
-IS_LEGACY:
-	ld	hl,LEGACY_MSG
-	call	PRINT_CALL_HELP##
-OK_NAME:
-
-
-	;* Print slot number
-
-	ld	hl,ONSLOT_S
-	call	PRINT_CALL_HELP##
-
-	ld	a,(ix)
-	ld	b,(ix+1)
-	call	PRSLOT
-
-	ld	hl,CRLF
-	call	PRINT_CALL_HELP##
 
 	;* Print relative unit number or device number
 
@@ -6203,32 +6180,9 @@ GDRVML_OK:
 	ld	ix,CDRV_BUF
 
 
-	;* Print driver name and version number
-
-	bit	7,(ix+4)
-	jr	z,IS_LEGACY2
+	;* Print driver name, version number and slot
 
 	call	PRINT_DRVINFO
-
-	jr	OK_NAME2
-
-IS_LEGACY2:
-	ld	hl,LEGACY_MSG
-	call	PRINT_CALL_HELP##
-OK_NAME2:
-
-
-	;* Print slot number
-
-	ld	hl,ONSLOT_S
-	call	PRINT_CALL_HELP##
-
-	ld	a,(ix)
-	ld	b,(ix+1)
-	call	PRSLOT
-
-	ld	hl,CRLF
-	call	PRINT_CALL_HELP##
 
 
 	;* Print number of assigned drives
@@ -6318,10 +6272,36 @@ TO_MSG:
 
 ;-----------------------------------------------------------------------------
 ;
-; Print driver name (with truncation) and version number.
+; Print driver name and version (or legacy description), slot and newline.
 ; Input: IX = Driver info block (in page 3, from GDRVR)
 
 PRINT_DRVINFO:
+	bit	7,(ix+4)
+	jr	z,PDI_IS_LEGACY
+
+	call	PRINT_DRVNAME_VERSION
+	jr	PDI_OK_NAME
+
+PDI_IS_LEGACY:
+	ld	hl,LEGACY_MSG
+	call	PRINT_CALL_HELP##
+
+PDI_OK_NAME:
+	;* Print slot number
+	ld	hl,ONSLOT_S
+	call	PRINT_CALL_HELP##
+
+	ld	a,(ix)
+	ld	b,(ix+1)
+	call	PRSLOT
+
+	ld	hl,CRLF
+	jp	PRINT_CALL_HELP##
+
+; Print driver name (with truncation) and version number.
+; Input: IX = Driver info block (in page 3, from GDRVR)
+
+PRINT_DRVNAME_VERSION:
 	push	ix
 	pop	hl
 	ld	bc,8
