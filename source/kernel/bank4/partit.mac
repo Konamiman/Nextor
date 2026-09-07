@@ -1085,20 +1085,9 @@ AA_NO_SKIP_AUTOMAP:
 	jr	z,AA_OK_CANDIDATE
 
 	;Check if this floppy device is already assigned to another drive
-	push	ix
-	ld	h,(ix+AAD_DRIVER_SLOT)
-	ld	l,(ix+AAD_DRIVER_SEGMENT)
-	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
-	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
-	push	de
-	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
-	exx
 	ld	de,0
 	ld	hl,0
-	exx
-	pop	ix
-	call	CHECK_MAP_IN_USE
-	pop	ix
+	call	AA_CHECK_MAP_IN_USE
 	jp	nz,AA_LLOOP_NEXT	;Already assigned: skip to next device
 
 	ld	a,(ix+AAD_CURR_PART_DEVNUM)
@@ -1301,23 +1290,12 @@ AA_CHECK_BOOT:
 
 	;* Check if the partition is already mapped to another drive
 
-	push ix
-	ld h,(ix+AAD_DRIVER_SLOT)
-	ld l,(ix+AAD_DRIVER_SEGMENT)
-    ld e,(ix+AAD_UNIT_DESCRIPTOR)
-    ld d,(ix+AAD_UNIT_DESCRIPTOR+1)
-    push de
-	ld d,(ix+AAD_LOOP_DEVICE_NUMBER)
-	exx
     ld  e,(ix+AAD_CURR_PART_SECTOR)
     ld  d,(ix+AAD_CURR_PART_SECTOR+1)
     ld  l,(ix+AAD_CURR_PART_SECTOR+2)
     ld  h,(ix+AAD_CURR_PART_SECTOR+3)
-	exx
-    pop ix
 
-	call CHECK_MAP_IN_USE
-	pop ix
+	call AA_CHECK_MAP_IN_USE
 	jp nz,AA_PART_IN_USE
 
 	;* All checks ok, partition is good.
@@ -1406,20 +1384,9 @@ AA_RECORD_FALLBACK:
 
 	;Check if the device is already attached (with no partition) to another drive
 
-	push	ix
-	ld	h,(ix+AAD_DRIVER_SLOT)
-	ld	l,(ix+AAD_DRIVER_SEGMENT)
-	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
-	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
-	push	de
-	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
-	exx
 	ld	de,0FFFFh
 	ld	hl,0FFFFh
-	exx
-	pop	ix
-	call	CHECK_MAP_IN_USE
-	pop	ix
+	call	AA_CHECK_MAP_IN_USE
 	jp	nz,AA_LLOOP_NEXT	;Already attached to another drive: skip to next device
 
 	ld	a,(ix+AAD_CURR_PART_DEVNUM)
@@ -1588,6 +1555,26 @@ AA_DO_ASSDOS1:
 	ld	(iy+UD1_RELATIVE_DRIVE##),a
 
 	xor	a
+	ret
+
+
+;Check if the current device and the supplied sector are already mapped.
+;Input: IX = AAD frame, HLDE = partition first absolute sector
+;Output: A = 0 & Z if not in use, A = 1 & NZ if already in use
+;Preserves IX; modifies AF, BC, DE, HL, BC', DE', HL', IY
+
+AA_CHECK_MAP_IN_USE:
+	exx
+	push	ix
+	ld	h,(ix+AAD_DRIVER_SLOT)
+	ld	l,(ix+AAD_DRIVER_SEGMENT)
+	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
+	ld	d,(ix+AAD_UNIT_DESCRIPTOR+1)
+	push	de
+	ld	d,(ix+AAD_LOOP_DEVICE_NUMBER)
+	pop	ix
+	call	CHECK_MAP_IN_USE
+	pop	ix
 	ret
 
 
