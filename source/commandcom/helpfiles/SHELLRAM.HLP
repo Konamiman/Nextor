@@ -1,7 +1,9 @@
 SHELLRAM                                                       [3.0]
 --------
 
-Format:      SHELLRAM [ON | OFF [/T]]
+Format:      SHELLRAM
+                or
+             SHELLRAM ON|OFF [/T]
 
 Purpose:     Displays or sets the use of a RAM segment for  extended
         shell features.

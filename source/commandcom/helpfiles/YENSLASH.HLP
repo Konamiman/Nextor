@@ -1,7 +1,9 @@
 YENSLASH                                                       [3.0]
 --------
 
-Format:      YENSLASH [ON | OFF [/T]]
+Format:      YENSLASH
+                or
+             YENSLASH ON|OFF [/T]
 
 Purpose:     Displays or sets the display of the yen sign  character
         as a backslash.
