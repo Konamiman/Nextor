@@ -2650,18 +2650,17 @@ F_CDRVR_GO:
 	or	a
 	ret	nz
 
-	ld	a,b
-	cp	0FFh
-	jr	nz,CDRVR_RAM
-
-	;--- ROM driver path
-
 	ld	(BK4_ADD##),de
-	ld_ iyh,c
+	ld_	iyh,c		;IY = slot:segment (FFh for ROM)
+	ld_	iyl,b
+
+	;Load input params from buffer (IX still = buffer ptr)
+
 	ld	l,(ix)
 	ld	h,(ix+1)
-	push	hl
+	push	hl		;Save input AF on stack
 	ld	c,(ix+2)
+	ld	b,(ix+3)
 	ld	e,(ix+4)
 	ld	d,(ix+5)
 	ld	l,(ix+6)
@@ -2677,7 +2676,6 @@ F_CDRVR_GO:
 	;--- We are in DOS 1 mode:
 	;    We can just call the driver right away.
 
-	ld	b,(ix+3)
 	ld	ix,CALDRV##
 	pop	af
 	call	CALSLT
@@ -2696,87 +2694,7 @@ CDRV_NODOS1:
 	;    in place when the function was called; otherwise
 	;    that TPA segment could be uninitialized.
 
-	ld a,(PS_BDOS##)
-	and 11b
-	ld b,a ;Main slot number
-	ld a,(SS_BDOS##)
-	rla
-	rla
-	and 1100b
-	or b   
-	ld b,a ;Main slot + subslot
-
-	ld a,(RAMAD0##)
-	and 1111b
-	cp b
-	jr nz,CDRV_NORAM0
-
-	ld	a,(P0_TPA##)
-	call	PUT_P0##
-
-CDRV_NORAM0:
-	ld	a,(P2_TPA##)
-	call	PUT_P2##
-
-	ld	b,(ix+3)
-	pop	af
-	ld	ix,CALDRV##
-	call	$CALSLT##
-	push	af
-	pop	ix
-
-	ld	a,(CODE_SEG##)
-	call	PUT_P0##
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-
-	xor	a
-	ret
-
-	;--- RAM driver path
-
-CDRVR_RAM:
-	; B=segment, C=slot, DE=routine addr, IX=input buffer ptr
-
-	ld	(BUF),de	;Save routine address to page-3 scratch
-
-	ld_	iyh,c		;IY = slot:segment
-	ld_	iyl,b
-
-	;Load input params from buffer (IX still = buffer ptr)
-
-	ld	l,(ix)
-	ld	h,(ix+1)
-	push	hl		;Save input AF on stack
-	ld	c,(ix+2)
-	ld	b,(ix+3)
-	ld	e,(ix+4)
-	ld	d,(ix+5)
-	ld	l,(ix+6)
-	ld	h,(ix+7)
-
-	ld	ix,(BUF)	;IX = routine address
-
-	;Check DOS version (A is free, input AF on stack)
-
-	ld	a,(DOS_VER##)
-	or	a
-	jr	nz,CDRV_RAM_D2
-
-	;--- DOS 1: call CALL_MAP directly
-
-	pop	af
-	call	CALL_MAP##
-	push	af
-	pop	ix		;IX = result AF
-	xor	a
-	ret
-
-CDRV_RAM_D2:
-	;--- DOS 2: restore TPA segments, call, restore kernel segments
-
 	push	bc		;Save input BC (BDOS slot check uses B)
-	push	de		;Save input DE
 
 	ld	a,(PS_BDOS##)
 	and	11b
@@ -2791,20 +2709,30 @@ CDRV_RAM_D2:
 	ld	a,(RAMAD0##)
 	and	1111b
 	cp	b
-	jr	nz,CRMD2_NOP0
-
 	ld	a,(P0_TPA##)
-	call	PUT_P0##
+	call	z,PUT_P0##	;Restore page 0 only if it was already in place
 
-CRMD2_NOP0:
 	ld	a,(P2_TPA##)
 	call	PUT_P2##
 
-	pop	de		;Restore input DE
 	pop	bc		;Restore input BC
-	pop	af		;Input AF
 
+	ld_	a,iyl
+	cp	0FFh
+	jr	nz,CDRVR_RAM
+
+CDRVR_ROM:
+	pop	af		;Input AF
+	ld	ix,CALDRV##
+	call	$CALSLT##
+	jr	CDRVR_RESULT
+
+CDRVR_RAM:
+	pop	af		;Input AF
+	ld	ix,(BK4_ADD##)
 	call	CALL_MAP##
+
+CDRVR_RESULT:
 	push	af
 	pop	ix		;IX = result AF
 
