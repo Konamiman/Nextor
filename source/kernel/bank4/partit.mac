@@ -6982,24 +6982,19 @@ COUNT_DEVICE_PARTITIONS::
 
 	;--- Check primary partition 1
 
-	call CDP_GPART_PRI1
+	ld hl,0100h
+	call CDP_GPART
 	or a
 	jp nz,CDP_DONE		;Error reading partition table = done
 	ld a,b
 	or a
 	jp z,CDP_DONE		;Empty = no partitions at all
-	call IS_SUITABLE_PART_TYPE
-	jr nz,CDP_P1_NOT_ACTIVE
-	ld a,c
-	and 80h
-	jr z,CDP_P1_NOT_ACTIVE
-	ld hl,BUF+1
-	inc (hl)
-CDP_P1_NOT_ACTIVE:
+	call CDP_COUNT_ACTIVE
 
 	;--- Check primary partition 2: determines if we have extended partitions
 
-	call CDP_GPART_PRI2
+	ld hl,0200h
+	call CDP_GPART
 	or a
 	jr nz,CDP_DONE		;Error = done
 	ld a,b
@@ -7010,39 +7005,19 @@ CDP_P1_NOT_ACTIVE:
 
 	;=== No extended: check partition 2 itself, then 3 and 4 ===
 
-	call IS_SUITABLE_PART_TYPE
-	jr nz,CDP_P2_NOT_ACTIVE
-	ld a,c
-	and 80h
-	jr z,CDP_P2_NOT_ACTIVE
-	ld hl,BUF+1
-	inc (hl)
-CDP_P2_NOT_ACTIVE:
+	call CDP_COUNT_ACTIVE
 
 	ld e,3			;E = primary partition number
 CDP_PRI_LOOP:
-	ld a,(BUF+6)
-	ld c,a
-	ld b,0FFh
-	ld a,(BUF)
-	ld d,a
 	ld h,e
 	ld l,0
-	push de
-	call F_GPART_INNER
-	pop de
+	call CDP_GPART
 	or a
 	jr nz,CDP_PRI_NEXT
 	ld a,b
 	or a
 	jr z,CDP_PRI_NEXT
-	call IS_SUITABLE_PART_TYPE
-	jr nz,CDP_PRI_NEXT
-	ld a,c
-	and 80h
-	jr z,CDP_PRI_NEXT
-	ld hl,BUF+1
-	inc (hl)
+	call CDP_COUNT_ACTIVE
 CDP_PRI_NEXT:
 	inc e
 	ld a,e
@@ -7055,16 +7030,9 @@ CDP_PRI_NEXT:
 CDP_SCAN_EXTENDED:
 	ld e,1			;E = extended partition index
 CDP_EXT_LOOP:
-	ld a,(BUF+6)
-	ld c,a
-	ld b,0FFh
-	ld a,(BUF)
-	ld d,a
 	ld h,2
 	ld l,e
-	push de
-	call F_GPART_INNER
-	pop de
+	call CDP_GPART
 	cp .IPART##
 	jr z,CDP_DONE		;No more partitions
 	or a
@@ -7072,13 +7040,7 @@ CDP_EXT_LOOP:
 	ld a,b
 	or a
 	jr z,CDP_DONE		;Empty = end of chain
-	call IS_SUITABLE_PART_TYPE
-	jr nz,CDP_EXT_NEXT	;Not suitable, but continue chain
-	ld a,c
-	and 80h
-	jr z,CDP_EXT_NEXT	;Not active, but continue chain
-	ld hl,BUF+1
-	inc (hl)
+	call CDP_COUNT_ACTIVE
 CDP_EXT_NEXT:
 	inc e
 	ld a,e
@@ -7093,29 +7055,34 @@ CDP_DONE:
 CDP_RET:
 	ret
 
-	;--- Helper: call F_GPART_INNER for primary partition 1
+	;--- Read partition HL using the current driver and device.
+	;    Returns A = error, B = type, C = status (on success).
+	;    Preserves DE, including the scan index in E.
 
-CDP_GPART_PRI1:
+CDP_GPART:
+	push de
 	ld a,(BUF+6)
 	ld c,a
 	ld b,0FFh
 	ld a,(BUF)
 	ld d,a
-	ld h,1
-	ld l,0
-	jp F_GPART_INNER
+	call F_GPART_INNER
+	pop de
+	ret
 
-	;--- Helper: call F_GPART_INNER for primary partition 2
+	;--- Count the partition if its type and active flag qualify.
+	;    Input: A = partition type, C = status.
+	;    Modifies AF, HL; preserves the scan index in E.
 
-CDP_GPART_PRI2:
-	ld a,(BUF+6)
-	ld c,a
-	ld b,0FFh
-	ld a,(BUF)
-	ld d,a
-	ld h,2
-	ld l,0
-	jp F_GPART_INNER
+CDP_COUNT_ACTIVE:
+	call IS_SUITABLE_PART_TYPE
+	ret nz
+	ld a,c
+	and 80h
+	ret z
+	ld hl,BUF+1
+	inc (hl)
+	ret
 
 
 ;-----------------------------------------------------------------------------
