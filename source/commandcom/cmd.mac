@@ -2451,7 +2451,10 @@ NXTCHR:	INC	HL
 	EX	DE,HL
 	POP	HL
 	LD	C,_SENV##
-	JP	BDOS
+	CALL	BDOS
+	RET	NZ	; Error setting the item.
+	JP	GETBUFI##	; Refresh the cached BUFINSERT state, in
+			;   case that was the item (see io.mac).
 
 DSTR:	POP	HL	; HL -> start of name.
 	CALL	GENV2##

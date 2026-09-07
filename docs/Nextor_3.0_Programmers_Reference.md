@@ -8,21 +8,23 @@
 
 [2.1. _STROUT (09h)](#21-_strout-09h)
 
-[2.2. _ALLOC (1Bh)](#22-_alloc-1bh)
+[2.2. _BUFIN (0Ah)](#22-_bufin-0ah)
 
-[2.3. _RDABS (2Fh) and _WRABS (30h)](#23-_rdabs-2fh-and-_wrabs-30h)
+[2.3. _ALLOC (1Bh)](#23-_alloc-1bh)
 
-[2.4. _DPARM (31h)](#24-_dparm-31h)
+[2.4. _RDABS (2Fh) and _WRABS (30h)](#24-_rdabs-2fh-and-_wrabs-30h)
 
-[2.5. _DEFER (64h)](#25-_defer-64h)
+[2.5. _DPARM (31h)](#25-_dparm-31h)
 
-[2.6. _EXPLAIN (66h)](#26-_explain-66h)
+[2.6. _DEFER (64h)](#26-_defer-64h)
 
-[2.7. _FORMAT (67h)](#27-_format-67h)
+[2.7. _EXPLAIN (66h)](#27-_explain-66h)
 
-[2.8. _DOSVER (6Fh)](#28-_dosver-6fh)
+[2.8. _FORMAT (67h)](#28-_format-67h)
 
-[2.8.1. Detecting Nextor in MSX-DOS 1 mode](#281-detecting-nextor-in-msx-dos-1-mode)
+[2.9. _DOSVER (6Fh)](#29-_dosver-6fh)
+
+[2.9.1. Detecting Nextor in MSX-DOS 1 mode](#291-detecting-nextor-in-msx-dos-1-mode)
 
 [3. New function calls](#3-new-function-calls)
 
@@ -121,7 +123,13 @@ Only the changes introduced in Nextor are explained, the complete description of
 
 When the fast STROUT mode is enabled, the maximum printable string length is 511 characters; if the string is longer, only the first 511 characters will be printed. The fast STROUT mode is disabled by default, it must be explicitly enabled by using the new _FOUT function.
 
-### 2.2. _ALLOC (1Bh)
+### 2.2. _BUFIN (0Ah)
+
+The line editor of this function starts every line in overwrite mode, with the INS key toggling to insert mode. Starting at Nextor 3.0, if an environment item named `BUFINSERT` exists with value `ON` (case insensitive), the editor starts every line in insert mode instead; the INS key still toggles between the two modes, and the keys that clear the line being edited (ESC, CTRL-U and CTRL-X) restore the initial mode. The same applies to the `CON` device when it is read in ASCII mode, since it uses the same line editor.
+
+The kernel checks this item when it is set or deleted (that is, in `_SENV`), not on every line input, so it can be set and removed at will; no other function is affected. See _[2.17. The BUFINSERT environment variable](Nextor_3.0_User_Manual.md#217-the-bufinsert-environment-variable)_ in the user manual.
+
+### 2.3. _ALLOC (1Bh)
 
 **Note:** This function call is deprecated. New Nextor-aware applications should use [the new `_DSPACE` function](#36-get-drive-space-information-_dspace-76h) instead.
 
@@ -129,7 +137,7 @@ When the reduced allocation information mode is enabled for a drive, this functi
 
 Moreover, starting at Nextor 2.0.3 the reduced allocation information mode can be turned into a zero allocation information mode by simply creating an environment item named `ZALLOC` with value `ON` (case insensitive). When this item exists, `_ALLOC` returns zero clusters free for all the drives in reduced allocation information mode.
 
-### 2.3. _RDABS (2Fh) and _WRABS (30h)
+### 2.4. _RDABS (2Fh) and _WRABS (30h)
 
 **Note:** These function calls are deprecated. New Nextor-aware applications should use the new functions [_RDDRV](#33-read-absolute-sectors-from-drive-_rddrv-73h) and [_WRDRV](#34-write-absolute-sectors-to-drive-_wrdrv-74h) instead.
 
@@ -139,7 +147,7 @@ Strictly speaking, this is not a change from the behavior in MSX-DOS, since FAT1
 
 The new [_RDDRV](#33-read-absolute-sectors-from-drive-_rddrv-73h) and [_WRDRV](#34-write-absolute-sectors-to-drive-_wrdrv-74h) functions, on the other hand, accept 32 bit sector numbers and allow access to any drive regardless of the contained filesystem.
 
-### 2.4. _DPARM (31h)
+### 2.5. _DPARM (31h)
 
 This function now returns the total number of logical sectors as a 32 bit value at position +24..27 in the returned parameter block. Moreover, when this number is greater than 65535, the 16 bit sector count returned at position +9,10 will be zero.
 
@@ -153,7 +161,7 @@ Also, position +28 of the returned parameter block contains the filesystem type:
 
 Remember that Nextor can currently handle FAT12 and FAT16 filesystems only.
 
-### 2.5. _DEFER (64h)
+### 2.6. _DEFER (64h)
 
 The parameters passed to the user routine in case of disk error are extended to support 32 bit sector numbers. In MSX-DOS 2, part of these parameters was as follows:
 
@@ -170,11 +178,11 @@ C:b4 - set if sector number is valid
 HL:DE = Sector number (if b4 of C is set)
 ```
 
-### 2.6. _EXPLAIN (66h)
+### 2.7. _EXPLAIN (66h)
 
 If an environment variable named `ERRLANG` exists with value `EN` (`SET ERRLANG=EN` from the command interpreter prompt), this function will return error messages in English even if the kanji mode is active (`CALL KANJI` from the BASIC interpreter). This feature is available since Nextor 2.0.4.
 
-### 2.7. _FORMAT (67h)
+### 2.8. _FORMAT (67h)
 
 This is the shape of this function in Nextor:
 
@@ -219,7 +227,7 @@ In MSX-DOS 1 mode this function behaves differently in a few aspects:
 
 See _[2.5. Support for floppy disks](Nextor_3.0_User_Manual.md#25-support-for-floppy-disks)_ in the user manual for details on support for floppy disks in Nextor.
 
-### 2.8. _DOSVER (6Fh)
+### 2.9. _DOSVER (6Fh)
 
 This function call has been expanded in order to allow applications to detect whether they are running MSX-DOS 2 or Nextor (both in Normal or MSX-DOS 1 mode), while at the same time still working for applications that expect the operating system to be MSX-DOS.
 
@@ -259,7 +267,7 @@ The procedure for detecting the operating system for Nextor aware applications i
 
 The value returned in HL is a pointer to a zero-terminated printable string that describes the operating system running, for example "Nextor kernel version 3.0". The string resides in the kernel master slot (slot number is available at 0F348h) and can be read via standard RDSLT calls.
 
-#### 2.8.1. Detecting Nextor in MSX-DOS 1 mode
+#### 2.9.1. Detecting Nextor in MSX-DOS 1 mode
 
 The `DOSVER` function has been made available in MSX-DOS 1 mode, so you can detect Nextor in this mode.
 
@@ -276,7 +284,7 @@ Therefore, if your application can work in MSX-DOS 1 mode but you still want to 
 
 This section details the new function calls introduced by Nextor. These are invoked the same way as the existing MSX-DOS calls, by setting the function number in register C and calling address 0005h or F37Dh. The specified short name for each function (for example `_FOUT`) is the suggested name for referring to the function call in code, and is also the name used in [the Nextor SDK](#81-the-nextor-sdk) and for function cross references in this manual.
 
-Some of the new function calls can be invoked in MSX-DOS 1 mode as well; in the current version, these functions are [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h), [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah), [_CDRVR](#311-call-a-routine-in-a-device-driver-_cdrvr-7bh), [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h), [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (with the restrictions explained in the corresponding section) and [_FORMAT](#27-_format-67h) (with the differences explained in the corresponding section). Also, the _DOSVER function behaves specially in this mode (see _[2.8.1. Detecting Nextor in MSX-DOS 1 mode](#281-detecting-nextor-in-msx-dos-1-mode)_). When invoked in MSX-DOS 1 mode, all the new Nextor function calls have the following restrictions:
+Some of the new function calls can be invoked in MSX-DOS 1 mode as well; in the current version, these functions are [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h), [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah), [_CDRVR](#311-call-a-routine-in-a-device-driver-_cdrvr-7bh), [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h), [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (with the restrictions explained in the corresponding section) and [_FORMAT](#28-_format-67h) (with the differences explained in the corresponding section). Also, the _DOSVER function behaves specially in this mode (see _[2.9.1. Detecting Nextor in MSX-DOS 1 mode](#291-detecting-nextor-in-msx-dos-1-mode)_). When invoked in MSX-DOS 1 mode, all the new Nextor function calls have the following restrictions:
 
 * They must be called by using the F37Dh entry point. The 0005h entry point is not supported, since there is no special version of `MSXDOS.SYS` for Nextor.
 

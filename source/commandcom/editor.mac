@@ -32,7 +32,8 @@
 EDLINE::	PUSH	IY	; RETKEY pops this on exit.
 	LD	A,(INSFLAG##)
 	AND	4	; Keep only b2 (unmodified recalled line);
-	LD	(INSFLAG##),A	;   insert and TAB cycle modes start off.
+	LD	(INSFLAG##),A	;   the TAB cycle starts off, and so does
+			;   insert mode unless BUFINSERT is ON (below).
 	XOR	A
 	LD	(APPENDF##),A
 	LD	(INSPOS##),A	; Cursor at the start of the line.
@@ -40,6 +41,9 @@ EDLINE::	PUSH	IY	; RETKEY pops this on exit.
 	EX	DE,HL
 	INC	HL	; HL -> length byte, kept there throughout.
 	LD	(HL),0	; Start with an empty line.
+	LD	A,(BUFINSF##)	; BUFINSERT is ON (cached by GETBUFI in
+	OR	A	;   io.mac): start in insert mode, with the
+	CALL	NZ,SETINS	;   underline cursor, as the kernel editor does.
 ;        The key read & dispatch loop.
 RDLINE:	CALL	RDKEY	; Get next key.
 	CP	9
@@ -434,7 +438,10 @@ WRDRIGHTC:	LD	A,(INSPOS##)
 
 ;        ESC, CTRL-X (SELECT) or CTRL-U: discard the line and start over.
 SELECT:	CALL	CLRLINE
-	CALL	BLKCURS	; Also leaves insert mode.
+	CALL	BLKCURS	; Also leaves insert mode, unless the
+	LD	A,(BUFINSF##)	;   line is to start in insert mode
+	OR	A	;   (BUFINSERT is ON): then switch it
+	CALL	NZ,SETINS	;   on again, as for a new line.
 	JP	RDLINE2
 
 ;        Erase the line on screen and in the buffer: move the cursor back
@@ -463,10 +470,19 @@ INSKEY:	LD	A,(#FBEB)
 	BIT	1,A
 	JR	Z,CTRLINS	; CTRL held.
 	LD	A,(INSFLAG##)
-	XOR	#01	; Toggle insert mode.
+	BIT	0,A	; Toggle insert mode:
+	JR	NZ,INS50	;   currently on => off, block cursor;
+	CALL	SETINS	;   currently off => on, underline cursor.
+INS40:	JP	RDLINE
+INS50:	CALL	BLKCURS
+	JR	INS40
+
+;        Enter insert mode: set INSFLAG bit 0, show the underline cursor
+; and remember where insertion starts. Also used to start a line in insert
+; mode when the BUFINSERT environment item is ON (see EDLINE and SELECT).
+SETINS:	LD	A,(INSFLAG##)
+	SET	0,A	; Insert mode on.
 	LD	(INSFLAG##),A
-	BIT	0,A
-	JR	Z,INS50	; Now off: back to the block cursor.
 	LD	A,27
 	CALL	PRCHAR##	; ESC "y4":
 	LD	A,"y"
@@ -475,9 +491,7 @@ INSKEY:	LD	A,(#FBEB)
 	CALL	PRCHAR##	;   (underline).
 	LD	A,(INSPOS##)
 	LD	(MININSPOS##),A	; Remember where insertion starts.
-INS40:	JP	RDLINE
-INS50:	CALL	BLKCURS
-	JR	INS40
+	RET
 
 ;        CTRL-INS: store the line at the bottom of the history without
 ; executing it, then clear it.

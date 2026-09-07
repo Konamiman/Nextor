@@ -1501,6 +1501,9 @@ NO_DUMMY:
 	ld	(MASTER_SLOT##),a
 	xor	a		;ERR_TO_BASIC isn't in the F2B8-F326 LDIR clear range,
 	ld	(ERR_TO_BASIC##),a	; so zero it explicitly at cold boot.
+	ld	(MFLAGS2##),a	;MFLAGS2 mirrors environment items (BUFINSERT), which
+				; don't survive a reboot: start with all its flags clear
+				; (the DOS 1 kernel uses this byte as a scratch variable).
 	ld	hl,CHAR_16	;Get KANJI range
 	ld	de,KANJTABLE##
 	ld	bc,4
