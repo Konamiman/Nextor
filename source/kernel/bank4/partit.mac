@@ -5570,67 +5570,15 @@ LOCKDRV_HELP:
 	ld	de,CHDRV_HELP
 	call	GET_PARENT_OR_HELP
 
-	push	hl
-	ld	ix,FRMEVL
-	call	BASIC_ROUT
-	ld	a,(VALTYP)
-	cp	3
-	jr	z,CHDRV2
-
-	pop	hl
-	ld	ix,GETBYT
-	call	BASIC_ROUT
+	call	PARSE_DRIVE_NUMBER
 	push	af
 	ld	a,')'
 	call	SYNCHR
 	pop	af
-	or	a
-	jp	z,JDERBDN
-	cp	8+1
+	dec	a			;Reject zero as well as invalid drive numbers
+	cp	8
 	jp	nc,JDERBDN
 	push	hl
-	dec	a
-	jp		CHDRV_DO
-
-CHDRV2:
-	inc	sp		;Discard old HL from stack
-	inc	sp
-	push	hl		;Save updated HL (BASIC text ptr)
-	ld	ix,FRESTR
-	call	BASIC_ROUT	;Free temp string; HL = descriptor ptr
-	;Read descriptor now (IX is clobbered by BASIC_ROUT calls)
-	ld	a,(hl)		;String length
-	inc	hl
-	ld	e,(hl)
-	inc	hl
-	ld	d,(hl)		;DE = string data address
-	pop	hl		;Restore BASIC text pointer
-	push	af		;Save string length
-	push	de		;Save string address
-	ld	a,')'
-	call	SYNCHR
-	push	hl
-	pop	ix		;IX = updated BASIC ptr (safe on stack)
-	pop	de		;DE = string data address
-	pop	af		;A = string length
-	push	ix		;Re-push BASIC ptr for later pop
-	cp	2
-	jp	nz,JDERBDN
-	ex	de,hl		;HL = string data address
-	ld	a,(hl)
-	and	0DFh		; force upper
-	cp	'A'
-	jp	c,JDERBDN
-	cp	'H'+1
-	jp	nc,JDERBDN
-
-	ld	b,a
-	inc	hl
-	ld	a,(hl)
-	cp	':'
-	jp	nz,JDERBDN
-	ld	a,b
-	sub	'A'
 
 CHDRV_DO:
 	call	VAL_DRV		; validate the drive
@@ -5781,16 +5729,7 @@ NEXT_CALL_PAR:
 ; Force BASIC error if invalid drive letter.
 
 GET_DRIVE_LETTER:
-	push	hl
-	ld	ix,FRMEVL
-	call	BASIC_ROUT
-	ld	a,(VALTYP)
-	cp	3
-	jr	z,GDL_GO
-
-	pop	hl
-	ld	ix,GETBYT
-	call	BASIC_ROUT
+	call	PARSE_DRIVE_NUMBER
 	or	a
 	jr	nz,GDRL_NOCUR
 
@@ -5807,12 +5746,30 @@ GDRL_CUR_DOS1:
 	ret
 
 GDRL_NOCUR:
-	cp	8+1
+	dec	a
+	cp	8
 	ld	e,62
 	jp	nc,BASIC_ERR
 
-	dec	a
 	ret
+
+
+;Parse a numeric or string drive argument, leaving HL at the next character.
+;Returns A = numeric byte value, 1..8 for strings "A:".."H:" (either case),
+;or FFh for an invalid string. Callers validate the range and handle zero.
+;Defer bad-drive errors so CCHDRV can check ')' first, as before.
+
+PARSE_DRIVE_NUMBER:
+	push	hl
+	ld	ix,FRMEVL
+	call	BASIC_ROUT
+	ld	a,(VALTYP)
+	cp	3
+	jr	z,GDL_GO
+
+	pop	hl
+	ld	ix,GETBYT
+	jp	BASIC_ROUT
 
 GDL_GO:
 	inc	sp	;Discard pushed HL
@@ -5828,29 +5785,24 @@ GDL_GO:
 	ld	d,(hl)		;DE = string data address
 	pop	hl		;Restore BASIC text pointer
 	cp	2
-	jr	z,GDL_OK
-	ld	e,62	;"Bad drive name"
-	jp	BASIC_ERR
-GDL_OK:
+	jr	nz,GDL_BAD
 	ld	a,(de)
-	push	de
 	or	32	;To lower case
-	cp	'a'
-	ld	e,62
-	jp	c,BASIC_ERR
-	cp	'h'+1
-	jp	nc,BASIC_ERR
-	pop	de
-
 	sub	'a'
+	cp	8
+	jr	nc,GDL_BAD
 	ld	b,a
 	inc	de
 	ld	a,(de)
 	cp	':'
-	ld	e,62
-	jp	nz,BASIC_ERR
+	jr	nz,GDL_BAD
 
 	ld	a,b
+	inc	a		;Return a 1-based number, as for numeric arguments
+	ret
+
+GDL_BAD:
+	ld	a,0FFh
 	ret
 
 
