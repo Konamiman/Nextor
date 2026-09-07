@@ -87,6 +87,7 @@ VERIFY ... displays/sets the current verify state
 VOL ...... displays/sets disk volume name
 XCOPY .... copies files from a directory tree
 XDIR ..... displays filenames in a directory tree
+YENSLASH . displays/sets the backslash in place of the yen sign
 Z80MODE .. displays/sets the Z80 access mode for a legacy driver
 
 Help for other Nextor features is also available.

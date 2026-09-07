@@ -240,7 +240,10 @@ SETBUF:	CALL	GET8##	; Get the number specified into E.
 ; whatever slots the inter-slot call switches in.
 ; On exit, E = A as returned by the BIOS routine, A = 0 with Z set, and IY
 ; is restored to the base of the IY-addressed variables (CALSLT corrupts
-; it).
+; it). The alternate register set is corrupted as well (by CALSLT, when the
+; main ROM is in an expanded slot), which is harmless while a command runs;
+; the command loop itself keeps its line pointer in HL' (see YENPAT in
+; io.mac, which is called from there).
 CALLSLOT::	LD	IY,(EXPTBL-1)	; IYh = main ROM slot.
 	LD	HL,#00	; Switch to a stack in page 3,
 	ADD	HL,SP	;   saving the current one.
@@ -3161,6 +3164,9 @@ DSK30:	INC	DE	; Skip DE past the matched word.
 ; the segment: their saved variable images live on its swap stack and
 ; would be lost. (The stack pointer sits at its top, BFFFh, only when no
 ; image is stored, which is exactly the safe case.)
+;        With the /T (temporary) option the state is changed but not
+; recorded in the environment item, so the next start of the interpreter
+; goes back to whatever the item says.
 @SHELLRAM::	AND	(HL)
 	JR	NZ,SHR20
 	LD	A,(SHRAMFL##)	; No arguments: display the state.
@@ -3173,30 +3179,9 @@ SHR10:	LD	A,#53	; Print 'Shell RAM is ' and
 	EX	DE,HL
 	JP	DMSCR##
 
-SHR20:	EX	DE,HL	; DE -> parameter.
-	DEC	DE	; Pretend DE -> length byte.
-	LD	HL,ONWORD$##	; Check for ON.
-	LD	B,(HL)	; Length of 'ON'.
-	LD	C,#00	; 0 => ON.
-	CALL	COMPARE##
-	JR	NC,SHR30
-	INC	B	; Ready for OFF check.
-	DEC	C	; FF => OFF.
-	INC	HL	; Point passed null at end of ON.
-	CALL	C,COMPARE##	; Check for OFF if not ON.
-	LD	A,.IPARM##	; 'Invalid parameter' if neither.
-	RET	C
-SHR30:	INC	DE	; Skip DE past the matched word.
-	DJNZ	SHR30
-	INC	DE
-	EX	DE,HL
-	LD	A,(HL)	; A separator and nothing else may
-	CALL	SEP?##	;   follow it.
-	LD	A,.IPARM##
-	RET	NZ
-	CALL	GETCH##
-	LD	A,.INP##
-	RET	NZ
+SHR20:	CALL	ONOFF	; C = 0 for ON, FF for OFF; B = FF
+	RET	NZ	;   when /T was given.
+	PUSH	BC	; Keep the /T flag for SHRENV.
 	LD	A,(SHRAMFL##)	; Already in the requested state ?
 	OR	A	;   Then there is nothing to do.
 	JR	Z,SHR40	;   (SHRAMFL is 0/1, C is 0/FF:
@@ -3208,10 +3193,12 @@ SHR40:	CP	C
 	INC	C	; C was FF => switch OFF.
 	JR	Z,SHR50
 	CALL	FINDSEG##	; Switch ON: re-adopt the marked
-	LD	A,.NORAM##	;   segment, or allocate and
-	RET	C	;   initialise a fresh one; 'Not
-	XOR	A	;   enough memory' if none is
-	LD	(SHRAMFL##),A	;   free.
+	JR	NC,SHR45	;   segment, or allocate and
+	POP	BC	;   initialise a fresh one; 'Not
+	LD	A,.NORAM##	;   enough memory' if none is
+	RET		;   free.
+SHR45:	XOR	A
+	LD	(SHRAMFL##),A
 	CALL	SETSHR##	; Sync the stub and the ceiling.
 	JR	SHRENV	; Record the state.
 
@@ -3222,6 +3209,7 @@ SHR50:	CALL	SETPG2##	; Switch OFF: refused when saved
 	OR	A
 	SBC	HL,DE
 	JR	Z,SHR60
+	POP	BC
 	LD	A,#54	; 'Cannot be changed from a
 	CALL	DMESSCR##	;   nested shell'.
 	XOR	A
@@ -3236,11 +3224,15 @@ SHR60:	LD	A,(MAPPAGE##)	; Give the segment back and forget
 	CALL	SETSHR##	; Sync the stub and the ceiling.
 	;fall through into SHRENV
 
-;        Record the current state in the 'SHELLRAM' environment item.
-; The item is read at startup, which is what makes the state survive a
-; BASIC + CALL SYSTEM round trip (environment strings live in the
-; kernel, not in the TPA). Any error is ignored.
-SHRENV:	LD	A,(SHRAMFL##)
+;        Record the current state in the 'SHELLRAM' environment item,
+; unless /T was given (B = FF on the stack). The item is read at
+; startup, which is what makes the state survive a BASIC + CALL SYSTEM
+; round trip (environment strings live in the kernel, not in the TPA).
+; Any error is ignored.
+SHRENV:	POP	BC
+	INC	B	; /T: leave the item alone.
+	JR	Z,SHRE20
+	LD	A,(SHRAMFL##)
 	OR	A
 	LD	DE,ONWORD$##+1
 	JR	Z,SHRE10
@@ -3248,6 +3240,55 @@ SHRENV:	LD	A,(SHRAMFL##)
 SHRE10:	LD	HL,SHRAM$##
 	LD	C,_SENV##
 	CALL	BDOS
+SHRE20:	XOR	A
+	RET
+
+;        Parse the "ON|OFF [/T]" arguments of the state switching commands
+; (SHELLRAM, YENSLASH) at (HL). On exit, Z with A = 0, C = 0 for ON or
+; FF for OFF and B = FF when the /T (temporary) option was given, 0 if
+; not; or NZ with the error in A: 'Invalid parameter' for a word that is
+; neither, 'Invalid option' for an option other than /T, 'Too many
+; parameters' for anything else.
+ONOFF:	EX	DE,HL	; DE -> parameter.
+	DEC	DE	; Pretend DE -> length byte.
+	LD	HL,ONWORD$##	; Check for ON.
+	LD	B,(HL)	; Length of 'ON'.
+	LD	C,#00	; 0 => ON.
+	CALL	COMPARE##
+	JR	NC,ONO10
+	INC	B	; Ready for OFF check.
+	DEC	C	; FF => OFF.
+	INC	HL	; Point passed null at end of ON.
+	CALL	C,COMPARE##	; Check for OFF if not ON.
+	LD	A,.IPARM##	; 'Invalid parameter' if neither.
+	RET	C
+ONO10:	INC	DE	; Skip DE past the matched word.
+	DJNZ	ONO10
+	INC	DE
+	EX	DE,HL
+	LD	B,#00	; No /T so far.
+	LD	A,(HL)	; The option may follow the word
+	CP	"/"	;   directly...
+	JR	Z,ONO20
+	CALL	SEP?##	; ...else a separator must, and
+	LD	A,.IPARM##	;   then the option or nothing.
+	RET	NZ
+	CALL	GETCH##
+	RET	Z
+	CP	"/"
+	LD	A,.INP##
+	RET	NZ
+ONO20:	INC	HL
+	LD	A,(HL)
+	CALL	MKUPPER##
+	CP	"T"	; Only /T exists.
+	LD	A,.IOPT##
+	RET	NZ
+	INC	HL
+	DEC	B	; B = FF: temporary.
+	CALL	GETCH##	; Nothing may follow it.
+	LD	A,.INP##
+	RET	NZ
 	XOR	A
 	RET
 
@@ -3259,6 +3300,61 @@ SHROFF:	LD	A,#53
 	LD	DE,OFFWORD$##+1
 	CALL	DMSCR##
 	XOR	A
+	RET
+
+		SUBTTL	YENSLASH
+;        The YENSLASH command (new in 3.0): YENSLASH [ON|OFF].
+;        On Japanese (and Korean) computers character 92 of the ROM
+; character set is the yen (won) sign, so paths are displayed with that
+; sign as the directory separator. YENSLASH ON redefines the character
+; as a regular backslash in the VRAM pattern generator table, in SCREEN
+; 0 (40 and 80 columns) and SCREEN 1; YENSLASH OFF puts the ROM glyph
+; back. With no arguments the current state is displayed.
+;        The state lives in the YENFLAG variable: the command loop (SETYEN
+; in io.mac) re-applies the redefinition before every prompt while the
+; flag is set, since any screen initialisation (MODE, a transient
+; program) restores the ROM character set. The flag is recorded in the
+; YENSLASH environment item, which ON creates with the value ON and OFF
+; removes, purely for persistence: the item lives in the kernel, so it
+; survives a BASIC + CALL SYSTEM round trip, and GETYEN loads the flag
+; from it when the interpreter starts. Changing the item with SET has no
+; effect until then. With the /T (temporary) option the state is changed
+; but the item is left alone. Nothing is visible while the Kanji driver
+; is installed (it draws the characters itself, on a bitmap screen; see
+; SETYEN).
+@YENSLASH::	AND	(HL)
+	JR	NZ,YEN20
+	LD	A,(YENFLAG##)	; No arguments: display the state.
+	OR	A
+	LD	HL,ONWORD$##+1
+	JR	NZ,YEN10
+	LD	HL,OFFWORD$##+1
+YEN10:	LD	A,#86	; Print 'Backslash instead of yen sign
+	CALL	DMESS##	;   is ' and the state.
+	EX	DE,HL
+	JP	DMSCR##
+
+YEN20:	CALL	ONOFF	; C = 0 for ON, FF for OFF; B = FF
+	RET	NZ	;   when /T was given.
+	LD	A,C	; A = FF for ON, 0 for OFF: the
+	CPL	;   value YENFLAG gets.
+	LD	C,A
+	INC	B	; /T: leave the item alone.
+	JR	Z,YEN50
+	LD	DE,ON$##	; ON: create the item with the value
+	OR	A	;   'ON'; OFF: remove it (a null
+	JR	NZ,YEN40	;   value deletes an item).
+	LD	DE,CMDTEND##
+YEN40:	PUSH	BC
+	LD	HL,YENSL$##
+	LD	C,_SENV##
+	CALL	BDOS
+	POP	BC
+	RET	NZ	; 'Not enough memory' and the like.
+YEN50:	LD	A,C	; Record the state in the flag and
+	LD	(YENFLAG##),A	;   redefine the character now
+	CALL	YENPAT##	;   (nonzero => the backslash, 0 =>
+	XOR	A	;   the ROM glyph).
 	RET
 
 		SUBTTL	LOCK

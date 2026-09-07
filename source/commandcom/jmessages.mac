@@ -197,4 +197,6 @@ JMESSAGES::	DEFB	"Yy",0
 
 	DEFB	"バイト",0	; #85 (DIR: after the K suffix of the totals)
 
+	DEFB	"円記号のバックスラッシュ表示は ",0	; #86 (YENSLASH) 'Backslash instead of yen sign is '
+
 	.strenc	default

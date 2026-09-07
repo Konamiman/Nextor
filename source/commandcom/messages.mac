@@ -174,3 +174,5 @@ MESSAGES::	DEFB	"Yy",0
 
 	DEFB	0	; #85 (DIR: after the K suffix of the totals; 'bytes' in Japanese)
 
+	DEFB	"Backslash instead of yen sign is ",0	; #86 (YENSLASH)
+

@@ -39,6 +39,7 @@ VAR_OFFSET DEFL	0
 	VAR	STRCODE, 1
 	VAR	LANG, 1	; NZ => use the Japanese messages.
 	VAR	HINTMSG, 1	; Message to print after an error, 0 = none.
+	VAR	YENFLAG, 1	; NZ => YENSLASH is ON (see GETYEN in io.mac).
 	VAR	PIPEADDR, 2
 	VAR	NEXTADDR, 2
 	VAR	INHNDL, 1
@@ -134,4 +135,4 @@ VAR_OFFSET DEFL	0
 	VAR	DIRKSFX, 3	; The suffix for the K figures ("K" or as DIRK).
 	VAR	DIRKTMP, 4	; Work area for the rounded K figure.
 ;
-; Total: 2881 bytes
+; Total: 2884 bytes (keep MAX_COM_SIZE in the Makefile in sync)

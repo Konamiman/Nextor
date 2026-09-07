@@ -19,6 +19,7 @@ BDOS:	EQU	#05	; MSX-DOS function call entry point.
 RDSLT:	EQU	#0C	; Inter-slot read (also available under MSX-DOS).
 CALSLT:	EQU	#1C	; Inter-slot call (also available under MSX-DOS).
 WRTVDP:	EQU	#47	; Write VDP register (main BIOS, via CALSLT).
+LDIRVM:	EQU	#5C	; Copy a block to VRAM (main BIOS, via CALSLT).
 
 ;------- MSX-DOS kernel variables
 ;
@@ -34,9 +35,15 @@ LINLEN:	EQU	#F3B0	; Columns in the current screen mode.
 CRTCNT:	EQU	#F3B1	; Rows in the current screen mode.
 CSRY:	EQU	#F3DC	; Cursor row (1 based).
 CSRX:	EQU	#F3DD	; Cursor column (1 based).
+RG0SAV:	EQU	#F3DF	; Shadows of VDP registers 0 and 1 (the screen
+RG1SAV:	EQU	#F3E0	;   mode bits M3-M5 and M1-M2 respectively).
 FORCLR:	EQU	#F3E9	; Foreground colour.
 BAKCLR:	EQU	#F3EA	; Background colour.
 BDRCLR:	EQU	#F3EB	; Border colour.
+CGPNT:	EQU	#F91F	; Slot (1 byte) and address (2 bytes) of the
+			;   character set that INITXT/INIT32 copy to VRAM.
+CGPBAS:	EQU	#F924	; Pattern generator table address of the current
+			;   text mode (SCREEN 0 or 1).
 RG9SAV:	EQU	#FFE8	; Shadow of VDP register 9.
 RTYCNT:	EQU	#FC9A	; BIOS workarea byte repurposed to remember the
 			;   history/alias mapper segment across re-loads.

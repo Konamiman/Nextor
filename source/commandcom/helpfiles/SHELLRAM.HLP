@@ -1,7 +1,7 @@
 SHELLRAM                                                       [3.0]
 --------
 
-Format:      SHELLRAM [ON | OFF]
+Format:      SHELLRAM [ON | OFF [/T]]
 
 Purpose:     Displays or sets the use of a RAM segment for  extended
         shell features.
@@ -35,6 +35,10 @@ Use:         COMMAND3.COM normally allocates one 16K segment of  the
         works,  taking effect the next  time the interpreter is
         loaded (see HELP ENV on Environment Items).
 
+             With the /T (temporary) option the state is changed but
+        not recorded in the environment item,  so the next start  of
+        the command interpreter goes back to the recorded state.
+
              The state can not be changed from a shell  that  shares
         its segment with an outer shell (see HELP COMMAND3 on invok-
         ing a second command interpreter).
@@ -56,4 +60,9 @@ Examples:
         SHELLRAM OFF
 
              The RAM segment is given back to the system.
+
+        SHELLRAM OFF /T
+
+             The RAM segment is given back to the system,  but  the
+        next start of the command interpreter will allocate one again.
 
