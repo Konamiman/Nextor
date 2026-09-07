@@ -7607,37 +7607,10 @@ DRVRO_INIT:
 	ld	a,.IDRVR##
 	ret	c		;Bad signature
 
-	;--- Set up print routine (DE = 0 -> point to a "ret")
+	;--- Invoke initialization with the caller's print routine and TPA
 
-	ld	de,(BUF+2)
-	ld	a,d
-	or	e
-	jr	nz,DRVRO_I2
-	ld	de,BUF+5	;Page 3 RET stub
-DRVRO_I2:
-
-	;--- Switch pages 0/2 to caller's TPA so that user-supplied
-	;    print routines in the TPA are reachable during the callback.
-
-	call	DRVRO_TPA_ON
-
-	;--- Invoke DRIVER_QUERY.INIT_RAM## via CALL_MAP
-	;    B=slot, C=segment (for driver's use, e.g. setting up hooks)
-
-	ld	a,(BUF)
-	ld	b,a		;B = slot
-	ld_	iyh,a		;slot for CALL_MAP
-	ld	a,(BUF+1)
-	ld	c,a		;C = segment
-	ld_	iyl,a		;segment for CALL_MAP
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.INIT_RAM##
-
-	call	CALL_MAP##
-
-	;--- Restore kernel segments for RAMDRV_REGISTER
-
-	call	DRVRO_TPA_OFF
+	call	DRVRO_QUERY
 
 	;--- Check result
 
@@ -7701,23 +7674,8 @@ DRVRO_SHUT:
 	call	VERIFY_DRV_SIG
 	jr	c,DRVRO_S4	;Signature corrupt, skip shutdown query
 
-	ld	de,(BUF+2)
-	ld	a,d
-	or	e
-	jr	nz,DRVRO_S3
-	ld	de,BUF+5	;Page 3 RET stub
-DRVRO_S3:
-	call	DRVRO_TPA_ON	;TPA in pages 0/2 for print routine
-
-	ld	a,(BUF)
-	ld_	iyh,a
-	ld	a,(BUF+1)
-	ld_	iyl,a
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.SHUTDOWN_RAM##
-	call	CALL_MAP##
-
-	call	DRVRO_TPA_OFF	;Restore kernel for unregister
+	call	DRVRO_QUERY
 
 DRVRO_S4:
 	;--- Step 4: Unregister
@@ -7727,6 +7685,32 @@ DRVRO_S4:
 
 	xor	a
 	ret
+
+;--- Invoke a RAM driver query with the caller's print routine and TPA.
+;    Input: A = query code; BUF holds slot, segment and print routine.
+;    Passes B = slot, C = segment, DE = print routine to the driver.
+;    Returns driver results after restoring the kernel mapping.
+
+DRVRO_QUERY:
+	push	af		;Save query code during parameter setup
+	ld	de,(BUF+2)
+	ld	a,d
+	or	e
+	jr	nz,DRVRO_QUERY_PRINT
+	ld	de,BUF+5	;Page 3 RET stub for silent operation
+DRVRO_QUERY_PRINT:
+	call	DRVRO_TPA_ON	;TPA in pages 0/2 for (user-supplied) print routine
+
+	ld	a,(BUF)
+	ld	b,a		;B = slot (also required by INIT_RAM)
+	ld	a,(BUF+1)
+	ld	c,a		;C = segment
+	push	bc
+	pop	iy		;IY = slot:segment for CALL_MAP
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	pop	af
+	call	CALL_MAP##
+	jp	DRVRO_TPA_OFF	;Restore kernel mapping, preserving driver results
 
 ;--- Load slot and segment from BUF
 ;    Returns: A=slot, B=segment
