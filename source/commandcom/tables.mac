@@ -362,6 +362,10 @@ CMDTAB::	DEFB	2
 	DEFB	"SHELLRAM"
 	DEFW	@SHELLRAM##
 
+	DEFB	8
+	DEFB	"YENSLASH"
+	DEFW	@YENSLASH##
+
 ;        The terminating zero also doubles as the shared empty string: the
 ; %var% expander and the variable functions return DE -> CMDTEND for a null
 ; value (RPC90 in cli.mac, FND90 in intvar.mac).

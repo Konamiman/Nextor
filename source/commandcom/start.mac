@@ -450,6 +450,8 @@ STA20:	LD	DE,#00
 	LD	HL,#00
 	LD	(#80),HL
 STA30:	CALL	SETMAPPER##
+	CALL	GETYEN##	; YENSLASH state from its environment
+			;   item (see SETYEN in io.mac).
 	LD	HL,SHRAM$##	; 'SHELLRAM' environment item OFF:
 	CALL	OFF?##	;   honour it, without touching
 	JR	NC,STA45	;   RTYCNT (a marked segment stays

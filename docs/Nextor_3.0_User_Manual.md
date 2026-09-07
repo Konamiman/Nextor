@@ -1358,13 +1358,15 @@ The following Nextor command line tools are now also internal commands of `COMMA
 
 * `Z80MODE`: displays and sets the Z80 access mode of a legacy driver (see _[3.4.7. Z80MODE: the Z80 access mode tool](#347-z80mode-the-z80-access-mode-tool)_).
 
-Additionally, there are three brand new internal commands:
+Additionally, there are four brand new internal commands:
 
 * `MEM`: displays a compact memory mapper listing: one line per mapper with its slot and its total, reserved and free memory, followed by the totals, the RAM disk size (when one exists) and the end address and size of the TPA. For more detailed information the classic `MEMORY` command is still there.
 
 * `SHELLRAM`: enables or disables the usage of an extra RAM segment by `COMMAND3.COM`, see below for the details.
 
 * `DIRB`: the same as `DIR`, but the file sizes, the total size of the listed files and the free space figure are always displayed in bytes, regardless of the `DIRK` environment item (see _[3.10.4. Other changes](#3104-other-changes)_).
+
+* `YENSLASH`: for Japanese (and Korean) computers, whose character set has the yen (won) sign in place of the backslash, so that paths are displayed as `A:¥DIR¥FILE`. `YENSLASH ON` redefines that character (code 92) as a regular backslash in the video RAM, in SCREEN 0 (40 and 80 columns) and SCREEN 1, and creates the `YENSLASH` environment item with the value `ON`; `YENSLASH OFF` restores the original character and removes the item; with no parameters the current state is displayed. While the state is on the interpreter repeats the redefinition before every prompt, since any screen initialization (the `MODE` command, a transient program) restores the original character set. The item is read when the interpreter starts, so the state survives entering BASIC and coming back with `CALL SYSTEM`; it serves that purpose only, and changing it with `SET` has no effect until the interpreter is loaded again. Adding `/T` (temporary) to `YENSLASH ON` or `YENSLASH OFF` changes the character without touching the item. The command has no visible effect while the kanji driver is installed (that is, after `CALL KANJI` in BASIC, whatever the mode set with `KMODE`), since the driver draws the characters itself from the kanji ROM on a graphic screen.
 
 #### 3.10.3. The SHELLRAM command
 
@@ -1375,6 +1377,8 @@ Like COMMAND 2.40 and later, `COMMAND3.COM` normally allocates one 16K RAM segme
 * `SHELLRAM OFF` gives the RAM segment back to the system, for users who need every RAM segment they can get for some other program. This has a price: the command history, the aliases and the `%_SHELL%` variable stop working (`ALIAS`, `HISTORY` and `MEMORY` report "Shell RAM is off"), and the TPA shrinks by about 1K, which the interpreter uses to save its state below its resident code, as the interpreter versions older than 2.40 did.
 
 * `SHELLRAM ON` returns to the normal state, allocating a RAM segment again. The command history and the alias list come back empty, unless a segment left over from a previous shell could be adopted. If no free segment exists, "Not enough memory" is reported and nothing changes.
+
+* Adding `/T` (temporary) to `SHELLRAM ON` or `SHELLRAM OFF` changes the state without recording it in the environment item described below, so the next start of the interpreter goes back to the recorded state.
 
 The state is recorded in the `SHELLRAM` environment item, which is read when the interpreter starts: the chosen state survives entering the BASIC interpreter and coming back with `CALL SYSTEM`. Setting the item directly (`SET SHELLRAM=OFF`) works too, taking effect the next time the interpreter is loaded.
 

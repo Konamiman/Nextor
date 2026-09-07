@@ -65,6 +65,9 @@ CLI::	LD	HL,#80
 	LD	C,_DEFAB##
 	CALL	BDOS
 CLI10:	CALL	SETLANG##	; Refresh the message language.
+	CALL	SETYEN##	; Redefine the yen sign as a backslash
+			;   again if YENFLAG says so (the main
+			;   registers are free here, HL' is not).
 	XOR	A	; No hint message pending from the
 	LD	(HINTMSG##),A	;   previous command (see ERROR).
 	LD	IY,REDIRST##
@@ -2161,6 +2164,7 @@ ALIAS$::	DEFB	"ALIAS",0
 SEPAR$::	DEFB	"SEPAR",0
 EXPAND$::	DEFB	"EXPAND",0
 SHRAM$::	DEFB	"SHELLRAM",0
+YENSL$::	DEFB	"YENSLASH",0
 PUSHD$::	DEFB	"PUSHD",0
 TEMPFN:	DEFB	"%PIPE00.$$$"
 DPROMPT$::	DEFB	"%_CWD%>",0

@@ -249,6 +249,145 @@ SLANG10:	LD	(LANG##),A
 	POP	AF
 	RET
 
+		SUBTTL	GETYEN, SETYEN, YENPAT
+;        The yen sign to backslash redefinition (new in 3.0). Japanese and
+; Korean character sets have the yen (won) sign as character 92, so the
+; directory separator shows up as such; while YENFLAG is set (by the
+; YENSLASH command, cmd.mac) the character is redefined as a backslash in
+; the VRAM pattern generator table. As the BIOS reloads the ROM character
+; set on every text screen initialisation (MODE, the Kanji driver, any
+; transient program), the command loop calls SETYEN before every prompt.
+;        The YENSLASH environment item only makes the state survive a
+; reload of the interpreter: GETYEN loads the flag from it at startup and
+; nowhere else (SET has no effect until then; the command's /T option
+; leaves the item alone). YENFLAG lives before BUFFER1, among the
+; variables preserved across transient programs.
+;        Nothing is done unless the VDP is in a text mode with a pattern
+; table (TEXT1, TEXT2, GRAPHIC1) according to the register shadows
+; RG0SAV/RG1SAV. SCRMOD is no use: the Kanji driver keeps it at 0 while
+; it draws the characters itself on a bitmap screen, even in its ANK
+; mode (KMODE 0), once CALL KANJI has installed it.
+;
+;        GETYEN: load YENFLAG from the environment item, checked with ON?
+; (which leaves its value in XBUF2). Called once, at startup; corrupts
+; AF and HL.
+GETYEN::	LD	HL,YENSL$##
+	CALL	ON?##	; NC => YENSLASH is "ON".
+	CCF
+	SBC	A,A	; FF => ON, 0 => OFF.
+	LD	(YENFLAG##),A
+	RET
+
+;        SETYEN: called before every prompt; the main register set is
+; corrupted, the alternate set and IX are preserved and IY is restored
+; to REDIRST, as CALLSLOT does.
+SETYEN::	LD	A,(YENFLAG##)	; A nonzero => the backslash.
+	OR	A
+	RET	Z
+	;fall through into YENPAT
+
+;        Write the pattern of character 92 to VRAM: the backslash when A
+; is nonzero, else the ROM glyph, read from the character set at CGPNT
+; as INITXT does (so a custom set installed there is honoured). Text
+; modes only (see above). The pattern is staged in XBUF2: page 0, where
+; the program may live, is switched out during the BIOS call. Both BIOS
+; calls run on the page-3 stack (RDSLT may switch page 1, where the
+; normal stack lives) with the alternate register set saved: CALSLT
+; corrupts it when the main ROM is in an expanded slot (turbo R), and
+; the command loop keeps its line pointer in HL'.
+;
+YENPAT::	LD	C,A	; Keep the selector.
+	LD	A,(RG1SAV)	; B = the M1 (b4) and M2 (b3) mode
+	AND	%00011000	;   bits of VDP register 1.
+	LD	B,A
+	LD	A,(RG0SAV)	; A = the M3 (b1), M4 (b2) and M5
+	AND	%00001110	;   (b3) mode bits of register 0.
+	JR	Z,YPT02	; M3 = M4 = M5 = 0: TEXT1, GRAPHIC1
+			;   or MULTICOLOR, sorted out below.
+	CP	%00000100	; M4 alone with M1 is TEXT2 (without
+	RET	NZ	;   M1 it is GRAPHIC3); anything else
+	LD	A,B	;   is a graphic mode: nothing to do.
+	CP	%00010000
+	RET	NZ
+	JR	YPT04
+
+YPT02:	LD	A,B	; M2 set (MULTICOLOR): nothing to do.
+	AND	%00001000
+	RET	NZ
+YPT04:	EXX		; Save the alternate register set
+	EX	AF,AF'	;   (see above).
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	EX	AF,AF'
+	EXX
+	LD	DE,XBUF2##	; The pattern goes here.
+	LD	A,C
+	OR	A
+	JR	Z,YPT10
+	LD	HL,BSLASH	; The backslash: copy it.
+	LD	BC,8
+	LDIR
+	JR	YPT30
+
+YPT10:	LD	HL,(CGPNT+1)	; The ROM glyph: read it from the
+	LD	BC,92*8	;   character set at CGPNT (slot in A,
+	ADD	HL,BC	;   address in HL), 8 bytes from the
+	LD	A,(CGPNT)	;   entry of character 92.
+	LD	C,A
+	LD	B,8
+	LD	(XBUF2##+8),SP	; Page-3 stack for RDSLT (see above).
+	LD	SP,#F51F
+YPT20:	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,C
+	CALL	RDSLT
+	POP	HL
+	POP	DE
+	POP	BC
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	YPT20
+	EI		; RDSLT returns with interrupts disabled.
+	LD	SP,(XBUF2##+8)	; Normal stack back.
+
+YPT30:	LD	HL,(CGPBAS)	; VRAM address of the pattern: the
+	LD	DE,92*8	;   pattern generator table of the
+	ADD	HL,DE	;   current mode plus the entry of
+	EX	DE,HL	;   character 92.
+	LD	HL,XBUF2##	; Copy the 8 bytes to VRAM with the
+	LD	BC,8	;   LDIRVM BIOS routine, called on
+	LD	IX,LDIRVM	;   the page-3 stack like CALLSLOT
+	LD	IY,(EXPTBL-1)	;   does (CALLSLOT itself needs HL,
+	LD	(XBUF2##+8),SP	;   so it can not be used here).
+	LD	SP,#F51F
+	CALL	CALSLT
+	LD	SP,(XBUF2##+8)
+	LD	IY,REDIRST##	; CALSLT corrupts IY.
+	EXX		; Alternate register set back.
+	EX	AF,AF'
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	EX	AF,AF'
+	EXX
+	RET
+
+;        The backslash, in the style of the MSX character set (the mirror
+; image of its slash; text modes display the leftmost six pixels only).
+BSLASH:	DEFB	%00000000
+	DEFB	%00000000
+	DEFB	%10000000
+	DEFB	%01000000
+	DEFB	%00100000
+	DEFB	%00010000
+	DEFB	%00001000
+	DEFB	%00000000
+
 ;******************************************************************************
 ;
 ;        Alias storage (new in 2.40). The alias list lives in COMMAND3's
