@@ -1715,45 +1715,34 @@ AA_CALLDRV_RAM:
 ;Preserves IX
 
 CHECK_FAT_BOOT:
-		ld	hl,($SECBUF##)
-		ld	de,UPB_SECTOR_SIZE##
-		add	hl,de
-		ld	d,(hl)			;Sector size must always
-		inc	hl			; be 200h.
-		ld	a,(hl)
-		inc	hl
-		sub	2
-		or	d
+		ld	iy,($SECBUF##)
+		ld	a,(iy+UPB_SECTOR_SIZE##+1)	;Sector size must always
+		sub	2				; be 200h.
+		or	(iy+UPB_SECTOR_SIZE##)
 		jp	nz,upb_not_found
 ;
-		or	(hl)
+		or	(iy+UPB_SECTORS_PER_CLUSTER##)
 		jp	z,upb_not_found		;Sectors/cluster must be
-		neg				; a non-zero power of 2.
-		and	(hl)
-		cp	(hl)
-		inc	hl
+		ld	d,a			; a non-zero power of 2.
+		dec	a
+		and	d
 		jp	nz,upb_not_found
 ;
-		inc	hl			;Ignore number of reserved
-		inc	hl			; sectors
+		;Ignore number of reserved sectors
 ;
-		ld	a,(hl)
+		ld	a,(iy+UPB_NUM_FATS##)
 		dec	a			;Number of FATs must be
 		cp	7			; 1...7 (nobody has more
 		jp	nc,upb_not_found	; the 7 copies of the FAT!)
 ;
-		inc	hl			;Zero directory entries
-		ld	a,(hl)			;means FAT32 drive.
-		inc	hl
-		or	(hl)
+		ld	a,(iy+UPB_NUM_ROOT_DIR_ENTRIES##)	;Zero directory entries
+		or	(iy+UPB_NUM_ROOT_DIR_ENTRIES##+1)	;means FAT32 drive.
 		jr	z,upb_not_found
 
-		ld	de,UPB_SECTORS_PER_FAT##-(UPB_NUM_ROOT_DIR_ENTRIES##+1);Ignore "total sectors"
-		add	hl,de			;  and "media byte".
+		;Ignore "total sectors" and "media byte".
 
-		ld	e,(hl)			;Number of sectors per
-		inc	hl			; FAT less than 256.
-		ld	d,(hl)
+		ld	e,(iy+UPB_SECTORS_PER_FAT##)	;Number of sectors per
+		ld	d,(iy+UPB_SECTORS_PER_FAT##+1)	; FAT must be 1...256.
 		dec	de
 		inc	d
 		dec	d
@@ -1765,7 +1754,6 @@ CHECK_FAT_BOOT:
 
 		;* We are in DOS 1: fail if FAT16 or if more than 3 sectors per FAT
 
-		ld	iy,($SECBUF##)
 		ld	e,(iy+UPB_TOTAL_SECTORS##)
 		ld	d,(iy+UPB_TOTAL_SECTORS##+1)	;DE=Total sectors
 		ld	a,d
@@ -1824,7 +1812,7 @@ upb_found:
 		ret				; if UPB was OK.
 
 upb_not_found:					;If anything was wrong with
-		or	h			; the UPB then return with
+		or	1			; the UPB then return with
 		ret				; Z-flag clear.
 
 
