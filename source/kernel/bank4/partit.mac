@@ -722,23 +722,13 @@ AUTOD_UDFND:
 	ld	a,(ix+UD_SLOT##)
 	ld_ iyh,a
 
-	ld	c,a
-	ld	a,(KERNEX##)
-	and	10001111b
-	cp	c
-	jr	z,AUTOD_OKNEX
-	ld	a,(KERNEX##+1)
-	and	10001111b
-	cp	c
-	jr	z,AUTOD_OKNEX
-	ld	a,(KERNEX##+2)
-	and	10001111b
-	cp	c
-	jr	z,AUTOD_OKNEX
-	ld	a,(KERNEX##+3)
-	and	10001111b
-	cp	c
-	jr	z,AUTOD_OKNEX
+	ld	e,a
+	push	bc
+	push	hl
+	call	IS_NEXTOR_KER
+	pop	hl
+	pop	bc
+	jr	nc,AUTOD_OKNEX
 	inc	hl
 	inc	hl
 	djnz	AUTOD_LOOP
@@ -2219,16 +2209,9 @@ GDRVR_FOUND_DRVTBL:
 	;--- Search the driver in KERNEX
 
 GDRVR_CHECK_KERNEX:
-	ld	iy,KERNEX##
-	ld	d,a
-	ld	b,4	;B=Entries left in DRVTBL
-GDRVR_KERNEX_LOOP:
-	ld	a,(iy)
-	and	10001111b
-	cp	d
-	jr	z,GDRV_IS_KERNEX
-	inc	iy
-	djnz	GDRVR_KERNEX_LOOP
+	ld	e,a
+	call	IS_NEXTOR_KER
+	jr	nc,GDRV_IS_KERNEX
 
 	;* Driver not found in KERNEX:
 	;  it is a MSX-DOS driver,
@@ -4724,15 +4707,11 @@ CHKLEGACY_LOOP:
 	jp	IDRVR_RET
 
 CHKLEGACY_STEP2:
-	ld	hl,KERNEX##
-	ld	b,4
-CHKLEGACY_STEP2_LOOP:
-	ld	a,(hl)
-	and	10001111b
-	cp	c
-	jp	z,IDRVR_RET
-	inc	hl
-	djnz	CHKLEGACY_STEP2_LOOP
+	push	de		;Preserve D = mode, E = action
+	ld	e,c
+	call	IS_NEXTOR_KER
+	pop	de
+	jp	nc,IDRVR_RET
 
 	;--- The slot number is OK, determine wether to get or to set the information
 
@@ -6570,6 +6549,7 @@ SLOFDR_FOUND:
 ; Check if a slot number is a Nextor kernel
 ; Input:    E = Slot number
 ; Output:   Cy = 0 if Nextor kernel, 1 if NOT a Nextor kernel
+;           A = Slot number if found
 ;           HL = Pointer to entry in KERNEX
 ; Modifies: AF, HL, B
 
