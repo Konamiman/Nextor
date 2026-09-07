@@ -1086,7 +1086,6 @@ AA_NO_SKIP_AUTOMAP:
 
 	;Check if this floppy device is already assigned to another drive
 	push	ix
-	push	iy
 	ld	h,(ix+AAD_DRIVER_SLOT)
 	ld	l,(ix+AAD_DRIVER_SEGMENT)
 	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
@@ -1099,7 +1098,6 @@ AA_NO_SKIP_AUTOMAP:
 	exx
 	pop	ix
 	call	CHECK_MAP_IN_USE
-	pop	iy
 	pop	ix
 	jp	nz,AA_LLOOP_NEXT	;Already assigned: skip to next device
 
@@ -1296,22 +1294,6 @@ AA_CHECK_BOOT:
 	call	CHECK_FAT_BOOT
 	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 
-AA_CHECK_BOOT2:
-
-	;* If DOS 1, check that sectors per FAT is 3 or less
-
-	ld	iy,($SECBUF##)
-	ld	a,(DOS_VER##)
-	or	a
-	jr	nz,AA_SPC_OK
-	ld	a,(iy+UPB_SECTORS_PER_FAT##+1)
-	or	a
-	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
-	ld	a,(iy+UPB_SECTORS_PER_FAT##)
-	cp	4
-	jp	nc,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
-AA_SPC_OK:
-
 	;* The device holds at least one valid filesystem:
 	;  it must not be considered for a fallback assignment
 
@@ -1320,7 +1302,6 @@ AA_SPC_OK:
 	;* Check if the partition is already mapped to another drive
 
 	push ix
-	push iy
 	ld h,(ix+AAD_DRIVER_SLOT)
 	ld l,(ix+AAD_DRIVER_SEGMENT)
     ld e,(ix+AAD_UNIT_DESCRIPTOR)
@@ -1336,7 +1317,6 @@ AA_SPC_OK:
     pop ix
 
 	call CHECK_MAP_IN_USE
-	pop iy
 	pop ix
 	jp nz,AA_PART_IN_USE
 
@@ -1427,7 +1407,6 @@ AA_RECORD_FALLBACK:
 	;Check if the device is already attached (with no partition) to another drive
 
 	push	ix
-	push	iy
 	ld	h,(ix+AAD_DRIVER_SLOT)
 	ld	l,(ix+AAD_DRIVER_SEGMENT)
 	ld	e,(ix+AAD_UNIT_DESCRIPTOR)
@@ -1440,7 +1419,6 @@ AA_RECORD_FALLBACK:
 	exx
 	pop	ix
 	call	CHECK_MAP_IN_USE
-	pop	iy
 	pop	ix
 	jp	nz,AA_LLOOP_NEXT	;Already attached to another drive: skip to next device
 
