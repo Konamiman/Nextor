@@ -3378,33 +3378,9 @@ MAPS_SEG_OK:
 	push	bc
 	push	iy
 
-	ld	a,(iy+1)
-	cp	0FFh
-	jr	nz,MAPS_RAM_GP
-
-	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	(BK4_ADD##),hl
-	ld	a,(iy)
-	ld	c,(iy+2)
-	ld_ iyh,a
-	ld	hl,($SECBUF##)
-	ld	ix,CALDRV##
-	ld a,DEVICE_QUERY.GET_PARAMS##
-	call	CALSLT
-	jr	MAPS_DONE_GP
-
-MAPS_RAM_GP:
-	ld	c,(iy+2)
-	ld	h,(iy)
-	ld	l,(iy+1)
-	push	hl
-	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	hl,($SECBUF##)
 	ld	a,DEVICE_QUERY.GET_PARAMS##
-	call	CALL_MAP##
+	call	MAPS_QUERY
 
-MAPS_DONE_GP:
 	pop	iy
 	pop	bc
 	pop	hl
@@ -3434,31 +3410,9 @@ MAPS_DONE_GP:
 	push	hl
 	push	iy
 
-	ld	a,(iy+1)
-	cp	0FFh
-	jr	nz,MAPS_RAM_GS
-
-	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	(BK4_ADD##),hl
-	ld	a,(iy)
-	ld	c,(iy+2)
-	ld_ iyh,a
-	ld a,DEVICE_QUERY.GET_STATUS##
-	ld	ix,CALDRV##
-	call	CALSLT
-	jr	MAPS_DONE_GS
-
-MAPS_RAM_GS:
-	ld	c,(iy+2)
-	ld	h,(iy)
-	ld	l,(iy+1)
-	push	hl
-	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	a,DEVICE_QUERY.GET_STATUS##
-	call	CALL_MAP##
+	call	MAPS_QUERY
 
-MAPS_DONE_GS:
 	ld d,b
 	pop	iy
 	pop	hl
@@ -3575,6 +3529,23 @@ MAP_SPEC_NOFDD:
 MAP_IDEVN_END:
 	ld	a,.IDEVN##
 	jp	SETNUMDRV
+
+
+;Query the device specified by the mapping information.
+;Input: A = device query, IY = mapping information
+;Output: driver results, flags set from A; GET_PARAMS data in SECBUF
+;Preserves IX; modifies AF, BC, DE, HL, IY
+
+MAPS_QUERY:
+	ld	c,(iy+2)
+	ld	h,(iy)
+	ld	l,(iy+1)
+	push	hl
+	pop	iy		;IYh = slot, IYl = segment (FFh for ROM)
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	(BK4_ADD##),hl
+	ld	hl,($SECBUF##)
+	jp	AA_CALLDRV2
 
 
 	;--- Mount a file
