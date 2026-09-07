@@ -2195,7 +2195,7 @@ GDRVR_OKSLOT:
 	ld	(ix+3),0
 	ld	a,b
 	cp	0FFh
-	jp	nz,GDRV_IS_RAM
+	jp	nz,GDRV_IS_NEXTOR
 	ld	a,(ix)		;Reload slot for DRVTBL search
 
 	;--- Search the driver in DRVTBL
@@ -2230,7 +2230,7 @@ GDRVR_FOUND_DRVTBL:
 GDRVR_CHECK_KERNEX:
 	ld	e,a
 	call	IS_NEXTOR_KER
-	jr	nc,GDRV_IS_KERNEX
+	jr	nc,GDRV_IS_NEXTOR
 
 	;* Driver not found in KERNEX:
 	;  it is a MSX-DOS driver,
@@ -2243,32 +2243,28 @@ GDRVR_CHECK_KERNEX:
 
 	;--- It's a Nextor driver: get driver information
 
-GDRV_IS_KERNEX:
-	ld	d,a
+GDRV_IS_NEXTOR:
+	ld	d,(ix)		;IY = slot:segment for ROM and RAM drivers
+	ld	e,(ix+1)	;FFh selects the ROM driver path
 	push de
 	pop iy
 	ld	(ix+4),85h	;Set driver flags ("is Nextor", "provides configuration" and "is device-based")
 
 	push	iy
-	push	ix
 	ld	hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
-	ld	ix,CALDRV##
 	ld a,DRIVER_QUERY.GET_VERSION##
-	call	CALSLT
-	or a
+	call	AA_CALLDRV2	;Preserves IX and sets flags from A
 	jr z,GDRV_OK_GET_VERSION
 	ld bc,0100h
 	ld d,0
 GDRV_OK_GET_VERSION:
-	pop	ix
 	pop	iy
 	ld	(ix+5),b	;Set driver version number
 	ld	(ix+6),c
 	ld	(ix+7),d
 
 	push	iy
-	push	ix
 	push	hl
 	push	bc
 
@@ -2291,8 +2287,7 @@ GDRV_LEGACY_STRING_SIZE:
 	ld d,a
 	ld a,DRIVER_QUERY.GET_STRING##
 	ld b,DRIVER_QUERY.STR_DRIVER_NAME##
-	ld	ix,CALDRV##
-	call	CALSLT
+	call	AA_CALLDRV2
 
 	pop hl
 	pop bc
@@ -2318,7 +2313,6 @@ GDRV_ADAPT_DRIVER_NAME_LOOP_2:
 GDRV_END:
 	pop	bc
 	pop	hl
-	pop	ix
 	pop	iy
 
 	xor	a
@@ -2336,83 +2330,6 @@ GDRVR_CHK_RAM:
 	ld	a,d		;A=slot
 	ld	b,e		;B=segment
 	jp	GDRVR_OKSLOT
-
-	;--- RAM driver: get version and name via CALL_MAP
-
-GDRV_IS_RAM:
-	ld	(ix+4),85h	;Nextor, device-based, provides config
-	ld	d,(ix)		;D = slot
-	ld	e,(ix+1)	;E = segment
-	push	de
-	pop	iy		;IY = slot:segment
-;
-	push	iy
-	push	ix
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
-	ld	a,DRIVER_QUERY.GET_VERSION##
-	call	CALL_MAP##
-	or	a
-	jr	z,GDRV_RAM_VER_OK
-	ld	bc,0100h
-	ld	d,0
-GDRV_RAM_VER_OK:
-	pop	ix
-	pop	iy
-	ld	(ix+5),b	;Major version
-	ld	(ix+6),c	;Minor version
-	ld	(ix+7),d	;Revision
-;
-	push	iy
-	push	ix
-	push	hl
-	push	bc
-;
-	ld	a,(ix+8)	;Extended name flag
-	and	80h
-	ld	d,33
-	jr	z,GDRV_RAM_STR_SZ
-	ld	d,64-8
-GDRV_RAM_STR_SZ:
-	push	af		;Save extended flag
-	ld	(ix+8),0	;Clear in case of error
-	push	ix
-	pop	hl
-	ld	bc,8
-	add	hl,bc
-	push	hl		;Save dest pointer
-	ld	a,DRIVER_QUERY.GET_STRING##
-	ld	b,DRIVER_QUERY.STR_DRIVER_NAME##
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
-	call	CALL_MAP##
-;
-	pop	hl		;String dest pointer
-	pop	bc		;B = extended flag (high byte from push af)
-	bit	7,b
-	jr	nz,GDRV_RAM_END	;Extended format, no conversion
-;
-	;Convert from zero-terminated to space-padded
-	ld	b,32
-GDRV_RAM_PAD_LOOP:
-	ld	a,(hl)
-	or	a
-	jr	z,GDRV_RAM_PAD
-	inc	hl
-	djnz	GDRV_RAM_PAD_LOOP
-	jr	GDRV_RAM_END
-;
-GDRV_RAM_PAD:
-	ld	(hl),' '
-	inc	hl
-	djnz	GDRV_RAM_PAD
-;
-GDRV_RAM_END:
-	pop	bc
-	pop	hl
-	pop	ix
-	pop	iy
-	xor	a
-	ret
-
 
 ;-----------------------------------------------------------------------------
 ;
