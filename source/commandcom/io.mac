@@ -278,6 +278,23 @@ GETYEN::	LD	HL,YENSL$##
 	LD	(YENFLAG##),A
 	RET
 
+;        GETBUFI: load BUFINSF from the BUFINSERT environment item, checked
+; with ON? (which leaves its value in XBUF2): nonzero => the command line
+; editor starts each line in insert mode (see EDLINE in editor.mac), as
+; the kernel line editor does for the same item. Called at startup and
+; after every successful SET (the only way to change the item from the
+; interpreter), so the editor never reads the environment, nor the
+; kernel's own copy of the state, on every line. BUFINSF lives among the
+; variables preserved across transient programs, like YENFLAG. Corrupts
+; AF and HL; returns A=0 (Z) so that SET can end with it.
+GETBUFI::	LD	HL,BUFINS$##
+	CALL	ON?##	; NC => BUFINSERT is "ON".
+	CCF
+	SBC	A,A	; FF => ON, 0 => OFF.
+	LD	(BUFINSF##),A
+	XOR	A
+	RET
+
 ;        SETYEN: called before every prompt; the main register set is
 ; corrupted, the alternate set and IX are preserved and IY is restored
 ; to REDIRST, as CALLSLOT does.

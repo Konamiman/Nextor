@@ -573,8 +573,11 @@ RESTART:	ld	c,(hl)			;Get buffer size.
 		dec	hl
 		ld	a,b			;Character count.
 new_line:	ld	(IN_COUNT##),a
-		xor	a			;Set overwrite mode.
-		call	INS_TOG2
+		ld	a,(MFLAGS2##)		;Set insert mode (A=FFh) if the
+		and	BUFINSM##		; BUFINSERT environment item is
+		neg				; ON, else overwrite mode (A=0).
+		call	INS_TOG2		; (INS_TOG toggles with CPL, so
+						; the flag must be 00h or FFh.)
 ;
 BUFIN_LOOP:	ld	de,BUFIN_LOOP		;Get a character, call the
 		push	de			; routine, and return to here.

@@ -30,6 +30,8 @@
 
 [2.12. The new COMMAND3.COM command interpreter](#212-the-new-command3com-command-interpreter)
 
+[2.13. The BUFINSERT environment item](#213-the-bufinsert-environment-item)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -146,9 +148,15 @@ Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on 
 
 * The `FORMAT` command now works for drives mapped to floppy disk devices handled by Nextor drivers (`COMMAND2.COM` can only format drives controlled by legacy MSX-DOS drivers), and gains a new `/Q` switch that performs a quick format: only the allocation table and the root directory are cleared.
 
+* The command line editor honors the new `BUFINSERT` environment item (see _[2.13. The BUFINSERT environment item](#213-the-bufinsert-environment-item)_): when it is `ON`, each line starts in insert mode.
+
 `COMMAND3.COM` contains all its messages in both English and Japanese, like the `COMMAND2.COM` of the Japanese MSX-DOS 2 did: the Japanese messages are used while the kanji mode is active, unless the `ERRLANG` environment item is set to `EN` (the same rules that the kernel and `NEXTOR.SYS` apply to the error messages). To make room for the second language, the list of subjects printed by `HELP` with no parameters is no longer built into the interpreter: it is read from the new `INDEX.HLP` file (`JINDEX.HLP`, in Japanese, while the Japanese messages are active, falling back to `INDEX.HLP` when that file does not exist) in the help directory, and "File for HELP not found" (followed by a hint about where the index file is expected to be) is reported when the file is not present. See _[3.10.5. Japanese messages](Nextor_3.0_User_Manual.md#3105-japanese-messages)_ in the user manual for the details.
 
 `COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`, which loads it when present and falls back to loading `COMMAND2.COM` otherwise; any `COMMAND2.COM` from version 2.20 still works with Nextor 3, but without the new features. See _[3.10. The COMMAND3.COM command interpreter](Nextor_3.0_User_Manual.md#310-the-command3com-command-interpreter)_ in the user manual for the details.
+
+### 2.13. The BUFINSERT environment item
+
+The line editor built into the kernel (the one behind the `_BUFIN` function call and the `CON` device in ASCII mode, and therefore the one used by any program that reads lines through them) starts every line in insert mode instead of overwrite mode when an environment item named `BUFINSERT` exists with the value `ON`. The command line editor of `COMMAND3.COM` honors the item too, so it applies to the command prompt whether `EXPAND` is `ON` or `OFF`. See _[2.17. The BUFINSERT environment variable](Nextor_3.0_User_Manual.md#217-the-bufinsert-environment-variable)_ in the user manual.
 
 ## 3. Information for application developers
 
@@ -158,7 +166,9 @@ The new [`_DRVRO`](Nextor_3.0_Programmers_Reference.md#315-driver-operations-_dr
 
 ### 3.2. Changed function calls
 
-* [`_FORMAT`](Nextor_3.0_Programmers_Reference.md#27-_format-67h): formatting now works for drives mapped to Nextor drivers (that support it), not only for MSX-DOS drivers. A new choice number, 80h, gets the format choice string into a RAM buffer and works for both driver types; the old choice 00h works for MSX-DOS drivers only and is deprecated. The documentation now also covers the special boot sector related choices dating back to the MSX-DOS 2 era (FEh, FFh) and to Nextor 2 (FBh-FDh), all of which work for both driver types as well.
+* [`_BUFIN`](Nextor_3.0_Programmers_Reference.md#22-_bufin-0ah): the line editor starts every line in insert mode, instead of overwrite mode, when the `BUFINSERT` environment item is `ON` (see _[2.13. The BUFINSERT environment item](#213-the-bufinsert-environment-item)_).
+
+* [`_FORMAT`](Nextor_3.0_Programmers_Reference.md#28-_format-67h): formatting now works for drives mapped to Nextor drivers (that support it), not only for MSX-DOS drivers. A new choice number, 80h, gets the format choice string into a RAM buffer and works for both driver types; the old choice 00h works for MSX-DOS drivers only and is deprecated. The documentation now also covers the special boot sector related choices dating back to the MSX-DOS 2 era (FEh, FFh) and to Nextor 2 (FBh-FDh), all of which work for both driver types as well.
 
 * [`_GDRVR`](Nextor_3.0_Programmers_Reference.md#38-get-information-about-a-device-driver-_gdrvr-78h): driver names can now be up to 255 characters long, and a new input flag requests the extended name (otherwise names are truncated as before). The returned driver flags always have the legacy "device-based driver" flag set for compatibility with Nextor 2-aware tools.
 

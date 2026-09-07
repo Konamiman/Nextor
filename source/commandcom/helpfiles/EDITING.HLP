@@ -76,6 +76,11 @@ EDITING COMMAND LINES
         ter,  the remaining  characters to the end of the line being
         moved one position to the right.
 
+             Each line starts in overwrite mode, unless the BUFINSERT
+        environment item is set to ON (see HELP ENV),  in which case
+        it starts in insert mode.  The keys that clear the line (see
+        below) restore the starting mode.
+
              The  delete key (marked DEL on most MSX machines)  will
         delete the character under the cursor and move the remaining
         characters to the end of the line one position to the left.

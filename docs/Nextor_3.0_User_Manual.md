@@ -50,6 +50,8 @@
 
 [2.16. The KILLDSKIO environment variable](#216-the-killdskio-environment-variable)
 
+[2.17. The BUFINSERT environment variable](#217-the-bufinsert-environment-variable)
+
 [3. Using Nextor](#3-using-nextor)
 
 [3.1. Installing Nextor](#31-installing-nextor)
@@ -437,6 +439,14 @@ Since version 2.1 Nextor allows mounting disk image files in two ways:
 Since version 2.1.1 Nextor provides a mechanism to disable the BASIC commands `DSKI$` and `DSKO$`, which gives 512 extra bytes of free memory for the BASIC environment. This is achieved by creating an environment variable named `KILLDSKIO` with a value of `ON` (case-insensitive).
 
 Note that when `DSKI$` and `DSKO$` are disabled in this way the `DIRBUF` variable (&HF351), which holds the address of the 512 byte buffer where these commands read and write sectors, will have the same value as `SECBUF` (&HF34D), which is a generic sector buffer used internally by Nextor; and the same goes for `PATHNAM` (&HF33B), a buffer used by BASIC to parse pathnames for commands like `FILES`. This shouldn't be a problem in most cases, but for robustness it's recommended to use this feature only when that extra memory is absolutely necessary.
+
+### 2.17. The BUFINSERT environment variable
+
+The line editor built into the Nextor kernel, used by the `_BUFIN` function call (buffered line input) and by the `CON` device when it is read in ASCII mode, starts every line in overwrite mode: the characters typed replace the ones under the cursor, and the INS key toggles the insert mode, in which the characters typed are inserted at the cursor position and the rest of the line is moved to the right (see the `EDITING` subject of the `HELP` command of the command interpreter for the full list of editing keys).
+
+Since version 3.0 Nextor allows changing the initial mode: if an environment item named `BUFINSERT` exists with a value (case insensitive) of `ON` (command `SET BUFINSERT=ON` in the command interpreter prompt), the editor starts every line in insert mode instead. The INS key still toggles between the two modes, and the keys that clear the line being edited (ESC, CTRL-U and CTRL-X) restore the initial mode. Setting the item to any other value, or deleting it, restores the default behavior.
+
+The setting affects any program that reads lines through the kernel, including the command interpreter: `COMMAND3.COM` uses the kernel line editor for its `INPUT` command and, when the `EXPAND` environment item is set to `OFF`, for its command line; and its own command line editor (the one used when `EXPAND` is `ON`, which is the default) honors the item as well, so the command prompt starts in insert mode whatever the value of `EXPAND`; the interpreter reads the item when it starts and whenever it is changed with the `SET` command. Older interpreters (`COMMAND2.COM`) honor it only when `EXPAND` is `OFF`, since their own editor knows nothing about it. This feature is not available in MSX-DOS 1 mode, where environment items don't exist.
 
 
 ## 3. Using Nextor
@@ -937,7 +947,7 @@ None of this applies to MSX-DOS 1 mode, in this mode only integer (16 bit) secto
 
 New in Nextor 3, this command also works for drives mapped to floppy disk devices handled by Nextor drivers (see _[2.5. Support for floppy disks](#25-support-for-floppy-disks)_); in that case the available format choices are supplied by the driver. The `FORMAT` command of `COMMAND3.COM` can format these drives too, but the one of the old `COMMAND2.COM` works only for drives controlled by MSX-DOS drivers.
 
-If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md#27-_format-67h)_ document for more details.
+If you are a developer, see the `_FORMAT` function call in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md#28-_format-67h)_ document for more details.
 
 #### 3.6.4. The CALL NEXTOR command
 
@@ -1399,6 +1409,8 @@ Compared to COMMAND 2.44:
 * `VOL`, `DIR` and `FREE` print an informative note when the drive is mapped to a mounted disk image file, to the RAM disk, or is a ghost drive of another one.
 
 * `DIR` displays the file sizes, the total size of the listed files and the free space figure in kilobytes (rounded to the nearest, with a `K` suffix) when they are 10K or over, and in bytes when they are smaller; COMMAND 2.44 displayed the file sizes always in bytes, and the totals in kilobytes (truncated) from 1K up. The threshold can be changed with the `DIRK` environment item: a number from 1 to 65535 is the size in kilobytes from which the figures are displayed in kilobytes, optionally followed by one or two letters to be displayed instead of `K` after those figures (for example `SET DIRK=100KB`); `0` or `OFF` (in any case) keeps the file sizes always in bytes, with the totals in kilobytes from 1K up (`0` may be followed by the suffix letters too, which then apply to the totals, as in `SET DIRK=0KB`); and any other value (or no item at all) means the default threshold of 10K with the `K` suffix. The new `DIRB` internal command is the same as `DIR` but displays all the figures in bytes, whatever the value of `DIRK`. The `XDIR` tool follows the same rules (see _[3.4.15. The classic MSX-DOS tools](#3415-the-classic-msx-dos-tools)_).
+
+* The command line editor starts each line in insert mode when the `BUFINSERT` environment item is `ON`, like the kernel line editor does (see _[2.17. The BUFINSERT environment variable](#217-the-bufinsert-environment-variable)_).
 
 * The help files have been revised for Nextor 3: the new commands are included, and the first line of each file now lists the interpreter versions in which the command was introduced (multiple versions means that the command was updated in the newer versions).
 

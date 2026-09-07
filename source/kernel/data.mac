@@ -196,7 +196,9 @@ ram_ad	defl	DATABASE
 	const	RDRV,5		;bit 5: at least one RAM driver is installed
 	const	RDRVM,20h	;mask for RDRV (1 SHL RDRV)
 	const   SYST2,7     ;Bit 7: force boot in MSXDOS2.SYS (temporary, reset after read)
-	spare	1		;Available for DOS 2
+	var1	MFLAGS2		;Miscellaneous flags, second byte (DOS 2 only, zeroed at boot by INIT)
+	const	BUFINS,0	;bit 0: line editor of _BUFIN starts in insert mode (SET BUFINSERT ON)
+	const	BUFINSM,01h	;mask for BUFINS (1 SHL BUFINS)
 ;
 	var2	BLDCHK
 	var2	BSVCHK
