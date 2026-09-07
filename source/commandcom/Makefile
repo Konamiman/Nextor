@@ -73,11 +73,11 @@ SDK_RELS := dos_calls.rel dos_errors.rel driver_const.rel
 # (#8000-#BFFF) while it accesses the alias list, the command history and
 # the variable swap area (SETPG2 in io.mac), so no part of the program -
 # and the variables area includes the stack - may live there. That limits
-# the .COM file to #8000 - #100 (the load address) - 2869 (the variables,
-# see the total in var.mac) = 29643 bytes. Carrying both message tables
+# the .COM file to #8000 - #100 (the load address) - 2881 (the variables,
+# see the total in var.mac) = 29631 bytes. Carrying both message tables
 # only fits because the ~4K HELP index text lives in the INDEX.HLP and
 # JINDEX.HLP files (see @HELP in copy.mac) instead of in the tables.
-MAX_COM_SIZE := 29643
+MAX_COM_SIZE := 29631
 
 define check_size
 	@size=$$(wc -c < $(1)); \

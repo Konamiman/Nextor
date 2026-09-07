@@ -7,13 +7,14 @@
  * languages, Kanji mode probed once at startup; see also the banner in
  * crt0_xdir.mac, which TYPE XDIR.COM displays).
  *
- * Syntax: XDIR [filespec] [/H]
+ * Syntax: XDIR [filespec] [/H] [/B]
  *
  *   Lists the files matching the filespec (default: everything) in the
  *   given directory (default: the current one) and, recursively, in all
  *   its subdirectories, with their attributes and sizes, followed by
  *   the total size, the file count and the free space on the drive.
  *   /H includes hidden files and directories in the listing.
+ *   /B displays all the sizes in bytes.
  *
  * Differences from the original program:
  *
@@ -22,6 +23,19 @@
  *   over 99 999 999 bytes or a drive with more than 65535 free K (both
  *   possible on the FAT16 volumes supported since Nextor 2.0) are now
  *   displayed correctly.
+ *
+ * - Sizes from a threshold up are displayed in K (rounded to the
+ *   nearest), following the same rules as the DIR command of
+ *   COMMAND3.COM: the threshold is 10K by default and can be changed
+ *   with the DIRK environment item (a number of K from 1 to 65535,
+ *   optionally followed by one or two letters that replace the "K"
+ *   suffix of the figures; 0 or OFF keeps the file sizes in bytes,
+ *   with the totals in K from 1K up as the original did, and 0 can
+ *   take the suffix letters too, for the totals; any other value
+ *   means the default), and the /B switch displays every figure
+ *   in bytes regardless of DIRK, like the DIRB command does. The
+ *   total and free space figures follow the same rules (the original
+ *   showed them in K, truncated, from 1K up).
  *
  * Everything else works as the original: same syntax, same output
  * format, same messages (English and Japanese).  Like the original, the
@@ -38,6 +52,7 @@
 #include "types.h"
 #include "dos_functions.h"
 #include "dos_errors.h"
+#include "strcmpi.h"
 
 
 /*   C O N S T A N T S   */
@@ -75,7 +90,7 @@
 
 enum {
     M_SIZ1, M_SIZ2, M_IN, M_KIN, M_FIL1, M_FIL2, M_KFREE,
-    M_VOL1, M_VOL2, M_VOL3, M_XDIR, M_WVER
+    M_VOL1, M_VOL2, M_VOL3, M_XDIR, M_WVER, M_BFREE
 };
 
 extern const byte msgs_en[];	/* defined in xdir_msgs.mac */
@@ -91,6 +106,19 @@ byte kanji_flag;		/* non-zero => print Japanese messages */
 byte source_drive;		/* logical source drive (1 = A: etc) */
 bool ambig_flag;		/* true => the filespec is ambiguous */
 bool hidden_flag;		/* true => list hidden files too (/H) */
+bool bytes_flag;		/* true => sizes always in bytes (/B) */
+
+/* How the sizes are displayed (see set_size_mode) */
+enum {
+    SM_BYTES,		/* every figure in bytes (/B) */
+    SM_TOTALS,		/* file sizes in bytes, totals in rounded K from
+			   1K up (DIRK off) */
+    SM_THRESHOLD	/* every figure in rounded K from k_threshold up,
+			   bytes below */
+};
+byte size_mode;
+ulong k_threshold;		/* the threshold, in bytes */
+char k_suffix[3];		/* the suffix of the figures in K */
 
 ulong total_sizes;		/* accumulated sum of the file sizes */
 uint f_count;			/* count of files found */
@@ -189,11 +217,12 @@ void put_unsigned(uint i)
 }
 
 /* format_u32: format a 32 bit number into the buffer, right aligned in
-   an 8 character field whose leading positions are filled with the
-   given character; a zero leader suppresses them (the field shrinks).
-   Numbers of more than 8 digits (possible on FAT16 volumes) widen the
-   field instead of being garbled (the original was limited to 8). */
-void format_u32(char leader, ulong value, char* buffer)
+   a field of the given width whose leading positions are filled with
+   the given character; a zero leader suppresses them (the field
+   shrinks).  Numbers wider than the field (possible on FAT16 volumes)
+   widen it instead of being garbled (the original was limited to 8).
+   Returns a pointer to the terminating null. */
+char* format_u32(char leader, byte width, ulong value, char* buffer)
 {
     char digits[10];
     byte n, i;
@@ -204,17 +233,61 @@ void format_u32(char leader, ulong value, char* buffer)
         value /= 10;
     } while (value != 0);
     if (leader)
-        for (i = n; i < 8; i++) *buffer++ = leader;
+        for (i = n; i < width; i++) *buffer++ = leader;
     while (n) *buffer++ = digits[--n];
     *buffer = '\0';
+    return buffer;
 }
 
 void put_u32(ulong value)
 {
     char buffer[12];
 
-    format_u32(0, value, buffer);
+    format_u32(0, 0, value, buffer);
     put_string(buffer);
+}
+
+/* in_k: whether a total is to be displayed in rounded K: bytes are
+   not forced and the count reaches the threshold. */
+bool in_k(ulong bytes)
+{
+    return size_mode != SM_BYTES && bytes >= k_threshold;
+}
+
+/* to_k: a byte count in K, rounded to the nearest (halves up). */
+ulong to_k(ulong bytes)
+{
+    return (bytes >> 10) + ((bytes & 0x200) ? 1 : 0);
+}
+
+/* format_size: a file size into the buffer as a right aligned 8
+   column field: the rounded K count followed by the suffix when in_k
+   says so in the threshold mode, the bytes otherwise. */
+void format_size(ulong bytes, char* buffer)
+{
+    const char* s;
+
+    if (size_mode == SM_THRESHOLD && in_k(bytes)) {
+        buffer = format_u32(' ', 8 - strlen(k_suffix), to_k(bytes), buffer);
+        for (s = k_suffix; *s; ) *buffer++ = *s++;
+        *buffer = '\0';
+    } else
+        format_u32(' ', 8, bytes, buffer);
+}
+
+/* put_total: a total (no padding) followed by the message for its
+   unit: the rounded K count, the suffix and k_msg when in_k says so;
+   else the bytes and the singular or plural bytes message. */
+void put_total(ulong bytes, byte k_msg, byte byte_msg, byte bytes_msg)
+{
+    if (in_k(bytes)) {
+        put_u32(to_k(bytes));
+        put_string(k_suffix);
+        put_msg(k_msg);
+    } else {
+        put_u32(bytes);
+        put_msg(bytes == 1 ? byte_msg : bytes_msg);
+    }
 }
 
 
@@ -315,13 +388,79 @@ byte get_w_path(char* buffer)
     return regs.Bytes.A;
 }
 
-/* get_kbytes_free: free space on the given logical drive, in kbytes
-   (sectors are always 512 bytes = half a K) */
-ulong get_kbytes_free(byte drive)
+/* get_bytes_free: free space on the given logical drive, in bytes
+   (free clusters * sectors per cluster * 512, sectors being always
+   512 bytes; fits in 32 bits for any FAT12/FAT16 volume) */
+ulong get_bytes_free(byte drive)
 {
     regs.Bytes.E = drive;
     DosCall(_ALLOC, &regs, REGS_MAIN, REGS_MAIN);
-    return ((ulong)regs.UWords.HL * regs.Bytes.A) >> 1;
+    return ((ulong)regs.UWords.HL * regs.Bytes.A) << 9;
+}
+
+/* get_env: the value of the environment item into the buffer (which
+   must hold 256 bytes); an empty string when it does not exist. */
+void get_env(const char* name, char* buffer)
+{
+    regs.UWords.HL = (uint)name;
+    regs.UWords.DE = (uint)buffer;
+    regs.Bytes.B = 255;
+    DosCall(_GENV, &regs, REGS_MAIN, REGS_AF);
+    if (regs.Bytes.A != 0) *buffer = '\0';
+}
+
+bool isletter(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+/* set_size_mode: decide how sizes are displayed, from the /B switch
+   and the DIRK environment item, with the rules of COMMAND3's DIR:
+   /B => every figure in bytes; else DIRK = "0" or "OFF" (any case) =>
+   file sizes in bytes and totals in K from 1K up, DIRK = 1 to 65535
+   => that many K is the threshold from which every figure is shown in
+   K. The number, 0 included, may be followed by one or two letters
+   that replace the "K" suffix of the figures shown in K (case
+   preserved); anything else (no DIRK included) => the default
+   threshold of 10K with the "K" suffix. */
+void set_size_mode(void)
+{
+    static char value[256];
+    char suffix[3];
+    char* p;
+    ulong n;
+    byte i;
+
+    size_mode = bytes_flag ? SM_BYTES : SM_THRESHOLD;
+    k_threshold = 10UL << 10;
+    k_suffix[0] = 'K';
+    k_suffix[1] = '\0';
+    if (bytes_flag) return;
+
+    get_env("DIRK", value);
+    if (strcmpi(value, "OFF") == 0) {
+        size_mode = SM_TOTALS;
+        k_threshold = 1024;
+        return;
+    }
+
+    n = 0;
+    for (p = value; *p >= '0' && *p <= '9'; p++) {
+        n = n * 10 + (*p - '0');
+        if (n > 65535) return;
+    }
+    if (p == value) return;		/* no number: default */
+
+    for (i = 0; i < 2 && isletter(*p); i++) suffix[i] = *p++;
+    suffix[i] = '\0';
+    if (*p) return;			/* something else follows: default */
+
+    if (i) strcpy(k_suffix, suffix);
+    if (n == 0) {
+        size_mode = SM_TOTALS;		/* with the suffix, if any */
+        k_threshold = 1024;
+    } else
+        k_threshold = n << 10;
 }
 
 
@@ -370,6 +509,8 @@ void parse_flags(char* ptr)
         switch (upper(*(++ptr))) {
             case 0  : error(_IOPT);
             case 'H': hidden_flag = true;
+                      break;
+            case 'B': bytes_flag = true;
                       break;
             default : error(_IOPT);
         }
@@ -508,7 +649,8 @@ void modify_path(char* fname)
 }
 
 /* put_file: print one file line: 13-char name field, 'h'/'r' attribute
-   flags, 8-column right-aligned size; accumulate the size. */
+   flags, 8-column right-aligned size (in bytes or K, see format_size);
+   accumulate the size. */
 void put_file(byte* fib)
 {
     char buffer[FIL_NAME_LEN + 1 + 2 + 11 + 1];
@@ -527,7 +669,7 @@ void put_file(byte* fib)
     if (fib[FIB_ATTRIBUTES] & MASK_HIDDEN) *bufptr = 'h';
 
     size = *(ulong*)(fib + FIB_SIZE);
-    format_u32(' ', size, buffer + FIL_NAME_LEN + 3);
+    format_size(size, buffer + FIL_NAME_LEN + 3);
     put_string(buffer);
     newline();
 
@@ -626,6 +768,7 @@ int main(char** argv, int argc)
     /* The crt0 does not zero plain globals, so initialize them here */
     kanji_flag = 0;
     hidden_flag = false;
+    bytes_flag = false;
     ambig_flag = false;
     f_count = 0;
     total_sizes = 0;
@@ -635,22 +778,18 @@ int main(char** argv, int argc)
     check_ver();
 
     get_path(argv, argc);
+    set_size_mode();
 
     xdir(0, (byte*)s_path);
 
-    if (total_sizes < 1024) {
-        put_unsigned((uint)total_sizes);
-        put_msg(total_sizes == 1 ? M_SIZ1 : M_SIZ2);	/* " byte(s)" */
-        put_msg(M_IN);					/* " in "     */
-    } else {
-        put_u32(total_sizes >> 10);
-        put_msg(M_KIN);					/* "K in "    */
-    }
+    /* "<n>K in " or "<n> byte(s) in " */
+    put_total(total_sizes, M_KIN, M_SIZ1, M_SIZ2);
+    if (!in_k(total_sizes)) put_msg(M_IN);
 
     put_unsigned(f_count);
     put_msg(f_count == 1 ? M_FIL1 : M_FIL2);		/* " file(s)" */
 
-    put_u32(get_kbytes_free(source_drive));
-    put_msg(M_KFREE);					/* "K free"   */
+    /* "<n>K free" or "<n> bytes free" */
+    put_total(get_bytes_free(source_drive), M_KFREE, M_BFREE, M_BFREE);
     return 0;
 }

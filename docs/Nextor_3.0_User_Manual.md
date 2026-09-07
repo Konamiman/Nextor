@@ -845,7 +845,7 @@ The transient tools that were part of the original MSX-DOS 2 distribution are al
 
 * `XCOPY.COM` copies files and directory trees, with switches for filtering, renaming, prompting and write verification. The new `/Dx` switch family controls what to do with files that already exist in the destination: overwrite, skip, keep the newer/older/smaller/bigger of the two files, overwrite only when the sizes differ, or ask for each file.
 
-* `XDIR.COM` lists a directory and all its subdirectories recursively, with the attributes and exact size of each file, the totals and the free space on the drive. Sizes and totals of any magnitude are displayed correctly on FAT16 volumes.
+* `XDIR.COM` lists a directory and all its subdirectories recursively, with the attributes and size of each file, the totals and the free space on the drive. Sizes and totals of any magnitude are displayed correctly on FAT16 volumes. The sizes follow the same rules as in the `DIR` command of `COMMAND3.COM`: they are displayed in kilobytes (rounded to the nearest) when they are 10K or over, with the threshold configurable through the `DIRK` environment item (see _[3.10.4. Other changes](#3104-other-changes)_), and the new `/B` switch displays all the sizes in bytes, like the `DIRB` command does.
 
 All of these tools display their messages in Japanese when a Kanji screen mode is active, and in English otherwise. The tools that write disk sectors directly (`DISKCOPY`, `FIXDISK` and `KMODE /S`) work on drives handled by MSX-DOS drivers and, under Nextor 3 or later, also on drives mapped to floppy disk devices of Nextor drivers.
 
@@ -1358,11 +1358,13 @@ The following Nextor command line tools are now also internal commands of `COMMA
 
 * `Z80MODE`: displays and sets the Z80 access mode of a legacy driver (see _[3.4.7. Z80MODE: the Z80 access mode tool](#347-z80mode-the-z80-access-mode-tool)_).
 
-Additionally, there are two brand new internal commands:
+Additionally, there are three brand new internal commands:
 
 * `MEM`: displays a compact memory mapper listing: one line per mapper with its slot and its total, reserved and free memory, followed by the totals, the RAM disk size (when one exists) and the end address and size of the TPA. For more detailed information the classic `MEMORY` command is still there.
 
 * `SHELLRAM`: enables or disables the usage of an extra RAM segment by `COMMAND3.COM`, see below for the details.
+
+* `DIRB`: the same as `DIR`, but the file sizes, the total size of the listed files and the free space figure are always displayed in bytes, regardless of the `DIRK` environment item (see _[3.10.4. Other changes](#3104-other-changes)_).
 
 #### 3.10.3. The SHELLRAM command
 
@@ -1391,6 +1393,8 @@ Compared to COMMAND 2.44:
 * `DIR` and `FREE` obtain the disk space figures through the new byte-based function of the Nextor kernel: the reported free space is now always the real one, even for drives in reduced allocation information mode (the 32MB cap of that mode only affects the classic ALLOC function, used by older interpreters and tools; see _[2.6. Reduced and zero allocation information mode](#26-reduced-and-zero-allocation-information-mode)_). For drives in zero allocation information mode, `FREE` explains that no space information is available and `DIR` omits the free space figure, instead of displaying a bogus value.
 
 * `VOL`, `DIR` and `FREE` print an informative note when the drive is mapped to a mounted disk image file, to the RAM disk, or is a ghost drive of another one.
+
+* `DIR` displays the file sizes, the total size of the listed files and the free space figure in kilobytes (rounded to the nearest, with a `K` suffix) when they are 10K or over, and in bytes when they are smaller; COMMAND 2.44 displayed the file sizes always in bytes, and the totals in kilobytes (truncated) from 1K up. The threshold can be changed with the `DIRK` environment item: a number from 1 to 65535 is the size in kilobytes from which the figures are displayed in kilobytes, optionally followed by one or two letters to be displayed instead of `K` after those figures (for example `SET DIRK=100KB`); `0` or `OFF` (in any case) keeps the file sizes always in bytes, with the totals in kilobytes from 1K up (`0` may be followed by the suffix letters too, which then apply to the totals, as in `SET DIRK=0KB`); and any other value (or no item at all) means the default threshold of 10K with the `K` suffix. The new `DIRB` internal command is the same as `DIR` but displays all the figures in bytes, whatever the value of `DIRK`. The `XDIR` tool follows the same rules (see _[3.4.15. The classic MSX-DOS tools](#3415-the-classic-msx-dos-tools)_).
 
 * The help files have been revised for Nextor 3: the new commands are included, and the first line of each file now lists the interpreter versions in which the command was introduced (multiple versions means that the command was updated in the newer versions).
 

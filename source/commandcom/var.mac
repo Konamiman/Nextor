@@ -127,5 +127,11 @@ VAR_OFFSET DEFL	0
 	VAR	XBUF1, 255
 	VAR	XBUF2, 255
 	VAR	XBUF3, 255
+	VAR	DIRKMODE, 1	; DIR sizes: 0 = file sizes in bytes, totals in
+			;   K (DIRK off); 1 = all in K from DIRKTHR up;
+			;   FF = all in bytes.
+	VAR	DIRKTHR, 4	; That threshold in bytes (DIRK item * 1024).
+	VAR	DIRKSFX, 3	; The suffix for the K figures ("K" or as DIRK).
+	VAR	DIRKTMP, 4	; Work area for the rounded K figure.
 ;
-; Total: 2869 bytes
+; Total: 2881 bytes

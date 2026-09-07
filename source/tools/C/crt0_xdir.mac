@@ -10,7 +10,7 @@
 	;    starts at 0x100), exactly as the standard crt0 recycles its
 	;    startup code.
 	;
-	;    Compile the program with --code-loc 0x400 (the banner makes
+	;    Compile the program with --code-loc 0x480 (the banner makes
 	;    the header bigger than the 0x180 used with the standard crt0)
 	;    and --data-loc 0.
 
@@ -31,7 +31,7 @@ init:   jp      realinit
         ;    prints for the jump instruction bytes above.
 
         .db     13
-        .ascii  "XDIR v1.1 - List a directory and all its subdirectories"
+        .ascii  "XDIR v1.2 - List a directory and all its subdirectories"
         .db     13,10,13,10
         .ascii  "Lists the files matching the filespec (all of them by default) in the"
         .db     13,10
@@ -39,15 +39,19 @@ init:   jp      realinit
         .db     13,10
         .ascii  "their attributes and sizes, followed by the totals and the free space"
         .db     13,10
-        .ascii  "on the drive."
+        .ascii  "on the drive. Sizes of 10K and over are shown in K (the DIRK"
+        .db     13,10
+        .ascii  "environment item changes that, as for the DIR command; see HELP DIR)."
         .db     13,10,13,10
-        .ascii  "Usage: XDIR [filespec] [/H]"
+        .ascii  "Usage: XDIR [filespec] [/H] [/B]"
         .db     13,10,13,10
         .ascii  "  filespec: a drive, a directory, a file name or a pattern; by default"
         .db     13,10
         .ascii  "            the whole current directory is listed."
         .db     13,10
         .ascii  "  /H: also list hidden files and directories"
+        .db     13,10
+        .ascii  "  /B: always show the sizes in bytes"
         .db     13,10,13,10
         .ascii  "Works on MSX-DOS 2 and Nextor."
         .db     13,10

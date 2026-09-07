@@ -1,7 +1,7 @@
 XDIR                                                     [2.20, 3.0]
 ----
 
-Format:      XDIR [filespec] [/H]
+Format:      XDIR [filespec] [/H] [/B]
 
 Purpose:     Lists a directory and all its subdirectories.
 
@@ -12,8 +12,16 @@ Use:         The filespec specifies which files are to be listed: a
 
              XDIR is similar to the DIR command, but it prints the
         attributes ('h' for hidden, 'r' for read only) and the
-        exact size in bytes of each file instead of the dates and
-        times.
+        size of each file instead of the dates and times.
+
+             The sizes and the totals follow the same rules as in
+        the DIR command: they are printed in bytes when they are
+        less than 10K, and in kilobytes (rounded to the nearest,
+        with a K suffix) when they are 10K or over.  The DIRK
+        environment item changes the threshold and the suffix, or
+        keeps the file sizes in bytes (see HELP DIR and HELP ENV).
+        /B prints all the figures in bytes, whatever the value of
+        DIRK, like the DIRB command.
 
              After the files of the specified directory have been
         listed, the files within each subdirectory are also listed,
@@ -39,4 +47,10 @@ Examples:
 
              The names of all files, including hidden files,
         matching *.COM anywhere on the current drive are displayed.
+
+        XDIR /B
+
+             The whole directory tree in or descending from the
+        current directory of the current drive is listed, with all
+        the sizes in bytes.
 

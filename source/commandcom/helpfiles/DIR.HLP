@@ -68,9 +68,22 @@ Use:         The  compound-filespec specifies which files are to  be
         the  current and parent directories respectively  (see  HELP
         SYNTAX for a description of paths).
 
-             When  printing  a  number  of  bytes,   the  number  is
-        truncated  and  printed as the number of kilobytes if 1K  or
-        greater.
+             The file sizes,  the total size of the listed files and
+        the free space figure are printed in bytes when they are less
+        than 10K,  and in kilobytes (rounded to the nearest, with a K
+        suffix) when they are 10K or over. This threshold can be chan-
+        ged with the DIRK environment item (see HELP ENV):  a  number
+        from 1 to 65535 is the size in kilobytes from which the figu-
+        res are printed in kilobytes,  and it may be followed by  one
+        or two letters to be used instead of K as the suffix of those
+        figures, for example DIRK=100KB.  A value of 0 or OFF  makes
+        the file sizes always be printed in bytes, with the totals in
+        kilobytes from 1K up;  0 may also be followed by  the  suffix
+        letters,  which then apply to the totals  (for example  DIRK=
+        0KB). Any other value is ignored, so the default threshold of
+        10K with the K suffix applies.  The DIRB command (see HELP
+        DIRB) is the same as DIR but prints all the figures in bytes,
+        whatever the value of DIRK.
 
              If the /P option is given,  then the output will  pause
         at the bottom of the screen until a key is pressed.
@@ -93,14 +106,16 @@ Examples:
               Directory of A:\
 
              NEXTOR   SYS r    4455 86-06-19  2:45p
-             COMMAND3 COM r   10496 86-06-19  2:46p
+             COMMAND3 COM r     10K 86-06-19  2:46p
              UTILS           <dir>  86-06-19  2:50p
              HELP            <dir>  86-06-19  2:50p
-              14K in 2 files   222K free
+              15K in 2 files   222K free
 
         The   disk  thus  contains  the  two  Nextor  system  files
         NEXTOR.SYS and COMMAND3.COM,  which are read only,  and two
-        directories called UTILS and HELP.
+        directories called UTILS and HELP. The size of  COMMAND3.COM
+        (10496 bytes) is printed in kilobytes because it reaches the
+        default 10K threshold; the size of NEXTOR.SYS is not.
 
         DIR B:\HELP/W
 

@@ -215,10 +215,13 @@ D16::	XOR	A	; No leading characters.
 	LD	DE,VALUEL##
 		SUBTTL  D32
 D32::	EXX
-	LD	C,A	; C'=lead char, applied only from the
-	LD	E,#00	;   10,000,000 entry on (see D32.10):
-	LD	D,"0"	;   the two larger entries never emit
-	EXX	;   it, so the classic 8-position
+	PUSH	BC	; BC' is live in the callers (DIR
+	LD	C,A	;   keeps its /W and /2 layout
+	LD	E,#00	;   state there).
+	LD	D,"0"	; C'=lead char, applied only from the
+	EXX	;   10,000,000 entry on (see D32.10):
+			;   the two larger entries never emit
+			;   it, so the classic 8-position
 			;   padded fields keep their width for
 			;   values below 100,000,000.
 	LD	HL,P10TAB	; Giant 32-bit power-of-ten table.
@@ -269,6 +272,9 @@ DMI20:	EXX
 	INC	A
 	JR	NZ,D32.10
 	LD	(IX),#00
+	EXX
+	POP	BC
+	EXX
 	RET
 
 P10TAB:	DEFB	#00,#CA,#9A,#3B	; 1,000,000,000

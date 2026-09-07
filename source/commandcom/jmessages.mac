@@ -195,4 +195,6 @@ JMESSAGES::	DEFB	"Yy",0
 
 	DEFB	"縮小アロケーション情報モードのドライブはありません",0	; #84 (RALLOC)
 
+	DEFB	"バイト",0	; #85 (DIR: after the K suffix of the totals)
+
 	.strenc	default

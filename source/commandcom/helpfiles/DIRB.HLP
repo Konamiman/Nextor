@@ -1,0 +1,39 @@
+DIRB                                                           [3.0]
+----
+
+Format:      DIRB [/S] [/H] [/W] [/P] [/2] [compound-filespec]
+
+Purpose:     Displays the names of files on disk,  with the sizes in
+        bytes.
+
+Use:         DIRB is identical to the DIR command (see HELP DIR)  in
+        every respect except one:  the file sizes,  the total size of
+        the  listed  files and the free  space  figure  are  always
+        printed in bytes.  DIR prints the figures of 10K and over  in
+        kilobytes (a threshold that can be changed with the DIRK envi-
+        ronment item,  which can also limit the kilobytes to the  to-
+        tals line); DIRB ignores that item.
+
+Examples:
+
+        DIRB
+
+             All  filenames  and  directory  names  in  the  current
+        directory of the current drive will be printed,  with  their
+        sizes in bytes. This might be as follows:
+
+              Volume in drive A: is MSX-DOS 2
+              Directory of A:\
+
+             NEXTOR   SYS r    4455 86-06-19  2:45p
+             COMMAND3 COM r   10496 86-06-19  2:46p
+             UTILS           <dir>  86-06-19  2:50p
+             HELP            <dir>  86-06-19  2:50p
+              14951 bytes in 2 files   227328 bytes free
+
+        DIRB B:\HELP/W
+
+             A  'wide'  directory format has been requested  of  the
+        HELP directory on drive B:.  The sizes are only shown in the
+        totals line.
+
