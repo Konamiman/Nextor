@@ -1993,24 +1993,35 @@ GOT120:	LD	A,.IPARM##	; Parameter out of range.
 		SUBTTL	INKEY, INPUT
 ;        INKEY and INPUT (new in 2.40) read a keystroke or a line of input
 ; into an environment item:
-;            INKEY [prompt text] %name      INPUT [prompt text] %name
+;            INKEY [prompt text] %name [flags]     INPUT [prompt text] %name
 ; (the name is typed as %%name; parameter expansion reduces it to %name).
 ; The prompt text, if present, is printed first. INKEY reads a single key,
 ; INPUT a line with all the editing facilities that _BUFIN provides. The
 ; two entries share their code: the carry kept in AF' tells them apart.
+;        The optional flags number of INKEY (new in 3.0) is the sum of:
+;   1 => don't wait for a key: if none is waiting in the keyboard buffer,
+;        the item is set to the empty string (which deletes it) at once,
+;        and nothing is printed. Otherwise the key is read, echoed and
+;        followed by a CR/LF as usual.
+;   2 => empty the keyboard buffer after reading the key (or after finding
+;        no key with 1). Without 1 the buffer is always emptied before
+;        waiting for the key too (as INCH does).
+;   4 => store the code of the key as two hexadecimal digits instead of
+;        the key itself (so that keys like space, ESC, TAB or BS can be
+;        tested). The key is then read without echo and nothing at all
+;        is printed (an echoed control key would mess up the screen).
 @INKEY::	SCF	; Cy => INKEY.
 @INPUT::	EX	AF,AF'	; Save the INKEY/INPUT flag.
 	XOR	A
 	LD	(ENVNAME##),A	; No name seen yet.
+	LD	(ENVDATA##),A	; No prompt text yet.
 	OR	(HL)	; A parameter must be given.
 	LD	A,.NOPAR##
 	RET	Z
-	CALL	PRSENV	; A '%name' with no prompt text ?
-	JR	NZ,INP10
-	CALL	GETCH##	; Yes if the line ends after it.
-	JR	Z,INP30
-INP10:	LD	DE,ENVDATA##	; Copy the prompt text to BUFF, up
-INP20:	LD	A,(HL)	;   to a '%' or the end of the
+	CALL	PRSENV	; A '%name' first => no prompt text.
+	JR	Z,INP40
+	LD	DE,ENVDATA##	; Else copy the prompt text to BUFF,
+INP20:	LD	A,(HL)	;   up to a '%' or the end of the
 	OR	A	;   line.
 	JR	Z,INP30
 	CP	"%"
@@ -2019,35 +2030,73 @@ INP20:	LD	A,(HL)	;   to a '%' or the end of the
 	INC	DE
 	INC	HL
 	JR	INP20
-INP30:	PUSH	AF
-	XOR	A	; Terminate the prompt text.
+INP30:	XOR	A	; Terminate the prompt text.
 	LD	(DE),A
-	POP	AF
-	OR	A	; Parse the '%name' if the text
-	CALL	NZ,PRSENV	;   ended with '%'.
-	LD	A,.INP##
+	OR	(HL)	; Parse the '%name' if the text ended
+	CALL	NZ,PRSENV	;   with one (else .NOPAR below).
+INP40:	CALL	GETCH##	; Anything after the name ?
+	LD	E,#00	;   (the flags default to 0)
+	JR	Z,INP50
+	EX	AF,AF'	; INPUT: 'too many parameters'.
+	JP	NC,INP45
+	EX	AF,AF'
+	CALL	GET8##	; INKEY: read the flags number into E;
+	CALL	Z,CHKNO##	;   nothing may follow it, and it
+	CALL	Z,CHKEOL##	;   must be 0 to 7.
 	RET	NZ
-	CALL	GETCH##	; No garbage after the name.
-	LD	A,.INP##
-	RET	NZ
-	LD	A,(ENVNAME##)	; A '%name' must have been given.
+	LD	A,E
+	CP	#08
+	LD	A,.IPARM##
+	RET	NC
+INP50:	LD	A,(ENVNAME##)	; A '%name' must have been given.
 	OR	A
 	LD	A,.NOPAR##
 	RET	Z
+	PUSH	DE	; E = the flags.
 	LD	DE,ENVDATA##	; Print the prompt text.
 	CALL	PRTSTR##
+	POP	DE
 	EX	AF,AF'
-	JR	NC,INP40	; Go if INPUT.
-	CALL	INCH##	; INKEY: read one key (returned in
-	LD	A,L	;   L) and make a one-character
-	LD	HL,ENVDATA##	;   string of it in BUFF.
-	LD	(HL),A
-	INC	HL
-	LD	(HL),0
-	DEC	HL
-	EX	DE,HL
-	JR	INP50
-INP40:	LD	HL,ENVDATA##	; INPUT: read a line of up to 127
+	JR	NC,INP70	; Go if INPUT.
+	PUSH	DE	; INKEY: keep the flags (BDOS calls
+	LD	A,E	;   may corrupt DE).
+	RRA	; Flags bit 0 => don't wait.
+	JR	C,INP55
+	CALL	FLUSHKB##	; Else empty the keyboard buffer first,
+	JR	INP57	;   as INCH does, and wait for a key.
+INP55:	LD	C,_CONST##	; A key waiting in the buffer ?
+	CALL	BDOS
+	LD	L,A	; No (A=0): the item gets the empty
+	JR	Z,INP60	;   string, and nothing is printed.
+INP57:	POP	DE	; Flags bit 2 => read the key without
+	PUSH	DE	;   echo, and no CR/LF either.
+	BIT	2,E
+	JR	NZ,INP58
+	LD	C,_CONIN##	; Else read and echo it, then CR/LF,
+	CALL	BDOS	;   as INCH does.
+	LD	L,A
+	CALL	LPRINT##
+	JR	INP60
+INP58:	LD	C,_INNOE##
+	CALL	BDOS
+	LD	L,A
+INP60:	POP	DE	; E = the flags again.
+	LD	A,L	; A = the key, or 0 if none.
+	LD	HL,ENVDATA##
+	OR	A	; None: the item gets the empty string.
+	JR	Z,INP65
+	BIT	2,E	; Flags bit 2 => the code of the key as
+	JR	Z,INP65	;   two hexadecimal digits in BUFF
+	CALL	MKBYTE##	;   (then A = 0, the terminator).
+	XOR	A
+INP65:	LD	(HL),A	; Else a one-character string of the
+	INC	HL	;   key (or the empty string).
+	LD	(HL),#00
+INP67:	BIT	1,E	; Flags bit 1 => empty the keyboard
+	CALL	NZ,FLUSHKB##	;   buffer now.
+	LD	DE,ENVDATA##
+	JR	INP80
+INP70:	LD	HL,ENVDATA##	; INPUT: read a line of up to 127
 	LD	(HL),#7F	;   characters into BUFF,
 	EX	DE,HL
 	LD	C,_BUFIN##
@@ -2062,9 +2111,13 @@ INP40:	LD	HL,ENVDATA##	; INPUT: read a line of up to 127
 	LD	(HL),0
 	POP	DE
 	INC	DE
-INP50:	LD	HL,ENVNAME##	; Set the environment item named at
+INP80:	LD	HL,ENVNAME##	; Set the environment item named at
 	LD	C,_SENV##	;   BUFF2 to the value at (DE).
 	JP	BDOS
+
+INP45:	LD	A,.INP##	; Garbage after the name of INPUT.
+	OR	A
+	RET
 
 ;        Parse a '%name' argument: if (HL) does not point at a '%' then NZ
 ; is returned with nothing done. Otherwise the name after the '%' is copied

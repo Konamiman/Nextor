@@ -1,7 +1,7 @@
-INKEY                                                         [2.40]
+INKEY                                                    [2.40, 3.0]
 -----
 
-Format:      INKEY [string] %%envname
+Format:      INKEY [string] %%envname [flags]
 
 Purpose:     Reads a single keystroke and places it into an environ-
         ment variable.
@@ -12,6 +12,35 @@ Use:         When a  string is specified, it will be displayed. Next
 
              Note that the environment item name must be preceded by
         two percent signs and not enclosed in percent signs.
+
+             Normally any keystrokes already waiting in the keyboard
+        buffer are  discarded first,  then INKEY  waits for  a  key,
+        which is displayed and followed by a new line. This  can  be
+        changed with the optional flags number (new in 3.0),  which
+        is the sum of the following values:
+
+        1    Do not wait for a key. If a keystroke is already  wait-
+             ing in the keyboard buffer,  it is read and  displayed
+             as usual; otherwise the environment item  is  deleted,
+             so that %envname% expands to nothing,  and nothing  is
+             displayed.
+
+        2    Discard any keystrokes remaining in the keyboard buffer
+             after the key has been read  (or after finding  no key
+             waiting, with 1).
+
+        4    Store the code of the key as two  hexadecimal  digits
+             (for example 20 for the space bar,  1B for ESC, 09 for
+             TAB, 08 for BS, 7F for DEL, 0D for RETURN) instead  of
+             the key itself,  so that such keys can be tested.  The
+             key is not displayed in this case, and neither is  the
+             new line that normally follows it.
+
+             So, for example, the flags value 0 (the default)  waits
+        for a key, 1 only checks whether a key was pressed, 2 waits
+        for a key and then empties the keyboard buffer,  3  checks
+        for a key and then empties the keyboard buffer,  4 waits for
+        a key and stores its code, and 7 does all three things.
 
 Examples:
 
@@ -30,4 +59,32 @@ Examples:
              The value of the environment item ITEM is displayed and
         a keystroke  is read  and placed  into the  environment item
         KEY.
-
+
+        INKEY %%KEY 1
+
+             If a keystroke is waiting it is placed into KEY, other-
+        wise KEY is deleted;  the batch file continues at once  ei-
+        ther way.  This allows a .BTM batch file to check for a key
+        press while it repeats some commands, for example:
+
+                  ~LOOP
+                  INKEY %%KEY 1
+                  IF NOT {%KEY%} == {} GOTO ~DONE
+                  ECHO Working...
+                  GOTO ~LOOP
+                  ~DONE
+                  ECHO You pressed %KEY%
+
+        INKEY Press any key %%KEY 2
+
+             The text is displayed and a keystroke is read into KEY.
+        Any other keystrokes typed meanwhile  (for example the  re-
+        peats of a key held down)  are then discarded,  so that they
+        do not reach the next command.
+
+        INKEY Press ESC to cancel, any other key to continue %%KEY 4
+        IF {%KEY%} == {1B} GOTO ~CANCEL
+
+             The text is displayed and the code of the key  pressed
+        is placed into KEY as two hexadecimal digits,  which is the
+        only way to test for a key such as ESC.
