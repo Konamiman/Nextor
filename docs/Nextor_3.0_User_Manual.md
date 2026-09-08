@@ -424,6 +424,8 @@ Also, the resident code of `NEXTOR.SYS` is more compact than it was in Nextor 2,
 
 Also, `NEXTOR.SYS` now loads the new `COMMAND3.COM` command interpreter when it is present in the boot drive, falling back to `COMMAND2.COM` otherwise; see _[3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)_.
 
+Also, `NEXTOR.SYS` now looks for `AUTOEXEC.BTM` in the boot drive before `AUTOEXEC.BAT`: when a file with that name exists, it is the one executed at boot time (and `AUTOEXEC.BAT` is ignored, even if it exists too). The command interpreter loads `.BTM` batch files whole into memory before executing them, which is what allows the `GOTO`, `GOSUB`, `RETURN` and `END` commands in them (see the `BATCH` subject of the `HELP` command); thus the boot batch file can now use them as well. `AUTOEXEC.BTM` is executed by `COMMAND3.COM` and by `COMMAND2.COM` 2.40 or later; an older `COMMAND2.COM` does not recognize `.BTM` files and simply displays the prompt, so with such an interpreter `AUTOEXEC.BTM` must not exist for `AUTOEXEC.BAT` to be executed. As with `AUTOEXEC.BAT`, the boot drive is passed to the batch file as `%1`.
+
 Finally, when the DOS environment can't be loaded at boot time (e.g. because the command interpreter is missing or incompatible), Nextor will now print a proper error message (for example "Command interpreter not found" or "Incompatible DOS version") before falling back to the BASIC prompt, instead of repeatedly asking the user for another disk or failing silently.
 
 ### 2.15. File mounting and disk emulation mode
@@ -526,7 +528,7 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if `NEXTOR.SYS` and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BAT` is executed (if present). When `NEXTOR.SYS` is missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
+2.  Otherwise, if `NEXTOR.SYS` and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BTM` (or `AUTOEXEC.BAT`, when the former does not exist; see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_) is executed (if present). When `NEXTOR.SYS` is missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
 
 3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
