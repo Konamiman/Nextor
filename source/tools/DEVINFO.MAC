@@ -92,13 +92,13 @@ GET_INFO_1:
 
 	push af
 	ld a,(iy+2)
-	ld ix,BUF_INFO
+	ld ix,BUF_NUMBER
 	call BYTE2ASC##
 	ld (ix),0
 	ld	de,DEV_MSG
 	ld	c,_ZSTROUT##
 	call	5
-	ld de,BUF_INFO
+	ld de,BUF_NUMBER
 	ld	c,_ZSTROUT##
 	call	5
 	ld	de,CRLF
@@ -506,6 +506,7 @@ BUF: equ 2000h
 BUF_DEV_IS_ONLINE: equ BUF
 BUF_REG: equ BUF_DEV_IS_ONLINE+1
 BUF_REG2	equ	BUF_REG+8
-BUF_INFO	equ	BUF_REG2+8
+BUF_NUMBER	equ	BUF_REG2+8
+BUF_INFO	equ	BUF_NUMBER+4
 
 	end
