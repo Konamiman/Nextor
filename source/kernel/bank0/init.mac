@@ -3985,7 +3985,21 @@ ADOPT_V2_DRIVERS_ENTRY:
 	rrca				;Is device-based
 	ret	nc
 	res	5,(hl)			;Mark Nextor 2 kernel compatible
-	ret
+	; Initialize the adapter once per adopted driver. The legacy driver
+	; keeps its existing work area and is not initialized again.
+	ld	a,(hl)
+	and	10001111b
+	ld_	iyl,a
+	ld	hl,0
+	ld	de,CHPUT
+	ld	a,(BOOTKEYS##)
+	and	00100000b
+	ld	c,a
+	ld	a,DRIVER_QUERY.INIT_ROM##
+	ex	af,af'
+	ld	a,6
+	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
+	jp	CALBNK##
 
 ;-----------------------------------------------------------------------------
 

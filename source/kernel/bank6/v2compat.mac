@@ -22,7 +22,8 @@
 ; EXTBIO handlers are not called.  Devices 1..7 are exposed as LUN 1 only;
 ; availability is probed, while available media report change state unknown.
 ; Default drive mappings identify configured devices even when they are empty.
-; Unsupported lifecycle, custom query and formatting operations are rejected.
+; ROM initialization reports adoption without reinitializing the legacy driver.
+; Other lifecycle, custom query and formatting operations are rejected.
 ;
 
 V2_RDBANK		equ	403Ch
@@ -51,6 +52,8 @@ V21_BK4_ADD		equ	0F1D0h	;Nextor 2.1 location (beta 2 and later)
 	jr	z,V2_DQ_STRING
 	cp	DRIVER_QUERY.GET_MAX_DEVICE##
 	jr	z,V2_DQ_MAX_DEVICE
+	cp	DRIVER_QUERY.INIT_ROM##
+	jr	z,V2_DQ_INIT
 
 	; The legacy driver is already initialized. Lifecycle operations have no
 	; generally safe translation in this facade.
@@ -84,6 +87,46 @@ V2_DQ_MAX_DEVICE:
 	ld	b,V2_MAX_DEVICE		;Nextor 2 device indices are 1..7
 	xor	a
 	ret
+
+V2_DQ_INIT:
+	; Initialize the facade only. Use the caller's print callback (AF only).
+	push	de
+	pop	ix
+	ld	hl,V2_INIT_MESSAGE
+	call	V2_INIT_PRINT
+	ld_	a,iyl
+	ld	b,a
+	and	3
+	add	a,'0'
+	call	JPIX##
+	bit	7,b
+	jr	z,V2_INIT_DONE
+	ld	a,'-'
+	call	JPIX##
+	ld	a,b
+	rrca
+	rrca
+	and	3
+	add	a,'0'
+	call	JPIX##
+V2_INIT_DONE:
+	ld	hl,V2_INIT_NEWLINE
+	call	V2_INIT_PRINT
+	xor	a
+	ret
+
+V2_INIT_PRINT:
+	ld	a,(hl)
+	or	a
+	ret	z
+	call	JPIX##
+	inc	hl
+	jr	V2_INIT_PRINT
+
+V2_INIT_MESSAGE:
+	db	13,"--- Using Nextor 2 driver at slot ",0
+V2_INIT_NEWLINE:
+	db	13,10,13,10,0
 
 ;-----------------------------------------------------------------------------
 ; Nextor 3 DEVICE_QUERY facade.  A Nextor 2 device may have several LUNs;
