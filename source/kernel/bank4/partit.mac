@@ -323,53 +323,25 @@ UPDATE_SEC:
 ;       (TMP_SEC##) = Sector number
 ;Output: A = Error code from DEV_RW
 ;        NZ if A<>0
-;Corrupts: AF, IX, IY
+;Corrupts: AF, IY
 
 DEV_READ:
 	push	bc
 	push	de
 	push	hl
-;
-	ld	a,b
-	cp	0FFh
-	jr	nz,DEV_READ_RAM
-;
-	;--- ROM driver path
-	ld_	iyh,c
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	ld	(BK4_ADD##),ix
-	ld	ix,CALDRV##
 
-	ld	a,d
-	ld	c,e
-	ld	b,1
-	ld	hl,($SECBUF##)
-	ld	de,TMP_SEC##
-
-	call	CALSLT
-	jr	DEV_READ_DONE
-;
-	;--- RAM driver path
-DEV_READ_RAM:
 	ld	h,c		;H = slot
 	ld	l,b		;L = segment
+	push	hl		;Save slot:segment for IY
+	pop	iy		;IY = slot:segment
 	ld	a,d		;A = device number
 	ld	c,e		;C = media descriptor
-	ld	b,1		;B = 1 sector
-	push	hl		;Save slot:segment for IY
-	ld	hl,($SECBUF##)	;HL = buffer
-	ld	de,TMP_SEC##	;DE = sector number pointer
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	pop	iy		;IY = slot:segment
-	or	a		;NC = read (the CP 0FFh above left
-	call	CALL_MAP##	; the carry set, and CALL_MAP
-;				; passes the flags to the driver)
-DEV_READ_DONE:
+	or	a		;NC = read
+	call	AA_DOSEC2
+
 	pop	hl
 	pop	de
 	pop	bc
-
-	or	a
 	ret
 
 
@@ -1642,6 +1614,12 @@ AA_DOSEC:
 	push	hl
 	pop	iy
 
+;Common sector I/O with the driver already selected.
+;Input: IY = slot:segment, A = device, C = media descriptor,
+;       Cy = read/write, (TMP_SEC) = sector number
+;Output: A = error code, NZ on error; preserves IX
+
+AA_DOSEC2:
 	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
 	ld	b,1
