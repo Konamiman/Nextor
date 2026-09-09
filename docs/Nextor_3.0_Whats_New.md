@@ -156,7 +156,7 @@ Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on 
 
 `COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`, which loads it when present and falls back to loading `COMMAND2.COM` otherwise; any `COMMAND2.COM` from version 2.20 still works with Nextor 3, but without the new features. See _[3.10. The COMMAND3.COM command interpreter](Nextor_3.0_User_Manual.md#310-the-command3com-command-interpreter)_ in the user manual for the details.
 
-Also, `NEXTOR.SYS` now looks for `AUTOEXEC.BTM` in the boot drive before `AUTOEXEC.BAT`: when a file with that name exists it is the one executed at boot time, so the boot batch file can use `GOTO`, `GOSUB`, `RETURN` and `END`, which are only available in `.BTM` batch files (they are loaded whole into memory before being executed). `AUTOEXEC.BTM` works with `COMMAND3.COM` and with `COMMAND2.COM` 2.40 or later. See _[2.14. Enhanced NEXTOR.SYS](Nextor_3.0_User_Manual.md#214-enhanced-nextorsys)_ in the user manual.
+Also, `NEXTOR.SYS` now looks for `AUTOEXEC.BTM` in the boot drive before `AUTOEXEC.BAT`: when a file with that name exists it is the one executed at boot time, so the boot batch file can use `GOTO`, `GOSUB`, `RETURN` and `END`, which are only available in `.BTM` batch files (they are loaded whole into memory before being executed). `AUTOEXEC.BTM` is looked for only when `COMMAND3.COM` is the interpreter loaded; a `COMMAND2.COM` fallback always gets `AUTOEXEC.BAT`. See _[2.14. Enhanced NEXTOR.SYS](Nextor_3.0_User_Manual.md#214-enhanced-nextorsys)_ in the user manual.
 
 ### 2.13. The BUFINSERT environment item
 

@@ -192,7 +192,7 @@ endif
 ;
 	LD	HL,AUTOCMD	; First boot: AUTOEXEC.BAT, unless AUTOEXEC.BTM
 	DEC	A		;   turns out to exist. That is checked once the
-	LD	(AUTOFLG),A	;   BDOS is usable (AUTOBTM, called from NPERR).
+	LD	(AUTOFLG),A	;   BDOS is usable (AUTOBTM, from NPOPEN3).
 COPYCMD:LD	C,(HL)		; Get length of command.
 	INC	C		; Include length byte (B=0 from above).
 	INC	C		; Include null on end.
@@ -334,12 +334,11 @@ REJOIN:	LD	BC,0*256+_JOIN; Reset file handles etc.
 ;
 	CALL	DERR		; Else print error message.
 	CALL	CRLF
-NPERR:	CALL	AUTOBTM	; AUTOEXEC.BTM instead of .BAT if it exists.
-	LD	DE,CMND3	; Attempt to open COMMAND3.COM
+NPERR:	LD	DE,CMND3	; Attempt to open COMMAND3.COM
 	LD	C,_OPEN	;   first.
 	XOR	A
 	CALL	BDOS
-	JR	Z,NPOPEN
+	JR	Z,NPOPEN3
 	CP	.NOFIL	; Fall back to COMMAND2.COM only
 	JP	NZ,LDERR	;   when COMMAND3.COM simply is
 	LD	DE,CMNDM	;   not there; report any other
@@ -347,6 +346,11 @@ NPERR:	CALL	AUTOBTM	; AUTOEXEC.BTM instead of .BAT if it exists.
 	XOR	A
 	CALL	BDOS		; Attempt to open COMMAND2.COM.
 	JP	NZ,LDERR	; Go if error.
+	JR	NPOPEN		; COMMAND2.COM gets AUTOEXEC.BAT only.
+;
+NPOPEN3:PUSH	BC		; COMMAND3.COM: AUTOEXEC.BTM instead of
+	CALL	AUTOBTM		;   .BAT if it exists (B, the file handle,
+	POP	BC		;   is kept: AUTOBTM opens a file too).
 NPOPEN:
 ;
 	LD	DE,100H		; Else load program to here.
@@ -433,9 +437,11 @@ LDERR_SAVE:
 ; file instead. It is the interpreter that loads and executes  it. The file is
 ; only opened and then closed here, to find out whether it exists.
 ;
-;        This  is  called  from NPERR, once the BDOS is usable, and does nothing
-; unless AUTOFLG is set; the flag is cleared so that a  later  re-boot  (which
-; gets no command at all) does not repeat the check.
+;        This  is called from NPOPEN3, once COMMAND3.COM has been opened: only
+; that interpreter gets the .BTM (a COMMAND2.COM,  which may be older than the
+; 2.40 that introduced .BTM files, is always handed AUTOEXEC.BAT).  It does
+; nothing unless AUTOFLG is set,  and clears the flag so that a later  re-boot
+; (which gets no command at all) does not repeat the check.
 ;
 AUTOBTM:LD	HL,AUTOFLG
 	LD	A,(HL)
