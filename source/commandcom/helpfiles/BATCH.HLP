@@ -146,14 +146,17 @@ BATCH FILES
                  First parameter: command
 
              When  Nextor starts up for the first time,  a  special
-        batch   file  called  AUTOEXEC.BAT  is  looked  for  and  is
-        executed if found. This may contain any Nextor command, and
-        usually contains once-only initialization commands,  such as
-        a RAMDISK command to set up a RAM disk.
+        batch  file called AUTOEXEC.BTM is looked for  in  the  boot
+        drive  and is executed if found;  when it does not exist,  a
+        file called AUTOEXEC.BAT is looked for and executed instead.
+        This may contain any Nextor command, and usually  contains
+        once-only  initialization commands,  such as a RAMDISK  com-
+        mand to set up a RAM disk.  Being a BTM file,  AUTOEXEC.BTM
+        may use GOTO, GOSUB, RETURN and END (see above).
 
-             One % parameter is passed to AUTOEXEC.BAT as  %1.  This
-        the  drive that Nextor booted from and is in the form of  a
-        normal drive letter followed by a colon.
+             One % parameter is passed to the AUTOEXEC batch file as
+        %1. This the drive that Nextor booted from and is  in  the
+        form of a normal drive letter followed by a colon.
 
              Another  special  batch  file is  REBOOT.BAT.  This  is
         executed  when Nextor is re-booted after using  some  other

@@ -155,6 +155,8 @@ STARTUP:LD	HL,P3BDOS	; Character outputs initially go through page 3
 ;
 RESTART:LD	HL,0		; Zero main and secondary errors returned by
 	LD	(ERROR2),HL	;   process.
+	XOR	A
+	LD	(AUTOFLG),A	; No AUTOEXEC.BTM check pending (see AUTOBTM).
 ;
 ifdef ver880722
 	LD	DE,80H		; DE -> command line buffer.
@@ -168,6 +170,7 @@ endif
 	LD	(AUTPAT),A	;   a parameter (so that the batch files can
 	LD	(REBPAT),A	;   access the boot drive as %1).
 	LD	(AUTOCMD+1),A	; Load AUTOEXEC from the boot drive.
+	LD	(BTMCMD),A	; Look for AUTOEXEC.BTM in the boot drive too.
 	LD	(REBCMD+1),A	; Load REBOOT from the boot drive.
 	LD	(CMNDM),A	; Load the command interpreter
 	LD	(CMND3),A	;   from the boot drive.
@@ -183,11 +186,13 @@ endif
 	LD	A,(HL)
 	LD	(HL),H		;   (set flag => not first time any more)
 ;
-	LD	HL,AUTOCMD
-	OR	A
-	JR	Z,COPYCMD
-;
 	LD	HL,REBCMD
+	OR	A
+	JR	NZ,COPYCMD
+;
+	LD	HL,AUTOCMD	; First boot: AUTOEXEC.BAT, unless AUTOEXEC.BTM
+	DEC	A		;   turns out to exist. That is checked once the
+	LD	(AUTOFLG),A	;   BDOS is usable (AUTOBTM, from NPOPEN3).
 COPYCMD:LD	C,(HL)		; Get length of command.
 	INC	C		; Include length byte (B=0 from above).
 	INC	C		; Include null on end.
@@ -333,7 +338,7 @@ NPERR:	LD	DE,CMND3	; Attempt to open COMMAND3.COM
 	LD	C,_OPEN	;   first.
 	XOR	A
 	CALL	BDOS
-	JR	Z,NPOPEN
+	JR	Z,NPOPEN3
 	CP	.NOFIL	; Fall back to COMMAND2.COM only
 	JP	NZ,LDERR	;   when COMMAND3.COM simply is
 	LD	DE,CMNDM	;   not there; report any other
@@ -341,6 +346,11 @@ NPERR:	LD	DE,CMND3	; Attempt to open COMMAND3.COM
 	XOR	A
 	CALL	BDOS		; Attempt to open COMMAND2.COM.
 	JP	NZ,LDERR	; Go if error.
+	JR	NPOPEN		; COMMAND2.COM gets AUTOEXEC.BAT only.
+;
+NPOPEN3:PUSH	BC		; COMMAND3.COM: AUTOEXEC.BTM instead of
+	CALL	AUTOBTM		;   .BAT if it exists (B, the file handle,
+	POP	BC		;   is kept: AUTOBTM opens a file too).
 NPOPEN:
 ;
 	LD	DE,100H		; Else load program to here.
@@ -388,7 +398,8 @@ ZLOOP:	LD	(HL),H
 	JP	100H		; Jump to the program.
 ;
 ;
-AUTOCMD:DEFB	18,'A:\AUTOEXEC.BAT '	; A: patched to the boot drive.
+AUTOCMD:DEFB	18,'A:\AUTOEXEC.B'	; A: patched to the boot drive.
+AUTOEXT: DEFB	'AT '			; 'AT' changed to 'TM' by AUTOBTM.
 AUTPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
 REBCMD:	DEFB	16,'A:\REBOOT.BAT '	; A: patched to the boot drive.
 REBPAT:	 DEFB	'A:',0			; A: patched to the boot drive.
@@ -417,6 +428,40 @@ LDERR_SAVE:
 	CALL	$DOSON##	; Restore BASIC ROM pages
 				;   (kernel also flushes ERR_TO_BASIC there).
 	JP	4022H		; Disk BASIC warm start (BASENT in NEXTOR cart).
+;
+;
+;        AUTOEXEC.BTM takes precedence over AUTOEXEC.BAT (new in 3.0). When the
+; command  set up by RESTART is the AUTOEXEC one and a file called AUTOEXEC.BTM
+; exists in the boot drive, the extension of the file name in the command line
+; buffer  at  80H  is changed to BTM, so that the command interpreter runs that
+; file instead. It is the interpreter that loads and executes  it. The file is
+; only opened and then closed here, to find out whether it exists.
+;
+;        This  is called from NPOPEN3, once COMMAND3.COM has been opened: only
+; that interpreter gets the .BTM (a COMMAND2.COM,  which may be older than the
+; 2.40 that introduced .BTM files, is always handed AUTOEXEC.BAT).  It does
+; nothing unless AUTOFLG is set,  and clears the flag so that a later  re-boot
+; (which gets no command at all) does not repeat the check.
+;
+AUTOBTM:LD	HL,AUTOFLG
+	LD	A,(HL)
+	LD	(HL),0		; Once only.
+	OR	A
+	RET	Z		; Not the AUTOEXEC command: nothing to do.
+;
+	LD	DE,BTMCMD	; Open AUTOEXEC.BTM in the boot drive, read
+	LD	A,1		;   only.
+	LD	C,_OPEN
+	CALL	BDOS
+	RET	NZ		; Not there (or not readable): keep the .BAT.
+;
+	LD	C,_CLOSE	; Close it again (B = the file handle).
+	CALL	BDOS
+	LD	HL,'M'*256+'T'	; Make the command 'AUTOEXEC.BTM': the 'AT'
+	LD	(80H+AUTOEXT-AUTOCMD),HL	;   of 'BAT' becomes 'TM' (low byte first).
+	RET
+;
+BTMCMD:	DEFB	'A:\AUTOEXEC.BTM',0	; A: patched to the boot drive.
 ;
 ;
 BAD_KERNEL:			; The kernel is not Nextor 3 or later.
@@ -1844,6 +1889,7 @@ LEN3	EQU	100		; Length of buffer 3 (must be >63).
 ;
 	VAR	ERROR, 1	; Main error code.            These two must be
 	VAR	ERROR2, 1	; Secondary error code.         in this order
+	VAR	AUTOFLG, 1	; NZ => check for AUTOEXEC.BTM (see AUTOBTM).
 ;
 ;
 	VAR	BDOS_STUFF, 9+2+2

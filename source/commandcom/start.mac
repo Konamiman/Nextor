@@ -380,6 +380,8 @@ START::	LD	SP,BOOTSTRAP##
 			;   re-load message copies made below
 			;   (STRCODES) English.
 	LD	(HINTMSG##),A	; No hint message pending (see ERROR).
+	LD	(BATPAGE##),A	; No .BTM segment allocated (the end of
+			;   a batch file releases it if not 0).
 	LD	B,#5A	; _DOSVER with the magic numbers:
 	LD	HL,#1234	;   only Nextor returns the extended
 	LD	DE,#ABCD	;   version information in IX/IY.

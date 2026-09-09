@@ -841,14 +841,18 @@ RSTPG2::	LD	A,(TMPPAGE##)	; Switch the saved segment back in.
 ;******************************************************************************
 ;        This  routine  waits  for  a  key  to  be  pressed and then echos the
 ; character and prints a CR,LF, returning the character in L.  Before  reading
-; the  character,  a  loop  is  entered  which  ensures that no characters are
+; the  character,  FLUSHKB  is  called,  which  ensures  that no characters are
 ; immediately waiting to be read, thus flushing the keyboard buffer first.
-; On exit, C contains the character.
-IC0:	LD	C,_INNOE##	; Get character with no echo.
+;        FLUSHKB (also used by INKEY) reads and discards, without echo, every
+; character waiting in the keyboard buffer. Returns A = 0 and Z set.
+FLUSHKB::	LD	C,_CONST##	; Console status.
 	CALL	BDOS
-INCH::	LD	C,_CONST##	; Console status.
-	CALL	BDOS
-	JR	NZ,IC0	; If key pressed, then read it.
+	RET	Z	; Return if no key waiting.
+	LD	C,_INNOE##	; Else get it with no echo, and
+	CALL	BDOS	;   look again.
+	JR	FLUSHKB
+
+INCH::	CALL	FLUSHKB	; Flush the keyboard buffer.
 	LD	C,_CONIN##	; Wait for, read & echo another key.
 	CALL	BDOS	; Character in L.
 	JP	LPRINT

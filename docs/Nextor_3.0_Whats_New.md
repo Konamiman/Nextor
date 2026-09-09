@@ -150,9 +150,13 @@ Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on 
 
 * The command line editor honors the new `BUFINSERT` environment item (see _[2.13. The BUFINSERT environment item](#213-the-bufinsert-environment-item)_): when it is `ON`, each line starts in insert mode.
 
+* The `INKEY` command accepts an optional flags number after the environment item name: `1` makes it not wait for a key (the item is deleted when no keystroke is waiting, so a `.BTM` file can check for a key press while it repeats some commands), `2` makes it discard any keystrokes remaining in the keyboard buffer after reading the key, and `4` stores the code of the key as two hexadecimal digits instead of the key itself, so that keys like the space bar, ESC or TAB can be tested; the values can be added together.
+
 `COMMAND3.COM` contains all its messages in both English and Japanese, like the `COMMAND2.COM` of the Japanese MSX-DOS 2 did: the Japanese messages are used while the kanji mode is active, unless the `ERRLANG` environment item is set to `EN` (the same rules that the kernel and `NEXTOR.SYS` apply to the error messages). To make room for the second language, the list of subjects printed by `HELP` with no parameters is no longer built into the interpreter: it is read from the new `INDEX.HLP` file (`JINDEX.HLP`, in Japanese, while the Japanese messages are active, falling back to `INDEX.HLP` when that file does not exist) in the help directory, and "File for HELP not found" (followed by a hint about where the index file is expected to be) is reported when the file is not present. See _[3.10.5. Japanese messages](Nextor_3.0_User_Manual.md#3105-japanese-messages)_ in the user manual for the details.
 
 `COMMAND3.COM` requires a Nextor 3 kernel and version 3 of `NEXTOR.SYS`, which loads it when present and falls back to loading `COMMAND2.COM` otherwise; any `COMMAND2.COM` from version 2.20 still works with Nextor 3, but without the new features. See _[3.10. The COMMAND3.COM command interpreter](Nextor_3.0_User_Manual.md#310-the-command3com-command-interpreter)_ in the user manual for the details.
+
+Also, `NEXTOR.SYS` now looks for `AUTOEXEC.BTM` in the boot drive before `AUTOEXEC.BAT`: when a file with that name exists it is the one executed at boot time, so the boot batch file can use `GOTO`, `GOSUB`, `RETURN` and `END`, which are only available in `.BTM` batch files (they are loaded whole into memory before being executed). `AUTOEXEC.BTM` is looked for only when `COMMAND3.COM` is the interpreter loaded; a `COMMAND2.COM` fallback always gets `AUTOEXEC.BAT`. See _[2.14. Enhanced NEXTOR.SYS](Nextor_3.0_User_Manual.md#214-enhanced-nextorsys)_ in the user manual.
 
 ### 2.13. The BUFINSERT environment item
 
