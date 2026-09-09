@@ -22,8 +22,8 @@ Use:         When a  string is specified, it will be displayed. Next
         1    Do not wait for a key. If a keystroke is already  wait-
              ing in the keyboard buffer,  it is read and  displayed
              as usual; otherwise the environment item  is  deleted,
-             so that %envname% expands to nothing,  and nothing  is
-             displayed.
+             so that %envname% expands to nothing, and nothing  but
+             the string, if given, is displayed.
 
         2    Discard any keystrokes remaining in the keyboard buffer
              after the key has been read  (or after finding  no key

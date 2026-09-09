@@ -2001,15 +2001,16 @@ GOT120:	LD	A,.IPARM##	; Parameter out of range.
 ;        The optional flags number of INKEY (new in 3.0) is the sum of:
 ;   1 => don't wait for a key: if none is waiting in the keyboard buffer,
 ;        the item is set to the empty string (which deletes it) at once,
-;        and nothing is printed. Otherwise the key is read, echoed and
-;        followed by a CR/LF as usual.
+;        and nothing but the prompt text is printed. Otherwise the key is
+;        read, echoed and followed by a CR/LF as usual.
 ;   2 => empty the keyboard buffer after reading the key (or after finding
 ;        no key with 1). Without 1 the buffer is always emptied before
 ;        waiting for the key too (as INCH does).
 ;   4 => store the code of the key as two hexadecimal digits instead of
 ;        the key itself (so that keys like space, ESC, TAB or BS can be
-;        tested). The key is then read without echo and nothing at all
-;        is printed (an echoed control key would mess up the screen).
+;        tested). The key is then read without echo, and nothing but the
+;        prompt text is printed, not even a CR/LF (an echoed control key
+;        would mess up the screen).
 @INKEY::	SCF	; Cy => INKEY.
 @INPUT::	EX	AF,AF'	; Save the INKEY/INPUT flag.
 	XOR	A
