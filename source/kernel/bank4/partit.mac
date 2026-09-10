@@ -4519,16 +4519,16 @@ MAPDOS1_CHECK_LOOP:
 	jr	nz,MAPDOS1_CHK_NEXT
 
 	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)	;Check starting sector
-	cp	(iy+3)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 	cp	(iy+4)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2)
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 	cp	(iy+5)
 	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3)
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2)
 	cp	(iy+6)
+	jr	nz,MAPDOS1_CHK_NEXT
+	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3)
+	cp	(iy+7)
 	jr	nz,MAPDOS1_CHK_NEXT
 
 	pop	ix
