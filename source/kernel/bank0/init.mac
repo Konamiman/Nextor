@@ -768,8 +768,7 @@ RDABS:	CALLDOS	2Fh	;Absolute sector read
 ; Input: C = type (0=initializing, 1=skipping, 2=init OK, 3=init failed)
 ;        B = slot number (for types 0, 1)
 CALL_PRINT_KERNEL_MSG:
-	ld hl,PRINT_KERNEL_MSG##
-	set 7,h		;Bit 15 = call bank 6
+	ld hl,PRINT_KERNEL_MSG##+8000h	;Bit 15 = call bank 6
 	ld (BK4_ADD##),hl
 	jp C4PBK##
 

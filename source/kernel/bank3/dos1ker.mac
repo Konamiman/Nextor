@@ -6042,8 +6042,7 @@ A6101:	call	A609A			; mark FAT buffer as invalid
 	ld	c,a		;C = device number
 	ld_	a,iyh
 	ld	(BUF+100),a	;Save slot for bank 6 routine
-	ld	hl,FMT_PRINT_AND_CHOOSE##
-	set	7,h		;Bit 15 = call bank 6
+	ld	hl,FMT_PRINT_AND_CHOOSE##+8000h	;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF)
 	ld	de,512		;Buffer size
@@ -6069,8 +6068,7 @@ fmt_choice_d1:
 	inc	a
 	ld	b,a		;B = 1-based drive number
 	push	hl
-	ld	hl,F_FORMAT##
-	set	7,h		;Bit 15 = call bank 6
+	ld	hl,F_FORMAT##+8000h	;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl
 	pop	hl
 	call	C4PBK##		;Returns carry on error, A = DSKFMT error code
