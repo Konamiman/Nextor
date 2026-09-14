@@ -249,7 +249,7 @@ nextor_base.dat: \
 SDK_COMRELS = dos_calls.rel dos_errors.rel dos_file_handles.rel
 COMRELS = $(SDK_COMRELS) kvar.rel data.rel chgbnk.rel
 B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
-B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel alloc.rel)
+B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel alloc.rel skipfirm.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
@@ -358,7 +358,7 @@ bank1/B1.BIN: \
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel alloc.rel ../bank4/bootmenu.rel msg.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel alloc.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 

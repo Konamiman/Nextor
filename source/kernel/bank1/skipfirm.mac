@@ -1,0 +1,300 @@
+	.z80
+	name('skipfirm')
+	title	Nextor3
+	subttl	Firmware skip
+;-----------------------------------------------------------------------------
+;
+	INCLUDE	../macros.inc
+	INCLUDE	../const.inc
+	INCLUDE	../condasm.inc
+	INCLUDE	../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE	../../../sdk/asm/constants/msx_workarea.inc
+;
+USRTAB	equ	0F39Ah
+H.INIP	equ	0FDC7h		;Initialization hook
+H.STKE	equ	0FEDAh		;Autostart cartridge hook
+;
+;-----------------------------------------------------------------------------
+;
+SKIP_FIRM::
+	PROC	SKIP_FIRM
+;
+;    Called from bank 0 via the BPROC trampoline.  Neutralises firmwares
+; that would steal boot via H.STKE or built-in applications.
+;
+; Entry:  A = 0:  INIT  - patch firmware before it starts
+;         A <> 0: CLEAN - disable autostart firmware after the boot menu
+;
+		or	a
+		jp	nz,SKIP_FIRM_CLEAN
+;
+;-----------------------------------------------------------------------------
+;
+SKIP_FIRM_INIT:
+		call	CHECK_BOOT_KEY
+		ret	nz
+;
+		ld	a,23h
+		ld	(0CBD8h),a		;FS-A1
+		ld	(0C3CEh),a		;FS-A1F
+		ld	(0C3D2h),a		;FS-A1MK2
+;
+		ld	hl,VJE80A_MAGIC		;FS-A1WX/ST
+		ld	de,0C010h
+		ld	bc,VJE80A_MAGIC_END-VJE80A_MAGIC
+		ldir
+;
+		call	CHECK_FS4600F		;FS-4600F
+		ret	nz
+;
+		ld	hl,7FF9h				; National control port <- 00h
+		ld	de,8700h				; slot3-1 MSX word processor III
+		call	WRSLTDE
+;
+		ld	hl,6000h				; National bank select <- 04h
+		ld	de,8704h				; slot3-1 MSX word processor III
+WRSLTDE:
+		ld	a,d
+		jp	WRSLT
+;
+VJE80A_MAGIC:
+		db	'JWrite'
+VJE80A_MAGIC_END:
+;
+;-----------------------------------------------------------------------------
+;
+SKIP_FIRM_CLEAN:
+		call	CHECK_HITBIT		;HB-11
+		db	83h
+		dw	5E60h,5DB2h
+		jr	z,FOUND_HB11
+;
+		call	CHECK_BOOT_KEY
+		jr	nz,HIT_BOOT_KEY1
+;
+		call	CHECK_HITBIT		;HB-101/101P/201/201P
+		db	03h
+		dw	4043h,4027h
+		jr	z,FOUND
+;
+		call	CHECK_HITBIT		;HB-F1
+		db	87h
+		dw	4076h,4042h
+		jr	z,FOUND
+;
+		call	CHECK_HITBIT		;HB-F1II
+		db	87h
+		dw	4079h,4045h
+		jr	z,FOUND
+;
+		call	CHECK_HITBIT		;HB-F5
+		db	84h
+		dw	4051h,4027h
+		jr	z,FOUND
+;
+		call	CHECK_HITBIT		;HB-F9P/F9S
+		db	87h
+		dw	405Ch,40B8h
+		jr	z,FOUND
+;
+		call	CHECK_MBH3		;MB-H3
+		jr	z,FOUND
+;
+		call	CHECK_NMS8220		;NMS-8220
+		jr	z,FOUND
+;
+		ld	a,8Fh			;ML-G1/G10
+		ld	de,4039h
+		call	CHECK_H_STEK
+		jr	z,FOUND
+;
+		call	CHECK_MSXWRITE		;MSX-Write/PHC-77
+		jr	z,FOUND
+;
+		call	CHECK_FSA1GT		;FS-A1GT
+		ret	nz
+;
+		;Prevent boot from ROM drive (VSHELL)
+		xor	a
+		ld	(BOOT_DRV##),a
+		ret
+;
+HIT_BOOT_KEY1:
+		ld	a,(H.STKE)
+		cp	0C9h
+		ret	z
+HIT_BOOT_KEY2:
+		ld	hl,6474h
+		ld	(USRTAB),hl
+		ret
+;
+FOUND_HB11:
+		ld	de,H.INIP		;HB-11
+		;ld	hl,HB11_H_INIP
+		;ld	bc,5
+		ld	c,5
+		ldir
+;
+		; Work around for Word Land Sentence II
+		; dummy i/o port
+		ld	a,0F3h
+		; v9938 port work
+		ld	(0D001h),a
+;
+		call	CHECK_BOOT_KEY
+		jr	nz,HIT_BOOT_KEY2
+;
+FOUND:
+		ld	hl,H.STKE
+		ld	bc,05C9h
+FOUND_LP:
+		ld	(hl),c
+		inc	hl
+		djnz	FOUND_LP
+		ret
+;
+;-----------------------------------------------------------------------------
+;
+; Entry:  A = slot, DE = handler address
+; Output: Z = match, C = slot
+; Corrupts: AF, HL
+;
+CHECK_H_STEK_402E:
+		ld	de,402Eh
+CHECK_H_STEK:
+		ld	c,a
+		ld	hl,H.STKE
+		ld	a,(hl)
+		cp	0F7h
+		ret	nz
+		inc	hl
+		ld	a,(hl)
+		cp	c
+		ret	nz
+		inc	hl
+		ld	a,(hl)
+		cp	e
+		ret	nz
+		inc	hl
+		ld	a,(hl)
+		cp	d
+		ret	nz
+		inc	hl
+		ld	a,(hl)
+		cp	0C9h
+		ret
+;
+CMP_SLOT:
+		pop	hl
+CMP_SLOT_LP:
+		ex	de,hl
+		push	bc
+		push	de
+		ld	a,c
+		call	RDSLT
+		pop	de
+		pop	bc
+		ex	de,hl
+		inc	de
+		cp	(hl)
+		inc	hl
+		ret	nz
+		djnz	CMP_SLOT_LP
+		ret
+;
+CHECK_HITBIT:
+		pop	hl
+		ld	a,(hl)
+		inc	hl
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	c,(hl)
+		inc	hl
+		ld	b,(hl)
+		inc	hl
+		push	hl
+		push	bc
+		call	CHECK_H_STEK
+		pop	de
+		ret	nz
+		ld	b,HITBIT_MAGIC_END-HITBIT_MAGIC
+		call	CMP_SLOT
+HITBIT_MAGIC:
+		db	'HITBIT'
+HITBIT_MAGIC_END:
+;
+HB11_H_INIP:
+		rst	30h
+		db	83h
+		dw	5DE9h
+		ret
+;
+CHECK_MBH3:
+		ld	a,83h
+		call	CHECK_H_STEK_402E
+		ret	nz
+		ld	b,MBH3_MAGIC_END-MBH3_MAGIC
+		ld	de,4308h
+		call	CMP_SLOT
+MBH3_MAGIC:
+		db	'H3',0,'HCOPY'
+MBH3_MAGIC_END:
+;
+CHECK_NMS8220:
+		ld	de,4042h		;12 June 1986
+		call	NMS8220_JUNE
+		ret	z
+		ld	de,709Ah		;13 August 1986
+NMS8220_JUNE:
+		ld	a,8Fh
+		call	CHECK_H_STEK
+		ret	nz
+		ld	b,NMS8220_MAGIC_END-NMS8220_MAGIC
+		ld	de,706Ch
+		call	CMP_SLOT
+NMS8220_MAGIC:
+		db	'Philips'
+NMS8220_MAGIC_END:
+;
+CHECK_MSXWRITE:
+		ld	a,(H.STKE+1)
+		call	CHECK_H_STEK_402E
+		ret	nz
+		ld	b,MSXWRITE_MAGIC_END-MSXWRITE_MAGIC
+		ld	de,9A32h
+		call	CMP_SLOT
+MSXWRITE_MAGIC:
+		db	'YAMAHA-MSX-JWP-SYSTEM'
+MSXWRITE_MAGIC_END:
+;
+CHECK_BOOT_KEY:
+		ld	a,(BOOTKEYS##+4)	;GRAPH
+		and	40h
+		ret
+;
+CHECK_FS4600F:
+		ld	a,(EXPTBL)
+		add	a
+		jr	nc,FS4600F_NOEXT
+		ld	bc,88h+(FS4600F_MAGIC_END-FS4600F_MAGIC)*256
+		ld	de,0B9C6h
+		call	CMP_SLOT
+FS4600F_MAGIC:
+		db	'Matsushita 1985'
+FS4600F_MAGIC_END:
+FS4600F_NOEXT:
+		pop	hl
+		ret
+;
+CHECK_FSA1GT:
+		ld	a,(002Dh)
+		cp	3
+		ret	nz
+		ld	a,(002Eh)
+		dec	a
+		ret
+;
+	finish	<SKIPFIRM>
+	end

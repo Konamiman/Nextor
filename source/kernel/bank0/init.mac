@@ -299,12 +299,12 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; Bits are assigned to keys as follows:
     ;
     ; 0: .654321.
-    ; 1: ..CS.... (C = CTRL, S = SHIFT)
+    ; 1: .GCS.... (G=GRAPH, C = CTRL, S = SHIFT)
     ;
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
 
-    ; Set INVERT_SHIFT, INVERT_CTRL and/or INVERT_KANJI (for the "6" key)
+    ; Set INVERT_SHIFT, INVERT_CTRL, INVERT_GRAPH and/or INVERT_KANJI (for the "6" key)
     ; at assembly time to invert the meaning of the corresponding boot key.
     ; By default no key is inverted.
 
@@ -324,6 +324,10 @@ KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+10h
 
     ifdef INVERT_CTRL
 KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+20h
+    endif
+
+    ifdef INVERT_GRAPH
+KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+40h
     endif
 
 KEYS_INV_1: db KEYS_INV_1_VALUE
@@ -973,6 +977,8 @@ BM_GOTLINLEN:
 	call BOOT_MENU##
 
 AFTER_BOOT_MENU:
+    xor a
+    call    SKIP_FIRM##
 	ld	a,(ALL_KERNELS_DISABLED##)
 	or	a
 	jr	nz,ABM_SKIP_SCREEN
@@ -3162,7 +3168,7 @@ DO_KEYS_INIT:
     ld b,a
 
     ld a,(KEYS_INV_1)
-    and 00110000b
+    and 01110000b
     xor h
     ld h,a
 
@@ -3364,6 +3370,8 @@ GWORK2:
 ;    command from BASIC.
 
 CLEAR_STAT_P2:
+    ld  a,1
+    call    SKIP_FIRM##
 	call	GSLT1
 	ld	b,a
 	and	11b
