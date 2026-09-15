@@ -118,12 +118,18 @@ ifndef BANK
 
 CALL_INIT:
 	pop	ix
+	if $LOCAL-INITVECT eq 0
+	dec	ix
+	dec	ix
+	dec	ix
+	else
 	push	bc
 	ld	bc,$LOCAL-INITVECT-3
-	ex	af,af'
-	ld	a,B.INIT
 	add	ix,bc
 	pop	bc
+	endif
+	ex	af,af'
+	ld	a,B.INIT
 	jp	CALBNK##
 ;
 endif
