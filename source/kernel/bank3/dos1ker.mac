@@ -491,7 +491,6 @@ endif
 ; End of deleted code
 
 SET_SLOT:
-	ld	l,a
 	ld	a,h
 	ld	(KSLOT##),a
 	ld	a,l
@@ -5730,6 +5729,29 @@ A5FF3:	ld	c,a
 	add	hl,bc
 	ret
 
+; Prompt for a FORMAT choice via bank 6, then "Strike a key when ready".
+; On cancel, jumps to FMT_ABORT_D1. On return A = choice.
+
+FMT_CHOOSE_D1:
+	call	A609A			; mark FAT buffer as invalid
+	call	A6086		; get diskdriverparameters
+	ld	c,a		;C = device number
+	ld	(BUF+100-1),iy	;BUF+100 = slot for bank 6 (IYL at BUF+99 unused)
+	ld	hl,FMT_PRINT_AND_CHOOSE##+8000h	;Bit 15 = call bank 6
+	ld	(BK4_ADD##),hl
+	ld	hl,($SECBUF)
+	ld	de,512		;Buffer size
+	call	C4PBK##		;A = choice (1-9 or 0), Cy = cancelled
+	jp	c,FMT_ABORT_D1	;Cancelled
+	or	a
+	jr	nz,fmt_choice_d1
+	ld	a,1		;Default: choice 1
+fmt_choice_d1:
+	push	af		;Save choice
+	call	A6174		;Strike a key when ready (CTRL-C aborts internally)
+	pop	af
+	ret
+
 	ALIGN	603Dh
 
 A603D:	pop	af
@@ -5796,9 +5818,7 @@ A607B:	pop	hl
 ; looks like the previous jump is a patch, may be the 'ei' instruction at the end of the patch was forgotten ??
 ; patch code does not fit here, 1 byte too less
 
-	nop
-	nop
-	nop
+	ALIGN	6086h
 
 ;	Subroutine	get diskdriverparameters
 ;	Inputs		A=driveid
@@ -5815,11 +5835,12 @@ A608C:	sub	(hl)
 A6093:	add	a,(hl)			; driveid driver
 	inc	hl
 	ld	h,(hl)			; slotid driver
+	ld	l,a
 	jp	SET_SLOT
-	nop
-	push	hl	;This line and the next two were commented out ?????
-	pop	iy
-	ret
+	;nop
+	;push	hl	;This line and the next two were commented out ?????
+	;pop	iy
+	;ret
 
 ;	Subroutine	mark FAT buffer as invalid
 ;	Inputs		A=driveid
@@ -5840,91 +5861,6 @@ A609A:	ld	hl,YF355
 	ex	de,hl
 	ld	(hl),0FFH
 	ret
-
-;	Get bitmask of formattable drives
-;	Scans DRVTBL. For MSX-DOS drivers (KERNEX[i]=0), all drives are FDDs.
-;	For Nextor drivers (KERNEX[i]!=0), checks KERNEX_DOS1 FDD flag.
-;	If KERNEX_DOS1 is not available, returns mask for all drives (YF347).
-;	Outputs		A = bitmask (bit 0=drive A, bit 1=drive B, etc.)
-;	Modifies	AF, BC, DE, HL, IX, IY
-
-GET_FMT_MASK:
-	ld	hl,(KERNEX_DOS1##)
-	ld	a,h
-	or	l
-	jr	z,gfm_all	;No KERNEX_DOS1 table
-
-	push	hl
-	pop	iy
-	inc	iy		;IY = first KERNEX_DOS1 entry (skip count)
-
-	ld	ix,KERNEX##	;Nextor driver flags (4 bytes, one per DRVTBL entry)
-	ld	hl,YFB21	;DRVTBL
-	ld	c,0		;Result bitmask
-	ld	d,1		;Current bit position
-	ld	b,4		;4 DRVTBL entries
-
-gfm_entry:
-	ld	a,(hl)		;num_drives for this entry
-	or	a
-	jr	z,gfm_next_entry
-
-	ld	e,b		;Save outer loop counter
-	ld	a,(ix+0)	;Nextor driver?
-	or	a
-	jr	nz,gfm_nextor
-
-	;MSX-DOS driver: all drives are FDDs
-	ld	a,(hl)
-	ld	b,a
-gfm_msx_loop:
-	ld	a,c
-	or	d
-	ld	c,a
-	sla	d
-	djnz	gfm_msx_loop
-	ld	b,e
-	jr	gfm_next_entry
-
-gfm_nextor:
-	;Nextor driver: check KERNEX_DOS1 entries for FDD flag
-	ld	a,(hl)
-	ld	b,a
-gfm_nxt_loop:
-	bit	6,(iy+UD1_RELATIVE_DRIVE##)
-	jr	z,gfm_nxt_skip
-	ld	a,c
-	or	d
-	ld	c,a
-gfm_nxt_skip:
-	push	de
-	ld	de,UD1_SIZE##
-	add	iy,de
-	pop	de
-	sla	d
-	djnz	gfm_nxt_loop
-	ld	b,e
-
-gfm_next_entry:
-	inc	hl
-	inc	hl
-	inc	ix
-	djnz	gfm_entry
-
-	ld	a,c
-	ret
-
-gfm_all:
-	;No KERNEX_DOS1: all drives support formatting
-	ld	a,(YF347)
-	ld	b,a
-	xor	a
-gfm_all_loop:
-	scf
-	rla
-	djnz	gfm_all_loop
-	ret
-
 
 ;	Subroutine	FORMAT BIOS call (H.FORM)
 ;	Inputs
@@ -5950,6 +5886,14 @@ A60B1:	ld	(YF339),sp		; save stackpointer for abort
 	pop	bc
 	pop	hl
 	ret			;No formattable drives
+
+RD_MEM:
+	ld	hl,XF368        ; enable system diskrom
+	push	hl
+	ld	hl,4
+	add	hl,sp
+	push	hl
+	jp	XF36B           ; enable system diskrom
 
 FMT_HAS_DRIVES:
 	ld	(BUF+99),a	;Save mask
@@ -6032,45 +5976,23 @@ FMT_CHK_BIT:
 	jr	nc,FMT_ASK_DRIVE ;Drive not formattable
 
 	ld	a,c		;Restore drive index
-A6101:	call	A609A			; mark FAT buffer as invalid
-	call	A6086		; get diskdriverparameters
-	push	iy
-	push	af
+A6101:
+	call	FMT_CHOOSE_D1
 
-	;--- Get format choice via common bank 6 routine
-
-	ld	c,a		;C = device number
-	ld_	a,iyh
-	ld	(BUF+100),a	;Save slot for bank 6 routine
-	ld	hl,FMT_PRINT_AND_CHOOSE##+8000h	;Bit 15 = call bank 6
-	ld	(BK4_ADD##),hl
-	ld	hl,($SECBUF)
-	ld	de,512		;Buffer size
-	call	C4PBK##		;A = choice (1-9 or 0), Cy = cancelled
-	jp	c,FMT_ABORT_D1	;Cancelled
-	or	a
-	jr	nz,fmt_choice_d1
-	ld	a,1		;Default: choice 1
-fmt_choice_d1:
-	push	af		;Save choice
-	call	A6174		;Strike a key when ready (CTRL-C aborts internally)
+	ld	c,a		;C = choice (subfunction 1-9)
 
 	;--- Route format operation through F_FORMAT (bank 6).
 	;    F_FORMAT handles both Nextor and MSX-DOS drivers.
 
-	pop	af		;A = choice
-	pop	de		;Discard D = relative drive
-	pop	iy		;Discard IYh = slot
-	pop	de		;DE = buffer size
-	pop	hl		;HL = buffer address
-	ld	c,a		;C = choice (subfunction 1-9)
 	ld	a,(YF33F)	;A = 0-based drive index
 	inc	a
 	ld	b,a		;B = 1-based drive number
-	push	hl
 	ld	hl,F_FORMAT##+8000h	;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl
-	pop	hl
+
+	pop	de		;DE = buffer size
+	pop	hl		;HL = buffer address
+
 	call	C4PBK##		;Returns carry on error, A = DSKFMT error code
 	ld	hl,T61E0
 	jr	nc,A615D		; no error, print "format complete" and quit
@@ -6083,6 +6005,8 @@ fmt_choice_d1:
 A615D:	call	A62C9			; print CR/LF
 	call	A5F8C			; print string
 	jp	A62C9			; print CR/LF
+
+	ALIGN	6166h
 
 ;	Subroutine	get fresh keyboardinput
 ;	Inputs		
@@ -6101,6 +6025,7 @@ A6174:	call	A5F86
 	nop
 	nop				; room for expansion ??
 	nop				; extra 5 bytes
+
 A6195:	call	A6166			; get fresh keyboardinput
 	cp	003H
 	ret	nz
@@ -6116,9 +6041,7 @@ T61C7:	defb	"Disk error",0
 T61D2:	defb	"Bad parameter",0
 T61E0:	defb	"Format complete",0
 
-; unused code ??
-
-	nop
+	ALIGN	61F1h
 
 A61F1:	ld	de,TEMPST+30
 	ld	hl,(TEMPPT)
@@ -6206,6 +6129,7 @@ L625A:	ld	a,(YF33F)		; driveid
 	nop
 	nop				; room for expansion
 	nop				; extra 10 bytes
+
 A62BD:	call	A6166			; get fresh keyboardinput
 	cp	003H
 	jr	z,A62BD
@@ -6768,16 +6692,6 @@ A658D:	ld	a,(de)
 	ccf
 	ret
 
-CMD_BANK4:
-	res	7,d
-	push	de
-	call	A72DA
-	pop	ix
-	xor	a
-	ex	af,af
-	ld	a,4
-	jp	CALBNK##
-
 A65A1:	inc	hl
 	ld	a,(hl)
 A65A3:	and	a
@@ -6791,6 +6705,25 @@ A65A3:	and	a
 A65AD:	pop	hl
 	scf	;jp	OEMSTA
 	ret
+
+CMD_BANK4:
+	res	7,d
+	push	de
+	call	A72DA
+	pop	ix
+	xor	a
+	ex	af,af
+	ld	a,4
+	jp	CALBNK##
+
+	;T65B1:
+	;defb	"SYSTEM",0
+	;defw	A65C4
+	;defb	"FORMAT",0
+	;defw	A65DC
+	;defb	0
+
+	ALIGN	65C4h
 
 A65C4:	ret	nz
 	push	af
@@ -9000,6 +8933,93 @@ TOBASREQ3:
 
 NEWCMD:	db	'NEW',0
 
+; Relocated past TO_BASIC_REQUIRED so the DOS 1 labels before it
+; (A60B0, $MTOFF, STATEMENT, ...) keep their historical addresses.
+
+;	Get bitmask of formattable drives
+;	Scans DRVTBL. For MSX-DOS drivers (KERNEX[i]=0), all drives are FDDs.
+;	For Nextor drivers (KERNEX[i]!=0), checks KERNEX_DOS1 FDD flag.
+;	If KERNEX_DOS1 is not available, returns mask for all drives (YF347).
+;	Outputs		A = bitmask (bit 0=drive A, bit 1=drive B, etc.)
+;	Modifies	AF, BC, DE, HL, IX, IY
+
+GET_FMT_MASK:
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	jr	z,gfm_all	;No KERNEX_DOS1 table
+
+	push	hl
+	pop	iy
+	inc	iy		;IY = first KERNEX_DOS1 entry (skip count)
+
+	ld	ix,KERNEX##	;Nextor driver flags (4 bytes, one per DRVTBL entry)
+	ld	hl,YFB21	;DRVTBL
+	ld	c,0		;Result bitmask
+	ld	d,1		;Current bit position
+	ld	b,4		;4 DRVTBL entries
+
+gfm_entry:
+	ld	a,(hl)		;num_drives for this entry
+	or	a
+	jr	z,gfm_next_entry
+
+	ld	e,b		;Save outer loop counter
+	ld	a,(ix+0)	;Nextor driver?
+	or	a
+	jr	nz,gfm_nextor
+
+	;MSX-DOS driver: all drives are FDDs
+	ld	a,(hl)
+	ld	b,a
+gfm_msx_loop:
+	ld	a,c
+	or	d
+	ld	c,a
+	sla	d
+	djnz	gfm_msx_loop
+	ld	b,e
+	jr	gfm_next_entry
+
+gfm_nextor:
+	;Nextor driver: check KERNEX_DOS1 entries for FDD flag
+	ld	a,(hl)
+	ld	b,a
+gfm_nxt_loop:
+	bit	6,(iy+UD1_RELATIVE_DRIVE##)
+	jr	z,gfm_nxt_skip
+	ld	a,c
+	or	d
+	ld	c,a
+gfm_nxt_skip:
+	push	de
+	ld	de,UD1_SIZE##
+	add	iy,de
+	pop	de
+	sla	d
+	djnz	gfm_nxt_loop
+	ld	b,e
+
+gfm_next_entry:
+	inc	hl
+	inc	hl
+	inc	ix
+	djnz	gfm_entry
+
+	ld	a,c
+	ret
+
+gfm_all:
+	;No KERNEX_DOS1: all drives support formatting
+	ld	a,(YF347)
+	ld	b,a
+	xor	a
+gfm_all_loop:
+	scf
+	rla
+	djnz	gfm_all_loop
+	ret
+
 ; Entry point for non DOS 1 function call
 ; The value of A is in (YF306)
 
@@ -9306,14 +9326,6 @@ KSTROUT:
 	pop	de
 	inc	de
 	jr	KSTROUT
-;
-RD_MEM:
-	ld	hl,XF368        ; enable system diskrom
-	push	hl
-	ld	hl,4
-	add	hl,sp
-	push	hl
-	jp	XF36B           ; enable system diskrom
 
 BASDEV_CHK::
 	ex	af,af'
