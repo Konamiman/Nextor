@@ -8908,8 +8908,6 @@ TO_BASIC_REQUIRED:
 
 	ld a,(YF340)	;0 if it's first boot
 	or a
-	scf
-	ccf
 	jr nz,TOBASREQ3
 
     ld a,(BOOTKEYS)
@@ -8917,18 +8915,16 @@ TO_BASIC_REQUIRED:
     scf
     jr nz,TOBASREQ3
 	or a
-	jr TOBASREQ3
+TOBASREQ3:
+	LD	A,(DEFDPB##+1)
+	LD	C,A
+	ret
 
 TOBASREQ2:
 	call	TO_BASIC_REQUIRED
 	ld	hl,T5B27
 	ret	nc
 	ld	hl,NEWCMD
-	ret
-
-TOBASREQ3:
-	LD	A,(DEFDPB##+1)
-	LD	C,A
 	ret
 
 NEWCMD:	db	'NEW',0
