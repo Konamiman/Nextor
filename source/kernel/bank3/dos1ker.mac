@@ -32,7 +32,7 @@ PRINTL	macro	NAME,VALUE
 
 ALIGN	macro	ADDR
     if $-START gt ADDR-ORIGIN
-	error	<Code overwraps at ADDR>
+	.error	<Code overwraps at ADDR>
 	PRINTL	<wrap at ADDR>,%($-START)-(ADDR-ORIGIN)
 	org	ADDR-ORIGIN
     else
@@ -6747,7 +6747,7 @@ A6576:	call	DRIVER_STAT	;ld	a,(H.GETP+0)
 	ld	hl,YF348
 	cp	(hl)
 	jr	nz,A65AD
-	ld	hl,CMD_NAMES	; T65B1
+	ld	hl,CMD_NAMES
 A658A:	ld	de,PROCNM
 A658D:	ld	a,(de)
 	cp	(hl)
@@ -6756,15 +6756,27 @@ A658D:	ld	a,(de)
 	jr	nz,A65A3
 	and	a
 	jr	nz,A658D
-	ld	a,(hl)
+	ld	e,(hl)
 	inc	hl
-	ld	h,(hl)
-	ld	l,a
-	ex	(sp),hl
-	call	A72DA			;
+	ld	d,(hl)
+	pop	hl
+	bit	7,d
+	jr	nz,CMD_BANK4
+	push	de
+	call	A72DA
 	scf
 	ccf
 	ret
+
+CMD_BANK4:
+	res	7,d
+	push	de
+	call	A72DA
+	pop	ix
+	xor	a
+	ex	af,af
+	ld	a,4
+	jp	CALBNK##
 
 A65A1:	inc	hl
 	ld	a,(hl)
@@ -6779,14 +6791,6 @@ A65A3:	and	a
 A65AD:	pop	hl
 	scf	;jp	OEMSTA
 	ret
-	nop
-
-T65B1:	ds	19
-	;defb	"SYSTEM",0
-	;defw	A65C4
-	;defb	"FORMAT",0
-	;defw	A65DC
-	;defb	0
 
 A65C4:	ret	nz
 	push	af
@@ -9080,43 +9084,6 @@ DO_FDISK:
 	ld	ix,NEWSTT
 	jp	CALBAS
 
-; Extra CALL handlers.
-
-DO_MAPDRV:
-	ld	ix,CMAPDRV##
-	jr	DO_CALL_CMD
-
-DO_USR:
-	ld	ix,CUSR##
-	jr	DO_CALL_CMD
-
-DO_NEXTOR:
-	ld	ix,CNEXTOR##
-	jr	DO_CALL_CMD
-
-DO_CURDRV:
-	ld	ix,CCURDRV##
-	jr	DO_CALL_CMD
-
-DO_CHDRV:
-	ld	ix,CCHDRV##
-	jr	DO_CALL_CMD
-
-DO_DRVNF:
-	ld	ix,CDRVINFO##
-	jr	DO_CALL_CMD
-
-DO_DRIVERS:
-	ld	ix,CDRIVERS##
-
-DO_CALL_CMD:
-	ex	af,af
-	xor	a
-	ex	af,af
-	ld	a,4
-	jp	CALBNK##
-
-
 ; Patch for FAT sectors read:
 ; if more than 3 sectors requested, return error,
 ; otherwise the computer will hang.
@@ -9196,7 +9163,8 @@ CLUSNUM_ERR:
 	jr	CLUSNUM_ERR_EXIT
 
 
-; CALL commands table is moved here to add support for CALL FDISK.
+; CALL commands table.
+; Bit 15 of the handler address is set for routines in bank 4.
 
 CMD_NAMES:
 	defb	"SYSTEM",0
@@ -9206,19 +9174,19 @@ CMD_NAMES:
 	db	"FDISK",0
 	dw	DO_FDISK
 	db	"MAPDRV",0
-	dw	DO_MAPDRV
+	dw	CMAPDRV##+8000h
 	db	"USR",0
-	dw	DO_USR
+	dw	CUSR##+8000h
 	db	"NEXTOR",0
-	dw	DO_NEXTOR
+	dw	CNEXTOR##+8000h
 	db	"CURDRV",0
-	dw	DO_CURDRV
+	dw	CCURDRV##+8000h
 	db	"CHDRV",0
-	dw	DO_CHDRV
+	dw	CCHDRV##+8000h
 	db	"DRVINFO",0
-	dw	DO_DRVNF
+	dw	CDRVINFO##+8000h
 	db	"DRIVERS",0
-	dw	DO_DRIVERS
+	dw	CDRIVERS##+8000h
 	defb	0
 
 ; Handling of new BASIC error codes
