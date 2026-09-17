@@ -119,6 +119,8 @@ ifndef BANK
 
 CALL_INIT:
 	pop	ix
+	ex	af,af'
+	ld	a,B.INIT
 	if $LOCAL-INITVECT eq 0
 	dec	ix
 	dec	ix
@@ -129,8 +131,6 @@ CALL_INIT:
 	add	ix,bc
 	pop	bc
 	endif
-	ex	af,af'
-	ld	a,B.INIT
 	jp	CALBNK##
 ;
 endif
