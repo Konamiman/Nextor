@@ -155,9 +155,11 @@ OK_PENTRY:
     ld  b,a
 
     bit 7,h ;Partition table entry sector requested: it's always 0 for primary partitions
-    ld hl,0
-    ld de,0
     ld a,0
+	ld h,a
+	ld l,a
+	ld d,a
+	ld e,a
     ret nz
 
 	ld	e,(ix+POFF_PSIZE)
