@@ -37,7 +37,8 @@ typedef struct {
     byte numberOfEntriesInImagesTable;
     byte indexOfImageToMountAtBoot;
     uint workAreaAddress;
-    byte reserved[4];
+    byte flags;
+    byte reserved[3];
 } GeneratedFileHeader;
 
 typedef struct {
@@ -52,6 +53,12 @@ typedef struct {
 #define IS_NEXTOR (1 << 7)
 #define IS_DEVICE_BASED (1)
 
+#define EMU_FLAG_50HZ (1 << 1)
+#define EMU_FLAG_60HZ (1 << 2)
+#define EMU_FLAG_INVERT_CTRL (1 << 3)
+#define EMU_FLAG_INVERT_SHIFT (1 << 4)
+#define EMU_FLAG_R800 (1 << 5)
+
 #define PARSE_FLAG_HAS_FILENAME (1 << 3)
 #define PARSE_FLAG_HAS_EXTENSION (1 << 4)
 #define PARSE_FLAG_IS_AMBIGUOUS (1 << 5)
@@ -62,17 +69,21 @@ typedef struct {
 
 #define SetupRAMAddress ((byte*)0xA000)
 
+#define BootKeysAddress ((byte*)0xA100)
+#define BOOTKEY_CTRL (1 << 5)   /* A115h bit 5, BOOTKEYS[4] */
+#define BOOTKEY_SHIFT (1 << 4)  /* A115h bit 4, BOOTKEYS[4] */
+
 
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v1.3\r\n"
-    "By Konamiman, 5/2023\r\n"
+    "Disk image emulation tool for Nextor v1.5\r\n"
+    "By Konamiman, 9/2026\r\n"
     "\r\n";
-    
+
 const char* strUsage=
     "Usage: emufile [<options>] <output file> <files> [<files> ...]\r\n"
-    "       emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
+    "       emufile set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
     "       emufile ?\r\n";
 
 const char* strHelp=
@@ -91,13 +102,23 @@ const char* strHelp=
     "              Must be a hexadecimal number between C000 and FFEF.\r\n"
     "              If missing or 0, the work area is allocated at boot time.\r\n"
     "-p : Print filenames and associated keys after creating the data file.\r\n"
+    "-5 : Force the screen to 50Hz when the emulation session starts.\r\n"
+    "-6 : Force the screen to 60Hz when the emulation session starts.\r\n"
+    "     These two have no effect on MSX1 computers.\r\n"
+    "-c : Free memory for the game by disabling the ghost floppy drive when\r\n"
+    "     the emulation session starts.\r\n"
+    "-s : Free more memory by disabling the MSX-DOS kernels (e.g. the floppy\r\n"
+    "     disk drive) when the emulation session starts.\r\n"
+    "-8 : Boot the emulation session in R800 mode (turbo R only).\r\n"
+    "     -c and -s work only for one-time emulation (see 'set' below);\r\n"
+    "     -5, -6 and -8 work for both the one-time and persistent variants.\r\n"
     "\r\n"
     "TYPE /B the generated file to see the names of the registered files.\r\n"
     "\r\n"
     "\r\n"
     "* To setup an existing emulation data file for booting:\r\n"
     "\r\n"
-    "emufile set <data file> [o|p[<device index>[<LUN index>]]]\r\n"
+    "emufile set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
     "\r\n"
     "Default extension for <data file> is EMU. A directory can be specified instead,\r\n"
     "in that case, a file with the same name and .EMU extension inside the directory\r\n"
@@ -112,12 +133,27 @@ const char* strHelp=
     "is the device where the emulation data file is located.\r\n"
     "Default <LUN index> (if only 'p<device index>' is specified) is 1.\r\n"
     "\r\n"
+    "-5 or -6: force the screen to 50Hz or 60Hz for this emulation session\r\n"
+    "(this overrides the setting stored in the emulation data file).\r\n"
+    "\r\n"
+    "-c: disable the ghost floppy drive to free memory for the game.\r\n"
+    "-s: disable the MSX-DOS kernels (e.g. the floppy drive) to free even more.\r\n"
+    "-8: boot the emulation session in R800 mode (turbo R only). Like -5/-6,\r\n"
+    "this works for both variants and can be stored in the data file.\r\n"
+    "-c and -s (or the equivalent flags stored in the data file) work only for\r\n"
+    "one-time emulation; they are ignored for persistent emulation.\r\n"
+    "\r\n"
+    "-x: ignore all the flags stored in the data file, apply only the flags\r\n"
+    "passed in this command line. The order of the arguments doesn't matter,\r\n"
+    "so \"-5 -s -x\" is the same as \"-x -5 -s\".\r\n"
+    "\r\n"
     "The computer will reset after successfully finishing the setup.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
 
 const char* emuDataSignature = "NEXTOR_EMU_DATA";
+const char* bootKeysSignature = "NEXTOR_BOOT_KEYS";
 
 /* Global variables */
 
@@ -139,6 +175,12 @@ int setupPartitionDeviceIndex;
 int setupPartitionLunIndex;
 bool setupAsPersistent;
 bool isNextor3;
+byte hzFlags;
+bool invertCtrl;
+bool invertShift;
+bool bootR800;
+bool resetFileFlags;
+byte fileFlags;
 
 /* Some handy code defines */
 
@@ -154,7 +196,18 @@ void Initialize();
 bool ProcessArguments(char** argv, int argc);
 void ProcessCreateFileArguments(char** argv, int argc);
 void ProcessSetupFileArguments(char** argv, int argc);
+void ProcessSetupVariantArgument(char* arg);
 int ProcessOption(char optionLetter, char* optionValue);
+bool IsHzOption(char optionLetter);
+void ProcessHzOption(char optionLetter);
+char* HzFlagsToString();
+byte EmuFlagsByte();
+byte EffectiveHzFlags();
+bool EffectiveInvertCtrl();
+bool EffectiveInvertShift();
+bool EffectiveBootR800();
+byte PointerFlagsByte();
+void WriteBootKeys(bool doCtrl, bool doShift);
 void ProcessFilename(char* fileName);
 void TooManyFiles();
 void StartSearchingFiles(char* fileName);
@@ -212,6 +265,18 @@ int main(char** argv, int argc)
         printf(
             "%s%s successfully generated!\r\n%i disk image file(s) registered\r\n",
             printFilenames ? "\r\n" : "", outputFileName, totalFilesProcessed);
+        if(hzFlags != 0) {
+            printf("Screen mode forced to %s\r\n", HzFlagsToString());
+        }
+        if(invertCtrl) {
+            print("Ghost floppy drive will be disabled\r\n");
+        }
+        if(invertShift) {
+            print("MSX-DOS kernels will be disabled\r\n");
+        }
+        if(bootR800) {
+            print("Will boot in R800 mode (turbo R only)\r\n");
+        }
     } else {
         print(strUsage);
     }
@@ -266,6 +331,12 @@ void Initialize()
     printFilenames = false;
     workAreaAddress = 0;
     totalFilesProcessed = 0;
+    hzFlags = 0;
+    invertCtrl = false;
+    invertShift = false;
+    bootR800 = false;
+    resetFileFlags = false;
+    fileFlags = 0;
 }
 
 bool ProcessArguments(char** argv, int argc) 
@@ -326,19 +397,45 @@ void ProcessCreateFileArguments(char** argv, int argc)
 
 void ProcessSetupFileArguments(char** argv, int argc)
 {
-    byte paramFirstChar;
+    int i;
+    bool variantSpecified;
 
     setupAsPersistent = false;
     setupPartitionDeviceIndex = 0;
     setupPartitionLunIndex = 0;
+    variantSpecified = false;
 
     strcpy(outputFileName, argv[1]);
 
-    if(argc == 2) {
-        return;
+    for(i=2; i<argc; i++) {
+        if(argv[i][0] == '-') {
+            if(IsHzOption(argv[i][1])) {
+                ProcessHzOption(argv[i][1]);
+            } else if((argv[i][1] | 32) == 'c') {
+                invertCtrl = true;
+            } else if((argv[i][1] | 32) == 's') {
+                invertShift = true;
+            } else if(argv[i][1] == '8') {
+                bootR800 = true;
+            } else if((argv[i][1] | 32) == 'x') {
+                resetFileFlags = true;
+            } else {
+                InvalidParameter();
+            }
+        } else if(variantSpecified) {
+            InvalidParameter();
+        } else {
+            ProcessSetupVariantArgument(argv[i]);
+            variantSpecified = true;
+        }
     }
+}
 
-    paramFirstChar = argv[2][0] | 32;
+void ProcessSetupVariantArgument(char* arg)
+{
+    byte paramFirstChar;
+
+    paramFirstChar = arg[0] | 32;
 
     if(paramFirstChar == 'o') {
         return;
@@ -349,26 +446,26 @@ void ProcessSetupFileArguments(char** argv, int argc)
 
     setupAsPersistent = true;
 
-    if(argv[2][1] == '\0') {
+    if(arg[1] == '\0') {
         return;
     }
 
-    setupPartitionDeviceIndex = argv[2][1] - '0';
+    setupPartitionDeviceIndex = arg[1] - '0';
     if(setupPartitionDeviceIndex < 1 || setupPartitionDeviceIndex > 9) {
         Terminate("Invalid device index");
     }
 
-    if(argv[2][2] == '\0') {
+    if(arg[2] == '\0') {
         setupPartitionLunIndex = 1;
         return;
     }
 
-    setupPartitionLunIndex = argv[2][2] - '0';
+    setupPartitionLunIndex = arg[2] - '0';
     if(setupPartitionLunIndex < 1 || setupPartitionLunIndex > 9) {
         Terminate("Invalid LUN index");
     }
 
-    if(argv[2][3] != '\0') {
+    if(arg[3] != '\0') {
         InvalidParameter();
     }
 }
@@ -376,24 +473,123 @@ void ProcessSetupFileArguments(char** argv, int argc)
 int ProcessOption(char optionLetter, char* optionValue)
 {
     optionLetter |= 32;
-	
+
 	if(optionLetter == 'b') {
 	    ProcessBootIndexOption(optionValue);
 		return 1;
 	}
-	
+
 	if(optionLetter == 'a') {
 	    ProcessWorkAreaAddressOption(optionValue);
 		return 1;
 	}
-	
+
     if(optionLetter == 'p') {
 	    ProcessPrintFilenamesOption();
 		return 0;
 	}
 
+    if(IsHzOption(optionLetter)) {
+        ProcessHzOption(optionLetter);
+        return 0;
+    }
+
+    if(optionLetter == 'c') {
+        invertCtrl = true;
+        return 0;
+    }
+
+    if(optionLetter == 's') {
+        invertShift = true;
+        return 0;
+    }
+
+    if(optionLetter == '8') {
+        bootR800 = true;
+        return 0;
+    }
+
 	InvalidParameter();
 	return 0;
+}
+
+/* Only the character right after the "-" matters, so that
+   "-50", "-50Hz", "-60hz" etc. are accepted too. */
+
+bool IsHzOption(char optionLetter)
+{
+    return optionLetter == '5' || optionLetter == '6';
+}
+
+void ProcessHzOption(char optionLetter)
+{
+    byte flag;
+
+    flag = optionLetter == '5' ? EMU_FLAG_50HZ : EMU_FLAG_60HZ;
+    if(hzFlags != 0 && hzFlags != flag) {
+        Terminate("Can't force both 50Hz and 60Hz");
+    }
+    hzFlags = flag;
+}
+
+char* HzFlagsToString()
+{
+    if(hzFlags == EMU_FLAG_50HZ) {
+        return "50Hz";
+    }
+    if(hzFlags == EMU_FLAG_60HZ) {
+        return "60Hz";
+    }
+    return "none";
+}
+
+/* The emulation flags byte stored in the data file header. The kernel only
+   acts on the Hz bits; the CTRL/SHIFT bits are read back by 'emufile set',
+   which turns them into the one-time boot keys. */
+byte EmuFlagsByte()
+{
+    return hzFlags |
+        (invertCtrl ? EMU_FLAG_INVERT_CTRL : 0) |
+        (invertShift ? EMU_FLAG_INVERT_SHIFT : 0) |
+        (bootR800 ? EMU_FLAG_R800 : 0);
+}
+
+/* Effective flags applied by 'emufile set': the command line ones combined
+   with those stored in the data file, unless -x was given (then the stored
+   ones are ignored and only the command line ones apply). The kernel reads
+   the Hz bits from the pointer only, so the resolved value is written there. */
+
+byte EffectiveHzFlags()
+{
+    if(hzFlags != 0) {
+        return hzFlags;
+    }
+    return resetFileFlags ? 0 : (fileFlags & (EMU_FLAG_50HZ | EMU_FLAG_60HZ));
+}
+
+bool EffectiveInvertCtrl()
+{
+    return invertCtrl || (!resetFileFlags && (fileFlags & EMU_FLAG_INVERT_CTRL) != 0);
+}
+
+bool EffectiveInvertShift()
+{
+    return invertShift || (!resetFileFlags && (fileFlags & EMU_FLAG_INVERT_SHIFT) != 0);
+}
+
+bool EffectiveBootR800()
+{
+    return bootR800 || (!resetFileFlags && (fileFlags & EMU_FLAG_R800) != 0);
+}
+
+/* The flags the kernel reads from the emulation data pointer: the frequency
+   bits and the R800 bit. The kernel acts on these in both one-time and
+   persistent emulation. The CTRL/SHIFT bits are not here: they go through the
+   one-time boot keys instead (see WriteBootKeys), because the ghost drive and
+   the MSX-DOS kernels are set up before these flags are read. */
+byte PointerFlagsByte()
+{
+    return EffectiveHzFlags() | (EffectiveBootR800() ? EMU_FLAG_R800 : 0);
 }
 
 void ConvertDirectoryToFilename(char* fileOrDirectoryName)
@@ -676,7 +872,8 @@ void GenerateFile()
     header->numberOfEntriesInImagesTable = totalFilesProcessed;
     header->indexOfImageToMountAtBoot = bootFileIndex;
     header->workAreaAddress = workAreaAddress;
-    memset(header->reserved, 0, 4);
+    header->flags = EmuFlagsByte();
+    memset(header->reserved, 0, 3);
     
     regs.Words.DE = (int)outputFileName;
     regs.Bytes.A = 0;
@@ -702,8 +899,22 @@ void GenerateFile()
     regs.Words.HL = (int)(fileNamesAppendAddress - fileNamesBase);
     DoDosCall(_WRITE);
 
-    bootFileIndexString = malloc(32);
+    bootFileIndexString = malloc(128);
     sprintf(bootFileIndexString, "\r\nBoot file index: %i\r\n", bootFileIndex);
+    if(hzFlags == EMU_FLAG_50HZ) {
+        strcat(bootFileIndexString, "50Hz mode forced\r\n");
+    } else if(hzFlags == EMU_FLAG_60HZ) {
+        strcat(bootFileIndexString, "60Hz mode forced\r\n");
+    }
+    if(invertCtrl) {
+        strcat(bootFileIndexString, "CTRL inverted\r\n");
+    }
+    if(invertShift) {
+        strcat(bootFileIndexString, "SHIFT inverted\r\n");
+    }
+    if(bootR800) {
+        strcat(bootFileIndexString, "Boot in R800 mode\r\n");
+    }
     regs.Bytes.B = fileHandle;
     regs.Words.DE = (int)bootFileIndexString;
     regs.Words.HL = strlen(bootFileIndexString);
@@ -749,10 +960,15 @@ void SetupFile()
     }
 
     if(setupAsPersistent) {
+        if(EffectiveInvertCtrl() || EffectiveInvertShift()) {
+            print("*** Warning: disabling the ghost drive or the MSX-DOS kernels\r\n");
+            print("    only works for one-time emulation; ignored here.\r\n");
+        }
+
         partition = &(sectorBuffer->primaryPartitions[0]);
         partition->status |= 1;
         partition->chsOfFirstSector[0] = driveInfo->deviceIndex;
-        partition->chsOfFirstSector[1] = driveInfo->logicalUnitNumber;
+        partition->chsOfFirstSector[1] = PointerFlagsByte();   //kernel reads Hz + R800 from here
         partition->chsOfFirstSector[2] = ((byte*)&sector)[3];   //MSB
         partition->chsOfLastSector[0] = ((byte*)&sector)[2];
         partition->chsOfLastSector[1] = ((byte*)&sector)[1];
@@ -766,12 +982,38 @@ void SetupFile()
     } else {
         strcpy(SetupRAMAddress, emuDataSignature);
         SetupRAMAddress[0x10] = driveInfo->deviceIndex;
-        SetupRAMAddress[0x11] = driveInfo->logicalUnitNumber;
+        SetupRAMAddress[0x11] = PointerFlagsByte();   //kernel reads Hz + R800 from here
         SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
         SetupRAMAddress[0x13] = ((byte*)&sector)[1];
         SetupRAMAddress[0x14] = ((byte*)&sector)[2];
         SetupRAMAddress[0x15] = ((byte*)&sector)[3];   //MSB
+
+        WriteBootKeys(EffectiveInvertCtrl(), EffectiveInvertShift());
     }
+}
+
+/* For one-time emulation, place the one-time boot keys block in RAM, next to
+   the emulation pointer, so the kernel applies these keys at the emulation
+   boot as if they were physically held. CTRL disables the ghost floppy drive
+   and SHIFT disables the MSX-DOS kernels, freeing the 1.5K MSX-DOS 1 FAT copy
+   each would use. These must act before the drives are set up, which is earlier
+   than disk emulation mode is entered, so unlike the frequency and R800 options
+   they can't be driven by the emulation flags byte; hence the boot keys, and
+   hence they only work for one-time emulation. Whether to do each comes from
+   the -c / -s switches or the equivalent flags in the data file (see the
+   Effective... helpers). */
+void WriteBootKeys(bool doCtrl, bool doShift)
+{
+    if(!doCtrl && !doShift) {
+        return;
+    }
+
+    strcpy(BootKeysAddress, bootKeysSignature);   //A100-A10F + zero terminator at A110
+    BootKeysAddress[0x11] = 0;
+    BootKeysAddress[0x12] = 0;
+    BootKeysAddress[0x13] = 0;
+    BootKeysAddress[0x14] = 0;
+    BootKeysAddress[0x15] = (doCtrl ? BOOTKEY_CTRL : 0) | (doShift ? BOOTKEY_SHIFT : 0);
 }
 
 void VerifyDataFileSignature(byte* sectorBuffer)
@@ -782,12 +1024,14 @@ void VerifyDataFileSignature(byte* sectorBuffer)
     fileHandle = regs.Bytes.B;
 
     regs.Words.DE = (int)sectorBuffer;
-    regs.Words.HL = 16;
+    regs.Words.HL = 24;    //signature (16) + rest of the header, including the flags byte at offset 20
     DoDosCall(_READ);
 
     if(regs.Words.HL < 16 || strcmpi((char*)sectorBuffer, emuDataSignature) != 0) {
         Terminate("Invalid emulation data file");
     }
+
+    fileFlags = regs.Words.HL >= 21 ? sectorBuffer[20] : 0;
 }
 
 byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sectorNumber, byte* buffer, bool write)

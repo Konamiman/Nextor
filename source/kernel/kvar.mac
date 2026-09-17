@@ -285,11 +285,15 @@ size	macro	name
     field  EMU_DESC_SIZE,EMU_TMP   ;Temporary location of work area used when setting up disk emulation mode
     field  1,IN_EMU_MODE           ;Set to 1 when disk emulation mode has been entered
     field  2,EMU_WORK_AREA_ADDRESS ;Address of work area as read from the emulation data file
+    field  1,EMU_FLAGS             ;Disk emulation flags (EF_* in const.inc). The routines that
+                                   ;find the emulation data file pointer store the flags byte of
+                                   ;the pointer here, then GO_EMU replaces it with the effective
+                                   ;value (pointer flags if any, else the data file header flags)
 
     ;The KERNEX_DOS1 table (1 + max 8 entries of UD1_SIZE bytes each = up to 57 bytes)
-    ;is also written at BOOT_TMP, overlapping with the fields above plus 40 more bytes.
+    ;is also written at BOOT_TMP, overlapping with the fields above plus 39 more bytes.
     ;BOOTKEYS and I_AM_RUSSIAN must be placed past the maximum table extent.
-    field  40                      ;Padding to avoid KERNEX_DOS1 table overlap
+    field  39                      ;Padding to avoid KERNEX_DOS1 table overlap
 
     ;NOTE! BOOTKEYS is used in dos1ker.mac with a hardcoded address,
     ;it must be manually updated there if it changes.

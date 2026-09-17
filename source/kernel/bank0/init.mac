@@ -50,6 +50,7 @@ USRTAB	equ	0F39Ah		;!=FCERR ==> ROM appl. /w MSX-DOS2
 endif
 CNSDFG	equ	0F3DEh		;Console display flag
 CURLIN	equ	0F41Ch		;Current line number
+RG9SAV	equ	0FFE8h		;Saved value of VDP register 9 (MSX2 and above)
 GHO_DRVTBL_PTR	equ	0FD8Eh	;PROCNM+5: DRVTBL pointer saved by ghost setup
 STKTOP	equ	0F674h		;Pointer to bottom of stack
 TXTTAB	equ	0F676h		;Beginning of BASIC text
@@ -2708,19 +2709,8 @@ OLDDOS::
 	ld	(MAIN_BANK##),a
 
 if STURBO
-	ld	a,(VERSION)
-	cp	3			;MSXturboR?
-	jr	c,NOCHCPU
-
-	ld	a,(BOOTKEYS##)  ;2 key pressed?
-	and	00000100b
-	ld	a,81h
-	jr	nz,DOCHCPU
-	ld	a,80h			;Insure CPU=Z80
-DOCHCPU:
-	call	CHGCPU
-NOCHCPU:
-    endif
+	call	SET_EMU_CPU	;R800-ROM if the "2" key or the emulation R800
+    endif			; flag ask for it, else Z80 (turbo R only)
 ;
 	ld	a,(RAMAD2##)		;Restore slot-2 in case of
 	ld	h,80h			; BASIC text cartridge.
@@ -2798,6 +2788,12 @@ NOCHCPU:
 
 MK_EMU_TBL:
 	;We are in disk emulation mode.
+
+	;Force the screen frequency if the emulation flags request it,
+	;before the emulated disk gets loaded.
+
+	call	SET_EMU_HZ
+
 	;If a explicit location was specified for the work area,
 	;then just copy from BUF_1 to it.
 	;Otherwise allocate space in page 3.
@@ -3173,6 +3169,78 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+3),hl
 
     ret
+
+;Set the screen frequency requested by the disk emulation flags
+;(EMU_FLAGS, resolved by GO_EMU in partit.mac): bit 1 of VDP register 9
+;is set for 50Hz or reset for 60Hz. Nothing is done if no frequency is
+;requested, nor on MSX1.
+;
+;The register is written directly, with interrupts disabled, and the
+;saved copy in RG9SAV is updated by hand: WRTVDP would enable interrupts
+;on return, and this runs while OLDDOS is swapping the interrupt hooks.
+;Updating RG9SAV keeps the setting across the screen mode changes made
+;later by the MSX-DOS 1 kernel and BASIC. Corrupts AF.
+
+SET_EMU_HZ:
+	ld	a,(VERSION)
+	or	a
+	ret	z		;MSX1: no 50/60Hz switch
+
+	ld	a,(EMU_FLAGS##)
+	bit	EF_50HZ,a
+	jr	nz,SET_EMU_50HZ
+	bit	EF_60HZ,a
+	ret	z		;No frequency requested
+
+SET_EMU_60HZ:
+	ld	a,(RG9SAV)
+	res	1,a		;60Hz
+	jr	SET_EMU_HZ_DO
+
+SET_EMU_50HZ:
+	ld	a,(RG9SAV)
+	set	1,a		;50Hz
+
+SET_EMU_HZ_DO:
+	ld	(RG9SAV),a
+	di
+	out	(99h),a
+	ld	a,9+80h
+	out	(99h),a
+	ret
+
+if STURBO
+;Switch a turbo R to R800-ROM mode if requested, else ensure Z80 mode. Called
+;from OLDDOS (DOS 1 / emulation setup) in place of the old inline "2"-key check.
+;R800 is used when the "2" boot key is pressed, or (in disk emulation mode only)
+;when the emulation flags carry the R800 bit; the latter is what makes EMUFILE's
+;-8 option work for both one-time and persistent emulation. Not a turbo R: the
+;CPU is left untouched. Corrupts AF.
+
+SET_EMU_CPU:
+	ld	a,(VERSION)
+	cp	3		;MSXturboR?
+	ret	c		;no: leave the CPU as-is
+
+	ld	a,(BOOTKEYS##)	;"2" key pressed?
+	and	00000100b
+	jr	nz,SEC_R800
+
+	ld	a,(IN_EMU_MODE##)	;in disk emulation mode?
+	or	a
+	jr	z,SEC_Z80
+	ld	a,(EMU_FLAGS##)		;R800 requested by the emulation flags?
+	bit	EF_R800,a
+	jr	nz,SEC_R800
+
+SEC_Z80:
+	ld	a,80h		;Insure CPU=Z80
+	jr	SEC_DO
+SEC_R800:
+	ld	a,81h		;R800-ROM mode
+SEC_DO:
+	jp	CHGCPU		;tail call, returns to OLDDOS
+endif
 
 	ALIGN	55DBh
 GTIME:	CALLDOS	2Ch	;Get time
