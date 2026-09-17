@@ -7,7 +7,7 @@ DEVINFO_STRLEN	equ	64
         ;        -------------------------------------------------------------------------------
 	db	13
 USAGE_S:
-	db	"DEVINFO v1.2 - displays information about the devices handled by a disk driver",13,10
+	db	"DEVINFO v1.3 - displays information about the devices handled by a disk driver",13,10
 	db	13,10
 	db	"Usage: DEVINFO <slot>[-<subslot>][:<segment>]|0",13,10
 	db	13,10
