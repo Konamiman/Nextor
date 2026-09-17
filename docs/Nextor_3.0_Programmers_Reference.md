@@ -94,6 +94,8 @@
 
 [7.2.2. Entering disk emulation mode](#722-entering-disk-emulation-mode)
 
+[7.2.3. Emulation flags](#723-emulation-flags)
+
 [7.3. DOS environment load errors](#73-dos-environment-load-errors)
 
 [8. Development helpers](#8-development-helpers)
@@ -1098,12 +1100,15 @@ The disk emulation data file, used by Nextor to know which disk image files must
 | Offset | Meaning |
 |:------:|---------|
 |   +0   | Signature string `NEXTOR_EMU_DATA`, zero terminated |
-|   +16  | Number of entries in the disk image files table     |
-|   +17  | 1-based index of the file to mount at boot time     |
-|   +18  | Address to use as work area during the emulation session, or 0 if this area must be allocated (2 bytes, little endian) |
-|   +20  | Reserved, must be zero (4 bytes)                    |
+|   +16  | Number of entries in the disk image files table (1 to 32) |
+|   +17  | 1-based index of the file to mount at boot time (1 to the number of entries) |
+|   +18  | Address to use as work area during the emulation session, or 0 if this area must be allocated (2 bytes, little endian); if not zero, it must be an address in page 3 (C000h or higher) |
+|   +20  | Emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ |
+|   +21  | Reserved, must be zero (3 bytes)                    |
 
-Each entry in the disk image files table is as follows:
+Nextor checks the signature, the number of entries, the index of the file to mount at boot time and the work area address when it finds an emulation data file; if any of them is invalid it boots normally, without entering disk emulation mode.
+
+The disk image files table starts right after the header, at offset 24. Each entry in the table is as follows:
 
 | Offset | Meaning |
 |:------:|---------|
@@ -1128,8 +1133,10 @@ Nextor will enter the one-time disk emulation mode if it finds the following inf
 |:-------:|---------|
 | A000h   | Signature string `NEXTOR_EMU_DATA`, zero terminated        |
 | A010h   | Number of the device that contains the emulation data      |
-| A011h   | Unused (was the logical unit number in Nextor 2) |
+| A011h   | Emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ (was the logical unit number in Nextor 2) |
 | A012h   | Absolute device sector number that contains the emulation data (4 bytes, little endian) |
+
+When this information is found, Nextor sets the first byte of the signature to zero before entering disk emulation mode, so that the emulation mode isn't entered again after a reset (RAM contents survive a reset, but not a power cycle).
 
 If the above information is not found, Nextor will enter the persistent disk emulation mode if it finds the following information in the first partition table entry of any of the available devices in the primary Nextor controller:
 
@@ -1137,20 +1144,48 @@ If the above information is not found, Nextor will enter the persistent disk emu
 |:-------------:|:----------------------------:|-------------------------|----------------|
 | 1BEh          | +0                           | Status byte             | Bit 0 set = enter disk emulation mode                 |         
 | 1BFh          | +1                           | Start CHS               | Number of the device that contains the emulation data |
-| 1C0h          | +2                           | Start CHS               | Unused (was the logical unit number in Nextor 2) |
+| 1C0h          | +2                           | Start CHS               | Emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ (was the logical unit number in Nextor 2) |
 | 1C1h          | +3                           | Start CHS               | MSB of the absolute device sector number that contains the emulation data |
 | 1C2h          | +4                           | Partition type          | Must be non-zero |
 | 1C3h          | +5                           | End CHS                 | 3rd byte of the absolute device sector number that contains the emulation data |
 | 1C4h          | +6                           | End CHS                 | 2nd byte of the absolute device sector number that contains the emulation data |
 | 1C5h          | +7                           | End CHS                 | LSB of the absolute device sector number that contains the emulation data |
 
-For example, if the emulation data is located at device 1, sector 33445566h, and the partition is FAT16 (partition type 0Eh) and has the "active" flag set in the status byte, then the start of the partition table entry set for persistent emulation would look like this (in hexadecimal):
+For example, if the emulation data is located at device 1, sector 33445566h, no emulation flags are set, and the partition is FAT16 (partition type 0Eh) and has the "active" flag set in the status byte, then the start of the partition table entry set for persistent emulation would look like this (in hexadecimal):
 
     81 01 00 33 0E 44 55 66
+
+With the emulation flag that forces the screen to 60Hz set, the third byte would be 04 instead of 00.
 
 Note that the condition for Nextor entering emulation mode is that bit 0 of the status byte must be set **and** the partition type code must be non-zero (but can be any other value, not necessarily FAT). Also note that the device information here refers to the emulation data file only - the disk image files themselves can be located at a different device.
 
 Also worth noting: Nextor will check that the emulation data actually starts with the `NEXTOR_EMU_DATA` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
+
+#### 7.2.3. Emulation flags
+
+The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 CPU mode right after entering disk emulation mode and before the emulated disk is loaded, and also records two options that `EMUFILE.COM` applies via the one-time boot keys. The byte has the same format in the three places where it exists: the emulation data file header, the one-time emulation data in RAM, and the partition table entry used for persistent emulation.
+
+| Bit | Meaning |
+|:---:|---------|
+|  0  | Ignored by Nextor (see below), must be written as 0 |
+|  1  | Set to force the VDP to 50Hz |
+|  2  | Set to force the VDP to 60Hz |
+|  3  | Disable the ghost floppy disk drive (not acted upon by the kernel, see below) |
+|  4  | Disable the MSX-DOS kernels (not acted upon by the kernel, see below) |
+|  5  | Boot the emulation in R800 mode on a turbo R |
+| 6-7 | Reserved, must be zero |
+
+Bits 1 and 2 must not be both set; if they are, Nextor currently forces 50Hz, but this shouldn't be relied upon.
+
+The kernel acts on the VDP frequency bits (1 and 2) and on the R800 bit (5), and it reads them **only from the emulation data pointer** (the one in RAM for one-time emulation, or the one in the partition table entry for persistent emulation), never from the emulation data file header. `EMUFILE.COM` is responsible for putting the effective values into the pointer: when it sets up an emulation session it combines the flags stored in the data file header with the options requested in its command line (`-5`/`-6`/`-8`), and writes the result to the pointer. The header flags are thus a stored default that `EMUFILE.COM` reads, not something the kernel reads directly. The `-x` option of `EMUFILE.COM` tells it to ignore the stored flags and use only the ones from the command line. Because these three bits travel in the pointer, they work for both the one-time and the persistent variants.
+
+Bits 3 and 4 are never acted upon by the kernel through the emulation flags byte; they are a convenience for `EMUFILE.COM`, which records in the emulation data file header that, when the emulation session starts, the ghost floppy disk drive should be disabled (bit 3) and/or the MSX-DOS kernels should be disabled (bit 4), each saving the 1.5 KB that Nextor allocates in RAM for that drive's FAT copy in MSX-DOS 1 mode. These must take effect before the drives are set up, which is earlier than the emulation is entered, so they can't be driven by the pointer like the bits above. Instead, when `EMUFILE.COM` sets up a **one-time** emulation session and either bit is set (in the data file or via the `-c`/`-s` options), it also writes the one-time boot keys (see _[7.1. One-time boot keys](#71-one-time-boot-keys)_) with the CTRL key (bit 3) and/or the SHIFT key (bit 4), so that the kernel's normal boot-key handling disables those drives. This works only for one-time emulation: bits 3 and 4 have no effect for persistent emulation.
+
+As explained in the previous section, the one-time emulation data in RAM takes precedence over the persistent emulation data in the partition table.
+
+Bit 0 is ignored because Nextor 2, and the Nextor 3 version of `EMUFILE.COM` prior to the introduction of this byte, stored the logical unit number of the device (which was 1 in practice) in the pointer locations. Thus emulation data pointers written by older versions of `EMUFILE.COM` are handled as having no flags set.
+
+The VDP frequency flags don't have any effect on MSX1 computers, whose VDP has no such setting, and the R800 flag has no effect except on a Turbo-R.
 
 ### 7.3. DOS environment load errors
 

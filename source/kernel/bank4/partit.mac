@@ -1220,8 +1220,9 @@ AA_PX_DOEMU:
     pop iy
     ld c,(ix+AAD_DRIVER_SLOT)
     ld b,(ix+AAD_DRIVER_SEGMENT)
+    ld a,(iy+POFF_CHS_START+1)  ;Emulation flags (was LUN number in Nextor 2),
+    ld (EMU_FLAGS##),a          ;GO_EMU resolves the effective value
     ld a,(iy+POFF_CHS_START)
-    ;ld b,(iy+POFF_CHS_START+1)
     ld h,(iy+POFF_CHS_START+2)
     ld l,(iy+POFF_CHS_END)
     ld d,(iy+POFF_CHS_END+1)
@@ -1635,8 +1636,9 @@ TRY_RAM_EMU:
     ld bc,(0F348h)
     push ix
     ld ix,EMU_RAM_ADDRESS+10h
+    ld a,(ix+1)     ;Emulation flags (was LUN number in Nextor 2),
+    ld (EMU_FLAGS##),a  ;GO_EMU resolves the effective value
     ld a,(ix)
-    ;ld b,(ix+1)
     ld e,(ix+2)
     ld d,(ix+3)
     ld l,(ix+4)
@@ -1870,6 +1872,12 @@ upb_not_found:					;If anything was wrong with
 ; The definitve address of the work area as read from the emulation data file is temporarily
 ; stored in EMU_WORK_AREA_ADDRESS, so that either the table it will be moved to this place
 ; or, if it is zero, the work area will be properly allocated.
+;
+; The caller must have stored the flags byte of the emulation data file pointer
+; (from RAM or from the partition table) in EMU_FLAGS. On success this variable
+; ends up holding just the frequency bits taken from that pointer; EMUFILE.COM
+; is responsible for resolving the data file header flags into the pointer.
+; The screen frequency is switched accordingly later, by SET_EMU_HZ in init.mac.
 
 GO_EMU:
 
@@ -1946,6 +1954,15 @@ GOEMU_WAOK:
 	ld	(EMU_WORK_AREA_ADDRESS##+1),a
 	ld	a,(ix+16)
 	ld	(iy+DSK_EMULATED_FILES_COUNT##),a	;Number of entries in table
+
+	;> Emulation flags: keep the frequency bits and the R800 bit, taken from the
+	;  pointer. EMUFILE.COM resolves the data file header flags into the pointer
+	;  (applying its -x option), so the kernel just honors whatever it carries:
+	;  the frequency is switched by SET_EMU_HZ and the R800 bit by OLDDOS.
+
+	ld	a,(EMU_FLAGS##)
+	and	EFM_KERNEL
+	ld	(EMU_FLAGS##),a
 
 	;> Current file data
 

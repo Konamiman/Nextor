@@ -270,6 +270,40 @@ UFM_FO	equ	(1 SHL UF_FOK)
 UFM_GH	equ	(1 SHL UF_GHO)
 UFM_GL	equ	(1 SHL UF_GLA)
 UFM_RD	equ	(1 SHL UF_RDD)
+;
+;
+;                 BITS IN THE DISK EMULATION FLAGS BYTE
+;               ==========================================
+;
+; This byte exists at offset +20 of the emulation data file header,
+; at A011h for the one-time emulation pointer, and at offset +2 of the
+; partition table entry for the persistent emulation pointer.
+; Bit 0 is ignored: Nextor 2 (and the Nextor 3 EMUFILE.COM tool prior
+; to the introduction of this byte) stored the logical unit number,
+; which was 1 in practice, in the pointer locations.
+;
+; Bits 3 and 4 (disable the floppy ghost drive / disable the MSX-DOS kernels)
+; are NOT honored by the kernel through this byte: EMUFILE.COM implements them
+; for one-time emulation by also setting the one-time boot keys
+; (NEXTOR_BOOT_KEYS at A100h) with CTRL / SHIFT, so the existing boot-key
+; handling disables those drives before they are set up. (They can't be honored
+; through this byte because the drives are set up before disk emulation mode is
+; entered, i.e. before this byte has been read.)
+;
+; Bit 5 (boot in R800 mode) IS honored by the kernel, in both one-time and
+; persistent emulation: OLDDOS switches a turbo R to R800-ROM mode when it is
+; set, in the same place where it honors the "2" boot key.
+;
+EF_50HZ	equ	1	;Set => force 50Hz screen mode when entering emulation mode
+EF_60HZ	equ	2	;Set => force 60Hz screen mode when entering emulation mode
+EF_R800	equ	5	;Set => boot the emulation in R800 mode (turbo R only)
+;
+;         MASK FOR THE DISK EMULATION FLAGS THE KERNEL HONORS
+;         (frequency bits, acted on by SET_EMU_HZ, plus the R800 bit,
+;          acted on by OLDDOS; GO_EMU keeps these in EMU_FLAGS)
+;
+EFM_HZ	equ	(1 SHL EF_50HZ)+(1 SHL EF_60HZ)
+EFM_KERNEL	equ	EFM_HZ+(1 SHL EF_R800)
 
 NUMKEYS	equ	0FCBBh
 

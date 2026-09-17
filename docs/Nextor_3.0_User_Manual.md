@@ -140,11 +140,13 @@
 
 [3.9.2. Changing the image file](#392-changing-the-image-file)
 
-[3.9.3. Rules and restrictions](#393-rules-and-restrictions)
+[3.9.3. Forcing the screen frequency](#393-forcing-the-screen-frequency)
 
-[3.9.4. How to free some memory](#394-how-to-free-some-memory)
+[3.9.4. Rules and restrictions](#394-rules-and-restrictions)
 
-[3.9.5. Known bugs](#395-known-bugs)
+[3.9.5. How to free some memory](#395-how-to-free-some-memory)
+
+[3.9.6. Known bugs](#396-known-bugs)
 
 [3.10. The COMMAND3.COM command interpreter](#310-the-command3com-command-interpreter)
 
@@ -796,17 +798,31 @@ The `-b <number>` option allows you to specify the number of the disk image file
 
 The `-a <address>` option allows you to specify the page 3 address that Nextor will use as work area (about 16 bytes) during the emulation session, must be a hexadecimal number in page 3 (C000 or higher). If not specified, this area will be allocated by Nextor before starting the emulation session.
 
+The `-5` and `-6` options tell Nextor to force the screen to 50Hz or 60Hz, respectively, right after the emulation session starts and before the disk image file is loaded; see _[3.9.3. Forcing the screen frequency](#393-forcing-the-screen-frequency)_. Specifying both is an error.
+
+The `-c` and `-s` options free memory for the game by disabling drives that would otherwise use it: `-c` disables the ghost floppy disk drive (simulates CTRL being pressed), and `-s` disables the MSX-DOS kernels like the internal floppy disk drive (simulates SHIFT being pressed). Each disabled drive frees about 1.5 KB. See _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_. These two options work only for one-time emulation (see below).
+
+The `-8` option makes an MSX turbo R boot the emulation session in R800-ROM mode; it has no effect on other computers. Note that in disk emulation mode (which is always MSX-DOS 1 mode) the active CPU is not switched when accessing disk drives, so some storage devices might not work properly in this mode. Like `-5`/`-6`, this option is stored in the data file and works for both the one-time and persistent variants.
+
 The `-p` option will print all the filenames and associated keys after creating the data file. Note however that you can see this same information afterwards if you `TYPE /B` the emulation data file.
 
 The syntax for starting a disk emulation session is as follows:
 
 ```
-EMUFILE set <data file> [o|p[<device index>[<LUN index>]]]
+EMUFILE set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]
 ```
 
 `o` will start the emulation using the one-time variant (this is the default), and `p` will start the emulation using the persistent variant. For the latter, by default the emulation file data pointer will be written to the device where `<data file>` is stored, but you can specify a different `<device index>` and also optionally a `<LUN index>`. The default LUN index is 1 (i.e. `p3` is the same as `p31`).
 
 **Note:** The `<LUN index>` argument is unused in Nextor 3. It's still accepted by the EMUFILE tool in order to continue working in Nextor 2.
+
+The `-5` and `-6` options force the screen to 50Hz or 60Hz for this emulation session, overriding the setting stored in the emulation data file (if any); they follow the same rules as in the file creation syntax. In the persistent variant the setting is stored together with the emulation data file pointer, so it applies to every boot until the persistent emulation mode is disabled.
+
+The `-c` and `-s` options disable the ghost floppy disk drive or the MSX-DOS kernels, respectively, to free memory for the game (see _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_). If the emulation data file was created with these options they are applied automatically, so you only need to specify them here to override a file that wasn't. They work only with the one-time variant (`o`); if you specify them with the persistent variant (`p`) a warning is printed and they are ignored.
+
+The `-8` option boots the emulation session in R800-ROM mode on a turbo R, as explained in the file creation syntax above. Like `-5`/`-6`, if the emulation data file was created with `-8` it is applied automatically, and it works with both the one-time and persistent variants (in the persistent case the setting is stored with the pointer, so it applies on every boot).
+
+The `-x` option makes `EMUFILE.COM` ignore all the flags stored in the emulation data file (the forced frequency, and the `-c`/`-s`/`-8` options) and apply only the options passed in this command line. The order of the arguments doesn't matter, so `-5 -s -x` is the same as `-x -5 -s`. This is useful to start a session that ignores what the file was created with; for example, `EMUFILE set mygame -x` starts the emulation with no forced frequency and no drives disabled, regardless of how `mygame.emu` was created.
 
 Note that in both variants the computer will reset immediately after `EMUFILE.COM` writes the emulation data file pointer to the appropriate place.
 
@@ -1305,7 +1321,13 @@ For example, assume that you are playing a two-disk game. You boot with disk 1 a
 Alternatively, you can also press the `GRAPH` key when the computer is trying to read the file. The CAPS lock LED will light up and the computer will freeze until you release `GRAPH` and press the appropriate file key (or you can press `GRAPH` again if you change your mind and want to keep using the same disk). This is useful when having to directly press an alphanumeric key while disk access is performed is a problem (for example, you are in the BASIC prompt and you want to trigger a file change when executing a FILES command: the pressed key would be added to "FILES" causing a Syntax Error).
 
 
-#### 3.9.3. Rules and restrictions
+#### 3.9.3. Forcing the screen frequency
+
+Some games assume that the computer runs at the screen frequency of the machines they were developed for (50Hz in Europe, 60Hz in Japan and America) without setting it themselves, and run too fast, too slow or with a garbled display otherwise. To handle these cases Nextor can force the screen frequency right after entering disk emulation mode and before the disk image file is loaded.
+
+The setting can be stored in the emulation data file itself, by using the `-5` or `-6` options when creating it with `EMUFILE.COM`, and it can be overridden for a given emulation session by using the same options with `EMUFILE set`; see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_. This has no effect on MSX1 computers (whose VDP has no such setting), and software that sets the frequency itself will still override the forced setting.
+
+#### 3.9.4. Rules and restrictions
 
 The following rules and restrictions apply to the disk emulation mode:
 
@@ -1319,21 +1341,25 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
 
-- Disk emulation mode is always started in DOS 1 mode and in Z80 mode. If you want to start a game in R800 mode, do the following: keep `GRAPH` and 2 pressed while the computer boots, and when the CAPS LED lights up, release both keys and press 1.
+- Disk emulation mode is always started in DOS 1 mode, and by default in Z80 mode. On an MSX turbo R you can start the emulation in R800-ROM mode instead: the recommended way is the `-8` option of `EMUFILE.COM` (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_), which works for both the one-time and persistent variants. Alternatively you can keep `GRAPH` and 2 pressed while the computer boots, and when the CAPS LED lights up, release both keys and press 1. Note that in MSX-DOS 1 mode the active CPU is not switched when accessing disk drives, which may prevent some storage devices from working properly.
 
 - All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing `SHIFT` while booting; this is useful to free some memory.
 
 
-#### 3.9.4. How to free some memory
+#### 3.9.5. How to free some memory
 
-Some games will not work "out of the box" because they assume that only the floppy disk drive is present in the system, but now there are drives allocated for both Nextor and the floppy drive, and thus the amount of free memory is smaller. You can do the following in order to increase the amount of memory available for games:
+Some games will not work "out of the box" because they assume that only the floppy disk drive is present in the system, but now there are drives allocated for both Nextor and the floppy drive, and thus the amount of free memory is smaller. Every drive present in MSX-DOS 1 mode uses about 1.5 KB of RAM for its FAT copy, so removing drives that the game doesn't need frees memory for it. You can do the following in order to increase the amount of memory available for games:
 
 - Press `SHIFT` while booting to disable the internal floppy disk drive (and any other MSX-DOS kernel present).
 
+- Press `CTRL` while booting to disable the ghost floppy disk drive (the extra drive letter that Nextor assigns to a single floppy disk drive).
+
 - Press 5 while booting to force Nextor to allocate only one drive for itself (useful only if you have more than one device connected to your Nextor controller). If your emulation session has five or more disk images, do the following instead: press `GRAPH`+5 until the CAPS lock LED lights up, then release both keys and press 1 (otherwise the 5 key would also be read as a request to switch to the fifth disk image).
 
+For the one-time emulation variant you don't need to press these keys by hand: the `-c` (disable the ghost drive, like `CTRL`) and `-s` (disable the MSX-DOS kernels, like `SHIFT`) options of `EMUFILE.COM` set them automatically when the session starts. You can store them in the emulation data file when you create it, so they take effect every time you start that session. See _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_.
 
-#### 3.9.5. Known bugs
+
+#### 3.9.6. Known bugs
 
 * The current version of the `EMUFILE.COM` tool does not verify that the disk image files are not fragmented (but you can use the `CONCLUS.COM` tool for this).
 

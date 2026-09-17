@@ -44,6 +44,8 @@
 
 [3.5. The Nextor SDK and the Docker development image](#35-the-nextor-sdk-and-the-docker-development-image)
 
+[3.6. Disk emulation mode: emulation flags](#36-disk-emulation-mode-emulation-flags)
+
 [4. Information for driver developers](#4-information-for-driver-developers)
 
 
@@ -132,6 +134,12 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * The classic transient tools of MSX-DOS 2 (`CHKDSK`, `UNDEL`, `DISKCOPY`, `FIXDISK`, `KMODE`, `XCOPY` and `XDIR`) are now part of Nextor: rewritten from the MSX-DOS 2.20 versions, built with the rest of the tools and included in the tools disk together with their help files. The highlights: `CHKDSK` and `UNDEL` now handle FAT16 volumes besides FAT12 (both require Nextor); `DISKCOPY` can copy a disk using a single drive (swapping the disks in several passes) and by default preserves the boot sector of the target disk; `FIXDISK` gains a `/B` switch that writes a standard boot sector; `KMODE /S` now safely refuses disks with a standard boot sector instead of corrupting them; `XCOPY` gains the `/Dx` switch family to control what happens when the destination file already exists (overwrite, skip, keep the newer/older/smaller/bigger, or ask per file); and `XDIR` displays sizes and totals of any magnitude correctly on FAT16 volumes, displays sizes of 10K and over in kilobytes following the same rules as the `DIR` command of `COMMAND3.COM` (see _[2.12. The new COMMAND3.COM command interpreter](#212-the-new-command3com-command-interpreter)_) and gains a `/B` switch that displays all the sizes in bytes. As a general behavior change, all of these tools except `XDIR` now require their main argument and display a usage summary when run without arguments (`DISKCOPY` no longer prompts for the drives, and `XCOPY` no longer copies the current directory onto itself; a bare `XDIR` still lists the current directory). See _[3.4.15. The classic MSX-DOS tools](Nextor_3.0_User_Manual.md#3415-the-classic-msx-dos-tools)_ in the user manual.
 
+* The `EMUFILE` tool gains the `-5` and `-6` options, in both the data file creation and the `set` syntaxes: Nextor then forces the screen to 50Hz or 60Hz right after entering disk emulation mode, before the disk image file is loaded. See _[3.9.3. Forcing the screen frequency](Nextor_3.0_User_Manual.md#393-forcing-the-screen-frequency)_ in the user manual.
+
+* The `EMUFILE` tool also gains the `-c` and `-s` options (one-time emulation only): they free memory for the game by simulating the CTRL key (disable the ghost floppy disk drive) or the SHIFT key (disable MSX-DOS kernels) being pressed when the emulation session starts. See _[3.9.5. How to free some memory](Nextor_3.0_User_Manual.md#395-how-to-free-some-memory)_ in the user manual.
+
+* The `EMUFILE` tool gains the `-8` option, which boots the emulation session in R800-ROM mode on an MSX turbo R (like `-5`/`-6`, it can be stored in the data file and works for both the one-time and persistent variants), and the `-x` option for the `set` syntax, which makes the tool ignore all the flags stored in the emulation data file and apply only the ones given in the command line. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
+
 ### 2.12. The new COMMAND3.COM command interpreter
 
 Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on COMMAND 2.44 (so everything you know from it applies: internal commands, aliases, command line editing and history, batch file enhancements, the HELP command, etc.) but adds new features specific to Nextor 3:
@@ -204,6 +212,10 @@ Nextor 3 ships with an SDK (Software Development Kit): a collection of assembler
 
 Additionally, a Docker image for Nextor development, with the required assembler and C compiler preinstalled, is published as `ghcr.io/konamiman/nextor-dev`. See _[8. Development helpers](Nextor_3.0_Programmers_Reference.md#8-development-helpers)_ in the programmers reference for an overview of both.
 
+
+### 3.6. Disk emulation mode: emulation flags
+
+The disk emulation data file header, the one-time emulation data in RAM and the partition table entry used for persistent emulation now have an emulation flags byte. Its bits 1 and 2 force the screen to 50Hz or 60Hz right after entering disk emulation mode, and bit 5 boots a turbo R in R800-ROM mode; the kernel reads these bits only from the emulation data pointer (RAM or partition table), and `EMUFILE.COM` combines the values stored in the data file header with the ones requested in its command line and writes the result to the pointer, so they work for both the one-time and persistent variants. Bits 3 and 4 are used by `EMUFILE.COM` (not the kernel) to disable the ghost floppy disk drive or the MSX-DOS kernels for one-time emulation, via the boot keys. Tools that write emulation data pointers should now write this byte as explained in _[7.2.3. Emulation flags](Nextor_3.0_Programmers_Reference.md#723-emulation-flags)_ in the programmers reference.
 
 ## 4. Information for driver developers
 
