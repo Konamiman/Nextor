@@ -138,7 +138,7 @@ CHGF3:
 	ld	iy,(0F348h-1)	;Master controller slot
 	ld	hl,DRIVER.READ_WRITE_ENTRY##
 	ld	(BK4_ADD##),hl
-	ld	b,1
+	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor: not a floppy)
 	ld	hl,($SECBUF##)
 	ld	de,TMP_SEC##
 	or	a
@@ -427,7 +427,8 @@ DIOEN3:
 	push	hl
 	ld	hl,0			;Default: base sector 0 (for FDD)
 	bit	6,(iy+UD1_RELATIVE_DRIVE##)
-	jr	nz,_dio_base_done
+	jr	nz,_dio_base_done	;FDD: the driver gets the DOS 1 media descriptor in C
+	ld	c,0			;Other devices: the driver expects C=0
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
 	ld	h,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 _dio_base_done:
@@ -704,7 +705,7 @@ _dpb_b0_done:
 	ld	a,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3)
 	ld	(TMP_SEC##+3),a
 	ld	a,(iy+UD1_DEVICE_NUMBER##)
-	ld	b,1
+	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor not known yet)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
@@ -952,7 +953,7 @@ READ_BOOT:
 	ld	(TMP_SEC##),de
 	ld	(TMP_SEC##+2),de
 	ld	a,(iy+UD1_DEVICE_NUMBER##)
-	ld	b,1
+	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor not known yet)
 	ld	de,TMP_SEC##
 	ld	hl,($SECBUF##)
 	or	a
