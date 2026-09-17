@@ -299,7 +299,7 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; Bits are assigned to keys as follows:
     ;
     ; 0: .654321.
-    ; 1: ..CS.... (C = CTRL, S = SHIFT)
+    ; 1: .GCS.... (G=GRAPH, C = CTRL, S = SHIFT)
     ;
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
@@ -307,6 +307,9 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; Set INVERT_SHIFT, INVERT_CTRL and/or INVERT_KANJI (for the "6" key)
     ; at assembly time to invert the meaning of the corresponding boot key.
     ; By default no key is inverted.
+	;
+    ; GRAPH cannot be inverted at assembly time; patch KEYS_INV_1 bit 6
+    ; in the ROM (offset 200h) instead.
 
 KEYS_INV_0_VALUE: defl 0
 
@@ -768,8 +771,7 @@ RDABS:	CALLDOS	2Fh	;Absolute sector read
 ; Input: C = type (0=initializing, 1=skipping, 2=init OK, 3=init failed)
 ;        B = slot number (for types 0, 1)
 CALL_PRINT_KERNEL_MSG:
-	ld hl,PRINT_KERNEL_MSG##
-	set 7,h		;Bit 15 = call bank 6
+	ld hl,PRINT_KERNEL_MSG##+8000h	;Bit 15 = call bank 6
 	ld (BK4_ADD##),hl
 	jp C4PBK##
 
@@ -974,6 +976,8 @@ BM_GOTLINLEN:
 	call BOOT_MENU##
 
 AFTER_BOOT_MENU:
+    xor a
+    call    SKIP_FIRM##
 	ld	a,(ALL_KERNELS_DISABLED##)
 	or	a
 	jr	nz,ABM_SKIP_SCREEN
@@ -1097,7 +1101,7 @@ NOTKILL:
 MEM_CHK_OK1:
 ;
 	ld	hl,DATASIZE##	;Try to allocate fixed system work area
-	call	ALLOC##		; just below RAMLOW.
+	call	ALLOC		; just below RAMLOW.
 	ret	c		;Be paranoid, this can't fail.
 ;
 ;	I am the master.
@@ -1288,7 +1292,7 @@ NO_DEVBASED:
 	jr z,DRIVER_NOT_REQUESTING_MEMORY
 
 	push hl
-	call	ALLOC##		;Try to allocate work area for my driver
+	call	ALLOC		;Try to allocate work area for my driver
 	pop hl
 	jp	c,NO_MEM_FOR_DRIVER	;failed, I cannot be the slave
 ;
@@ -1598,7 +1602,7 @@ ALCFAT:
 	push	bc	;If drive not in use, try to allocate
 	push	hl	;space for a new DPB (for MAPDRV function)
 	ld	hl,DPBSIZE
-	call	ALLOC##
+	call	ALLOC
 	ex	de,hl
 	pop	hl
 	pop	bc
@@ -1727,6 +1731,7 @@ WATLOP	equ	7D0Dh
 SRCBAS	equ	7DEEh
 BASROM	equ	0FBB1h
 ;
+BAS_HB11:
 	ld	a,(BASROM)
 	or	a
 	ld	ix,SRCBAS-5	;Because BASIC cartridge is no more enabled.
@@ -2021,7 +2026,7 @@ SET_DIRBUF:
 	call	RESERVE_BASIC
 	call	SET_BLOAD_BSAVE
 ;
-	call	DEFILE##	;re-define file structure
+	call	DEFILE	;re-define file structure
 CANCEL_XFER:
 	ld	a,0C9h		;cancel $DOSON, $DOSOFF and XFER
 SET_XFER:
@@ -2070,7 +2075,7 @@ CHECK_PANIC:
 	jr	PALLOC1
 ;
 PALLOC:
-	call	ALLOC##
+	call	ALLOC
 PALLOC1:
 	ret	nc		;successfully allocated
 ;
@@ -2733,7 +2738,7 @@ if STURBO
 	ld	de,DPBSIZE		;
 	add	hl,de			;
 	ld	(HIMEM##),hl		;
-	call	DEFILE##		; and rebuild BASIC's FCB structure
+	call	DEFILE		; and rebuild BASIC's FCB structure
 	ld	sp,(STKTOP)		;
 ;
 	;Begin of creation of KERNEX_DOS1
@@ -2804,7 +2809,7 @@ MK_EMU_TBL:
 	jr	nz,OK_EMU_WK
 
 	ld	hl,16
-	call	ALLOC##	;TODO: Check for failure to allocate
+	call	ALLOC	;TODO: Check for failure to allocate
 
 OK_EMU_WK:
 	push	hl
@@ -2835,7 +2840,7 @@ MK_DVB_TBL:
 	ld	h,0
 	inc	hl	;HL = Size of table = (entries * UD1_SIZE) + 1
 	push	hl
-	call	ALLOC##
+	call	ALLOC
 	pop	bc
 	jr	z,AUTODRV_OK
 	ld	hl,0
@@ -3135,6 +3140,10 @@ AUXIN:	CALLDOS	03h	;Auxilliary input
 	ALIGN	5474h
 AUXOUT:	CALLDOS	04h	;Auxilliary output
 ;
+
+	public	ALLOC,DEFILE
+	INCLUDE ../bank0/alloc.inc
+
 	ALIGN	553Ch
 GDATE:	CALLDOS	2Ah	;Get date
 ;
@@ -3158,7 +3167,7 @@ DO_KEYS_INIT:
     ld b,a
 
     ld a,(KEYS_INV_1)
-    and 00110000b
+    and 01110000b
     xor h
     ld h,a
 
@@ -3360,6 +3369,8 @@ GWORK2:
 ;    command from BASIC.
 
 CLEAR_STAT_P2:
+    ld  a,1
+    call    SKIP_FIRM##
 	call	GSLT1
 	ld	b,a
 	and	11b
@@ -4014,5 +4025,8 @@ TIMI_NXT_AND_RAM::
 
 ;-----------------------------------------------------------------------------
 
+; Entry address for SONY HB-11 HiTBit-U MENU
+	ALIGN	59DBh
+	jp	BAS_HB11
 	end
 

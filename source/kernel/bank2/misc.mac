@@ -741,8 +741,7 @@ fmt_not_zero:
 		push	ix
 		pop	bc			;BC = buffer pointer (IX consumed by CALSLT)
 		push	hl			;Save unit descriptor
-		ld	hl,DSK_CHOICE_BUF##
-		set	7,h			;Bit 15 = call bank 6 (not bank 4)
+		ld	hl,DSK_CHOICE_BUF##+8000h	;Bit 15 = call bank 6 (not bank 4)
 		ld	(BK4_ADD##),hl
 		pop	hl			;HL = unit descriptor
 		ld	ix,C4PBK##
