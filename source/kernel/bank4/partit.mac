@@ -121,6 +121,7 @@ F_GPART_INNER:
 	ld	(TMP_SEC##+1),a
 	ld	(TMP_SEC##+2),a
 	ld	(TMP_SEC##+3),a
+	ld	e,a			;Boot sector media descriptors are unknown
 	call	DEV_READ
 	ret	nz
 
@@ -316,8 +317,9 @@ UPDATE_SEC:
 
 ;This routine reads one sector into SECBUF
 ;Input: C = Driver slot
-;       B = Driver segment (FFh for ROM drivers), currently ignored
+;       B = Driver segment (FFh for ROM drivers)
 ;       D = Device number
+;       E = Media descriptor
 ;       (TMP_SEC##) = Sector number
 ;Output: A = Error code from DEV_RW
 ;        NZ if A<>0
@@ -352,7 +354,7 @@ DEV_READ_RAM:
 	ld	h,c		;H = slot
 	ld	l,b		;L = segment
 	ld	a,d		;A = device number
-	ld	c,e		;C = LUN
+	ld	c,e		;C = media descriptor
 	ld	b,1		;B = 1 sector
 	push	hl		;Save slot:segment for IY
 	ld	hl,($SECBUF##)	;HL = buffer
