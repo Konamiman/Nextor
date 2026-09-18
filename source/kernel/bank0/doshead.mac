@@ -213,22 +213,21 @@ CALBNK:		exx
 		ld	e,a
 		ld	a,(BNK_ID##)
 		push	af
-		ld	bc,CBNK_CONT
-		push	bc
-		push	ix
+		call	CBNK_RET_TO_IX
+		ex	af,af'
+		pop	af
+		call	CHGBNK	;Re-select caller bank
+		ex	af,af'
+		ret
+
+CBNK_RET_TO_IX:
 		push	hl
-		pop	ix
+		ex	(sp),ix
 		ld	a,e
 		exx
 		call	CHGBNK	;Select desired bank
 		ex	af,af'
 		ret			;Go do the function
-CBNK_CONT:		
-		ex	af,af'
-		pop	af
-		call	CHGBNK	;Always re-select bank #0
-		ex	af,af'
-		ret
 
 ;-----------------------------------------------------------------------------
 ;
