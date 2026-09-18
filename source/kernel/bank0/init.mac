@@ -3735,8 +3735,10 @@ MEMCPY:
 
 DO_LDDR:
 	add	hl,bc
+	dec	hl	;Last byte of source
 	ex	de,hl
 	add	hl,bc
+	dec	hl	;Last byte of destination
 	ex	de,hl
 	lddr
 	ret
