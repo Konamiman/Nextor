@@ -3740,12 +3740,12 @@ MEMCPY:
 	ret	z
 
 DO_LDDR:
-	push	bc
 	add	hl,bc
+	dec	hl	;Last byte of source
 	ex	de,hl
 	add	hl,bc
+	dec	hl	;Last byte of destination
 	ex	de,hl
-	pop	bc
 	lddr
 	ret
 

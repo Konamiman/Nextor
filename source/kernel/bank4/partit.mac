@@ -5639,7 +5639,7 @@ LOCKDRV_HELP:
 	;    ---------------------------------------- 
 	db	"CALL LOCKDRV(<drive>[,<action>])",13,10
 	db	13,10
-	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 7,",1
+	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
 	db  "         or 0 for default drive",13,10
 	db  "<action>: 0 to unlock, non-0 to lock,",1
 	db  "          omit to show current status"
