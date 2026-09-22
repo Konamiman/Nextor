@@ -428,7 +428,7 @@ DIOEN3:
 	ld	hl,0			;Default: base sector 0 (for FDD)
 	bit	6,(iy+UD1_RELATIVE_DRIVE##)
 	jr	nz,_dio_base_done	;FDD: the driver gets the DOS 1 media descriptor in C
-	ld	c,0			;Other devices: the driver expects C=0
+	ld	c,h			;Other devices: the driver expects C=0 (H is still 0)
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##)
 	ld	h,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+1)
 _dio_base_done:
@@ -442,8 +442,9 @@ _dio_base_done:
 	ld	l,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+2)
 	ld	h,(iy+UD1_FIRST_ABSOLUTE_SECTOR##+3)
 _dio_base_hw:
-	ld	de,0
-	adc	hl,de
+	jr	nc,_dio_base_nc		;Add the carry from the low word ADD HL,DE
+	inc	hl			;  (shorter than LD DE,0 + ADC HL,DE, and
+_dio_base_nc:				;   nothing in between alters the carry)
 	ld	(ix+2),l
 	ld	(ix+3),h
 	pop	hl		;Restore transfer address
@@ -944,84 +945,6 @@ ASSIGN_PARTITION:
 
 ;-----------------------------------------------------------------------------
 ;
-; Read the MBR of the device whose entry in KERNEX_DOS1
-; is pointed by IY. Returns the disk error in A.
-; Corrupts AF, BC, DE, HL, IX, IY.
-
-READ_BOOT:
-	ld	de,0
-	ld	(TMP_SEC##),de
-	ld	(TMP_SEC##+2),de
-	ld	a,(iy+UD1_DEVICE_NUMBER##)
-	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor not known yet)
-	ld	de,TMP_SEC##
-	ld	hl,($SECBUF##)
-	or	a
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	jp	DO_CALBNK
-
-
-;-----------------------------------------------------------------------------
-;
-; Convert the disk error returned by a Nextor routine,
-; into its old MSX-DOS equivalent
-
-POP_CONV_ERR:
-	inc	sp
-	inc	sp
-
-CONV_ERR:
-	or	a
-	ret	z
-
-	push	bc
-	ld	b,0
-	cp	.WPROT##
-	jr	z,CONV_ERR_END
-	ld	b,2
-	cp	.NRDY##
-	jr	z,CONV_ERR_END
-
-	;This case should never happen because READ_WRITE is supposed to
-	;never return .IDEVN for an existing device (if the device is offilne
-	;it should return .NRDY instead); however in Nextor 2 both cases
-	;were indistinguishable, so drivers not properly ported from Nextor 2
-	;will return .IDEVN instead of .NRDY. This is only relevant for DOS 1 mode
-	;(in DOS 2 mode the media check layer masks this driver defect,
-	;see mc_devcmd_err in val.mac)
-	cp	.IDEVN##
-	jr	z,CONV_ERR_END
-
-	ld	b,4
-	cp	.DATA##
-	jr	z,CONV_ERR_END
-	ld	b,6
-	cp	.SEEK##
-	jr	z,CONV_ERR_END
-	ld	b,8
-	cp	.RNF##
-	jr	z,CONV_ERR_END
-	ld	b,10
-	cp	.WRERR##
-	jr	z,CONV_ERR_END
-	ld	b,12
-
-CONV_ERR_END:
-	ld	a,b
-	pop	bc
-	scf
-	ret
-
-COMP16:
-	ld	a,h
-	sub	d
-	ret	nz
-	ld	a,l
-	sub	e
-	ret
-
-;-----------------------------------------------------------------------------
-;
 ; Default DPB, it contains data for a 720K disk drive
 
 	ALIGN 7BAAh
@@ -1249,6 +1172,84 @@ KANJI_BOOT_ERROR:
 KB_RESUME:
 	ld	sp,BOOTAD+512		;Same stack as the caller had
 	jp	KANJI_BOOT_RESUME##
+
+;-----------------------------------------------------------------------------
+;
+; Read the MBR of the device whose entry in KERNEX_DOS1
+; is pointed by IY. Returns the disk error in A.
+; Corrupts AF, BC, DE, HL, IX, IY.
+
+READ_BOOT:
+	ld	de,0
+	ld	(TMP_SEC##),de
+	ld	(TMP_SEC##+2),de
+	ld	a,(iy+UD1_DEVICE_NUMBER##)
+	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor not known yet)
+	ld	de,TMP_SEC##
+	ld	hl,($SECBUF##)
+	or	a
+	ld	ix,DRIVER.READ_WRITE_ENTRY##
+	jp	DO_CALBNK
+
+
+;-----------------------------------------------------------------------------
+;
+; Convert the disk error returned by a Nextor routine,
+; into its old MSX-DOS equivalent
+
+POP_CONV_ERR:
+	inc	sp
+	inc	sp
+
+CONV_ERR:
+	or	a
+	ret	z
+
+	push	bc
+	ld	b,0
+	cp	.WPROT##
+	jr	z,CONV_ERR_END
+	ld	b,2
+	cp	.NRDY##
+	jr	z,CONV_ERR_END
+
+	;This case should never happen because READ_WRITE is supposed to
+	;never return .IDEVN for an existing device (if the device is offilne
+	;it should return .NRDY instead); however in Nextor 2 both cases
+	;were indistinguishable, so drivers not properly ported from Nextor 2
+	;will return .IDEVN instead of .NRDY. This is only relevant for DOS 1 mode
+	;(in DOS 2 mode the media check layer masks this driver defect,
+	;see mc_devcmd_err in val.mac)
+	cp	.IDEVN##
+	jr	z,CONV_ERR_END
+
+	ld	b,4
+	cp	.DATA##
+	jr	z,CONV_ERR_END
+	ld	b,6
+	cp	.SEEK##
+	jr	z,CONV_ERR_END
+	ld	b,8
+	cp	.RNF##
+	jr	z,CONV_ERR_END
+	ld	b,10
+	cp	.WRERR##
+	jr	z,CONV_ERR_END
+	ld	b,12
+
+CONV_ERR_END:
+	ld	a,b
+	pop	bc
+	scf
+	ret
+
+COMP16:
+	ld	a,h
+	sub	d
+	ret	nz
+	ld	a,l
+	sub	e
+	ret
 
 ;-----------------------------------------------------------------------------
 ;
