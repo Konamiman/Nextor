@@ -969,6 +969,8 @@ AUTO_COMMON2:
     push hl
     xor a
     call TRY_RAM_EMU
+    or a
+    call z,TRY_PS_EMU
     pop hl
     pop de
     pop bc
@@ -1133,89 +1135,8 @@ AA_PX_1ST:
     jp AA_RECORD_FALLBACK
 AA_PX_POK:
 
-    ;--- If we are scanning the first partition and bit 0 of status byte is set, try to enter disk emulation mode
-
     ld  (ix+AAD_CURR_PART_STATUS_BYTE),c
 
-    bit 0,c
-    jp z,AA_PX_NOEMU    ;Bit 0 of status byte must be set
-    bit AAFLAG_ENTER_EMU_MODE,(ix+AAD_FLAGS)
-    jp z,AA_PX_NOEMU    ;Enter emulation mode must have been requested    
-    ld a,(0F348h)    
-    cp (ix+AAD_DRIVER_SLOT) ;Must be the primary slot
-    jp nz,AA_PX_NOEMU    
-    ld a,(ix+AAD_CURR_PART_INDEX)   ;Must be the first partition
-    dec a
-    jp nz,AA_PX_NOEMU
-
-    push hl
-    push de
-    push bc
-    push ix
-
-    ld hl,($SECBUF##)   ;We still have sector 0 of the device here from F_GPART
-    ld bc,MBR_PSTART
-    add hl,bc
-    push hl
-    pop iy  ;IY = First entry of partition table
-
-    ld a,(BOOTKEYS##)
-    and 00000001b       ;"0" key pressed?
-    jr z,AA_PX_DOEMU
-
-    ;* Reset emulation mode flag from status byte in partition table, then boot normally
-
-AA_PX_KILLEMU:
-    ld  a,(ix+AAD_CURR_PART_STATUS_BYTE)
-    and 0FEh
-    ld (iy+POFF_STATUS),a
-    xor a
-    ld (iy+POFF_CHS_START),a
-    ld (iy+POFF_CHS_START+1),a
-    ld (iy+POFF_CHS_START+2),a
-    ld (iy+POFF_CHS_END),a
-    ld (iy+POFF_CHS_END+1),a
-    ld (iy+POFF_CHS_END+2),a
-
-	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
-    ld  c,(ix+AAD_DRIVER_SLOT)
-    ld  b,(ix+AAD_DRIVER_SEGMENT)
-    ld de,0
-	ld	(TMP_SEC##),de
-	ld	(TMP_SEC##+2),de
-    call AA_WSEC
-
-    pop ix
-    pop bc
-    pop de
-    pop hl
-    jr AA_PX_NOEMU
-
-AA_PX_DOEMU:
-    ld hl,($SECBUF##)   ;We still have sector 0 of the device here from F_GPART
-    ld bc,MBR_PSTART
-    add hl,bc
-    push hl
-    pop iy
-    ld c,(ix+AAD_DRIVER_SLOT)
-    ld b,(ix+AAD_DRIVER_SEGMENT)
-    ld a,(iy+POFF_CHS_START+1)  ;Emulation flags (was LUN number in Nextor 2),
-    ld (EMU_FLAGS##),a          ;GO_EMU resolves the effective value
-    ld a,(iy+POFF_CHS_START)
-    ld h,(iy+POFF_CHS_START+2)
-    ld l,(iy+POFF_CHS_END)
-    ld d,(iy+POFF_CHS_END+1)
-    ld e,(iy+POFF_CHS_END+2)
-    call GO_EMU
-    pop ix
-    pop bc
-    pop de
-    pop hl
-    inc a
-    cp 2
-    ret z    
-
-AA_PX_NOEMU:
     ld	a,b	;Partition type
     call IS_EXT_PART
     jr  nz,AA_PX_NOEX
@@ -1571,6 +1492,32 @@ AA_CHECK_MAP_IN_USE:
 	ret
 
 
+    ;Try to enter emulation mode from the pointer in the persistent storage
+    ;of the master controller (see pstor.mac in bank 6)
+    ;Returns A=1 on success, 0 on failure
+
+TRY_PS_EMU:
+    push ix
+    ld ix,PS_GET_EMU##
+    ld a,6
+    call CALBNK##
+    or a
+    jr z,TRY_PS_EMU_END
+
+    push af
+    ld a,b      ;Emulation flags,
+    ld (EMU_FLAGS##),a  ;GO_EMU resolves the effective value
+    ld a,(MASTER_SLOT##)
+    ld c,a
+    ld b,0FFh   ;The master disk ROM is never a RAM driver
+    pop af
+    call GO_EMU
+
+TRY_PS_EMU_END:
+    pop ix
+    ret
+
+
     ;Try to enter emulation mode from data in RAM
     ;Returns A=1 on success, 0 on failure
 
@@ -1622,7 +1569,7 @@ TRY_RAM_EMU_NO_SIG:
     ret
 
 
-;This subroutine reads (AA_RSEC) or writes (AA_WSEC) a sector from the device to SECBUF.
+;This subroutine reads a sector from the device to SECBUF.
 ;Input: A  = Device number
 ;       C  = Driver slot
 ;       B  = Driver RAM segment, FFh for ROM drivers
@@ -1630,13 +1577,8 @@ TRY_RAM_EMU_NO_SIG:
 ;Output: NZ on error
 ;Preserves IX
 
-AA_WSEC:
-    scf
-    jr AA_DOSEC
-
 AA_RSEC:
     or a
-AA_DOSEC:
 	ld	h,c		;IYh = slot, IYl = segment
 	ld	l,b		;(for AA_CALLDRV2).
 	push	hl
@@ -5885,6 +5827,7 @@ CNEXTOR_S:
 ;    ---------------------------------------- 
     db	13,10,"Available Nextor CALL commands:",13,10
 	db	13,10
+	db  "_BOOTKEYS()",13,10
 	db	"_CHDRV (same as MSX-DOS 2,",1
 	db	"        but works in DOS 1 mode)",13,10
 	db	"_CURDRV",13,10

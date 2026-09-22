@@ -32,6 +32,8 @@
 
 [2.13. The BUFINSERT environment item](#213-the-bufinsert-environment-item)
 
+[2.14. The persistent storage: boot keys and persistent disk emulation](#214-the-persistent-storage-boot-keys-and-persistent-disk-emulation)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -45,6 +47,8 @@
 [3.5. The Nextor SDK and the Docker development image](#35-the-nextor-sdk-and-the-docker-development-image)
 
 [3.6. Disk emulation mode: emulation flags](#36-disk-emulation-mode-emulation-flags)
+
+[3.7. The persistent storage and the _PSOPS function call](#37-the-persistent-storage-and-the-_psops-function-call)
 
 [4. Information for driver developers](#4-information-for-driver-developers)
 
@@ -96,7 +100,7 @@ Pressing the N key while the machine boots opens the new boot menu, which lets y
 
 ### 2.5. The Kanji driver can be installed at boot time
 
-A new boot key, 6, makes Nextor install the Kanji driver (the equivalent of `CALL KANJI` followed by `CALL ANK` in BASIC, so the driver is installed but the screen is left in ANK mode) before the DOS environment is loaded, in both MSX-DOS 2 and MSX-DOS 1 modes; this is what disks patched with `KMODE.COM` did. Like the other boot keys, it can be selected in the boot menu, set via the one-time boot keys mechanism, and inverted in the ROM (so that the driver is installed unless the key is pressed), either with `mknexrom /k:0040` or by using one of the new "KANJI_INV" kernel variants. See _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_.
+A new boot key, 6, makes Nextor install the Kanji driver (the equivalent of `CALL KANJI` followed by `CALL ANK` in BASIC, so the driver is installed but the screen is left in ANK mode) before the DOS environment is loaded, in both MSX-DOS 2 and MSX-DOS 1 modes; this is what disks patched with `KMODE.COM` did. Like the other boot keys, it can be selected in the boot menu, set via the one-time boot keys mechanism, and inverted with `mknexrom /k:0040` (so that the driver is installed unless the key is pressed), or via the persistent storage. See _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_.
 
 ### 2.6. One drive letter per active partition/offline device at boot
 
@@ -136,7 +140,11 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * The `EMUFILE` tool gains the `-5` and `-6` options, in both the data file creation and the `set` syntaxes: Nextor then forces the screen to 50Hz or 60Hz right after entering disk emulation mode, before the disk image file is loaded. See _[3.9.3. Forcing the screen frequency](Nextor_3.0_User_Manual.md#393-forcing-the-screen-frequency)_ in the user manual.
 
-* The `EMUFILE` tool also gains the `-c` and `-s` options (one-time emulation only): they free memory for the game by simulating the CTRL key (disable the ghost floppy disk drive) or the SHIFT key (disable MSX-DOS kernels) being pressed when the emulation session starts. See _[3.9.5. How to free some memory](Nextor_3.0_User_Manual.md#395-how-to-free-some-memory)_ in the user manual.
+* The `EMUFILE` tool also gains the `-c` and `-s` options: they free memory for the game by forcing the CTRL key (disable the ghost floppy disk drive) or the SHIFT key (disable MSX-DOS kernels) as pressed when the emulation session starts. See _[3.9.5. How to free some memory](Nextor_3.0_User_Manual.md#395-how-to-free-some-memory)_ in the user manual.
+
+* The `EMUFILE` tool gains the `k` command, that removes the persistent disk emulation mode, and no longer accepts a device for the persistent variant; and there are two new BASIC commands, `CALL BOOTKEYS` and `CALL EMUKILL`. See _[2.14. The persistent storage: boot keys and persistent disk emulation](#214-the-persistent-storage-boot-keys-and-persistent-disk-emulation)_.
+
+* The `NEXBOOT` tool gains the `/p`, `/k` and `/i` options, which store, remove and show the inverted boot keys kept in the persistent storage, as an alternative to `CALL BOOTKEYS`. Unlike the rest of the tool they don't reset the computer.
 
 * The `EMUFILE` tool gains the `-8` option, which boots the emulation session in R800-ROM mode on an MSX turbo R (like `-5`/`-6`, it can be stored in the data file and works for both the one-time and persistent variants), and the `-x` option for the `set` syntax, which makes the tool ignore all the flags stored in the emulation data file and apply only the ones given in the command line. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
 
@@ -169,6 +177,16 @@ Also, `NEXTOR.SYS` now looks for `AUTOEXEC.BTM` in the boot drive before `AUTOEX
 ### 2.13. The BUFINSERT environment item
 
 The line editor built into the kernel (the one behind the `_BUFIN` function call and the `CON` device in ASCII mode, and therefore the one used by any program that reads lines through them) starts every line in insert mode instead of overwrite mode when an environment item named `BUFINSERT` exists with the value `ON`. The command line editor of `COMMAND3.COM` honors the item too, so it applies to the command prompt whether `EXPAND` is `ON` or `OFF`. See _[2.17. The BUFINSERT environment variable](Nextor_3.0_User_Manual.md#217-the-bufinsert-environment-variable)_ in the user manual.
+
+### 2.14. The persistent storage: boot keys and persistent disk emulation
+
+Nextor 3 introduces the _persistent storage_: a small non-volatile data area, provided by the primary Nextor controller, where Nextor keeps the settings that it needs to know at the very beginning of the boot process. It's a small hidden file (`_NEXTOR.PSF`) in the first partition of the first storage device of the primary controller, so the settings belong to the medium rather than to the computer; see _[2.18. The persistent storage](Nextor_3.0_User_Manual.md#218-the-persistent-storage)_ in the user manual. Two things are kept there:
+
+* **The boot key inverters.** In Nextor 2 the only way to have a boot key inverted (for example, having the MSX-DOS kernels disabled unless SHIFT is pressed) was to modify the kernel ROM before flashing it. Now [the `CALL BOOTKEYS` command](Nextor_3.0_User_Manual.md#3616-the-call-bootkeys-command) does it, for any of the keys 1 to 6, CTRL and SHIFT. Inverting a key in the ROM itself is still possible with the `/k` option of `mknexrom`.
+
+* **The pointer for the persistent disk emulation mode.** **This is a breaking change:** in Nextor 2 the pointer was kept in the partition table of a device, and Nextor 3 neither reads nor modifies that. If you have the persistent disk emulation mode set up with Nextor 2, disable it (by booting with the 0 key pressed) before upgrading, and set it up again with the new `EMUFILE.COM` afterwards; if you don't, nothing bad will happen, the computer will just boot normally. On the other hand, the `-c` and `-s` options of `EMUFILE.COM` now work for the persistent variant too.
+
+The meaning of the 0 boot key changes accordingly: it no longer removes the persistent disk emulation mode, instead it makes Nextor ignore the persistent storage completely for that boot (so neither the boot keys set with `CALL BOOTKEYS` are inverted, nor the disk emulation mode is entered). To remove the persistent disk emulation mode use `EMUFILE k` or [the `CALL EMUKILL` command](Nextor_3.0_User_Manual.md#3617-the-call-emukill-command).
 
 ## 3. Information for application developers
 
@@ -215,7 +233,13 @@ Additionally, a Docker image for Nextor development, with the required assembler
 
 ### 3.6. Disk emulation mode: emulation flags
 
-The disk emulation data file header, the one-time emulation data in RAM and the partition table entry used for persistent emulation now have an emulation flags byte. Its bits 1 and 2 force the screen to 50Hz or 60Hz right after entering disk emulation mode, and bit 5 boots a turbo R in R800-ROM mode; the kernel reads these bits only from the emulation data pointer (RAM or partition table), and `EMUFILE.COM` combines the values stored in the data file header with the ones requested in its command line and writes the result to the pointer, so they work for both the one-time and persistent variants. Bits 3 and 4 are used by `EMUFILE.COM` (not the kernel) to disable the ghost floppy disk drive or the MSX-DOS kernels for one-time emulation, via the boot keys. Tools that write emulation data pointers should now write this byte as explained in _[7.2.3. Emulation flags](Nextor_3.0_Programmers_Reference.md#723-emulation-flags)_ in the programmers reference.
+The disk emulation data file header, the one-time emulation data in RAM and the emulation data pointer for persistent emulation (now in the persistent storage) have an emulation flags byte. Its bits 1 and 2 force the screen to 50Hz or 60Hz right after entering disk emulation mode, bit 5 boots a turbo R in R800-ROM mode, and bits 3 and 4 force the CTRL and SHIFT boot keys as pressed; the kernel reads these bits only from the emulation data pointer, and `EMUFILE.COM` combines the ones in the data file header with its command line options to build it. In Nextor 2 that byte was the logical unit number, so bit 0 is ignored. See _[7.2.3. Emulation flags](Nextor_3.0_Programmers_Reference.md#723-emulation-flags)_ in the programmers reference.
+
+### 3.7. The persistent storage and the _PSOPS function call
+
+The new function call `_PSOPS` (80h) reads and writes the persistent storage of the primary controller, in a raw way. Programs can use the storage for their own data, as long as they respect the data that Nextor keeps at its beginning, whose format is documented. See _[3.16. Persistent storage operations (_PSOPS, 80h)](Nextor_3.0_Programmers_Reference.md#316-persistent-storage-operations-_psops-80h)_ and _[7.4. Persistent storage](Nextor_3.0_Programmers_Reference.md#74-persistent-storage)_ in the programmers reference. Note that this is the first function call with a number beyond 7Fh.
+
+The emulation data pointer for the persistent disk emulation mode is now part of that data; tools that used to write it to the partition table of a device must be updated, see _[7.2.2. Entering disk emulation mode](Nextor_3.0_Programmers_Reference.md#722-entering-disk-emulation-mode)_.
 
 ## 4. Information for driver developers
 
@@ -224,3 +248,5 @@ The driver structure of Nextor 3 is completely new and incompatible with Nextor 
 The good news is that the changes are mostly at the driver API level rather than at the driver functionality level, so most of the code of an existing Nextor 2 driver can be reused: it is mostly a matter of adding a compatibility layer that adapts it to the new structure. The _[Nextor 3.0 Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md)_ explains how to do exactly that. The complete reference for the new driver system is _[4. Nextor driver structure](Nextor_3.0_Driver_Development_Guide.md#4-nextor-driver-structure)_ in the _[Nextor 3.0 Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md)_; and once your driver is written, the new `DRVTEST.COM` tool will help you exercise it: see _[5. Testing drivers with DRVTEST.COM](Nextor_3.0_Driver_Development_Guide.md#5-testing-drivers-with-drvtestcom)_.
 
 The free area for driver code or data at the end of the kernel main banks (the `/e:` option of `mknexrom`) shrinks from 1K at 7BD0h to 256 bytes at 7ED0h-7FCFh: the kernel now uses the rest. Drivers that used that area must move their contents to the new location (and update anything that points into it, such as hooks) and fit them in 256 bytes; `mknexrom` refuses the extra file if the area isn't empty in the kernel base file. The new `DRIVER_EXTRA_AREA` and `DRIVER_EXTRA_AREA_SIZE` SDK constants give the location and size. See _[4.7.1. The free space at kernel main bank](Nextor_3.0_Driver_Development_Guide.md#471-the-free-space-at-kernel-main-bank)_.
+
+Drivers can take part in the new persistent storage in two ways, both optional: by exposing non-volatile memory of the controller, or by implementing the "read device sectors before initialization" device query, which lets Nextor read its persistent storage file early enough at boot time. There's also a new device flag, "this device shouldn't be used for the persistent storage". See _[4.7.2. Supporting the persistent storage](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage)_ in the driver development guide.

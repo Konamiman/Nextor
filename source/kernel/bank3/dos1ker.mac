@@ -6799,17 +6799,36 @@ A65A3:	and	a
 	ld	a,(hl)
 	and	a
 	jr	nz,A658A
+NOT_IN_TABLE:
+	jr	T65B1			;Not in our table: try the commands of bank 6
+NOT_IN_TABLE_SIZE	equ	$-NOT_IN_TABLE
+
 A65AD:	pop	hl
 	scf	;jp	OEMSTA
 	ret
 	nop
 
-T65B1:	ds	19
-	;defb	"SYSTEM",0
-	;defw	A65C4
-	;defb	"FORMAT",0
-	;defw	A65DC
-	;defb	0
+;The CALL commands table was here, now it's CMD_NAMES. The room it left
+;is used for the jump above and for the code below, which looks for the
+;command in bank 6 (CALL_EXTRA in pstor.mac, which returns Cy=1 if it
+;doesn't know the command either); what's left over is padded so that
+;nothing after this point moves. The table was:
+;
+;	defb	"SYSTEM",0
+;	defw	A65C4
+;	defb	"FORMAT",0
+;	defw	A65DC
+;	defb	0
+
+CALL_TABLE_ROOM	equ	(6+1+2)*2+1	;Two "name,0 + address" entries plus the terminator
+
+T65B1:	pop	hl
+	ld	ix,CALL_EXTRA##
+	ld	a,6
+	jp	CALBNK##
+T65B1_END:
+
+	ds	CALL_TABLE_ROOM-NOT_IN_TABLE_SIZE-(T65B1_END-T65B1)
 
 A65C4:	ret	nz
 	push	af
@@ -9078,6 +9097,9 @@ MOREFS:
 
 	db	_FORMAT##
 	dw	F_FORMAT##+8000h	;Bit 15 = call bank 6
+
+	db	_PSOPS##
+	dw	F_PSOPS##+8000h
 
 	db	0
 

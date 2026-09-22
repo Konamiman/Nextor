@@ -602,17 +602,9 @@ DM_AFTER_KERNELS:
 
 	ld b,0			;B = key index (0-8)
 DM_KEY_LOOP:
-	;Skip keys 2 and 4 on non-Turbo-R
 	ld a,b
-	cp 2
-	jr z,DM_KEY_CHECK_TURBO
-	cp 4
-	jr nz,DM_KEY_SHOW
-DM_KEY_CHECK_TURBO:
-	ld a,(MSXVER)
-	cp 3			;Turbo-R = 3
-	jr c,DM_KEY_SKIP
-DM_KEY_SHOW:
+	call KEY_IS_SHOWN
+	jr nz,DM_KEY_SKIP
 	push bc
 	ld a,b
 	call DISPLAY_KEY_LINE
@@ -776,22 +768,15 @@ MIL_LOOP:
 	;Digit key pressed
 	sub '0'			;A = key index 0-8
 
-	;Skip keys 2,4 on non-Turbo-R
-	cp 2
-	jr z,MIL_CHECK_TURBO_KEY
-	cp 4
-	jr nz,MIL_DO_TOGGLE_KEY
-MIL_CHECK_TURBO_KEY:
+	;Ignore the keys that aren't listed
 	push af
-	ld a,(MSXVER)
-	cp 3
-	jr nc,MIL_TURBO_OK
+	call KEY_IS_SHOWN
+	jr z,MIL_DO_TOGGLE_KEY
 	pop af
-	jr MIL_LOOP		;Ignore on non-Turbo-R
-MIL_TURBO_OK:
-	pop af
+	jr MIL_LOOP
 
 MIL_DO_TOGGLE_KEY:
+	pop af
 	call TOGGLE_NUM_KEY
 	jr MIL_LOOP
 
@@ -951,15 +936,8 @@ TNK_COUNT:
 	jr z,TNK_COUNTED
 
 	;Was this key displayed?
-	cp 2
-	jr z,TNK_CHECK_TR
-	cp 4
-	jr nz,TNK_WAS_SHOWN
-TNK_CHECK_TR:
-	ld a,(MSXVER)
-	cp 3
-	jr c,TNK_NEXT_COUNT	;Not shown on non-Turbo-R
-TNK_WAS_SHOWN:
+	call KEY_IS_SHOWN
+	jr nz,TNK_NEXT_COUNT
 	inc d			;Count this displayed key
 TNK_NEXT_COUNT:
 	inc b
@@ -1036,6 +1014,56 @@ WRITE_RAM_KEYS:
 
 RAMKEYSIG:	db "NEXTOR_BOOT_KEYS",0
 RAMKEYSIG_END:
+
+
+;=============================================================================
+;  KEY_IS_SHOWN - Tell whether a numeric key option is listed in the menu
+;  Input:  A = key index (0-8)
+;  Output: Z = listed, NZ = not listed
+;  Corrupts: AF
+;=============================================================================
+
+KEY_IS_SHOWN:
+	cp 2			;The two R800 options need a turbo R
+	jr z,KIS_TURBO
+	cp 4
+	jr z,KIS_TURBO
+	or a
+	jr z,KIS_KEY_0
+	xor a			;Any other key is always listed
+	ret
+
+KIS_TURBO:
+	ld a,(MSXVER)
+	cp 3			;Turbo R = 3
+	jr c,KIS_NO
+	xor a
+	ret
+
+	;The "0" key only prevents the persistent disk emulation mode from
+	;being entered: the inverted boot keys have been applied already, and
+	;what this menu shows and returns is the final state of the keys. So
+	;list it only if there's an emulation pointer in the persistent
+	;storage, or if the key was already pressed (so that it can be unset).
+	;
+	;ORIG_KEYS and not LOCAL_KEYS on purpose: the answer must not change
+	;while the menu is open, otherwise toggling the key off would make its
+	;own line disappear and move every line below it.
+
+KIS_KEY_0:
+	ld a,(PS_EMU_PRESENT##)
+	or a
+	jr nz,KIS_YES
+	ld a,(ORIG_KEYS)
+	and 1			;Bit 0 of byte 0 is the "0" key
+	jr nz,KIS_YES
+KIS_NO:
+	ld a,1
+	or a			;NZ
+	ret
+KIS_YES:
+	xor a
+	ret
 
 
 ;=============================================================================
@@ -1409,7 +1437,7 @@ KEY_STR_TABLE:
 	dw STR_KEY_7
 	dw STR_KEY_8
 ;               |--------|---------|---------|---------|
-STR_KEY_0:	db "Disable permanent disk emulation",0
+STR_KEY_0:	db "Ignore persistent disk emulation",0
 STR_KEY_1:	db "Boot in MSX-DOS 1 mode",0
 STR_KEY_2:	db "Boot in MSX-DOS 1+R800 ROM mode",0
 STR_KEY_3:	db "Boot in MSX BASIC",0

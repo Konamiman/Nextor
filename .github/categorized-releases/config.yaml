@@ -74,24 +74,13 @@ categories:
       [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md)
       list.
 
-      Each release contains all the combinations of these variants, encoded in the file name:
+      Each release contains two variants, encoded in the file name:
 
       - No suffix: the default build.
       - `NO_UNDOC`: built without undocumented Z80 instructions, so that the kernel also works
         on machines with a Z180 processor.
-      - `SHIFT_INV`: the SHIFT boot key is inverted. Normally pressing SHIFT while booting
-        prevents the MSX-DOS kernels (typically the internal floppy disk drive) from booting;
-        in this variant they are disabled _unless_ SHIFT is pressed.
-      - `CTRL_INV`: the CTRL boot key is inverted. Normally pressing CTRL while booting makes
-        the internal floppy disk drive disable its second "ghost" drive, freeing some memory;
-        in this variant the ghost drive is disabled _unless_ CTRL is pressed.
-      - `KANJI_INV`: the "6" boot key is inverted. Normally pressing 6 while booting installs
-        the Kanji driver before the DOS environment is loaded; in this variant the Kanji
-        driver is installed _unless_ 6 is pressed.
 
-      The release provides files with no key inverted, with SHIFT inverted (`SHIFT_INV`) and
-      with CTRL inverted (`CTRL_INV`); each of the three comes with and without `NO_UNDOC` and
-      with and without `KANJI_INV`, twelve files in total. See the
+      It is possible to invert boot keys in the ROM by using the `/k` option of mknexrom. See the
       [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md#2101-boot-key-inverters)
       for the details on the boot key inverters.
     assets: '(^|\n)Nextor-[^\n]*\.base(\.[^\n]*)?\.dat(\n|$)'
@@ -115,7 +104,7 @@ categories:
           (you still get the Nextor features, such as FAT16 support, on those devices), or
           for testing drivers loaded in RAM. Each ROM is built from the kernel base file of
           the same version, and the same variants are available: see [Kernel base](#kernel-base)
-          for an explanation of the `NO_UNDOC`, `SHIFT_INV`, `CTRL_INV` and `KANJI_INV` suffixes.
+          for an explanation of the `NO_UNDOC` suffix.
         assets: '(^|\n)Nextor-[^\n]*\.Standalone(ASCII8|ASCII16)[^\n]*\.ROM(\n|$)'
 
       - name: "Example RAM driver"

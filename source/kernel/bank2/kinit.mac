@@ -817,6 +817,8 @@ kbdos_table:
     dw  F_GETCLUS##     ;Get information about a cluster in a FAT drive
 
 	dw	F_DRVRO##		;Operate on a RAM-loaded driver
+
+	dw	F_PSOPS##+8000h		;Persistent storage operations (bit 15 = bank 6)
 ;
 ;
 num_kbdos_fns	equ	($-kbdos_table)/2

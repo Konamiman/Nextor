@@ -16,3 +16,9 @@
 	jentry	IDRV_AUTOMAP
 	jentry	CIDRIVER
 	jentry	CUDRIVER
+	jentry	PS_BOOT
+	jentry	PS_GET_EMU
+	jentry	F_PSOPS
+	jentry	CBOOTKEYS
+	jentry	CEMUKILL
+	jentry	CALL_EXTRA

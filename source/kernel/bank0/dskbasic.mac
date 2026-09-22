@@ -476,6 +476,10 @@ COMMAND:
 	defw	CIDRIVER## or 8000h
 	defb	'UDRIVER',0
 	defw	CUDRIVER## or 8000h
+	defb	'BOOTKEYS',0
+	defw	CBOOTKEYS## or 8000h
+	defb	'EMUKILL',0
+	defw	CEMUKILL## or 8000h
 ;
 	defb	0		;end of table
 
