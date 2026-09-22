@@ -253,13 +253,13 @@ BDOS_GO_GO:
 		JR	C,FUNCTION_OK		; then force it into a known
 		LD	A,BADNO			; unimplemented function number
 FUNCTION_OK:
-		LD	HL,FUNTAB
-		ADD	A,A
-		ADD	A,L			;Index into the function table
-		LD	L,A			; to get the address of the
-		JR	NC,NOINC		; routine for this function.
-		INC	H
-NOINC:
+		LD	L,A			;Index into the function table
+		LD	H,0			; to get the address of the
+		ADD	HL,HL			; routine for this function
+		PUSH	DE			; (function numbers go beyond
+		LD	DE,FUNTAB		; 7Fh, so the index doesn't
+		ADD	HL,DE			; fit in 8 bits).
+		POP	DE
 		LD	A,(HL)			;Get function routine address
 		INC	HL			; from table.
 		LD	H,(HL)
@@ -428,6 +428,7 @@ FUNTAB:	DEFW	@TERM0		;Terminate program with no error.
     DEFW    @GETCLUS    ; Get information about a cluster in a FAT drive
 
 	DEFW	@DRVRO		; Operate on a RAM-loaded driver
+	DEFW	@PSOPS		; Persistent storage operations
 ;
 MAXFN	EQU	($-FUNTAB)/2	;Largest function number.
 ;
@@ -776,6 +777,7 @@ _KBSDE_GO:
 @GPART:
 @Z80MODE:
 @DRVRO:
+@PSOPS:
 ;
 @BADFN:				;Undefined functions go straight through.
 ;

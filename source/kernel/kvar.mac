@@ -319,6 +319,13 @@ size	macro	name
     ;pointer is what MAP_SCAN would have returned in HL.
     field  2*16+1,MAP_REC
     field  2,MAP_REC_END_PTR
+
+    ;Set by PS_BOOT to 1 if the persistent storage holds a disk emulation
+    ;pointer, to 0 otherwise (including when the storage isn't read at all
+    ;because the "0" key is pressed). The boot menu uses it to decide whether
+    ;the "0" option is worth showing. It goes last so that the address of
+    ;everything above, BOOTKEYS in particular, stays put.
+    field  1,PS_EMU_PRESENT
 ;
 ;-----------------------------------------------------------------------------
 ;

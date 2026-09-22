@@ -4,7 +4,7 @@
 
 ## What's what
 
-- **Kernel base**: the Nextor kernel without any device driver, as a `.dat` file. Driver developers combine it with their driver using `mknexrom` to produce a complete kernel ROM. Available in several variants (`NO_UNDOC`, `SHIFT_INV`, `CTRL_INV`, `KANJI_INV`), explained in the category itself.
+- **Kernel base**: the Nextor kernel without any device driver, as a `.dat` file. Driver developers combine it with their driver using `mknexrom` to produce a complete kernel ROM. Available in two variants (default and `NO_UNDOC`), explained in the category itself.
 
 - **Drivers**: the device drivers supplied with the Nextor repository.
   - **Standalone ROMs**: complete kernel ROMs with a dummy device driver that handles no devices, for computers and emulators where the storage devices are handled by other ROMs, or for testing drivers loaded in RAM.

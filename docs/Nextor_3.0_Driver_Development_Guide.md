@@ -104,9 +104,13 @@
 
 [4.6.7. Device query 7: Stop the motor of a floppy disk drive](#467-device-query-7-stop-the-motor-of-a-floppy-disk-drive)
 
+[4.6.8. Device query 8: Read device sectors before initialization](#468-device-query-8-read-device-sectors-before-initialization)
+
 [4.7. Other](#47-other)
 
 [4.7.1. The free space at kernel main bank](#471-the-free-space-at-kernel-main-bank)
+
+[4.7.2. Supporting the persistent storage](#472-supporting-the-persistent-storage)
 
 [5. Testing drivers with DRVTEST.COM](#5-testing-drivers-with-drvtestcom)
 
@@ -279,7 +283,7 @@ The procedure for creating the complete Nextor kernel ROM file consists basicall
 
 In order to manually create a complete Nextor ROM file, the following recipe must be followed. The file positions mentioned are zero based.
 
-1.  Create a copy of the kernel base file, `Nextor-3.x.x-beta1.base.dat` or any of its variants (e.g. `Nextor-3.x.x-beta1.base.CTRL_INV.dat`).
+1.  Create a copy of the kernel base file, `Nextor-3.x.x-beta1.base.dat` or its `NO_UNDOC` variant, `Nextor-3.x.x-beta1.base.NO_UNDOC.dat`.
 
 2.  Append the page 0 code at the end of the file. This code can be simply copied from the first 255 bytes of the kernel base file itself.
 
@@ -974,7 +978,8 @@ On success, buffer filled with the following information:
                  to be read-only.
         bit 2: 1 if the device is a floppy disk drive.
         bit 3: 1 if this device shouldn't be used for partition automapping.
-        bits 4-7: must be zero.
+        bit 4: 1 if this device shouldn't be used for the persistent storage.
+        bits 5-7: must be zero.
 +8 (2): Number of cylinders
 +10 (1): Number of heads
 +11 (1): Number of sectors per track
@@ -989,6 +994,8 @@ In the current version Nextor will refuse to work with a device that is reported
 The information about cylinders, heads and sectors per track applies only to floppy disks and hard disks; for other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is not used by the Nextor kernel, but can be used by device partitioning tools in order to properly align partitions on the disk (in the current version of Nextor this information is not used by the built-in partitioning tool).
 
 The "read only" flag should be set only for devices that are only readable by design (for example a CD-ROM). A device that can be dynamically write protected and write enabled should not be reported as a read-only device.
+
+If the "shouldn't be used for the persistent storage" flag is set Nextor will never look for its persistent storage file in the device, see _[4.7.2. Supporting the persistent storage](#472-supporting-the-persistent-storage)_. Set it for devices that aren't the regular storage media of the user, for example a read-only disk embedded in the cartridge. A driver that sets this flag for a device and implements _[4.6.8. Device query 8: Read device sectors before initialization](#468-device-query-8-read-device-sectors-before-initialization)_ must make that query fail for the device.
 
 If the "floppy disk drive" flag is set Nextor will treat the device differently in some aspects, see ["Support for floppy disks" in the user manual](Nextor_3.0_User_Manual.md#25-support-for-floppy-disks). If a driver reports a device as being a floppy disk it should implement the _[4.6.5. Device query 5: Get format choices for a floppy disk device](#465-device-query-5-get-format-choices-for-a-floppy-disk-device)_ and _[4.6.6. Device query 6: Format a floppy disk device](#466-device-query-6-format-a-floppy-disk-device)_ queries too.
 
@@ -1099,6 +1106,31 @@ This query is intended for floppy disk devices only. For any other device type (
 
 This query is currently never invoked by the Nextor kernel, but this could change in future versions so drivers should implement it whenever possible.
 
+#### 4.6.8. Device query 8: Read device sectors before initialization
+
+```
+Input:  A  = 8
+        C  = Device number
+        B  = Number of sectors to read
+        HL = Destination memory address (never in page 1)
+        DE = Memory address (never in page 1) where
+             the 4 byte sector number is stored
+Output: A  = 0: Ok
+             RESULT_NOT_IMPLEMENTED: query not implemented
+             Other: same error codes as the READ_WRITE routine
+```
+
+This query reads absolute sectors from a device, like [`READ_WRITE`](#449-read_write-4128h) does, but it's invoked at boot time **before** the driver has been initialized: before _[4.5.3. Driver query 3: Get driver initialization parameters](#453-driver-query-3-get-driver-initialization-parameters)_ and _[4.5.4. Driver query 4: Initialize driver](#454-driver-query-4-initialize-driver)_ are invoked. Nextor uses it to read its persistent storage file at the very beginning of the boot, which is the only moment the regular [`READ_WRITE`](#449-read_write-4128h) routine can't be used for it; a driver that doesn't implement it loses the boot key inverters, but not the rest of the persistent storage. See _[4.7.2. Supporting the persistent storage](#472-supporting-the-persistent-storage)_ for the details and for the rules that a driver must follow when it runs in that state.
+
+Some specific rules for this query:
+
+* Nextor tries the devices in order, starting with device 1. The error code tells it what to do next: `.IDEVN` (or `RESULT_INVALID_DEVICE`) and `.NRDY` mean "try the next device", success means "this is the device to use", and anything else (`RESULT_NOT_IMPLEMENTED` included) means "stop looking".
+* Return `.IDEVN` for a device that doesn't exist **and also** for a device that is flagged as "shouldn't be used for the persistent storage" in _[4.6.2. Device query 2: Get device parameters](#462-device-query-2-get-device-parameters)_.
+* Return `.NRDY` for a device that exists but can't be accessed now (no medium inserted, or a device that isn't ready yet shortly after power on).
+* Don't wait for a long time for a device to become ready: every second spent here is added to the boot time of the computer, on every boot.
+
+Returning `RESULT_NOT_IMPLEMENTED` means that Nextor won't be able to read the persistent storage file at boot time. The consequences are explained in _[4.7.2. Supporting the persistent storage](#472-supporting-the-persistent-storage)_.
+
 ### 4.7. Other
 
 This section contains other useful information about the Nextor device driver structure.
@@ -1118,6 +1150,29 @@ There are two main cases in which it may be necessary to add custom contents to 
 The code at this area should use [the `CALBNK` routine](#424-calbnk-4042h) if it needs to invoke code in the driver bank, whose number can be read from [the `K_SIZE` address](#428-k_size-40feh).
 
 Note that whatever is placed in this area, it must be identical in both banks 0 and 3, so that everything will work correctly in both the normal Nextor mode and the MSX-DOS 1 mode. The `mknexrom` tool will appropriately patch both banks if a data file for this area is supplied.
+
+#### 4.7.2. Supporting the persistent storage
+
+Nextor 3 has a _persistent storage_: a small non-volatile data area, provided by the primary controller, that Nextor uses to remember the boot keys that the user wants inverted and the pointer for the persistent disk emulation mode. Programs can access it too. See ["Persistent storage" in the Programmers Reference](Nextor_3.0_Programmers_Reference.md#74-persistent-storage) for the contents, and ["The persistent storage" in the User Manual](Nextor_3.0_User_Manual.md#218-the-persistent-storage) for what the user sees.
+
+Nextor keeps the data in a hidden file named `_NEXTOR.PSF`, in the root directory of the first partition of one of the devices of the driver (or in the root directory of the device, if it has no partitions). Nextor finds, creates and updates the file by itself; the driver doesn't need to know anything about partitions or filesystems. The only thing it needs to do is to implement the ["Read device sectors before initialization" device query](#468-device-query-8-read-device-sectors-before-initialization), so that Nextor can read the file early enough at boot time. The device used is the first one that exists, isn't flagged as "shouldn't be used for the persistent storage", and is available.
+
+This means that the settings belong to the storage medium and not to the cartridge: a different medium has different settings, or none at all, and a controller whose devices have no medium inserted has no persistent storage. A future version of Nextor may let a controller with non-volatile memory of its own keep the data there instead; the information returned by [the `_PSOPS` function call](Nextor_3.0_Programmers_Reference.md#316-persistent-storage-operations-_psops-80h) is already shaped for that, so programs should read the storage geometry from it rather than assuming one sector of 512 bytes.
+
+Why "before initialization"? Some boot keys (`SHIFT`, `CTRL`, `4`, `5`) are acted upon by the kernel before the driver is initialized, and the persistent storage says which of them are inverted. So Nextor has to read it first thing at boot time.
+
+These are the rules for a driver query or device query that is invoked before the driver is initialized:
+
+* No work area has been allocated yet. [`GWORK`](#425-gwork-4045h) must not be used to get a pointer to allocated memory (the 8 bytes of the `SLTWRK` entry for the slot do exist, and they are zeroed). If some temporary RAM is needed, use the stack.
+* Nothing must be printed on the screen.
+* The execution time must be bounded, and reasonably short.
+* Whatever is done to the hardware must not prevent the regular initialization from working when it's requested later. The opposite is fine: the hardware can be left in any state, since the regular initialization will happen anyway.
+* Interrupts are enabled when the query is invoked, and the same rules as in [`READ_WRITE`](#449-read_write-4128h) apply.
+* ["Get maximum supported device number" driver query](#455-driver-query-5-get-maximum-supported-device-number) is invoked in this state too, in order to know how many devices to try.
+
+If the device query returns `RESULT_NOT_IMPLEMENTED`, this is what happens: Nextor can still find its persistent storage file once the driver is initialized, by using the regular [`READ_WRITE`](#449-read_write-4128h) routine, and therefore the persistent disk emulation mode works and programs can use the persistent storage. What is lost is only what has to be known before the driver exists: the boot keys configured by the user as inverted have no effect (the ones set in the ROM are used), and the disk emulation mode options that force the `CTRL` and `SHIFT` keys have no effect for the persistent disk emulation mode.
+
+Drivers loaded in RAM never provide the persistent storage: it's always handled by the primary controller, whose driver is in ROM.
 
 ## 5. Testing drivers with DRVTEST.COM
 

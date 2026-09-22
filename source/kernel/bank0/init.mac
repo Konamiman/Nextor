@@ -294,7 +294,11 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; (if boot keys are set in RAM, the keyboard is completely ignored).
     ;
     ; These bytes are fixed at offset 200h (starting at 0) in ROM.
-    ; They should be changed in the ROM file before flashing in the hardware.
+    ; They are always assembled as zero; to invert a key in the ROM itself,
+    ; patch them in the ROM file (MKNEXROM does it with its /k option)
+    ; before flashing in the hardware. Since Nextor 3 the usual way to
+    ; invert a boot key is the persistent storage instead, which doesn't
+    ; require modifying the ROM (see CALL BOOTKEYS and NEXBOOT /p).
     ;
     ; Bits are assigned to keys as follows:
     ;
@@ -304,29 +308,9 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
 
-    ; Set INVERT_SHIFT, INVERT_CTRL and/or INVERT_KANJI (for the "6" key)
-    ; at assembly time to invert the meaning of the corresponding boot key.
-    ; By default no key is inverted.
+KEYS_INV_0: db 0
 
-KEYS_INV_0_VALUE: defl 0
-
-    ifdef INVERT_KANJI
-KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+40h
-    endif
-
-KEYS_INV_0: db KEYS_INV_0_VALUE
-
-KEYS_INV_1_VALUE: defl 0
-
-    ifdef INVERT_SHIFT
-KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+10h
-    endif
-
-    ifdef INVERT_CTRL
-KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+20h
-    endif
-
-KEYS_INV_1: db KEYS_INV_1_VALUE
+KEYS_INV_1: db 0
 
 ;
 ;=======================================================================
@@ -3144,23 +3128,28 @@ SDATE:	CALLDOS	2Bh	;Set date
 
     ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet.
 
+    ;This is done only by the first Nextor kernel that gets initialized
+    ;(its slot is the only one that CHK_DUP has registered so far),
+    ;the others just use the boot keys state that it leaves in BOOTKEYS.
+    ;
+    ;The raw state of the keys is stored first. Then PS_BOOT in bank 6 inverts
+    ;the keys that have their inverter set (the inverters are taken from the
+    ;persistent storage if possible, otherwise from KEYS_INV_0/1) and forces
+    ;the keys requested by the flags of the disk emulation mode pointer.
+
 DO_KEYS_INIT:
+    ld a,(PROCNM+1)
+    or a
+    ret nz
+
     call CHECK_IS_RUSSIAN
     ld (I_AM_RUSSIAN##),a
 
     call SCANKEYS_RAM
+    ld c,1
     jr z,DO_KEYS_INIT2
     call SCANKEYS
-
-    ld a,(KEYS_INV_0)
-    and 01111110b
-    xor b
-    ld b,a
-
-    ld a,(KEYS_INV_1)
-    and 00110000b
-    xor h
-    ld h,a
+    ld c,0
 
 DO_KEYS_INIT2:
     ld a,b
@@ -3168,7 +3157,12 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+1),de
     ld (BOOTKEYS##+3),hl
 
-    ret
+    call GSLOT1##
+    ld de,(KEYS_INV_0)  ;E = KEYS_INV_0, D = KEYS_INV_1
+    ld hl,PS_BOOT##
+    set 7,h     ;Bit 15 = call bank 6
+    ld (BK4_ADD##),hl
+    jp C4PBK##
 
 ;Set the screen frequency requested by the disk emulation flags
 ;(EMU_FLAGS, resolved by GO_EMU in partit.mac): bit 1 of VDP register 9

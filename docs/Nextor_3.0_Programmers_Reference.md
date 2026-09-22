@@ -58,6 +58,8 @@
 
 [3.15. Driver operations (_DRVRO, 7Fh)](#315-driver-operations-_drvro-7fh)
 
+[3.16. Persistent storage operations (_PSOPS, 80h)](#316-persistent-storage-operations-_psops-80h)
+
 [3.15.1. Initializing a driver loaded in RAM](#3151-initializing-a-driver-loaded-in-ram)
 
 [3.15.2. Shutting down a driver loaded in RAM](#3152-shutting-down-a-driver-loaded-in-ram)
@@ -97,6 +99,8 @@
 [7.2.3. Emulation flags](#723-emulation-flags)
 
 [7.3. DOS environment load errors](#73-dos-environment-load-errors)
+
+[7.4. Persistent storage](#74-persistent-storage)
 
 [8. Development helpers](#8-development-helpers)
 
@@ -286,7 +290,7 @@ Therefore, if your application can work in MSX-DOS 1 mode but you still want to 
 
 This section details the new function calls introduced by Nextor. These are invoked the same way as the existing MSX-DOS calls, by setting the function number in register C and calling address 0005h or F37Dh. The specified short name for each function (for example `_FOUT`) is the suggested name for referring to the function call in code, and is also the name used in [the Nextor SDK](#81-the-nextor-sdk) and for function cross references in this manual.
 
-Some of the new function calls can be invoked in MSX-DOS 1 mode as well; in the current version, these functions are [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h), [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah), [_CDRVR](#311-call-a-routine-in-a-device-driver-_cdrvr-7bh), [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h), [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (with the restrictions explained in the corresponding section) and [_FORMAT](#28-_format-67h) (with the differences explained in the corresponding section). Also, the _DOSVER function behaves specially in this mode (see _[2.9.1. Detecting Nextor in MSX-DOS 1 mode](#291-detecting-nextor-in-msx-dos-1-mode)_). When invoked in MSX-DOS 1 mode, all the new Nextor function calls have the following restrictions:
+Some of the new function calls can be invoked in MSX-DOS 1 mode as well; in the current version, these functions are [_GDRVR](#38-get-information-about-a-device-driver-_gdrvr-78h), [_GPART](#310-get-information-about-a-device-partition-_gpart-7ah), [_CDRVR](#311-call-a-routine-in-a-device-driver-_cdrvr-7bh), [_GDLI](#39-get-information-about-a-drive-letter-_gdli-79h), [_MAPDRV](#312-map-a-drive-letter-to-a-driver-and-device-_mapdrv-7ch) (with the restrictions explained in the corresponding section), [_PSOPS](#316-persistent-storage-operations-_psops-80h) and [_FORMAT](#28-_format-67h) (with the differences explained in the corresponding section). Also, the _DOSVER function behaves specially in this mode (see _[2.9.1. Detecting Nextor in MSX-DOS 1 mode](#291-detecting-nextor-in-msx-dos-1-mode)_). When invoked in MSX-DOS 1 mode, all the new Nextor function calls have the following restrictions:
 
 * They must be called by using the F37Dh entry point. The 0005h entry point is not supported, since there is no special version of `MSXDOS.SYS` for Nextor.
 
@@ -879,6 +883,52 @@ Prior to invoking the "shut down driver" query the kernel will check if the `NEX
 The only error this operation can return is `.IDRVR` when the combination of slot and segment passed doesn't correspond to any of the registered drivers loaded in RAM. The [`_GDRVR`](#38-get-information-about-a-device-driver-_gdrvr-78h) function can be used to list the registered drivers (both ROM and RAM) and their locations.
 
 
+### 3.16. Persistent storage operations (_PSOPS, 80h)
+
+```
+Parameters:  C  = 80H (_PSOPS)
+             A  = Operation to perform:
+                  0: Get information about the persistent storage
+                  1: Read sectors from the persistent storage
+                  2: Write sectors to the persistent storage
+             HL = Memory address (must be in the primary mapper)
+             DE = First sector (operations 1 and 2)
+             B  = Number of sectors (operations 1 and 2)
+Results:     A  = Error code
+```
+
+This function gives access to the persistent storage of the primary controller. See _[7.4. Persistent storage](#74-persistent-storage)_ for an explanation of what the persistent storage is, what Nextor keeps in it, and the rules that programs must follow when they use it.
+
+The read and write operations are raw: the function is unconcerned about the format of the stored data. The storage is made of sectors, numbered from zero; the sector size and the sector count are obtained with the "get information" operation.
+
+The "get information" operation fills 7 bytes at the address passed in HL:
+
+```
++0: Slot number of the driver that provides the storage
+    (always the primary controller in the current version of Nextor)
++1: Flags, currently always zero
++2: Device number where the storage file is, never zero
++3: Sector size in bytes, 1 to 512 (2 bytes)
++5: Sector count, at least 1 (2 bytes)
+```
+
+In Nextor 3.0 the storage is always a file in one of the devices of the driver, so the flags are always zero, the sector size is always 512 and the sector count is always 1. Read these fields instead of assuming those values, since a later version may let a controller keep the data in non-volatile memory of its own, and the block is shaped for that.
+
+In particular, **a device number of zero is not currently returned**: it's always the number of an existing device of the driver, which Nextor finds by trying the devices in order starting at device 1. A program should still accept a zero gracefully rather than e.g. using it as an index or printing it as a device, since it's what such a later version would report for a storage that isn't a file in a device, together with a flag saying so.
+
+Error codes returned:
+
+* `.ISBFN`: the operation number is not valid.
+* `.IDRVR`: there's no persistent storage available: none of the devices of the primary controller is suitable for the storage file. A suitable device is the first one that exists, that the driver doesn't exclude from this usage, and that is available (has a medium inserted); and it must have a FAT12 or FAT16 filesystem, either in the partition of the first entry of its partition table, or starting at its sector zero.
+* `.IPARM`: the requested sectors are beyond the end of the storage.
+* `.NOFIL`: read operation: the storage file doesn't exist yet.
+* `.DRFUL` or `.DKFUL`: write operation: the storage file doesn't exist and it can't be created, because the root directory or the disk is full.
+* Any of the disk errors (`.WPROT`, `.NRDY`, `.DISK`...) if there's an error when accessing the device. These are returned as the error code of the function, the disk error handling routine is never invoked.
+
+A write operation creates the storage file if it doesn't exist. Nextor does this by itself, not through the regular file handling code, and thus before doing it all the disk buffers are flushed and invalidated, for all the drives, as if `_FLUSH` had been executed with B=FFh and D=FFh. In MSX-DOS 1 mode, where there's no such function, the creation fails with a `.FOPEN` error if there are changes not yet written to disk for some drive (this happens only while a file that has been written to is still open).
+
+This function works in MSX-DOS 1 mode too. In that mode the memory address can't be in page 1.
+
 ## 4. New error codes
 
 New error codes are defined to handle error conditions when managing the new features of Nextor. These errors are returned in MSX-DOS 1 mode as well by the new functions supported in this mode.
@@ -1138,50 +1188,35 @@ Nextor will enter the one-time disk emulation mode if it finds the following inf
 
 When this information is found, Nextor sets the first byte of the signature to zero before entering disk emulation mode, so that the emulation mode isn't entered again after a reset (RAM contents survive a reset, but not a power cycle).
 
-If the above information is not found, Nextor will enter the persistent disk emulation mode if it finds the following information in the first partition table entry of any of the available devices in the primary Nextor controller:
+If the above information is not found, Nextor will enter the persistent disk emulation mode if it finds an emulation data pointer in the persistent storage of the primary controller, see _[7.4. Persistent storage](#74-persistent-storage)_ (the pointer consists of a device number, a sector number and the emulation flags, as in the one-time variant). The pointer can be removed with `CALL EMUKILL` in BASIC or with `EMUFILE k`. If the 0 key is pressed while booting the persistent storage is not read at all, so the computer boots normally, but the pointer is not removed.
 
-| Sector offset | Partition table entry offset | Partition table meaning | Nextor meaning |
-|:-------------:|:----------------------------:|-------------------------|----------------|
-| 1BEh          | +0                           | Status byte             | Bit 0 set = enter disk emulation mode                 |         
-| 1BFh          | +1                           | Start CHS               | Number of the device that contains the emulation data |
-| 1C0h          | +2                           | Start CHS               | Emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ (was the logical unit number in Nextor 2) |
-| 1C1h          | +3                           | Start CHS               | MSB of the absolute device sector number that contains the emulation data |
-| 1C2h          | +4                           | Partition type          | Must be non-zero |
-| 1C3h          | +5                           | End CHS                 | 3rd byte of the absolute device sector number that contains the emulation data |
-| 1C4h          | +6                           | End CHS                 | 2nd byte of the absolute device sector number that contains the emulation data |
-| 1C5h          | +7                           | End CHS                 | LSB of the absolute device sector number that contains the emulation data |
-
-For example, if the emulation data is located at device 1, sector 33445566h, no emulation flags are set, and the partition is FAT16 (partition type 0Eh) and has the "active" flag set in the status byte, then the start of the partition table entry set for persistent emulation would look like this (in hexadecimal):
-
-    81 01 00 33 0E 44 55 66
-
-With the emulation flag that forces the screen to 60Hz set, the third byte would be 04 instead of 00.
-
-Note that the condition for Nextor entering emulation mode is that bit 0 of the status byte must be set **and** the partition type code must be non-zero (but can be any other value, not necessarily FAT). Also note that the device information here refers to the emulation data file only - the disk image files themselves can be located at a different device.
+Note that older versions of Nextor (the ones that don't have the persistent storage) kept this pointer in the first entry of the partition table of a device (in the CHS fields, with bit 0 of the status byte as the "enter disk emulation mode" flag), and that removing it was done by pressing the 0 key while booting. Nextor no longer reads nor modifies that information. If a device still has it, it's harmless for Nextor (it can be removed by booting once with such an older version and the 0 key pressed).
 
 Also worth noting: Nextor will check that the emulation data actually starts with the `NEXTOR_EMU_DATA` signature, and if that's not the case then it will boot normally without entering disk emulation mode.
 
 #### 7.2.3. Emulation flags
 
-The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 CPU mode right after entering disk emulation mode and before the emulated disk is loaded, and also records two options that `EMUFILE.COM` applies via the one-time boot keys. The byte has the same format in the three places where it exists: the emulation data file header, the one-time emulation data in RAM, and the partition table entry used for persistent emulation.
+The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 CPU mode right after entering disk emulation mode and before the emulated disk is loaded, and to force the state of the CTRL and SHIFT boot keys. The byte has the same format in the three places where it exists: the emulation data file header, the one-time emulation data in RAM, and the emulation data pointer in the persistent storage.
 
 | Bit | Meaning |
 |:---:|---------|
 |  0  | Ignored by Nextor (see below), must be written as 0 |
 |  1  | Set to force the VDP to 50Hz |
 |  2  | Set to force the VDP to 60Hz |
-|  3  | Disable the ghost floppy disk drive (not acted upon by the kernel, see below) |
-|  4  | Disable the MSX-DOS kernels (not acted upon by the kernel, see below) |
+|  3  | Disable the ghost floppy disk drive: force the CTRL boot key |
+|  4  | Disable the MSX-DOS kernels: force the SHIFT boot key |
 |  5  | Boot the emulation in R800 mode on a turbo R |
 | 6-7 | Reserved, must be zero |
 
 Bits 1 and 2 must not be both set; if they are, Nextor currently forces 50Hz, but this shouldn't be relied upon.
 
-The kernel acts on the VDP frequency bits (1 and 2) and on the R800 bit (5), and it reads them **only from the emulation data pointer** (the one in RAM for one-time emulation, or the one in the partition table entry for persistent emulation), never from the emulation data file header. `EMUFILE.COM` is responsible for putting the effective values into the pointer: when it sets up an emulation session it combines the flags stored in the data file header with the options requested in its command line (`-5`/`-6`/`-8`), and writes the result to the pointer. The header flags are thus a stored default that `EMUFILE.COM` reads, not something the kernel reads directly. The `-x` option of `EMUFILE.COM` tells it to ignore the stored flags and use only the ones from the command line. Because these three bits travel in the pointer, they work for both the one-time and the persistent variants.
+The kernel reads the flags **only from the emulation data pointer** (the one in RAM for one-time emulation, or the one in the persistent storage for persistent emulation), never from the emulation data file header. `EMUFILE.COM` is responsible for putting the effective values into the pointer: when it sets up an emulation session it combines the flags stored in the data file header with the options requested in its command line (`-5`/`-6`/`-8`/`-c`/`-s`), and writes the result to the pointer. The header flags are thus a stored default that `EMUFILE.COM` reads, not something the kernel reads directly. The `-x` option of `EMUFILE.COM` tells it to ignore the stored flags and use only the ones from the command line.
 
-Bits 3 and 4 are never acted upon by the kernel through the emulation flags byte; they are a convenience for `EMUFILE.COM`, which records in the emulation data file header that, when the emulation session starts, the ghost floppy disk drive should be disabled (bit 3) and/or the MSX-DOS kernels should be disabled (bit 4), each saving the 1.5 KB that Nextor allocates in RAM for that drive's FAT copy in MSX-DOS 1 mode. These must take effect before the drives are set up, which is earlier than the emulation is entered, so they can't be driven by the pointer like the bits above. Instead, when `EMUFILE.COM` sets up a **one-time** emulation session and either bit is set (in the data file or via the `-c`/`-s` options), it also writes the one-time boot keys (see _[7.1. One-time boot keys](#71-one-time-boot-keys)_) with the CTRL key (bit 3) and/or the SHIFT key (bit 4), so that the kernel's normal boot-key handling disables those drives. This works only for one-time emulation: bits 3 and 4 have no effect for persistent emulation.
+Bits 3 and 4 exist to save memory in the emulation session: disabling the ghost floppy disk drive (bit 3) and/or the MSX-DOS kernels (bit 4) saves, for each, the 1.5 KB that are allocated in RAM for a drive's FAT copy in MSX-DOS 1 mode. These must take effect before the drives are set up, which is much earlier than the moment when the emulation is entered. So at the very beginning of the boot process, when the state of the boot keys is calculated, Nextor looks for the emulation data pointer that is going to be used (the one in RAM, else the one in the persistent storage) and if one of these bits is set in its flags, the corresponding boot key is handled as pressed. The keys are only ever forced to "pressed": a flag that is not set has no effect, whatever the state of the key is otherwise (after applying the boot key inverters, or as set in the one-time boot keys). The user can still change the state of these keys in the boot menu.
 
-As explained in the previous section, the one-time emulation data in RAM takes precedence over the persistent emulation data in the partition table.
+For the persistent variant this requires that the driver of the primary controller allows the persistent storage to be read before the driver is initialized; otherwise bits 3 and 4 have no effect for that variant (see ["Supporting the persistent storage" in the Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage)). Also, if the emulation data pointer turns out not to point to an actual emulation data file, the computer boots normally but with the keys forced anyway.
+
+As explained in the previous section, the one-time emulation data in RAM takes precedence over the pointer in the persistent storage.
 
 Bit 0 is ignored because Nextor 2, and the Nextor 3 version of `EMUFILE.COM` prior to the introduction of this byte, stored the logical unit number of the device (which was 1 in practice) in the pointer locations. Thus emulation data pointers written by older versions of `EMUFILE.COM` are handled as having no flags set.
 
@@ -1193,6 +1228,39 @@ When the Nextor kernel fails to load the DOS environment at boot time, it stores
 
 The error codes currently used by the kernel for this mechanism are `.NOCMD` (0AEh) and `.IDOSV` (0ADh), described in _[4. New error codes](#4-new-error-codes)_; but any DOS error code will work, and application programs may make use of this mechanism too.
 
+
+### 7.4. Persistent storage
+
+The persistent storage is a small non-volatile data area provided by the primary Nextor controller. Nextor uses it to keep the settings that must be known at the very beginning of the boot process, before the device drivers are initialized: which boot keys are inverted, and the emulation data pointer for the persistent disk emulation mode. Programs access it with [the `_PSOPS` function call](#316-persistent-storage-operations-_psops-80h).
+
+The storage is the first 512 bytes of a file named `_NEXTOR.PSF`, with the hidden, system and read only attributes, in the root directory of the first partition of a device of the controller. Some controllers offer none. See ["Supporting the persistent storage" in the Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage) for the details. The settings therefore belong to the storage medium, not to the computer or the cartridge: a different medium has different settings, or none.
+
+The data stored by Nextor is at the very beginning of the storage, and it has the following format:
+
+| Offset | Size | Contents |
+|:------:|:----:|----------|
+|   +0   |  7   | Signature string `NEXTOR`, zero terminated |
+|   +7   |  2   | Size of the data in bytes, including the signature and the checksum (little endian) |
+|   +9   |  1   | Version of the data format, currently 1 |
+|  +10   |  2   | Boot key inverters, FFFFh if not set. First byte: bits 1 to 6 for the keys 1 to 6. Second byte: bit 4 for SHIFT, bit 5 for CTRL. This is the same format of the two boot key inverter bytes of the kernel ROM. |
+|  +12   |  1   | Persistent disk emulation: number of the device that contains the emulation data, 0 or FFh if persistent emulation is not set |
+|  +13   |  4   | Persistent disk emulation: absolute device sector number that contains the emulation data (little endian) |
+|  +17   |  1   | Persistent disk emulation: emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ |
+|  +18   |  1   | Checksum: the value that makes the sum of all the bytes of the data (as many as the size field says), modulo 256, equal to zero |
+
+Nextor ignores the data (it behaves as if nothing was set) if the signature is not there, if the size is smaller than 19 or bigger than 512, or if the checksum is wrong. Nothing else is required: the storage doesn't need to be initialized in any way before it's used for the first time.
+
+When the boot key inverters are not set, the ones in the kernel ROM are used. When they are set they fully replace the ones in the kernel ROM, they aren't combined. Unused bits should be zero.
+
+The size of the data is stored explicitly because future versions of Nextor might store more data. When that happens the new fields will be added after the existing ones, right before the checksum, and the version number will be increased; the existing fields will never change their position nor their meaning. Thus a program that manipulates this data must follow these rules:
+
+* Accept a version number higher than the one it knows about, and use the fields it knows about.
+* When modifying the data, keep the size field and all the bytes that it doesn't know about, and recalculate the checksum (over as many bytes as the size field says).
+* When there's no valid data, create it from scratch: the signature, a size of 19, version 1, FFFFh for the boot key inverters, zeros for the emulation data pointer, and the checksum.
+
+Programs can use the rest of the storage, past the data stored by Nextor, for whatever they want (as programs have always done with the non-volatile memory of the clock chip); Nextor never reads nor modifies it. Since the data stored by Nextor could grow in future versions, it's recommended to use first the space at the end of the storage. Keep in mind that the storage is small: 512 bytes in total, of which Nextor uses the first 19.
+
+The persistent storage is read at boot time unless the 0 key is pressed. Nextor writes to it only when `CALL BOOTKEYS` or `CALL EMUKILL` are executed.
 
 ## 8. Development helpers
 

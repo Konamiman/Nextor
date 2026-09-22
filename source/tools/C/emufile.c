@@ -24,11 +24,8 @@
 #include "msx_bios.h"
 #include "msx_workarea.h"
 #include "partit.h"
+#include "persistent_storage.h"
 #include "strcmpi.h"
-
-/* Nextor 2 legacy driver DEV_RW entry point address (this tool dispatches
-   on isNextor3 to choose between DRIVER_READ_WRITE_ENTRY and this). */
-#define NEXTOR2_DEV_RW 0x4160
 
 	/* Typedefs */
 
@@ -69,21 +66,19 @@ typedef struct {
 
 #define SetupRAMAddress ((byte*)0xA000)
 
-#define BootKeysAddress ((byte*)0xA100)
-#define BOOTKEY_CTRL (1 << 5)   /* A115h bit 5, BOOTKEYS[4] */
-#define BOOTKEY_SHIFT (1 << 4)  /* A115h bit 4, BOOTKEYS[4] */
 
 
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v1.5\r\n"
+    "Disk image emulation tool for Nextor v3.0\r\n"
     "By Konamiman, 9/2026\r\n"
     "\r\n";
 
 const char* strUsage=
     "Usage: emufile [<options>] <output file> <files> [<files> ...]\r\n"
-    "       emufile set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
+    "       emufile set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
+    "       emufile k\r\n"
     "       emufile ?\r\n";
 
 const char* strHelp=
@@ -110,8 +105,7 @@ const char* strHelp=
     "-s : Free more memory by disabling the MSX-DOS kernels (e.g. the floppy\r\n"
     "     disk drive) when the emulation session starts.\r\n"
     "-8 : Boot the emulation session in R800 mode (turbo R only).\r\n"
-    "     -c and -s work only for one-time emulation (see 'set' below);\r\n"
-    "     -5, -6 and -8 work for both the one-time and persistent variants.\r\n"
+    "     All of these work for both the one-time and persistent variants.\r\n"
     "\r\n"
     "TYPE /B the generated file to see the names of the registered files.\r\n"
     "\r\n"
@@ -127,11 +121,8 @@ const char* strHelp=
     "o: one-time emulation (store emulation data file pointer in RAM).\r\n"
     "This is the default if only <data file> is specified.\r\n"
     "\r\n"
-    "p: persistent emulation (store emulation data file pointer in partition table).\r\n"
-    "Use <device index> and <LUN index> to specify the device whose\r\n"
-    "partition table will be written. Default device (if only 'p' is specified)\r\n"
-    "is the device where the emulation data file is located.\r\n"
-    "Default <LUN index> (if only 'p<device index>' is specified) is 1.\r\n"
+    "p: persistent emulation (store emulation data file pointer in the\r\n"
+    "persistent storage of the primary controller; this fails if there's none).\r\n"
     "\r\n"
     "-5 or -6: force the screen to 50Hz or 60Hz for this emulation session\r\n"
     "(this overrides the setting stored in the emulation data file).\r\n"
@@ -140,20 +131,25 @@ const char* strHelp=
     "-s: disable the MSX-DOS kernels (e.g. the floppy drive) to free even more.\r\n"
     "-8: boot the emulation session in R800 mode (turbo R only). Like -5/-6,\r\n"
     "this works for both variants and can be stored in the data file.\r\n"
-    "-c and -s (or the equivalent flags stored in the data file) work only for\r\n"
-    "one-time emulation; they are ignored for persistent emulation.\r\n"
     "\r\n"
     "-x: ignore all the flags stored in the data file, apply only the flags\r\n"
     "passed in this command line. The order of the arguments doesn't matter,\r\n"
     "so \"-5 -s -x\" is the same as \"-x -5 -s\".\r\n"
     "\r\n"
-    "The computer will reset after successfully finishing the setup.\r\n";
+    "The computer will reset after successfully finishing the setup.\r\n"
+    "\r\n"
+    "\r\n"
+    "* To disable the persistent emulation:\r\n"
+    "\r\n"
+    "emufile k\r\n"
+    "\r\n"
+    "Boot with the 0 key pressed to skip the emulation once, then run this.\r\n"
+    "CALL EMUKILL in BASIC does the same.\r\n";
 
 const char* strInvParam = "Invalid parameter";
 const char* strCRLF = "\r\n";
 
 const char* emuDataSignature = "NEXTOR_EMU_DATA";
-const char* bootKeysSignature = "NEXTOR_BOOT_KEYS";
 
 /* Global variables */
 
@@ -171,10 +167,10 @@ byte* fileContentsBase;
 byte* fileNamesBase;
 byte* fileNamesAppendAddress;
 byte fileHandle;
-int setupPartitionDeviceIndex;
-int setupPartitionLunIndex;
 bool setupAsPersistent;
-bool isNextor3;
+byte* psBuffer;
+persistentStorageInfo psInfo;
+byte psSectors;
 byte hzFlags;
 bool invertCtrl;
 bool invertShift;
@@ -207,7 +203,6 @@ bool EffectiveInvertCtrl();
 bool EffectiveInvertShift();
 bool EffectiveBootR800();
 byte PointerFlagsByte();
-void WriteBootKeys(bool doCtrl, bool doShift);
 void ProcessFilename(char* fileName);
 void TooManyFiles();
 void StartSearchingFiles(char* fileName);
@@ -234,13 +229,11 @@ void* malloc(int size);
 uint ParseHex(char* hexString);
 void DoDosCall(byte functionCode);
 void SetupFile();
-void DriverCall(byte slot, uint routineAddress);
-byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sectorNumber, byte* buffer, bool write);
+void PsLoad();
+void PsSave();
+void KillPersistentEmulation();
 void VerifyDataFileSignature(byte* sectorBuffer);
 void ResetComputer();
-
-#define ReadDeviceSector(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer, false)
-#define WriteDeviceSector(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer) DeviceSectorRW(driverSlot, deviceIndex, lunIndex, sectorNumber, buffer, true)
 
 	/* MAIN */
 	
@@ -346,6 +339,11 @@ bool ProcessArguments(char** argv, int argc)
         Terminate(null);
     }
 
+    if(argc == 1 && (argv[0][0] | 32) == 'k' && argv[0][1] == '\0') {
+        KillPersistentEmulation();
+        Terminate(null);
+    }
+
 	if(argc < 2) {
         print(strUsage);
         Terminate(null);
@@ -401,8 +399,6 @@ void ProcessSetupFileArguments(char** argv, int argc)
     bool variantSpecified;
 
     setupAsPersistent = false;
-    setupPartitionDeviceIndex = 0;
-    setupPartitionLunIndex = 0;
     variantSpecified = false;
 
     strcpy(outputFileName, argv[1]);
@@ -446,27 +442,8 @@ void ProcessSetupVariantArgument(char* arg)
 
     setupAsPersistent = true;
 
-    if(arg[1] == '\0') {
-        return;
-    }
-
-    setupPartitionDeviceIndex = arg[1] - '0';
-    if(setupPartitionDeviceIndex < 1 || setupPartitionDeviceIndex > 9) {
-        Terminate("Invalid device index");
-    }
-
-    if(arg[2] == '\0') {
-        setupPartitionLunIndex = 1;
-        return;
-    }
-
-    setupPartitionLunIndex = arg[2] - '0';
-    if(setupPartitionLunIndex < 1 || setupPartitionLunIndex > 9) {
-        Terminate("Invalid LUN index");
-    }
-
-    if(arg[3] != '\0') {
-        InvalidParameter();
+    if(arg[1] != '\0') {
+        Terminate("The emulation data pointer goes to the persistent storage:\r\nuse just 'p', with no device index");
     }
 }
 
@@ -583,13 +560,19 @@ bool EffectiveBootR800()
 }
 
 /* The flags the kernel reads from the emulation data pointer: the frequency
-   bits and the R800 bit. The kernel acts on these in both one-time and
-   persistent emulation. The CTRL/SHIFT bits are not here: they go through the
-   one-time boot keys instead (see WriteBootKeys), because the ghost drive and
-   the MSX-DOS kernels are set up before these flags are read. */
+   bits, the R800 bit, and the two that force the CTRL and SHIFT boot keys.
+   The kernel acts on all of them in both the one-time and the persistent
+   emulation variants. */
 byte PointerFlagsByte()
 {
-    return EffectiveHzFlags() | (EffectiveBootR800() ? EMU_FLAG_R800 : 0);
+    byte flags;
+
+    flags = EffectiveHzFlags() | (EffectiveBootR800() ? EMU_FLAG_R800 : 0);
+
+    if(EffectiveInvertCtrl()) flags |= EMU_FLAG_INVERT_CTRL;
+    if(EffectiveInvertShift()) flags |= EMU_FLAG_INVERT_SHIFT;
+
+    return flags;
 }
 
 void ConvertDirectoryToFilename(char* fileOrDirectoryName)
@@ -947,49 +930,74 @@ void SetupFile()
 
 	sector = driveInfo->firstSectorNumber + GetFirstFileSectorForFileInFib();
 	
-    if(setupPartitionDeviceIndex == 0) {
-        setupPartitionDeviceIndex = driveInfo->deviceIndex;
-        setupPartitionLunIndex = driveInfo->logicalUnitNumber;
+    if(setupAsPersistent) {
+        PsLoad();
+        psBuffer[PSD_EMU_DEVICE] = driveInfo->deviceIndex;
+        psBuffer[PSD_EMU_SECTOR] = ((byte*)&sector)[0];   //LSB
+        psBuffer[PSD_EMU_SECTOR + 1] = ((byte*)&sector)[1];
+        psBuffer[PSD_EMU_SECTOR + 2] = ((byte*)&sector)[2];
+        psBuffer[PSD_EMU_SECTOR + 3] = ((byte*)&sector)[3];   //MSB
+        psBuffer[PSD_EMU_FLAGS] = PointerFlagsByte();
+        PsSave();
+        return;
     }
 
-    sectorBuffer = malloc(sizeof(masterBootRecord));
-    error = ReadDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
-    if(error != 0) {
-        print("*** Error when reading MBR of device:");
+    strcpy(SetupRAMAddress, emuDataSignature);
+    SetupRAMAddress[0x10] = driveInfo->deviceIndex;
+    SetupRAMAddress[0x11] = PointerFlagsByte();
+    SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
+    SetupRAMAddress[0x13] = ((byte*)&sector)[1];
+    SetupRAMAddress[0x14] = ((byte*)&sector)[2];
+    SetupRAMAddress[0x15] = ((byte*)&sector)[3];   //MSB
+}
+
+/* Persistent storage access. The format handling itself lives in the SDK
+   (sdk/C/code/persistent_storage.c); these two just add the error policy
+   of this tool, which is to give up with a message. */
+
+void PsLoad()
+{
+    byte error;
+
+    psBuffer = malloc(PSD_MAX_SIZE);
+    error = PsLoadData(psBuffer, PSD_MAX_SIZE, &psInfo, &psSectors);
+
+    if(error == _IBDOS) {
+        Terminate("This version of Nextor doesn't have persistent storage");
+    }
+    if(error == _IDRVR) {
+        Terminate("No persistent storage available");
+    }
+    if(error != 0 && error != _NOFIL) {
         TerminateWithDosError(error);
     }
+}
 
-    if(setupAsPersistent) {
-        if(EffectiveInvertCtrl() || EffectiveInvertShift()) {
-            print("*** Warning: disabling the ghost drive or the MSX-DOS kernels\r\n");
-            print("    only works for one-time emulation; ignored here.\r\n");
-        }
+void PsSave()
+{
+    byte error;
 
-        partition = &(sectorBuffer->primaryPartitions[0]);
-        partition->status |= 1;
-        partition->chsOfFirstSector[0] = driveInfo->deviceIndex;
-        partition->chsOfFirstSector[1] = PointerFlagsByte();   //kernel reads Hz + R800 from here
-        partition->chsOfFirstSector[2] = ((byte*)&sector)[3];   //MSB
-        partition->chsOfLastSector[0] = ((byte*)&sector)[2];
-        partition->chsOfLastSector[1] = ((byte*)&sector)[1];
-        partition->chsOfLastSector[2] = ((byte*)&sector)[0];    //LSB
-
-        error = WriteDeviceSector(driveInfo->driverSlotNumber, setupPartitionDeviceIndex, setupPartitionLunIndex, 0, (byte*)sectorBuffer);
-        if(error != 0) {
-            print("*** Error when writing MBR of device:");
-            TerminateWithDosError(error);
-        }
-    } else {
-        strcpy(SetupRAMAddress, emuDataSignature);
-        SetupRAMAddress[0x10] = driveInfo->deviceIndex;
-        SetupRAMAddress[0x11] = PointerFlagsByte();   //kernel reads Hz + R800 from here
-        SetupRAMAddress[0x12] = ((byte*)&sector)[0];   //LSB
-        SetupRAMAddress[0x13] = ((byte*)&sector)[1];
-        SetupRAMAddress[0x14] = ((byte*)&sector)[2];
-        SetupRAMAddress[0x15] = ((byte*)&sector)[3];   //MSB
-
-        WriteBootKeys(EffectiveInvertCtrl(), EffectiveInvertShift());
+    error = PsSaveData(psBuffer, psSectors);
+    if(error != 0) {
+        TerminateWithDosError(error);
     }
+}
+
+void KillPersistentEmulation()
+{
+    byte device;
+    int i;
+
+    PsLoad();
+    device = psBuffer[PSD_EMU_DEVICE];
+    if(device == 0 || device == 0xFF) {
+        print("Persistent emulation mode is not set\r\n");
+        return;
+    }
+
+    for(i = PSD_EMU_DEVICE; i <= PSD_EMU_FLAGS; i++) psBuffer[i] = 0;
+    PsSave();
+    print("Persistent emulation mode removed\r\n");
 }
 
 /* For one-time emulation, place the one-time boot keys block in RAM, next to
@@ -1002,20 +1010,6 @@ void SetupFile()
    hence they only work for one-time emulation. Whether to do each comes from
    the -c / -s switches or the equivalent flags in the data file (see the
    Effective... helpers). */
-void WriteBootKeys(bool doCtrl, bool doShift)
-{
-    if(!doCtrl && !doShift) {
-        return;
-    }
-
-    strcpy(BootKeysAddress, bootKeysSignature);   //A100-A10F + zero terminator at A110
-    BootKeysAddress[0x11] = 0;
-    BootKeysAddress[0x12] = 0;
-    BootKeysAddress[0x13] = 0;
-    BootKeysAddress[0x14] = 0;
-    BootKeysAddress[0x15] = (doCtrl ? BOOTKEY_CTRL : 0) | (doShift ? BOOTKEY_SHIFT : 0);
-}
-
 void VerifyDataFileSignature(byte* sectorBuffer)
 {
     regs.Words.DE = (int)outputFileName;
@@ -1032,39 +1026,6 @@ void VerifyDataFileSignature(byte* sectorBuffer)
     }
 
     fileFlags = regs.Words.HL >= 21 ? sectorBuffer[20] : 0;
-}
-
-byte DeviceSectorRW(byte driverSlot, byte deviceIndex, byte lunIndex, ulong sectorNumber, byte* buffer, bool write)
-{
-	regs.Flags.C = write;
-	regs.Bytes.A = deviceIndex;
-	regs.Bytes.B = 1;
-	regs.Bytes.C = lunIndex;
-	regs.Words.HL = (int)buffer;
-	regs.Words.DE = (int)&sectorNumber;
-
-	DriverCall(driverSlot, isNextor3 ? DRIVER_READ_WRITE_ENTRY : NEXTOR2_DEV_RW);
-	return regs.Bytes.A;
-}
-
-void DriverCall(byte slot, uint routineAddress)
-{
-	byte registerData[8];
-	int i;
-
-	memcpy(registerData, &regs, 8);
-
-	regs.Bytes.A = slot & 0x8F;
-    if(isNextor3) {
-        regs.Bytes.A |= 0x10;
-    }
-	regs.Bytes.B = 0xFF;
-	regs.UWords.DE = routineAddress;
-	regs.Words.HL = (int)registerData;
-
-	DoDosCall(_CDRVR);
-
-    regs.Words.AF = regs.Words.IX;
 }
 
 void ResetComputer()
@@ -1113,7 +1074,9 @@ void CheckDosVersion()
         Terminate("This program is for Nextor only.");
     }
 
-    isNextor3 = (regs.Bytes.IXl > 2);
+    if(regs.Bytes.IXl < 3) {
+        Terminate("This program needs Nextor 3 or newer.\r\nUse an older version of EMUFILE for Nextor 2.");
+    }
 }
 
 void* malloc(int size)

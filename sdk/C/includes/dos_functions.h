@@ -145,6 +145,7 @@
 #define _GETCLUS   0x7E  /* Get information about a FAT cluster     */
 
 #define _DRVRO     0x7F  /* Operate on a RAM-loaded driver          */
+#define _PSOPS     0x80  /* Persistent storage operations           */
 
 /* ----------------------------------------------------------------- */
 /*  Standard file handles                                            */

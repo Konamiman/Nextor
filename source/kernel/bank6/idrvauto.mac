@@ -12,6 +12,15 @@
 
 CALBNK_ADDR	equ	4042h
 
+;These routines are used by pstor.mac too
+
+	public	BASIC_ROUT6
+	public	SYNCHR6
+	public	BASIC_ERR6
+	public	BASIC_DOS6_NE
+	public	GET_PARENT_OR_HELP6
+	public	PRDEC6
+
 
 ;=============================================================================
 ;
