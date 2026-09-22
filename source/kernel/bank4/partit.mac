@@ -5833,6 +5833,7 @@ CNEXTOR_S:
 	db	"_CURDRV",13,10
 	db	"_DRIVERS",13,10
 	db	"_DRVINFO",13,10
+	db  "_EMUKILL",13,10
 	db	"_FDISK",13,10
 	db  "_IDRIVER()",13,10
 	db	"_LOCKDRV() *",13,10

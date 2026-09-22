@@ -839,11 +839,18 @@ PS_LOC_SIZE_OK:
 	ld	h,(iy+1Bh)
 	ld	a,h
 	or	a
-	jr	nz,PS_LOC_CLUS_OK
+	jr	nz,PS_LOC_CLUS_2
 	ld	a,l
 	cp	2
 	jr	c,PS_LOC_BAD		;Clusters 0 and 1 don't exist
-PS_LOC_CLUS_OK:
+PS_LOC_CLUS_2:
+	ld	e,(ix+PSC_NCLUS)	;It must be inside the data area too,
+	ld	d,(ix+PSC_NCLUS+1)	; otherwise the sector we would write
+	push	hl			; to isn't part of the file
+	or	a
+	sbc	hl,de
+	pop	hl
+	jr	nc,PS_LOC_BAD
 	call	PS_CLUS_TO_SEC
 	xor	a
 	ret
@@ -1647,6 +1654,11 @@ PFC_L:
 	ld	a,.DKFUL##
 	or	a
 	ret
+PFC_BAD_FAT:
+	pop	de
+	ld	a,.IDRVR##		;The filesystem doesn't make sense
+	or	a
+	ret
 PFC_1:
 	push	de
 	bit	0,(ix+PSC_F16)
@@ -1677,7 +1689,13 @@ PFC_F12:
 	dec	a
 	jr	z,PFC_NEXT		;Offset 511: the entry spans two sectors
 PFC_GOT:
-	ld	(ix+PSC_FATOFF),l	;BC = Index of the FAT sector
+	ld	a,c			;BC = Index of the FAT sector. The
+	sub	(ix+PSC_SPF)		; cluster count and the FAT size come
+	ld	a,b			; from different fields of the boot
+	sbc	a,(ix+PSC_SPF+1)	; sector, so a malformed one could put
+	jr	nc,PFC_BAD_FAT		; this entry past the end of the FAT
+
+	ld	(ix+PSC_FATOFF),l
 	ld	(ix+PSC_FATOFF+1),h
 	ld	a,c
 	cp	(ix+PSC_CURFAT)

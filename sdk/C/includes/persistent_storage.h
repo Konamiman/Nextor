@@ -91,6 +91,11 @@ byte PsRead(byte* buffer, uint firstSector, byte sectorCount);
 byte PsWrite(byte* buffer, uint firstSector, byte sectorCount);
 byte PsSectorsThatFit(persistentStorageInfo* info, uint bufferSize, uint* availableBytes);
 bool PsDataIsValid(byte* buffer, uint availableBytes);
+
+/* Put a fresh, empty set of data in the buffer. The buffer should be at
+   least PSD_MIN_SIZE bytes long (PSD_MAX_SIZE to also hold what programs
+   keep past Nextor's data); a shorter one gets only what fits in it, which
+   won't be valid data. */
 void PsInitData(byte* buffer, uint bufferSize);
 void PsSetChecksum(byte* buffer);
 

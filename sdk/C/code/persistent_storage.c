@@ -95,11 +95,16 @@ bool PsDataIsValid(byte* buffer, uint availableBytes)
 void PsInitData(byte* buffer, uint bufferSize)
 {
     uint i;
+    uint count;
 
     for(i = 0; i < bufferSize; i++) {
         buffer[i] = 0;
     }
-    for(i = 0; i < PSD_MIN_SIZE; i++) {
+
+    /* A buffer of less than PSD_MIN_SIZE bytes can't hold a valid set of
+       data, but write what fits rather than past the end of it. */
+    count = bufferSize < PSD_MIN_SIZE ? bufferSize : PSD_MIN_SIZE;
+    for(i = 0; i < count; i++) {
         buffer[i] = psFreshData[i];
     }
 }

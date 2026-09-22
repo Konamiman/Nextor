@@ -226,10 +226,11 @@ void ProcessOption(char** argv, int argc)
 {
     byte option;
 
-    option = argv[0][1] | 32;
+    option = argv[0][1];
     if(option == '\0' || argv[0][2] != '\0') {
-        InvalidParameter();
+        InvalidParameter();   /* before |32, since '\0'|32 isn't zero */
     }
+    option |= 32;
 
     if(option == 'p') {
         if(argc == 1) {
