@@ -394,7 +394,7 @@ docker/test.sh                 # local 'nextor-dev' build, else the official lat
 docker/test.sh my-other-tag    # or any explicit tag
 ```
 
-`test.sh` runs inside the container as a login shell and checks: every tool runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), both base variants are present, the baked `NEXTOR_VERSION` matches the built kernel and `manifest.json`, and both project templates (`driver`, `tool`) build end-to-end when copied verbatim. It exits non-zero on any failure, so it doubles as a CI gate - and indeed the **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this (`build.sh` → `test.sh`, no push) on every pull request that touches an image input, so the build and the 14 checks are verified before merge.
+`test.sh` runs inside the container as a login shell and checks: every tool runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), both base variants are present, the baked `NEXTOR_VERSION` matches the built kernel and `manifest.json`, and both project templates (`driver`, `tool`) build end-to-end when copied verbatim. It exits non-zero on any failure, so it doubles as a CI gate - and indeed the **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this (`build.sh` → `test.sh`, no push) on every pull request that touches an image input, so the build and the 16 checks are verified before merge.
 
 **2. Move it to another machine** without a registry, via a tarball:
 
