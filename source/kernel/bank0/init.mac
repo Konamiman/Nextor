@@ -3122,7 +3122,15 @@ AUXIN:	CALLDOS	03h	;Auxilliary input
 AUXOUT:	CALLDOS	04h	;Auxilliary output
 ;
 
-	public	ALLOC,DEFILE
+	;ALLOC and DEFILE are INCLUDEd here instead of being a module of their
+	;own because a separate module can only be linked after init.rel, while
+	;this way they fill the hole left before the next ALIGN, which frees
+	;their size in the (full) linear space of bank 0.
+	;
+	;This is the only copy: other banks call ALLOC through CALBNK
+	;(ALLOC is exported to them via b0labels.inc and b0lab_b6.inc).
+
+	public	ALLOC
 	INCLUDE ../bank0/alloc.inc
 
 	ALIGN	553Ch

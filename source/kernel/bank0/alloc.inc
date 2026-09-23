@@ -1,5 +1,9 @@
 ;-----------------------------------------------------------------------
 ;
+;       INCLUDEd by init.mac, see the comment there.
+;
+;-----------------------------------------------------------------------
+;
 ;       ALLOC allocates specified amount of memory downward from current
 ;       HIMEM
 ;
@@ -76,7 +80,6 @@ ALLOC:
 	ld	(NULBUF),hl
 	ld	hl,(STKTOP)	;update STKTOP
 	add	hl,bc
-ifndef NO_DEFILE
 	jr	CLRFCB
 
 ;
@@ -102,7 +105,6 @@ DEFILE:
 	add	hl,de
 	ld	(NULBUF),hl
 	pop	hl
-endif
 CLRFCB:
 	ld	(STKTOP),hl
 	dec	hl		;and SAVSTK

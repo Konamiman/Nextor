@@ -98,7 +98,7 @@ DO_MAPINIT:
 		add	hl,hl			; mapper record + 1 byte for
 		inc	hl			; null record.
 		push	de
-		call	ALLOC##
+		call	ALLOC_B0##
 		pop	de
 		ret	c
 ;

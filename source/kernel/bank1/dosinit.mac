@@ -333,6 +333,21 @@ inter_conv_table equ	$-080h
 ;
 ;-----------------------------------------------------------------------------
 ;
+ALLOC_B0::
+;
+;    Call ALLOC in bank 0, it has the same inputs and outputs.  ALLOC lives
+; only there (see the comment before its INCLUDE in init.mac), don't call
+; ALLOC## directly from this bank: the symbol is the bank 0 address.
+; Also corrupts IX, AF' and E'.
+;
+		ld	ix,ALLOC##
+		ex	af,af'
+		xor	a			;Bank 0
+		jp	CALBNK##
+;
+;
+;-----------------------------------------------------------------------------
+;
 DOWNLOAD_CODE:
 ;
 ;    This routine downloads all the RAM resident code which must be in page-3,
@@ -343,7 +358,7 @@ DOWNLOAD_CODE:
 ;
 ;
 		ld	hl,IRQS_SZ##+BDS_SZ##+P3_RAM_SIZE
-		call	ALLOC##			;Allocate memory for the
+		call	ALLOC_B0		;Allocate memory for the
 		ret	c			; stack and downloaded code.
 ;
 ;	+++++  ALLOCATE INTERRUPT STACK  +++++
