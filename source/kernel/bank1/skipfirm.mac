@@ -10,7 +10,6 @@
 	INCLUDE	../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE	../../../sdk/asm/constants/msx_workarea.inc
 ;
-USRTAB	equ	0F39Ah
 H.INIP	equ	0FDC7h		;Initialization hook
 H.STKE	equ	0FEDAh		;Autostart cartridge hook
 ;
@@ -22,18 +21,24 @@ SKIP_FIRM::
 ;    Called from bank 0 via the BPROC trampoline.  Neutralises firmwares
 ; that would steal boot via H.STKE or built-in applications.
 ;
+;    This is done only if the "7" key is pressed at boot time (or has been
+; forced by its inverter, the boot menu, the one-time boot keys or the disk
+; emulation flags), otherwise nothing is touched.
+;
 ; Entry:  A = 0:  INIT  - patch firmware before it starts
 ;         A <> 0: CLEAN - disable autostart firmware after the boot menu
 ;
+		ld	b,a
+		ld	a,(BOOTKEYS##)
+		and	10000000b		;"7" key pressed?
+		ret	z
+		ld	a,b
 		or	a
 		jp	nz,SKIP_FIRM_CLEAN
 ;
 ;-----------------------------------------------------------------------------
 ;
 SKIP_FIRM_INIT:
-		call	CHECK_BOOT_KEY
-		ret	nz
-;
 		ld	a,23h
 		ld	(0CBD8h),a		;FS-A1
 		ld	(0C3CEh),a		;FS-A1F
@@ -68,9 +73,6 @@ SKIP_FIRM_CLEAN:
 		db	83h
 		dw	5E60h,5DB2h
 		jr	z,FOUND_HB11
-;
-		call	CHECK_BOOT_KEY
-		jr	nz,HIT_BOOT_KEY1
 ;
 		call	CHECK_HITBIT		;HB-101/101P/201/201P
 		db	03h
@@ -119,15 +121,6 @@ SKIP_FIRM_CLEAN:
 		ld	(BOOT_DRV##),a
 		ret
 ;
-HIT_BOOT_KEY1:
-		ld	a,(H.STKE)
-		cp	0C9h
-		ret	z
-HIT_BOOT_KEY2:
-		ld	hl,6474h
-		ld	(USRTAB),hl
-		ret
-;
 FOUND_HB11:
 		ld	de,H.INIP		;HB-11
 		;ld	hl,HB11_H_INIP
@@ -140,9 +133,6 @@ FOUND_HB11:
 		ld	a,0F3h
 		; v9938 port work
 		ld	(0D001h),a
-;
-		call	CHECK_BOOT_KEY
-		jr	nz,HIT_BOOT_KEY2
 ;
 FOUND:
 		ld	hl,H.STKE
@@ -268,11 +258,6 @@ CHECK_MSXWRITE:
 MSXWRITE_MAGIC:
 		db	'YAMAHA-MSX-JWP-SYSTEM'
 MSXWRITE_MAGIC_END:
-;
-CHECK_BOOT_KEY:
-		ld	a,(BOOTKEYS##+4)	;GRAPH
-		and	40h
-		ret
 ;
 CHECK_FS4600F:
 		ld	a,(EXPTBL)

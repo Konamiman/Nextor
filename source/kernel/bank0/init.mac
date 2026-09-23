@@ -302,8 +302,8 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ;
     ; Bits are assigned to keys as follows:
     ;
-    ; 0: .654321.
-    ; 1: .GCS.... (G=GRAPH, C = CTRL, S = SHIFT)
+    ; 0: 7654321.
+    ; 1: ..CS.... (C = CTRL, S = SHIFT)
     ;
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.

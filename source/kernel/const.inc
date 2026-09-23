@@ -276,19 +276,19 @@ UFM_RD	equ	(1 SHL UF_RDD)
 ;               ==========================================
 ;
 ; This byte exists at offset +20 of the emulation data file header,
-; at A011h for the one-time emulation pointer, and at offset +2 of the
-; partition table entry for the persistent emulation pointer.
+; at A011h for the one-time emulation pointer, and at PSD_EMU_FLAGS in
+; the persistent storage for the persistent emulation pointer.
 ; Bit 0 is ignored: Nextor 2 (and the Nextor 3 EMUFILE.COM tool prior
 ; to the introduction of this byte) stored the logical unit number,
 ; which was 1 in practice, in the pointer locations.
 ;
-; Bits 3 and 4 (disable the floppy ghost drive / disable the MSX-DOS kernels)
-; are NOT honored by the kernel through this byte: EMUFILE.COM implements them
-; for one-time emulation by also setting the one-time boot keys
-; (NEXTOR_BOOT_KEYS at A100h) with CTRL / SHIFT, so the existing boot-key
-; handling disables those drives before they are set up. (They can't be honored
-; through this byte because the drives are set up before disk emulation mode is
-; entered, i.e. before this byte has been read.)
+; Bits 3, 4 and 6 (disable the floppy ghost drive / disable the MSX-DOS
+; kernels / disable the built-in firmware) are honored at boot time by PS_BOOT
+; in bank 6, in both one-time and persistent emulation, by forcing the CTRL,
+; SHIFT and "7" boot keys respectively; the existing boot-key handling then
+; does the rest. (They can't be honored later through this byte because the
+; drives are set up before disk emulation mode is entered.) PS_BOOT has its
+; own EF_FORCE_* constants for these.
 ;
 ; Bit 5 (boot in R800 mode) IS honored by the kernel, in both one-time and
 ; persistent emulation: OLDDOS switches a turbo R to R800-ROM mode when it is

@@ -345,6 +345,17 @@ The boot time configuration of Nextor can be modified by keeping pressed some sp
 
 *  **6**: Install the Kanji driver before loading the DOS environment, in the same way as disks patched with the `KMODE.COM` tool did: the equivalent of `CALL KANJI` followed by `CALL ANK` is executed in BASIC, so the driver is installed (and the memory it needs is reserved, which is very difficult to do once the DOS environment is loaded) but the screen is left in ANK mode. This works in both MSX-DOS 2 and MSX-DOS 1 modes, and the boot process just continues normally if the computer doesn't have a Kanji driver (the failure of `CALL KANJI` is silently ignored).
 
+*  **7**: Disable the built-in software of computers whose firmware would otherwise take over the boot process. Some computers have proprietary built-in software (like a menu or a word processor) that is started at boot time and interferes with Nextor: typically Nextor gets forced into MSX-DOS 1 mode, or the computer resets or hangs. When this key is pressed, Nextor recognizes these computers and neutralizes their built-in software so that the boot process continues normally. The recognized models are:
+
+    * Sony HB-11, HB-101, HB-101P, HB-201, HB-201P, HB-F1, HB-F1II, HB-F5, HB-F9P and HB-F9S (the HiTBiT menu)
+    * Panasonic FS-A1, FS-A1F, FS-A1MK2, FS-A1WX, FS-A1ST and FS-A1GT, and National FS-4600F
+    * Hitachi MB-H3
+    * Philips NMS 8220
+    * Mitsubishi ML-G1 and ML-G10
+    * Sanyo PHC-77, and the Yamaha MSX-Write cartridge
+
+    The key has no effect on other computers. If you own one of these computers you'll probably want to have the key inverted, so that the built-in software is disabled unless the key is pressed; see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_.
+
 * **CTRL**: The state of this key is passed to MSX-DOS kernels on initialization. Typically this will cause the internal floppy disk drive to disable its second "ghost" drive, freeing some extra memory, especially in MSX-DOS 1 mode. 
 
 *  **SHIFT**: Prevent MSX-DOS kernels from booting, but allow Nextor kernels to boot normally. This is useful to disable the internal floppy disk drive in order to get some extra TPA memory, especially in MSX-DOS 1 mode.
@@ -364,7 +375,7 @@ Example: if your Nextor kernel is in primary slot 1, press Q to prevent it from 
 
 ![Nextor boot menu](img/BootMenu.png)
 
-In the menu, the numeric keys 0 to 6 toggle the boot keys with the same numbers, while 7 toggles the CTRL key and 8 toggles the SHIFT key.
+In the menu, the numeric keys 0 to 7 toggle the boot keys with the same numbers, while 8 toggles the CTRL key and 9 toggles the SHIFT key.
 
 The entry for the 0 key is special, and it's listed as "Ignore persistent disk emulation" rather than with the full meaning of the key. The reason is that by the time the menu appears, the persistent storage has already been read and the inverted keys have already been applied: what the menu displays is the final state of the keys, so you switch a key on or off directly in the menu instead of asking for the inverters to be ignored. What the 0 key still decides at that point is whether the persistent disk emulation mode is entered, and that's what the entry does.
 
@@ -384,7 +395,7 @@ Here's how bits are assigned to each key:
 
 * First byte (offset 512):
 
-  * Bits 1 to 6: keys 1 to 6
+  * Bits 1 to 7: keys 1 to 7
 
 * Second byte (offset 513):
 
@@ -401,12 +412,13 @@ If you use `mknexrom` you need to supply a 16 bit hexadecimal value with the `/k
   * 4: 0010
   * 5: 0020
   * 6: 0040
+  * 7: 0080
   * CTRL: 2000
   * SHIFT: 1000
 
 e.g. `/k:3002` to invert the 1, CTRL and SHIFT keys, or `/k:0040` to invert the 6 key (so that the Kanji driver is installed at boot time unless the key is pressed).
 
-The boot menu respects the key inversion encoded in the ROM, and will show inverted keys as already switched on (you can of course switch them off before continuing with the boot). For example, the boot menu screenshot displayed above is for a ROM that has the CTRL key inverted.
+The boot menu respects the key inversion encoded in the ROM, and will show inverted keys as already switched on (you can of course switch them off before continuing with the boot). For example, the boot menu screenshot displayed above is for an MSX Turbo-R that has the CTRL key inverted.
 
 In Nextor 2 the only kernel file offered with a key already inverted was one with the CTRL key inverted, so that internal floppy disk drives would boot with a single drive letter assigned. Nextor 3 offers no pre-inverted kernel files at all: the inverted keys can now be changed at any time, without modifying the ROM, by keeping them in the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_, _[3.6.16. The CALL BOOTKEYS command](#3616-the-call-bootkeys-command)_ and _[3.4.11. NEXBOOT: the boot keys configuration tool](#3411-nexboot-the-boot-keys-configuration-tool)_).
 
@@ -818,7 +830,7 @@ NEXBOOT /k
 NEXBOOT /i
 ```
 
-`/p` stores the keys whose meaning is inverted at every boot. Be careful not to confuse this with the syntax above: there, the keys are the ones to be considered as pressed in the next boot only; here they are the ones that will be considered inverted, so they will act as pressed when you _don't_ press them, and as not pressed when you do, at every boot. Only the keys 1 to 6, C and S can be inverted, since those are the only ones that have an inverter bit, so specifying a key from 7 to 9 is an error. As in the syntax above, all the keys go together in one single argument: `NEXBOOT /p C6` inverts the CTRL and 6 keys, while `NEXBOOT /p C 6` is an error (there are no kernels to disable here, so there's nothing that a second argument could mean). Use `.` to store "no key is inverted".
+`/p` stores the keys whose meaning is inverted at every boot. Be careful not to confuse this with the syntax above: there, the keys are the ones to be considered as pressed in the next boot only; here they are the ones that will be considered inverted, so they will act as pressed when you _don't_ press them, and as not pressed when you do, at every boot. Only the keys 1 to 7, C and S can be inverted, since those are the only ones that have an inverter bit, so specifying the 8 or 9 key is an error. As in the syntax above, all the keys go together in one single argument: `NEXBOOT /p C6` inverts the CTRL and 6 keys, while `NEXBOOT /p C 6` is an error (there are no kernels to disable here, so there's nothing that a second argument could mean). Use `.` to store "no key is inverted".
 
 `/k` removes the stored keys, so that the inverters in the kernel ROM are used again. Note that this is not the same as `NEXBOOT /p .`: that one stores "no key is inverted", which overrides the ROM, while `/k` stores nothing at all.
 
@@ -846,12 +858,14 @@ The `-c` and `-s` options free memory for the game by disabling drives that woul
 
 The `-8` option makes an MSX turbo R boot the emulation session in R800-ROM mode; it has no effect on other computers. Note that in disk emulation mode (which is always MSX-DOS 1 mode) the active CPU is not switched when accessing disk drives, so some storage devices might not work properly in this mode. Like `-5`/`-6`, this option is stored in the data file and works for both the one-time and persistent variants.
 
+The `-f` option disables the built-in software of the computer, as if the 7 key was pressed while booting (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_); it has no effect except on the computers listed there. Pressing the key by hand isn't a good option in disk emulation mode, since it could be read as a request to switch to the seventh disk image file. Like `-c`/`-s`, this option is stored in the data file and works for both the one-time and persistent variants.
+
 The `-p` option will print all the filenames and associated keys after creating the data file. Note however that you can see this same information afterwards if you `TYPE /B` the emulation data file.
 
 The syntax for starting a disk emulation session is as follows:
 
 ```
-EMUFILE set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-x]
+EMUFILE set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-f] [-x]
 ```
 
 `o` will start the emulation using the one-time variant (this is the default), and `p` will start the emulation using the persistent variant. For the latter, the emulation data file pointer is written to the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_), and the command fails if there's none.
@@ -862,7 +876,9 @@ The `-c` and `-s` options disable the ghost floppy disk drive or the MSX-DOS ker
 
 The `-8` option boots the emulation session in R800-ROM mode on a turbo R, as explained in the file creation syntax above. Like `-5`/`-6`, if the emulation data file was created with `-8` it is applied automatically, and it works with both the one-time and persistent variants (in the persistent case the setting is stored with the pointer, so it applies on every boot).
 
-The `-x` option makes `EMUFILE.COM` ignore all the flags stored in the emulation data file (the forced frequency, and the `-c`/`-s`/`-8` options) and apply only the options passed in this command line. The order of the arguments doesn't matter, so `-5 -s -x` is the same as `-x -5 -s`. This is useful to start a session that ignores what the file was created with; for example, `EMUFILE set mygame -x` starts the emulation with no forced frequency and no drives disabled, regardless of how `mygame.emu` was created.
+The `-f` option disables the built-in software of the computer, as explained in the file creation syntax above. It works like `-c` and `-s`: if the emulation data file was created with `-f` it is applied automatically, and it works with both the one-time and the persistent variants (for the latter, with the same requirement about the driver of your controller).
+
+The `-x` option makes `EMUFILE.COM` ignore all the flags stored in the emulation data file (the forced frequency, and the `-c`/`-s`/`-8`/`-f` options) and apply only the options passed in this command line. The order of the arguments doesn't matter, so `-5 -s -x` is the same as `-x -5 -s`. This is useful to start a session that ignores what the file was created with; for example, `EMUFILE set mygame -x` starts the emulation with no forced frequency and no drives disabled, regardless of how `mygame.emu` was created.
 
 Note that in both variants the computer will reset immediately after `EMUFILE.COM` writes the emulation data file pointer to the appropriate place.
 
@@ -1252,7 +1268,7 @@ Persistent storage: file in device 1
 Inverted boot keys: 6 CTRL
 ```
 
-`<keys>` is the sum of the values for the keys to be inverted: 2, 4, 8, 16, 32 and 64 for the keys 1 to 6, &H1000 for SHIFT, and &H2000 for CTRL. These are the same values that the `mknexrom` tool accepts. For example `CALL BOOTKEYS(&H2040)` inverts the 6 and CTRL keys, so that from the next boot on the Kanji driver will be installed and the ghost floppy disk drive will be disabled, unless the corresponding key is pressed. A value of 0 means "no key is inverted".
+`<keys>` is the sum of the values for the keys to be inverted: 2, 4, 8, 16, 32, 64 and 128 for the keys 1 to 7, &H1000 for SHIFT, and &H2000 for CTRL. These are the same values that the `mknexrom` tool accepts. For example `CALL BOOTKEYS(&H2040)` inverts the 6 and CTRL keys, so that from the next boot on the Kanji driver will be installed and the ghost floppy disk drive will be disabled, unless the corresponding key is pressed. A value of 0 means "no key is inverted".
 
 A value of -1 removes the setting: the boot key inverters of the kernel ROM will be in effect again. Note that this is not the same as 0: when a value is set, it fully replaces the one in the ROM.
 
@@ -1423,6 +1439,8 @@ The following rules and restrictions apply to the disk emulation mode:
 - Disk emulation mode is always started in DOS 1 mode, and by default in Z80 mode. On an MSX turbo R you can start the emulation in R800-ROM mode instead: the recommended way is the `-8` option of `EMUFILE.COM` (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_), which works for both the one-time and persistent variants. Alternatively you can keep `GRAPH` and 2 pressed while the computer boots, and when the CAPS LED lights up, release both keys and press 1. Note that in MSX-DOS 1 mode the active CPU is not switched when accessing disk drives, which may prevent some storage devices from working properly.
 
 - All Nextor controllers but the primary one will be disabled when disk emulation mode is entered. MSX-DOS kernels (such as the internal floppy disk drive) will not, but you can force them to disable themselves by pressing `SHIFT` while booting; this is useful to free some memory.
+
+- If your computer is one of those whose built-in software takes over the boot process (see the 7 key in _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_), use the `-f` option of `EMUFILE.COM` to disable it for the emulation session, or have the 7 key inverted.
 
 
 #### 3.9.5. How to free some memory

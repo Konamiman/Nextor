@@ -51,7 +51,7 @@ const char* strUsage=
     "\r\n"
     "/p <keys>: store in the persistent storage the keys whose meaning is\r\n"
     "INVERTED at every boot: an inverted key acts as pressed when you don't\r\n"
-    "press it, and as not pressed when you do. Only 1 to 6, C and S can be\r\n"
+    "press it, and as not pressed when you do. Only 1 to 7, C and S can be\r\n"
     "inverted, and as above they all go in one single argument, e.g. /p C6\r\n"
     "(there are no kernels to disable here). '.' stores 'no key inverted'.\r\n"
     "/k: remove the stored keys, so the ones in the kernel ROM are used.\r\n"
@@ -273,7 +273,7 @@ void GetPersistentBits(char* keys)
     for(i=0; i<keysCount; i++) {
         currentKey = keys[i] | 32;
 
-        if(currentKey >= '1' && currentKey <= '6') {
+        if(currentKey >= '1' && currentKey <= '7') {
             keyFlags[0] |= (1 << (currentKey-'0'));
         }
         else if(currentKey == 's') {
@@ -282,8 +282,8 @@ void GetPersistentBits(char* keys)
         else if(currentKey == 'c') {
             keyFlags[4] |= 0x20;
         }
-        else if(currentKey >= '7' && currentKey <= '9') {
-            Terminate("Only the keys 1 to 6, C and S can be inverted");
+        else if(currentKey == '8' || currentKey == '9') {
+            Terminate("Only the keys 1 to 7, C and S can be inverted");
         }
         else {
             Terminate("Invalid key specification");
@@ -354,7 +354,7 @@ void PrintStoredKeys()
     print("Inverted boot keys: ");
 
     any = false;
-    for(i=1; i<=6; i++) {
+    for(i=1; i<=7; i++) {
         if(low & (1 << i)) {
             printf("%i ", i);
             any = true;
