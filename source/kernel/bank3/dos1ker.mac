@@ -4740,9 +4740,7 @@ A592C:	ld	e,(hl)
 	ld	d,0			; number of sectors per FAT
 	call	A4916			; * FAT size
 	inc	bc			; and a FAT buffer flag
-	ld	l,c			; unused (ALLFBUF takes BC); kept to hold old code 
-	ld	h,b			; size of the FAT buffer
-	call	ALLFBUF			; allocate memory for FAT buffer
+	call	ALLFBUF			; allocate memory for FAT buffer (size in BC)
 	ld	(YF349),hl		; base system bottom sofar
 	ld	(hl),0FFH		; flag invalid FAT buffer
 	inc	hl
@@ -4751,6 +4749,8 @@ A592C:	ld	e,(hl)
 	pop	bc
 	pop	hl
 	djnz	A592C			; next drive
+	nop				; padding (the HIMEM check moved to ALLFBUF),
+	nop				; keeps A5967 onwards at their original addresses
 FAT_ALLOC_END:
 	ld	hl,XF327
 	ld	(hl),03EH
@@ -4820,10 +4820,9 @@ A59E9:	ld	ix,M7E14		; start BASIC program in ROM
 A59ED:	call	A5C16			; initialize diskbasic
 	jp	CALBAS
 
-A59F3:	call	KANJI_BOOT##		; install the Kanji driver if the "6" key is active
-KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
-	ld	hl,A5B3A
-	push	hl			; if quit anywhere start diskbasic
+A59F3:	jp	KANJI_BOOT_D1		; install the Kanji driver if the "6" key is active
+					; (and push A5B3A), then continue below
+BOOT_D1_CONT:
 	call	A5AE7			; read bootsector
 	ret	c			; failed, start diskbasic
 	call	A5ADB			; start bootcode with Cx reset (some disk can take control from here)
@@ -4840,6 +4839,8 @@ KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
 	ret	z			; no ram available on page 1, start diskbasic
 
 ; MSXDOS requirement are met, try starting it
+
+	ALIGN	5A11h
 
 A5A11:	LD	HL,(YF349)
 	LD	(YF34B),HL		; bottom MSX-DOS system
@@ -4945,6 +4946,9 @@ J5A98:	POP	HL
 	LD	A,0C3H
 	CALL	A5C62			; enable XFER, ENAKRN and ENARAM routines
 	SCF
+
+	ALIGN	5ADBh
+
 A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 	LD	DE,XF368		; ENAKRN routine
 	LD	A,(YF340)		; coldboot flag
@@ -4958,6 +4962,10 @@ A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 ;	drive 0 was tried, which prevented booting in MSX-DOS 1 mode
 ;	when the bootable disk was in any other drive (relevant in Nextor,
 ;	where unlike in MSX-DOS the internal FDD isn't necessarily drive 0).
+;
+;	The routine doesn't fit in the room of the original one, so it
+;	continues at BSCAN_READ_DONE, past the last ALIGN.
+;
 ;	Inputs		________________________
 ;	Outputs		Cy reset: bootsector copied to YC000, A = nonzero,
 ;			          boot drive is the new default drive
@@ -4969,7 +4977,7 @@ A5AE7:	call	TO_BASIC_REQUIRED	; also flags the dirsector buffer invalid
 	xor	a			; start scanning at drive 0
 BSCAN_LOOP:
 	call	IS_GHOST		; ghost half of a ghost drive pair?
-	jr	c,BSCAN_SKIP		; yep: same physical drive as its master, skip it
+	jp	c,BSCAN_SKIP		; yep: same physical drive as its master, skip it
 	call	A609A			; invalidate FAT buffer of the drive
 					;  (its disk may have been changed)
 	push	af
@@ -4983,32 +4991,9 @@ BSCAN_LOOP:
 	PUSH	HL
 	or	a			; read
 	CALL	PHYDIO			; read sector
-	POP	HL
-	jr	c,BSCAN_NEXT		; error, try next drive
-	LD	A,(HL)
-	LD	DE,YC000
-	LD	BC,256
-	LDIR				; copy bootloader to C000
-	CP	0EBH
-	jr	z,BSCAN_OK		; valid bootloader, quit
-	CP	0E9H
-	jr	z,BSCAN_OK		; valid bootloader, quit
-BSCAN_NEXT:
-	pop	af
-BSCAN_SKIP:
-	inc	a
-	ld	hl,YF347
-	cp	(hl)			; more drives to try?
-	jr	c,BSCAN_LOOP
-	scf				; no bootable disk found
-	ret
+	jp	BSCAN_READ_DONE
 
-BSCAN_OK:
-	pop	af
-	LD	(YF247),a		; boot drive becomes the default drive
-	ld	a,(YC000)
-	or	a			; Cy reset, A nonzero (as the old code did)
-	ret
+	ALIGN	5B0Fh
 
 I5B0F:	DEFB	LOW RDSLT,C63F4-C63F4
 	DEFB	LOW WRSLT,C6415-C63F4
@@ -5024,6 +5009,8 @@ T5B27:	defb	'RUN',34,'AUTOEXEC.BAS',0
 T5B38:	defw	A5B92			; start DiskBASIC in direct mode
 
 ;	Subroutine	Start DiskBASIC
+
+	ALIGN	5B3Ah
 
 BASIC::
 A5B3A:	call	A5C60			; disable XFER,ENARAM,ENAKRN routines
@@ -5736,7 +5723,8 @@ FMT_CHOOSE_D1:
 	call	A609A			; mark FAT buffer as invalid
 	call	A6086		; get diskdriverparameters
 	ld	c,a		;C = device number
-	ld	(BUF+100-1),iy	;BUF+100 = slot for bank 6 (IYL at BUF+99 unused)
+	ld_	a,iyh
+	ld	(BUF+100),a	;Slot for the bank 6 routine
 	ld	hl,FMT_PRINT_AND_CHOOSE##+8000h	;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl
 	ld	hl,($SECBUF)
@@ -5751,6 +5739,17 @@ fmt_choice_d1:
 	call	A6174		;Strike a key when ready (CTRL-C aborts internally)
 	pop	af
 	ret
+
+; Kanji driver installation for the MSX-DOS 1 boot, moved here from A59F3
+; so that the addresses that follow it keep their original values.
+; KANJI_BOOT_RESUME must be right after the CALL, see KANJI_BOOT in drv.mac.
+
+KANJI_BOOT_D1:
+	call	KANJI_BOOT##		; install the Kanji driver if the "6" key is active
+KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
+	ld	hl,A5B3A
+	push	hl			; if quit anywhere start diskbasic
+	jp	BOOT_D1_CONT
 
 	ALIGN	603Dh
 
@@ -5836,11 +5835,8 @@ A6093:	add	a,(hl)			; driveid driver
 	inc	hl
 	ld	h,(hl)			; slotid driver
 	ld	l,a
-	jp	SET_SLOT
-	;nop
-	;push	hl	;This line and the next two were commented out ?????
-	;pop	iy
-	;ret
+	jp	SET_SLOT		; the original code returned IY = slot here,
+					; SET_SLOT does it too (and sets KSLOT)
 
 ;	Subroutine	mark FAT buffer as invalid
 ;	Inputs		A=driveid
@@ -9003,19 +8999,55 @@ gfm_next_entry:
 	inc	hl
 	inc	ix
 	djnz	gfm_entry
-
-	ld	a,c
-	ret
+	jr	gfm_clamp
 
 gfm_all:
 	;No KERNEX_DOS1: all drives support formatting
+	ld	c,0FFh
+
+gfm_clamp:
+	;Keep only the drives that exist: if ALLFBUF ran out of memory at
+	;boot time, YF347 was lowered but DRVTBL still counts the drives
+	;that were dropped (always the last ones).
 	ld	a,(YF347)
 	ld	b,a
 	xor	a
-gfm_all_loop:
+gfm_clamp_loop:
 	scf
 	rla
-	djnz	gfm_all_loop
+	djnz	gfm_clamp_loop
+	and	c
+	ret
+
+; Second part of the bootsector scan of A5AE7, moved here so that the
+; addresses that follow A5AE7 keep their original values.
+
+BSCAN_READ_DONE:
+	POP	HL
+	jr	c,BSCAN_NEXT		; error, try next drive
+	LD	A,(HL)
+	LD	DE,YC000
+	LD	BC,256
+	LDIR				; copy bootloader to C000
+	CP	0EBH
+	jr	z,BSCAN_OK		; valid bootloader, quit
+	CP	0E9H
+	jr	z,BSCAN_OK		; valid bootloader, quit
+BSCAN_NEXT:
+	pop	af
+BSCAN_SKIP:
+	inc	a
+	ld	hl,YF347
+	cp	(hl)			; more drives to try?
+	jp	c,BSCAN_LOOP
+	scf				; no bootable disk found
+	ret
+
+BSCAN_OK:
+	pop	af
+	LD	(YF247),a		; boot drive becomes the default drive
+	ld	a,(YC000)
+	or	a			; Cy reset, A nonzero (as the old code did)
 	ret
 
 ; Entry point for non DOS 1 function call

@@ -25,7 +25,7 @@ PRINTL	macro	NAME,VALUE
 
 ALIGN	macro	ADDR
     if $-START gt ADDR-ORIGIN
-	error	<Code overwraps at ADDR>
+	.error	<Code overwraps at ADDR>
 	PRINTL	<wrap at ADDR>,%($-START)-(ADDR-ORIGIN)
 	org	ADDR-ORIGIN
     else
