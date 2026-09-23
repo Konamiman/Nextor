@@ -957,8 +957,6 @@ BM_GOTLINLEN:
 	call BOOT_MENU##
 
 AFTER_BOOT_MENU:
-    xor a
-    call    SKIP_FIRM##
 	ld	a,(ALL_KERNELS_DISABLED##)
 	or	a
 	jr	nz,ABM_SKIP_SCREEN
@@ -1197,6 +1195,13 @@ OVERRIDE_PAST_MSG:
 	ld	(hl),d
 	inc	hl
 	ld	(hl),0C9h	;instruction code for "RET"
+;
+;	Neutralize the built-in firmware if the "7" key is pressed, first part
+;	(the second part runs in CLEAN). Done here, and not before, so that it
+;	happens only when there's a master Nextor kernel that will run CLEAN.
+;
+	xor	a
+	call	SKIP_FIRM##
 	;	;
 	;	;
 	;	;
@@ -1440,6 +1445,8 @@ not_my_slot:
 	subttl	Clean up procedure
 ;
 CLEAN::
+	ld	a,1		;Neutralize the built-in firmware, second part
+	call	SKIP_FIRM##
 	call	CLEAR_STAT_P2	;ld	hl,H.RUNC	;restore hook to initial value
 	ld	b,5
 CLEAN1:
@@ -3368,8 +3375,6 @@ GWORK2:
 ;    command from BASIC.
 
 CLEAR_STAT_P2:
-    ld  a,1
-    call    SKIP_FIRM##
 	call	GSLT1
 	ld	b,a
 	and	11b
