@@ -205,6 +205,9 @@ DRIVER_QUERY:
 		jp z,DO_DRVQ_SHUTDOWN_RAM
 	endif
 
+	;The device query 8 (read device sectors before initialization) is
+	;optional and not implemented here.
+
 	ld a,RESULT_NOT_IMPLEMENTED
 	ret
 
@@ -460,7 +463,10 @@ DO_DEVQ_GET_STRING:
 ;                  to be read-only.
 ;         bit 2: 1 if the device is a floppy disk drive.
 ;         bit 3: 1 if this device shouldn't be used for automapping.
-;         bits 4-7: must be zero.
+;         bit 4: 1 if this device shouldn't be used for the persistent
+;                  storage file of Nextor (a device flagged like this must
+;                  also return .IDEVN in the device query 8, if implemented).
+;         bits 5-7: must be zero.
 ; +8 (2): Number of cylinders
 ; +10 (1): Number of heads
 ; +11 (1): Number of sectors per track

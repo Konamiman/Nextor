@@ -6685,7 +6685,7 @@ A658D:	ld	a,(de)
 	ld	d,(hl)
 	pop	hl
 	bit	7,d
-	jr	nz,CMD_BANK4
+	jp	nz,CMD_BANK4
 	push	de
 	call	A72DA
 	scf
@@ -6702,26 +6702,28 @@ A65A3:	and	a
 	ld	a,(hl)
 	and	a
 	jr	nz,A658A
+NOT_IN_TABLE:
+	jr	T65B1			;Not in our table: try the commands of bank 6
+
 A65AD:	pop	hl
 	scf	;jp	OEMSTA
 	ret
 
-CMD_BANK4:
-	res	7,d
-	push	de
-	call	A72DA
-	pop	ix
-	xor	a
-	ex	af,af
-	ld	a,4
-	jp	CALBNK##
+;The CALL commands table was here, now it's CMD_NAMES. The room it left
+;is used for the jump above and for the code below, which looks for the
+;command in bank 6 (CALL_EXTRA in pstor.mac, which returns Cy=1 if it
+;doesn't know the command either). The table was:
+;
+;	defb	"SYSTEM",0
+;	defw	A65C4
+;	defb	"FORMAT",0
+;	defw	A65DC
+;	defb	0
 
-	;T65B1:
-	;defb	"SYSTEM",0
-	;defw	A65C4
-	;defb	"FORMAT",0
-	;defw	A65DC
-	;defb	0
+T65B1:	pop	hl
+	ld	ix,CALL_EXTRA##
+	ld	a,6
+	jp	CALBNK##
 
 	ALIGN	65C4h
 
@@ -9076,6 +9078,9 @@ MOREFS:
 	db	_FORMAT##
 	dw	F_FORMAT##+8000h	;Bit 15 = call bank 6
 
+	db	_PSOPS##
+	dw	F_PSOPS##+8000h
+
 	db	0
 
 
@@ -9177,6 +9182,20 @@ CLUSNUM_ERR_EXIT:
 CLUSNUM_ERR:
 	pop	af
 	jr	CLUSNUM_ERR_EXIT
+
+
+;Execute a CALL command whose handler is in bank 4.
+;Input: DE = handler address with bit 15 set, HL = BASIC text pointer
+
+CMD_BANK4:
+	res	7,d
+	push	de
+	call	A72DA
+	pop	ix
+	xor	a
+	ex	af,af
+	ld	a,4
+	jp	CALBNK##
 
 
 ; CALL commands table.

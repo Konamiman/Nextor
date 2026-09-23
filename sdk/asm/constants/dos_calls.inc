@@ -143,4 +143,6 @@
 
 	const	_DRVRO,   7Fh	;Operate on a RAM-loaded driver
 
+	const	_PSOPS,   80h	;Persistent storage operations
+
 

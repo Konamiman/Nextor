@@ -280,6 +280,16 @@ ERROR:	LD	SP,BOOTSTRAP##	; Set up SP again in case an abort.
 	LD	(ABORTERR##),A	; Save error for terminating COMMAND3.
 	LD	B,A	; B=error code.
 	PUSH	BC	; Save it for later.
+	XOR	A	; Turn /P paging off before printing
+	LD	(ROWMAX##),A	;   anything: after a transient
+	LD	(COLCNT##),A	;   program ROWMAX and COLCNT hold
+	LD	A,B	;   whatever it left there (they are
+				;   past BUFFER1, so they are not
+				;   restored at re-load), and CLI10
+				;   only resets them once the message
+				;   has been printed; garbage there
+				;   made the message pause with 'Press
+				;   any key to continue'.
 	LD	DE,ENVNAME##	; DE -> buffer to get message into.
 	CP	" "	; User error ?
 	JR	C,ERR10	; Go if yes (no message required).

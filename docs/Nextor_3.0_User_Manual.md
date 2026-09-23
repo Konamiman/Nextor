@@ -52,6 +52,8 @@
 
 [2.17. The BUFINSERT environment variable](#217-the-bufinsert-environment-variable)
 
+[2.18. The persistent storage](#218-the-persistent-storage)
+
 [3. Using Nextor](#3-using-nextor)
 
 [3.1. Installing Nextor](#31-installing-nextor)
@@ -86,7 +88,7 @@
 
 [3.4.10. NSYSVER: the NEXTOR.SYS version changer](#3410-nsysver-the-nextorsys-version-changer)
 
-[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)
+[3.4.11. NEXBOOT: the boot keys configuration tool](#3411-nexboot-the-boot-keys-configuration-tool)
 
 [3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)
 
@@ -129,6 +131,10 @@
 [3.6.14. The CALL USR command](#3614-the-call-usr-command)
 
 [3.6.15. The CALL SYSTEM2 command](#3615-the-call-system2-command)
+
+[3.6.16. The CALL BOOTKEYS command](#3616-the-call-bootkeys-command)
+
+[3.6.17. The CALL EMUKILL command](#3617-the-call-emukill-command)
 
 [3.7. New BASIC error codes](#37-new-basic-error-codes)
 
@@ -325,7 +331,7 @@ MSX-DOS 2 provides a set of mapper support routines, which allow applications to
 
 The boot time configuration of Nextor can be modified by keeping pressed some special keys while the system is booting. These keys and their behavior are:
 
-*  **0**: Disable permanent disk emulation mode by deleting the emulation data file pointer from the partition table. See _[3.9. Disk emulation mode](#39-disk-emulation-mode)_.
+*  **0**: Ignore the persistent storage during this boot: the boot keys that were set as inverted with `CALL BOOTKEYS` are not inverted, and the persistent disk emulation mode is not entered. Nothing is changed in the persistent storage, so the next boot will use it again. See _[2.18. The persistent storage](#218-the-persistent-storage)_ and _[3.9. Disk emulation mode](#39-disk-emulation-mode)_.
 
 *  **1**: Force boot in MSX-DOS 1 mode. If the computer is an MSX Turbo-R, switches the CPU to Z80 mode.
 
@@ -360,13 +366,19 @@ Example: if your Nextor kernel is in primary slot 1, press Q to prevent it from 
 
 In the menu, the numeric keys 0 to 6 toggle the boot keys with the same numbers, while 7 toggles the CTRL key and 8 toggles the SHIFT key.
 
+The entry for the 0 key is special, and it's listed as "Ignore persistent disk emulation" rather than with the full meaning of the key. The reason is that by the time the menu appears, the persistent storage has already been read and the inverted keys have already been applied: what the menu displays is the final state of the keys, so you switch a key on or off directly in the menu instead of asking for the inverters to be ignored. What the 0 key still decides at that point is whether the persistent disk emulation mode is entered, and that's what the entry does.
+
+For the same reason the entry is listed only when it can actually change something: when the persistent storage holds an emulation pointer, or when you booted with the 0 key pressed (so that you can switch it off again). Pressing the key at boot time keeps its full meaning in any case, since then it acts before the persistent storage is read.
+
+**Note:** Nextor scans the keyboard before printing the _Press N to show the boot menu message_, so you can release the keys as soon as it appears.
+
 If you want to completely disable all Nextor kernels, press N at boot time to show the menu, release it, and press it again. This is useful when the kernel ROM must be updated from a storage device controlled by a non-Nextor controller (e.g. the internal floppy disk drive).
 
 #### 2.10.1. Boot key inverters
 
 The Nextor kernel has two bytes, at offsets 512 and 513 in the ROM, that act as _boot key inverters_. There's one bit assigned to each of the keys that affect the booting process (not including the slot keys and the 0 and N keys), and when that bit is set, then the meaning of the key is inverted. For example, if the bit for the SHIFT key is set, then MSX-DOS drivers will be disabled unless SHIFT is pressed while booting.
 
-Being hardcoded values, the only way to customize them is to modify the Nextor ROM file before flashing it into your device. The `mknexrom` tool can be used for that, or you can do it manually using a hexadecimal editor.
+These are hardcoded values: to change them you need to modify the Nextor ROM file before flashing it into your device. The `mknexrom` tool can be used for that, or you can do it manually using a hexadecimal editor. However, if your Nextor controller supports it, there's a much more convenient way to choose which keys are inverted: [the `CALL BOOTKEYS` command](#3616-the-call-bootkeys-command), which keeps your choice in the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_). A choice made this way replaces the values in the ROM.
 
 Here's how bits are assigned to each key:
 
@@ -396,7 +408,7 @@ e.g. `/k:3002` to invert the 1, CTRL and SHIFT keys, or `/k:0040` to invert the 
 
 The boot menu respects the key inversion encoded in the ROM, and will show inverted keys as already switched on (you can of course switch them off before continuing with the boot). For example, the boot menu screenshot displayed above is for a ROM that has the CTRL key inverted.
 
-The releases section of the Nextor repository and the development Docker image contain "CTRL_INV" and "SHIFT_INV" variants of the kernel base file (with the CTRL and SHIFT keys inverted, respectively), as well as "KANJI_INV" variants (with the 6 key inverted) of these and of the non-inverted files; this is for convenience, especially for driver developers that don't use `mknexrom` for the build process.
+In Nextor 2 the only kernel file offered with a key already inverted was one with the CTRL key inverted, so that internal floppy disk drives would boot with a single drive letter assigned. Nextor 3 offers no pre-inverted kernel files at all: the inverted keys can now be changed at any time, without modifying the ROM, by keeping them in the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_, _[3.6.16. The CALL BOOTKEYS command](#3616-the-call-bootkeys-command)_ and _[3.4.11. NEXBOOT: the boot keys configuration tool](#3411-nexboot-the-boot-keys-configuration-tool)_).
 
 #### 2.10.2. One-time boot keys
 
@@ -404,7 +416,7 @@ There's yet another way to modify the Nextor booting procedure: the _one-time bo
 
 Being a RAM based mechanism, it's "one-time" in the sense that it won't work again on the next computer reset unless the signature and the key data are put in memory again. The signature is explicitly erased by Nextor after being read to make this behavior consistent.
 
-The `NEXBOOT.COM` tool (see _[3.4.11. NEXBOOT: the one-time boot keys configuration tool](#3411-nexboot-the-one-time-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document.
+The `NEXBOOT.COM` tool (see _[3.4.11. NEXBOOT: the boot keys configuration tool](#3411-nexboot-the-boot-keys-configuration-tool)_) can be used to easily set this data and reset the computer, but all the tool does is write to RAM, and thus any other tool could be used instead. The details on the location and format of the data used by this mechanism are in the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document.
 
 ### 2.11. Built-in partitioning tool
 
@@ -452,6 +464,20 @@ Since version 3.0 Nextor allows changing the initial mode: if an environment ite
 
 The setting affects any program that reads lines through the kernel, including the command interpreter: `COMMAND3.COM` uses the kernel line editor for its `INPUT` command and, when the `EXPAND` environment item is set to `OFF`, for its command line; and its own command line editor (the one used when `EXPAND` is `ON`, which is the default) honors the item as well, so the command prompt starts in insert mode whatever the value of `EXPAND`; the interpreter reads the item when it starts and whenever it is changed with the `SET` command. Older interpreters (`COMMAND2.COM`) honor it only when `EXPAND` is `OFF`, since their own editor knows nothing about it. This feature is not available in MSX-DOS 1 mode, where environment items don't exist.
 
+
+### 2.18. The persistent storage
+
+Nextor 3 can remember a few settings that need to be known at the very beginning of the boot process, before anything can be loaded from disk: which boot keys you want to have inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_), and whether the computer must boot in persistent disk emulation mode (see _[3.9. Disk emulation mode](#39-disk-emulation-mode)_). These settings are kept in the _persistent storage_ of the primary Nextor controller.
+
+The settings are kept in a small file named `_NEXTOR.PSF` (with the hidden, system and read only attributes) in the root directory of the first partition of the first storage device of the controller. **They therefore belong to the storage medium, not to the computer nor to the controller**: if you insert a different card or disk you will get the settings stored in that one, or none, and if there's no medium inserted at all there's no persistent storage for that boot. Nextor creates the file when it's needed; the partition must be FAT12 or FAT16. You can copy the file to another medium to copy the settings, and delete it to get rid of them. Don't modify it by hand.
+
+Whether all of this works depends on how the Nextor driver of your controller was made: it must be able to read the medium before it has been initialized, which is what Nextor needs in order to read the file at the very beginning of the boot. If it can't, inverting boot keys with `CALL BOOTKEYS` has no effect, although the persistent disk emulation mode and the programs that use the storage still work.
+
+Use [the `CALL BOOTKEYS` command](#3616-the-call-bootkeys-command) to see whether you have persistent storage and which device holds it.
+
+If something goes wrong with the stored settings, keep the 0 key pressed while booting: the persistent storage will be completely ignored during that boot.
+
+Only the persistent storage of the primary controller (the Nextor kernel that controls the boot process) is ever used. If you have two Nextor controllers and the primary one isn't the one in the lowest numbered slot, the boot keys that you set as inverted will not work; the rest will.
 
 ## 3. Using Nextor
 
@@ -510,7 +536,7 @@ B: for driver on slot 2
 C:, D: for the internal disk drive
 ```
 
-The internal disk drive would not have any drives attached if you pressed SHIFT while booting (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_) or if you use a Nextor kernel variant with the SHIFT key inverted.
+The internal disk drive would not have any drives attached if you pressed SHIFT while booting (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_) or if you have the SHIFT key set as inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_).
 
 After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. Each drive is mapped to a device partition that meets the following conditions:
 
@@ -770,7 +796,7 @@ For example: `NSYSVER 2.20`. Note that this will change only the value of the `N
 
 Note: the version number change performed by this tool is temporary and it will cease to have effect (that is, the `NEXTOR.SYS` version number will revert to its real value) when `NEXTOR.SYS` is reloaded, either because the BASIC prompt is entered and exited via CALL SYSTEM, or because the computer is rebooted.
 
-#### 3.4.11. NEXBOOT: the one-time boot keys configuration tool
+#### 3.4.11. NEXBOOT: the boot keys configuration tool
 
 The `NEXBOOT.COM` tool allows you to easily configure the keys to be used as one-time boot keys (see _[2.10.2. One-time boot keys](#2102-one-time-boot-keys)_) in the next reset. The syntax is:
 
@@ -783,6 +809,22 @@ where the boot keys are the numeric keys, C for CTRL and S for SHIFT, and `<slot
 When using version 1.1 or newer of NEXBOOT.COM you can also specify `*` to disable all the Nextor kernels, this is equivalent to pressing `N` in the boot menu. Note however that this will only work with Nextor kernels whose version is 2.1 or newer.
 
 In all cases, the tool resets the computer immediately after appropriately setting the keys information in RAM.
+
+Version 3.0 and newer of the tool can also manage the _inverted_ boot keys kept in the persistent storage (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_ and _[2.18. The persistent storage](#218-the-persistent-storage)_), as an alternative to [the `CALL BOOTKEYS` command](#3616-the-call-bootkeys-command):
+
+```
+NEXBOOT /p <boot keys>|.
+NEXBOOT /k
+NEXBOOT /i
+```
+
+`/p` stores the keys whose meaning is inverted at every boot. Be careful not to confuse this with the syntax above: there, the keys are the ones to be considered as pressed in the next boot only; here they are the ones that will be considered inverted, so they will act as pressed when you _don't_ press them, and as not pressed when you do, at every boot. Only the keys 1 to 6, C and S can be inverted, since those are the only ones that have an inverter bit, so specifying a key from 7 to 9 is an error. As in the syntax above, all the keys go together in one single argument: `NEXBOOT /p C6` inverts the CTRL and 6 keys, while `NEXBOOT /p C 6` is an error (there are no kernels to disable here, so there's nothing that a second argument could mean). Use `.` to store "no key is inverted".
+
+`/k` removes the stored keys, so that the inverters in the kernel ROM are used again. Note that this is not the same as `NEXBOOT /p .`: that one stores "no key is inverted", which overrides the ROM, while `/k` stores nothing at all.
+
+`/i` shows the currently stored keys and what kind of persistent storage is in use.
+
+These three options don't reset the computer (the stored keys take effect on the next boot), and they don't touch the persistent disk emulation mode: use [the `CALL EMUKILL` command](#3617-the-call-emukill-command) or `EMUFILE k` for that.
 
 #### 3.4.12. EMUFILE: the disk emulation mode tool
 
@@ -800,7 +842,7 @@ The `-a <address>` option allows you to specify the page 3 address that Nextor w
 
 The `-5` and `-6` options tell Nextor to force the screen to 50Hz or 60Hz, respectively, right after the emulation session starts and before the disk image file is loaded; see _[3.9.3. Forcing the screen frequency](#393-forcing-the-screen-frequency)_. Specifying both is an error.
 
-The `-c` and `-s` options free memory for the game by disabling drives that would otherwise use it: `-c` disables the ghost floppy disk drive (simulates CTRL being pressed), and `-s` disables the MSX-DOS kernels like the internal floppy disk drive (simulates SHIFT being pressed). Each disabled drive frees about 1.5 KB. See _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_. These two options work only for one-time emulation (see below).
+The `-c` and `-s` options free memory for the game by disabling drives that would otherwise use it: `-c` disables the ghost floppy disk drive (as if CTRL was pressed while booting), and `-s` disables the MSX-DOS kernels like the internal floppy disk drive (as if SHIFT was pressed while booting); see _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_. The options are recorded in the emulation data file and are applied when an emulation session is started with it, in both the one-time and the persistent variants. They only ever disable: if you already boot with these keys inverted, the options have no visible effect.
 
 The `-8` option makes an MSX turbo R boot the emulation session in R800-ROM mode; it has no effect on other computers. Note that in disk emulation mode (which is always MSX-DOS 1 mode) the active CPU is not switched when accessing disk drives, so some storage devices might not work properly in this mode. Like `-5`/`-6`, this option is stored in the data file and works for both the one-time and persistent variants.
 
@@ -809,22 +851,28 @@ The `-p` option will print all the filenames and associated keys after creating 
 The syntax for starting a disk emulation session is as follows:
 
 ```
-EMUFILE set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]
+EMUFILE set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-x]
 ```
 
-`o` will start the emulation using the one-time variant (this is the default), and `p` will start the emulation using the persistent variant. For the latter, by default the emulation file data pointer will be written to the device where `<data file>` is stored, but you can specify a different `<device index>` and also optionally a `<LUN index>`. The default LUN index is 1 (i.e. `p3` is the same as `p31`).
-
-**Note:** The `<LUN index>` argument is unused in Nextor 3. It's still accepted by the EMUFILE tool in order to continue working in Nextor 2.
+`o` will start the emulation using the one-time variant (this is the default), and `p` will start the emulation using the persistent variant. For the latter, the emulation data file pointer is written to the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_), and the command fails if there's none.
 
 The `-5` and `-6` options force the screen to 50Hz or 60Hz for this emulation session, overriding the setting stored in the emulation data file (if any); they follow the same rules as in the file creation syntax. In the persistent variant the setting is stored together with the emulation data file pointer, so it applies to every boot until the persistent emulation mode is disabled.
 
-The `-c` and `-s` options disable the ghost floppy disk drive or the MSX-DOS kernels, respectively, to free memory for the game (see _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_). If the emulation data file was created with these options they are applied automatically, so you only need to specify them here to override a file that wasn't. They work only with the one-time variant (`o`); if you specify them with the persistent variant (`p`) a warning is printed and they are ignored.
+The `-c` and `-s` options disable the ghost floppy disk drive or the MSX-DOS kernels, respectively, to free memory for the game (see _[3.9.5. How to free some memory](#395-how-to-free-some-memory)_). If the emulation data file was created with these options they are applied automatically. They work with both the one-time and the persistent variants; for the persistent one, the driver of your controller needs to support reading the persistent storage early at boot time (if it doesn't, the options are just ignored).
 
 The `-8` option boots the emulation session in R800-ROM mode on a turbo R, as explained in the file creation syntax above. Like `-5`/`-6`, if the emulation data file was created with `-8` it is applied automatically, and it works with both the one-time and persistent variants (in the persistent case the setting is stored with the pointer, so it applies on every boot).
 
 The `-x` option makes `EMUFILE.COM` ignore all the flags stored in the emulation data file (the forced frequency, and the `-c`/`-s`/`-8` options) and apply only the options passed in this command line. The order of the arguments doesn't matter, so `-5 -s -x` is the same as `-x -5 -s`. This is useful to start a session that ignores what the file was created with; for example, `EMUFILE set mygame -x` starts the emulation with no forced frequency and no drives disabled, regardless of how `mygame.emu` was created.
 
 Note that in both variants the computer will reset immediately after `EMUFILE.COM` writes the emulation data file pointer to the appropriate place.
+
+To leave the persistent disk emulation mode, boot with the 0 key pressed (this skips the emulation for that boot only) and then run:
+
+```
+EMUFILE k
+```
+
+This removes the emulation data file pointer from the persistent storage. [The `CALL EMUKILL` command](#3617-the-call-emukill-command) does the same, and it can be executed from inside the emulation session if you can get to the BASIC prompt.
 
 Disk emulation mode requires disk image files to be stored across consecutive clusters in the storage device. The `CONCLUS.COM` tool will check if that's the case for a given file and print an informative message; just run it as:
 
@@ -1185,6 +1233,37 @@ Nextor 2.1.1 introduced a new `CALL SYSTEM2` command. This command works the sam
 Note however that the new function calls introduced by Nextor won't work if `NEXTOR.SYS` isn't loaded, this implies that the Nextor-specific command line tools (e.g. `MAPDRV.COM`) won't work if the DOS environment is entered via the `CALL SYSTEM2` command.
 
 
+#### 3.6.16. The CALL BOOTKEYS command
+
+This command sets which boot keys are inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_), keeping the setting in the persistent storage (see _[2.18. The persistent storage](#218-the-persistent-storage)_). It works in MSX-DOS 1 mode too. The syntax is:
+
+```
+CALL BOOTKEYS
+CALL BOOTKEYS()
+CALL BOOTKEYS(<keys>)
+```
+
+Without parameters and without parenthesis, the command just shows some usage information.
+
+`CALL BOOTKEYS()` (or `CALL BOOTKEYS(-2)`, which is equivalent) shows the current state: what kind of persistent storage there is, if any, and which keys are set as inverted. For example:
+
+```
+Persistent storage: file in device 1
+Inverted boot keys: 6 CTRL
+```
+
+`<keys>` is the sum of the values for the keys to be inverted: 2, 4, 8, 16, 32 and 64 for the keys 1 to 6, &H1000 for SHIFT, and &H2000 for CTRL. These are the same values that the `mknexrom` tool accepts. For example `CALL BOOTKEYS(&H2040)` inverts the 6 and CTRL keys, so that from the next boot on the Kanji driver will be installed and the ghost floppy disk drive will be disabled, unless the corresponding key is pressed. A value of 0 means "no key is inverted".
+
+A value of -1 removes the setting: the boot key inverters of the kernel ROM will be in effect again. Note that this is not the same as 0: when a value is set, it fully replaces the one in the ROM.
+
+An "Illegal function call" error is thrown if the value has bits for keys that don't exist. If there's no persistent storage a message says so and nothing else happens. If the persistent storage is file based, the first time that a value is set in a given storage medium the `_NEXTOR.PSF` file is created.
+
+The 0 key can't be inverted: it's the one that makes Nextor ignore all these settings.
+
+#### 3.6.17. The CALL EMUKILL command
+
+This command removes the emulation data file pointer from the persistent storage, so that the computer stops booting in persistent disk emulation mode (see _[3.9.1. Entering and exiting the disk emulation mode](#391-entering-and-exiting-the-disk-emulation-mode)_). It has no parameters, it works in MSX-DOS 1 mode too (and thus from inside a disk emulation session), and it does nothing if the persistent disk emulation mode is not set.
+
 ### 3.7. New BASIC error codes
 
 The following new BASIC error codes are defined to handle the possible errors of the new BASIC commands. Errors 76 to 79 are available in MSX-DOS 1 mode as well for the commands that work in this environment; error 80 exists in MSX-DOS 1 mode too but with a different name and meaning (see below), and errors 81 to 83 don't exist in that mode. The numbers in parentheses are the error codes.
@@ -1307,7 +1386,7 @@ Second, in order to tell Nextor to boot in disk emulation mode, a pointer to the
 
 * **One-time:** Nextor will enter disk emulation mode only once, that is, after resetting the computer again Nextor will boot normally. In this mode the pointer to the emulation data file is set in RAM.
 
-* **Persistent:** Nextor will enter disk emulation mode on every computer reset, until that mode is manually disabled by pressing 0 while booting. In this mode the pointer to the emulation data file is set in the partition table of one of the devices controlled by Nextor (usually the same device that contains the emulation data file and the disk image files, but that's not mandatory).
+* **Persistent:** Nextor will enter disk emulation mode on every computer reset, until that mode is disabled. In this mode the pointer to the emulation data file is set in the persistent storage of the primary Nextor controller (see _[2.18. The persistent storage](#218-the-persistent-storage)_). To disable it run [`CALL EMUKILL`](#3617-the-call-emukill-command) in the BASIC prompt, or boot with the 0 key pressed (the emulation mode is skipped for that boot) and run `EMUFILE k`.
 
 Both variants of disk emulation mode can be entered by using the `EMUFILE.COM` tool with the `set` parameter, with the one-time variant being the default.
 
@@ -1356,7 +1435,7 @@ Some games will not work "out of the box" because they assume that only the flop
 
 - Press 5 while booting to force Nextor to allocate only one drive for itself (useful only if you have more than one device connected to your Nextor controller). If your emulation session has five or more disk images, do the following instead: press `GRAPH`+5 until the CAPS lock LED lights up, then release both keys and press 1 (otherwise the 5 key would also be read as a request to switch to the fifth disk image).
 
-For the one-time emulation variant you don't need to press these keys by hand: the `-c` (disable the ghost drive, like `CTRL`) and `-s` (disable the MSX-DOS kernels, like `SHIFT`) options of `EMUFILE.COM` set them automatically when the session starts. You can store them in the emulation data file when you create it, so they take effect every time you start that session. See _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_.
+You don't need to press the `CTRL` and `SHIFT` keys by hand: the `-c` (disable the ghost drive, like `CTRL`) and `-s` (disable the MSX-DOS kernels, like `SHIFT`) options of `EMUFILE.COM` set them automatically when the session starts. You can store them in the emulation data file when you create it, so they take effect every time you start that session. See _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_.
 
 
 #### 3.9.6. Known bugs

@@ -229,8 +229,8 @@ tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 	@dd if=/dev/zero of=$(TOOLS_DSK) bs=1 seek=30 count=482 conv=notrunc status=none
 	@dd if=$(BOOTSECT_BIN) of=$(TOOLS_DSK) bs=1 seek=30 conv=notrunc status=none
 
-	# Add a VOL_ID in the boot sector code, so that undeletion works on the disk.
-	# The kernel's FORMAT command generates a random 4-byte id in the 00h-7Fh range, so we do the same here.
+# Add a VOL_ID in the boot sector code, so that undeletion works on the disk.
+# The kernel's FORMAT command generates a random 4-byte id in the 00h-7Fh range, so we do the same here.
 	@dd if=/dev/urandom bs=1 count=4 status=none | tr '\200-\377' '\000-\177' | dd of=$(TOOLS_DSK) bs=1 seek=39 conv=notrunc status=none
 
 	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS

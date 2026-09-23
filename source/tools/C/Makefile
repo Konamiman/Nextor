@@ -60,6 +60,12 @@ endif
 
 SDK_C_RELS := asmcall.rel printf.rel print_msxdos.rel strcmpi.rel
 
+# Linked only by the tools that access the persistent storage, so that
+# it doesn't add up to the size of all the others.
+EXTRA_RELS =
+EMUFILE.COM NEXBOOT.COM: EXTRA_RELS = persistent_storage.rel
+EMUFILE.COM NEXBOOT.COM: persistent_storage.rel
+
 # The banner crt0s place the whole startup code, banner included, in an
 # absolute area starting at 0x100, and the C code is linked right after
 # it (--code-loc).  The linker does NOT detect an overlap between the
@@ -87,7 +93,7 @@ $(COMS): \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
-	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(call lc,$(patsubst %.COM,%.c,$@))
+	sdcc --code-loc 0x180 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_msxdos.rel $(SDK_C_RELS) $(EXTRA_RELS) $(call lc,$(patsubst %.COM,%.c,$@))
 	$(call hex2bin,$(call lc,$(patsubst %.COM,%.ihx,$@)),$@)
 
 crt0_msxdos.rel: \
@@ -159,6 +165,10 @@ printf.rel: ../../../sdk/C/code/printf.c ../../../sdk/C/includes/msx_bios.h
 
 print_msxdos.rel: ../../../sdk/C/code/print_msxdos.c
 	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/print_msxdos.c
+
+persistent_storage.rel: ../../../sdk/C/code/persistent_storage.c ../../../sdk/C/includes/persistent_storage.h
+
+	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/persistent_storage.c
 
 strcmpi.rel: ../../../sdk/C/code/strcmpi.c ../../../sdk/C/includes/strcmpi.h
 	sdcc -c -mz80 --disable-warning 196 --disable-warning 85 -I../../../sdk/C/includes ../../../sdk/C/code/strcmpi.c

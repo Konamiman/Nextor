@@ -1,0 +1,2303 @@
+	.z80
+	name('pstor')
+	title	Persistent storage
+;******************************************************************************
+;
+;   Persistent storage: a small non-volatile area offered by the master
+; controller, where Nextor keeps the boot key inverters and the pointer to
+; the emulation data file for the persistent disk emulation mode.
+;
+;   The data lives in the first sector of the file _NEXTOR.PSF, in the root
+; directory of the first partition (or of the partitionless filesystem) of the
+; first suitable device of the driver. The code here finds the file by itself,
+; without the help of the DOS filesystem layer, since it must work before the
+; driver and the system are initialized; all the driver needs to provide is the
+; READ_BEFORE_INIT device query. A driver that doesn't implement it loses only
+; the boot key inverters, which are the one thing that has to be known before
+; the driver is initialized: everything else reaches the file later through the
+; regular READ_WRITE routine.
+;
+;   The storage is therefore always one sector of 512 bytes. The information
+; returned by the PSOPS_GET_INFO operation still describes it in full (size,
+; sector count, and the flag that tells a file from controller memory), so that
+; a future version can offer storage in the controller itself without changing
+; the API; see the "future improvements" section of the design document.
+;
+;   Format of the data stored by Nextor:
+;
+;   +0:  "NEXTOR",0
+;   +7:  Size of the data, including the signature and the checksum (2 bytes)
+;   +9:  Data format version
+;   +10: Boot key inverters, same format as KEYS_INV_0/1 in init.mac
+;        (2 bytes, FFFFh = not configured)
+;   +12: Persistent emulation: device number (0 or FFh = no emulation)
+;   +13: Persistent emulation: absolute sector number (4 bytes)
+;   +17: Persistent emulation: emulation flags
+;   +18: Checksum: the sum of all the "size" bytes, this one included, is zero
+;
+;   The data is ignored if the signature, the size or the checksum are wrong.
+;
+	INCLUDE ../macros.inc
+	INCLUDE ../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE ../../../sdk/asm/constants/persistent_storage.inc
+	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
+	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
+
+
+;The constant files included below are already assembled into other modules
+;(driver_device_queries.inc into data.mac, partit.inc into partit.mac), which
+;is where their public symbols come from; and the work area offsets that
+;follow are of no interest outside this module. So from this point on `const`
+;defines constants privately, otherwise the linker would see the same public
+;symbols defined twice. They can't be used as link time externals anyway:
+;bit numbers for `bit`/`set`/`res` are encoded in the opcode at assembly time.
+
+const	macro	name,value
+name	 equ	 (value)
+	endm
+
+	module	DEVICE_QUERY
+	INCLUDE ../../../sdk/asm/constants/driver_device_queries.inc
+	endmod
+
+	INCLUDE ../../../sdk/asm/constants/partit.inc
+	INCLUDE ../../../sdk/asm/macros/var.inc
+
+
+;Emulation flags that force a boot key when the emulation session starts
+;(the flags byte is documented in const.inc, see EF_*)
+
+EF_FORCE_CTRL	equ	3	;Disable the ghost floppy drive
+EF_FORCE_SHIFT	equ	4	;Disable the MSX-DOS kernels
+
+;Offsets in a FAT boot sector
+
+BPB_SECSIZE	equ	0Bh
+BPB_SPC		equ	0Dh
+BPB_RESERVED	equ	0Eh
+BPB_NFATS	equ	10h
+BPB_ROOTENT	equ	11h
+BPB_SPF		equ	16h
+
+MAX_ROOT_SCAN	equ	32	;Root directory sectors scanned at most
+
+;Work area, allocated in the stack by the public entries and pointed by IX.
+;It must be in page 3, since the driver gets pointers to it. The offsets are
+;laid out with the `var` macros, so that adding or resizing a field doesn't
+;require recalculating the ones that follow.
+
+ram_ad	defl	0
+
+	var1	PSC_FLAGS	;See PSF_* below
+	var1	PSC_SLOT	;Slot of the driver
+	var1	PSC_DEV		;Device number for the file backend
+	var1	PSC_MAXDEV	;Maximum device number of the driver
+	var2	PSC_BUF		;Address of the 512 byte buffer
+	var2	PSC_AVAIL	;Bytes of the storage that fit in the buffer
+	var2	PSC_RDN		;CALL commands: sectors that fit in the buffer
+	var2	PSC_SSIZE	;Sector size of the storage
+	var2	PSC_NSEC	;Sector count of the storage
+	var	PSC_SEC,4	;Sector number for the driver calls
+	var	PSC_PART,4	;File: first sector of the filesystem
+	var	PSC_DATA,4	;File: first sector of the data area
+	var	PSC_FILESEC,4	;File: sector that holds the file contents
+	var1	PSC_ROOTN	;File: root directory sectors left to scan
+	var1	PSC_SPC		;File: sectors per cluster
+	var2	PSC_INV		;PS_BOOT: key inverters
+	var	PSC_FAT,4	;File: first sector of the first FAT
+	var2	PSC_SPF		;File: sectors per FAT
+	var1	PSC_NFATS	;File: number of FAT copies
+	var1	PSC_F16		;File: 1 if FAT16, 0 if FAT12
+	var	PSC_ROOT,4	;File: first sector of the root directory
+	var1	PSC_ROOTCAP	;File: root directory sectors that get scanned
+	var2	PSC_DOFF	;File: sectors before the data area
+	var2	PSC_NCLUS	;File: highest cluster number + 1
+	var	PSC_DIRSEC,4	;Creation: sector of the free directory entry
+	var2	PSC_DIROFF	;Creation: offset of the entry in that sector
+	var2	PSC_CLUS	;Creation: the cluster for the file
+	var2	PSC_FATOFF	;Creation: offset of its FAT entry in the sector
+	var2	PSC_CURFAT	;Creation: index of the FAT sector in the buffer
+	var1	PSC_CNT		;General purpose counter
+	var1	PSC_OP		;F_PSOPS: operation
+	var2	PSC_UADDR	;F_PSOPS: address in user memory
+	var2	PSC_USEC	;F_PSOPS: next sector
+	var1	PSC_UCNT	;F_PSOPS: sectors left
+	var2	PSC_XREM	;PS_XFER: bytes left
+	var2	PSC_XBUF	;PS_XFER: pointer to the buffer
+	var2	PSC_XCHUNK	;PS_XFER: size of the current chunk
+	var1	PSC_XDIR	;PS_XFER: 0 = buffer to user, 1 = user to buffer
+	var1	PSC_OLDP2	;PS_XFER: segment that was in page 2
+	var0	PSC_LENGTH
+
+PSF_EARLY	equ	0	;Set => the driver is not initialized yet
+				;(bit 1 is free)
+PSF_RAMKEYS	equ	2	;PS_BOOT: the boot keys came from RAM
+PSF_NOFILE	equ	3	;File backend: the file doesn't exist yet
+PSF_VALID	equ	4	;CALL commands: the data in the buffer is valid
+
+MAX_FIT_SECS	equ	255	;Sectors read at once by the CALL commands, at most
+
+DPBTBL_DOS1	equ	0F355h	;MSX-DOS 1: table of pointers to DPBs
+DIRBUF_DOS1	equ	0F246h	;MSX-DOS 1: drive of the directory sector buffer
+DATBUF_DOS1	equ	0F241h	;MSX-DOS 1: drive of the data sector buffer
+
+EMU_RAM_ADDRESS	equ	0A000h	;One-time emulation pointer, see partit.mac
+PSGE_CTX_OFFSET	equ	100	;PS_GET_EMU: where in BUF the work area goes
+
+
+;=============================================================================
+;
+;   PS_BOOT: finish the calculation of the boot keys.
+;
+;   This is called by the first Nextor kernel that gets initialized, right
+; after it has stored the raw state of the keys (from the keyboard, or from
+; the one-time boot keys in RAM) in BOOTKEYS. The driver is not initialized
+; yet, so only queries that work in that state are used.
+;
+;   - If the keys come from the keyboard, the keys that have their inverter
+;     set are inverted. The inverters come from the persistent storage if
+;     they are configured there, otherwise from the ROM.
+;   - If a pointer for disk emulation mode is in place, its flags byte can
+;     force CTRL and/or SHIFT. The pointer is the one in RAM for one-time
+;     emulation or else the one in the persistent storage.
+;   - The persistent storage isn't read at all if the "0" key is pressed.
+;
+; Entry:    A = Slot of this kernel
+;           C = 0 if the keys come from the keyboard, else from RAM
+;           E = KEYS_INV_0, D = KEYS_INV_1
+; Returns:  BOOTKEYS updated
+; Corrupts: AF, BC, DE, HL, IX, IY, AF', BC', DE', HL'
+
+	PROC	PS_BOOT
+	ex	af,af'
+	exx
+	ld	hl,-(PSC_LENGTH+512)
+	add	hl,sp
+	ld	sp,hl
+	call	PS_INIT_CTX
+	exx
+	ex	af,af'
+
+	ld	(ix+PSC_SLOT),a
+	ld	(ix+PSC_INV),e
+	ld	(ix+PSC_INV+1),d
+	set	PSF_EARLY,(ix+PSC_FLAGS)
+	ld	a,c
+	or	a
+	jr	z,PSB_KEYB
+	set	PSF_RAMKEYS,(ix+PSC_FLAGS)
+PSB_KEYB:
+
+	push	ix
+	pop	hl
+	ld	bc,PSC_LENGTH
+	add	hl,bc
+	ld	(ix+PSC_BUF),l		;The buffer is in the stack too,
+	ld	(ix+PSC_BUF+1),h	; right after the work area
+
+	;--- Read the persistent storage unless "0" is pressed.
+	;    D = emulation device number and E = emulation flags
+	;    from the storage, both zero if there's none.
+
+	ld	de,0
+	ld	a,(BOOTKEYS##)
+	rrca
+	jr	c,PSB_NO_STOR
+
+	call	PS_READ_DATA
+	ld	de,0
+	jr	nz,PSB_NO_STOR
+
+	call	PS_IY_BUF
+	ld	d,(iy+PSD_EMU_DEVICE)
+	ld	e,(iy+PSD_EMU_FLAGS)
+
+	ld	a,(iy+PSD_KEYS)		;Use the stored inverters
+	and	(iy+PSD_KEYS+1)		; if they are configured
+	inc	a
+	jr	z,PSB_NO_STOR
+	ld	a,(iy+PSD_KEYS)
+	ld	(ix+PSC_INV),a
+	ld	a,(iy+PSD_KEYS+1)
+	ld	(ix+PSC_INV+1),a
+PSB_NO_STOR:
+
+	;--- Note whether the storage holds an emulation pointer, so that the
+	;    boot menu knows if its "0" option has any effect at all
+
+	ld	a,d
+	or	a
+	jr	z,PSB_GOT_EMUP
+	inc	a
+	jr	z,PSB_GOT_EMUP
+	ld	a,1
+PSB_GOT_EMUP:
+	ld	(PS_EMU_PRESENT##),a
+
+	;--- Apply the inverters, only to keys coming from the keyboard
+
+	bit	PSF_RAMKEYS,(ix+PSC_FLAGS)
+	jr	nz,PSB_INV_DONE
+
+	ld	hl,BOOTKEYS##
+	ld	a,(ix+PSC_INV)
+	and	01111110b
+	xor	(hl)
+	ld	(hl),a
+
+	ld	hl,BOOTKEYS##+4
+	ld	a,(ix+PSC_INV+1)
+	and	01110000b
+	xor	(hl)
+	ld	(hl),a
+PSB_INV_DONE:
+
+	;--- Get the flags of the emulation pointer that will be used:
+	;    the one in RAM, else the one in the storage
+
+	push	de
+	ld	hl,EMU_RAM_ADDRESS
+	ld	de,PS_EMU_SIG
+	ld	b,PS_EMU_SIG_END-PS_EMU_SIG
+	call	PS_COMPARE
+	pop	de
+	jr	nz,PSB_STOR_PTR
+	ld	a,(EMU_RAM_ADDRESS+11h)
+	jr	PSB_GOT_FLAGS
+
+PSB_STOR_PTR:
+	ld	a,d
+	or	a
+	jr	z,PSB_END	;No pointer in the storage
+	inc	a
+	jr	z,PSB_END
+	ld	a,e
+
+	;--- Force CTRL and SHIFT as requested by the flags
+
+PSB_GOT_FLAGS:
+	ld	c,0
+	bit	EF_FORCE_CTRL,a
+	jr	z,PSB_NO_CTRL
+	set	5,c
+PSB_NO_CTRL:
+	bit	EF_FORCE_SHIFT,a
+	jr	z,PSB_NO_SHIFT
+	set	4,c
+PSB_NO_SHIFT:
+	ld	hl,BOOTKEYS##+4
+	ld	a,(hl)
+	or	c
+	ld	(hl),a
+
+PSB_END:
+	ld	hl,PSC_LENGTH+512
+	add	hl,sp
+	ld	sp,hl
+	ret
+
+PS_EMU_SIG:
+	db	"NEXTOR_EMU_DATA",0
+PS_EMU_SIG_END:
+
+
+;=============================================================================
+;
+;   PS_GET_EMU: get the pointer for the persistent disk emulation mode.
+;
+;   This is called by the master kernel once its driver is initialized.
+; The storage isn't read if the "0" key was pressed at boot time.
+;
+; Returns:  A    = Device number, 0 if there's no pointer
+;           HLDE = Absolute sector number of the emulation data file
+;           B    = Emulation flags
+; Corrupts: AF, BC, DE, HL, IX, IY, AF', BC', DE', HL'
+
+	PROC	PS_GET_EMU
+
+	;The work area isn't allocated in the stack here: when booting
+	;straight in MSX-DOS 1 mode the stack is small at this point
+	;and sits right above memory that is in use.
+
+	ld	hl,BUF+PSGE_CTX_OFFSET
+	call	PS_INIT_CTX
+	call	PS_SET_MASTER
+
+	ld	a,(BOOTKEYS##)
+	rrca
+	jr	c,PSGE_NONE
+
+	call	PS_READ_DATA
+	jr	nz,PSGE_NONE
+
+	call	PS_IY_BUF
+	ld	a,(iy+PSD_EMU_DEVICE)
+	or	a
+	jr	z,PSGE_NONE
+	inc	a
+	jr	z,PSGE_NONE
+
+	ld	e,(iy+PSD_EMU_SECTOR)
+	ld	d,(iy+PSD_EMU_SECTOR+1)
+	ld	l,(iy+PSD_EMU_SECTOR+2)
+	ld	h,(iy+PSD_EMU_SECTOR+3)
+	ld	b,(iy+PSD_EMU_FLAGS)
+	ld	a,(iy+PSD_EMU_DEVICE)
+	jr	PSGE_END
+
+PSGE_NONE:
+	xor	a
+PSGE_END:
+	ret
+
+
+;=============================================================================
+;
+;    Common routines
+;
+;=============================================================================
+
+
+;-----------------------------------------------------------------------------
+;
+; Initialize a work area just allocated in the stack.
+;
+; Entry:    HL = Address of the work area
+; Returns:  IX = Address of the work area, all of its contents zeroed
+; Corrupts: AF, B, HL
+
+PS_INIT_CTX:
+	push	hl
+	pop	ix
+	ld	b,PSC_LENGTH
+	xor	a
+PS_INIT_CTX_L:
+	ld	(hl),a
+	inc	hl
+	djnz	PS_INIT_CTX_L
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Set up the work area for working with the initialized master driver:
+; the driver slot is the master slot, the buffer is $SECBUF.
+;
+; Corrupts: AF, HL
+
+PS_SET_MASTER:
+	ld	a,(MASTER_SLOT##)
+	ld	(ix+PSC_SLOT),a
+	ld	hl,($SECBUF##)
+	ld	(ix+PSC_BUF),l
+	ld	(ix+PSC_BUF+1),h
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Read the data stored by Nextor in the persistent storage to the buffer,
+; then verify it.
+;
+; Returns:  Z if there's valid data in the buffer, NZ if not
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_READ_DATA:
+	call	PS_SELECT
+	ret	nz
+	call	PS_LOAD
+	ret	nz
+	;Continues in PS_VALIDATE
+
+
+;-----------------------------------------------------------------------------
+;
+; Verify the data in the buffer: signature, size and checksum.
+;
+; Returns:  Z if the data is valid, NZ if not
+; Corrupts: AF, BC, DE, HL
+
+PS_VALIDATE:
+	call	PS_HL_BUF
+	ld	de,PS_SIG
+	ld	b,PS_SIG_END-PS_SIG
+	call	PS_COMPARE
+	ret	nz
+
+	ld	e,(hl)			;HL points to the size field now
+	inc	hl
+	ld	d,(hl)
+	ld	hl,-PSD_MIN_SIZE
+	add	hl,de
+	jr	nc,PS_RET_NZ		;Too small
+
+	ld	l,(ix+PSC_AVAIL)
+	ld	h,(ix+PSC_AVAIL+1)
+	or	a
+	sbc	hl,de
+	jr	c,PS_RET_NZ		;Bigger than what we have read
+
+	call	PS_HL_BUF
+	ld	b,d
+	ld	c,e
+	xor	a
+PS_VALIDATE_L:
+	add	a,(hl)
+	inc	hl
+	dec	bc
+	ld	d,a
+	ld	a,b
+	or	c
+	ld	a,d
+	jr	nz,PS_VALIDATE_L
+
+	or	a
+	ret
+
+PS_RET_NZ:
+	or	1
+	ret
+
+PS_SIG:
+	db	"NEXTOR",0
+PS_SIG_END:
+
+PS_FILENAME:
+	db	"_NEXTOR PSF"
+PS_FILENAME_END:
+
+
+;-----------------------------------------------------------------------------
+;
+; Select the backend for the storage and, for the file backend, the device.
+;
+; Returns:  Z if there's storage, NZ if not
+;           For the file backend, sector 0 of the device is in the buffer
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+	;--- Look for the first device that exists, is not excluded
+	;    by the driver, and is not offline.
+
+PS_SELECT:
+	ld	(ix+PSC_AVAIL),LOW 512
+	ld	(ix+PSC_AVAIL+1),HIGH 512
+	ld	(ix+PSC_SSIZE),LOW 512	;The file offers one sector of 512 bytes
+	ld	(ix+PSC_SSIZE+1),HIGH 512
+	ld	(ix+PSC_NSEC),1
+	ld	(ix+PSC_NSEC+1),0
+
+	ld	a,DRIVER_QUERY.GET_MAX_DEVICE##
+	call	PS_DRVQ
+	or	a
+	jr	z,PS_SEL_GOTMAX
+	ld	b,4			;Default if the query is not implemented
+PS_SEL_GOTMAX:
+	ld	(ix+PSC_MAXDEV),b
+	ld	(ix+PSC_DEV),0
+
+PS_SEL_NEXT:
+	ld	a,(ix+PSC_DEV)
+	cp	(ix+PSC_MAXDEV)
+	jp	nc,PS_RET_NZ		;No more devices
+	inc	(ix+PSC_DEV)
+
+	xor	a			;We'll read sector 0
+	ld	(ix+PSC_SEC),a
+	ld	(ix+PSC_SEC+1),a
+	ld	(ix+PSC_SEC+2),a
+	ld	(ix+PSC_SEC+3),a
+
+	bit	PSF_EARLY,(ix+PSC_FLAGS)
+	jr	z,PS_SEL_LATE
+
+	;* Driver not initialized: all we can do is to try to read.
+	;  The driver fails the read with "invalid device"
+	;  also for the devices it wants to exclude.
+
+	call	PS_RDSEC
+	ret	z
+	cp	.IDEVN##
+	jr	z,PS_SEL_NEXT
+	cp	.NRDY##
+	jr	z,PS_SEL_NEXT
+	cp	DRIVER.RESULT_INVALID_DEVICE##
+	jr	z,PS_SEL_NEXT
+	jp	PS_RET_NZ
+
+	;* Driver initialized: ask it about the device
+
+PS_SEL_LATE:
+	call	PS_HL_BUF
+	ld	a,DEVICE_QUERY.GET_PARAMS
+	ld	c,(ix+PSC_DEV)
+	call	PS_DEVQ
+	cp	DRIVER.RESULT_INVALID_DEVICE##
+	jr	z,PS_SEL_NEXT
+	or	a
+	jr	nz,PS_SEL_LATE_2	;Not implemented: no flags
+	call	PS_IY_BUF
+	bit	DEVICE_QUERY.PARAMF_NO_PSTOR,(iy+7)
+	jr	nz,PS_SEL_NEXT
+PS_SEL_LATE_2:
+
+	ld	a,DEVICE_QUERY.GET_AVAILABILITY
+	ld	c,(ix+PSC_DEV)
+	call	PS_DEVQ
+	cp	DRIVER.RESULT_INVALID_DEVICE##
+	jr	z,PS_SEL_NEXT
+	or	a
+	jr	nz,PS_SEL_LATE_3	;Not implemented: available
+	or	b
+	jr	z,PS_SEL_NEXT		;Offline
+PS_SEL_LATE_3:
+
+	jp	PS_RDSEC
+
+
+;-----------------------------------------------------------------------------
+;
+; Read the first bytes of the storage (as many as they fit) to the buffer.
+;
+; Entry:    PS_SELECT executed successfully
+; Returns:  A = Error code and Z if no error
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_LOAD:
+	call	PS_LOCATE
+	ret	nz
+
+	push	ix
+	pop	hl
+	ld	bc,PSC_FILESEC
+	add	hl,bc
+	call	PS_SET_SEC
+	jp	PS_RDSEC
+
+
+;-----------------------------------------------------------------------------
+;
+; Locate the storage file.
+;
+; Entry:    Sector 0 of the device is in the buffer
+; Returns:  A = 0 and Z if the file exists, its contents are at PSC_FILESEC
+;           A = .NOFIL if the filesystem is fine but the file isn't there
+;           A = Other error if there's no suitable filesystem
+;               or there's an error when accessing the device
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_LOCATE:
+	call	PS_CHECK_BPB
+	jr	z,PS_LOC_FS		;The filesystem starts at sector 0
+
+	;--- There's a partition table: check the first entry
+
+	call	PS_HL_BUF
+	ld	bc,1FEh
+	add	hl,bc
+	ld	a,(hl)
+	cp	55h
+	jp	nz,PS_LOC_BAD
+	inc	hl
+	ld	a,(hl)
+	cp	0AAh
+	jp	nz,PS_LOC_BAD
+
+	call	PS_HL_BUF
+	ld	bc,MBR_PSTART+POFF_TYPE
+	add	hl,bc
+	ld	a,(hl)			;Partition type code
+	cp	PT_FAT12
+	jr	z,PS_LOC_PART
+	cp	PT_FAT16_S		;FAT16, up to 32MB
+	jr	z,PS_LOC_PART
+	cp	PT_FAT16
+	jr	z,PS_LOC_PART
+	cp	PT_FAT16_L		;FAT16, LBA
+	jp	nz,PS_LOC_BAD
+PS_LOC_PART:
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl			;First sector of the partition
+	push	hl
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	or	(hl)
+	pop	hl
+	jp	z,PS_LOC_BAD
+
+	push	hl
+	call	PS_SET_SEC
+	pop	hl
+	push	ix
+	pop	de
+	ex	de,hl
+	ld	bc,PSC_PART
+	add	hl,bc
+	ex	de,hl
+	ld	bc,4
+	ldir
+
+	call	PS_RDSEC
+	ret	nz
+	call	PS_CHECK_BPB
+	jp	nz,PS_LOC_BAD
+
+	;--- We have a valid boot sector in the buffer.
+	;    Calculate where the root directory and the data area are.
+
+PS_LOC_FS:
+	call	PS_IY_BUF
+	ld	a,(iy+BPB_SPC)
+	ld	(ix+PSC_SPC),a
+	ld	a,(iy+BPB_NFATS)
+	ld	(ix+PSC_NFATS),a
+	ld	c,(iy+BPB_SPF)
+	ld	b,(iy+BPB_SPF+1)
+	ld	(ix+PSC_SPF),c
+	ld	(ix+PSC_SPF+1),b
+
+	ld	l,(iy+BPB_RESERVED)
+	ld	h,(iy+BPB_RESERVED+1)
+PS_LOC_FATS:
+	add	hl,bc
+	jp	c,PS_LOC_BAD
+	dec	a
+	jr	nz,PS_LOC_FATS
+	ld	(ix+PSC_DOFF),l		;Reserved sectors + FAT sectors
+	ld	(ix+PSC_DOFF+1),h
+
+	ld	l,(iy+BPB_ROOTENT)
+	ld	h,(iy+BPB_ROOTENT+1)
+	ld	bc,15
+	add	hl,bc
+	jp	c,PS_LOC_BAD
+	ld	b,4
+PS_LOC_ROOTSEC:
+	srl	h
+	rr	l
+	djnz	PS_LOC_ROOTSEC		;HL = Root directory sectors
+
+	ld	a,h
+	or	a
+	ld	a,MAX_ROOT_SCAN
+	jr	nz,PS_LOC_ROOTN
+	ld	a,l
+	cp	MAX_ROOT_SCAN
+	jr	c,PS_LOC_ROOTN
+	ld	a,MAX_ROOT_SCAN
+PS_LOC_ROOTN:
+	ld	(ix+PSC_ROOTCAP),a
+	ld	(ix+PSC_ROOTN),a
+
+	push	hl
+	ld	bc,PSC_PART*256+PSC_FAT
+	call	PS_COPY32
+	ld	e,(iy+BPB_RESERVED)
+	ld	d,(iy+BPB_RESERVED+1)
+	ld	a,PSC_FAT
+	call	PS_ADD16		;PSC_FAT = First sector of the first FAT
+
+	ld	bc,PSC_PART*256+PSC_ROOT
+	call	PS_COPY32
+	ld	e,(ix+PSC_DOFF)
+	ld	d,(ix+PSC_DOFF+1)
+	ld	a,PSC_ROOT
+	call	PS_ADD16		;PSC_ROOT = First sector of the root dir
+
+	ld	bc,PSC_ROOT*256+PSC_DATA
+	call	PS_COPY32
+	pop	de
+	push	de
+	ld	a,PSC_DATA
+	call	PS_ADD16		;PSC_DATA = First sector of the data area
+
+	pop	de
+	ld	l,(ix+PSC_DOFF)
+	ld	h,(ix+PSC_DOFF+1)
+	add	hl,de
+	jp	c,PS_LOC_BAD
+	ld	(ix+PSC_DOFF),l		;Now it's all the sectors
+	ld	(ix+PSC_DOFF+1),h	; before the data area
+
+	;Calculate the cluster count, to know if it's FAT12 or FAT16
+	;and where the FAT ends
+
+	ld	e,(iy+13h)		;Total sectors, 16 bits
+	ld	d,(iy+14h)
+	ld	hl,0
+	ld	a,d
+	or	e
+	jr	nz,PS_LOC_GOTTOT
+	ld	e,(iy+20h)		;Total sectors, 32 bits
+	ld	d,(iy+21h)
+	ld	l,(iy+22h)
+	ld	h,(iy+23h)
+PS_LOC_GOTTOT:
+	ex	de,hl			;DEHL = Total sectors
+	ld	c,(ix+PSC_DOFF)
+	ld	b,(ix+PSC_DOFF+1)
+	or	a
+	sbc	hl,bc
+	ex	de,hl
+	ld	bc,0
+	sbc	hl,bc			;HLDE = Sectors in the data area
+	jp	c,PS_LOC_BAD
+
+	ld	a,(ix+PSC_SPC)
+PS_LOC_DIV:
+	rrca
+	jr	c,PS_LOC_DIV_END
+	srl	h
+	rr	l
+	rr	d
+	rr	e
+	jr	PS_LOC_DIV
+PS_LOC_DIV_END:
+	ld	a,h			;HLDE = Cluster count
+	or	l
+	jp	nz,PS_LOC_BAD
+	ld	a,d
+	cp	10h			;Same criteria as the kernel: it's FAT16
+	ld	a,0			; if there are 1000h clusters or more
+	jr	c,PS_LOC_F12
+	inc	a
+PS_LOC_F12:
+	ld	(ix+PSC_F16),a
+	inc	de
+	inc	de
+	ld	(ix+PSC_NCLUS),e
+	ld	(ix+PSC_NCLUS+1),d
+
+	ld	bc,PSC_ROOT*256+PSC_SEC
+	call	PS_COPY32
+
+	;--- Scan the root directory
+
+PS_LOC_SCAN:
+	call	PS_RDSEC
+	ret	nz
+
+	call	PS_HL_BUF
+	ld	b,16
+PS_LOC_ENTRY:
+	ld	a,(hl)
+	or	a
+	jr	z,PS_LOC_NOFIL		;End of the directory
+	push	hl
+	push	bc
+	ld	de,PS_FILENAME
+	ld	b,PS_FILENAME_END-PS_FILENAME
+	call	PS_COMPARE
+	jr	nz,PS_LOC_NEXT
+	ld	a,(hl)			;Attributes byte
+	and	00011000b		;It must not be a directory
+	jr	z,PS_LOC_FOUND		; nor a volume name
+PS_LOC_NEXT:
+	pop	bc
+	pop	hl
+	ld	de,32
+	add	hl,de
+	djnz	PS_LOC_ENTRY
+
+	dec	(ix+PSC_ROOTN)
+	jr	z,PS_LOC_NOFIL
+	ld	de,1
+	ld	a,PSC_SEC
+	call	PS_ADD16
+	jr	PS_LOC_SCAN
+
+PS_LOC_NOFIL:
+	ld	a,.NOFIL##
+	or	a
+	ret
+
+PS_LOC_BAD:
+	ld	a,.IDRVR##
+	or	a
+	ret
+
+	;--- The file exists. It must have at least one sector.
+
+PS_LOC_FOUND:
+	pop	bc
+	pop	iy			;IY = Directory entry
+	ld	a,(iy+1Eh)		;File size, two high bytes
+	or	(iy+1Fh)
+	jr	nz,PS_LOC_SIZE_OK
+	ld	a,(iy+1Dh)
+	cp	2
+	jr	c,PS_LOC_BAD
+PS_LOC_SIZE_OK:
+
+	ld	l,(iy+1Ah)		;First cluster
+	ld	h,(iy+1Bh)
+	ld	a,h
+	or	a
+	jr	nz,PS_LOC_CLUS_2
+	ld	a,l
+	cp	2
+	jr	c,PS_LOC_BAD		;Clusters 0 and 1 don't exist
+PS_LOC_CLUS_2:
+	ld	e,(ix+PSC_NCLUS)	;It must be inside the data area too,
+	ld	d,(ix+PSC_NCLUS+1)	; otherwise the sector we would write
+	push	hl			; to isn't part of the file
+	or	a
+	sbc	hl,de
+	pop	hl
+	jr	nc,PS_LOC_BAD
+	call	PS_CLUS_TO_SEC
+	xor	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Calculate the first sector of a cluster.
+;
+; Entry:    HL = Cluster number, 2 or higher
+; Returns:  PSC_FILESEC = Sector number
+; Corrupts: AF, BC, DE, HL
+
+PS_CLUS_TO_SEC:
+	dec	hl
+	dec	hl
+	ex	de,hl
+	ld	hl,0			;HLDE = Cluster number - 2
+
+	ld	a,(ix+PSC_SPC)
+PS_C2S_MUL:
+	rrca
+	jr	c,PS_C2S_MUL_END
+	sla	e
+	rl	d
+	adc	hl,hl
+	jr	PS_C2S_MUL
+PS_C2S_MUL_END:
+
+	push	hl
+	push	de
+	ld	bc,PSC_DATA*256+PSC_FILESEC
+	call	PS_COPY32
+	pop	de
+	pop	bc
+	ld	a,PSC_FILESEC
+	jp	PS_ADD32		;PSC_FILESEC = PSC_DATA + HLDE
+
+
+;-----------------------------------------------------------------------------
+;
+; Check if the buffer contains a valid FAT12 or FAT16 boot sector.
+; This is the same check that CHECK_FAT_BOOT in partit.mac does.
+;
+; Returns:  Z if valid, NZ if not
+; Corrupts: AF, DE, IY
+
+PS_CHECK_BPB:
+	call	PS_IY_BUF
+	ld	a,(iy+BPB_SECSIZE+1)	;Sector size must be 512
+	sub	2
+	or	(iy+BPB_SECSIZE)
+	ret	nz
+
+	or	(iy+BPB_SPC)		;Sectors per cluster must be
+	jp	z,PS_RET_NZ		; a non-zero power of two
+	ld	d,a
+	dec	a
+	and	d
+	ret	nz
+
+	ld	a,(iy+BPB_NFATS)	;1 to 7 FAT copies
+	dec	a
+	cp	7
+	jp	nc,PS_RET_NZ
+
+	ld	a,(iy+BPB_ROOTENT)	;Zero root directory entries
+	or	(iy+BPB_ROOTENT+1)	; means FAT32
+	jp	z,PS_RET_NZ
+
+	ld	e,(iy+BPB_SPF)		;1 to 256 sectors per FAT
+	ld	d,(iy+BPB_SPF+1)
+	dec	de
+	ld	a,d
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Read the sector PSC_SEC of the device PSC_DEV to the buffer.
+;
+; Returns:  A = Error code and Z if no error
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_RDSEC:
+	push	ix
+	pop	hl
+	ld	bc,PSC_SEC
+	add	hl,bc
+	ex	de,hl			;DE = Address of the sector number
+	call	PS_HL_BUF
+
+	bit	PSF_EARLY,(ix+PSC_FLAGS)
+	jr	z,PS_RDSEC_LATE
+
+	ld	a,DEVICE_QUERY.READ_BEFORE_INIT
+	ld	c,(ix+PSC_DEV)
+	ld	b,1
+	call	PS_DEVQ
+	or	a
+	ret
+
+PS_RDSEC_LATE:
+	ld	a,(ix+PSC_DEV)
+	ld	bc,0100h		;One sector, no media ID
+	or	a			;NC = read
+	call	PS_RW
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Call a routine of the driver at the slot PSC_SLOT.
+;
+; Entry:    AF, BC, DE, HL = Input for the routine
+; Returns:  AF, BC, DE, HL = Output from the routine
+; Corrupts: IY, AF', BC', DE', HL'
+
+PS_DRVQ:
+	push	hl
+	ld	hl,DRIVER.DRIVER_QUERY_ENTRY##
+	jr	PS_CALL_DRV
+
+PS_DEVQ:
+	push	hl
+	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
+	jr	PS_CALL_DRV
+
+PS_RW:
+	push	hl
+	ld	hl,DRIVER.READ_WRITE_ENTRY##
+
+PS_CALL_DRV:
+	ld	(BK4_ADD##),hl
+	pop	hl
+	push	ix
+	push	af
+	ld	a,(ix+PSC_SLOT)
+	ld_	iyh,a
+	pop	af
+	ld	ix,CALDRV##
+	call	CALSLT
+	pop	ix
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Small helpers
+;
+
+;HL = Address of the buffer. Corrupts nothing else.
+
+PS_HL_BUF:
+	ld	l,(ix+PSC_BUF)
+	ld	h,(ix+PSC_BUF+1)
+	ret
+
+;IY = Address of the buffer. Corrupts nothing else.
+
+PS_IY_BUF:
+	push	hl
+	call	PS_HL_BUF
+	ex	(sp),hl
+	pop	iy
+	ret
+
+;Copy the 32 bit number at (HL) to PSC_SEC. Corrupts BC, DE, HL.
+
+PS_SET_SEC:
+	push	ix
+	pop	de
+	ex	de,hl
+	ld	bc,PSC_SEC
+	add	hl,bc
+	ex	de,hl
+	ld	bc,4
+	ldir
+	ret
+
+;Add the 16 bit number DE (PS_ADD16) or the 32 bit number BCDE (PS_ADD32)
+;to the 32 bit number at offset A of the work area. Corrupts AF, BC, HL.
+
+PS_ADD16:
+	ld	bc,0
+PS_ADD32:
+	push	ix
+	pop	hl
+	push	bc
+	ld	c,a
+	ld	b,0
+	add	hl,bc
+	pop	bc
+	ld	a,(hl)
+	add	a,e
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	adc	a,d
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	adc	a,c
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	adc	a,b
+	ld	(hl),a
+	ret
+
+;Compare B bytes at (HL) and (DE). Returns Z if equal, and then
+;HL and DE point past the compared bytes. Corrupts AF, B.
+
+PS_COMPARE:
+	ld	a,(de)
+	cp	(hl)
+	ret	nz
+	inc	hl
+	inc	de
+	djnz	PS_COMPARE
+	ret
+
+;Copy the 32 bit number at offset B of the work area to offset C.
+;Corrupts AF, BC, DE, HL.
+
+PS_COPY32:
+	push	ix
+	pop	hl
+	ld	e,b
+	ld	d,0
+	add	hl,de
+	push	hl
+	push	ix
+	pop	hl
+	ld	e,c
+	add	hl,de
+	ex	de,hl
+	pop	hl
+	ld	bc,4
+	ldir
+	ret
+
+;Calculate how many sectors of PSC_SSIZE bytes fit in the buffer (PSC_RDN,
+;at most PSC_NSEC and MAX_FIT_SECS) and how many bytes that is (PSC_AVAIL).
+;Used by the CALL commands on the geometry that PSOPS_GET_INFO reports, which
+;is always one sector of 512 bytes now but doesn't have to stay that way.
+;Returns Cy=1 if that's enough for the data stored by Nextor.
+;Corrupts AF, BC, DE, HL.
+
+PS_CALC_FIT:
+	ld	hl,0
+	ld	de,0
+PS_FIT_L:
+	ld	a,e
+	cp	MAX_FIT_SECS
+	jr	z,PS_FIT_END
+	cp	(ix+PSC_NSEC)
+	jr	nz,PS_FIT_2
+	ld	a,d
+	cp	(ix+PSC_NSEC+1)
+	jr	z,PS_FIT_END		;No more sectors
+PS_FIT_2:
+	push	hl
+	ld	c,(ix+PSC_SSIZE)
+	ld	b,(ix+PSC_SSIZE+1)
+	add	hl,bc
+	jr	c,PS_FIT_FULL
+	push	hl
+	ld	bc,-(PSD_MAX_SIZE+1)
+	add	hl,bc
+	pop	hl
+	jr	c,PS_FIT_FULL		;One more sector doesn't fit
+	pop	bc
+	inc	de
+	jr	PS_FIT_L
+PS_FIT_FULL:
+	pop	hl
+PS_FIT_END:
+	ld	(ix+PSC_AVAIL),l
+	ld	(ix+PSC_AVAIL+1),h
+	ld	(ix+PSC_RDN),e
+	ld	(ix+PSC_RDN+1),d
+	ld	bc,-PSD_MIN_SIZE
+	add	hl,bc
+	ret
+
+
+;=============================================================================
+;
+;   F_PSOPS: the _PSOPS function call, persistent storage operations.
+;
+;   The read and write operations are raw: they know nothing about the format
+; of the data that Nextor stores (see the top of this file). With the file
+; backend, a write creates the storage file if it doesn't exist.
+;
+; Entry:    C  = Operation (the value of A in the function call):
+;                0: Get information
+;                1: Read sectors
+;                2: Write sectors
+;           HL = Address in user memory
+;           DE = First sector (operations 1 and 2)
+;           B  = Number of sectors (operations 1 and 2)
+; Returns:  A  = Error code:
+;                .ISBFN: invalid operation
+;                .IDRVR: there's no persistent storage available
+;                .IPARM: sectors out of range
+;                .NOFIL: file backend, read, the file doesn't exist
+;                .DRFUL, .DKFUL: file backend, the file can't be created
+;                Other: error when accessing the device
+;
+;   The information returned by operation 0:
+;   +0: Slot of the driver
+;   +1: Flags. Bit 0: 0 = native backend, 1 = file backend
+;   +2: Device number for the file backend, 0 for the native backend
+;   +3: Sector size (2 bytes)
+;   +5: Sector count (2 bytes)
+
+	PROC	F_PSOPS
+	ld	a,c
+	ex	af,af'
+	exx
+	ld	hl,-PSC_LENGTH
+	add	hl,sp
+	ld	sp,hl
+	call	PS_INIT_CTX
+	exx
+	ex	af,af'
+
+	ld	(ix+PSC_OP),a
+	ld	(ix+PSC_UADDR),l
+	ld	(ix+PSC_UADDR+1),h
+	ld	(ix+PSC_USEC),e
+	ld	(ix+PSC_USEC+1),d
+	ld	(ix+PSC_UCNT),b
+	call	PS_SET_MASTER
+
+	ld	a,(ix+PSC_OP)
+	cp	3
+	ld	a,.ISBFN##
+	jp	nc,PSO_END
+
+	call	PS_SELECT
+	ld	a,.IDRVR##
+	jp	nz,PSO_END
+
+	call	PS_LOCATE
+	or	a
+	jr	z,PSO_GO
+	cp	.NOFIL##
+	jp	nz,PSO_END
+	set	PSF_NOFILE,(ix+PSC_FLAGS)
+PSO_GO:
+
+	ld	a,(ix+PSC_OP)
+	or	a
+	jr	nz,PSO_RW
+
+	;--- Get information
+
+	call	PS_IY_BUF
+	ld	a,(ix+PSC_SLOT)
+	ld	(iy+0),a
+	xor	a			;No flags are defined yet
+	ld	(iy+1),a
+	ld	a,(ix+PSC_DEV)
+	ld	(iy+2),a
+	ld	a,(ix+PSC_SSIZE)
+	ld	(iy+3),a
+	ld	a,(ix+PSC_SSIZE+1)
+	ld	(iy+4),a
+	ld	a,(ix+PSC_NSEC)
+	ld	(iy+5),a
+	ld	a,(ix+PSC_NSEC+1)
+	ld	(iy+6),a
+	ld	bc,7
+	xor	a
+	call	PS_XFER
+	jp	PSO_OK
+
+	;--- Read or write: check the range of sectors first
+
+PSO_RW:
+	ld	a,(ix+PSC_UCNT)
+	or	a
+	jp	z,PSO_OK
+	ld	l,(ix+PSC_USEC)
+	ld	h,(ix+PSC_USEC+1)
+	ld	e,a
+	ld	d,0
+	add	hl,de
+	jr	c,PSO_IPARM
+	ex	de,hl
+	ld	l,(ix+PSC_NSEC)
+	ld	h,(ix+PSC_NSEC+1)
+	or	a
+	sbc	hl,de
+	jr	c,PSO_IPARM
+
+	ld	a,(ix+PSC_OP)
+	dec	a
+	jr	nz,PSO_WR_L
+
+	;--- Read
+
+PSO_RD_L:
+	bit	PSF_NOFILE,(ix+PSC_FLAGS)
+	ld	a,.NOFIL##
+	jr	nz,PSO_END
+	ld	bc,PSC_FILESEC*256+PSC_SEC
+	call	PS_COPY32
+	call	PS_RDSEC
+	jr	nz,PSO_END
+	ld	c,(ix+PSC_SSIZE)
+	ld	b,(ix+PSC_SSIZE+1)
+	xor	a
+	call	PS_XFER
+	call	PSO_NEXT
+	jr	nz,PSO_RD_L
+	jr	PSO_OK
+
+	;--- Write
+
+PSO_WR_L:
+	bit	PSF_NOFILE,(ix+PSC_FLAGS)
+	jr	z,PSO_WR_1
+	call	PS_CREATE
+	jr	nz,PSO_END
+	res	PSF_NOFILE,(ix+PSC_FLAGS)
+PSO_WR_1:
+	ld	c,(ix+PSC_SSIZE)
+	ld	b,(ix+PSC_SSIZE+1)
+	ld	a,1
+	call	PS_XFER
+	ld	bc,PSC_FILESEC*256+PSC_SEC
+	call	PS_COPY32
+	call	PS_WRSEC
+	jr	nz,PSO_END
+	call	PSO_NEXT
+	jr	nz,PSO_WR_L
+
+PSO_OK:
+	xor	a
+	jr	PSO_END
+PSO_IPARM:
+	ld	a,.IPARM##
+PSO_END:
+	ld	hl,PSC_LENGTH
+	add	hl,sp
+	ld	sp,hl
+	ret
+
+	;Read or write (query number in A) the native sector PSC_USEC
+
+	;Go to the next sector, return Z if there are no more
+
+PSO_NEXT:
+	inc	(ix+PSC_USEC)
+	jr	nz,PSO_NEXT_2
+	inc	(ix+PSC_USEC+1)
+PSO_NEXT_2:
+	dec	(ix+PSC_UCNT)
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Copy data between the buffer and the user memory at PSC_UADDR,
+; then update PSC_UADDR.
+;
+;   In DOS 2 mode the user memory in pages 0 to 2 is not visible when
+; this runs, so the TPA segment of each page is switched in page 2 for
+; the copy. In DOS 1 mode the memory is accessed directly.
+;
+; Entry:    A  = 0 to copy from the buffer to user memory, 1 for the opposite
+;           BC = How many bytes to copy
+; Corrupts: AF, BC, DE, HL
+
+PS_XFER:
+	ld	(ix+PSC_XDIR),a
+	ld	(ix+PSC_XREM),c
+	ld	(ix+PSC_XREM+1),b
+	call	PS_HL_BUF
+	ld	(ix+PSC_XBUF),l
+	ld	(ix+PSC_XBUF+1),h
+
+PS_XFER_L:
+	ld	a,(ix+PSC_XREM)
+	or	(ix+PSC_XREM+1)
+	ret	z
+
+	ld	e,(ix+PSC_UADDR)	;Copy up to the end of the
+	ld	a,(ix+PSC_UADDR+1)	; page of the user address
+	and	3Fh
+	ld	d,a
+	ld	hl,4000h
+	or	a
+	sbc	hl,de
+	ld	e,(ix+PSC_XREM)
+	ld	d,(ix+PSC_XREM+1)
+	push	hl
+	or	a
+	sbc	hl,de
+	pop	hl
+	jr	c,PS_XFER_CHUNK
+	ex	de,hl
+PS_XFER_CHUNK:
+	ld	(ix+PSC_XCHUNK),l
+	ld	(ix+PSC_XCHUNK+1),h
+
+	ld	l,(ix+PSC_UADDR)
+	ld	h,(ix+PSC_UADDR+1)
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,PS_XFER_DIRECT
+	ld	a,h
+	cp	0C0h
+	jr	nc,PS_XFER_DIRECT
+
+	rlca
+	rlca
+	and	3
+	ld	e,a
+	ld	d,0
+	ld	hl,P0_TPA##
+	add	hl,de
+	ld	e,(hl)			;E = TPA segment for the page
+	call	GET_P2##
+	ld	(ix+PSC_OLDP2),a
+	ld	a,e
+	call	PUT_P2##
+	ld	l,(ix+PSC_UADDR)
+	ld	a,(ix+PSC_UADDR+1)
+	and	3Fh
+	or	80h
+	ld	h,a
+	call	PS_XFER_COPY
+	ld	a,(ix+PSC_OLDP2)
+	call	PUT_P2##
+	jr	PS_XFER_NEXT
+
+PS_XFER_DIRECT:
+	call	PS_XFER_COPY
+
+PS_XFER_NEXT:
+	ld	c,(ix+PSC_XCHUNK)
+	ld	b,(ix+PSC_XCHUNK+1)
+	ld	l,(ix+PSC_UADDR)
+	ld	h,(ix+PSC_UADDR+1)
+	add	hl,bc
+	ld	(ix+PSC_UADDR),l
+	ld	(ix+PSC_UADDR+1),h
+	ld	l,(ix+PSC_XBUF)
+	ld	h,(ix+PSC_XBUF+1)
+	add	hl,bc
+	ld	(ix+PSC_XBUF),l
+	ld	(ix+PSC_XBUF+1),h
+	ld	l,(ix+PSC_XREM)
+	ld	h,(ix+PSC_XREM+1)
+	or	a
+	sbc	hl,bc
+	ld	(ix+PSC_XREM),l
+	ld	(ix+PSC_XREM+1),h
+	jp	PS_XFER_L
+
+	;Copy one chunk, HL = user memory as visible now
+
+PS_XFER_COPY:
+	ld	e,(ix+PSC_XBUF)
+	ld	d,(ix+PSC_XBUF+1)
+	ld	c,(ix+PSC_XCHUNK)
+	ld	b,(ix+PSC_XCHUNK+1)
+	ld	a,(ix+PSC_XDIR)
+	or	a
+	jr	nz,PS_XFER_COPY_2
+	ex	de,hl
+PS_XFER_COPY_2:
+	ldir
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Write the buffer to the sector PSC_SEC of the device PSC_DEV.
+;
+; Returns:  A = Error code and Z if no error
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_WRSEC:
+	push	ix
+	pop	hl
+	ld	bc,PSC_SEC
+	add	hl,bc
+	ex	de,hl
+	call	PS_HL_BUF
+	ld	a,(ix+PSC_DEV)
+	ld	bc,0100h
+	scf				;Cy = write
+	call	PS_RW
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Create the storage file: one cluster, 512 bytes, its first sector zeroed.
+;
+;   This is done here, not by the DOS filesystem code, so that it works in
+; any context. Therefore anything that DOS has cached about any drive is
+; flushed and thrown away first: a drive could be mapped to the filesystem
+; that is being modified.
+;
+; Entry:    PS_LOCATE executed and it returned .NOFIL
+; Returns:  A = Error code and Z if no error, PSC_FILESEC set
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_CREATE:
+	call	PS_INVALIDATE_DOS
+	ret	nz
+
+	;--- Find a free entry in the root directory
+
+	ld	bc,PSC_ROOT*256+PSC_SEC
+	call	PS_COPY32
+	ld	a,(ix+PSC_ROOTCAP)	;Only in the part that PS_LOCATE scans
+	ld	(ix+PSC_CNT),a
+PSCR_DIR_L:
+	call	PS_RDSEC
+	ret	nz
+	call	PS_HL_BUF
+	ld	b,16
+	ld	de,32
+PSCR_DIR_E:
+	ld	a,(hl)
+	or	a
+	jr	z,PSCR_DIR_OK
+	cp	0E5h
+	jr	z,PSCR_DIR_OK
+	add	hl,de
+	djnz	PSCR_DIR_E
+	ld	de,1
+	ld	a,PSC_SEC
+	call	PS_ADD16
+	dec	(ix+PSC_CNT)
+	jr	nz,PSCR_DIR_L
+	ld	a,.DRFUL##
+	or	a
+	ret
+
+PSCR_DIR_OK:
+	ld	e,(ix+PSC_BUF)
+	ld	d,(ix+PSC_BUF+1)
+	or	a
+	sbc	hl,de
+	ld	(ix+PSC_DIROFF),l
+	ld	(ix+PSC_DIROFF+1),h
+	ld	bc,PSC_SEC*256+PSC_DIRSEC
+	call	PS_COPY32
+
+	;--- Find a free cluster
+
+	call	PS_FIND_CLUS
+	ret	nz
+
+	;--- Zero the first sector of the cluster
+
+	call	PS_HL_BUF
+	ld	d,h
+	ld	e,l
+	inc	de
+	ld	(hl),0
+	ld	bc,511
+	ldir
+	ld	l,(ix+PSC_CLUS)
+	ld	h,(ix+PSC_CLUS+1)
+	call	PS_CLUS_TO_SEC
+	ld	bc,PSC_FILESEC*256+PSC_SEC
+	call	PS_COPY32
+	call	PS_WRSEC
+	ret	nz
+
+	;--- Mark the cluster as the end of a chain, in all the FAT copies
+
+	call	PS_SET_FAT_SEC
+	call	PS_RDSEC
+	ret	nz
+
+	call	PS_HL_BUF
+	ld	e,(ix+PSC_FATOFF)
+	ld	d,(ix+PSC_FATOFF+1)
+	add	hl,de
+	bit	0,(ix+PSC_F16)
+	jr	z,PSCR_FAT12
+	ld	(hl),0FFh
+	inc	hl
+	ld	(hl),0FFh
+	jr	PSCR_FAT_WR
+PSCR_FAT12:
+	bit	0,(ix+PSC_CLUS)
+	jr	nz,PSCR_FAT12_ODD
+	ld	(hl),0FFh
+	inc	hl
+	ld	a,(hl)
+	or	0Fh
+	ld	(hl),a
+	jr	PSCR_FAT_WR
+PSCR_FAT12_ODD:
+	ld	a,(hl)
+	or	0F0h
+	ld	(hl),a
+	inc	hl
+	ld	(hl),0FFh
+
+PSCR_FAT_WR:
+	ld	a,(ix+PSC_NFATS)
+	ld	(ix+PSC_CNT),a
+PSCR_FAT_L:
+	call	PS_WRSEC
+	ret	nz
+	ld	e,(ix+PSC_SPF)
+	ld	d,(ix+PSC_SPF+1)
+	ld	a,PSC_SEC
+	call	PS_ADD16
+	dec	(ix+PSC_CNT)
+	jr	nz,PSCR_FAT_L
+
+	;--- Fill the directory entry
+
+	ld	bc,PSC_DIRSEC*256+PSC_SEC
+	call	PS_COPY32
+	call	PS_RDSEC
+	ret	nz
+
+	call	PS_HL_BUF
+	ld	e,(ix+PSC_DIROFF)
+	ld	d,(ix+PSC_DIROFF+1)
+	add	hl,de
+	ex	de,hl
+	ld	hl,PS_DIRENTRY
+	ld	bc,PS_DIRENTRY_END-PS_DIRENTRY
+	ldir
+	ex	de,hl
+	ld	a,(ix+PSC_CLUS)
+	ld	(hl),a
+	inc	hl
+	ld	a,(ix+PSC_CLUS+1)
+	ld	(hl),a
+	inc	hl
+	ld	(hl),LOW 512		;File size
+	inc	hl
+	ld	(hl),HIGH 512
+	inc	hl
+	ld	(hl),0
+	inc	hl
+	ld	(hl),0
+	jp	PS_WRSEC
+
+PS_DIRENTRY:
+	db	"_NEXTOR PSF"
+	db	00000111b		;Read only, hidden, system
+	ds	10,0
+	dw	0			;Time
+	dw	(2026-1980)*512+1*32+1	;Date: 2026-01-01
+PS_DIRENTRY_END:
+
+	;PSC_SEC = Sector PSC_CURFAT of the first FAT
+
+PS_SET_FAT_SEC:
+	ld	bc,PSC_FAT*256+PSC_SEC
+	call	PS_COPY32
+	ld	e,(ix+PSC_CURFAT)
+	ld	d,(ix+PSC_CURFAT+1)
+	ld	a,PSC_SEC
+	jp	PS_ADD16
+
+
+;-----------------------------------------------------------------------------
+;
+; Find a free cluster.
+;
+;   FAT12 entries that span two sectors are skipped, so that one sector
+; buffer is enough.
+;
+; Returns:  A = Error code and Z if no error
+;           PSC_CLUS = Cluster number, PSC_CURFAT = Index of the FAT sector
+;           that has its entry, PSC_FATOFF = Offset of the entry in it
+; Corrupts: AF, BC, DE, HL, IY, AF', BC', DE', HL'
+
+PS_FIND_CLUS:
+	ld	(ix+PSC_CURFAT),0FFh
+	ld	(ix+PSC_CURFAT+1),0FFh
+	ld	de,2
+PFC_L:
+	ld	a,e
+	cp	(ix+PSC_NCLUS)
+	jr	nz,PFC_1
+	ld	a,d
+	cp	(ix+PSC_NCLUS+1)
+	jr	nz,PFC_1
+	ld	a,.DKFUL##
+	or	a
+	ret
+PFC_BAD_FAT:
+	pop	de
+	ld	a,.IDRVR##		;The filesystem doesn't make sense
+	or	a
+	ret
+PFC_1:
+	push	de
+	bit	0,(ix+PSC_F16)
+	jr	z,PFC_F12
+	ld	l,e			;FAT16: 256 entries per sector
+	ld	h,0
+	add	hl,hl
+	ld	c,d
+	ld	b,0
+	jr	PFC_GOT
+PFC_F12:
+	ld	h,d			;FAT12: the entry is at
+	ld	l,e			; byte (cluster * 1.5)
+	srl	h
+	rr	l
+	add	hl,de
+	ld	a,h
+	srl	a
+	ld	c,a
+	ld	b,0
+	ld	a,h
+	and	1
+	ld	h,a
+	ld	a,l
+	inc	a
+	jr	nz,PFC_GOT
+	ld	a,h
+	dec	a
+	jr	z,PFC_NEXT		;Offset 511: the entry spans two sectors
+PFC_GOT:
+	ld	a,c			;BC = Index of the FAT sector. The
+	sub	(ix+PSC_SPF)		; cluster count and the FAT size come
+	ld	a,b			; from different fields of the boot
+	sbc	a,(ix+PSC_SPF+1)	; sector, so a malformed one could put
+	jr	nc,PFC_BAD_FAT		; this entry past the end of the FAT
+
+	ld	(ix+PSC_FATOFF),l
+	ld	(ix+PSC_FATOFF+1),h
+	ld	a,c
+	cp	(ix+PSC_CURFAT)
+	jr	nz,PFC_LOAD
+	ld	a,b
+	cp	(ix+PSC_CURFAT+1)
+	jr	z,PFC_LOADED
+PFC_LOAD:
+	ld	(ix+PSC_CURFAT),c
+	ld	(ix+PSC_CURFAT+1),b
+	call	PS_SET_FAT_SEC
+	call	PS_RDSEC
+	jr	z,PFC_LOADED
+	pop	de
+	ret
+PFC_LOADED:
+	call	PS_HL_BUF
+	ld	e,(ix+PSC_FATOFF)
+	ld	d,(ix+PSC_FATOFF+1)
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)			;DE = The entry, or the word that has it
+	pop	bc
+	push	bc
+	bit	0,(ix+PSC_F16)
+	jr	nz,PFC_TEST
+	bit	0,c
+	jr	z,PFC_EVEN
+	ld	b,4
+PFC_ODD:
+	srl	d
+	rr	e
+	djnz	PFC_ODD
+	jr	PFC_TEST
+PFC_EVEN:
+	ld	a,d
+	and	0Fh
+	ld	d,a
+PFC_TEST:
+	ld	a,d
+	or	e
+	jr	nz,PFC_NEXT
+	pop	de
+	ld	(ix+PSC_CLUS),e
+	ld	(ix+PSC_CLUS+1),d
+	xor	a
+	ret
+PFC_NEXT:
+	pop	de
+	inc	de
+	jp	PFC_L
+
+
+;-----------------------------------------------------------------------------
+;
+; Make DOS flush and forget anything it has cached about the disks.
+;
+; Returns:  A = Error code and Z if no error
+; Corrupts: AF, BC, DE, HL, IY
+
+PS_INVALIDATE_DOS:
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,PSINV_DOS1
+
+	;--- DOS 2: same as the _FLUSH function call for all the drives,
+	;    with invalidation of the buffers and the unit descriptors.
+	;    We are running in the context of a function call.
+
+	push	ix
+	ld	iy,RAM_BASE##
+	ld	a,0FFh
+	pcall	FL_PHYS
+	ld	a,0FFh
+	pcall	INV_PHYS
+	pcall	ZAP_ALL
+	pop	ix
+	xor	a
+	ret
+
+	;--- DOS 1: invalidate the FAT buffer of all the drives and the
+	;    directory and data sector buffers. A FAT buffer that has changes
+	;    not written yet can't be thrown away: give up in that case.
+
+PSINV_DOS1:
+	ld	hl,DPBTBL_DOS1
+	ld	b,8
+PSINV_DOS1_L:
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,d
+	or	e
+	jr	z,PSINV_DOS1_NEXT
+	push	hl
+	ex	de,hl
+
+	;The table always has eight pointers, but the DPBs of the drives that
+	;don't exist are never initialized (they are all zeros), and taking a
+	;FAT buffer address from one of those would corrupt memory. A DPB that
+	;has been set up always declares a sector size of 512.
+
+	inc	hl
+	inc	hl
+	ld	a,(hl)			;Sector size, low byte
+	inc	hl
+	or	a
+	jr	nz,PSINV_DOS1_SKIP
+	ld	a,(hl)			;Sector size, high byte
+	cp	2
+	jr	nz,PSINV_DOS1_SKIP
+
+	ld	de,16
+	add	hl,de			;HL = DPB+19
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a			;HL = FAT buffer
+	ld	a,h
+	or	l
+	jr	z,PSINV_DOS1_SKIP
+	dec	hl			;Its state: 0 = clean, 1 = changed, FFh = invalid
+	ld	a,(hl)
+	dec	a
+	jr	z,PSINV_DOS1_BUSY
+	ld	(hl),0FFh
+PSINV_DOS1_SKIP:
+	pop	hl
+PSINV_DOS1_NEXT:
+	djnz	PSINV_DOS1_L
+
+	ld	a,0FFh
+	ld	(DIRBUF_DOS1),a
+	ld	hl,00FFh
+	ld	(DATBUF_DOS1),hl
+	xor	a
+	ret
+
+PSINV_DOS1_BUSY:
+	pop	hl
+	ld	a,.FOPEN##
+	or	a
+	ret
+
+
+
+;=============================================================================
+;
+;    BASIC CALL commands
+;
+;    They work on the data stored by Nextor through the _PSOPS function call,
+;    with the work area and the buffer in the stack.
+;
+;=============================================================================
+
+
+
+;-----------------------------------------------------------------------------
+;
+; CALL BOOTKEYS            - Show usage information
+; CALL BOOTKEYS()          - Show the current state
+; CALL BOOTKEYS(-2)        - Same
+; CALL BOOTKEYS(-1)        - Set the inverters as not configured,
+;                            the ones in the ROM will be used
+; CALL BOOTKEYS(<value>)   - Set the inverters, same format as the /k
+;                            parameter of mknexrom (KEYS_INV_0/1 in init.mac)
+
+	PROC	CBOOTKEYS
+	ld	de,BOOTKEYS_HELP
+	call	GET_PARENT_OR_HELP6##
+
+	dec	hl
+	ld	ix,CHRGTR
+	call	BASIC_ROUT6##
+	cp	")"
+	jr	nz,CBK_VALUE
+	inc	hl
+	ld	de,-2
+	jr	CBK_GO
+CBK_VALUE:
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6##		;DE = Value
+	push	de
+	ld	a,")"
+	call	SYNCHR6##
+	pop	de
+CBK_GO:
+
+	;The value is -1, -2, or has bits of existing keys only
+
+	ld	a,d
+	and	e
+	inc	a
+	jr	z,CBK_VALUE_OK		;-1
+	ld	a,d
+	inc	a
+	jr	nz,CBK_VALUE_CHK
+	ld	a,e
+	cp	-2
+	jr	z,CBK_VALUE_OK
+CBK_VALUE_CHK:
+	ld	a,e
+	and	NOT PSD_KEYSM_LOW
+	jr	nz,CBK_BAD_VALUE
+	ld	a,d
+	and	NOT PSD_KEYSM_HIGH
+	jr	z,CBK_VALUE_OK
+CBK_BAD_VALUE:
+	ld	e,5			;"Illegal function call"
+	jp	BASIC_ERR6##
+CBK_VALUE_OK:
+
+	call	PSCALL_OPEN		;The value goes to PSC_INV
+	jp	c,PSCALL_CLOSE
+
+	ld	a,(ix+PSC_INV)
+	cp	-2
+	jr	nz,CBK_SET
+	ld	a,(ix+PSC_INV+1)
+	inc	a
+	jr	z,CBK_SHOW
+
+	;--- Set the inverters
+
+CBK_SET:
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	call	z,PS_INIT_DATA
+	call	PS_IY_BUF
+	ld	a,(ix+PSC_INV)
+	ld	(iy+PSD_KEYS),a
+	ld	a,(ix+PSC_INV+1)
+	ld	(iy+PSD_KEYS+1),a
+	call	PSCALL_SAVE
+	jp	PSCALL_CLOSE
+
+	;--- Show the state
+
+CBK_SHOW:
+	ld	hl,PSTOR_FILE_S
+	call	PS_PRINT
+	ld	a,(ix+PSC_DEV)
+	call	PRDEC6##
+	ld	hl,PS_CRLF_S
+	call	PS_PRINT
+
+	ld	hl,KEYS_NOCONF_S
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	jr	z,CBK_SHOW_END
+	call	PS_IY_BUF
+	ld	e,(iy+PSD_KEYS)
+	ld	d,(iy+PSD_KEYS+1)
+	ld	a,d
+	and	e
+	inc	a
+	jr	z,CBK_SHOW_END
+
+	ld	hl,KEYS_INV_S
+	call	PS_PRINT
+	ld	hl,KEYS_NONE_S
+	ld	a,e
+	and	PSD_KEYSM_LOW
+	ld	e,a
+	ld	a,d
+	and	PSD_KEYSM_HIGH
+	ld	d,a
+	or	e
+	jr	z,CBK_SHOW_END
+
+	ld	bc,6*256+"1"
+CBK_SHOW_NUM:
+	srl	e
+	bit	0,e
+	jr	z,CBK_SHOW_NUM_2
+	ld	a,c
+	rst	18h
+	ld	a," "
+	rst	18h
+CBK_SHOW_NUM_2:
+	inc	c
+	djnz	CBK_SHOW_NUM
+	ld	hl,KEYS_CTRL_S
+	bit	5,d
+	call	nz,PS_PRINT
+	ld	hl,KEYS_SHIFT_S
+	bit	4,d
+	call	nz,PS_PRINT
+	ld	hl,PS_CRLF_S
+CBK_SHOW_END:
+	call	PS_PRINT
+	jp	PSCALL_CLOSE
+
+BOOTKEYS_HELP:
+	db	"BOOTKEYS([<keys>])",13,10
+	db	13,10
+	db	"Set the boot keys whose meaning is",1
+	db	"inverted, in the persistent storage.",13,10
+	db	13,10
+	db	"<keys>: sum of 2 4 8 16 32 64 for",1
+	db	"the keys 1 to 6, &H1000 for SHIFT,",1
+	db	"&H2000 for CTRL.",13,10
+	db	"-1: not set, use the ones in the ROM.",13,10
+	db	"-2 or nothing: show the current state.",13,10
+	db	0
+
+PSTOR_FILE_S:
+	db	"Persistent storage: file in device ",0
+PSTOR_NONE_S:
+	db	"No persistent storage available",13,10,0
+KEYS_NOCONF_S:
+	db	"Inverted boot keys: not configured",13,10,0
+KEYS_INV_S:
+	db	"Inverted boot keys: ",0
+KEYS_NONE_S:
+	db	"none"
+PS_CRLF_S:
+	db	13,10,0
+KEYS_CTRL_S:
+	db	"CTRL ",0
+KEYS_SHIFT_S:
+	db	"SHIFT ",0
+
+
+;-----------------------------------------------------------------------------
+;
+; CALL EMUKILL - Remove the pointer for the persistent disk emulation mode
+
+	PROC	CEMUKILL
+	ld	de,0
+	call	PSCALL_OPEN
+	jr	c,PSCALL_CLOSE
+
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	jr	z,PSCALL_CLOSE
+	call	PS_IY_BUF
+	ld	a,(iy+PSD_EMU_DEVICE)
+	or	a
+	jr	z,PSCALL_CLOSE
+	inc	a
+	jr	z,PSCALL_CLOSE
+
+	xor	a
+	ld	(iy+PSD_EMU_DEVICE),a
+	ld	(iy+PSD_EMU_SECTOR),a
+	ld	(iy+PSD_EMU_SECTOR+1),a
+	ld	(iy+PSD_EMU_SECTOR+2),a
+	ld	(iy+PSD_EMU_SECTOR+3),a
+	ld	(iy+PSD_EMU_FLAGS),a
+	call	PSCALL_SAVE
+	;Continues in PSCALL_CLOSE
+
+
+;-----------------------------------------------------------------------------
+;
+; Free the stack space allocated by PSCALL_OPEN
+; and return to the BASIC interpreter.
+
+PSCALL_CLOSE:
+	ld	hl,PSC_LENGTH+512
+	add	hl,sp
+	ld	sp,hl
+	pop	hl			;BASIC text pointer
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; CALL_EXTRA: execute a CALL command implemented in this bank, in DOS 1 mode.
+;
+;   The MSX-DOS 1 kernel has its own table of CALL commands, and no room
+; for more entries. It calls this when a command isn't in that table.
+;
+; Entry:    HL = BASIC text pointer, PROCNM = Name of the command
+; Returns:  Cy = 1 if the command isn't known here either
+
+	PROC	CALL_EXTRA
+	push	hl
+	ld	hl,PROCNM
+	ld	de,BOOTKEYS_NAME
+	ld	b,BOOTKEYS_NAME_END-BOOTKEYS_NAME
+	call	PS_COMPARE
+	jr	z,CALL_EXTRA_BK
+	ld	hl,PROCNM
+	ld	de,EMUKILL_NAME
+	ld	b,EMUKILL_NAME_END-EMUKILL_NAME
+	call	PS_COMPARE
+	pop	hl
+	scf
+	ret	nz
+	call	?CEMUKILL
+	or	a
+	ret
+CALL_EXTRA_BK:
+	pop	hl
+	call	?CBOOTKEYS
+	or	a
+	ret
+
+BOOTKEYS_NAME:
+	db	"BOOTKEYS",0
+BOOTKEYS_NAME_END:
+EMUKILL_NAME:
+	db	"EMUKILL",0
+EMUKILL_NAME_END:
+
+;-----------------------------------------------------------------------------
+;
+; Allocate the work area and the buffer in the stack (on top of the BASIC
+; text pointer, that gets pushed) and read the data stored by Nextor.
+;
+; Entry:    HL = BASIC text pointer
+;           DE = Value to store in PSC_INV
+; Returns:  Cy = 1 if there's no storage (a message has been printed)
+;           PSF_VALID set if the buffer has valid data. If it isn't set the
+;           buffer has whatever was read, or zeros if the file doesn't exist.
+;           Throws a BASIC error if the storage can't be read.
+
+PSCALL_OPEN:
+	pop	bc			;Return address
+	push	hl
+	push	bc
+	exx
+	pop	de			;Return address again
+	ld	hl,-(PSC_LENGTH+512)
+	add	hl,sp
+	ld	sp,hl
+	push	de
+	call	PS_INIT_CTX
+	exx
+	ld	(ix+PSC_INV),e
+	ld	(ix+PSC_INV+1),d
+
+	push	ix
+	pop	hl
+	ld	bc,PSC_LENGTH
+	add	hl,bc
+	ld	(ix+PSC_BUF),l
+	ld	(ix+PSC_BUF+1),h
+
+	;--- Get information about the storage
+
+	xor	a
+	call	PSCALL_BDOS
+	cp	.IDRVR##
+	jr	nz,PSCO_1
+	ld	hl,PSTOR_NONE_S
+	call	PS_PRINT
+	scf
+	ret
+PSCO_1:
+	or	a
+	jr	nz,PSCALL_ERROR
+
+	call	PS_IY_BUF
+	ld	a,(iy+2)
+	ld	(ix+PSC_DEV),a
+	ld	a,(iy+3)
+	ld	(ix+PSC_SSIZE),a
+	ld	a,(iy+4)
+	ld	(ix+PSC_SSIZE+1),a
+	ld	a,(iy+5)
+	ld	(ix+PSC_NSEC),a
+	ld	a,(iy+6)
+	ld	(ix+PSC_NSEC+1),a
+	call	PS_CALC_FIT
+
+	;--- Read the data
+
+	ld	a,1
+	call	PSCALL_BDOS
+	cp	.NOFIL##
+	jr	nz,PSCO_3
+	call	PS_HL_BUF
+	ld	d,h
+	ld	e,l
+	inc	de
+	ld	(hl),0
+	ld	bc,511
+	ldir
+	or	a
+	ret
+PSCO_3:
+	or	a
+	jr	nz,PSCALL_ERROR
+	call	PS_VALIDATE
+	jr	nz,PSCO_4
+	set	PSF_VALID,(ix+PSC_FLAGS)
+PSCO_4:
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Set the checksum of the data in the buffer and write it to the storage.
+; Throws a BASIC error if it can't be written.
+
+PSCALL_SAVE:
+	call	PS_SET_CHECKSUM
+	ld	a,2
+	call	PSCALL_BDOS
+	or	a
+	ret	z
+
+	;Turn the error code of the function call into a BASIC error
+
+PSCALL_ERROR:
+	ld	e,68			;"Disk write protected"
+	cp	.WPROT##
+	jr	z,PSCALL_ERROR_2
+	ld	e,66			;"Disk full"
+	cp	.DKFUL##
+	jr	z,PSCALL_ERROR_2
+	ld	e,67			;"Too many files": the root directory is full
+	cp	.DRFUL##
+	jr	z,PSCALL_ERROR_2
+	ld	e,70			;"Disk offline"
+	cp	.NRDY##
+	jr	z,PSCALL_ERROR_2
+	ld	e,69			;"Disk I/O error"
+PSCALL_ERROR_2:
+	jp	BASIC_ERR6##
+
+
+;-----------------------------------------------------------------------------
+;
+; Execute the _PSOPS function call for the first sectors of the storage
+; (as many as PSC_RDN says) and the buffer.
+;
+; Entry:    A = Operation
+; Returns:  A = Error code
+
+PSCALL_BDOS:
+	call	PS_HL_BUF
+	ld	de,0
+	ld	b,(ix+PSC_RDN)
+	ld	c,_PSOPS##
+	push	ix
+	call	BASIC_DOS6_NE##
+	pop	ix
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Helpers for the data stored by Nextor
+;
+
+;Put the data for "nothing is configured" in the buffer.
+;The checksum isn't set. Corrupts BC, DE, HL.
+
+PS_INIT_DATA:
+	call	PS_HL_BUF
+	ex	de,hl
+	ld	hl,PS_FRESH_DATA
+	ld	bc,PS_FRESH_DATA_END-PS_FRESH_DATA
+	ldir
+	ret
+
+PS_FRESH_DATA:
+	db	"NEXTOR",0
+	dw	PSD_MIN_SIZE
+	db	PSD_FORMAT_VERSION
+	dw	0FFFFh			;Inverters not configured
+	db	0,0,0,0,0,0		;No emulation pointer
+	db	0			;Checksum
+PS_FRESH_DATA_END:
+
+;Set the checksum of the data in the buffer. Corrupts AF, BC, D, HL.
+
+PS_SET_CHECKSUM:
+	call	PS_IY_BUF
+	ld	c,(iy+PSD_SIZE)
+	ld	b,(iy+PSD_SIZE+1)
+	dec	bc
+	call	PS_HL_BUF
+	xor	a
+PS_SET_CHK_L:
+	add	a,(hl)
+	inc	hl
+	dec	bc
+	ld	d,a
+	ld	a,b
+	or	c
+	ld	a,d
+	jr	nz,PS_SET_CHK_L
+	neg
+	ld	(hl),a
+	ret
+
+;Print the zero terminated string at HL. Corrupts AF, HL.
+
+PS_PRINT:
+	ld	a,(hl)
+	or	a
+	ret	z
+	rst	18h
+	inc	hl
+	jr	PS_PRINT
+
+
+	finish	<PSTOR>
+	end

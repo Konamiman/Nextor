@@ -294,7 +294,11 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; (if boot keys are set in RAM, the keyboard is completely ignored).
     ;
     ; These bytes are fixed at offset 200h (starting at 0) in ROM.
-    ; They should be changed in the ROM file before flashing in the hardware.
+    ; They are always assembled as zero; to invert a key in the ROM itself,
+    ; patch them in the ROM file (MKNEXROM does it with its /k option)
+    ; before flashing in the hardware. Since Nextor 3 the usual way to
+    ; invert a boot key is the persistent storage instead, which doesn't
+    ; require modifying the ROM (see CALL BOOTKEYS and NEXBOOT /p).
     ;
     ; Bits are assigned to keys as follows:
     ;
@@ -304,32 +308,9 @@ CPMVER:	CALLDOS	0Ch	;Return CP/M version number
     ; "." bits are currently unused and should always be 0 to ensure compatibility
     ; with possible future extensions.
 
-    ; Set INVERT_SHIFT, INVERT_CTRL and/or INVERT_KANJI (for the "6" key)
-    ; at assembly time to invert the meaning of the corresponding boot key.
-    ; By default no key is inverted.
-	;
-    ; GRAPH cannot be inverted at assembly time; patch KEYS_INV_1 bit 6
-    ; in the ROM (offset 200h) instead.
+KEYS_INV_0: db 0
 
-KEYS_INV_0_VALUE: defl 0
-
-    ifdef INVERT_KANJI
-KEYS_INV_0_VALUE: defl KEYS_INV_0_VALUE+40h
-    endif
-
-KEYS_INV_0: db KEYS_INV_0_VALUE
-
-KEYS_INV_1_VALUE: defl 0
-
-    ifdef INVERT_SHIFT
-KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+10h
-    endif
-
-    ifdef INVERT_CTRL
-KEYS_INV_1_VALUE: defl KEYS_INV_1_VALUE+20h
-    endif
-
-KEYS_INV_1: db KEYS_INV_1_VALUE
+KEYS_INV_1: db 0
 
 ;
 ;=======================================================================
@@ -1479,7 +1460,7 @@ NO_CLEAN_SCANKEYS_RAM:
 
 	call	GET_DISKID_HL
 	ld	a,(hl)
-	ld	(hl),b		;clear DEVICE
+	ld	(hl),0		;clear DEVICE
 	or	a		;disk system still alive?
 	ret	m		;no
 ;
@@ -3153,23 +3134,28 @@ SDATE:	CALLDOS	2Bh	;Set date
 
     ;Scan and store boot keys and check if keyboard is Russian if that hasn't been done yet.
 
+    ;This is done only by the first Nextor kernel that gets initialized
+    ;(its slot is the only one that CHK_DUP has registered so far),
+    ;the others just use the boot keys state that it leaves in BOOTKEYS.
+    ;
+    ;The raw state of the keys is stored first. Then PS_BOOT in bank 6 inverts
+    ;the keys that have their inverter set (the inverters are taken from the
+    ;persistent storage if possible, otherwise from KEYS_INV_0/1) and forces
+    ;the keys requested by the flags of the disk emulation mode pointer.
+
 DO_KEYS_INIT:
+    ld a,(PROCNM+1)
+    or a
+    ret nz
+
     call CHECK_IS_RUSSIAN
     ld (I_AM_RUSSIAN##),a
 
     call SCANKEYS_RAM
+    ld c,1
     jr z,DO_KEYS_INIT2
     call SCANKEYS
-
-    ld a,(KEYS_INV_0)
-    and 01111110b
-    xor b
-    ld b,a
-
-    ld a,(KEYS_INV_1)
-    and 01110000b
-    xor h
-    ld h,a
+    ld c,0
 
 DO_KEYS_INIT2:
     ld a,b
@@ -3177,7 +3163,12 @@ DO_KEYS_INIT2:
     ld (BOOTKEYS##+1),de
     ld (BOOTKEYS##+3),hl
 
-    ret
+    call GSLOT1##
+    ld de,(KEYS_INV_0)  ;E = KEYS_INV_0, D = KEYS_INV_1
+    ld hl,PS_BOOT##
+    set 7,h     ;Bit 15 = call bank 6
+    ld (BK4_ADD##),hl
+    jp C4PBK##
 
 ;Set the screen frequency requested by the disk emulation flags
 ;(EMU_FLAGS, resolved by GO_EMU in partit.mac): bit 1 of VDP register 9
@@ -3390,12 +3381,12 @@ clstat_noexp:
 	ld	hl,SLTATR
 	add	hl,bc	;Base address for this slot
 
-	ld	(hl),0	;Clear page 0 bits
+	ld	(hl),b	;Clear page 0 bits
 	inc	hl
 	inc	hl
-	ld	(hl),0	;Clear page 2 bits
+	ld	(hl),b	;Clear page 2 bits
 	inc	hl
-	ld	(hl),0	;Clear page 3 bits
+	ld	(hl),b	;Clear page 3 bits
 	
 	ld	hl,H.RUNC
 	ret
@@ -3751,12 +3742,12 @@ MEMCPY:
 	ret	z
 
 DO_LDDR:
-	push	bc
 	add	hl,bc
+	dec	hl	;Last byte of source
 	ex	de,hl
 	add	hl,bc
+	dec	hl	;Last byte of destination
 	ex	de,hl
-	pop	bc
 	lddr
 	ret
 
@@ -3769,11 +3760,9 @@ DO_LDIR:
 
 CALL_DV_INIT::
     push af
-    push bc
 	ld de,CHPUT
     ld a,(BOOTKEYS##)
     and 00100000b
-    pop bc
     ld c,a
     pop af
 
@@ -3784,8 +3773,7 @@ CALL_DRIVER_QUERY:
 CALL_DRIVER:
 	ex	af,af'
 	ld	a,DV_BANK##
-	call	CALBNK##
-    ret
+	jp	CALBNK##
 
 FOURZEROS:	db	0,0,0,0
 
@@ -3793,222 +3781,135 @@ FOURZEROS:	db	0,0,0,0
 ;
 ; Remove Nextor 2 kernels from DRVTBL##, HOOKSAV and KERNEX tables.
 ; Nextor 3 kernels are identified by bit 4 set in their KERNEX entry.
-; Uses: AF, BC, DE, HL, IX, IY
+; Uses: AF, BC, DE, HL, BC', DE', HL'
 
 CLEAN_V2_KERNELS::
+	call CLEAN_COMPACT
+	jp CLEAN_KERNEX
 
 	; --- Combined clean+compact of DRVTBL## (4 entries, 2 bytes each)
 	;     and HOOKSAV (4 entries, 3 bytes each) in a single pass.
-	;     Also counts removed v2 entries to adjust DISKID.
+	;     Also adjusts DISKID for each removed v2 entry.
 
-	ld	hl,	DRVTBL##		; DRVTBL## source
-	ld	de,DRVTBL##		; DRVTBL## dest
-	ld	ix,HOOKSAV		; HOOKSAV source
-	ld	iy,HOOKSAV		; HOOKSAV dest
-	ld	b,4			; Loop counter
-	ld	c,0			; Count of removed v2 entries
-
+CLEAN_COMPACT:
+	ld	hl,DRVTBL##		; DRVTBL## source / dest
+	ld	e,l
+	ld	d,h
+	exx
+	ld	hl,HOOKSAV		; HOOKSAV source / dest
+	ld	e,l
+	ld	d,h
+	exx
+	ld	bc,4FFH			; Tables have 4 entries + slack for ldi decrements
 CLEAN_COMPACT_LOOP:
+	call	CLEAN_COMPACT_ENTRY
+	djnz	CLEAN_COMPACT_LOOP
+	call	CLEAN_FILL
+	exx
+	call	CLEAN_FILL
+	exx
+	ret
+
+CLEAN_COMPACT_ENTRY:
 	ld	a,(hl)			; Drive count (first byte of DRVTBL## entry)
 	or	a
-	jr	z,CLEAN_COMPACT_SKIP_EMPTY	; Empty entry, skip both tables
+	jr	z,CLEAN_COMPACT_SKIP	; Empty entry, skip both tables
 
+	push	bc
+	push	hl
 	inc	hl
 	ld	a,(hl)			; Slot address (second byte)
-	dec	hl			; HL back to start of entry
-	and	10001111b		; Mask to get slot + expansion bit
-	push	hl			; Save DRVTBL## pointer (GET_KERNEX_ENTRY clobbers HL)
 	call	GET_KERNEX_ENTRY	; Get KERNEX entry for this slot
-	pop	hl			; Restore DRVTBL## pointer
+	pop	hl
+	pop	bc
 	jr	nz,CLEAN_COMPACT_COPY	; NZ = not in KERNEX, keep it (legacy)
 
 	; It's in KERNEX, check bit 4 for Nextor v3
 	bit	4,a
 	jr	nz,CLEAN_COMPACT_COPY	; Bit 4 set = Nextor v3, keep it
 
-	; Nextor v2 kernel: skip (don't copy), count removal
-	inc	c
-	jr	CLEAN_COMPACT_SKIP_ENTRY
-
-CLEAN_COMPACT_COPY:
-	; Copy DRVTBL## entry (2 bytes: HL → DE)
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-
-	; Copy HOOKSAV entry (3 bytes: IX → IY)
-	ld	a,(ix+0)
-	ld	(iy+0),a
-	ld	a,(ix+1)
-	ld	(iy+1),a
-	ld	a,(ix+2)
-	ld	(iy+2),a
-
-	; Advance HOOKSAV source and dest
-	inc	ix
-	inc	ix
-	inc	ix
-	inc	iy
-	inc	iy
-	inc	iy
-	djnz	CLEAN_COMPACT_LOOP
-	jr	CLEAN_COMPACT_FILL
-
-CLEAN_COMPACT_SKIP_ENTRY:
+	; Nextor v2 kernel: adjust DISKID and skip
+	push	hl
+	call	GET_DISKID_HL
+	dec	(hl)
+	pop	hl
+CLEAN_COMPACT_SKIP:
 	; Advance DRVTBL## source only (dest stays)
 	inc	hl
 	inc	hl
 	; Advance HOOKSAV source only (dest stays)
-	inc	ix
-	inc	ix
-	inc	ix
-	djnz	CLEAN_COMPACT_LOOP
-	jr	CLEAN_COMPACT_FILL
-
-CLEAN_COMPACT_SKIP_EMPTY:
-	; Empty DRVTBL## entry: advance source pointers only
+	exx
 	inc	hl
 	inc	hl
-	inc	ix
-	inc	ix
-	inc	ix
-	djnz	CLEAN_COMPACT_LOOP
+	inc	hl
+	exx
+	ret
 
-CLEAN_COMPACT_FILL:
-	; Fill remaining DRVTBL## slots with zeros
-	push	ix			; Save IX (will need for HOOKSAV bounds check)
-	push	hl
-	ld	hl,	DRVTBL##+8		; End of DRVTBL##
-	or	a			; Clear carry
-	sbc	hl,de			; HL = remaining bytes in DRVTBL##
-	ld	a,l
-	pop	hl
-	or	a
-	jr	z,CLEAN_COMPACT_FILL_HOOKSAV
-	ld	b,a
-	xor	a
-CLEAN_COMPACT_FILL_DRVTBL:
-	ld	(de),a
-	inc	de
-	djnz	CLEAN_COMPACT_FILL_DRVTBL
-
-CLEAN_COMPACT_FILL_HOOKSAV:
-	; Fill remaining HOOKSAV slots with zeros
-	pop	ix			; Restore IX (not needed, but keep stack clean)
-	push	iy
-	pop	hl			; HL = HOOKSAV dest (current position)
-	ex	de,hl			; DE = HOOKSAV dest
-	ld	hl,HOOKSAV+12		; End of HOOKSAV
-	or	a			; Clear carry
-	sbc	hl,de			; HL = remaining bytes in HOOKSAV
-	ld	a,l
-	or	a
-	jr	z,CLEAN_COMPACT_DISKID
-	ld	b,a
-	xor	a
-CLEAN_COMPACT_FILL_HOOKSAV_LOOP:
-	ld	(de),a
-	inc	de
-	djnz	CLEAN_COMPACT_FILL_HOOKSAV_LOOP
-
-CLEAN_COMPACT_DISKID:
-	; Adjust DISKID: subtract count of removed v2 entries
-	ld	a,c
-	or	a
-	jr	z,CLEAN_KERNEX
-
-	push	bc
-	call	GET_DISKID_HL
-	ld	a,(hl)
-	sub	c
-	ld	(hl),a
-	pop	bc
+CLEAN_COMPACT_COPY:
+	; Copy DRVTBL## entry (2 bytes: HL → DE)
+	ldi
+	ldi
+	; Copy HOOKSAV entry (3 bytes: HL' → DE')
+	exx
+	ldi
+	ldi
+	ldi
+	exx
+	ret
 
 	; --- Clean KERNEX table
 
 CLEAN_KERNEX:
-	ld	hl,KERNEX##
-	ld	b,4 ; Size of the table
+	ld	hl,KERNEX##		; KERNEX## source / dest
+	ld	e,l
+	ld	d,h
+	ld	bc,4FFH			; Table has 4 entries + slack for ldi decrements
 CLEAN_KERNEX_LOOP:
-	ld	a,(hl)
-	or	a
-	jr	z,CLEAN_KERNEX_NEXT	; Skip empty entries
-
-	bit	4,a
-	jr	nz,CLEAN_KERNEX_NEXT	; Bit 4 set = Nextor v3, keep it
-
-	ld	(hl),0 	; Not Nextor v3, clear the entry
-
-CLEAN_KERNEX_NEXT:
-	inc	hl
+	call	CLEAN_KERNEX_ENTRY
 	djnz	CLEAN_KERNEX_LOOP
+	jr	CLEAN_FILL
 
-	; --- Compact KERNEX (remove gaps)
-
-	ld	hl,KERNEX##
-	ld	de,KERNEX##
-	ld	b,4
-	ld	c,0			; C = count of entries copied
-COMPACT_KERNEX_LOOP:
+CLEAN_KERNEX_ENTRY:
 	ld	a,(hl)
-	or	a
-	jr	z,COMPACT_KERNEX_SKIP
-	ld	(de),a			; Copy non-zero entry (bit 4 = v3 flag is preserved)
-	inc	de
-	inc	c
-COMPACT_KERNEX_SKIP:
+	bit	4,a
+	jr	nz,CLEAN_KERNEX_COPY	; Copy Nextor v3 entry
 	inc	hl
-	djnz	COMPACT_KERNEX_LOOP
-
-	; Fill remaining slots with zero
-	ld	a,4
-	sub	c			; A = remaining entries
-	ret	z
-	ld	b,a
-	xor	a
-COMPACT_KERNEX_FILL:
-	ld	(de),a
-	inc	de
-	djnz	COMPACT_KERNEX_FILL
 	ret
+
+CLEAN_KERNEX_COPY:
+	ldi
+	ret
+
+CLEAN_FILL:
+	; Fill backwards from HL to DE with zeros
+	scf
+	sbc	hl,de
+	ret	c
+	add	hl,de
+	ld	(hl),0
+	jr	CLEAN_FILL
 
 ;-----------------------------------------------------------------------------
 ;
 ; Find KERNEX entry for a given slot address
-; Entry: A = slot address (masked with 0x8F)
-; Exit: Z flag set if found, A = KERNEX entry value
+; Entry: A = slot address (is masked with 0x8F)
+; Exit: Z flag set if found, HL = KERNEX entry, A = KERNEX entry value
 ;       NZ if not found
-; Uses: AF, HL
+; Uses: AF, BC, HL
 ;
 GET_KERNEX_ENTRY:
-	push	bc
-	push	de
+	and	10001111b		; Mask to get slot + expansion bit
 	ld	c,a			; Save slot to find
 	ld	hl,KERNEX##
 	ld	b,4
 GET_KERNEX_LOOP:
 	ld	a,(hl)
-	ld	d,a			; Save full KERNEX entry in D
 	and	10001111b		; Mask to get slot
 	cp	c
-	jr	z,GET_KERNEX_FOUND
+	ld	a,(hl)
+	ret	z
 	inc	hl
 	djnz	GET_KERNEX_LOOP
-	; Not found
-	pop	de
-	pop	bc
-	or	1			; Clear Z flag
-	ret
-GET_KERNEX_FOUND:
-	ld	a,d			; Restore full KERNEX entry
-	pop	de
-	pop	bc
-	cp	a			; Set Z flag, A = KERNEX entry
 	ret
 
 ;-----------------------------------------------------------------------------

@@ -6,10 +6,10 @@
 # driver live in source/drivers; third-party drivers (Sunrise IDE,
 # MegaFlash ROM SCC+ SD...) have their own dedicated repositories.
 #
-# The build is controlled by four external variables (set via env or on
-# the make command line). Each variable, when non-empty, both defines a
-# symbol that gets passed to N80 via --define-symbols, and adds a
-# fragment to the output-filename suffix:
+# The build is controlled by one external variable (set via env or on
+# the make command line). When non-empty it both defines a symbol that
+# gets passed to N80 via --define-symbols, and adds a fragment to the
+# output-filename suffix:
 #
 #   NO_UNDOC_CPU_INSTRUCTIONS  -> defines NO_UNDOC_CPU_INSTRUCTIONS,
 #                                 suffix fragment ".NO_UNDOC". Replaces
@@ -17,31 +17,18 @@
 #                                 iyl) with documented equivalents, for
 #                                 compatibility with Z180-based MSX
 #                                 machines.
-#   INVERT_SHIFT               -> defines INVERT_SHIFT, suffix fragment
-#                                 ".SHIFT_INV". Inverts the meaning of
-#                                 the SHIFT boot key.
-#   INVERT_CTRL                -> defines INVERT_CTRL, suffix fragment
-#                                 ".CTRL_INV". Inverts the meaning of
-#                                 the CTRL boot key.
-#   INVERT_KANJI               -> defines INVERT_KANJI, suffix fragment
-#                                 ".KANJI_INV". Inverts the meaning of the
-#                                 "6" boot key, so the Kanji driver is
-#                                 installed at boot time unless the key
-#                                 is pressed.
 #
-# Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1 make`
-# produces Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.SHIFT_INV.dat,
-# and `INVERT_KANJI=1 make` produces Nextor-$(NEXTOR_KERNEL_VERSION).base.KANJI_INV.dat.
+# Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 make` produces
+# Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.dat.
+#
 #
 # A single variant-specific stamp file (its filename encodes the active
 # variant signature) is listed as a prereq of every assembled .rel, so
 # switching variants forces a full reassembly and previously built .rels
 # from a different variant are never silently reused.
 #
-# `make everything` invokes make twelve times to build the kernel base
-# file for all twelve variant combinations: the six combinations of
-# default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC, NO_UNDOC+INVERT_SHIFT and
-# NO_UNDOC+INVERT_CTRL, each one with and without INVERT_KANJI.
+# `make everything` invokes make twice to build the kernel base file for
+# both variants: default and NO_UNDOC.
 #
 # The generated base files are copied to ../../bin/kernel-base.
 #
@@ -76,21 +63,6 @@ _VARIANT_SUFFIX :=
 ifneq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
 _VARIANT_DEFINES += NO_UNDOC_CPU_INSTRUCTIONS
 _VARIANT_SUFFIX := $(_VARIANT_SUFFIX).NO_UNDOC
-endif
-
-ifneq ($(strip $(INVERT_SHIFT)),)
-_VARIANT_DEFINES += INVERT_SHIFT
-_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).SHIFT_INV
-endif
-
-ifneq ($(strip $(INVERT_CTRL)),)
-_VARIANT_DEFINES += INVERT_CTRL
-_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).CTRL_INV
-endif
-
-ifneq ($(strip $(INVERT_KANJI)),)
-_VARIANT_DEFINES += INVERT_KANJI
-_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).KANJI_INV
 endif
 
 UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
@@ -136,38 +108,25 @@ endef
 
 all: base ../../sdk/nextor-kernel-version.txt
 
-# `everything` builds the kernel base file across all twelve variant
-# combinations: default, INVERT_SHIFT, INVERT_CTRL, NO_UNDOC,
-# NO_UNDOC+INVERT_SHIFT and NO_UNDOC+INVERT_CTRL, each one with and
-# without INVERT_KANJI. Each variant runs as a recursive make invocation with
-# the corresponding env vars set, so the variant stamp inside the
-# sub-make is correctly tracked.
+# `everything` builds the kernel base file for both variants: default and
+# NO_UNDOC. Each variant runs as a recursive make invocation with the
+# corresponding env var set, so the variant stamp inside the sub-make is
+# correctly tracked.
 #
 # Sub-makes within a single variant are incremental, but switching
 # variants between sub-makes forces a full reassembly (intrinsic to the
 # single-stamp mechanism). The default variant is built last so the
-# on-disk intermediate file (nextor_base.dat) is left as the
-# non-inverted, undoc kernel that downstream consumers (source/drivers)
-# pick up by default.
+# on-disk intermediate file (nextor_base.dat) is left as the undoc
+# kernel that downstream consumers (source/drivers) pick up by default.
 #
 # Sub-make failures don't abort the matrix — the loop collects the worst
 # exit code and exits with it at the end, so CI / release scripts see a
-# failure if any variant broke while still attempting all twelve.
+# failure if either variant broke while still attempting both.
 .PHONY: everything
 everything:
 	@status=0; \
 	for args in \
-	    "INVERT_KANJI=1 INVERT_SHIFT=1" \
-	    "INVERT_KANJI=1 INVERT_CTRL=1" \
-	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1" \
-	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
-	    "INVERT_KANJI=1 NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
-	    "INVERT_KANJI=1" \
-	    "INVERT_SHIFT=1" \
-	    "INVERT_CTRL=1" \
 	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
-	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_SHIFT=1" \
-	    "NO_UNDOC_CPU_INSTRUCTIONS=1 INVERT_CTRL=1" \
 	    ""; do \
 	    $(MAKE) --no-print-directory --keep-going all $$args || status=$$?; \
 	done; \
@@ -254,7 +213,7 @@ B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.re
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
-B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel)
+B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel pstor.rel)
 
 lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,\
 	$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,\
@@ -469,7 +428,7 @@ bank6/B6.BIN bank6/B6.SYM &: \
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel ../print_call_help.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel pstor.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \
