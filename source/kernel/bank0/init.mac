@@ -3180,8 +3180,7 @@ DO_KEYS_INIT2:
 
     call GSLOT1##
     ld de,(KEYS_INV_0)  ;E = KEYS_INV_0, D = KEYS_INV_1
-    ld hl,PS_BOOT##
-    set 7,h     ;Bit 15 = call bank 6
+    ld hl,PS_BOOT##+8000h  ;Bit 15 = call bank 6
     ld (BK4_ADD##),hl
     jp C4PBK##
 
