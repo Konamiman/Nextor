@@ -547,6 +547,14 @@ GDRV_OK_ROM:
 	ld a,0C9h ;"RET"
 	ld (H.PROMPT##+2),a
 
+	;Apply the screen parameters in the persistent storage
+	;(done here since the driver is initialized, and before
+	;the BIOS sets up the screen for BASIC or MSX-DOS)
+
+	ld ix,PS_SCREEN##
+	ld a,6
+	call CALBNK##
+
 	call _AUTODRV
 
 	pop hl
@@ -5839,6 +5847,7 @@ CNEXTOR_S:
 	db	"_LOCKDRV() *",13,10
 	db	"_MAPDRV()",13,10
 	db	"_MAPDRVL() *",13,10
+	db  "_SETSCREEN()",13,10
 	db  "_UDRIVER()",13,10
 	db	"_USR()",13,10
 	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10

@@ -136,6 +136,8 @@
 
 [3.6.17. The CALL EMUKILL command](#3617-the-call-emukill-command)
 
+[3.6.18. The CALL SETSCREEN command](#3618-the-call-setscreen-command)
+
 [3.7. New BASIC error codes](#37-new-basic-error-codes)
 
 [3.8. Mounting files](#38-mounting-files)
@@ -331,7 +333,7 @@ MSX-DOS 2 provides a set of mapper support routines, which allow applications to
 
 The boot time configuration of Nextor can be modified by keeping pressed some special keys while the system is booting. These keys and their behavior are:
 
-*  **0**: Ignore the persistent storage during this boot: the boot keys that were set as inverted with `CALL BOOTKEYS` are not inverted, and the persistent disk emulation mode is not entered. Nothing is changed in the persistent storage, so the next boot will use it again. See _[2.18. The persistent storage](#218-the-persistent-storage)_ and _[3.9. Disk emulation mode](#39-disk-emulation-mode)_.
+*  **0**: Ignore the persistent storage during this boot: the boot keys that were set as inverted with `CALL BOOTKEYS` are not inverted, the persistent disk emulation mode is not entered, and the screen parameters stored with `CALL SETSCREEN` are not applied. Nothing is changed in the persistent storage, so the next boot will use it again. See _[2.18. The persistent storage](#218-the-persistent-storage)_ and _[3.9. Disk emulation mode](#39-disk-emulation-mode)_.
 
 *  **1**: Force boot in MSX-DOS 1 mode. If the computer is an MSX Turbo-R, switches the CPU to Z80 mode.
 
@@ -467,13 +469,13 @@ The setting affects any program that reads lines through the kernel, including t
 
 ### 2.18. The persistent storage
 
-Nextor 3 can remember a few settings that need to be known at the very beginning of the boot process, before anything can be loaded from disk: which boot keys you want to have inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_), and whether the computer must boot in persistent disk emulation mode (see _[3.9. Disk emulation mode](#39-disk-emulation-mode)_). These settings are kept in the _persistent storage_ of the primary Nextor controller.
+Nextor 3 can remember a few settings that need to be known at the very beginning of the boot process, before anything can be loaded from disk: which boot keys you want to have inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_), whether the computer must boot in persistent disk emulation mode (see _[3.9. Disk emulation mode](#39-disk-emulation-mode)_), and the screen parameters to use, for computers whose clock chip battery is dead (see _[3.6.18. The CALL SETSCREEN command](#3618-the-call-setscreen-command)_). These settings are kept in the _persistent storage_ of the primary Nextor controller.
 
 The settings are kept in a small file named `_NEXTOR.PSF` (with the hidden, system and read only attributes) in the root directory of the first partition of the first storage device of the controller. **They therefore belong to the storage medium, not to the computer nor to the controller**: if you insert a different card or disk you will get the settings stored in that one, or none, and if there's no medium inserted at all there's no persistent storage for that boot. Nextor creates the file when it's needed; the partition must be FAT12 or FAT16. You can copy the file to another medium to copy the settings, and delete it to get rid of them. Don't modify it by hand.
 
-Whether all of this works depends on how the Nextor driver of your controller was made: it must be able to read the medium before it has been initialized, which is what Nextor needs in order to read the file at the very beginning of the boot. If it can't, inverting boot keys with `CALL BOOTKEYS` has no effect, although the persistent disk emulation mode and the programs that use the storage still work.
+Whether all of this works depends on how the Nextor driver of your controller was made: it must be able to read the medium before it has been initialized, which is what Nextor needs in order to read the file at the very beginning of the boot. If it can't, inverting boot keys with `CALL BOOTKEYS` has no effect, although the persistent disk emulation mode, the screen parameters and the programs that use the storage still work.
 
-Use [the `CALL BOOTKEYS` command](#3616-the-call-bootkeys-command) to see whether you have persistent storage and which device holds it.
+Use [the `CALL BOOTKEYS` command](#3616-the-call-bootkeys-command) or [the `CALL SETSCREEN` command](#3618-the-call-setscreen-command) to see whether you have persistent storage and which device holds it.
 
 If something goes wrong with the stored settings, keep the 0 key pressed while booting: the persistent storage will be completely ignored during that boot.
 
@@ -1263,6 +1265,58 @@ The 0 key can't be inverted: it's the one that makes Nextor ignore all these set
 #### 3.6.17. The CALL EMUKILL command
 
 This command removes the emulation data file pointer from the persistent storage, so that the computer stops booting in persistent disk emulation mode (see _[3.9.1. Entering and exiting the disk emulation mode](#391-entering-and-exiting-the-disk-emulation-mode)_). It has no parameters, it works in MSX-DOS 1 mode too (and thus from inside a disk emulation session), and it does nothing if the persistent disk emulation mode is not set.
+
+#### 3.6.18. The CALL SETSCREEN command
+
+MSX2 and newer computers keep the screen parameters (the ones set with `SET SCREEN`, `SET ADJUST` and `SET BEEP`) in the memory of the clock chip, which is powered by a battery when the computer is off. Many computers have a dead battery nowadays, and then these parameters are lost every time the computer is turned off. This command keeps them in the persistent storage instead (see _[2.18. The persistent storage](#218-the-persistent-storage)_), and Nextor applies them at boot time. It works on MSX1 computers too, which have no clock chip at all, and in MSX-DOS 1 mode. The syntax is:
+
+```
+CALL SETSCREEN
+CALL SETSCREEN()
+CALL SETSCREEN(<value>)
+```
+
+Without parameters and without parenthesis, the command just shows some usage information.
+
+`CALL SETSCREEN(1)` stores the current screen parameters, the same ones that `SET SCREEN` stores in the clock chip, plus the ones of `SET ADJUST` and `SET BEEP`:
+
+* The screen mode, 0 or 1 (if the command is executed in a graphic screen mode, the last text screen mode is stored).
+* The screen width for that screen mode (`WIDTH`).
+* The foreground, background and border colors (`COLOR`).
+* Whether the function keys are displayed (`KEY ON`/`KEY OFF`).
+* The key click, the printer type, the cassette speed and the interlace mode (the third to sixth parameters of the `SCREEN` statement).
+* The display adjust (`SET ADJUST`) and the beep tone and volume (`SET BEEP`).
+
+So the usual way to use the command is: set up the screen as you like with the `SCREEN`, `WIDTH`, `COLOR` and `KEY` statements, plus `SET ADJUST` and `SET BEEP` if you want, then run `CALL SETSCREEN(1)`. On MSX2 and newer the parameters are also written to the clock chip, as `SET SCREEN` would do.
+
+`CALL SETSCREEN(-1)` removes the stored parameters. This doesn't change the current screen parameters, nor the ones in the clock chip.
+
+`CALL SETSCREEN()` (or `CALL SETSCREEN(0)`, which is equivalent) shows what kind of persistent storage there is, if any, and the stored parameters. For example:
+
+```
+Persistent storage: file in device 1
+Screen parameters:
+  SCREEN 0, interlace OFF
+  WIDTH 80
+  COLOR 15,4,4
+  KEY ON, key click ON
+  Printer: MSX
+  Cassette: 1200 bauds
+  SET ADJUST (0,0)
+  SET BEEP 1,2
+```
+
+If there's no persistent storage a message says so and nothing else happens.
+
+At boot time, on MSX2 and newer computers the stored parameters are written to the clock chip, so that the BIOS applies them as it does with the ones set with `SET SCREEN`: this means that **the stored parameters take precedence over the ones set with `SET SCREEN`, `SET ADJUST` and `SET BEEP`**, which then last only until the computer is reset. If you want to change the parameters permanently, use `CALL SETSCREEN(1)` again (or `CALL SETSCREEN(-1)` to go back to using the clock chip alone).
+
+On MSX1 computers the parameters are applied directly, and only these take effect:
+
+* The screen width for the default screen mode set by BIOS (`WIDTH`).
+* The foreground, background and border colors (`COLOR`).
+* The key click, the printer type, and the cassette speed (the third to fifth parameters of the `SCREEN` statement).
+
+The parameters are applied after the Nextor driver is initialized, so the screens that Nextor displays while booting (and those of the BIOS and of the cartridges initialized before Nextor) don't use them. If the stored parameters make the screen unusable (for example if the foreground and background colors are the same), keep the 0 key pressed while booting: the persistent storage will be ignored during that boot, and you'll be able to run `CALL SETSCREEN(-1)` or to store other parameters.
 
 ### 3.7. New BASIC error codes
 

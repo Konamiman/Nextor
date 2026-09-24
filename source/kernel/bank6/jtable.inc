@@ -22,3 +22,5 @@
 	jentry	CBOOTKEYS
 	jentry	CEMUKILL
 	jentry	CALL_EXTRA
+	jentry	CSETSCREEN
+	jentry	PS_SCREEN
