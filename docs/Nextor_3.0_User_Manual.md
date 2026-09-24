@@ -1287,8 +1287,6 @@ Without parameters and without parenthesis, the command just shows some usage in
 * The key click, the printer type, the cassette speed and the interlace mode (the third to sixth parameters of the `SCREEN` statement).
 * The display adjust (`SET ADJUST`) and the beep tone and volume (`SET BEEP`).
 
-On MSX1 computers only the following parameters take effect:
-
 So the usual way to use the command is: set up the screen as you like with the `SCREEN`, `WIDTH`, `COLOR` and `KEY` statements, plus `SET ADJUST` and `SET BEEP` if you want, then run `CALL SETSCREEN(1)`. On MSX2 and newer the parameters are also written to the clock chip, as `SET SCREEN` would do.
 
 `CALL SETSCREEN(-1)` removes the stored parameters. This doesn't change the current screen parameters, nor the ones in the clock chip.
