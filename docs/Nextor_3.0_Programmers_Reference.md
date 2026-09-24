@@ -1231,7 +1231,7 @@ The error codes currently used by the kernel for this mechanism are `.NOCMD` (0A
 
 ### 7.4. Persistent storage
 
-The persistent storage is a small non-volatile data area provided by the primary Nextor controller. Nextor uses it to keep the settings that must be known at the very beginning of the boot process, before the device drivers are initialized: which boot keys are inverted, and the emulation data pointer for the persistent disk emulation mode. Programs access it with [the `_PSOPS` function call](#316-persistent-storage-operations-_psops-80h).
+The persistent storage is a small non-volatile data area provided by the primary Nextor controller. Nextor uses it to keep the settings that must be known at the very beginning of the boot process, before the device drivers are initialized: which boot keys are inverted, and the emulation data pointer for the persistent disk emulation mode; and also the screen parameters, for computers whose clock chip battery is dead. Programs access it with [the `_PSOPS` function call](#316-persistent-storage-operations-_psops-80h).
 
 The storage is the first 512 bytes of a file named `_NEXTOR.PSF`, with the hidden, system and read only attributes, in the root directory of the first partition of a device of the controller. Some controllers offer none. See ["Supporting the persistent storage" in the Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage) for the details. The settings therefore belong to the storage medium, not to the computer or the cartridge: a different medium has different settings, or none.
 
@@ -1246,21 +1246,35 @@ The data stored by Nextor is at the very beginning of the storage, and it has th
 |  +12   |  1   | Persistent disk emulation: number of the device that contains the emulation data, 0 or FFh if persistent emulation is not set |
 |  +13   |  4   | Persistent disk emulation: absolute device sector number that contains the emulation data (little endian) |
 |  +17   |  1   | Persistent disk emulation: emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ |
-|  +18   |  1   | Checksum: the value that makes the sum of all the bytes of the data (as many as the size field says), modulo 256, equal to zero |
+|  +18   |  1   | Stored items: bit 0 is set if the screen parameters are stored, the other bits are reserved and must be zero |
+|  +19   |  5   | Screen parameters, see below |
+|  +24   |  1   | Checksum: the value that makes the sum of all the bytes of the data (as many as the size field says), modulo 256, equal to zero |
 
-Nextor ignores the data (it behaves as if nothing was set) if the signature is not there, if the size is smaller than 19 or bigger than 512, or if the checksum is wrong. Nothing else is required: the storage doesn't need to be initialized in any way before it's used for the first time.
+Nextor ignores the data (it behaves as if nothing was set) if the signature is not there, if the size is smaller than 25 or bigger than 512, or if the checksum is wrong. Nothing else is required: the storage doesn't need to be initialized in any way before it's used for the first time.
 
 When the boot key inverters are not set, the ones in the kernel ROM are used. When they are set they fully replace the ones in the kernel ROM, they aren't combined. Unused bits should be zero.
+
+The screen parameters are registers 1 to 10 of block 2 of the clock chip, in the same format (see "Contents of block 2" in chapter 5 of the MSX2 Technical Handbook): two registers per byte, the odd numbered one in the low nibble. Thus:
+
+| Offset | Low nibble | High nibble |
+|:------:|------------|-------------|
+|  +19   | Adjust X   | Adjust Y    |
+|  +20   | Bit 0: screen mode (0 or 1), bit 1: interlace mode | Width, low nibble |
+|  +21   | Width, high nibble | Foreground color |
+|  +22   | Background color | Border color |
+|  +23   | Bit 0: function keys displayed, bit 1: key click, bit 2: non-MSX printer, bit 3: cassette at 2400 bauds | Beep: bits 3-2 are the tone minus 1, bits 1-0 are the volume minus 1 |
+
+The adjust values are the opposite of the ones passed to `SET ADJUST` (so `SET ADJUST(2,-3)` is stored as X=-2 and Y=3, in two's complement), which makes the byte at +19 have the same format as VDP register 18. The parameters are stored with `CALL SETSCREEN` (see _[3.6.18. The CALL SETSCREEN command](Nextor_3.0_User_Manual.md#3618-the-call-setscreen-command)_ in the user manual), and applied at boot time: on MSX2 and newer by writing them to the clock chip (and to VDP register 18), on MSX1 by setting the corresponding system variables. They are ignored if the width is 0 or bigger than 80 (32 for screen mode 1).
 
 The size of the data is stored explicitly because future versions of Nextor might store more data. When that happens the new fields will be added after the existing ones, right before the checksum, and the version number will be increased; the existing fields will never change their position nor their meaning. Thus a program that manipulates this data must follow these rules:
 
 * Accept a version number higher than the one it knows about, and use the fields it knows about.
 * When modifying the data, keep the size field and all the bytes that it doesn't know about, and recalculate the checksum (over as many bytes as the size field says).
-* When there's no valid data, create it from scratch: the signature, a size of 19, version 1, FFFFh for the boot key inverters, zeros for the emulation data pointer, and the checksum.
+* When there's no valid data, create it from scratch: the signature, a size of 25, version 1, FFFFh for the boot key inverters, zeros for the emulation data pointer, the stored items and the screen parameters, and the checksum.
 
-Programs can use the rest of the storage, past the data stored by Nextor, for whatever they want (as programs have always done with the non-volatile memory of the clock chip); Nextor never reads nor modifies it. Since the data stored by Nextor could grow in future versions, it's recommended to use first the space at the end of the storage. Keep in mind that the storage is small: 512 bytes in total, of which Nextor uses the first 19.
+Programs can use the rest of the storage, past the data stored by Nextor, for whatever they want (as programs have always done with the non-volatile memory of the clock chip); Nextor never reads nor modifies it. Since the data stored by Nextor could grow in future versions, it's recommended to use first the space at the end of the storage. Keep in mind that the storage is small: 512 bytes in total, of which Nextor uses the first 25.
 
-The persistent storage is read at boot time unless the 0 key is pressed. Nextor writes to it only when `CALL BOOTKEYS` or `CALL EMUKILL` are executed.
+The persistent storage is read at boot time unless the 0 key is pressed. Nextor writes to it only when `CALL BOOTKEYS`, `CALL EMUKILL` or `CALL SETSCREEN` are executed.
 
 ## 8. Development helpers
 

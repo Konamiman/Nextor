@@ -142,7 +142,7 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * The `EMUFILE` tool also gains the `-c` and `-s` options: they free memory for the game by forcing the CTRL key (disable the ghost floppy disk drive) or the SHIFT key (disable MSX-DOS kernels) as pressed when the emulation session starts. See _[3.9.5. How to free some memory](Nextor_3.0_User_Manual.md#395-how-to-free-some-memory)_ in the user manual.
 
-* The `EMUFILE` tool gains the `k` command, that removes the persistent disk emulation mode, and no longer accepts a device for the persistent variant; and there are two new BASIC commands, `CALL BOOTKEYS` and `CALL EMUKILL`. See _[2.14. The persistent storage: boot keys and persistent disk emulation](#214-the-persistent-storage-boot-keys-and-persistent-disk-emulation)_.
+* The `EMUFILE` tool gains the `k` command, that removes the persistent disk emulation mode, and no longer accepts a device for the persistent variant; and there are three new BASIC commands, `CALL BOOTKEYS`, `CALL EMUKILL` and `CALL SETSCREEN`. See _[2.14. The persistent storage: boot keys and persistent disk emulation](#214-the-persistent-storage-boot-keys-and-persistent-disk-emulation)_.
 
 * The `NEXBOOT` tool gains the `/p`, `/k` and `/i` options, which store, remove and show the inverted boot keys kept in the persistent storage, as an alternative to `CALL BOOTKEYS`. Unlike the rest of the tool they don't reset the computer.
 
@@ -180,13 +180,15 @@ The line editor built into the kernel (the one behind the `_BUFIN` function call
 
 ### 2.14. The persistent storage: boot keys and persistent disk emulation
 
-Nextor 3 introduces the _persistent storage_: a small non-volatile data area, provided by the primary Nextor controller, where Nextor keeps the settings that it needs to know at the very beginning of the boot process. It's a small hidden file (`_NEXTOR.PSF`) in the first partition of the first storage device of the primary controller, so the settings belong to the medium rather than to the computer; see _[2.18. The persistent storage](Nextor_3.0_User_Manual.md#218-the-persistent-storage)_ in the user manual. Two things are kept there:
+Nextor 3 introduces the _persistent storage_: a small non-volatile data area, provided by the primary Nextor controller, where Nextor keeps the settings that it needs to know at the very beginning of the boot process. It's a small hidden file (`_NEXTOR.PSF`) in the first partition of the first storage device of the primary controller, so the settings belong to the medium rather than to the computer; see _[2.18. The persistent storage](Nextor_3.0_User_Manual.md#218-the-persistent-storage)_ in the user manual. Three things are kept there:
 
 * **The boot key inverters.** In Nextor 2 the only way to have a boot key inverted (for example, having the MSX-DOS kernels disabled unless SHIFT is pressed) was to modify the kernel ROM before flashing it. Now [the `CALL BOOTKEYS` command](Nextor_3.0_User_Manual.md#3616-the-call-bootkeys-command) does it, for any of the keys 1 to 6, CTRL and SHIFT. Inverting a key in the ROM itself is still possible with the `/k` option of `mknexrom`.
 
 * **The pointer for the persistent disk emulation mode.** **This is a breaking change:** in Nextor 2 the pointer was kept in the partition table of a device, and Nextor 3 neither reads nor modifies that. If you have the persistent disk emulation mode set up with Nextor 2, disable it (by booting with the 0 key pressed) before upgrading, and set it up again with the new `EMUFILE.COM` afterwards; if you don't, nothing bad will happen, the computer will just boot normally. On the other hand, the `-c` and `-s` options of `EMUFILE.COM` now work for the persistent variant too.
 
-The meaning of the 0 boot key changes accordingly: it no longer removes the persistent disk emulation mode, instead it makes Nextor ignore the persistent storage completely for that boot (so neither the boot keys set with `CALL BOOTKEYS` are inverted, nor the disk emulation mode is entered). To remove the persistent disk emulation mode use `EMUFILE k` or [the `CALL EMUKILL` command](Nextor_3.0_User_Manual.md#3617-the-call-emukill-command).
+* **The screen parameters.** MSX2 and newer computers keep the parameters set with `SET SCREEN`, `SET ADJUST` and `SET BEEP` in the clock chip, and they are lost at every power off when its battery is dead, which is common nowadays. [The new `CALL SETSCREEN` command](Nextor_3.0_User_Manual.md#3618-the-call-setscreen-command) stores them in the persistent storage, and Nextor applies them at boot time (taking precedence over the ones in the clock chip). It works on MSX1 computers too, where it's the only way to have these parameters remembered at all (except the screen mode).
+
+The meaning of the 0 boot key changes accordingly: it no longer removes the persistent disk emulation mode, instead it makes Nextor ignore the persistent storage completely for that boot (so the boot keys set with `CALL BOOTKEYS` are not inverted, the disk emulation mode is not entered, and the screen parameters stored with `CALL SETSCREEN` are not applied). To remove the persistent disk emulation mode use `EMUFILE k` or [the `CALL EMUKILL` command](Nextor_3.0_User_Manual.md#3617-the-call-emukill-command).
 
 ## 3. Information for application developers
 

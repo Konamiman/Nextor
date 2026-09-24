@@ -4,8 +4,9 @@
 ;******************************************************************************
 ;
 ;   Persistent storage: a small non-volatile area offered by the master
-; controller, where Nextor keeps the boot key inverters and the pointer to
-; the emulation data file for the persistent disk emulation mode.
+; controller, where Nextor keeps the boot key inverters, the pointer to
+; the emulation data file for the persistent disk emulation mode, and the
+; screen parameters.
 ;
 ;   The data lives in the first sector of the file _NEXTOR.PSF, in the root
 ; directory of the first partition (or of the partitionless filesystem) of the
@@ -33,7 +34,9 @@
 ;   +12: Persistent emulation: device number (0 or FFh = no emulation)
 ;   +13: Persistent emulation: absolute sector number (4 bytes)
 ;   +17: Persistent emulation: emulation flags
-;   +18: Checksum: the sum of all the "size" bytes, this one included, is zero
+;   +18: Items stored, bit 0 = screen parameters (see CSETSCREEN)
+;   +19: Screen parameters (5 bytes, see PS_SCREEN)
+;   +24: Checksum: the sum of all the "size" bytes, this one included, is zero
 ;
 ;   The data is ignored if the signature, the size or the checksum are wrong.
 ;
@@ -144,6 +147,25 @@ DATBUF_DOS1	equ	0F241h	;MSX-DOS 1: drive of the data sector buffer
 
 EMU_RAM_ADDRESS	equ	0A000h	;One-time emulation pointer, see partit.mac
 PSGE_CTX_OFFSET	equ	100	;PS_GET_EMU: where in BUF the work area goes
+
+;For the screen parameters
+
+CHGMOD		equ	005Fh	;BIOS: set up a screen mode
+EXTROM		equ	015Fh	;BIOS: call a SUB-ROM routine
+SDFSCR		equ	0185h	;SUB-ROM: set up the screen from the clock chip
+CLIKSW		equ	0F3DBh	;Key click (0 = off)
+FORCLR		equ	0F3E9h	;Foreground color, followed by BAKCLR, BDRCLR
+ATRBYT		equ	0F3F2h	;Attribute byte for graphics
+CS1200		equ	0F3FCh	;Cassette parameters for 1200 bauds (5 bytes)
+CS2400		equ	0F401h	;Cassette parameters for 2400 bauds (5 bytes)
+LOW_CAS		equ	0F406h	;Cassette parameters in use (5 bytes)
+NTMSXP		equ	0F417h	;Printer (0 = MSX printer)
+EXBRSA		equ	0FAF8h	;Slot of the SUB-ROM (0 = this is an MSX1)
+OLDSCR		equ	0FCB0h	;Last text screen mode
+RG9SAV		equ	0FFE8h	;Saved copy of VDP register 9
+RG18SAV		equ	0FFF1h	;Saved copy of VDP register 18
+CLOCK_ADDR	equ	0B4h	;Ports of the clock chip
+CLOCK_DATA	equ	0B5h
 
 
 ;=============================================================================
@@ -349,6 +371,365 @@ PS_EMU_SIG_END:
 PSGE_NONE:
 	xor	a
 PSGE_END:
+	ret
+
+
+;=============================================================================
+;
+;   PS_SCREEN: apply the screen parameters kept in the persistent storage.
+;
+;   This is called by the master kernel at the beginning of AUTODRV, once
+; its driver is initialized: from KINIT in MSX-DOS 2 mode, and from OLDDOS
+; when the system goes to MSX-DOS 1 mode (this is the only call when there
+; isn't enough memory for MSX-DOS 2). Nothing is done if the "0" key was
+; pressed at boot time.
+;
+;   On MSX2 and newer the parameters are written to block 2 of the clock
+; chip, where SET SCREEN, SET ADJUST and SET BEEP keep them, and the BIOS
+; does the rest: the SDFSCR and SETSCR routines of the SUB-ROM apply them
+; when BASIC or MSX-DOS starts (they are called by init.mac and by the
+; MSX-DOS 1 kernel), and BEEP reads its tone and volume from the clock
+; chip every time. Only the display adjust is applied here, since the BIOS
+; applies it only at power on.
+;
+;   On MSX1 there's no clock chip, so the parameters go straight to the
+; system variables, but the screen mode chosen by the BIOS is kept; the
+; adjust, the interlace mode and the beep don't apply.
+;
+;   Calling from KINIT happens before init.mac sets up the screen for BASIC
+; or MSX-DOS, but calling from OLDDOS happens after that: then the screen
+; is set up again (with SDFSCR or CHGMOD) if anything has changed.
+;
+; Corrupts: AF, BC, DE, HL, IX, IY, AF', BC', DE', HL'
+
+	PROC	PS_SCREEN
+
+	;Same work area as PS_GET_EMU, and for the same reasons
+
+	ld	hl,BUF+PSGE_CTX_OFFSET
+	call	PS_INIT_CTX
+	call	PS_SET_MASTER
+
+	ld	a,(BOOTKEYS##)
+	rrca
+	ret	c
+
+	call	PS_READ_DATA
+	ret	nz
+	call	PSS_GET_PARAMS
+	ret	z		;Not stored
+	call	PSS_CHECK
+	ret	nz		;Not valid
+
+	ld	a,(EXBRSA)
+	or	a
+	jr	z,PSS_MSX1
+
+	ld	a,(iy)		;Adjust, same format as VDP register 18
+	call	PSS_SET_R18
+	push	iy
+	pop	hl
+	call	PS_RTC_WRITE
+	jr	PSS_CHANGED
+
+PSS_MSX1:
+	call	PSS_TO_VARS
+PSS_CHANGED:
+	ret	z		;Nothing changed
+
+	ld	a,(DOS_VER##)
+	or	a
+	ret	nz		;Called from KINIT
+
+	;The stack can be short when booting straight in MSX-DOS 1 mode,
+	;so a temporary one is set up at the end of BUF: the work area
+	;isn't needed anymore, and the BIOS uses more stack than we do.
+
+	ld	hl,0
+	add	hl,sp
+	ld	sp,BUF+258
+	push	hl
+
+	ld	a,(EXBRSA)
+	or	a
+	jr	z,PSS_REINIT_MSX1
+	ld	ix,SDFSCR
+	call	EXTROM
+	jr	PSS_REINIT_END
+PSS_REINIT_MSX1:
+	ld	a,(SCRMOD)
+	call	CHGMOD
+PSS_REINIT_END:
+
+	pop	hl
+	ld	sp,hl
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; Screen parameters helpers.
+;
+;   The parameters are stored as registers 1 to 10 of block 2 of the clock
+; chip, two per byte, the odd register in the low nibble:
+;
+;   +0: low = adjust X, high = adjust Y (the two's complement of the values
+;       of SET ADJUST, this byte has the format of VDP register 18)
+;   +1: low = bit 0: screen mode (0 or 1), bit 1: interlace mode
+;       high = width, low nibble
+;   +2: low = width, high nibble; high = foreground color
+;   +3: low = background color; high = border color
+;   +4: low = bit 0: function keys shown, bit 1: key click,
+;             bit 2: non-MSX printer, bit 3: cassette at 2400 bauds
+;       high = beep: bits 3-2: tone - 1, bits 1-0: volume - 1
+;
+
+;Point IY to the screen parameters in the buffer.
+;Returns Z if they aren't stored. Corrupts AF, DE.
+
+PSS_GET_PARAMS:
+	call	PS_IY_BUF
+	ld	a,(iy+PSD_ITEMS)
+	ld	de,PSD_SCREEN
+	add	iy,de
+	and	1 SHL PSD_ITEM_SCREEN
+	ret
+
+;Get the width. Entry: IY = parameters.
+;Returns: A = Width, B = Maximum width for the screen mode (80 or 32),
+;         Cy = Screen mode. Corrupts C.
+
+PSS_WIDTH:
+	ld	a,(iy+2)
+	rlca
+	rlca
+	rlca
+	rlca
+	and	0F0h
+	ld	c,a
+	ld	a,(iy+1)
+	rrca
+	rrca
+	rrca
+	rrca
+	and	0Fh
+	or	c
+	ld	b,80
+	bit	0,(iy+1)
+	ret	z
+	ld	b,32
+	scf
+	ret
+
+;Check that the width is valid for the screen mode (1 to 80 or 1 to 32;
+;everything else, colors included, is always valid).
+;Entry: IY = parameters. Returns Z if valid. Corrupts AF, BC.
+
+PSS_CHECK:
+	call	PSS_WIDTH
+	or	a
+	jp	z,PS_RET_NZ
+	dec	a
+	cp	b
+	jp	nc,PS_RET_NZ
+	xor	a
+	ret
+
+;Set the parameters in the system variables of an MSX1 (the screen mode
+;is not changed). Entry: IY = parameters. Returns NZ if anything changed.
+;Corrupts AF, BC, DE, HL.
+
+PSS_TO_VARS:
+	ld	hl,CS1200	;Copy the cassette parameters
+	bit	3,(iy+4)
+	jr	z,PSS_TV_1200
+	ld	hl,CS2400
+PSS_TV_1200:
+	ld	de,LOW_CAS
+	ld	bc,5
+	ldir
+
+	ld	e,0		;Nothing changed yet
+
+	call	PSS_WIDTH
+	ld	hl,LINL32
+	ld	b,32
+	jr	c,PSS_TV_WIDTH
+	dec	hl		;LINL40
+	ld	b,40
+PSS_TV_WIDTH:
+	cp	b
+	jr	c,PSS_TV_WIDTH_OK
+	ld	a,b		;An MSX1 can't do more than 40 columns
+PSS_TV_WIDTH_OK:
+	call	PSS_STORE
+
+	ld	a,(iy+2)
+	call	PSS_HIGH
+	ld	hl,FORCLR
+	call	PSS_STORE
+	ld	(ATRBYT),a
+	ld	a,(iy+3)
+	and	0Fh
+	inc	hl		;BAKCLR
+	call	PSS_STORE
+	ld	a,(iy+3)
+	call	PSS_HIGH
+	inc	hl		;BDRCLR
+	call	PSS_STORE
+
+	ld	c,(iy+4)
+	ld	hl,CNSDFG
+	call	PSS_STORE_BIT
+	ld	hl,CLIKSW
+	call	PSS_STORE_BIT
+	ld	hl,NTMSXP
+	call	PSS_STORE_BIT
+
+	ld	a,e
+	or	a
+	ret
+
+;Store 0FFh at (HL) if bit 0 of C is set, 0 otherwise; then shift C right
+;and continue in PSS_STORE.
+
+PSS_STORE_BIT:
+	rr	c
+	sbc	a,a
+	;Continues in PSS_STORE
+
+;Store A at (HL) and set E to 1 if (HL) was different. Corrupts F.
+
+PSS_STORE:
+	cp	(hl)
+	ret	z
+	ld	(hl),a
+	ld	e,1
+	ret
+
+;A = high nibble of A
+
+PSS_HIGH:
+	rrca
+	rrca
+	rrca
+	rrca
+	and	0Fh
+	ret
+
+;Set VDP register 18 and its saved copy to A, with interrupts disabled
+;(if they were enabled on entry, they are enabled again). Corrupts AF, B.
+
+PSS_SET_R18:
+	ld	(RG18SAV),a
+	ld	b,a
+	ld	a,i		;P/V = IFF2
+	push	af
+	ld	a,b
+	di
+	out	(99h),a
+	ld	a,80h+18
+	out	(99h),a
+	pop	af
+	ret	po
+	ei
+	ret
+
+;Select block 2 of the clock chip, keeping the alarm and timer bits.
+;Returns A = Previous value of the mode register.
+
+PS_RTC_BLOCK2:
+	ld	a,13
+	out	(CLOCK_ADDR),a
+	in	a,(CLOCK_DATA)
+	and	0Fh
+	push	af
+	and	1100b
+	or	2
+	out	(CLOCK_DATA),a
+	pop	af
+	ret
+
+;Restore the mode register of the clock chip to A.
+
+PS_RTC_RESTORE:
+	push	af
+	ld	a,13
+	out	(CLOCK_ADDR),a
+	pop	af
+	out	(CLOCK_DATA),a
+	ret
+
+;Write the 5 bytes at HL to registers 1 to 10 of block 2 of the clock chip.
+;Returns NZ if any register had a different value. Corrupts AF, BC, DE, HL.
+
+PS_RTC_WRITE:
+	call	PS_RTC_BLOCK2
+	push	af
+	ld	bc,5*256+1	;B = Bytes, C = Register
+	ld	e,0		;Nothing changed yet
+PS_RTC_WRITE_L:
+	ld	d,(hl)
+	call	PS_RTC_WRITE_NIB
+	ld	a,d
+	call	PSS_HIGH
+	ld	d,a
+	call	PS_RTC_WRITE_NIB
+	inc	hl
+	djnz	PS_RTC_WRITE_L
+	pop	af
+	call	PS_RTC_RESTORE
+	ld	a,e
+	or	a
+	ret
+
+;Write the low nibble of D to register C and increase C,
+;set E to 1 if the register had a different value. Corrupts AF.
+
+PS_RTC_WRITE_NIB:
+	ld	a,c
+	out	(CLOCK_ADDR),a
+	inc	c
+	in	a,(CLOCK_DATA)
+	xor	d
+	and	0Fh
+	ret	z
+	ld	e,1
+	ld	a,d
+	and	0Fh
+	out	(CLOCK_DATA),a
+	ret
+
+;Read registers 1 to 10 of block 2 of the clock chip to 5 bytes at HL.
+;Corrupts AF, BC, DE, HL.
+
+PS_RTC_READ:
+	call	PS_RTC_BLOCK2
+	push	af
+	ld	bc,5*256+1	;B = Bytes, C = Register
+PS_RTC_READ_L:
+	call	PS_RTC_READ_NIB
+	ld	e,a
+	call	PS_RTC_READ_NIB
+	rlca
+	rlca
+	rlca
+	rlca
+	or	e
+	ld	(hl),a
+	inc	hl
+	djnz	PS_RTC_READ_L
+	pop	af
+	jr	PS_RTC_RESTORE
+
+;Read register C to A (low nibble only) and increase C.
+
+PS_RTC_READ_NIB:
+	ld	a,c
+	out	(CLOCK_ADDR),a
+	inc	c
+	in	a,(CLOCK_DATA)
+	and	0Fh
 	ret
 
 
@@ -2065,6 +2446,405 @@ PSCALL_CLOSE:
 
 ;-----------------------------------------------------------------------------
 ;
+; CALL SETSCREEN            - Show usage information
+; CALL SETSCREEN() or (0)   - Show the stored items
+; CALL SETSCREEN(<items>)   - Store the current values of the items
+; CALL SETSCREEN(-<items>)  - Remove the items
+;
+; <items> is a set of flags, same as PSD_ITEMS; only bit 0 (screen
+; parameters) exists for now.
+
+CSS_SHOW	equ	0	;Operations, in PSC_INV+1
+CSS_STORE	equ	1
+CSS_REMOVE	equ	2
+
+CSS_KNOWN	equ	1 SHL PSD_ITEM_SCREEN
+
+	PROC	CSETSCREEN
+	ld	de,SETSCREEN_HELP
+	call	GET_PARENT_OR_HELP6##
+
+	dec	hl
+	ld	ix,CHRGTR
+	call	BASIC_ROUT6##
+	cp	")"
+	jr	nz,CSS_VALUE
+	inc	hl
+	ld	de,0
+	jr	CSS_GO
+CSS_VALUE:
+	ld	ix,FRMQNT
+	call	BASIC_ROUT6##		;DE = Value
+	push	de
+	ld	a,")"
+	call	SYNCHR6##
+	pop	de
+CSS_GO:
+
+	;Get the operation in D and the items in E
+
+	ld	a,e
+	or	d
+	jr	z,CSS_OP_OK		;0: show
+	ld	a,d
+	or	a
+	ld	d,CSS_STORE
+	jr	z,CSS_OP_ITEMS
+	inc	a
+	jr	nz,CSS_BAD_VALUE	;Above 255 or below -255
+	ld	a,e
+	neg
+	jr	z,CSS_BAD_VALUE		;-256
+	ld	e,a
+	ld	d,CSS_REMOVE
+CSS_OP_ITEMS:
+	ld	a,e
+	and	NOT CSS_KNOWN
+	jr	z,CSS_OP_OK
+CSS_BAD_VALUE:
+	ld	e,5			;"Illegal function call"
+	jp	BASIC_ERR6##
+CSS_OP_OK:
+
+	call	PSCALL_OPEN		;D and E go to PSC_INV
+	jp	c,PSCALL_CLOSE
+
+	ld	a,(ix+PSC_INV+1)
+	cp	CSS_STORE
+	jp	z,CSS_DO_STORE
+	jp	nc,CSS_DO_REMOVE
+
+	;--- Show the stored items
+
+	ld	hl,PSTOR_FILE_S
+	call	PS_PRINT
+	ld	a,(ix+PSC_DEV)
+	call	PRDEC6##
+	ld	hl,PS_CRLF_S
+	call	PS_PRINT
+
+	ld	hl,SCR_NONE_S
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	jp	z,CSS_SHOW_END
+	call	PSS_GET_PARAMS
+	jp	z,CSS_SHOW_END
+
+	ld	hl,SCR_MODE_S		;SCREEN
+	call	PS_PRINT
+	ld	a,(iy+1)
+	and	1
+	call	PRDEC6##
+	ld	hl,SCR_INTER_S		;Interlace
+	call	PS_PRINT
+	bit	1,(iy+1)
+	call	PSS_PRINT_ONOFF
+
+	ld	hl,SCR_WIDTH_S		;WIDTH
+	call	PS_PRINT
+	call	PSS_WIDTH
+	call	PRDEC6##
+
+	ld	hl,SCR_COLOR_S		;COLOR
+	call	PS_PRINT
+	ld	a,(iy+2)
+	call	PSS_HIGH
+	call	PRDEC6##
+	call	PSS_PRINT_COMMA
+	ld	a,(iy+3)
+	and	0Fh
+	call	PRDEC6##
+	call	PSS_PRINT_COMMA
+	ld	a,(iy+3)
+	call	PSS_HIGH
+	call	PRDEC6##
+
+	ld	hl,SCR_KEY_S		;KEY
+	call	PS_PRINT
+	bit	0,(iy+4)
+	call	PSS_PRINT_ONOFF
+	ld	hl,SCR_CLICK_S		;Key click
+	call	PS_PRINT
+	bit	1,(iy+4)
+	call	PSS_PRINT_ONOFF
+
+	ld	hl,SCR_PRINTER_S	;Printer
+	call	PS_PRINT
+	ld	hl,SCR_NONMSX_S
+	bit	2,(iy+4)
+	call	nz,PS_PRINT
+	ld	hl,SCR_MSX_S
+	call	PS_PRINT
+	ld	hl,SCR_CAS_S		;Cassette
+	call	PS_PRINT
+	ld	hl,SCR_1200_S
+	bit	3,(iy+4)
+	jr	z,CSS_SHOW_1200
+	ld	hl,SCR_2400_S
+CSS_SHOW_1200:
+	call	PS_PRINT
+
+	ld	hl,SCR_ADJUST_S		;SET ADJUST
+	call	PS_PRINT
+	ld	a,(iy)
+	call	PSS_PRINT_ADJUST
+	call	PSS_PRINT_COMMA
+	ld	a,(iy)
+	call	PSS_HIGH
+	call	PSS_PRINT_ADJUST
+	ld	a,")"
+	rst	18h
+
+	ld	hl,SCR_BEEP_S		;SET BEEP
+	call	PS_PRINT
+	ld	a,(iy+4)
+	rrca
+	rrca
+	call	PSS_HIGH
+	and	3
+	inc	a
+	call	PRDEC6##
+	call	PSS_PRINT_COMMA
+	ld	a,(iy+4)
+	call	PSS_HIGH
+	and	3
+	inc	a
+	call	PRDEC6##
+
+	ld	hl,PS_CRLF_S
+CSS_SHOW_END:
+	call	PS_PRINT
+	jp	PSCALL_CLOSE
+
+	;--- Store the current values
+
+CSS_DO_STORE:
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	call	z,PS_INIT_DATA
+	call	PSS_GET_PARAMS
+	set	PSD_ITEM_SCREEN,(iy-PSD_SCREEN+PSD_ITEMS)
+	call	PSS_FROM_VARS
+	call	PSCALL_SAVE
+
+	ld	a,(EXBRSA)		;Update the clock chip too, since
+	or	a			;that's where the BIOS takes
+	jp	z,PSCALL_CLOSE		;the parameters from
+	call	PSS_GET_PARAMS
+	push	iy
+	pop	hl
+	call	PS_RTC_WRITE
+	jp	PSCALL_CLOSE
+
+	;--- Remove the stored items
+
+CSS_DO_REMOVE:
+	bit	PSF_VALID,(ix+PSC_FLAGS)
+	jp	z,PSCALL_CLOSE
+	call	PSS_GET_PARAMS
+	jp	z,PSCALL_CLOSE
+	res	PSD_ITEM_SCREEN,(iy-PSD_SCREEN+PSD_ITEMS)
+	xor	a
+	ld	(iy),a
+	ld	(iy+1),a
+	ld	(iy+2),a
+	ld	(iy+3),a
+	ld	(iy+4),a
+PSCALL_SAVE_CLOSE:
+	call	PSCALL_SAVE
+	jp	PSCALL_CLOSE
+
+;Print ON if NZ, OFF if Z. Corrupts AF, HL.
+
+PSS_PRINT_ONOFF:
+	ld	hl,SCR_ON_S
+	jr	nz,PSS_PRINT_ONOFF_2
+	ld	hl,SCR_OFF_S
+PSS_PRINT_ONOFF_2:
+	jp	PS_PRINT
+
+;Print a comma. Corrupts AF.
+
+PSS_PRINT_COMMA:
+	ld	a,","
+	rst	18h
+	ret
+
+;Print the value of SET ADJUST for the low nibble of A,
+;which is its two's complement (-7 to 8). Corrupts AF, BC, DE.
+
+PSS_PRINT_ADJUST:
+	and	0Fh
+	neg
+	and	0Fh
+	cp	9
+	jr	c,PSS_PRINT_ADJ_POS	;0 to 8
+	neg				;-7 to -1
+	and	0Fh
+	push	af
+	ld	a,"-"
+	rst	18h
+	pop	af
+PSS_PRINT_ADJ_POS:
+	jp	PRDEC6##
+
+;Put the current screen parameters in the buffer (IY = parameters),
+;same as SET SCREEN does, plus the adjust and the beep: from the clock chip
+;on MSX2 and newer, or the default values on MSX1. Corrupts AF, BC, DE, HL.
+
+PSS_FROM_VARS:
+	ld	(iy),0			;MSX1: adjust 0,0
+	ld	(iy+4),10h		;and beep 1,2
+	ld	a,(EXBRSA)
+	or	a
+	jr	z,PSS_FV_MSX1
+	push	iy
+	pop	hl
+	call	PS_RTC_READ
+PSS_FV_MSX1:
+
+	;The screen mode is the last text mode,
+	;if we are in a graphic mode now
+
+	ld	a,(SCRMOD)
+	cp	2
+	jr	c,PSS_FV_MODE
+	ld	a,(OLDSCR)
+PSS_FV_MODE:
+	and	1
+	ld	c,a
+	ld	hl,LINL40
+	jr	z,PSS_FV_MODE0
+	inc	hl			;LINL32
+PSS_FV_MODE0:
+	ld	b,(hl)			;B = Width
+
+	ld	a,(EXBRSA)
+	or	a
+	jr	z,PSS_FV_NO_INTER
+	ld	a,(RG9SAV)		;Interlace mode: bit 3 of VDP register 9
+	and	1000b
+	rrca
+	rrca
+	or	c
+	ld	c,a
+PSS_FV_NO_INTER:
+
+	ld	a,b
+	rlca
+	rlca
+	rlca
+	rlca
+	ld	d,a			;D = Width with the nibbles swapped
+	and	0F0h
+	or	c
+	ld	(iy+1),a		;Mode, interlace, width low
+
+	ld	a,(FORCLR)
+	rlca
+	rlca
+	rlca
+	rlca
+	and	0F0h
+	ld	c,a
+	ld	a,d
+	and	0Fh
+	or	c
+	ld	(iy+2),a		;Width high, foreground
+
+	ld	a,(FORCLR+2)		;BDRCLR
+	rlca
+	rlca
+	rlca
+	rlca
+	and	0F0h
+	ld	c,a
+	ld	a,(FORCLR+1)		;BAKCLR
+	and	0Fh
+	or	c
+	ld	(iy+3),a		;Background, border
+
+	ld	a,(LOW_CAS)		;Cassette speed
+	ld	hl,CS2400
+	cp	(hl)
+	ld	c,0
+	jr	nz,PSS_FV_1200
+	inc	c
+PSS_FV_1200:
+	ld	hl,NTMSXP		;Printer, key click, keys shown
+	call	PSS_FV_FLAG
+	ld	hl,CLIKSW
+	call	PSS_FV_FLAG
+	ld	hl,CNSDFG
+	call	PSS_FV_FLAG
+
+	ld	a,(iy+4)
+	and	0F0h
+	or	c
+	ld	(iy+4),a
+	ret
+
+;Shift C left and set its bit 0 if (HL) is not zero. Corrupts AF.
+
+PSS_FV_FLAG:
+	ld	a,(hl)
+	or	a
+	jr	z,PSS_FV_FLAG_2
+	scf
+PSS_FV_FLAG_2:
+	rl	c
+	ret
+
+SETSCREEN_HELP:
+	db	"SETSCREEN([<items>])",13,10
+	db	13,10
+	db	"Keep the screen parameters in the",1
+	db	"persistent storage.",13,10
+	db	"They are applied at boot time.",13,10
+	db	13,10
+	db	"1: store the current parameters,",1
+	db	"as SET SCREEN, SET ADJUST, SET BEEP.",13,10
+	db	"-1: remove the stored parameters.",13,10
+	db	"0 or nothing: show what's stored.",13,10
+	db	0
+
+SCR_NONE_S:
+	db	"Screen parameters: not stored",13,10,0
+SCR_MODE_S:
+	db	"Screen parameters:",13,10
+	db	"  SCREEN ",0
+SCR_INTER_S:
+	db	", interlace ",0
+SCR_WIDTH_S:
+	db	13,10,"  WIDTH ",0
+SCR_COLOR_S:
+	db	13,10,"  COLOR ",0
+SCR_KEY_S:
+	db	13,10,"  KEY ",0
+SCR_CLICK_S:
+	db	", key click ",0
+SCR_PRINTER_S:
+	db	13,10,"  Printer: ",0
+SCR_NONMSX_S:
+	db	"non-",0
+SCR_MSX_S:
+	db	"MSX",0
+SCR_CAS_S:
+	db	13,10,"  Cassette: ",0
+SCR_1200_S:
+	db	"1200 bauds",0
+SCR_2400_S:
+	db	"2400 bauds",0
+SCR_ADJUST_S:
+	db	13,10,"  SET ADJUST (",0
+SCR_BEEP_S:
+	db	13,10,"  SET BEEP ",0
+SCR_ON_S:
+	db	"ON",0
+SCR_OFF_S:
+	db	"OFF",0
+
+
+;-----------------------------------------------------------------------------
+;
 ; CALL_EXTRA: execute a CALL command implemented in this bank, in DOS 1 mode.
 ;
 ;   The MSX-DOS 1 kernel has its own table of CALL commands, and no room
@@ -2081,6 +2861,11 @@ PSCALL_CLOSE:
 	call	PS_COMPARE
 	jr	z,CALL_EXTRA_BK
 	ld	hl,PROCNM
+	ld	de,SETSCREEN_NAME
+	ld	b,SETSCREEN_NAME_END-SETSCREEN_NAME
+	call	PS_COMPARE
+	jr	z,CALL_EXTRA_SS
+	ld	hl,PROCNM
 	ld	de,EMUKILL_NAME
 	ld	b,EMUKILL_NAME_END-EMUKILL_NAME
 	call	PS_COMPARE
@@ -2095,6 +2880,11 @@ CALL_EXTRA_BK:
 	call	?CBOOTKEYS
 	or	a
 	ret
+CALL_EXTRA_SS:
+	pop	hl
+	call	?CSETSCREEN
+	or	a
+	ret
 
 BOOTKEYS_NAME:
 	db	"BOOTKEYS",0
@@ -2102,6 +2892,9 @@ BOOTKEYS_NAME_END:
 EMUKILL_NAME:
 	db	"EMUKILL",0
 EMUKILL_NAME_END:
+SETSCREEN_NAME:
+	db	"SETSCREEN",0
+SETSCREEN_NAME_END:
 
 ;-----------------------------------------------------------------------------
 ;
@@ -2263,6 +3056,8 @@ PS_FRESH_DATA:
 	db	PSD_FORMAT_VERSION
 	dw	0FFFFh			;Inverters not configured
 	db	0,0,0,0,0,0		;No emulation pointer
+	db	0			;No items
+	db	0,0,0,0,0		;Screen parameters
 	db	0			;Checksum
 PS_FRESH_DATA_END:
 

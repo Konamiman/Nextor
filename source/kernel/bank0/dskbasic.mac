@@ -480,6 +480,8 @@ COMMAND:
 	defw	CBOOTKEYS## or 8000h
 	defb	'EMUKILL',0
 	defw	CEMUKILL## or 8000h
+	defb	'SETSCREEN',0
+	defw	CSETSCREEN## or 8000h
 ;
 	defb	0		;end of table
 

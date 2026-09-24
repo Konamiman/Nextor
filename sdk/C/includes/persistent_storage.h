@@ -59,7 +59,12 @@ typedef struct {
 #define PSD_EMU_SECTOR  13 /* Persistent disk emulation: absolute sector
                               number (4 bytes) */
 #define PSD_EMU_FLAGS   17 /* Persistent disk emulation: flags */
-#define PSD_MIN_SIZE    19 /* Size of the data in format version 1 */
+#define PSD_ITEMS       18 /* Items stored, see PSD_ITEM_* below */
+#define PSD_SCREEN      19 /* Screen parameters (5 bytes): registers 1 to 10
+                              of block 2 of the clock chip, two per byte,
+                              the odd one in the low nibble (only if
+                              PSD_ITEM_SCREEN is set) */
+#define PSD_MIN_SIZE    25 /* Size of the data in format version 1 */
 #define PSD_MAX_SIZE   512 /* The data must always fit in one sector */
 
 #define PSD_FORMAT_VERSION 1 /* Current value of the PSD_VERSION field */
@@ -70,8 +75,13 @@ typedef struct {
 #define PSD_KEYSM_LOW  0x7E
 #define PSD_KEYSM_HIGH 0x30
 
+/* Bits of PSD_ITEMS: which of the optional items hold valid data.
+   They are the same as the bits of the parameter of CALL SETSCREEN. */
+
+#define PSD_ITEM_SCREEN 0x01 /* Screen parameters, at PSD_SCREEN */
+
 /* A valid, empty set of data: signature, size, version, no inverters,
-   no emulation pointer, and the checksum that makes the sum zero.
+   no emulation pointer, no items, and the checksum that makes the sum zero.
    Use it to initialize a byte array of PSD_MIN_SIZE elements. */
 
 #define PSD_FRESH_DATA { \
@@ -80,7 +90,9 @@ typedef struct {
     PSD_FORMAT_VERSION, \
     0xFF, 0xFF, \
     0, 0, 0, 0, 0, 0, \
-    0x0E }
+    0, \
+    0, 0, 0, 0, 0, \
+    0x08 }
 
 /* Routines in sdk/C/code/persistent_storage.c. None of them terminates
    the program nor prints anything: they return the error code of the
