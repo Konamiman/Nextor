@@ -1,1 +1,1 @@
-    DEFB "3.0 beta 1"
+    DEFB "3.0 beta 2"
