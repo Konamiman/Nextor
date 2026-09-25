@@ -73,6 +73,7 @@ name	 equ	 (value)
 
 EF_FORCE_CTRL	equ	3	;Disable the ghost floppy drive
 EF_FORCE_SHIFT	equ	4	;Disable the MSX-DOS kernels
+EF_FORCE_7	equ	6	;Disable the built-in firmware
 
 ;Offsets in a FAT boot sector
 
@@ -181,7 +182,7 @@ CLOCK_DATA	equ	0B5h
 ;     set are inverted. The inverters come from the persistent storage if
 ;     they are configured there, otherwise from the ROM.
 ;   - If a pointer for disk emulation mode is in place, its flags byte can
-;     force CTRL and/or SHIFT. The pointer is the one in RAM for one-time
+;     force CTRL, SHIFT and/or "7". The pointer is the one in RAM for one-time
 ;     emulation or else the one in the persistent storage.
 ;   - The persistent storage isn't read at all if the "0" key is pressed.
 ;
@@ -264,13 +265,13 @@ PSB_GOT_EMUP:
 
 	ld	hl,BOOTKEYS##
 	ld	a,(ix+PSC_INV)
-	and	01111110b
+	and	PSD_KEYSM_LOW
 	xor	(hl)
 	ld	(hl),a
 
 	ld	hl,BOOTKEYS##+4
 	ld	a,(ix+PSC_INV+1)
-	and	00110000b
+	and	PSD_KEYSM_HIGH
 	xor	(hl)
 	ld	(hl),a
 PSB_INV_DONE:
@@ -296,7 +297,7 @@ PSB_STOR_PTR:
 	jr	z,PSB_END
 	ld	a,e
 
-	;--- Force CTRL and SHIFT as requested by the flags
+	;--- Force CTRL, SHIFT and "7" as requested by the flags
 
 PSB_GOT_FLAGS:
 	ld	c,0
@@ -308,10 +309,15 @@ PSB_NO_CTRL:
 	jr	z,PSB_NO_SHIFT
 	set	4,c
 PSB_NO_SHIFT:
+	ld	b,a
 	ld	hl,BOOTKEYS##+4
 	ld	a,(hl)
 	or	c
 	ld	(hl),a
+	bit	EF_FORCE_7,b
+	jr	z,PSB_END
+	ld	hl,BOOTKEYS##
+	set	7,(hl)
 
 PSB_END:
 	ld	hl,PSC_LENGTH+512
@@ -2347,7 +2353,7 @@ CBK_SHOW:
 	or	e
 	jr	z,CBK_SHOW_END
 
-	ld	bc,6*256+"1"
+	ld	bc,7*256+"1"
 CBK_SHOW_NUM:
 	srl	e
 	bit	0,e
@@ -2376,9 +2382,9 @@ BOOTKEYS_HELP:
 	db	"Set the boot keys whose meaning is",1
 	db	"inverted, in the persistent storage.",13,10
 	db	13,10
-	db	"<keys>: sum of 2 4 8 16 32 64 for",1
-	db	"the keys 1 to 6, &H1000 for SHIFT,",1
-	db	"&H2000 for CTRL.",13,10
+	db	"<keys>: sum of 2 4 8 16 32 64 128 for",1
+	db	"the keys 1 to 7,",13,10
+	db	"&H1000 for SHIFT, &H2000 for CTRL.",13,10
 	db	"-1: not set, use the ones in the ROM.",13,10
 	db	"-2 or nothing: show the current state.",13,10
 	db	0

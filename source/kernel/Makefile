@@ -207,8 +207,8 @@ nextor_base.dat: \
 
 SDK_COMRELS = dos_calls.rel dos_errors.rel dos_file_handles.rel
 COMRELS = $(SDK_COMRELS) kvar.rel data.rel chgbnk.rel
-B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
-B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel)
+B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
+B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel skipfirm.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
@@ -248,7 +248,7 @@ bank6/jump.rel: bank6/jtable.inc
 # every file that references the version. The generic rule above only tracks
 # macros.inc/const.inc/condasm.inc, so declare these here or a version bump
 # wouldn't force a rebuild.
-bank0/init.rel: version.inc
+bank0/init.rel: version.inc bank0/alloc.inc
 bank2/misc.rel: version.inc
 bank4/bootmenu.rel: version.inc
 bank4/partit.rel: version.inc
@@ -276,14 +276,14 @@ bank0/B0.BIN bank0/B0.SYM &: \
 
 	$(call print_linking,"bank 0")
 	@$(LK80) --working-dir bank0 --symbols-file B0.SYM --output-file B0.BIN \
-			--code 4000h ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel ../rel.rel doshead.rel 40ff.rel b0.rel init.rel alloc.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel \
+			--code 4000h ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel ../rel.rel doshead.rel 40ff.rel b0.rel init.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel \
 			--code 7700h ../drv.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank0/b0labels.inc: \
 	bank0/B0.SYM
 
-	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT|R_DSK[^[:space:]]+|R_GETDPB|R_CHOICE)
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0labels.inc,[?][^[:space:]]+|DOSV0|GETERR|BDOSE|KDERR|KABR|C4PBK|PROMPT|R_DSK[^[:space:]]+|R_GETDPB|R_CHOICE|ALLOC)
 
 bank0/b0lab_b3.inc: \
 	bank0/B0.SYM
@@ -310,13 +310,12 @@ bank1/B1.BIN: \
 	$(B1RELS) \
 	bank1/msg.rel \
 	bank1/b1.rel \
-	bank0/alloc.rel \
 	bank4/bootmenu.rel \
 	bank0/b0labels.inc
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank0/alloc.rel ../bank4/bootmenu.rel msg.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 

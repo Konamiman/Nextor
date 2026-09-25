@@ -1137,7 +1137,7 @@ The one-time boot keys mechanism (see _[2.10.2. One-time boot keys](Nextor_3.0_U
 | A114h   | V | U | T | S | R | Q | P | O |
 | A115h   |   |   |CTRL|SHFT| Z | Y | X | W |
 
-Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 7 to 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
+Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 8 and 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
 
 ### 7.2. Disk emulation mode
 
@@ -1196,7 +1196,7 @@ Also worth noting: Nextor will check that the emulation data actually starts wit
 
 #### 7.2.3. Emulation flags
 
-The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 CPU mode right after entering disk emulation mode and before the emulated disk is loaded, and to force the state of the CTRL and SHIFT boot keys. The byte has the same format in the three places where it exists: the emulation data file header, the one-time emulation data in RAM, and the emulation data pointer in the persistent storage.
+The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 CPU mode right after entering disk emulation mode and before the emulated disk is loaded, and to force the state of the CTRL, SHIFT and 7 boot keys. The byte has the same format in the three places where it exists: the emulation data file header, the one-time emulation data in RAM, and the emulation data pointer in the persistent storage.
 
 | Bit | Meaning |
 |:---:|---------|
@@ -1206,15 +1206,16 @@ The emulation flags byte tells Nextor to force a VDP frequency and/or the R800 C
 |  3  | Disable the ghost floppy disk drive: force the CTRL boot key |
 |  4  | Disable the MSX-DOS kernels: force the SHIFT boot key |
 |  5  | Boot the emulation in R800 mode on a turbo R |
-| 6-7 | Reserved, must be zero |
+|  6  | Disable the built-in software of the computer: force the 7 boot key |
+|  7  | Reserved, must be zero |
 
 Bits 1 and 2 must not be both set; if they are, Nextor currently forces 50Hz, but this shouldn't be relied upon.
 
-The kernel reads the flags **only from the emulation data pointer** (the one in RAM for one-time emulation, or the one in the persistent storage for persistent emulation), never from the emulation data file header. `EMUFILE.COM` is responsible for putting the effective values into the pointer: when it sets up an emulation session it combines the flags stored in the data file header with the options requested in its command line (`-5`/`-6`/`-8`/`-c`/`-s`), and writes the result to the pointer. The header flags are thus a stored default that `EMUFILE.COM` reads, not something the kernel reads directly. The `-x` option of `EMUFILE.COM` tells it to ignore the stored flags and use only the ones from the command line.
+The kernel reads the flags **only from the emulation data pointer** (the one in RAM for one-time emulation, or the one in the persistent storage for persistent emulation), never from the emulation data file header. `EMUFILE.COM` is responsible for putting the effective values into the pointer: when it sets up an emulation session it combines the flags stored in the data file header with the options requested in its command line (`-5`/`-6`/`-8`/`-c`/`-s`/`-f`), and writes the result to the pointer. The header flags are thus a stored default that `EMUFILE.COM` reads, not something the kernel reads directly. The `-x` option of `EMUFILE.COM` tells it to ignore the stored flags and use only the ones from the command line.
 
-Bits 3 and 4 exist to save memory in the emulation session: disabling the ghost floppy disk drive (bit 3) and/or the MSX-DOS kernels (bit 4) saves, for each, the 1.5 KB that are allocated in RAM for a drive's FAT copy in MSX-DOS 1 mode. These must take effect before the drives are set up, which is much earlier than the moment when the emulation is entered. So at the very beginning of the boot process, when the state of the boot keys is calculated, Nextor looks for the emulation data pointer that is going to be used (the one in RAM, else the one in the persistent storage) and if one of these bits is set in its flags, the corresponding boot key is handled as pressed. The keys are only ever forced to "pressed": a flag that is not set has no effect, whatever the state of the key is otherwise (after applying the boot key inverters, or as set in the one-time boot keys). The user can still change the state of these keys in the boot menu.
+Bits 3 and 4 exist to save memory in the emulation session: disabling the ghost floppy disk drive (bit 3) and/or the MSX-DOS kernels (bit 4) saves, for each, the 1.5 KB that are allocated in RAM for a drive's FAT copy in MSX-DOS 1 mode. These must take effect before the drives are set up, which is much earlier than the moment when the emulation is entered. So at the very beginning of the boot process, when the state of the boot keys is calculated, Nextor looks for the emulation data pointer that is going to be used (the one in RAM, else the one in the persistent storage) and if one of these bits is set in its flags, the corresponding boot key is handled as pressed. Bit 6 is handled in the same way: the 7 key is handled as pressed, so that the built-in software of the computers that have it is disabled before it can interfere with the boot process (see the 7 key in _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the user manual). The keys are only ever forced to "pressed": a flag that is not set has no effect, whatever the state of the key is otherwise (after applying the boot key inverters, or as set in the one-time boot keys). The user can still change the state of these keys in the boot menu.
 
-For the persistent variant this requires that the driver of the primary controller allows the persistent storage to be read before the driver is initialized; otherwise bits 3 and 4 have no effect for that variant (see ["Supporting the persistent storage" in the Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage)). Also, if the emulation data pointer turns out not to point to an actual emulation data file, the computer boots normally but with the keys forced anyway.
+For the persistent variant this requires that the driver of the primary controller allows the persistent storage to be read before the driver is initialized; otherwise bits 3, 4 and 6 have no effect for that variant (see ["Supporting the persistent storage" in the Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md#472-supporting-the-persistent-storage)). Also, if the emulation data pointer turns out not to point to an actual emulation data file, the computer boots normally but with the keys forced anyway.
 
 As explained in the previous section, the one-time emulation data in RAM takes precedence over the pointer in the persistent storage.
 
@@ -1242,7 +1243,7 @@ The data stored by Nextor is at the very beginning of the storage, and it has th
 |   +0   |  7   | Signature string `NEXTOR`, zero terminated |
 |   +7   |  2   | Size of the data in bytes, including the signature and the checksum (little endian) |
 |   +9   |  1   | Version of the data format, currently 1 |
-|  +10   |  2   | Boot key inverters, FFFFh if not set. First byte: bits 1 to 6 for the keys 1 to 6. Second byte: bit 4 for SHIFT, bit 5 for CTRL. This is the same format of the two boot key inverter bytes of the kernel ROM. |
+|  +10   |  2   | Boot key inverters, FFFFh if not set. First byte: bits 1 to 7 for the keys 1 to 7. Second byte: bit 4 for SHIFT, bit 5 for CTRL. This is the same format of the two boot key inverter bytes of the kernel ROM. |
 |  +12   |  1   | Persistent disk emulation: number of the device that contains the emulation data, 0 or FFh if persistent emulation is not set |
 |  +13   |  4   | Persistent disk emulation: absolute device sector number that contains the emulation data (little endian) |
 |  +17   |  1   | Persistent disk emulation: emulation flags, see _[7.2.3. Emulation flags](#723-emulation-flags)_ |

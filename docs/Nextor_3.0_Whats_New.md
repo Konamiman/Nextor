@@ -34,6 +34,8 @@
 
 [2.14. The persistent storage: boot keys and persistent disk emulation](#214-the-persistent-storage-boot-keys-and-persistent-disk-emulation)
 
+[2.15. Built-in software that interferes with the boot can be disabled](#215-built-in-software-that-interferes-with-the-boot-can-be-disabled)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -146,7 +148,7 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * The `NEXBOOT` tool gains the `/p`, `/k` and `/i` options, which store, remove and show the inverted boot keys kept in the persistent storage, as an alternative to `CALL BOOTKEYS`. Unlike the rest of the tool they don't reset the computer.
 
-* The `EMUFILE` tool gains the `-8` option, which boots the emulation session in R800-ROM mode on an MSX turbo R (like `-5`/`-6`, it can be stored in the data file and works for both the one-time and persistent variants), and the `-x` option for the `set` syntax, which makes the tool ignore all the flags stored in the emulation data file and apply only the ones given in the command line. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
+* The `EMUFILE` tool gains the `-8` option, which boots the emulation session in R800-ROM mode on an MSX turbo R (like `-5`/`-6`, it can be stored in the data file and works for both the one-time and persistent variants), the `-f` option, which disables the built-in software of the computer as the new 7 boot key does (see _[2.15. Built-in software that interferes with the boot can be disabled](#215-built-in-software-that-interferes-with-the-boot-can-be-disabled)_), and the `-x` option for the `set` syntax, which makes the tool ignore all the flags stored in the emulation data file and apply only the ones given in the command line. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
 
 ### 2.12. The new COMMAND3.COM command interpreter
 
@@ -182,13 +184,17 @@ The line editor built into the kernel (the one behind the `_BUFIN` function call
 
 Nextor 3 introduces the _persistent storage_: a small non-volatile data area, provided by the primary Nextor controller, where Nextor keeps the settings that it needs to know at the very beginning of the boot process. It's a small hidden file (`_NEXTOR.PSF`) in the first partition of the first storage device of the primary controller, so the settings belong to the medium rather than to the computer; see _[2.18. The persistent storage](Nextor_3.0_User_Manual.md#218-the-persistent-storage)_ in the user manual. Three things are kept there:
 
-* **The boot key inverters.** In Nextor 2 the only way to have a boot key inverted (for example, having the MSX-DOS kernels disabled unless SHIFT is pressed) was to modify the kernel ROM before flashing it. Now [the `CALL BOOTKEYS` command](Nextor_3.0_User_Manual.md#3616-the-call-bootkeys-command) does it, for any of the keys 1 to 6, CTRL and SHIFT. Inverting a key in the ROM itself is still possible with the `/k` option of `mknexrom`.
+* **The boot key inverters.** In Nextor 2 the only way to have a boot key inverted (for example, having the MSX-DOS kernels disabled unless SHIFT is pressed) was to modify the kernel ROM before flashing it. Now [the `CALL BOOTKEYS` command](Nextor_3.0_User_Manual.md#3616-the-call-bootkeys-command) does it, for any of the keys 1 to 7, CTRL and SHIFT. Inverting a key in the ROM itself is still possible with the `/k` option of `mknexrom`.
 
 * **The pointer for the persistent disk emulation mode.** **This is a breaking change:** in Nextor 2 the pointer was kept in the partition table of a device, and Nextor 3 neither reads nor modifies that. If you have the persistent disk emulation mode set up with Nextor 2, disable it (by booting with the 0 key pressed) before upgrading, and set it up again with the new `EMUFILE.COM` afterwards; if you don't, nothing bad will happen, the computer will just boot normally. On the other hand, the `-c` and `-s` options of `EMUFILE.COM` now work for the persistent variant too.
 
 * **The screen parameters.** MSX2 and newer computers keep the parameters set with `SET SCREEN`, `SET ADJUST` and `SET BEEP` in the clock chip, and they are lost at every power off when its battery is dead, which is common nowadays. [The new `CALL SETSCREEN` command](Nextor_3.0_User_Manual.md#3618-the-call-setscreen-command) stores them in the persistent storage, and Nextor applies them at boot time (taking precedence over the ones in the clock chip). It works on MSX1 computers too, where it's the only way to have these parameters remembered at all (except the screen mode).
 
 The meaning of the 0 boot key changes accordingly: it no longer removes the persistent disk emulation mode, instead it makes Nextor ignore the persistent storage completely for that boot (so the boot keys set with `CALL BOOTKEYS` are not inverted, the disk emulation mode is not entered, and the screen parameters stored with `CALL SETSCREEN` are not applied). To remove the persistent disk emulation mode use `EMUFILE k` or [the `CALL EMUKILL` command](Nextor_3.0_User_Manual.md#3617-the-call-emukill-command).
+
+### 2.15. Built-in software that interferes with the boot can be disabled
+
+Some computers have proprietary built-in software (such as the HiTBiT menu of many Sony models, or the built-in word processors of the Panasonic FS-A1 series) that is started at boot time and interferes with Nextor: it forces MSX-DOS 1 mode, or makes the computer reset or hang, and many of these models offer no way to bypass it. A new boot key, 7, makes Nextor recognize these computers and neutralize their built-in software so that it boots normally; it has no effect on other computers. Like the other boot keys, it can be selected in the boot menu, set via the one-time boot keys mechanism, and inverted with `mknexrom /k:0080` or via the persistent storage (so that the built-in software is disabled unless the key is pressed); and the new `-f` option of `EMUFILE` forces it for a disk emulation session. See _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the user manual for the list of recognized models.
 
 ## 3. Information for application developers
 
@@ -235,7 +241,7 @@ Additionally, a Docker image for Nextor development, with the required assembler
 
 ### 3.6. Disk emulation mode: emulation flags
 
-The disk emulation data file header, the one-time emulation data in RAM and the emulation data pointer for persistent emulation (now in the persistent storage) have an emulation flags byte. Its bits 1 and 2 force the screen to 50Hz or 60Hz right after entering disk emulation mode, bit 5 boots a turbo R in R800-ROM mode, and bits 3 and 4 force the CTRL and SHIFT boot keys as pressed; the kernel reads these bits only from the emulation data pointer, and `EMUFILE.COM` combines the ones in the data file header with its command line options to build it. In Nextor 2 that byte was the logical unit number, so bit 0 is ignored. See _[7.2.3. Emulation flags](Nextor_3.0_Programmers_Reference.md#723-emulation-flags)_ in the programmers reference.
+The disk emulation data file header, the one-time emulation data in RAM and the emulation data pointer for persistent emulation (now in the persistent storage) have an emulation flags byte. Its bits 1 and 2 force the screen to 50Hz or 60Hz right after entering disk emulation mode, bit 5 boots a turbo R in R800-ROM mode, and bits 3, 4 and 6 force the CTRL, SHIFT and 7 boot keys as pressed; the kernel reads these bits only from the emulation data pointer, and `EMUFILE.COM` combines the ones in the data file header with its command line options to build it. In Nextor 2 that byte was the logical unit number, so bit 0 is ignored. See _[7.2.3. Emulation flags](Nextor_3.0_Programmers_Reference.md#723-emulation-flags)_ in the programmers reference.
 
 ### 3.7. The persistent storage and the _PSOPS function call
 

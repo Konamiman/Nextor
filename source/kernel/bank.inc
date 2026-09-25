@@ -105,7 +105,8 @@ INITVECT:
 	BPROC	INIT,	ERR_MSG
 	BPROC	INIT,	MAPBIO
 	BPROC	INIT,	BOOT_MENU
-;
+	BPROC	INIT,	SKIP_FIRM
+	
 ;	Entries for KERNEL code.
 ;
 KERNELVECT:
@@ -118,12 +119,18 @@ ifndef BANK
 
 CALL_INIT:
 	pop	ix
-	push	bc
-	ld	bc,$LOCAL-INITVECT-3
 	ex	af,af'
 	ld	a,B.INIT
+	if $LOCAL-INITVECT eq 0
+	dec	ix
+	dec	ix
+	dec	ix
+	else
+	push	bc
+	ld	bc,$LOCAL-INITVECT-3
 	add	ix,bc
 	pop	bc
+	endif
 	jp	CALBNK##
 ;
 endif

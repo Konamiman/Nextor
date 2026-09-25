@@ -1,0 +1,358 @@
+	.z80
+	name('skipfirm')
+	title	Nextor3
+	subttl	Built-in firmware neutralization
+;-----------------------------------------------------------------------------
+;
+;   Some computers have proprietary built-in software (like a menu or a
+; word processor) that takes over the boot process: typically by hooking
+; H.STKE, which makes the system start that software instead of booting,
+; and makes the kernel boot in MSX-DOS 1 mode (H.STKE hooked and USRTAB
+; unchanged), or makes the computer reset or hang. Many of these computers
+; offer no way to bypass it.
+;
+;   When the "7" boot key is pressed (or forced by its inverter, the boot
+; menu, the one-time boot keys or the disk emulation flags) the master
+; Nextor kernel neutralizes the built-in software of the computers that it
+; recognizes. Otherwise nothing at all is touched. This is done in two
+; phases:
+;
+; - INIT, while the master kernel initializes: patches that must be in
+;   place before the built-in software initializes (it lives in a slot that
+;   is scanned after the Nextor cartridge).
+;
+; - CLEAN, from the H.RUNC hook, right before BASIC starts and H.STKE
+;   is called: every ROM has been initialized by then, so the hooks that
+;   the built-in software has set up can be recognized and undone.
+;
+	INCLUDE	../macros.inc
+	INCLUDE	../const.inc
+	INCLUDE	../condasm.inc
+	INCLUDE	../../../sdk/asm/constants/msx_bios.inc
+	INCLUDE	../../../sdk/asm/constants/msx_workarea.inc
+;
+MSXVER	equ	002Dh		;MSX version, 3 = turbo R
+MSXMID	equ	002Eh		;Bit 0 set = the computer has MIDI (turbo R)
+H.INIP	equ	0FDC7h		;Hook of the character patterns initialization
+H.STKE	equ	0FEDAh		;Hook called right before BASIC starts
+;
+RST30	equ	0F7h		;Opcode of RST 30h (inter-slot call)
+RET_OP	equ	0C9h		;Opcode of RET
+;
+;-----------------------------------------------------------------------------
+;
+; SKIP_FIRM: entry point, called from bank 0 via the BPROC trampoline.
+;
+; Entry:  A = 0 for the INIT phase, 1 for the CLEAN phase
+; Corrupts: AF, BC, DE, HL, IX
+;
+SKIP_FIRM::
+	PROC	SKIP_FIRM
+
+	ld	b,a
+	ld	a,(BOOTKEYS##)
+	and	10000000b		;"7" key pressed?
+	ret	z			;No: don't touch anything
+	ld	a,b
+	or	a
+	jr	nz,SKIP_FIRM_CLEAN
+
+
+;=============================================================================
+;
+; INIT phase
+;
+; These patches are applied on any computer, since the firmware of the
+; affected ones can't be recognized yet at this point. They only write to
+; page 3 RAM that isn't in use yet at this point of the boot process, so
+; they have no effect on other computers.
+
+SKIP_FIRM_INIT:
+
+	;--- Panasonic FS-A1, FS-A1F and FS-A1MK2: a byte of the work area
+	;    of the built-in software is set to 23h before it initializes.
+
+	ld	a,23h
+	ld	(0CBD8h),a		;FS-A1
+	ld	(0C3CEh),a		;FS-A1F
+	ld	(0C3D2h),a		;FS-A1MK2
+
+	;--- Panasonic FS-A1WX/ST: the built-in software sets "JWrite" at
+	;    C010h when it starts, and when it initializes and finds that
+	;    marker already there it clears it and doesn't hook H.STKE (in
+	;    the FS-A1ST: the code at 822Ch of the firmware, in the
+	;    firmware ROM segment at 58000h). Set that marker in advance.
+
+	ld	hl,JWRITE_MARKER
+	ld	de,0C010h
+	ld	bc,JWRITE_MARKER_END-JWRITE_MARKER
+	ldir
+
+	;--- National FS-4600F: the MSX Word Processor III in slot 3-1 is
+	;    deactivated through its control port and its bank select register.
+
+	call	IS_FS4600F
+	ret	nz
+
+	ld	a,87h			;Slot 3-1
+	ld	hl,7FF9h		;Control port
+	ld	e,0
+	call	WRSLT
+	ld	a,87h
+	ld	hl,6000h		;Bank select
+	ld	e,4
+	jp	WRSLT
+
+JWRITE_MARKER:
+	db	'JWrite'
+JWRITE_MARKER_END:
+
+
+;=============================================================================
+;
+; CLEAN phase
+;
+; The built-in software is recognized by H.STKE containing an inter-slot
+; call to its entry point (RST 30h, slot, address, RET), and in most cases
+; also by a signature string found in the same slot. See FIRM_TABLE.
+
+SKIP_FIRM_CLEAN:
+	ld	a,(H.STKE)
+	cp	RST30
+	jr	nz,SFC_NOT_FOUND
+	ld	a,(H.STKE+4)
+	cp	RET_OP
+	jr	nz,SFC_NOT_FOUND
+
+	ld	hl,FIRM_TABLE
+SFC_LOOP:
+	push	hl
+	call	MATCH_FIRM_ENTRY	;Z if the entry matches
+	pop	ix			;IX = the entry
+	jr	z,SFC_FOUND
+
+	ld	c,(ix+FE_SIGLEN)	;Point HL to the next entry
+	ld	b,0
+	ld	hl,FE_SIG
+	add	hl,bc
+	push	ix
+	pop	de
+	add	hl,de
+
+	ld	de,FIRM_TABLE_END
+	or	a
+	sbc	hl,de
+	add	hl,de
+	jr	c,SFC_LOOP
+
+	;--- Nothing recognized through H.STKE
+
+SFC_NOT_FOUND:
+
+	;--- Panasonic FS-A1GT: when its firmware switch is on, its built-in
+	;    disk ROM sets BOOT_DRV to its SRAM/ROM disk, so that MSX-View is
+	;    booted from there. Clear it so that the normal boot takes place.
+	;    The FS-A1GT is the only turbo R with MIDI.
+
+	ld	a,(MSXVER)
+	cp	3			;MSX turbo R?
+	ret	nz
+	ld	a,(MSXMID)		;Has MIDI?
+	dec	a
+	ret	nz
+	xor	a
+	ld	(BOOT_DRV##),a
+	ret
+
+SFC_FOUND:
+	ld	l,(ix+FE_ACTION)
+	ld	h,(ix+FE_ACTION+1)
+	jp	(hl)
+
+
+;-----------------------------------------------------------------------------
+;
+; Actions to perform when the built-in software is recognized
+
+	;--- Sony HB-11: install the H.INIP handler that its firmware
+	;    expects (at 5DE9h in slot 3-0), apply a workaround for the Word
+	;    Land Sentence II software (dummy I/O port / V9938 port work area),
+	;    then unhook H.STKE as for any other computer.
+
+ACTION_HB11:
+	ld	hl,HB11_H_INIP
+	ld	de,H.INIP
+	ld	bc,HB11_H_INIP_END-HB11_H_INIP
+	ldir
+
+	ld	a,0F3h
+	ld	(0D001h),a
+
+	;--- Unhook H.STKE, so that the built-in software isn't started
+	;    and the normal boot takes place.
+
+ACTION_UNHOOK:
+	ld	hl,H.STKE
+	ld	b,5
+ACTION_UNHOOK_LOOP:
+	ld	(hl),RET_OP
+	inc	hl
+	djnz	ACTION_UNHOOK_LOOP
+	ret
+
+HB11_H_INIP:
+	rst	30h
+	db	83h
+	dw	5DE9h
+	ret
+HB11_H_INIP_END:
+
+
+;-----------------------------------------------------------------------------
+;
+; Table of recognized built-in software, entry format:
+;
+; +0: Slot of the H.STKE handler, or ANY_SLOT for any slot
+; +1: Address of the H.STKE handler (2 bytes)
+; +3: Address of the action to perform (2 bytes)
+; +5: Address of the signature in the slot of the handler (2 bytes)
+; +7: Length of the signature, 0 for no signature
+; +8: Signature
+
+FE_SLOT		equ	0
+FE_HANDLER	equ	1
+FE_ACTION	equ	3
+FE_SIGADDR	equ	5
+FE_SIGLEN	equ	7
+FE_SIG		equ	8
+
+ANY_SLOT	equ	0FFh	;Not a valid slot number (bits 4-6 set)
+
+FIRM	macro	SLOT,HANDLER,ACTION,SIGADDR,SIG
+	local	SIG_START,SIG_END
+	db	SLOT
+	dw	HANDLER,ACTION,SIGADDR
+	db	SIG_END-SIG_START
+SIG_START:
+	ifnb	<SIG>
+	db	SIG
+	endif
+SIG_END:
+	endm
+
+FIRM_TABLE:
+	FIRM	83h,5E60h,ACTION_HB11,  5DB2h,<'HITBIT'>	;Sony HB-11
+	FIRM	03h,4043h,ACTION_UNHOOK,4027h,<'HITBIT'>	;Sony HB-101/101P/201/201P
+	FIRM	87h,4076h,ACTION_UNHOOK,4042h,<'HITBIT'>	;Sony HB-F1
+	FIRM	87h,4079h,ACTION_UNHOOK,4045h,<'HITBIT'>	;Sony HB-F1II
+	FIRM	84h,4051h,ACTION_UNHOOK,4027h,<'HITBIT'>	;Sony HB-F5
+	FIRM	87h,405Ch,ACTION_UNHOOK,40B8h,<'HITBIT'>	;Sony HB-F9P/F9S
+	FIRM	83h,402Eh,ACTION_UNHOOK,4308h,<'H3',0,'HCOPY'>	;Hitachi MB-H3
+	FIRM	8Fh,4042h,ACTION_UNHOOK,706Ch,<'Philips'>	;Philips NMS 8220 (June 1986)
+	FIRM	8Fh,709Ah,ACTION_UNHOOK,706Ch,<'Philips'>	;Philips NMS 8220 (August 1986)
+	FIRM	8Fh,4039h,ACTION_UNHOOK,0,<>			;Mitsubishi ML-G1/G10
+	FIRM	ANY_SLOT,402Eh,ACTION_UNHOOK,9A32h,<'YAMAHA-MSX-JWP-SYSTEM'> ;Yamaha MSX-Write, Sanyo PHC-77
+FIRM_TABLE_END:
+
+
+;-----------------------------------------------------------------------------
+;
+; MATCH_FIRM_ENTRY: check if H.STKE and the signature match an entry of
+; FIRM_TABLE. H.STKE must have been verified to hold "RST 30h, slot,
+; address, RET" already.
+;
+; Input:  HL = Entry
+; Output: Z if the entry matches, NZ if not
+; Corrupts: AF, BC, DE, HL, IX
+
+MATCH_FIRM_ENTRY:
+	push	hl
+	pop	ix
+
+	ld	a,(H.STKE+1)
+	ld	c,a			;C = slot of the H.STKE handler
+	ld	a,(ix+FE_SLOT)
+	cp	ANY_SLOT
+	jr	z,MFE_SLOT_OK
+	cp	c
+	ret	nz
+MFE_SLOT_OK:
+
+	ld	hl,(H.STKE+2)
+	ld	e,(ix+FE_HANDLER)
+	ld	d,(ix+FE_HANDLER+1)
+	or	a
+	sbc	hl,de
+	ret	nz
+
+	ld	e,(ix+FE_SIGADDR)
+	ld	d,(ix+FE_SIGADDR+1)
+	ld	b,(ix+FE_SIGLEN)
+	push	ix
+	pop	hl
+	push	bc
+	ld	bc,FE_SIG
+	add	hl,bc
+	pop	bc
+
+	;Fall into CMP_SLOT
+
+
+;-----------------------------------------------------------------------------
+;
+; CMP_SLOT: compare a string with the contents of another slot.
+;
+; Input:  HL = String in this bank
+;         DE = Address of the string to compare in the other slot
+;         B  = Length of the string, 0 is allowed (the strings match then)
+;         C  = Slot
+; Output: Z if the strings match, NZ if not
+; Corrupts: AF, B, DE, HL
+
+CMP_SLOT:
+	ld	a,b
+	or	a
+	ret	z
+CMP_SLOT_LOOP:
+	push	bc
+	push	de
+	push	hl
+	ex	de,hl
+	ld	a,c
+	call	RDSLT
+	pop	hl
+	pop	de
+	pop	bc
+	cp	(hl)
+	ret	nz
+	inc	hl
+	inc	de
+	djnz	CMP_SLOT_LOOP
+	ret
+
+
+;-----------------------------------------------------------------------------
+;
+; IS_FS4600F: check if the computer is a National FS-4600F: slot 0 is
+; expanded and the signature is found in slot 0-2.
+;
+; Output: Z if it's an FS-4600F, NZ if not
+; Corrupts: AF, BC, DE, HL
+
+IS_FS4600F:
+	ld	a,(EXPTBL)
+	cpl
+	and	80h			;Slot 0 not expanded: NZ
+	ret	nz
+	ld	c,88h			;Slot 0-2
+	ld	de,0B9C6h
+	ld	hl,FS4600F_SIG
+	ld	b,FS4600F_SIG_END-FS4600F_SIG
+	jr	CMP_SLOT
+
+FS4600F_SIG:
+	db	'Matsushita 1985'
+FS4600F_SIG_END:
+
+	finish	<SKIPFIRM>
+	end

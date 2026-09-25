@@ -70,9 +70,9 @@ typedef struct {
 #define PSD_FORMAT_VERSION 1 /* Current value of the PSD_VERSION field */
 
 /* The keys that have an inverter bit, in the two bytes at PSD_KEYS:
-   1 to 6 in the first one, SHIFT and CTRL in the second one. */
+   1 to 7 in the first one, SHIFT and CTRL in the second one. */
 
-#define PSD_KEYSM_LOW  0x7E
+#define PSD_KEYSM_LOW  0xFE
 #define PSD_KEYSM_HIGH 0x30
 
 /* Bits of PSD_ITEMS: which of the optional items hold valid data.

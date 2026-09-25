@@ -55,6 +55,7 @@ typedef struct {
 #define EMU_FLAG_INVERT_CTRL (1 << 3)
 #define EMU_FLAG_INVERT_SHIFT (1 << 4)
 #define EMU_FLAG_R800 (1 << 5)
+#define EMU_FLAG_SKIP_FIRMWARE (1 << 6)
 
 #define PARSE_FLAG_HAS_FILENAME (1 << 3)
 #define PARSE_FLAG_HAS_EXTENSION (1 << 4)
@@ -77,7 +78,7 @@ const char* strTitle=
 
 const char* strUsage=
     "Usage: emufile [<options>] <output file> <files> [<files> ...]\r\n"
-    "       emufile set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
+    "       emufile set <data file> [o|p] [-5|-6] [-c] [-s] [-8] [-f] [-x]\r\n"
     "       emufile k\r\n"
     "       emufile ?\r\n";
 
@@ -105,6 +106,8 @@ const char* strHelp=
     "-s : Free more memory by disabling the MSX-DOS kernels (e.g. the floppy\r\n"
     "     disk drive) when the emulation session starts.\r\n"
     "-8 : Boot the emulation session in R800 mode (turbo R only).\r\n"
+    "-f : Disable the built-in firmware of the computer (like pressing\r\n"
+    "     the 7 key at boot time).\r\n"
     "     All of these work for both the one-time and persistent variants.\r\n"
     "\r\n"
     "TYPE /B the generated file to see the names of the registered files.\r\n"
@@ -112,7 +115,7 @@ const char* strHelp=
     "\r\n"
     "* To setup an existing emulation data file for booting:\r\n"
     "\r\n"
-    "emufile set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-x]\r\n"
+    "emufile set <data file> [o|p[<device index>[<LUN index>]]] [-5|-6] [-c] [-s] [-8] [-f] [-x]\r\n"
     "\r\n"
     "Default extension for <data file> is EMU. A directory can be specified instead,\r\n"
     "in that case, a file with the same name and .EMU extension inside the directory\r\n"
@@ -131,6 +134,7 @@ const char* strHelp=
     "-s: disable the MSX-DOS kernels (e.g. the floppy drive) to free even more.\r\n"
     "-8: boot the emulation session in R800 mode (turbo R only). Like -5/-6,\r\n"
     "this works for both variants and can be stored in the data file.\r\n"
+    "-f: disable the built-in firmware of the computer (like the 7 key).\r\n"
     "\r\n"
     "-x: ignore all the flags stored in the data file, apply only the flags\r\n"
     "passed in this command line. The order of the arguments doesn't matter,\r\n"
@@ -175,6 +179,7 @@ byte hzFlags;
 bool invertCtrl;
 bool invertShift;
 bool bootR800;
+bool skipFirmware;
 bool resetFileFlags;
 byte fileFlags;
 
@@ -202,6 +207,7 @@ byte EffectiveHzFlags();
 bool EffectiveInvertCtrl();
 bool EffectiveInvertShift();
 bool EffectiveBootR800();
+bool EffectiveSkipFirmware();
 byte PointerFlagsByte();
 void ProcessFilename(char* fileName);
 void TooManyFiles();
@@ -270,6 +276,9 @@ int main(char** argv, int argc)
         if(bootR800) {
             print("Will boot in R800 mode (turbo R only)\r\n");
         }
+        if(skipFirmware) {
+            print("Built-in firmware will be disabled\r\n");
+        }
     } else {
         print(strUsage);
     }
@@ -328,6 +337,7 @@ void Initialize()
     invertCtrl = false;
     invertShift = false;
     bootR800 = false;
+    skipFirmware = false;
     resetFileFlags = false;
     fileFlags = 0;
 }
@@ -413,6 +423,8 @@ void ProcessSetupFileArguments(char** argv, int argc)
                 invertShift = true;
             } else if(argv[i][1] == '8') {
                 bootR800 = true;
+            } else if((argv[i][1] | 32) == 'f') {
+                skipFirmware = true;
             } else if((argv[i][1] | 32) == 'x') {
                 resetFileFlags = true;
             } else {
@@ -486,6 +498,11 @@ int ProcessOption(char optionLetter, char* optionValue)
         return 0;
     }
 
+    if(optionLetter == 'f') {
+        skipFirmware = true;
+        return 0;
+    }
+
 	InvalidParameter();
 	return 0;
 }
@@ -520,15 +537,16 @@ char* HzFlagsToString()
     return "none";
 }
 
-/* The emulation flags byte stored in the data file header. The kernel only
-   acts on the Hz bits; the CTRL/SHIFT bits are read back by 'emufile set',
-   which turns them into the one-time boot keys. */
+/* The emulation flags byte stored in the data file header. The kernel doesn't
+   read it: 'emufile set' reads it back and combines it with the command line
+   flags into the flags of the emulation data pointer (see PointerFlagsByte). */
 byte EmuFlagsByte()
 {
     return hzFlags |
         (invertCtrl ? EMU_FLAG_INVERT_CTRL : 0) |
         (invertShift ? EMU_FLAG_INVERT_SHIFT : 0) |
-        (bootR800 ? EMU_FLAG_R800 : 0);
+        (bootR800 ? EMU_FLAG_R800 : 0) |
+        (skipFirmware ? EMU_FLAG_SKIP_FIRMWARE : 0);
 }
 
 /* Effective flags applied by 'emufile set': the command line ones combined
@@ -559,8 +577,14 @@ bool EffectiveBootR800()
     return bootR800 || (!resetFileFlags && (fileFlags & EMU_FLAG_R800) != 0);
 }
 
+bool EffectiveSkipFirmware()
+{
+    return skipFirmware || (!resetFileFlags && (fileFlags & EMU_FLAG_SKIP_FIRMWARE) != 0);
+}
+
 /* The flags the kernel reads from the emulation data pointer: the frequency
-   bits, the R800 bit, and the two that force the CTRL and SHIFT boot keys.
+   bits, the R800 bit, and the three that force the CTRL, SHIFT and 7 boot
+   keys.
    The kernel acts on all of them in both the one-time and the persistent
    emulation variants. */
 byte PointerFlagsByte()
@@ -571,6 +595,7 @@ byte PointerFlagsByte()
 
     if(EffectiveInvertCtrl()) flags |= EMU_FLAG_INVERT_CTRL;
     if(EffectiveInvertShift()) flags |= EMU_FLAG_INVERT_SHIFT;
+    if(EffectiveSkipFirmware()) flags |= EMU_FLAG_SKIP_FIRMWARE;
 
     return flags;
 }

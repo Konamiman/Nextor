@@ -58,9 +58,9 @@
 	const	PSD_FORMAT_VERSION, 1	;Current value of the PSD_VERSION field
 
 ;The keys that have an inverter bit, in the two bytes at PSD_KEYS:
-;1 to 6 in the first one, SHIFT and CTRL in the second one.
+;1 to 7 in the first one, SHIFT and CTRL in the second one.
 
-	const	PSD_KEYSM_LOW,   01111110b
+	const	PSD_KEYSM_LOW,   11111110b
 	const	PSD_KEYSM_HIGH,  00110000b
 
 ;Bit numbers in PSD_ITEMS: which of the optional items hold valid data.
