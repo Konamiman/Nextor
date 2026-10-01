@@ -6,7 +6,7 @@ If you are already familiar with Nextor 2 you may want to take a look at [what's
 
 The source code of Nextor is published with permission from the MSX Licensing Corporation under certain terms. **Please take a moment to read [the license terms](LICENSE.md) for details**.
 
-Please visit [the releases section](https://github.com/Konamiman/Nextor/releases) for binaries.
+Please visit either [the categorized releases page](https://konamiman.github.io/Nextor/releases/index.html) (recommended) or [the standard releases section](https://github.com/Konamiman/Nextor/releases) for binaries.
 
 ## Looking for the drivers?
 
