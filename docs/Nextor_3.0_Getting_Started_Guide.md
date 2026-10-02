@@ -73,7 +73,7 @@ If you want to follow the steps of this guide by using a real MSX computer with 
 
     * Download the Nextor tools disk image file and transfer its contents to a floppy disk.
 
-    * Download the Nextor tools ZIP file (_tools.zip_) and uncompress it to a floppy disk, together with the NEXTOR.SYS and COMMAND3.COM files.
+    * Download the Nextor tools ZIP file (_tools.zip_) and uncompress it to a floppy disk, keeping its directory structure (it has the same contents as the disk image).
 
 Note: NEXTOR.SYS and the Nextor tools are available as assets in [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest); the Nextor kernel files with the Sunrise IDE driver are released in [the Sunrise IDE driver repository](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest).
 
@@ -414,7 +414,7 @@ a. Get the example RAM driver file, _ram-driver-example.drv_ (available in [the 
 b. Install the driver by executing the following command:
 
 ```
-C:DRVROP i RAMDRIVR.DRV /m
+C:\TOOLS\DRVROP i RAMDRIVR.DRV /m
 ```
 
 You will see the initialization messages printed by the driver, the slot and segment number where it has been installed (take note of these, you'll need them later), and a message telling that a drive has been mapped (drive E: if you are following this guide step by step). You will also notice that the CAPS LED of your computer (or of the emulated machine) starts blinking:
@@ -440,7 +440,7 @@ e. Go to BASIC and execute `CALL PRINT("HELLO!")`: the string will be printed. `
 f. Uninstall the driver by executing the following command, replacing the slot and segment numbers with the values you took note of in step b (if you didn't take note, run the `DRIVERS` command as in step d); for example, if the driver was installed in slot 3-2 and segment 28:
 
 ```
-C:DRVROP u 3-2 28
+C:\TOOLS\DRVROP u 3-2 28
 ```
 
 You will see the shutdown message printed by the driver, and the CAPS LED will stop blinking. Drive E: is now unmapped, and the `CALL PRINT` command is gone.

@@ -24,8 +24,8 @@ Usage: $prog <part> [make-args...]
                             variant, plus NEXTOR.SYS and all tools
   $prog all tools-disk      NEXTOR.SYS + all tools, packed into the
                             bin/tools/nextor.dsk disk image
-  $prog all tools-zip       all tools, packed into the bin/tools/tools.zip
-                            archive
+  $prog all tools-zip       NEXTOR.SYS + all tools, packed into the
+                            bin/tools/tools.zip archive
   $prog all tools-all       the tools, the disk image and the zip archive,
                             all in one go
   $prog all clean           remove source-tree intermediates
