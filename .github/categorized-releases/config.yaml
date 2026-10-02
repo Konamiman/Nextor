@@ -1,6 +1,7 @@
 # Configuration for the categorized releases page, generated into
-# docs/releases by generate.sh (which runs
-# https://github.com/Konamiman/github-categorized-releases) and served
+# docs/releases by .github/workflows/releases-page.yaml (or locally by
+# generate.sh), both running
+# https://github.com/Konamiman/github-categorized-releases, and served
 # by GitHub Pages from the docs directory.
 #
 # Nextor 3 publishes each component (kernel base, standalone drivers,

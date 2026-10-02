@@ -4,9 +4,10 @@
 # https://konamiman.github.io/Nextor/releases/
 #
 # The page is generated from the actual releases of the repository and is
-# kept in source control: run this script after publishing, editing or
-# deleting a release (or after changing config.yaml or MAIN.md), check the
-# result, then commit docs/releases and push.
+# kept in source control. The published page is regenerated and committed
+# automatically by .github/workflows/releases-page.yaml whenever a release
+# changes (see README.md for when it must be run by hand); this script
+# generates the same page locally, to check changes before they get there.
 #
 # With --fake the page is generated from the releases in fake-releases.json
 # instead (a file that contains fabricated releases data for testing), and it is
@@ -18,7 +19,9 @@
 # is cloned into bin/categorized-releases on the first run, at the exact
 # version tag set in tool_ref below, so that the generated page is the same
 # wherever it is regenerated (bin/ is gitignored). To use a newer version,
-# change tool_ref and delete bin/categorized-releases so that it is cloned
+# change tool_ref (and the version of the github-categorized-releases action
+# in .github/workflows/releases-page.yaml, which must be the same) and
+# delete bin/categorized-releases so that it is cloned
 # again: the script never updates an existing clone. Node.js (20 or later)
 # and git are required. Set GITHUB_TOKEN to avoid the anonymous GitHub API
 # rate limit (not needed with --fake).
@@ -73,5 +76,6 @@ node "$tool_dir/src/generate-release-page.js" \
 echo
 echo "Open $output_dir/index.html in a browser to check the page."
 if [ "${1:-}" = "" ]; then
-  echo "If it looks right, commit docs/releases and push."
+  echo "If it looks right, commit docs/releases along with the changes it reflects"
+  echo "(or run the Releases page workflow once these changes are in master)."
 fi
