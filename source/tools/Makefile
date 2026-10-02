@@ -120,17 +120,85 @@ DATA.REL: \
 	$(call assemble,../kernel/data.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 # ---------------------------------------------------------------------------
+# Tools disk image and zip archive contents.
+#
+# The disk image and the zip archive (see below) have the same contents:
+#
+# - In the root directory: NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
+#   NEXTORJ.SYS), COMMAND3.COM, an AUTOEXEC.BAT that points the HELP and
+#   PATH environment items to the HELP and TOOLS directories, and a
+#   README.TXT (sourced from tools-disk-readme.txt).
+# - In a TOOLS directory: every other .COM file present in bin/tools.
+# - In a HELP directory: the COMMAND3.COM help files from
+#   ../commandcom/helpfiles.
+#
+# The text files are stored with CRLF line endings, whatever the line
+# endings of their sources. The tree is assembled in a staging directory
+# (one per target, so that they can run in parallel) that is deleted once
+# the disk image or the zip archive has been created.
+#
+# The files are expected to exist in bin/tools already: if any is missing
+# the build fails. Use the tools-disk and tools-zip targets of ../Makefile
+# to build all of them and then create the disk or the archive in one go.
+
+# The C tools list, derived from the .c files (it matches the COMS variable
+# in C/Makefile).
+C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
+
+PACKAGE_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM $(COMS) $(C_COMS)
+PACKAGE_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(PACKAGE_REQUIRED)))),$(PACKAGE_REQUIRED))
+
+# The .COM files for the TOOLS directory: every .COM file in bin/tools
+# except COMMAND3.COM (in either letter case, in case the filesystem
+# preserved a lowercase copy). $(sort ...) also removes duplicates, in case
+# the filesystem is case-insensitive.
+TOOL_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com,\
+	$(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)))
+
+# The COMMAND3.COM help files, stored in the HELP directory.
+# JINDEX.HLP (the Japanese help index, shown by HELP with no arguments
+# when the Kanji mode is active) is generated from its UTF-8 source,
+# since the machine needs it in Shift-JIS with CRLF line endings and a
+# trailing CTRL-Z, like the other help files; these are ASCII and stored
+# as they are. The Makefile is a prerequisite so that a change in the
+# conversion recipe regenerates the file.
+HELPFILES_DIR := ../commandcom/helpfiles
+HELPFILES = $(wildcard $(HELPFILES_DIR)/*.HLP)
+
+$(HELPFILES_DIR)/JINDEX.HLP: $(HELPFILES_DIR)/JINDEX.HLP.utf8 Makefile
+	$(if $(shell which iconv),,$(error "ERROR: can't execute iconv, is it installed/in PATH?"))
+	@sed 's/\r*$$/\r/' $< | iconv -f UTF-8 -t SHIFT_JIS > $@
+	@printf '\032' >> $@
+
+# Assemble the disk/archive tree in the staging directory $(1).
+define stage_package
+	$(if $(PACKAGE_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(PACKAGE_MISSING) - build the tools first, or use the tools-disk/tools-zip targets of ../Makefile"))
+	$(if $(HELPFILES),,$(error "ERROR: no help files found in $(HELPFILES_DIR)"))
+	@rm -rf $(1)
+	@mkdir -p $(1)/TOOLS $(1)/HELP
+	@cp $(BIN_TOOLS)/NEXTOR.SYS $(1)/NEXTOR.SYS
+	@cp $(BIN_TOOLS)/NEXTOR.SYS.japanese $(1)/NEXTORJ.SYS
+	@cp $(BIN_TOOLS)/COMMAND3.COM $(1)/COMMAND3.COM
+	@sed 's/\r*$$/\r/' tools-disk-autoexec.bat > $(1)/AUTOEXEC.BAT
+	@sed 's/\r*$$/\r/' tools-disk-readme.txt > $(1)/README.TXT
+	@for f in $(TOOL_COMS); do \
+		cp "$$f" "$(1)/TOOLS/$$(basename $$f | tr a-z A-Z)" || exit 1; \
+	done
+	@cp $(filter-out %JINDEX.HLP,$(HELPFILES)) $(HELPFILES_DIR)/JINDEX.HLP $(1)/HELP/
+endef
+
+# The root directory files, in the order they are added to the disk and
+# the archive.
+PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM AUTOEXEC.BAT README.TXT
+
+# ---------------------------------------------------------------------------
 # Tools disk image.
 #
 # `make tools-disk` creates bin/tools/nextor.dsk: a 720K double sided 3.5"
-# FAT12 disk image containing NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
-# NEXTORJ.SYS, since its real name doesn't fit the 8.3 convention), every
-# .COM file present in bin/tools (which includes COMMAND3.COM), a README.TXT
-# (sourced from tools-disk-readme.txt), the COMMAND3.COM help files from
-# ../commandcom/helpfiles in a HELP directory, and any files supplied via
-# the EXTRA_FILES variable. The image is recreated from scratch on every
-# run using mformat, mmd and mcopy from the mtools package, plus dd to
-# install the boot sector code.
+# FAT12 disk image with the contents described above, plus any files
+# supplied via the EXTRA_FILES variable (in the root directory). The image
+# is recreated from scratch on every run using mformat, mmd and mcopy from
+# the mtools package, plus dd to install the boot sector code.
 # (The image was a 360K single sided one until the help files came in:
 # they don't fit in the space a 360K disk leaves free.)
 #
@@ -139,10 +207,6 @@ DATA.REL: \
 # tools-disk-bootsect.mac), so it boots both in Nextor/MSX-DOS 2 mode
 # (straight to the DOS prompt) and in MSX-DOS 1 mode (loading MSXDOS.SYS
 # if present, or falling back to Disk BASIC).
-#
-# The files to put in the disk are expected to exist in bin/tools already:
-# if any is missing the build fails. Use the tools-disk target of ../Makefile
-# to build all of them and then create the disk in one go.
 #
 # Files that are not built by this repository can be added to the disk with
 # the EXTRA_FILES variable: a comma (or space) separated list of files, with
@@ -159,6 +223,7 @@ DATA.REL: \
 # passes WORKING_DIR explicitly instead.
 
 TOOLS_DSK := $(BIN_TOOLS)/nextor.dsk
+DISK_STAGING := tools-disk-staging
 
 WORKING_DIR ?= $(or $(PWD),$(CURDIR))
 
@@ -167,30 +232,7 @@ EXTRA_FILES ?=
 EXTRA_FILES_ABS := $(foreach f,$(subst $(comma), ,$(EXTRA_FILES)),$(if $(filter /%,$(f)),$(f),$(WORKING_DIR)/$(f)))
 EXTRA_MISSING = $(filter-out $(wildcard $(EXTRA_FILES_ABS)),$(EXTRA_FILES_ABS))
 
-# The C tools list, derived from the .c files (it matches the COMS variable
-# in C/Makefile).
-C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
-
-DISK_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM $(COMS) $(C_COMS)
-DISK_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(DISK_REQUIRED)))),$(DISK_REQUIRED))
-
-# Everything with a .COM extension goes in the disk. $(sort ...) also removes
-# duplicates, in case the filesystem is case-insensitive.
-DISK_COMS = $(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com))
-
 MTOOLS := mformat mmd mcopy
-
-# The COMMAND3.COM help files, stored in the HELP directory of the disk.
-# JINDEX.HLP (the Japanese help index, shown by HELP with no arguments
-# when the Kanji mode is active) is generated from its UTF-8 source,
-# since the machine needs it in Shift-JIS; the other files are ASCII and
-# stored as they are.
-HELPFILES_DIR := ../commandcom/helpfiles
-HELPFILES = $(wildcard $(HELPFILES_DIR)/*.HLP)
-
-$(HELPFILES_DIR)/JINDEX.HLP: $(HELPFILES_DIR)/JINDEX.HLP.utf8
-	$(if $(shell which iconv),,$(error "ERROR: can't execute iconv, is it installed/in PATH?"))
-	@iconv -f UTF-8 -t SHIFT_JIS $< > $@
 
 # The boot sector code, assembled standalone from the kernel source (see
 # tools-disk-bootsect.mac) and linked at 0C01Eh, where boot sector code runs.
@@ -220,9 +262,8 @@ $(BOOTSECT_BIN): \
 tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 	$(foreach exec,$(MTOOLS),\
 		$(if $(shell which $(exec)),,$(error "ERROR: can't execute $(exec), from the mtools package, is it installed/in PATH?")))
-	$(if $(DISK_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(DISK_MISSING) - build the tools first, or use the tools-disk target of ../Makefile"))
 	$(if $(EXTRA_MISSING),$(error "ERROR: EXTRA_FILES not found: $(EXTRA_MISSING)"))
-	$(if $(HELPFILES),,$(error "ERROR: no help files found in $(HELPFILES_DIR)"))
+	$(call stage_package,$(DISK_STAGING))
 	@rm -f $(TOOLS_DSK)
 	@mformat -C -i $(TOOLS_DSK) -t 80 -h 2 -n 9 -v NEXTOR ::
 	@printf 'NEXTOR3 ' | dd of=$(TOOLS_DSK) bs=1 seek=3 conv=notrunc status=none
@@ -233,45 +274,34 @@ tools-disk: $(BOOTSECT_BIN) $(HELPFILES_DIR)/JINDEX.HLP
 # The kernel's FORMAT command generates a random 4-byte id in the 00h-7Fh range, so we do the same here.
 	@dd if=/dev/urandom bs=1 count=4 status=none | tr '\200-\377' '\000-\177' | dd of=$(TOOLS_DSK) bs=1 seek=39 conv=notrunc status=none
 
-	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS ::NEXTOR.SYS
-	@mcopy -i $(TOOLS_DSK) $(BIN_TOOLS)/NEXTOR.SYS.japanese ::NEXTORJ.SYS
-	@mcopy -i $(TOOLS_DSK) $(DISK_COMS) ::
-	@mcopy -t -i $(TOOLS_DSK) tools-disk-readme.txt ::README.TXT
-	@mmd -i $(TOOLS_DSK) ::HELP
-	@mcopy -i $(TOOLS_DSK) $(filter-out %JINDEX.HLP,$(HELPFILES)) $(HELPFILES_DIR)/JINDEX.HLP ::HELP/
+	@cd $(DISK_STAGING) && mcopy -i $(abspath $(TOOLS_DSK)) $(PACKAGE_ROOT_FILES) ::
+	@mmd -i $(TOOLS_DSK) ::TOOLS ::HELP
+	@cd $(DISK_STAGING) && mcopy -i $(abspath $(TOOLS_DSK)) TOOLS/* ::TOOLS/
+	@cd $(DISK_STAGING) && mcopy -i $(abspath $(TOOLS_DSK)) HELP/* ::HELP/
 	$(if $(EXTRA_FILES_ABS),@for f in $(EXTRA_FILES_ABS); do \
 		mcopy -i $(TOOLS_DSK) "$$f" "::$$(basename $$f | tr a-z A-Z)" || exit 1; \
 	done)
+	@rm -rf $(DISK_STAGING)
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_DSK)
 
 # ---------------------------------------------------------------------------
 # Tools zip archive.
 #
-# `make tools-zip` creates bin/tools/tools.zip with every .COM file present
-# in bin/tools (the same set of command line tools that goes in the disk
-# image), without NEXTOR.SYS and without COMMAND3.COM. As with tools-disk,
-# the tools are expected to have been built already: if any is missing the
-# build fails. Use the tools-zip target of ../Makefile to build the tools
-# and create the archive in one go. The archive is recreated from scratch
-# on every run.
+# `make tools-zip` creates bin/tools/tools.zip with the same contents as the
+# disk image (see above), minus the EXTRA_FILES. The archive is recreated
+# from scratch on every run.
 
 TOOLS_ZIP := $(BIN_TOOLS)/tools.zip
-
-ZIP_REQUIRED := $(COMS) $(C_COMS)
-ZIP_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(ZIP_REQUIRED)))),$(ZIP_REQUIRED))
-
-# The .COM files to pack: everything that goes in the disk image except
-# COMMAND3.COM (in either letter case, in case the filesystem preserved a
-# lowercase copy).
-ZIP_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com,$(DISK_COMS))
+ZIP_STAGING := tools-zip-staging
 
 .PHONY: tools-zip
 
-tools-zip:
+tools-zip: $(HELPFILES_DIR)/JINDEX.HLP
 	$(if $(shell which zip),,$(error "ERROR: can't execute zip, is it installed/in PATH?"))
-	$(if $(ZIP_MISSING),$(error "ERROR: missing in $(BIN_TOOLS): $(ZIP_MISSING) - build the tools first, or use the tools-zip target of ../Makefile"))
+	$(call stage_package,$(ZIP_STAGING))
 	@rm -f $(TOOLS_ZIP)
-	@cd $(BIN_TOOLS) && zip -q tools.zip $(notdir $(ZIP_COMS))
+	@cd $(ZIP_STAGING) && zip -q -X $(abspath $(TOOLS_ZIP)) $(PACKAGE_ROOT_FILES) TOOLS/ TOOLS/* HELP/ HELP/*
+	@rm -rf $(ZIP_STAGING)
 	@printf "\n\033[0;36mCreated %s\033[0m\n\n" $(TOOLS_ZIP)
 
 .PHONY: clean
@@ -279,3 +309,4 @@ tools-zip:
 clean:
 	for ext in REL rel SYM sym HEX COM bin; do find . -type f -name "*.$$ext" -delete; done
 	rm -f $(HELPFILES_DIR)/JINDEX.HLP
+	rm -rf $(DISK_STAGING) $(ZIP_STAGING)
