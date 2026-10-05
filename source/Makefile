@@ -56,11 +56,12 @@ tools-disk:
 	$(MAKE) -C tools/C
 	$(MAKE) -C tools tools-disk WORKING_DIR="$(PWD)"
 
-# Build all the command line tools, then pack them into the
-# bin/tools/tools.zip archive (just the tools: no NEXTOR.SYS and no
-# COMMAND3.COM there, so no NEXTOR.SYS build either - see the tools-zip
-# target in tools/Makefile).
+# Build NEXTOR.SYS, COMMAND3.COM and all the command line tools, then pack
+# them into the bin/tools/tools.zip archive, which has the same contents
+# as the disk image (see the tools-zip target in tools/Makefile).
 tools-zip:
+	$(MAKE) -C nextor_sys
+	$(MAKE) -C commandcom
 	$(MAKE) -C tools
 	$(MAKE) -C tools/C
 	$(MAKE) -C tools tools-zip

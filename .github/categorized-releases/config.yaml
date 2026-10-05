@@ -54,8 +54,9 @@ latest-page:
   description: |
     The most recent release of every component. Switch to the **Assets** view
     to get a flat list of the latest version of every downloadable file. Note that
-    `tools.zip` contains all the tools' .COM files, and `nextor.dsk` is a disk image
-    that contains all the tools' .COM files plus NEXTOR.SYS and COMMAND3.COM.
+    `nextor.dsk` is a bootable disk image that contains NEXTOR.SYS, COMMAND3.COM,
+    all the tools' .COM files and the COMMAND3.COM help files, and `tools.zip`
+    contains the same files.
 
 # Releases matching no category at all. Kept visible so that a release with
 # unexpected asset names doesn't silently disappear from the page.

@@ -230,7 +230,7 @@ docker/make.sh nextor_sys          # build NEXTOR.SYS
 docker/make.sh all                 # one variant of every part
 docker/make.sh all everything      # the FULL matrix (see below)
 docker/make.sh all tools-disk      # NEXTOR.SYS + all tools, packed in a disk image
-docker/make.sh all tools-zip       # all tools, packed in a zip archive
+docker/make.sh all tools-zip       # NEXTOR.SYS + all tools, packed in a zip archive
 docker/make.sh all tools-all       # tools + disk image + zip archive in one go
 docker/make.sh all distclean       # remove every build artifact, incl. bin/
 ```
@@ -250,7 +250,7 @@ docker/make.sh all distclean       # remove every build artifact, incl. bin/
 
 `make.sh all tools-disk` builds NEXTOR.SYS, COMMAND3.COM and all the command line tools, then packs them into `bin/tools/nextor.dsk`, a 720K FAT12 disk image created with `mformat`/`mcopy`, carrying the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates. Thanks to the included COMMAND3.COM the disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM. Files not built by this repository can be added with the `EXTRA_FILES` variable, e.g. `EXTRA_FILES=MSXDOS.SYS,COMMAND.COM` for a disk that also boots to the DOS prompt in MSX-DOS 1 mode; relative paths are resolved against the repository root (see the `tools-disk` target in `source/tools/Makefile` for the details).
 
-`make.sh all tools-zip` builds all the command line tools and packs just them - no NEXTOR.SYS, no COMMAND3.COM - into the `bin/tools/tools.zip` archive.
+`make.sh all tools-zip` builds NEXTOR.SYS, COMMAND3.COM and all the command line tools, then packs them into the `bin/tools/tools.zip` archive, which has the same contents and directory structure as the disk image (NEXTOR.SYS, COMMAND3.COM and an AUTOEXEC.BAT in the root directory, the tools in `TOOLS`, the help files in `HELP`) minus the `EXTRA_FILES`.
 
 `make.sh all tools-all` does everything tools-related in one go: NEXTOR.SYS and all the tools, the disk image and the zip archive. It accepts the same `EXTRA_FILES` variable as `tools-disk`. Note that the disk recipe lives in `source/tools`, but `make.sh tools tools-disk` won't work: the `tools` part maps to *both* tool Makefiles, and only `source/tools` has that target. Go through `all`, which builds everything the disk needs first.
 
