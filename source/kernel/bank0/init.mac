@@ -680,6 +680,67 @@ FCALLSET:
 	ALIGN	4392h
 FREN:	CALLDOS	17h	;;Rename file (FCB)
 ;
+;-----------------------------------------------------------------------------
+;
+OPEN_NEXTOR_SYS::
+;
+;    Called by TRY_MSX_DOS at boot time to open "NEXTOR3.SYS" in the root
+; directory of the default drive, or "NEXTOR.SYS" if there's no "NEXTOR3.SYS".
+; This allows having one single boot medium for both Nextor 2 (NEXTOR.SYS)
+; and Nextor 3 (NEXTOR3.SYS).
+;
+;    Instead of trying to open the two files one after the other (which would
+; mean two directory scans when NEXTOR3.SYS doesn't exist), all the files
+; matching "NEXTOR?.SYS" are enumerated in one single scan: NEXTOR3.SYS is
+; opened as soon as it's found, and if NEXTOR.SYS is found first its FIB is
+; kept so that it can be opened if the scan ends without finding NEXTOR3.SYS.
+;
+;    The FIBs are placed in the TPA at 100h, which will be overwritten
+; anyway when the file is loaded.
+;
+; Input:  -
+; Output: Z and B = file handle if a file was opened, NZ if not
+;
+NSYS_FIB	equ	100h	;FIB used for the search
+NSYS_FIB_OLD	equ	140h	;Copy of the FIB for NEXTOR.SYS, if found
+
+	xor	a
+	ld	(NSYS_FIB_OLD),a	;No NEXTOR.SYS found yet
+	ld	de,NSYS_NAME
+	ld	b,ATM_HID+ATM_SYS	;Same files that _OPEN would find
+	ld	c,_FFIRST##
+NSYS_LOOP:
+	ld	ix,NSYS_FIB
+	call	BOOT_BDOS##
+	jr	nz,NSYS_END		;No more matching files
+
+	ld	de,NSYS_FIB
+	ld	a,(NSYS_FIB+7)		;7th character of the filename
+	cp	"3"
+	jr	z,NSYS_OPEN		;"NEXTOR3.SYS" found: open it now
+	cp	"."
+	jr	nz,NSYS_NEXT		;Neither "NEXTOR3.SYS" nor "NEXTOR.SYS"
+
+	ex	de,hl			;"NEXTOR.SYS" found: keep its FIB
+	ld	de,NSYS_FIB_OLD		; and continue searching
+	ld	bc,64
+	ldir
+NSYS_NEXT:
+	ld	c,_FNEXT##
+	jr	NSYS_LOOP
+
+NSYS_END:
+	ld	de,NSYS_FIB_OLD		;Return with NZ if "NEXTOR.SYS"
+	ld	a,(de)			; was not found either,
+	inc	a			; otherwise open it
+	ret	nz
+NSYS_OPEN:
+	xor	a
+	ld	c,_OPEN##
+	jp	BOOT_BDOS##
+
+NSYS_NAME:	db	"\NEXTOR?.SYS",0
+;
 	ALIGN	4462h
 FOPEN:	CALLDOS	0Fh	;;Open file (FCB)
 ;
