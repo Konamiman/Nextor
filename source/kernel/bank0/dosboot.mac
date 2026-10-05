@@ -271,11 +271,8 @@ retry_dos:
 		ld (MFLAGS##),a
 		jr nz,retry_dos2
 retry_dos_go:
-		ld	de,BOOT_NAME    ;Try to open the "NEXTOR.SYS"
-		xor	a               ;file on the default drive.
-		ld	c,_OPEN##
-		call	BOOT_BDOS
-        jr z,msxdos_bootok
+		call	OPEN_NEXTOR_SYS##	;Try to open "NEXTOR3.SYS" or
+        jr z,msxdos_bootok		;"NEXTOR.SYS" on the default drive.
 
 retry_dos2:
         ld	de,OLD_BOOT_NAME    ;Fallback to try "MSXDOS.SYS"
@@ -310,7 +307,6 @@ msxdos_fail:
 		ret
 ;
 ;
-BOOT_NAME:	db	"\NEXTOR.SYS",0
 OLD_BOOT_NAME: db "\MSXDOS2.SYS",0
 ;
 ;-----------------------------------------------------------------------------
@@ -338,7 +334,7 @@ SET_BOOT_VECTORS:
         ld (BREAKVECT##),hl
         ret
 
-BOOT_BDOS:	call	BDOS##			;Routine for calling BDOS.
+BOOT_BDOS::	call	BDOS##			;Routine for calling BDOS.
 		cp	.ABORT##
 		jr	nz,not_abort_err	;If we have an aborted disk
 		ld	a,b			; error then return the

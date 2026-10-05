@@ -36,6 +36,8 @@
 
 [2.15. Built-in software that interferes with the boot can be disabled](#215-built-in-software-that-interferes-with-the-boot-can-be-disabled)
 
+[2.16. NEXTOR3.SYS: one boot medium for Nextor 2 and Nextor 3](#216-nextor3sys-one-boot-medium-for-nextor-2-and-nextor-3)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -195,6 +197,10 @@ The meaning of the 0 boot key changes accordingly: it no longer removes the pers
 ### 2.15. Built-in software that interferes with the boot can be disabled
 
 Some computers have proprietary built-in software (such as the HiTBiT menu of many Sony models, or the built-in word processors of the Panasonic FS-A1 series) that is started at boot time and interferes with Nextor: it forces MSX-DOS 1 mode, or makes the computer reset or hang, and many of these models offer no way to bypass it. A new boot key, 7, makes Nextor recognize these computers and neutralize their built-in software so that it boots normally; it has no effect on other computers. Like the other boot keys, it can be selected in the boot menu, set via the one-time boot keys mechanism, and inverted with `mknexrom /k:0080` or via the persistent storage (so that the built-in software is disabled unless the key is pressed); and the new `-f` option of `EMUFILE` forces it for a disk emulation session. See _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the user manual for the list of recognized models.
+
+### 2.16. NEXTOR3.SYS: one boot medium for Nextor 2 and Nextor 3
+
+`NEXTOR.SYS` version 3 doesn't run on a Nextor 2 kernel, so a boot medium with only one `NEXTOR.SYS` can boot to the DOS prompt with either Nextor 2 or Nextor 3, but not both. To solve this, the Nextor 3 kernel looks for `NEXTOR3.SYS` in the root directory of the boot drive before looking for `NEXTOR.SYS`: copy the Nextor 3 `NEXTOR.SYS` as `NEXTOR3.SYS`, keep the Nextor 2 `NEXTOR.SYS` with its usual name, and the medium will boot with both versions. The file is still distributed as `NEXTOR.SYS`, and renaming it is necessary only for media that need to boot both versions. See _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](Nextor_3.0_User_Manual.md#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_ in the user manual.
 
 ## 3. Information for application developers
 

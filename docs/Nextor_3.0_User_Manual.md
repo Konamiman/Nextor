@@ -62,6 +62,8 @@
 
 [3.2.1. Booting in DOS 1 mode](#321-booting-in-dos-1-mode)
 
+[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](#322-booting-nextor-2-and-nextor-3-from-the-same-medium)
+
 [3.3. Managing media changes](#33-managing-media-changes)
 
 [3.3.1. Media changes in MSX-DOS 1 mode](#331-media-changes-in-msx-dos-1-mode)
@@ -513,6 +515,8 @@ Nextor consists of the following components:
 
 **Note:** starting with Nextor 2.1.0, the kernel will try to load `MSXDOS2.SYS` if `NEXTOR.SYS` is not found. However in this case the Nextor command line tools won't work.
 
+**Note:** starting with Nextor 3.0, the kernel looks for a file named `NEXTOR3.SYS` before looking for `NEXTOR.SYS`. You don't need to care about this unless you want to boot both Nextor 2 and Nextor 3 from the same medium, see _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_; otherwise just use the file with its distributed name, `NEXTOR.SYS`.
+
 **Note:** starting with Nextor 2.1.0, the `CALL SYSTEM2` command (see _[3.6.15. The CALL SYSTEM2 command](#3615-the-call-system2-command)_) can be used in BASIC to force a reboot in the DOS environment using `MSXDOS2.SYS`, even if `NEXTOR.SYS` exists.
 
 In order to boot in the MSX-DOS 1 prompt, you need the usual `MSXDOS.SYS` and `COMMAND.COM` files. Also, if you have just the kernel and no `NEXTOR.SYS` or `MSXDOS.SYS` files, Nextor will boot in the BASIC prompt (running `AUTOEXEC.BAS` if present).
@@ -570,7 +574,7 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if `NEXTOR.SYS` and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BTM` (or `AUTOEXEC.BAT`, when the former does not exist or when `COMMAND2.COM` is the interpreter loaded; see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_) is executed (if present). When `NEXTOR.SYS` is missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
+2.  Otherwise, if `NEXTOR.SYS` (or `NEXTOR3.SYS`, which takes precedence; see _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_) and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BTM` (or `AUTOEXEC.BAT`, when the former does not exist or when `COMMAND2.COM` is the interpreter loaded; see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_) is executed (if present). When both `NEXTOR3.SYS` and `NEXTOR.SYS` are missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
 
 3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
@@ -605,6 +609,22 @@ Remember that MSX-DOS 1 can boot the DOS environment (`MSXDOS.SYS` and `COMMAND.
 On MSX Turbo-R computers, the CPU mode will be switched to Z80 when booting in MSX-DOS 1 mode, unless the 2 key is pressed during boot (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_).
 
 Note: when booting directly in the BASIC prompt in MSX-DOS 1 mode, it is not necessary to execute `POKE &HF346,1` for `CALL SYSTEM` to work, as it was the case with the original MSX-DOS 1.
+
+#### 3.2.2. Booting Nextor 2 and Nextor 3 from the same medium
+
+`NEXTOR.SYS` version 3 refuses to run on a Nextor 2 kernel (it shows a "This version of NEXTOR.SYS requires a Nextor 3 kernel" message and the system falls back to the BASIC prompt after a key is pressed), and the Nextor 2 kernel only knows how to load a file named `NEXTOR.SYS`. Thus a boot medium can't hold one single `NEXTOR.SYS` that works for both Nextor 2 and Nextor 3.
+
+To solve this, the Nextor 3 kernel looks for a file named `NEXTOR3.SYS` in the root directory of the boot drive first, and only if it doesn't find it, it looks for `NEXTOR.SYS` (and then for `MSXDOS2.SYS`, as explained in _[3.2. Booting Nextor](#32-booting-nextor)_). So if you want to boot both Nextor 2 and Nextor 3 from the same medium (for example, a memory card that you use in two computers, one with each version of Nextor), do the following:
+
+1. Copy the Nextor 3 `NEXTOR.SYS` file to the root directory of the medium, but with the name `NEXTOR3.SYS`.
+2. Keep the Nextor 2 `NEXTOR.SYS` in the root directory of the medium, with its usual name.
+3. Have both `COMMAND3.COM` and `COMMAND2.COM` in the root directory: the Nextor 2 `NEXTOR.SYS` always loads `COMMAND2.COM`, while the Nextor 3 one will load `COMMAND3.COM`.
+
+The same search is performed when entering `CALL SYSTEM` from BASIC. `CALL SYSTEM2` still loads `MSXDOS2.SYS` directly, ignoring both `NEXTOR3.SYS` and `NEXTOR.SYS`.
+
+As a bonus, since Nextor 3 executes `AUTOEXEC.BTM` instead of `AUTOEXEC.BAT` when it exists (see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_), while Nextor 2 only knows about `AUTOEXEC.BAT`, you can have a different boot batch file for each Nextor version.
+
+**Do this only for media that need to boot both Nextor versions.** For a medium that will only be used with Nextor 3 just copy `NEXTOR.SYS` with its distributed name, since a medium with only a `NEXTOR3.SYS` file can't boot to the DOS prompt with Nextor 2 or MSX-DOS 2, which can be confusing.
 
 ### 3.3. Managing media changes
 
