@@ -1,0 +1,99 @@
+name: Releases page
+
+# Regenerates the categorized releases page (docs/releases) whenever a release
+# is published, edited, unpublished or deleted, and commits it to the branch
+# GitHub Pages publishes from (master, folder /docs). The commit itself is what
+# republishes the site: Pages keeps building the docs directory with Jekyll
+# exactly as for any other push, this workflow only keeps docs/releases fresh.
+# It can also be run by hand (Actions > Releases page > Run workflow), e.g.
+# after changing .github/categorized-releases/config.yaml or MAIN.md.
+#
+# The page is built with the github-categorized-releases action, pinned to the
+# same version as tool_ref in .github/categorized-releases/generate.sh (the
+# script for regenerating the page locally): keep both in sync.
+#
+# A release event runs the version of this file that is present in the commit
+# the release tag points to, so releases whose tag predates this workflow don't
+# trigger it (editing one of them needs a manual run). Asset uploads and
+# deletions don't raise release events either: run the workflow by hand if the
+# assets of a release change after it's published.
+#
+# The generator stamps a "Last update" time in the page, so the output differs
+# on every run; a run whose only change is that timestamp (e.g. a Nextor 2
+# release was edited) commits nothing.
+
+on:
+  release:
+    types: [published, unpublished, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # To push the regenerated page
+
+# Releases are typically published several at a time: serialize the runs so
+# that they don't race to push. A pending run is replaced by a newer one, which
+# is fine since every run regenerates the page from all the current releases.
+concurrency:
+  group: releases-page
+  cancel-in-progress: false
+
+env:
+  PAGES_BRANCH: master   # The branch GitHub Pages publishes the docs directory from
+
+jobs:
+  update:
+    name: Update releases page
+    if: github.repository == 'Konamiman/Nextor'   # Not in forks
+    runs-on: ubuntu-latest
+    steps:
+      # Release events check out the tagged commit by default, but the page
+      # must be committed on top of the current Pages branch.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PAGES_BRANCH }}
+
+      # The generator doesn't remove files that it no longer produces.
+      - name: Remove the current page
+        run: rm -rf docs/releases
+
+      - name: Generate releases page
+        uses: Konamiman/github-categorized-releases@v1.1.0   # Same as tool_ref in generate.sh
+        with:
+          config: .github/categorized-releases/config.yaml
+          output: docs/releases
+
+      - name: Commit and push
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          git add -A docs/releases
+          if git diff --cached --quiet -I 'class="last-update"' -- docs/releases; then
+            echo "The releases page hasn't changed (other than its timestamp), nothing to commit."
+            exit 0
+          fi
+
+          if [ "$EVENT" = "release" ]; then
+            reason="release $TAG $ACTION"
+          else
+            reason="manual run"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet -m "Update the categorized releases page ($reason)"
+
+          # Someone may have pushed to the branch while the page was being
+          # generated: rebase on top of it and retry.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$PAGES_BRANCH"; then
+              echo "### Releases page updated ($reason)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Push failed (attempt $attempt), rebasing on the current $PAGES_BRANCH..."
+            sleep 5
+            git pull --quiet --rebase origin "$PAGES_BRANCH"
+          done
+          echo "::error::Could not push the regenerated releases page to $PAGES_BRANCH" >&2
+          exit 1
