@@ -1,18 +1,24 @@
 //FDISK - Disk partitionner for Nextor
-//This is the main program. There is also an extra functions file (fdisk2.c)
-//that is placed in the bank immediately following.
-//To call functions on that bank, use CallFunctionInExtraBank.
+//The whole program lives in ROM bank 5.
 
-// Compilation command line:
+// This file is compiled by the "bank5/fdisk.dat" rule of source/kernel/Makefile
+// (run from source/kernel), which is roughly:
 //
-// sdcc --code-loc 0x4120 --data-loc 0x8020 -mz80 --disable-warning 196 --disable-warning 84 --disable-warning 85 \
-//      --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0 \
-//      -I../../../sdk/C/includes -I../../../sdk/C/code \
-//      fdisk_crt0.rel asmcall.rel printf.rel fdisk.c
-// hex2bin -e dat fdisk.ihx
+// sdcc -o bank5/ --code-loc 0x4120 --data-loc 0x8020 -mz80
+//      --disable-warning 196 --disable-warning 84 --disable-warning 85
+//      --max-allocs-per-node 1000 --allow-unsafe-read --opt-code-size --no-std-crt0
+//      -I../../sdk/C/includes -I../../sdk/C/code
+//      bank5/fdisk_crt0.rel bank5/asmcall.rel bank5/printf.rel bank5/fdisk.c
+// objcopy -I ihex -O binary bank5/fdisk.ihx bank5/fdisk.dat
 //
-// Once compiled, embed the first 16000 bytes of fdisk.dat at position 82176 of the appropriate Nextor ROM file:
-// dd if=fdisk.dat of=nextor.rom bs=1 count=16000 seek=82176
+// fdisk.dat starts at 4100h (the crt0 header) and its first 16080 bytes
+// (4100h-7FCFh, up to CHGBNK at 7FD0h) are embedded at offset 82176 (bank 5 + 100h)
+// of the kernel base file:
+//
+// dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16080 seek=82176
+//
+// So the code segment (4120h onwards) can't be bigger than 16048 bytes;
+// the Makefile checks that, and there's very little free space left.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,6 +88,8 @@ byte sectorBufferBackup[512];
 ulong nextDeviceSector;
 ulong mainExtendedPartitionSectorCount;
 ulong mainExtendedPartitionFirstSector;
+byte rootFilesystemFatType;
+ulong rootFilesystemSizeInK;
 
 #define HideCursor() print("\x1Bx5")
 #define DisplayCursor() print("\x1By5")
@@ -108,6 +116,7 @@ byte GetRemainingBy1024String(ulong value, char* destination);
 void GoPartitioningMainMenuScreen();
 bool GetYesOrNo();
 byte GetDiskPartitionsInfo();
+byte GetBootSectorFatType();
 void ShowPartitions();
 void TogglePartitionActive(byte partitionIndex);
 void PrintOnePartitionInfo(partitionInfo* info);
@@ -126,7 +135,6 @@ void PreparePartitioningProcess();
 bool ConfirmDataDestroy(char* action);
 void ClearInformationArea();
 void GetDriversInformation();
-void TerminateRightPaddedStringWithZero(char* string, byte length);
 byte WaitKey();
 byte GetKey();
 void SaveOriginalScreenConfiguration();
@@ -267,27 +275,10 @@ void ShowDriverSelectionScreen()
 
 void ComposeSlotString(byte slot, byte segment, char* destination)
 {
-	*destination++ = (slot & 3) + '0';
-	if(slot & 0x80) {
-		*destination++ = '-';
-		*destination++ = ((slot >> 2) & 3) + '0';
-	}
+	destination += sprintf(destination, slot & 0x80 ? "%i-%i" : "%i", slot & 3, (slot >> 2) & 3);
 	if(segment != 0xFF) {
-		if(is80ColumnsDisplay) {
-			char* s = ", segment ";
-			while(*s) *destination++ = *s++;
-		} else {
-			*destination++ = ':';
-		}
-		if(segment >= 100) {
-			*destination++ = (segment / 100) + '0';
-		}
-		if(segment >= 10) {
-			*destination++ = ((segment / 10) % 10) + '0';
-		}
-		*destination++ = (segment % 10) + '0';
+		sprintf(destination, is80ColumnsDisplay ? ", segment %i" : ":%i", segment);
 	}
-	*destination = '\0';
 }
 
 
@@ -605,26 +596,20 @@ void InitializePartitioningVariables(byte deviceIndex)
 
 void PrintSize(ulong sizeInK)
 {
-	byte remaining;
 	char buf[3];
-	ulong dividedSize;
-	char* remString;
+	char unit = 'M';
 
 	if(sizeInK < (ulong)(10 * 1024)) {
 		printf("%iK", sizeInK);
 		return;
 	}
-	
-	dividedSize = sizeInK >> 10;
-	if(dividedSize < (ulong)(10 * 1024)) {
-		printf("%i", dividedSize + GetRemainingBy1024String(sizeInK, buf));
-		printf("%sM", buf);
-	} else {
+
+	if(sizeInK >= (ulong)(10 * 1024) * 1024) {
 		sizeInK >>= 10;
-		dividedSize = sizeInK >> 10;
-		printf("%i", dividedSize + GetRemainingBy1024String(sizeInK, buf));
-		printf("%sG", buf);
+		unit = 'G';
 	}
+	printf("%i", (uint)(sizeInK >> 10) + GetRemainingBy1024String(sizeInK, buf));
+	printf("%s%c", buf, unit);
 }
 
 
@@ -694,13 +679,14 @@ void GoPartitioningMainMenuScreen()
 				partitionsExistInDisk = (partitionsCount > 0);
 				partitionsDeletedFromDisk = false;
 			}
+			rootFilesystemFatType = (ReadSectorFromDevice(0) == 0 ? GetBootSectorFatType() : 0);
 			mustRetrievePartitionInfo = false;
 		}
 
 		ClearInformationArea();
 		PrintTargetInfo();
 		if(!partitionsExistInDisk) {
-			print("Unpartitionned space available: ");
+			print("Unpartitioned space available: ");
 			PrintSize(unpartitionnedSpaceInSectors / 2);
 			NewLine();
 		}
@@ -716,6 +702,13 @@ void GoPartitioningMainMenuScreen()
 				  partitionsExistInDisk ? "found" : "defined");
 		} else if(canCreatePartitions) {
 			print("(No partitions found or defined)\r\n");
+		}
+		//Only while the partitions list reflects what's actually on disk
+		if(rootFilesystemFatType != 0 &&
+			(partitionsExistInDisk || (partitionsCount == 0 && !partitionsDeletedFromDisk))) {
+			print("\r\nThere's a ");
+			PrintSize(rootFilesystemSizeInK);
+			printf(" FAT%i filesystem%sstarting at sector 0.\r\n\r\n", rootFilesystemFatType, spaceOrNewLine);
 		}
 		canAddPartitionsNow = 
 			!partitionsExistInDisk && 
@@ -837,6 +830,151 @@ byte GetDiskPartitionsInfo()
 	} while(primaryIndex <= 4 && partitionsCount < MAX_PARTITIONS_TO_HANDLE);
 
 	return 0;
+}
+
+
+//Check if sectorBuffer holds the boot sector of a FAT filesystem
+//the same way the kernel does it when mapping a drive to a device:
+//validation is as in CHECK_FAT_BOOT (bank4/partit.mac, but without
+//the DOS 1 specific restrictions), and the FAT12/FAT16 decision
+//is as in _NEW_UPB (bank2/val.mac).
+//Returns 0 (no FAT filesystem), 12 or 16,
+//and if not 0 sets rootFilesystemSizeInK.
+//It's written in assembler because the C version is way bigger
+//and there's very little free space in this ROM bank.
+byte GetBootSectorFatType() __naked
+{
+	__asm
+
+		;--- Validate the boot sector
+
+		ld hl,(#_sectorBuffer+11)	;Sector size must be 512
+		ld a,h
+		sub #2
+		or l
+		jr nz,gbsft_none
+
+		ld a,(#_sectorBuffer+13)	;Sectors per cluster must be
+		or a						;a non-zero power of 2
+		jr z,gbsft_none
+		ld c,a
+		dec a
+		and c
+		jr nz,gbsft_none
+
+		ld a,(#_sectorBuffer+16)	;Number of FATs must be 1...7
+		dec a
+		cp #7
+		jr nc,gbsft_none
+
+		ld hl,(#_sectorBuffer+17)	;Zero root directory entries
+		ld a,h						;means FAT32
+		or l
+		jr z,gbsft_none
+
+		ld de,(#_sectorBuffer+22)	;Sectors per FAT must be 1...256
+		dec de
+		inc d
+		dec d
+		jr z,gbsft_valid
+gbsft_none:
+		xor a
+		ret
+gbsft_valid:
+		inc de
+
+		;--- Calculate the first data sector
+
+		ld bc,#15		;HL = Root directory entries / 16, rounded up
+		add hl,bc
+		ld b,#4
+gbsft_dirsec:
+		rr h
+		rr l
+		or a
+		djnz gbsft_dirsec
+
+		ld a,(#_sectorBuffer+16)	;HL += Number of FATs * Sectors per FAT
+		ld b,a
+gbsft_fatsec:
+		add hl,de
+		djnz gbsft_fatsec
+
+		ld de,(#_sectorBuffer+14)	;HL += Reserved sectors
+		add hl,de
+		ex de,hl					;DE = First data sector
+
+		;--- Get the total sectors count (24 bit, as the kernel does)
+
+		ld hl,(#_sectorBuffer+19)
+		ld a,h
+		or l
+		ld a,#0
+		jr nz,gbsft_small
+		ld hl,(#_sectorBuffer+32)
+		ld a,(#_sectorBuffer+34)
+gbsft_small:						;AHL = Total sectors
+
+		push af
+		push hl
+		srl a
+		rr h
+		rr l
+		ld (#_rootFilesystemSizeInK),hl
+		ld (#_rootFilesystemSizeInK+2),a
+		xor a
+		ld (#_rootFilesystemSizeInK+3),a
+		pop hl
+		pop af
+
+		;--- Calculate the clusters count (16 bit, as the kernel does)
+
+		or a		;AHL = Data sectors
+		sbc hl,de
+		sbc a,#0
+
+		ld c,a
+		ld a,(#_sectorBuffer+13)
+gbsft_clusters:
+		rrca
+		jr c,gbsft_clusters_ok
+		srl c
+		rr h
+		rr l
+		jr gbsft_clusters
+gbsft_clusters_ok:			;HL = Clusters count
+
+		;--- Up to 4084 clusters: FAT12, more than 4095: FAT16,
+		;    otherwise it depends on the filesystem string
+
+		or a
+		ld de,#4084+1
+		sbc hl,de
+		ld a,#12
+		ret c
+		ld de,#4095+1-(4084+1)
+		sbc hl,de
+		ld a,#16
+		ret nc
+
+		ld hl,#_sectorBuffer+0x36
+		ld de,#gbsft_fat16
+		ld b,#5
+gbsft_fat16_loop:
+		ld a,(de)
+		cp (hl)
+		ld a,#12
+		ret nz
+		inc hl
+		inc de
+		djnz gbsft_fat16_loop
+		ld a,#16
+		ret
+
+gbsft_fat16:
+		.ascii "FAT16"
+
+	__endasm;
 }
 
 
@@ -1396,17 +1534,6 @@ void GetDriversInformation()
         }
         driverIndex++;
     }
-}
-
-
-void TerminateRightPaddedStringWithZero(char* string, byte length)
-{
-    char* pointer = string + length - 1;
-    while(*pointer == ' ' && length > 0) {
-        pointer--;
-        length--;
-    }
-    pointer[1] = '\0';
 }
 
 

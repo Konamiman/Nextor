@@ -200,7 +200,7 @@ nextor_base.dat: \
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=64k
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=80k
 	dd conv=notrunc if=doshead.BIN of=nextor_base.dat bs=1 count=255 seek=96k
-	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16048 seek=82176
+	dd conv=notrunc if=bank5/fdisk.dat of=nextor_base.dat bs=1 count=16080 seek=82176
 
 255.bytes:
 	dd if=/dev/zero of=255.bytes bs=1 count=255
