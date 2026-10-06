@@ -1,11 +1,11 @@
 # Jekyll settings for the GitHub Pages site served from this directory
 # (Settings > Pages > Deploy from a branch, folder /docs).
 #
-# Nothing here is required for the site to work: GitHub Pages already serves
-# README.md as the index page, converts the other .md files to HTML (rewriting
-# the links between them) and applies the default theme. This file only sets
-# the metadata the theme displays in the page header and <title>, and pins
-# the theme so that it doesn't change under us.
+# GitHub Pages already serves README.md as the index page, converts the other
+# .md files to HTML (rewriting the links between them) and applies the default
+# theme. This file sets the metadata the theme displays in the page header and
+# <title>, pins the theme so that it doesn't change under us, and lists the
+# README files that must be converted to HTML pages (see "include" below).
 #
 # The releases page at docs/releases is plain HTML generated (and committed)
 # by .github/workflows/releases-page.yaml; Jekyll copies it as it is.
@@ -13,3 +13,13 @@
 title: Nextor
 description: A disk operating system for MSX computers, forked from MSX-DOS 2.31
 theme: jekyll-theme-primer
+
+# A README.md is converted to HTML only when it can become the index page of
+# its directory, otherwise it's published as a raw .md file and the links to
+# it point to that file. helpfiles/README.md can't be the index of helpfiles,
+# because the INDEX.md there (the help index) already counts as such (the
+# check for index.html is case-insensitive); listing the file here makes it a
+# regular page, helpfiles/README.html, with the links to it rewritten
+# accordingly.
+include:
+  - helpfiles/README.md
