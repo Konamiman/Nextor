@@ -1,0 +1,47 @@
+# CHKDSK
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+CHKDSK d: [/F]
+```
+
+## Purpose
+
+Checks the integrity of the filesystem of a disk.
+
+## Use
+
+The integrity of the filesystem data structures of the disk in the specified drive is checked, and lost disk space is searched for. Both FAT12 and FAT16 volumes are handled, and the drive letter is mandatory. Progress is displayed while the disk is examined, and a report of the space usage of the drive is printed at the end.
+
+The checks cover invalid cluster numbers, files cross linked with other files (illegally sharing disk space), invalid directory entries, differences between the FAT copies, and clusters marked as used that do not belong to any file (lost clusters).
+
+If lost clusters are found, a prompt is issued for each lost chain allowing it to be either converted back into usable free space or into a file. In the latter case, files of the form `FILE0000.CHK`, `FILE0001.CHK` etc. are created in the root directory, containing the lost data.
+
+If the `/F` option is not given, then `CHKDSK` does not actually write any correction to disk, but behaves as if it had. This allows `CHKDSK` to be executed to see what would be done to the disk if `/F` was given.
+
+Disk space can become lost (i.e. lost clusters created) when some programs are aborted. It is recommended to run `CHKDSK` occasionally on all disks.
+
+This program requires Nextor (any version). Running `CHKDSK` without arguments prints a parameter summary, and `TYPE CHKDSK.COM` prints a description.
+
+## Examples
+
+```
+CHKDSK B:
+```
+
+The disk in drive `B:` is checked. Any errors found are reported, but no correction is written to the disk.
+
+```
+CHKDSK B: /F
+1 lost cluster found in 1 chain
+Convert lost chain to a file (Y/N)?
+```
+
+The disk in drive `B:` was checked and some lost disk space was found. Since `/F` was given, the corrections are written to the disk and the lost space is recovered.
+
+---
+
+[Back to the help index](INDEX.md)

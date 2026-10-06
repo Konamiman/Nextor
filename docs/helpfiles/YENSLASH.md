@@ -1,0 +1,56 @@
+# YENSLASH
+
+_Versions: 3.0_
+
+## Format
+
+```
+YENSLASH
+   or
+YENSLASH ON|OFF [/T]
+```
+
+## Purpose
+
+Displays or sets the display of the yen sign character as a backslash.
+
+## Use
+
+Japanese MSX computers (and Korean ones, with the won sign) have the yen sign in place of the backslash in their character set. It is the same character code (92), so the directory separator of paths, and any backslash typed or printed, is displayed as a yen sign.
+
+If no parameters are given, then the current state is displayed.
+
+`YENSLASH ON` redefines character 92 in the video RAM as a regular backslash. This works in SCREEN 0 (40 and 80 columns) and in SCREEN 1. It has no visible effect while the kanji driver is installed (that is, after `CALL KANJI` in the BASIC interpreter, whatever the mode set with `KMODE`), since the driver draws the characters itself from the kanji ROM on a graphic screen. Any screen initialisation (by the `MODE` command or by a transient program) puts the original character set back, so the command interpreter repeats the redefinition before displaying each prompt while the state is `ON`.
+
+`YENSLASH OFF` restores the original character.
+
+The state is recorded in the `YENSLASH` environment item, which `ON` creates (with the value `ON`) and `OFF` removes. It is read when the command interpreter starts, so the state survives entering the BASIC interpreter and coming back with `CALL SYSTEM`. The item serves that purpose only: changing it with `SET` has no effect until the next time the command interpreter is loaded (see [`HELP ENV`](ENV.md) on Environment Items).
+
+With the `/T` (temporary) option the character is changed but the environment item is left alone, so the next start of the command interpreter goes back to the recorded state.
+
+On computers whose character set already has a backslash the command is harmless: character 92 is redefined all the same, with a backslash of the same shape.
+
+## Examples
+
+```
+YENSLASH
+Backslash instead of yen sign is OFF
+```
+
+No parameters were given, so the current state is displayed, in this case the default one.
+
+```
+YENSLASH ON
+```
+
+From now on character 92 is displayed as a backslash.
+
+```
+YENSLASH OFF /T
+```
+
+The yen sign is displayed again, but the next start of the command interpreter will bring the backslash back.
+
+---
+
+[Back to the help index](INDEX.md)

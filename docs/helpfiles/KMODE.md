@@ -1,0 +1,51 @@
+# KMODE
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+KMODE mode
+   or
+KMODE [mode] /S [d:]
+```
+
+## Purpose
+
+Sets the 'Kanji screen mode', or saves it in the boot sector of a disk so that it is set automatically at boot time.
+
+## Use
+
+The `mode` is `OFF` for the ANK screen (the standard MSX screen modes), or a number from 0 to 3 with the same meaning as in the BASIC `CALL KANJI<n>` statement. A Kanji driver (built into Japanese MSX computers) must be installed for the screen mode to actually change: it is installed by typing a `CALL KANJI` statement from BASIC, or automatically when booting from a disk updated by `KMODE /S`.
+
+If the `/S` option is given, the boot code of the disk in the default or specified drive is replaced by 'Kanji boot' code, which installs the Kanji driver and then sets the given screen mode at boot time. If the `mode` is omitted, the currently active mode is saved. A disk updated this way will no longer be able to boot MSX-DOS 1. To help prevent accidents, a prompt is issued before the disk is updated.
+
+Disks with a standard (PC style) boot sector are refused by `/S`: run `FIXDISK /S` on them first to give them an MSX-DOS 2 boot sector, then use `KMODE /S`.
+
+The `/S` option works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives.
+
+## Examples
+
+```
+KMODE 3
+```
+
+The 'Kanji screen mode' is set to 3, if a Kanji driver is installed.
+
+```
+KMODE OFF
+```
+
+The screen is set back to the native MSX text screen.
+
+```
+KMODE /S B:
+Disk in drive B: will only be able to boot MSX-DOS 2
+Press any key to continue...
+```
+
+The boot code of the disk in drive `B:` is replaced with 'Kanji boot' code; a prompt is issued first. Booting from this disk will automatically install the Kanji driver and then set the screen mode saved in the disk, in this case the mode that was active when the `KMODE` command was given.
+
+---
+
+[Back to the help index](INDEX.md)

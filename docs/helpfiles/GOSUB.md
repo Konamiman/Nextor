@@ -1,0 +1,54 @@
+# GOSUB
+
+_Versions: 2.40_
+
+## Format
+
+```
+GOSUB ~label
+```
+
+## Purpose
+
+Executes a sub-routine within a batch file.
+
+## Use
+
+`GOSUB` searches the batch file for the specified label. Then it continues executing the batch file from the line following the label. When a `RETURN` command is encountered, it returns to the line following the `GOSUB` command that invoked the sub-routine.
+
+The label is a string of arbitrary characters. No processing is performed on the characters and so the casing of characters is preserved. A label must always start with a `~` character to distinguish it from a normal command.
+
+An `*** Unrecognized command` error occurs when `GOSUB` is executed from the command line or from a `.BAT` file.
+
+An `*** Invalid parameter` error occurs when the label is not found in the batch file. Execution of the batch file is then ended, since continuing the batch file would have no meaning.
+
+`GOSUB` commands can be nested up to a maximum of 8 levels. A `*** Too many parameters` error occurs when more than eight `GOSUB` commands are nested.
+
+See also [`HELP RETURN`](RETURN.md) and [`HELP END`](END.md).
+
+## Examples
+
+The following example should be executed as a `.BTM` file.
+
+```
+ECHO This is the first line
+GOSUB ~label1
+ECHO This is the third line
+END
+~label2
+ECHO This is the second line
+RETURN
+~label1
+GOSUB ~label2
+RETURN
+
+This is the first line
+This is the second line
+This is the third line
+```
+
+First the text "This is the first line" is echoed to the screen. Then the batch file continues with the sub-routine following the label `~label1`, which calls a sub-routine following the label `~label2`, so the text "This is the second line" is echoed to the screen. Then the second sub-routine returns to the line following the `GOSUB` command that invoked the sub-routine, and the first sub-routine returns to its invoking `GOSUB` command, so the text "This is the third line" is echoed to the screen. Then the batch file ends, and returns to the command interpreter.
+
+---
+
+[Back to the help index](INDEX.md)

@@ -1,0 +1,38 @@
+# ECHO
+
+_Versions: 2.20_
+
+## Format
+
+```
+ECHO [text]
+```
+
+## Purpose
+
+Prints text in a batch file.
+
+## Use
+
+The `text` is simply displayed on the screen. If no text is given, then just a blank line is output.
+
+This command should not be confused with the 'echo' state in batch files, which is controlled by an environment item called `ECHO` (see [`HELP ENV`](ENV.md) on Environment Items).
+
+## Examples
+
+```
+ECHO AUTOEXEC batch file executed
+AUTOEXEC batch file executed
+```
+
+The specified text ('AUTOEXEC batch file executed') was printed on the screen.
+
+```
+ECHO
+```
+
+No parameters were given, so just a blank line was printed.
+
+---
+
+[Back to the help index](INDEX.md)

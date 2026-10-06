@@ -1,0 +1,48 @@
+# DRVINFO
+
+_Versions: 3.0_
+
+## Format
+
+```
+DRVINFO
+```
+
+## Purpose
+
+Displays what every drive letter is assigned to.
+
+## Use
+
+For every drive that is assigned to something, one of the following is displayed:
+
+- The driver that controls the drive (its name and version, or 'Legacy MSX-DOS driver', and its slot, with the RAM segment after a colon when the driver is loaded in RAM), plus the device number (for Nextor drivers) or the relative unit number (for legacy drivers).
+
+- The disk image file mounted on the drive, the drive that hosts the file, and whether it is mounted in read only mode (see [`HELP MAPDRV`](MAPDRV.md) on mounting files).
+
+- The drive that the drive is a ghost of.
+
+- The RAM disk.
+
+Unassigned drives are not listed.
+
+The same function is provided by the `DRVINFO.COM` external tool, which also works on older Nextor versions.
+
+## Examples
+
+```
+DRVINFO
+Drive A: is assigned to:
+Nextor internal SD driver v1.2 on slot 2
+Device 1
+
+Drive B: is assigned to:
+File B:\DISKS\GAMES.DSK on drive A: (read only)
+
+Drive H: is assigned to:
+RAM disk
+```
+
+---
+
+[Back to the help index](INDEX.md)

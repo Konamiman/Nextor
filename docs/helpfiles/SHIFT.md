@@ -1,0 +1,39 @@
+# SHIFT
+
+_Versions: 2.44_
+
+## Format
+
+```
+SHIFT [/<numeric>]
+```
+
+## Purpose
+
+Shifts batch file arguments one position to the left.
+
+## Use
+
+If `/<numeric>` is specified, the argument on that position will be the first to be shifted. Arguments below `<numeric>` remain unchanged.
+
+This command can only be used in batch files. It does not work in direct mode.
+
+See also [`HELP BATCH`](BATCH.md).
+
+## Examples
+
+```
+SHIFT
+```
+
+All batch file arguments will be shifted 1 step to the left. `%1` will be moved to `%0`, `%2` to `%1`, `%3` to `%2`, `%4` to `%3`, etc.
+
+```
+SHIFT /3
+```
+
+All batch file arguments starting from `%3` will be moved 1 step to the left. `%4` will be moved to `%3`, `%5` to `%4`, `%6` to `%5`, etc. Arguments `%0`, `%1` and `%2` will remain unchanged.
+
+---
+
+[Back to the help index](INDEX.md)

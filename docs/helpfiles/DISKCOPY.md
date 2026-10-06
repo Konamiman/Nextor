@@ -1,0 +1,48 @@
+# DISKCOPY
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+DISKCOPY src: [tgt:] [/X] [/S]
+```
+
+## Purpose
+
+Copies one disk to another, sector by sector.
+
+## Use
+
+The first drive is the source and the second is the destination, which defaults to the current drive. The source drive is mandatory.
+
+The same drive may be given as source and destination: the copy is then made in several passes through memory, prompting to swap the source and target disks as needed (the source prompts display "(pass X of Y)"). Two different drive letters mapped to the same physical drive are refused.
+
+Before `DISKCOPY` is used, the destination disk must be formatted with the same format as the source disk, and an error is given if this is not the case.
+
+The boot sector of the target disk is preserved: only the sectors after it are copied. This keeps the target disk's own boot code and volume id. If `/S` is given, the boot sector is copied from the source disk as well.
+
+If `/X` is given, the prompts are suppressed: the initial "insert the disks and press a key" wait and the final "copy another disk" question. The disk swap prompts of a same-drive copy are always issued, since they are the copy mechanism itself.
+
+The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives (including 'ghost' drive letters of a single floppy drive). Whole-disk copying is refused on other drives (hard disk partitions, mounted files, the RAM disk), whose layout is managed by Nextor.
+
+## Examples
+
+```
+DISKCOPY A: B:
+Insert source disk in drive A:
+Insert target disk in drive B:
+Press any key to continue...
+```
+
+The disk in drive `A:` is copied to the disk in drive `B:`, destroying the previous contents of the disk in `B:`. The prompt is printed first.
+
+```
+DISKCOPY A:
+```
+
+The disk in drive `A:` is copied to the disk in the current drive. If the current drive is `A:` itself, the copy is made in passes, prompting to swap the two disks.
+
+---
+
+[Back to the help index](INDEX.md)

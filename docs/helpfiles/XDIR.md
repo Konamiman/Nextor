@@ -1,0 +1,53 @@
+# XDIR
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+XDIR [filespec] [/H] [/B]
+```
+
+## Purpose
+
+Lists a directory and all its subdirectories.
+
+## Use
+
+The `filespec` specifies which files are to be listed: a drive, a directory, a file name or a pattern. By default the whole current directory is listed. `/H` includes hidden files and directories in the listing.
+
+`XDIR` is similar to the `DIR` command, but it prints the attributes ('h' for hidden, 'r' for read only) and the size of each file instead of the dates and times.
+
+The sizes and the totals follow the same rules as in the `DIR` command: they are printed in bytes when they are less than 10K, and in kilobytes (rounded to the nearest, with a K suffix) when they are 10K or over. The `DIRK` environment item changes the threshold and the suffix, or keeps the file sizes in bytes (see [`HELP DIR`](DIR.md) and [`HELP ENV`](ENV.md)). `/B` prints all the figures in bytes, whatever the value of `DIRK`, like the `DIRB` command.
+
+After the files of the specified directory have been listed, the files within each subdirectory are also listed, shown indented one level per directory. This allows the listing of a complete directory tree or disk. The listing ends with the number and total size of the files and with the free space on the drive; sizes and totals of any magnitude are displayed correctly on FAT16 volumes.
+
+## Examples
+
+```
+XDIR
+```
+
+The whole directory tree in or descending from the current directory of the current drive is listed.
+
+```
+XDIR B:\DIR1
+```
+
+All the files and directories descending from the directory `DIR1` of drive `B:` are listed.
+
+```
+XDIR \*.COM /H
+```
+
+The names of all files, including hidden files, matching `*.COM` anywhere on the current drive are displayed.
+
+```
+XDIR /B
+```
+
+The whole directory tree in or descending from the current directory of the current drive is listed, with all the sizes in bytes.
+
+---
+
+[Back to the help index](INDEX.md)

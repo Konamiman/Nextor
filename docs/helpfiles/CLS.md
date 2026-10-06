@@ -1,0 +1,29 @@
+# CLS
+
+_Versions: 2.20_
+
+## Format
+
+```
+CLS
+```
+
+## Purpose
+
+Clears the screen.
+
+## Use
+
+Simply clears the screen and homes the cursor.
+
+## Examples
+
+```
+CLS
+```
+
+The screen is cleared, and another command can be typed.
+
+---
+
+[Back to the help index](INDEX.md)
