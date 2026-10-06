@@ -1,0 +1,43 @@
+# UNDEL
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+UNDEL filespec
+```
+
+## Purpose
+
+Recovers previously deleted files.
+
+## Use
+
+The `filespec` specifies which files are to be undeleted if possible. It may contain wildcards, and it may be a directory: in that case all the deleted files directly inside it are recovered. The `filespec` is mandatory; use `*.*` to recover all the deleted files of the current directory. Both FAT12 and FAT16 volumes are handled.
+
+Files can only be undeleted from disks that have a 'volume id' in their boot sector: disks formatted under MSX-DOS 2 or Nextor, or updated with `FIXDISK /S` or `/B`. Also, no disk allocation must have taken place since the file was deleted, which usually means that files have to be undeleted immediately after they have been deleted.
+
+Each deleted file and directory reference found in the directory specified by the `filespec` is undeleted if its name is matched by the filename in the `filespec`, and if undeletion is possible. `UNDEL` can therefore be used to restore a directory removed with the `RD` or `RMDIR` commands; to restore the contents of the directory, a further `UNDEL` command is required specifying the now undeleted directory.
+
+Entries that a previous `CHKDSK /F` run has marked as not recoverable are never undeleted.
+
+This program requires Nextor (any version). Running `UNDEL` without arguments prints a parameter summary, and `TYPE UNDEL.COM` prints a description.
+
+## Examples
+
+```
+UNDEL B:FRED.MAC
+```
+
+Attempts to undelete the file `FRED.MAC` from the current directory of drive `B:`.
+
+```
+UNDEL A:\DIR1
+```
+
+All undeletable files and directories in `DIR1` are undeleted.
+
+---
+
+[Back to the help index](INDEX.md)

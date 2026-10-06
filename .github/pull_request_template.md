@@ -47,5 +47,5 @@ Check the items that apply (put an "x" between the brackets) and fill in the one
 - [ ] Tested in an emulator (emulator and emulated machine):
 - [ ] Tested in real hardware (computer and storage device):
 - [ ] The documentation in `docs/` has been updated to reflect the changes.
-- [ ] The help texts (`CALL` commands help in the kernel, help texts embedded in the `.COM` tools, help files in `source/commandcom/helpfiles`) have been updated to reflect the changes.
+- [ ] The help texts (`CALL` commands help in the kernel, help texts embedded in the `.COM` tools, help files in `source/commandcom/helpfiles` and their Markdown mirror in `docs/helpfiles`) have been updated to reflect the changes.
 - [ ] New kernel code doesn't use undocumented Z80 instructions directly: the macros in `sdk/asm/macros/undoc.inc` are used instead, so that the kernel still works when built with `NO_UNDOC_CPU_INSTRUCTIONS`.

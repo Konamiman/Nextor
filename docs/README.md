@@ -8,6 +8,8 @@ The following documentation is available for [Nextor](https://github.com/konamim
 
 * [User Manual](Nextor_3.0_User_Manual.md): Manual for end users, explains how Nextor expands the features of MSX-DOS 2 and contains a reference of the Nextor tools and built-in commands.
 
+* [Help files](helpfiles/README.md): The help files of the `COMMAND3.COM` command interpreter (the ones displayed by its `HELP` command) converted to Markdown, with the full reference of all the commands.
+
 * [Programmers Reference](Nextor_3.0_Programmers_Reference.md): For application developers, contains a reference of the new function calls implemented by Nextor and the new and expanded Disk BASIC commands.
 
 * [Driver Development Guide](Nextor_3.0_Driver_Development_Guide.md): You need this if you want to develop a device driver for Nextor. The [driver template project](https://github.com/Konamiman/Nextor/tree/HEAD/sdk/templates/driver) supplied with the Nextor SDK can be used as the foundation for a new driver.

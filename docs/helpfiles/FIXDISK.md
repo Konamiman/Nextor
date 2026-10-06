@@ -1,0 +1,43 @@
+# FIXDISK
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+FIXDISK d: [/S|/B]
+```
+
+## Purpose
+
+Rebuilds the MSX-DOS 2 disk parameters of a disk.
+
+## Use
+
+The drive letter (mandatory) selects the disk that `FIXDISK` will operate on. The files on the disk are always preserved.
+
+This command is mainly used to update MSX-DOS 1 disks so that they work reliably under MSX-DOS 2 and Nextor. Those systems read the disk parameters from the boot sector, but MSX-DOS 1 did not use that information and so it is not necessarily correct on MSX-DOS 1 disks.
+
+By default only the disk parameters are rewritten; the boot code and the rest of the boot sector are left untouched. Note that this does NOT enable undeletion on the disk: the `UNDEL` command requires a 'volume id' in the boot sector, which only the `/S` and `/B` options write.
+
+If `/S` is given, a complete MSX-DOS 2 boot sector is written instead: boot code plus a volume id. This enables undeletion and the other MSX-DOS 2 disk features, but the disk will then only be able to boot MSX-DOS 2 or Nextor: an application disk that started up from its own boot code will no longer boot that application.
+
+If `/B` is given, a standard (PC style) boot sector, also with a volume id, is written instead. This option requires Nextor 3 or later.
+
+To help prevent accidental updates of boot disks, a prompt is always issued before the disk is written.
+
+The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives.
+
+## Examples
+
+```
+FIXDISK B: /S
+Disk in drive B: will only be able to boot MSX-DOS
+Press any key to continue...
+```
+
+The disk in drive `B:` is given a full MSX-DOS 2 boot sector. Since the disk may have been a boot disk from another system, a prompt is issued before the disk is actually updated.
+
+---
+
+[Back to the help index](INDEX.md)

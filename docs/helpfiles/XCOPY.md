@@ -1,0 +1,74 @@
+# XCOPY
+
+_Versions: 2.20, 3.0_
+
+## Format
+
+```
+XCOPY src [tgt] [options]
+```
+
+## Purpose
+
+Copies files and directory trees.
+
+## Use
+
+The options available are:
+
+```
+[/A] [/E] [/H] [/M] [/P] [/S] [/T] [/V] [/W] [/Dx]
+```
+
+`XCOPY` is an extended file copying command (compare with the [`COPY`](COPY.md) command) that can selectively copy both files and directories. The first filespec specifies the source files: a file, a directory or a pattern; it is mandatory (running `XCOPY` without arguments prints a parameter summary). The second filespec is the destination, which defaults to the current directory; it may include a rename pattern, so files can be renamed during the copy (as in the standard `COPY` command). System files are never copied.
+
+`/S` causes `XCOPY` to copy subdirectories as well: within each directory all matching files are copied, then the subdirectories are entered recursively, creating them on the destination when they do not already exist. Directories that would end up empty are not kept; `/E` keeps them.
+
+`/H` makes `XCOPY` copy hidden files and directories too.
+
+`/P` prompts before copying each file, which allows files to be selectively copied. `/W` waits for a key press before starting, so that disks can be changed.
+
+`/T` gives the copies the current date and time; by default they keep the date and time of the source files.
+
+If `/A` is given, only files with the 'archive' attribute set are copied. The attribute is set whenever a file is written to. `/M` is like `/A` but also clears the attribute of the source files after copying them: used regularly, this copies only the files modified since the last backup, providing a file backup facility.
+
+`/V` turns disk write verification on for the duration of the copy (see the [`VERIFY`](VERIFY.md) command); the previous setting is restored at the end.
+
+The `/Dx` options say what to do when the destination file already exists:
+
+- `/DW`: overwrite it (this is the default)
+- `/DK`: skip the file
+- `/DN`: keep the newer of the two files
+- `/DO`: keep the older
+- `/DS`: keep the smaller
+- `/DB`: keep the bigger
+- `/DD`: overwrite only when the sizes differ
+- `/DP`: show both files and ask
+
+A file skipped this way is listed with ' - Skipped' after its name, and a file that replaces an existing destination file is listed with ' - Overwritten' (in every mode, with or without a `/Dx` option). When the compared dates or sizes are equal, the existing destination file is kept.
+
+The `/DP` prompt shows the name, date and time, and size of both files and asks: (O)verwrite, (S)kip, (C)ancel, Over(W)rite all, S(K)ip all. 'Cancel' stops the whole run; the 'all' answers overwrite or skip the remaining duplicates without asking again. When `/P` is also given, the copy confirmation is asked first and the duplicate prompt second.
+
+## Examples
+
+```
+XCOPY B:\ /S
+```
+
+The whole directory tree of drive `B:` is copied into the current directory of the current drive.
+
+```
+XCOPY *.* B: /H/S/M
+```
+
+All files, including hidden files, are copied to drive `B:` only if they have been modified since a similar command was last given, and are then marked as unmodified. All the subdirectories and their contents are copied too.
+
+```
+XCOPY *.TXT B:*.BAK /DN
+```
+
+The `.TXT` files of the current directory are copied to drive `B:` with the extension changed to `.BAK`; whenever the `.BAK` file already exists, the newer of the two files is kept.
+
+---
+
+[Back to the help index](INDEX.md)

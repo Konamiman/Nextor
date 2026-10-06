@@ -1,0 +1,29 @@
+# HERTZ
+
+_Versions: 2.44_
+
+## Format
+
+```
+HERTZ n
+```
+
+## Purpose
+
+Switches the refresh frequency of the VDP.
+
+## Use
+
+The only two values for `n` can be `50` and `60` indicating the refresh frequency of 50 Hz and 60 Hz.
+
+## Examples
+
+```
+HERTZ 50
+```
+
+Switches the VDP to 50 Hz refresh frequency.
+
+---
+
+[Back to the help index](INDEX.md)
