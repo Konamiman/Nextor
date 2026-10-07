@@ -10,7 +10,7 @@
 	;    starts at 0x100), exactly as the standard crt0 recycles its
 	;    startup code.
 	;
-	;    Compile the program with --code-loc 0x480 (the banner makes
+	;    Compile the program with --code-loc 0x500 (the banner makes
 	;    the header bigger than the 0x180 used with the standard crt0)
 	;    and --data-loc 0.
 
@@ -31,7 +31,7 @@ init:   jp      realinit
         ;    prints for the jump instruction bytes above.
 
         .db     13
-        .ascii  "DISKCOPY v1.1 - Copy full disks sector by sector"
+        .ascii  "DISKCOPY v1.2 - Copy full disks sector by sector"
         .db     13,10,13,10
         .ascii  "Copies all the sectors of a disk to another disk of the same type,"
         .db     13,10
@@ -55,7 +55,9 @@ init:   jp      realinit
         .db     13,10,13,10
         .ascii  "Works on drives handled by MSX-DOS drivers and, under Nextor 3 or"
         .db     13,10
-        .ascii  "later, on floppy disk drives."
+        .ascii  "later, on floppy disk drives and on drives with a mounted disk image"
+        .db     13,10
+        .ascii  "file (e.g. to write an image to a floppy disk, or the other way round)."
         .db     13,10
         .db     0x1A
 

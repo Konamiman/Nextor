@@ -36,11 +36,18 @@
  *   program's scope); under Nextor only drives mapped to MSX-DOS
  *   drivers are allowed, plus (on Nextor 3 or later) drives mapped to
  *   Nextor devices flagged as floppy disk drives by their driver
- *   (DEVICE_QUERY "get device parameters", flags bit 2) and ghost
- *   drives (whose main drive is always a floppy disk device).
- *   Whole-disk raw copying makes no sense on the other drives (hard
- *   disk partitions, mounted files, the RAM disk), whose layout is
- *   managed by Nextor.
+ *   (DEVICE_QUERY "get device parameters", flags bit 2), ghost
+ *   drives (whose main drive is always a floppy disk device), and
+ *   drives with a mounted file (a disk image: this allows writing an
+ *   image to a floppy disk and the other way round).  Whole-disk raw
+ *   copying makes no sense on the other drives (hard disk partitions,
+ *   the RAM disk), whose layout is managed by Nextor.
+ * - A mounted disk image can't be copied from or to the drive that
+ *   holds the image file (or its ghost drive), nor to itself (a
+ *   same-drive copy, whose "disk swaps" could not change the image):
+ *   "Can't copy disk onto itself".  A target image mounted in
+ *   read-only mode is refused upfront with a "Write protected disk"
+ *   error.
  * - Sector I/O uses _RDABS/_WRABS on plain MSX-DOS 2, and
  *   _RDDRV/_WRDRV under Nextor (any version: they exist since Nextor
  *   2.0, where _RDABS/_WRABS are deprecated and refuse FAT16 drives).
@@ -157,6 +164,8 @@ byte nextor_ver;		/* 0 = plain MSX-DOS 2, else Nextor major */
 
 byte source_drive;		/* logical source drive (1 = A: etc) */
 byte target_drive;		/* logical target drive */
+byte source_host;		/* drive holding the image file mounted */
+byte target_host;		/* in the source/target drive, 0 = none */
 
 byte o_chk;			/* DSKCHK value to restore on exit */
 bool prompt_flag;		/* true => give warnings and loop */
@@ -392,37 +401,80 @@ bool device_is_floppy(void)
     return (dev_buf[7] & 0x04) != 0;
 }
 
-/* check_drive_supported: on plain MSX-DOS 2 every drive is allowed (the
-   original program's scope); under Nextor the drive must be mapped to an
-   MSX-DOS driver, or (on Nextor 3 or later) to a Nextor device flagged
-   as a floppy disk drive, or be a ghost drive (whose main drive is
-   always a floppy disk device); see the file header.  Terminates with a
-   message and exit code 6 otherwise. */
-void check_drive_supported(byte drive)
+/* get_drive_info: _GDLI of the drive (1 = A: etc) into gdli_buf.
+   Terminates on any error (e.g. "Invalid drive"). */
+void get_drive_info(byte drive)
 {
-    if (nextor_ver == 0)		/* plain MSX-DOS 2: no gate */
-        return;				/* (and no _GDLI to ask) */
-
     regs.Bytes.A = drive - 1;
     regs.UWords.HL = (uint)gdli_buf;
     DosCall(_GDLI, &regs, REGS_MAIN, REGS_AF);
     if (regs.Bytes.A != 0)
-        terminate(regs.Bytes.A);	/* e.g. "Invalid drive" */
+        terminate(regs.Bytes.A);
+}
+
+/* check_drive_supported: on plain MSX-DOS 2 every drive is allowed (the
+   original program's scope); under Nextor the drive must be mapped to an
+   MSX-DOS driver, or (on Nextor 3 or later) to a Nextor device flagged
+   as a floppy disk drive, or be a ghost drive (whose main drive is
+   always a floppy disk device), or have a file mounted (a disk image);
+   see the file header.  Terminates with a message and exit code 6
+   otherwise.  Returns the drive that holds the image file (1 = A: etc)
+   for a mounted file, 0 for any other drive; gdli_buf keeps the drive
+   information. */
+byte check_drive_supported(byte drive)
+{
+    if (nextor_ver == 0)		/* plain MSX-DOS 2: no gate */
+        return 0;			/* (and no _GDLI to ask) */
+
+    get_drive_info(drive);
 
     if (gdli_buf[0] == 5)		/* ghost drive */
-        return;
+        return 0;
+    if (gdli_buf[0] == 3 && nextor_ver >= 3)
+        return gdli_buf[1] + 1;		/* mounted file */
     if (gdli_buf[0] == 1) {		/* assigned to a storage device */
         if (gdli_buf[3] != 0xFF)	/* relative drive: a real number */
-            return;			/* means an MSX-DOS driver */
+            return 0;			/* means an MSX-DOS driver */
         if (nextor_ver >= 3 && device_is_floppy())
-            return;			/* Nextor devices need Nextor 3+ */
+            return 0;			/* Nextor devices need Nextor 3+ */
     }
-    /* Unassigned, mounted file, RAM disk, non-floppy Nextor device, or
-       any Nextor device below Nextor 3 */
+    /* Unassigned, RAM disk, non-floppy Nextor device, or any Nextor
+       device or mounted file below Nextor 3 */
     put_msg(M_NSUP1);
     put_char(drive + 'A' - 1);
     put_msg(M_NSUP2);
     terminate(E_NSUP);
+    return 0;
+}
+
+/* base_drive: the drive itself, or the main drive for a ghost drive
+   (both refer to the same physical floppy disk drive). */
+byte base_drive(byte drive)
+{
+    get_drive_info(drive);
+    return gdli_buf[0] == 5 ? gdli_buf[1] + 1 : drive;
+}
+
+/* check_mounted_files: a disk image can't be copied from or to the
+   drive that holds its file (or that drive's ghost), and a same-drive
+   copy makes no sense for it (no disk swaps are possible); both are
+   reported as "Can't copy disk onto itself".  Also, the target image
+   must not be mounted in read-only mode. */
+void check_mounted_files(void)
+{
+    if (target_host != 0) {
+        get_drive_info(target_drive);
+        if (gdli_buf[2] & 1)		/* read-only mount */
+            terminate(_WPROT);
+    }
+    if ((source_host != 0 || target_host != 0) && single_mode)
+        error(E_SAM_DRIVE);
+    if (source_host != 0
+        && base_drive(source_host) == base_drive(target_drive))
+        error(E_SAM_DRIVE);
+    if (target_host != 0
+        && base_drive(target_host) == base_drive(source_drive))
+        error(E_SAM_DRIVE);
 }
 
 
@@ -937,8 +989,9 @@ int main(char** argv, int argc)
 
     get_drives(argv, argc);
 
-    check_drive_supported(source_drive);
-    check_drive_supported(target_drive);
+    source_host = check_drive_supported(source_drive);
+    target_host = check_drive_supported(target_drive);
+    check_mounted_files();
 
     o_chk = get_dchk();		/* read before registering the abort */
     set_abort_routine();	/* routine that restores it */

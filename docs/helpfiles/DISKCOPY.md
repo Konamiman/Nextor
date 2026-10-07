@@ -24,7 +24,14 @@ The boot sector of the target disk is preserved: only the sectors after it are c
 
 If `/X` is given, the prompts are suppressed: the initial "insert the disks and press a key" wait and the final "copy another disk" question. The disk swap prompts of a same-drive copy are always issued, since they are the copy mechanism itself.
 
-The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives (including 'ghost' drive letters of a single floppy drive). Whole-disk copying is refused on other drives (hard disk partitions, mounted files, the RAM disk), whose layout is managed by Nextor.
+The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives (including 'ghost' drive letters of a single floppy drive) and on drives with a mounted disk image file. This allows writing a disk image to a floppy disk, or creating an image of a floppy disk, e.g. after `MAPDRV E: GAME.DSK`:
+
+```
+DISKCOPY E: A:   (image to floppy disk)
+DISKCOPY A: E:   (floppy disk to image)
+```
+
+A disk image can't be copied from or to the drive that holds the image file, nor to itself; a target image mounted in read-only mode is refused too. Whole-disk copying is refused on other drives (hard disk partitions, the RAM disk), whose layout is managed by Nextor.
 
 ## Examples
 

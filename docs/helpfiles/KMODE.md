@@ -22,7 +22,7 @@ If the `/S` option is given, the boot code of the disk in the default or specifi
 
 Disks with a standard (PC style) boot sector are refused by `/S`: run `FIXDISK /S` on them first to give them an MSX-DOS 2 boot sector, then use `KMODE /S`.
 
-The `/S` option works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives.
+The `/S` option works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives and on drives with a mounted disk image file.
 
 ## Examples
 

@@ -27,10 +27,12 @@
 ;     mapped to a device flagged as a floppy disk drive by its Nextor
 ;     driver (or to a ghost drive, whose main drive is always such a
 ;     device).
+;   - The operating system is Nextor 3 or later and a file (a disk
+;     image) is mounted in the target drive.
 ;
-; On any other drive (hard disk partitions on Nextor devices, mounted
-; files, the RAM disk) the boot-sector patch is refused: those boot
-; sectors are managed by Nextor and may live inside partitioned media.
+; On any other drive (hard disk partitions on Nextor devices, the RAM
+; disk) the boot-sector patch is refused: those boot sectors are managed
+; by Nextor and may live inside partitioned media.
 ;
 ; Disks with a standard (non MSX) boot sector are also refused (see
 ; CHECK_STDBOOT): such disks boot MSX-DOS through the kernel without
@@ -56,7 +58,7 @@
 	;	-------------------------------------------------------
 
 	db	13
-	db	"KMODE v1.1 - Set the Kanji screen mode",13,10
+	db	"KMODE v1.2 - Set the Kanji screen mode",13,10
 	db	13,10
 	db	"Sets the Kanji screen mode of the computer (requires a Kanji driver,",13,10
 	db	"built in Japanese MSX computers), and optionally saves it in the",13,10
@@ -70,8 +72,9 @@
 	db	"           omitted, the currently active mode is saved.",13,10
 	db	13,10
 	db	"/S works on drives handled by MSX-DOS drivers and, under Nextor 3 or",13,10
-	db	"later, on floppy disk drives. Disks with a standard (non MSX) boot",13,10
-	db	"sector are refused: run FIXDISK /S on them first.",13,10
+	db	"later, on floppy disk drives and on drives with a mounted disk image",13,10
+	db	"file. Disks with a standard (non MSX) boot sector are refused: run",13,10
+	db	"FIXDISK /S on them first.",13,10
 	db	1Ah
 
 	;	-------------------------------------------------------
@@ -354,6 +357,7 @@ CHECK_TARGET:
 ;      device must be flagged as a floppy disk drive (DEV_QUERY
 ;      "get device parameters", flags bit 2). Ghost drives are accepted
 ;      directly (their main drive is always a floppy disk device).
+;    - Nextor 3 or later with a file mounted in the drive.
 ;
 ;    Returns only if the drive is acceptable; otherwise the program exits
 ; with an error message or a DOS error code.
@@ -384,9 +388,16 @@ ct_nextor:
 	cp	5		;5 = ghost drive, whose main
 	ret	z		;     drive is always a floppy
 				;     disk device: acceptable.
+	cp	3		;3 = mounted file (a disk
+	jr	nz,ct_not_mounted ;   image): acceptable on Nextor
+	ld	a,(NEXTOR_VER)	;     3 or later.
+	cp	3
+	ret	nc
+	jr	ct_unsup
+ct_not_mounted:
 	cp	1		;Anything but "assigned to a
 	jr	nz,ct_unsup	; storage device" (unassigned,
-				; mounted file, RAM disk): no.
+				; RAM disk): no.
 
 	ld	a,(GDLI_BUF+3)	;Relative drive number: FFh for
 	inc	a		; Nextor drivers, a real number

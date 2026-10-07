@@ -221,7 +221,16 @@ Nextor adds three new similar choice parameters:
 
 * FBh: Will perform a "quick format" on the disk, by simply clearing the FAT and root directory areas. As with the other two new choices, the disk must have a valid FAT12 or FAT16 boot sector, otherwise a "Not a DOS disk" error will be returned. 
 
-When the disk is actually formatted (choice 1..9) in MSX-DOS 2 mode, an MSX-DOS 2 boot sector will be generated once the physical format completes. All the format choices (01h..09h and FBh..FFh) work for drives mapped to both MSX-DOS and Nextor drivers; only choice 00h is restricted to MSX-DOS drivers.
+When the disk is actually formatted (choice 1..9) in MSX-DOS 2 mode, an MSX-DOS 2 boot sector will be generated once the physical format completes.
+
+Not all the choices are available on all the drives (an `.IFORM` error is returned otherwise):
+
+* Choice 00h works for drives mapped to MSX-DOS drivers only.
+* Choices 01h..09h work for drives mapped to MSX-DOS drivers and for drives mapped to floppy disk devices on Nextor drivers.
+* Choices FEh and FFh work for the same drives as 01h..09h, and also for drives with a mounted file (a disk image).
+* Choices FBh..FDh work for any drive with a FAT12 or FAT16 filesystem.
+
+On drives mapped to Nextor drivers (including mounted files) the FEh and FFh choices keep the disk parameters already present in the boot sector, since Nextor drivers can't provide disk parameters for a media ID: if the boot sector doesn't contain valid disk parameters a "Not a DOS disk" error is returned, FEh leaves the boot sector unchanged, and FFh adds the MSX-DOS 2 boot code and volume id. On these drives FEh and FFh are available for FAT12 disks only (an `.IFORM` error is returned for FAT16 disks).
 
 In MSX-DOS 1 mode this function behaves differently in a few aspects:
 

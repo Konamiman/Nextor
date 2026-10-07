@@ -112,8 +112,8 @@ DISKCOPY.COM: \
 	$(SDK_C_RELS) \
 	../../../sdk/C/includes/asmcall.h
 
-	$(call check_header,crt0_diskcopy.rel,0x480)
-	sdcc --code-loc 0x480 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_diskcopy.rel $(SDK_C_RELS) diskcopy_msgs.rel diskcopy.c
+	$(call check_header,crt0_diskcopy.rel,0x500)
+	sdcc --code-loc 0x500 --data-loc 0 -mz80 --disable-warning 196 --disable-warning 85 --no-std-crt0 -I../../../sdk/C/includes -I../../../sdk/C/code crt0_diskcopy.rel $(SDK_C_RELS) diskcopy_msgs.rel diskcopy.c
 	$(call hex2bin,diskcopy.ihx,$@)
 
 crt0_diskcopy.rel: crt0_diskcopy.mac

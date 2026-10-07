@@ -100,27 +100,14 @@ MAXCLUS_12BITS	equ	4095
 ;
 ;
 
-    ; For non-FDD Nextor drives, allow only the FBh-FDh choices
-    ; (quick format and boot sector rebuild preserving the disk
-    ; parameters): they work through regular sector I/O on any drive
-    ; with a valid FAT12/16 filesystem (e.g. FORMAT /Q or the FDh
-    ; choice on a hard disk / SD card partition). The physical format
-    ; choices (1-9) are rejected (fmt_devcmd_routine would reject them
-    ; anyway, this just fails earlier), and so are FEh-FFh: those
-    ; compose the boot sector from the floppy media ID table, which
-    ; would write floppy geometry over a partition's disk parameters.
-
-		push	hl
+		push	iy			;IY must keep pointing to
+		push	hl			; RAM_BASE after the gate
+		pop	iy			; (BUILD_UPB tests RW_FLAGS
+		ld	e,a			; through it).
+		call	FMT_GATE
+		ld	a,e
 		pop	iy
-		bit	UF_DBD,(iy+UD_DFLAGS##)
-		jr	z,fmt_ok_gate
-		bit	UF_FDD,(iy+UD_DFLAGS##)
-		jr	nz,fmt_ok_gate
-		cp	0FBh
-		jr	c,fmt_gate_rej
-		cp	0FEh
-		jr	c,fmt_ok_gate
-fmt_gate_rej:
+		jr	nc,fmt_ok_gate
 		ld	a,.IFORM##
 		ret
 fmt_ok_gate:
@@ -162,11 +149,19 @@ new_boot_sec:	push	af
 ;
 		push	bc			;Save choice again.
 		call	FIND_UPB
-		ld	de,1			;Try to read the first FAT
-		jr	nz,upb_no_valid
+		push	af
+		push	hl
+		ld	de,UD_DFLAGS##
+		add	hl,de
+		bit	UF_DBD,(hl)
+		pop	hl
+		jp	nz,nxt_new_boot_sec	;Nextor drive?
+		pop	af
+		ld	de,1
+		jr	nz,upb_read_fat
 		ld	e,(ix+UPB_RESERVED_SECTORS##)
 		ld	d,(ix+UPB_RESERVED_SECTORS##+1)
-upb_no_valid:
+upb_read_fat:				;Try to read the first FAT
 		ld	bc,(DATA_SEG##)		; sector and if there was
 		ld	b,1			; any error then give up
 						; immediately.
@@ -202,7 +197,7 @@ upb_no_valid:
 		pop	bc
 		ret	nz			;Give up if there was an error.
 ;
-		bit	0,b			;If choice code is "upb only"
+chk_upb_only:	bit	0,b			;If choice code is "upb only"
 		jr	z,put_boot_sec		; skip to write out boot.
 ;
 got_boot_sec:	push	hl
@@ -249,8 +244,45 @@ not_dos1_disk:	ld	a,.NDOS##		;Error if was no valid
 		ret				; FATid byte.
 ;
 ;
+;
 NEW_BOOT_NAME:	db	0EBh,0FEh,090h		;Dummy 8086 jump instruction
 		db	"NEXTOR20"
+;
+;
+;    The choices allowed by DSK_FORMAT on each type of drive.  Drives on
+; MSX-DOS drivers and Nextor floppy disk drives allow all of them.  Other
+; Nextor drives allow only the FBh-FDh choices (quick format and boot
+; sector rebuild preserving the disk parameters): they work through
+; regular sector I/O on any drive with a valid FAT12/16 filesystem (e.g.
+; FORMAT /Q or the FDh choice on a hard disk / SD card partition).  The
+; physical format choices (1-9) are rejected (fmt_devcmd_routine would
+; reject them anyway, this just fails earlier), and so are FEh-FFh, which
+; are meant for floppy disks.  The exception are the mounted files (disk
+; images), where FEh-FFh are allowed (this is what FIXDISK needs); as on
+; Nextor floppy disk drives, they work on FAT12 disks only (see
+; nxt_new_boot_sec).
+;
+; Entry:     IY = Address of unit descriptor
+;	      A = Choice number
+; Returns:   Cy = 1 if the choice is not allowed on the drive
+; Corrupts:  AF
+;
+FMT_GATE:
+		or	a
+		bit	UF_DBD,(iy+UD_DFLAGS##)
+		ret	z
+		bit	UF_FDD,(iy+UD_DFLAGS##)
+		ret	nz
+		cp	0FBh
+		ret	c
+		cp	0FEh
+		ccf
+		ret	nc
+		bit	UF_MNT,(iy+UD_FLAGS##)
+		scf
+		ret	z
+		ccf
+		ret
 ;
 
 ;		------------------------------------
@@ -292,6 +324,46 @@ do_boot_sec:	push	hl
 		jr	put_boot_sec
 
 std_boot_err:	pop	bc	;Throw away pushed AF (choice)
+		ret
+
+	;--- FEh/FFh on a Nextor drive (floppy disk drive or mounted file).
+	;    Nextor drivers can't provide disk parameters for a media ID
+	;    (DP_CMD is a no-op, MAKE_UPB would use a stale DPB), so the
+	;    disk must already have a valid UPB, which is kept as is:
+	;    FEh rewrites the boot sector unchanged, FFh adds the MSX-DOS 2
+	;    boot code and VOL_ID block. Only FAT12 disks with a 16 bit
+	;    total sector count are supported, since the VOL_ID block
+	;    overlaps the 32 bit total sector count, and MSX-DOS 2 boot
+	;    sectors are a FAT12 thing (the FCh choice does the same).
+	;    Input: IX = UPB_BUF with the boot sector, HL = unit descriptor,
+	;           stack = AF from FIND_UPB, choice
+
+nxt_new_boot_sec:
+		pop	af
+		pop	bc			;B = choice
+		jp	nz,not_dos1_disk	;No valid UPB: "Not a DOS disk"
+		ld	a,(ix+UPB_TOTAL_SECTORS##)
+		or	(ix+UPB_TOTAL_SECTORS##+1)
+		jr	z,nxt_new_boot_rej
+		push	hl
+		ld	de,UD_DPB_ADDRESS##	;DE := max cluster number from
+		add	hl,de			; the DPB just built by FIND_UPB
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+		ld	de,14
+		add	hl,de
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		ld	hl,MAXCLUS_FAT12+1	;Cy := FAT16
+		or	a
+		sbc	hl,de
+		pop	hl
+		jp	nc,chk_upb_only
+nxt_new_boot_rej:
+		ld	a,.IFORM##
 		ret
 
 ;		------------------------------------
