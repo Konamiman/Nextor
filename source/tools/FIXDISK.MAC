@@ -45,11 +45,19 @@
 ;     mapped to a device flagged as a floppy disk drive by its Nextor
 ;     driver (or to a ghost drive, whose main drive is always such a
 ;     device).
+;   - The operating system is Nextor 3 or later and a file (a disk
+;     image) is mounted in the target drive. As on floppy disk drives
+;     of Nextor drivers, the kernel accepts the FEh and FFh choices
+;     (default and /S) only on FAT12 disks that already have valid disk
+;     parameters ("Not a DOS disk" otherwise), which are preserved as
+;     they are: Nextor drivers can't provide disk parameters for a
+;     media ID. FAT16 disks get "Cannot format this drive". /B works
+;     on any FAT12 or FAT16 disk.
 ;
-; On any other drive (hard disk partitions on Nextor devices, mounted
-; files, the RAM disk) the operation is refused: those boot sectors are
-; managed by Nextor and rebuilding them from the media ID would destroy
-; the real disk parameters.
+; On any other drive (hard disk partitions on Nextor devices, the RAM
+; disk) the operation is refused: those boot sectors are managed by
+; Nextor and rebuilding them from the media ID would destroy the real
+; disk parameters.
 ;
 ; NOTE: KMODE and FIXDISK deliberately duplicate their startup, drive
 ; gate and message machinery (as CHKDSK and UNDEL do). Sharing the
@@ -61,7 +69,7 @@
 	;	-------------------------------------------------------
 
 	db	13
-	db	"FIXDISK v1.1 - Rebuild the MSX-DOS 2 disk parameters of a disk",13,10
+	db	"FIXDISK v1.2 - Rebuild the MSX-DOS 2 disk parameters of a disk",13,10
 	db	13,10
 	db	"Rewrites the boot sector of a disk so that it has valid MSX-DOS 2",13,10
 	db	"disk parameters. The /S and /B options write a complete boot sector",13,10
@@ -74,7 +82,8 @@
 	db	"       /B: write a standard boot sector (requires Nextor 3)",13,10
 	db	13,10
 	db	"Works on drives handled by MSX-DOS drivers and, under Nextor 3 or",13,10
-	db	"later, on floppy disk drives.",13,10
+	db	"later, on floppy disk drives and on drives with a mounted disk image",13,10
+	db	"file (FAT12 only, except for /B).",13,10
 	db	1Ah
 
 	;	-------------------------------------------------------
@@ -286,6 +295,7 @@ CHECK_TARGET:
 ;      device must be flagged as a floppy disk drive (DEV_QUERY
 ;      "get device parameters", flags bit 2). Ghost drives are accepted
 ;      directly (their main drive is always a floppy disk device).
+;    - Nextor 3 or later with a file mounted in the drive.
 ;
 ;    Returns only if the drive is acceptable; otherwise the program exits
 ; with an error message or a DOS error code.
@@ -316,9 +326,16 @@ ct_nextor:
 	cp	5		;5 = ghost drive, whose main
 	ret	z		;     drive is always a floppy
 				;     disk device: acceptable.
+	cp	3		;3 = mounted file (a disk
+	jr	nz,ct_not_mounted ;   image): acceptable on Nextor
+	ld	a,(NEXTOR_VER)	;     3 or later (the kernel
+	cp	3		;     itself refuses the FEh/FFh
+	ret	nc		;     choices on FAT16 disks).
+	jr	ct_unsup
+ct_not_mounted:
 	cp	1		;Anything but "assigned to a
 	jr	nz,ct_unsup	; storage device" (unassigned,
-				; mounted file, RAM disk): no.
+				; RAM disk): no.
 
 	ld	a,(GDLI_BUF+3)	;Relative drive number: FFh for
 	inc	a		; Nextor drivers, a real number

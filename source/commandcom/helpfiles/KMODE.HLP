@@ -32,7 +32,7 @@ Use:         The mode is OFF for the ANK screen (the standard MSX
 
              The /S option works on drives handled by MSX-DOS
         drivers and, under Nextor 3 or later, on floppy disk
-        drives.
+        drives and on drives with a mounted disk image file.
 
 Examples:
 

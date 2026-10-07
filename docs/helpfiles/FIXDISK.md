@@ -26,7 +26,7 @@ If `/B` is given, a standard (PC style) boot sector, also with a volume id, is w
 
 To help prevent accidental updates of boot disks, a prompt is always issued before the disk is written.
 
-The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives.
+The program works on drives handled by MSX-DOS drivers and, under Nextor 3 or later, on floppy disk drives and on drives with a mounted disk image file. On floppy disk drives of Nextor drivers and on disk images the disk must already have valid disk parameters (otherwise a "Not a DOS disk" error is given), and they are kept unchanged, so the default option has no effect there: use `/S` or `/B`. `/S` is available for FAT12 disks only.
 
 ## Examples
 

@@ -702,7 +702,10 @@ div_10_loop:	inc	c			; an error number to the
 ; - Choice 00h works for drives assigned by MSX-DOS drives only
 ;   (obsolete, 80h should be used instead)
 ; - All other choices work for drives assigned by MSX-DOS drives
-;   and for drives assigned to Nextor devices that are floppy disks
+;   and for drives assigned to Nextor devices that are floppy disks;
+;   FBh-FDh work on any drive, and FEh-FFh on mounted files too;
+;   on Nextor drives FEh-FFh need a FAT12 disk (see nxt_new_boot_sec
+;   in val.mac)
 
 		ex	af,af'			;Save choice number in A'
 		push	hl
