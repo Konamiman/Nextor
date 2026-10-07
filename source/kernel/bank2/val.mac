@@ -1945,7 +1945,8 @@ is_fat16:	ex	(sp),hl
 		push	hl
 		ld	bc,UD_FLAGS##
 		add	hl,bc
-		ld	(hl),UFM_F6	;Set FAT16 flag
+		res	UF_F12,(hl)	;Set FAT16 flag
+		set	UF_F16,(hl)
 		pop	hl
 		ex	(sp),hl
 
