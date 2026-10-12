@@ -371,12 +371,11 @@ ram_ad	defl	DATABASE
 ;
 ;	---------------------------------
 ;
-;   The following are entry points to the kernel  code  segment.   "KINIT"  is
-; only  used  for  initialization,  "KBDOS"  is  used  to  access all the BDOS
-; functions, "KTIMI" is for timer interrupts and the  remainder  are  for  the
-; BIOS routines.  
+;   The following are entry points to the kernel  code  segment.   "KBDOS"  is
+; used  to  access all the BDOS functions, "KTIMI" is for timer interrupts and
+; the remainder are for the BIOS routines.  (The kernel initialization, KINIT,
+; was also here; it now runs from bank 1.)
 ;
-	const	KINIT,  0000h		;Kernel initialization routine
 	const	KBDOS,  0005h		;Kernel BDOS function dispatcher
 ;
 	const	$ALL_SEG,005Ch		;Mapper support allocate segment

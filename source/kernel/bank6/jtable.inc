@@ -20,3 +20,7 @@
 	jentry	CALL_EXTRA
 	jentry	CSETSCREEN
 	jentry	PS_SCREEN
+	jentry	F_FMT
+	jentry	NEW_UPB6
+	jentry	F_BFIN
+	jentry	CN_LINE6

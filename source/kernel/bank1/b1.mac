@@ -4,5 +4,6 @@ BANK	equ	1
 ;
 	include	../bank.inc
 	include	../bank0/b0labels.inc
+	include	../bank2/b2labels.inc
 ;
 	end

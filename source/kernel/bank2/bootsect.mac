@@ -3,12 +3,12 @@
 ;mode (or starts Disk BASIC if that file is not present).
 ;
 ;This is what the built-in FORMAT command puts at offset 1Eh of the boot
-;sector, right after the disk parameters (see SET_BOOT_EX in val.mac, which
-;copies it to the freshly formatted disk; the rest of the sector, up to byte
+;sector, right after the disk parameters (see SET_BOOT_EX in bank6/dskfmt.mac,
+;which copies it to the freshly formatted disk; the rest of the sector, up to byte
 ;511, is zeroed - the code relies on that, e.g. for the tail of the
 ;MSXDOS.SYS FCB).
 ;
-;It lives in its own file, included by val.mac, so that the tools Makefile
+;It lives in its own file, included by bank6/dskfmt.mac, so that the tools Makefile
 ;can also assemble it standalone to make the generated tools disk image
 ;bootable: see the tools-disk target and tools-disk-bootsect.mac in
 ;source/tools.

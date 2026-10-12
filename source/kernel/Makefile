@@ -208,12 +208,12 @@ nextor_base.dat: \
 SDK_COMRELS = dos_calls.rel dos_errors.rel dos_file_handles.rel
 COMRELS = $(SDK_COMRELS) kvar.rel data.rel chgbnk.rel
 B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
-B1RELS = $(addprefix bank1/,dosinit.rel mapinit.rel msg.rel skipfirm.rel)
+B1RELS = $(addprefix bank1/,dosinit.rel kinit1.rel mapinit.rel msg.rel skipfirm.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
 B5RELS = $(addprefix bank5/,b5.rel)
-B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel pstor.rel)
+B6RELS = $(addprefix bank6/,b6.rel jump.rel ghost.rel format.rel dskfmt.rel upb.rel lnedit.rel bootmsg.rel idrvauto.rel pstor.rel)
 
 lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,\
 	$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,\
@@ -254,9 +254,10 @@ bank4/bootmenu.rel: version.inc
 bank4/partit.rel: version.inc
 bank6/bootmsg.rel: version.inc
 
-# val.mac includes the FORMAT boot sector code from its own file (which the
-# tools-disk target of the tools Makefile also assembles standalone).
-bank2/val.rel: bank2/bootsect.mac
+# bank6/dskfmt.mac includes the FORMAT boot sector code from its own file in
+# bank2 (which the tools-disk target of the tools Makefile also assembles
+# standalone).
+bank6/dskfmt.rel: bank2/bootsect.mac
 
 ###  Bank 0
 
@@ -301,7 +302,8 @@ bank0/b0lab_b6.inc: \
 bank1/b1.rel: \
 	$(UNDOC_MODE_STAMP) \
 	bank1/b1.mac \
-	bank0/b0labels.inc
+	bank0/b0labels.inc \
+	bank2/b2labels.inc
 
 	$(call assemble,bank1/b1.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
@@ -311,11 +313,12 @@ bank1/B1.BIN: \
 	bank1/msg.rel \
 	bank1/b1.rel \
 	bank4/bootmenu.rel \
-	bank0/b0labels.inc
+	bank0/b0labels.inc \
+	bank2/b2labels.inc
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel mapinit.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel kinit1.rel mapinit.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
@@ -426,7 +429,7 @@ bank6/B6.BIN bank6/B6.SYM &: \
 
 	$(call print_linking,"bank 6")
 	@$(LK80) --working-dir bank6 --symbols-file B6.SYM --output-file B6.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel bootmsg.rel idrvauto.rel pstor.rel ../print_call_help.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b6.rel jump.rel ghost.rel format.rel dskfmt.rel upb.rel lnedit.rel bootmsg.rel idrvauto.rel pstor.rel ../print_call_help.rel \
 			--code 7fd0h ../chgbnk.rel
 
 bank5/fdisk.dat: \
