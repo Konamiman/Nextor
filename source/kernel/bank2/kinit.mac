@@ -83,6 +83,32 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 	jp	?ALL_SEG## -OFFSET	;Entry jumps to the mapper
 	jp	?FRE_SEG## -OFFSET	; allocation routines.
 ;
+;	--------------------------------
+;
+;   Second half of GO_EXIT (err.mac), placed here to use the free space
+; before the BIOS entries: GO_EXIT makes the exit routine return here,
+; with the bank to restore in the stack (FFh = kernel ROM was not in page 1).
+;
+	PROC	GE_RESTORE
+		ex	(sp),hl			;L := bank to restore
+		push	af
+		ld	a,l
+		inc	a
+		jr	z,ge_restore_end	;Kernel ROM wasn't in page 1
+		push	bc
+		push	de
+		ld	a,(MASTER_SLOT##)	;Put the kernel ROM in page 1
+		ld	h,40h			; again (preserves HL)
+		call	$ENASLT##
+		ld	a,l			;Select the bank it had
+		call	CHGBNK
+		ei
+		pop	de
+		pop	bc
+ge_restore_end:	pop	af
+		pop	hl
+		ret
+;
 ;
 ;	--------------------------------
 ;
