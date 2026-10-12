@@ -868,8 +868,9 @@ AAD_DEV_HAS_MAPPED equ 20  ;Nonzero if the device currently being examined
                            ;has a valid partition already mapped to a drive
 
 AAD_DRIVER_SEGMENT equ 21 ;Driver RAM segment, FFh for ROM drivers
+AAD_EXT_SLOT equ 22 ;Primary partition number of the extended partition being examined
 
-AAD_SIZE equ 22
+AAD_SIZE equ 23
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_IS_AUTOASPART equ 7
@@ -1062,7 +1063,7 @@ AA_PXLOOP:
     ld l,0
     bit 7,a ;We are examining extended partitions?
     jr z,AA_PX_1ST
-    ld h,2  ;Yes: primary = 2, extended = partition # - 1
+    ld h,(ix+AAD_EXT_SLOT)  ;Yes: primary = slot of the extended partition, extended = partition # - 1
     and 7Fh
     dec a
     ld l,a
@@ -1077,7 +1078,11 @@ AA_PX_1ST:
     call F_GPART
     pop ix
     cp  .IPART
-    jr z,AA_PLOOP_END
+    jr nz,AA_PX_NOIPART
+    bit 7,(ix+AAD_CURR_PART_INDEX)
+    jr z,AA_PLOOP_NEXT  ;Empty primary partition: skip it
+    jr AA_PLOOP_END     ;No more logical partitions
+AA_PX_NOIPART:
     or a
     jr z,AA_PX_POK
 
@@ -1095,11 +1100,18 @@ AA_PX_POK:
 
     ld  (ix+AAD_CURR_PART_STATUS_BYTE),c
 
+    ;If this is the first extended partition in the primary partition table,
+    ;continue with its logical partitions (primary partitions after it are ignored).
+    ;An extended type for a logical partition is just an unsuitable type.
+
+    bit 7,(ix+AAD_CURR_PART_INDEX)
     ld	a,b	;Partition type
+    jr  nz,AA_PX_NOEX
     call IS_EXT_PART
     jr  nz,AA_PX_NOEX
     ld a,(ix+AAD_CURR_PART_INDEX)
-    or 80h
+    ld (ix+AAD_EXT_SLOT),a
+    ld a,80h+2  ;Extended partition 1 (partition # - 1)
     jr AA_PXLOOP
 AA_PX_NOEX:    
 	cp	PT_FAT12
@@ -4469,8 +4481,10 @@ DOSV1_2:
 ;
 ; If "part" is 0, maps to absolute sector 0 of device
 ;
-; If "part" is 2, 3 or 4, it is interpreted as logical partition
-; if partition 2 is extended, otherwise it is interpreted as primary partition
+; If the first extended partition in the primary partition table is
+; primary partition K, "part" numbers K and above are interpreted as logical
+; partitions K-1, K-2... of that extended partition; otherwise "part"
+; is interpreted as a primary partition
 ;
 ; If "lun" is 0, it is interpreted as 1
 ;
@@ -4745,9 +4759,6 @@ MAPDRV_NOGETCUR:
 	jr	z,MAPDRV_GOT_PAR_SEC
 
 	ld	a,(MAPDRV_PAR)
-	cp	1
-	ld	b,0
-	jr	z,MAPDRV_GOTPAR
 
 	;* If partition number is 0, map to device sector 0
 
@@ -4760,32 +4771,59 @@ MAPDRV_NOGETCUR:
 	jr	MAPDRV_GOT_PAR_SEC
 MAPDRV_NOP0:
 
-	;* If partition number is 2 to 4, convert it to primary or logical
+	;* Convert partition number N to primary or logical: if the first
+	;  extended partition in the primary partition table is primary partition K,
+	;  partitions K and above are its logical partitions K-1, K-2...;
+	;  otherwise partition N is primary partition N.
+	;  Only primary partitions 1 to N need to be examined.
 
+	ld	c,a	;C = partition number
+	ld	b,0	;B = primary partition being examined
+MAPDRV_PLOOP:
+	inc	b
+	ld	a,b
 	cp	4+1
-	jr	nc,MAPDRV_LOGPAR
-	
-	push	af
+	jr	nc,MAPDRV_PRIM	;No extended partition in the primary partition table
+	dec	a
+	cp	c
+	jr	nc,MAPDRV_PRIM	;Partition N is before the first extended partition
+
+	push	bc
+	ld	h,b
+	ld	l,0
 	ld	a,(MAPDRV_SEG)
 	ld	b,a
 	ld	a,(MAPDRV_DEV)
 	ld	d,a
 	ld	a,(MAPDRV_SLT)
-	ld	hl,0200h
 	ld	c,_GPART##
-	call	BASIC_DOS
+	call	BASIC_DOS_NE	;Don't throw a BASIC error for empty partitions
+	or	a
+	jr	nz,MAPDRV_PERR
 	ld	a,b
-	call IS_EXT_PART	;Extended partition?
-
 	pop	bc
-	ld	a,b
-	ld	b,0
-	jr	nz,MAPDRV_GOTPAR
+	call IS_EXT_PART	;Extended partition?
+	jr	nz,MAPDRV_PLOOP
 
-MAPDRV_LOGPAR:
-	dec	a
-	ld	b,a
-	ld	a,2
+	ld	a,c	;Extended: logical partition N-K+1 of primary partition K
+	sub	b
+	inc	a
+	ld	c,a
+	ld	a,b
+	ld	b,c
+	jr	MAPDRV_GOTPAR
+
+MAPDRV_PERR:
+	pop	bc
+	cp	.IPART##
+	jr	z,MAPDRV_PLOOP	;Empty primary partition: keep searching
+				;Other errors will be thrown by the _GPART call below
+MAPDRV_PRIM:
+	ld	a,c
+	ld	b,0
+	cp	4+1
+	jr	c,MAPDRV_GOTPAR
+	ld	a,4+1	;No such primary partition (and keep bit 7 of H clear)
 
 MAPDRV_GOTPAR:
 
@@ -6493,43 +6531,23 @@ COUNT_DEVICE_PARTITIONS::
 	call GET_P1_SLOT
 	ld (BUF+6),a		;BUF+6 = driver slot
 
-	;--- Check primary partition 1
+	;--- Scan the primary partitions, the first extended one
+	;    determines if we have logical partitions.
+	;    Same rules as AUTO_ASSIGN: empty primary partitions are skipped,
+	;    and primary partitions after an extended one are ignored.
 
-	ld hl,0100h
-	call CDP_GPART
-	or a
-	jr nz,CDP_DONE		;Error reading partition table = done
-	ld a,b
-	or a
-	jr z,CDP_DONE		;Empty = no partitions at all
-	call CDP_COUNT_ACTIVE
-
-	;--- Check primary partition 2: determines if we have extended partitions
-
-	ld hl,0200h
-	call CDP_GPART
-	or a
-	jr nz,CDP_DONE		;Error = done
-	ld a,b
-	or a
-	jr z,CDP_DONE		;Empty = only partition 1 existed
-	call IS_EXT_PART
-	jr z,CDP_SCAN_EXTENDED
-
-	;=== No extended: check partition 2 itself, then 3 and 4 ===
-
-	call CDP_COUNT_ACTIVE
-
-	ld e,3			;E = primary partition number
+	ld e,1			;E = primary partition number
 CDP_PRI_LOOP:
 	ld h,e
 	ld l,0
 	call CDP_GPART
+	cp .IPART##
+	jr z,CDP_PRI_NEXT	;Empty = skip it
 	or a
-	jr nz,CDP_PRI_NEXT
+	jr nz,CDP_DONE		;Error reading partition table = done
 	ld a,b
-	or a
-	jr z,CDP_PRI_NEXT
+	call IS_EXT_PART
+	jr z,CDP_SCAN_EXTENDED
 	call CDP_COUNT_ACTIVE
 CDP_PRI_NEXT:
 	inc e
@@ -6541,9 +6559,10 @@ CDP_PRI_NEXT:
 	;=== Extended: scan logical partitions in the chain ===
 
 CDP_SCAN_EXTENDED:
+	ld d,e			;D = primary partition number of the extended partition
 	ld e,1			;E = extended partition index
 CDP_EXT_LOOP:
-	ld h,2
+	ld h,d
 	ld l,e
 	call CDP_GPART
 	cp .IPART##

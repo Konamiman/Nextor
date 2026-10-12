@@ -19,7 +19,7 @@ Maps a drive to a partition of a device of a Nextor driver, or mounts a disk ima
 
 The first form maps the drive to the given partition of the given device of the driver in the given slot (which must be a Nextor driver).
 
-The partition can be any number starting at 1, or 0 to map the drive directly to the device (needed for devices without partitions, such as floppy disks). Partition numbers 2 to 4 refer to the extended partitions 2-1 to 2-3 when partition 2 of the device is extended, otherwise they refer to primary partitions.
+The partition can be any number starting at 1, or 0 to map the drive directly to the device (needed for devices without partitions, such as floppy disks). When primary partition K of the device is extended, partition numbers below K refer to primary partitions and numbers K onwards refer to the extended partitions K-1, K-2 and so on; otherwise they refer to primary partitions.
 
 Instead of a partition, `d` reverts the drive to its mapping at boot time and `u` leaves the drive unmapped (any further arguments are ignored in both cases), and `s` attaches the drive to the device without assigning a partition: a suitable one is searched on each access to the drive (useful for removable devices that are currently offline).
 

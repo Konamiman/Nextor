@@ -601,15 +601,15 @@ The partition type code returns information about the filesystem that the partit
 
 There are many more partition type codes defined, but they refer to filesystems that can't be handled by Nextor so they are not listed here.
 
-A device can have up to four primary partitions, numbered 1 to 4. In order to accommodate more than four partitions, partition number 2 may be of a special type named "Extended". An extended partition is actually a container for more partitions; there is no limit in the number of extra partitions that a partition of type "Extended" can contain. Primary partitions 3 and 4 do not exist when partition 2 is extended.
+A device can have up to four primary partitions, numbered 1 to 4. In order to accommodate more than four partitions, one of the primary partitions may be of a special type named "Extended". An extended partition is actually a container for more partitions; there is no limit in the number of extra partitions that a partition of type "Extended" can contain. Any primary partition can be the extended one: the built-in partitioning tool always uses partition 2, while other partitioning tools may use a different one (for example, partition 4 when the device has three primary partitions besides the extended one). Nextor doesn't support primary partitions placed after the extended partition in the partition table: they are ignored by the automatic mapping procedure and can't be mapped with the `MAPDRV` tool or the `CALL MAPDRV` command.
 
 In order to enumerate all the partitions existing in a device, the following procedure should be followed, to take into account the possible presence of extended partitions:
 
-1.  Search partition 1-0 (primary number 1, extended number 0).
+1.  Search partitions 1-0, 2-0, 3-0 and 4-0 (primary numbers 1 to 4, extended number 0) in this order.
 
-2.  Search partition 2-0. If it exists and is of type "Extended", search partitions 2-1, 2-2, 2-3, etc, until a partition code 0 is returned.
+2.  When one of them, say P-0, is of type "Extended", search partitions P-1, P-2, P-3, etc, until a partition code 0 is returned.
 
-3.  If partition 2-0 does not exist or is not of type "Extended", search partitions 3-0 and 4-0.
+Prior to version 3.0, Nextor only recognized extended partitions in primary partition 2, and the recommended procedure was "search partition 1-0, then 2-0; if partition 2-0 is extended search 2-1, 2-2, etc, otherwise search 3-0 and 4-0". Applications that follow that procedure will work with any device partitioned with the built-in partitioning tool, but they won't find the logical partitions of an extended partition placed elsewhere.
 
 Note that it is possible that a device has no partitions at all. In this case, it is still possible that the device contains a valid filesystem, mapped to the absolute device sector zero; this is indeed the case of floppy disks and devices with very small capacity.
 
@@ -623,7 +623,7 @@ Starting with Nextor 2.1.0, it is possible to request the device sector number t
 
 * If a primary partition was requested (extended number was 0), then the sector number returned is always 0, and the offset for the partition table entry in the sector is 1BEh, 1CEh, 1DEh and 1EEh for primary partition numbers 1, 2, 3 and 4 respectively.
 
-* If an extended partition is requested (primary partition number is 2, extended partition number is not 0) then the partition table entry is the first one in the returned sector (at offset 1BEh).
+* If an extended partition is requested (extended partition number is not 0) then the partition table entry is the first one in the returned sector (at offset 1BEh).
 
 For more information on the partition table structure see [Master Boot Record on Wikipedia](https://en.wikipedia.org/wiki/Master_boot_record).
 
