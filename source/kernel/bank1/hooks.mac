@@ -1,0 +1,296 @@
+	.z80
+	name('hooks')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Disk BASIC hooks, error messages and CALL commands table
+;******************************************************************************
+;
+;    Disk BASIC code moved here from bank 0 (dskbasic.mac) since it runs
+; rarely: once per boot, when an error message is printed, or for CALL
+; statements.  It's called through the BPROC vectors in bank.inc.  The
+; handlers stay in bank 0: they are referenced through HK_xxx aliases defined
+; there (by the $HOOK macro for the hook handlers), exported via b0lab_b1.inc.
+;
+PROCNM	equ	0FD89h
+TXTTAB	equ	0F676h
+;
+	INCLUDE	../bank0/b0lab_b1.inc
+;
+	public	SETHOOKS
+SETHOOKS:
+;
+;	Cancel hook at POSDSK to allow FILES "*.COM" etc.
+;
+	ld	hl,POSDSK
+	ld	de,0FEBCH	;H.POSD
+	ld	bc,5
+	ldir
+;
+;	Set up other hooks
+;
+	ld	hl,HOKTBL
+SDSKL:
+	ld	e,(hl)		;get hook address to [DE]
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	a,e		;end of table?
+	or	d
+	ret	z		;yes
+	ex	de,hl
+	ld	(hl),0F7H	;RST 30H operation code
+	inc	hl
+	ld	a,(MASTER_SLOT##)
+	ld	(hl),a		;set my slot address
+	inc	hl
+	ex	de,hl
+	ldi			;set address
+	ldi
+	ld	a,0C9H		;set "RET" instruction
+	ld	(de),a
+	jr	SDSKL
+;
+;	Hook data table
+;
+HOKTBL:
+	defw	0FDEFh,HK_DSKO$
+	defw	0FE17h,HK_DSKI$
+	defw	0FDF9h,HK_NAME
+	defw	0FDFEh,HK_KILL
+	defw	0FE08h,HK_DKCOPY
+	defw	0FE12h,HK_DSKF
+	defw	0FE21h,HK_LSET
+	defw	0FE26h,HK_RSET
+	defw	0FE2Bh,HK_FIELD
+	defw	0FE30h,HK_MKI$
+	defw	0FE35h,HK_MKS$
+	defw	0FE3Ah,HK_MKD$
+	defw	0FE3Fh,HK_CVI
+	defw	0FE44h,HK_CVS
+	defw	0FE49h,HK_CVD
+	defw	0FE4Eh,HK_GETPTR
+	defw	0FE58h,HK_NOFOR
+	defw	0FE5Dh,HK_NULOPN
+	defw	0FE62h,HK_NTFL0
+	defw	0FE71h,HK_BINSAV
+	defw	0FE76h,HK_BINLOD
+	defw	0FE7Bh,HK_FILES
+	defw	0FE80h,HK_DGET
+	defw	0FE85h,HK_FILOU1
+	defw	0FE8Ah,HK_INDSKC
+	defw	0FE99h,HK_LOC
+	defw	0FE9Eh,HK_LOF
+	defw	0FEA3h,HK_EOF
+	defw	0FEADh,HK_BAKUPT
+	defw	0FEB2h,HK_PARDEV
+	defw	0FEB7h,HK_NODEV
+	defw	0FEFDh,HK_ERRPRT
+	defw	0FFA7h,HK_PHYDIO
+	defw	0FFACh,HK_FORMAT
+	defw	0		;end of table
+
+;
+;	Routine which allows FILES "*.BAS" etc.
+;
+POSDSK:
+	inc	sp
+	inc	sp
+	jp	6F1Dh
+;
+;------------------------------------------------------------------------------
+;
+;    DSKERRMSG copies a disk BASIC error message to a buffer, for the H.ERRP
+; hook handlers (ERRPRT in bank 0 for DOS 2 mode, A71D3 in bank 3 for DOS 1
+; mode). They map the error code to the message number and call this through
+; the BPROC vector (bank 0) or CALBNK + B1V_DSKERRMSG (bank 3).
+;
+; Input:  B  = Message number (1 = first message of DERMSG)
+;         DE = Buffer for the message (MAXMSGLEN bytes)
+; Output: HL = Buffer, it contains a zero, the message and a zero
+;         E  = 1 (error code to print the message at HL)
+;
+	public	DSKERRMSG
+DSKERRMSG:
+	ld	hl,DERMSG
+ERPRT1:	ld	a,(hl)
+	and	a
+	inc	hl
+	jr	nz,ERPRT1
+	djnz	ERPRT1
+	dec	hl
+	push	de
+	ld	bc,MAXMSGLEN
+	ldir
+	ld	e,1		;modify error code
+	pop	hl		;modify error message address
+	ret
+;
+;    Error codes 60 (3Ch) and up, in order. DOS 1 mode only has codes up to
+; 71 and 76 to 80, and 80 there is "Illegal in emulation" (the last one).
+;
+DERMSG:	defb	0
+	defb	'Bad FAT',                 0
+	defb	'Bad file mode',           0
+	defb	'Bad drive name',          0
+	defb	'Bad sector number',       0
+	defb	'File still open',         0
+	defb	'File already exists',     0
+	defb	'Disk full',               0
+	defb	'Too many files',          0
+	defb	'Disk write protected',    0
+	defb	'Disk I/O error',          0
+	defb	'Disk offline',            0
+	defb	'Rename across disk',      0
+;
+	defb	'File write protected',    0
+	defb	'Directory already exists',0
+	defb	'Directory not found',     0
+	defb	'RAM disk already exists', 0
+
+	defb	'Invalid device driver',   0
+	defb	'Invalid device number',   0
+	defb	'Invalid partition number',0
+	defb	'Partition already in use',0
+
+	defb	'File is mounted',         0
+	defb	'Bad file size',           0
+	defb	'Cluster sequence error',  0
+	defb	'Initialization error',    0
+
+	defb	'Illegal in emulation',    0	;DOS 1 mode code 80
+
+;		    '----+----1----+----2----'
+;
+MAXMSGLEN	equ	24+2	;2 extra spaces are for terminators
+;
+;------------------------------------------------------------------------------
+;
+;    FIND_CMD searches the CALL statement name (PROCNM) in the table of
+; expanded statements.
+;
+; Output: Cy=0 and DE = handler address if found (see the table for the
+;         encoding of the bank), Cy=1 if not found. HL is preserved.
+;
+	public	FIND_CMD
+FIND_CMD:
+	push	hl
+	ld	hl,COMMAND
+CKCMD1:
+	ld	de,PROCNM
+CKCMD2:
+	ld	a,(de)		;get specified statement
+	cp	(hl)		;compare with my statement
+	jr	nz,NOTCMD	;failed, try next statement
+	inc	de
+	inc	hl
+	and	a		;end of name?
+	jr	nz,CKCMD2	;check more characters
+	ld	e,(hl)		;get address in [DE]
+	inc	hl
+	ld	d,(hl)
+	pop	hl		;Cy=0 after "and a"
+	ret
+;
+NOTCMD:
+	ld	c,0FFh		; skip till end of name
+	xor	a
+	cpir
+	inc	hl		; skip address
+	inc	hl
+	cp	(hl)		; end of table?
+	jr	nz,CKCMD1	; no, search next
+	pop	hl
+	scf			;command not in this cartridge
+	ret
+;
+;	Table of expanded statements (CALL commands), searched by FIND_CMD.
+;
+;	Each entry is: name (zero-terminated), address (2 bytes).
+;	Address encoding for the dispatch routine:
+;	  - High byte = 41h: bank 4 jump table entry (called via CALBNK)
+;	  - High byte = C1h: bank 6 jump table entry (bit 15 set, called via CALBNK)
+;	  - Any other high byte: direct call in bank 0
+;
+;	This means bank 4 and 6 jump tables must not exceed 256 bytes
+;	(i.e. must stay within 4100h-41FFh), which allows up to 85 entries each.
+;
+COMMAND:
+	defb	'SYSTEM2',0
+	defw	HK_SYSTEM2
+	defb	'SYSTEM',0
+	defw	HK_SYSTEM
+	defb	'FORMAT',0
+	defw	HK_CFORMAT
+	defb	'CHDRV',0
+	defw	CCHDRV##
+	defb	'CHDIR',0
+	defw	HK_CHDIR
+	defb	'MKDIR',0
+	defw	HK_MKDIR
+	defb	'RMDIR',0
+	defw	HK_RMDIR
+	defb	'RAMDISK',0
+	defw	HK_RAMDISK
+	defb	'FDISK',0
+	defw	HK_FDISK
+	defb	'MAPDRV',0
+	defw	HK_MAPDRV
+	defb	'MAPDRVL',0
+	defw	HK_MAPDRVL
+	defb	'LOCKDRV',0
+	defw	CLOCKDRV##
+	defb	'USR',0
+	defw	CUSR##
+	defb	'CURDRV',0
+	defw	CCURDRV##
+	defb	'NEXTOR',0
+	defw	CNEXTOR##
+	defb	'DRVINFO',0
+	defw	CDRVINFO##
+	defb	'DRIVERS',0
+	defw	CDRIVERS##
+	defb	'IDRIVER',0
+	defw	CIDRIVER## or 8000h
+	defb	'UDRIVER',0
+	defw	CUDRIVER## or 8000h
+	defb	'BOOTKEYS',0
+	defw	CBOOTKEYS## or 8000h
+	defb	'EMUKILL',0
+	defw	CEMUKILL## or 8000h
+	defb	'SETSCREEN',0
+	defw	CSETSCREEN## or 8000h
+;
+	defb	0		;end of table
+;
+;------------------------------------------------------------------------------
+;
+;    CHK_FDISK checks if there's a BASIC program in memory before running
+; CALL FDISK (which overwrites it), and prints a warning if so.
+;
+; Output: Z if there's no program, NZ if there is (warning printed)
+;
+	public	CHK_FDISK
+CHK_FDISK:
+	ld	hl,(TXTTAB)
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	or	h
+	ret	z
+	ld	hl,FDISK_PROGRAM_EXISTS_WARNING
+CHK_FDISK_LOOP:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	jr	z,CHK_FDISK_END
+	rst	18h		;OUTDO
+	jr	CHK_FDISK_LOOP
+CHK_FDISK_END:
+	inc	a		;NZ
+	ret
+
+FDISK_PROGRAM_EXISTS_WARNING:
+	db "There's a BASIC program in memory!",13,10
+	db "Save it if you want to keep it,",13,10
+	db "delete it with NEW, then try again.",0
+;
+	end

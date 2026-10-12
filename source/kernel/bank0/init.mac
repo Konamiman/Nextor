@@ -2180,6 +2180,7 @@ BLOAD_BSAVE_LEN equ	$-BLOAD_DATA
 ;
 	public	DSKRW
 DSKRW:
+HK_PHYDIO::			;For SETHOOKS in bank 1
 	ei			;Re-enable interrupt because I was
 				; inter-slot called.
 	push	hl		;save target address
@@ -3478,6 +3479,7 @@ CHK_CODE_SIZE	equ $-CHK_CODE
 ;	$FORMAT:  CLI FORMAT command comes here.
 ;
 HOKFMT::
+HK_FORMAT::			;For SETHOOKS in bank 1
 	or	a
 $FORMAT::
 	ei

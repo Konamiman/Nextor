@@ -208,7 +208,7 @@ nextor_base.dat: \
 SDK_COMRELS = dos_calls.rel dos_errors.rel dos_file_handles.rel
 COMRELS = $(SDK_COMRELS) kvar.rel data.rel chgbnk.rel
 B0RELS = $(addprefix bank0/,doshead.rel 40ff.rel b0.rel init.rel dskbasic.rel dosboot.rel bdos.rel ramdrv.rel)
-B1RELS = $(addprefix bank1/,dosinit.rel kinit1.rel mapinit.rel msg.rel skipfirm.rel)
+B1RELS = $(addprefix bank1/,dosinit.rel kinit1.rel hooks.rel mapinit.rel msg.rel skipfirm.rel)
 B2RELS = $(addprefix bank2/,kinit.rel char.rel dev.rel kbios.rel misc.rel seg.rel path.rel find.rel dir.rel handles.rel del.rel rw.rel files.rel buf.rel fat.rel val.rel err.rel)
 B3RELS = $(addprefix bank3/,dos1ker.rel)
 B4RELS = $(addprefix bank4/,jump.rel env.rel cpm.rel time.rel seg.rel misc.rel bootmenu.rel)
@@ -259,6 +259,13 @@ bank6/bootmsg.rel: version.inc
 # standalone).
 bank6/dskfmt.rel: bank2/bootsect.mac
 
+# SETHOOKS (bank 1) takes the bank 0 hook handler addresses from B0.SYM.
+bank1/hooks.rel: bank0/b0lab_b1.inc
+
+# The bank headers and init.mac include bank.inc, which holds the bank 1
+# call vectors (BPROC): a new vector must reassemble all of them.
+bank0/b0.rel bank0/init.rel bank1/b1.rel bank2/b2.rel bank3/b3.rel bank4/b4.rel bank5/b5.rel bank6/b6.rel: bank.inc
+
 ###  Bank 0
 
 bank6/b6.rel: bank2/b2labels.inc bank0/b0lab_b6.inc
@@ -291,6 +298,11 @@ bank0/b0lab_b3.inc: \
 
 	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b3.inc,INIT|TIMINT|MAPBIO|GWRK|FDISK|PROMPT|R_[^[:space:]]+)
 
+bank0/b0lab_b1.inc: \
+	bank0/B0.SYM
+
+	$(call SymToEqus,bank0/B0.SYM,bank0/b0lab_b1.inc,HK_[^[:space:]]+)
+
 bank0/b0lab_b6.inc: \
 	bank0/B0.SYM
 
@@ -314,11 +326,12 @@ bank1/B1.BIN: \
 	bank1/b1.rel \
 	bank4/bootmenu.rel \
 	bank0/b0labels.inc \
-	bank2/b2labels.inc
+	bank2/b2labels.inc \
+	bank0/b0lab_b1.inc
 
 	$(call print_linking,"bank 1")
 	@$(LK80) --working-dir bank1 --symbols-file B1.SYM --output-file B1.BIN \
-			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel kinit1.rel mapinit.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
+			--code 40FFh ../dos_calls.rel ../dos_errors.rel ../dos_file_handles.rel ../kvar.rel ../data.rel b1.rel dosinit.rel kinit1.rel hooks.rel mapinit.rel ../bank4/bootmenu.rel skipfirm.rel msg.rel \
 			--code 7fd0h ../chgbnk.rel
 
 
