@@ -563,7 +563,7 @@ RAMD_NUM	equ	"H"-"A"+1
 		inc	b			;Skip if just asking how
 		jp	z,ramdisk_ret_ok	; big the RAM disk is.
 		dec	b			;Skip if killing an existing
-		jp	z,kill_ramdisk		; RAM disk.
+		jr	z,kill_ramdisk		; RAM disk.
 ;
 ;       ----------------------------------------
 ;
@@ -598,7 +598,7 @@ no_free_seg:
 		or	a			; any segments at all then
 		ld	a,c			; exit with an error.
 		ld	c,.NORAM##
-		jp	z,ramdisk_ret_c
+		jr	z,ramdisk_ret_c
 ;
 		ld	hl,(RM_UD##)		   ;Record the RAM disk's unit
 		ld	(UNIT_TAB##+2*RAMD_NUM),hl ; descriptor address.

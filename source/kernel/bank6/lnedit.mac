@@ -400,7 +400,7 @@ clear_cur_z:	jp	z,CLEAR_CUR
 
 		ld	a,(INS_FLAG##)		;In insert mode?
 		or	a
-		jp	nz,INS_CHAR		;Go & insert character if yes.
+		jr	nz,INS_CHAR		;Go & insert character if yes.
 ;
 		ld	a,(IN_COUNT##)		;Adding at the end?
 		cp	b
@@ -457,8 +457,7 @@ ONE_PRINT:	ld	(hl),e			;Else put in buffer.
 		ld	a,e			;And print it.
 		inc	b
 		call	OUT_CHAR		;Print it over what was there.
-		call	UPDATE_MAX		;Update max cursor pos
-		ret
+		jp	UPDATE_MAX		;Update max cursor pos
 ;
 ;
 INS_CHAR:
@@ -500,7 +499,7 @@ RE_PRINT_16:	ld	(hl),e			;set 1st byte
 		call	OUT_TO_END
 		inc	b
 		inc	b
-		jp	LEFT_TO_B
+		jr	LEFT_TO_B
 ;
 not_ins16:
 		ld	a,(IN_COUNT##)
@@ -530,7 +529,7 @@ no_shift:	inc	hl
 RE_PRINT:	ld	(hl),e			;Insert character into buffer.
 		call	OUT_TO_END		;Re-display to the end of line.
 		inc	b
-		jp	LEFT_TO_B		;Move cursor back again.
+		jr	LEFT_TO_B		;Move cursor back again.
 ;
 ;
 BUF_FULL_16:

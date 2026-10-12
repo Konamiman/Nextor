@@ -460,7 +460,7 @@ std_boot_err:	pop	bc	;Throw away pushed AF (choice)
 nxt_new_boot_sec:
 		pop	af
 		pop	bc			;B = choice
-		jp	nz,not_dos1_disk	;No valid UPB: "Not a DOS disk"
+		jr	nz,not_dos1_disk	;No valid UPB: "Not a DOS disk"
 		ld	a,(ix+UPB_TOTAL_SECTORS##)
 		or	(ix+UPB_TOTAL_SECTORS##+1)
 		jr	z,nxt_new_boot_rej

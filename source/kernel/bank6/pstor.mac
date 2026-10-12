@@ -886,7 +886,7 @@ PS_SEL_GOTMAX:
 PS_SEL_NEXT:
 	ld	a,(ix+PSC_DEV)
 	cp	(ix+PSC_MAXDEV)
-	jp	nc,PS_RET_NZ		;No more devices
+	jr	nc,PS_RET_NZ		;No more devices
 	inc	(ix+PSC_DEV)
 
 	xor	a			;We'll read sector 0
@@ -910,7 +910,7 @@ PS_SEL_NEXT:
 	jr	z,PS_SEL_NEXT
 	cp	DRIVER.RESULT_INVALID_DEVICE##
 	jr	z,PS_SEL_NEXT
-	jp	PS_RET_NZ
+	jr	PS_RET_NZ
 
 	;* Driver initialized: ask it about the device
 
@@ -1134,7 +1134,7 @@ PS_LOC_GOTTOT:
 	ex	de,hl
 	ld	bc,0
 	sbc	hl,bc			;HLDE = Sectors in the data area
-	jp	c,PS_LOC_BAD
+	jr	c,PS_LOC_BAD
 
 	ld	a,(ix+PSC_SPC)
 PS_LOC_DIV:
@@ -1148,7 +1148,7 @@ PS_LOC_DIV:
 PS_LOC_DIV_END:
 	ld	a,h			;HLDE = Cluster count
 	or	l
-	jp	nz,PS_LOC_BAD
+	jr	nz,PS_LOC_BAD
 	ld	a,d
 	cp	10h			;Same criteria as the kernel: it's FAT16
 	ld	a,0			; if there are 1000h clusters or more
@@ -1617,14 +1617,14 @@ PSO_GO:
 	ld	bc,7
 	xor	a
 	call	PS_XFER
-	jp	PSO_OK
+	jr	PSO_OK
 
 	;--- Read or write: check the range of sectors first
 
 PSO_RW:
 	ld	a,(ix+PSC_UCNT)
 	or	a
-	jp	z,PSO_OK
+	jr	z,PSO_OK
 	ld	l,(ix+PSC_USEC)
 	ld	h,(ix+PSC_USEC+1)
 	ld	e,a
@@ -2253,7 +2253,7 @@ PSINV_DOS1_BUSY:
 ;                            parameter of mknexrom (KEYS_INV_0/1 in init.mac)
 
 	PROC	CBOOTKEYS
-	ld	de,BOOTKEYS_HELP
+	ld	e,HLP_BOOTKEYS
 	call	GET_PARENT_OR_HELP6##
 
 	dec	hl
@@ -2324,11 +2324,11 @@ CBK_SET:
 
 CBK_SHOW:
 	ld	hl,PSTOR_FILE_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(ix+PSC_DEV)
 	call	PRDEC6##
 	ld	hl,PS_CRLF_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,KEYS_NOCONF_S
 	bit	PSF_VALID,(ix+PSC_FLAGS)
@@ -2342,7 +2342,7 @@ CBK_SHOW:
 	jr	z,CBK_SHOW_END
 
 	ld	hl,KEYS_INV_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	hl,KEYS_NONE_S
 	ld	a,e
 	and	PSD_KEYSM_LOW
@@ -2367,27 +2367,14 @@ CBK_SHOW_NUM_2:
 	djnz	CBK_SHOW_NUM
 	ld	hl,KEYS_CTRL_S
 	bit	5,d
-	call	nz,PS_PRINT
+	call	nz,PRINT_CALL_HELP##
 	ld	hl,KEYS_SHIFT_S
 	bit	4,d
-	call	nz,PS_PRINT
+	call	nz,PRINT_CALL_HELP##
 	ld	hl,PS_CRLF_S
 CBK_SHOW_END:
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	jp	PSCALL_CLOSE
-
-BOOTKEYS_HELP:
-	db	"BOOTKEYS([<keys>])",13,10
-	db	13,10
-	db	"Set the boot keys whose meaning is",1
-	db	"inverted, in the persistent storage.",13,10
-	db	13,10
-	db	"<keys>: sum of 2 4 8 16 32 64 128 for",1
-	db	"the keys 1 to 7,",13,10
-	db	"&H1000 for SHIFT, &H2000 for CTRL.",13,10
-	db	"-1: not set, use the ones in the ROM.",13,10
-	db	"-2 or nothing: show the current state.",13,10
-	db	0
 
 PSTOR_FILE_S:
 	db	"Persistent storage: file in device ",0
@@ -2467,7 +2454,7 @@ CSS_REMOVE	equ	2
 CSS_KNOWN	equ	1 SHL PSD_ITEM_SCREEN
 
 	PROC	CSETSCREEN
-	ld	de,SETSCREEN_HELP
+	ld	e,HLP_SETSCREEN
 	call	GET_PARENT_OR_HELP6##
 
 	dec	hl
@@ -2513,7 +2500,7 @@ CSS_BAD_VALUE:
 CSS_OP_OK:
 
 	call	PSCALL_OPEN		;D and E go to PSC_INV
-	jp	c,PSCALL_CLOSE
+	jr	c,PSCALL_CLOSE
 
 	ld	a,(ix+PSC_INV+1)
 	cp	CSS_STORE
@@ -2523,11 +2510,11 @@ CSS_OP_OK:
 	;--- Show the stored items
 
 	ld	hl,PSTOR_FILE_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(ix+PSC_DEV)
 	call	PRDEC6##
 	ld	hl,PS_CRLF_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,SCR_NONE_S
 	bit	PSF_VALID,(ix+PSC_FLAGS)
@@ -2536,22 +2523,22 @@ CSS_OP_OK:
 	jp	z,CSS_SHOW_END
 
 	ld	hl,SCR_MODE_S		;SCREEN
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(iy+1)
 	and	1
 	call	PRDEC6##
 	ld	hl,SCR_INTER_S		;Interlace
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	bit	1,(iy+1)
 	call	PSS_PRINT_ONOFF
 
 	ld	hl,SCR_WIDTH_S		;WIDTH
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	call	PSS_WIDTH
 	call	PRDEC6##
 
 	ld	hl,SCR_COLOR_S		;COLOR
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(iy+2)
 	call	PSS_HIGH
 	call	PRDEC6##
@@ -2565,32 +2552,32 @@ CSS_OP_OK:
 	call	PRDEC6##
 
 	ld	hl,SCR_KEY_S		;KEY
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	bit	0,(iy+4)
 	call	PSS_PRINT_ONOFF
 	ld	hl,SCR_CLICK_S		;Key click
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	bit	1,(iy+4)
 	call	PSS_PRINT_ONOFF
 
 	ld	hl,SCR_PRINTER_S	;Printer
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	hl,SCR_NONMSX_S
 	bit	2,(iy+4)
-	call	nz,PS_PRINT
+	call	nz,PRINT_CALL_HELP##
 	ld	hl,SCR_MSX_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	hl,SCR_CAS_S		;Cassette
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	hl,SCR_1200_S
 	bit	3,(iy+4)
 	jr	z,CSS_SHOW_1200
 	ld	hl,SCR_2400_S
 CSS_SHOW_1200:
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 
 	ld	hl,SCR_ADJUST_S		;SET ADJUST
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(iy)
 	call	PSS_PRINT_ADJUST
 	call	PSS_PRINT_COMMA
@@ -2601,7 +2588,7 @@ CSS_SHOW_1200:
 	rst	18h
 
 	ld	hl,SCR_BEEP_S		;SET BEEP
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	ld	a,(iy+4)
 	rrca
 	rrca
@@ -2618,7 +2605,7 @@ CSS_SHOW_1200:
 
 	ld	hl,PS_CRLF_S
 CSS_SHOW_END:
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	jp	PSCALL_CLOSE
 
 	;--- Store the current values
@@ -2665,7 +2652,7 @@ PSS_PRINT_ONOFF:
 	jr	nz,PSS_PRINT_ONOFF_2
 	ld	hl,SCR_OFF_S
 PSS_PRINT_ONOFF_2:
-	jp	PS_PRINT
+	jp	PRINT_CALL_HELP##
 
 ;Print a comma. Corrupts AF.
 
@@ -2799,19 +2786,6 @@ PSS_FV_FLAG_2:
 	rl	c
 	ret
 
-SETSCREEN_HELP:
-	db	"SETSCREEN([<items>])",13,10
-	db	13,10
-	db	"Keep the screen parameters in the",1
-	db	"persistent storage.",13,10
-	db	"They are applied at boot time.",13,10
-	db	13,10
-	db	"1: store the current parameters,",1
-	db	"as SET SCREEN, SET ADJUST, SET BEEP.",13,10
-	db	"-1: remove the stored parameters.",13,10
-	db	"0 or nothing: show what's stored.",13,10
-	db	0
-
 SCR_NONE_S:
 	db	"Screen parameters: not stored",13,10,0
 SCR_MODE_S:
@@ -2943,7 +2917,7 @@ PSCALL_OPEN:
 	cp	.IDRVR##
 	jr	nz,PSCO_1
 	ld	hl,PSTOR_NONE_S
-	call	PS_PRINT
+	call	PRINT_CALL_HELP##
 	scf
 	ret
 PSCO_1:
@@ -3088,16 +3062,6 @@ PS_SET_CHK_L:
 	neg
 	ld	(hl),a
 	ret
-
-;Print the zero terminated string at HL. Corrupts AF, HL.
-
-PS_PRINT:
-	ld	a,(hl)
-	or	a
-	ret	z
-	rst	18h
-	inc	hl
-	jr	PS_PRINT
 
 
 	finish	<PSTOR>

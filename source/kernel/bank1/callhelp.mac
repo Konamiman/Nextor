@@ -1,0 +1,272 @@
+	.z80
+	name('callhlp')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	CALL commands help texts
+;******************************************************************************
+;
+;    Help texts of the CALL commands, printed when a command that needs
+; parameters is run without them, and the list printed by CALL NEXTOR.
+; The commands are in banks 4 and 6, which can run BDOS function code,
+; so the texts live here to keep that space free.
+; The handlers call PRINT_HELP through the BPROC vector in bank.inc
+; (CALBNK with A=B.INIT, IX=B1V_PRINT_HELP).
+;
+;-----------------------------------------------------------------------------
+;
+; Print a CALL command help text.
+; Input: E = help text number (HLP_xxx in const.inc)
+; Modifies: AF, BC, DE, HL
+;
+	public	PRINT_HELP
+PRINT_HELP:
+	ld	hl,HELP_TEXTS
+	inc	e
+PH_SKIP:
+	dec	e
+	jr	z,PRINT_TEXT
+	xor	a
+	ld	b,a
+	ld	c,a
+	cpir			;Skip to the next text
+	jr	PH_SKIP
+
+;
+;-----------------------------------------------------------------------------
+;
+; Print a zero-terminated help text.
+;
+; Special character codes:
+;   1: 80 columns: print 1 space then skip spaces. 40 columns: print new line.
+;   2: 80 columns: skip spaces (no leading space). 40 columns: print new line.
+;   3: 80 columns: nothing. 40 columns: print "Press any key to continue...",
+;      wait for key, erase the message line, then continue printing.
+;
+; Input: HL = pointer to string.
+; Modifies: AF, HL
+;
+LINL40	equ	0F3AEh
+CHGET	equ	009Fh
+;
+PRINT_TEXT:
+	ld	a,(LINL40)
+	cp	41
+	jr	c,PCH_40
+
+PCH_80:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	4
+	jr	nc,PCH_80DO
+	cp	3
+	jr	z,PCH_80	;Code 3: no-op in 80-col
+	cp	1
+	ld	a,' '
+	call	z,0018h
+PCH_80NS:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z		;String ends with code 1/2 + only spaces
+	cp	' '
+	jr	z,PCH_80NS
+PCH_80DO:
+	rst	18h
+	jr	PCH_80
+
+PCH_40:
+	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	4
+	jr	nc,PCH_40_DO
+	cp	3
+	jr	z,PCH_40_PAUSE
+	;Codes 1 and 2: new line
+	ld	a,13
+	rst	18h
+	ld	a,10
+PCH_40_DO:
+	rst	18h
+	jr	PCH_40
+
+PCH_40_PAUSE:
+	push	hl		;Save string pointer
+	ld	hl,PCH_PAUSE_MSG
+PCH_40_PMSG:
+	ld	a,(hl)
+	or	a
+	jr	z,PCH_40_WAIT
+	rst	18h
+	inc	hl
+	jr	PCH_40_PMSG
+PCH_40_WAIT:
+	call	CHGET		;Wait for key press
+	;Erase the message: CR + ESC K (VT52 erase to end of line)
+	ld	a,13
+	rst	18h
+	ld	a,27
+	rst	18h
+	ld	a,"K"
+	rst	18h
+	pop	hl		;Restore string pointer
+	jr	PCH_40
+
+PCH_PAUSE_MSG:
+	db "Press any key to continue...",0
+
+;
+; The texts, zero-terminated and in the order of the HLP_xxx numbers.
+; See PRINT_TEXT for the meaning of the codes 1 to 3.
+;
+HELP_TEXTS:
+;HLP_MAPDRV (0)
+	;    ----------------------------------------
+	db	"CALL MAPDRV[L](<drive>[,<partition>",2
+	db  "  [,<device>[,<slot>[,<segment>]]]])",13,10
+	db	"CALL MAPDRV[L](<drive>,<filename>",2
+	db  "  [,<flags>])",13,10
+	db  13,10
+	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
+	db  "         or 0 for default drive",13,10
+	db  "<partition>: >=1: partition number",13,10
+	db  "             0: device sector zero",13,10
+	db  "             -1: unmap drive",13,10
+	db  "             -2: automatic mapping",13,10
+	db  "             -3: don't set partition",13,10
+	db	"<device>: device number (1-255)",13,10
+	db  "<slot>: of driver, main + 4*sub, or",1
+	db  "        0 for primary controller",13,10
+	db  "<segment>: RAM driver segment",1
+	db  "           (FFh or omit for ROM)",13,10
+	db	13,10
+	db	"<filename>: full path of file to mount",13,10
+	db	"<flags>: 1 for read-only mount mode",1
+	db  "         0 for default (read/write)",13,10
+	db  13,10
+	db  3 ;Pause and ask for key press
+	db  "MAPDRVL locks drive after mapping",1
+	db  "      (not available in MSX-DOS 1 mode)",13,10
+	db  "Default <partition>: automatic mapping",13,10
+	db  "Default <device>, <slot>:",1
+	db  "  the ones already mapped",13,10
+	db 0
+
+;HLP_USR (1)
+	;    ---------------------------------------- 
+	db	"CALL USR(<run address>",2
+	db  "         [,<registers address>])",13,10
+	db  13,10
+	db  "<run address>: Address of code to run",13,10
+	db  "<registers address>: Address of a",1
+	db  "      12-byte buffer for Z80 registers",13,10
+	db  13,10
+	db	"CALL USR(-1) does nothing.",1
+	db  "Use it together with ON ERROR GOTO",13,10
+	db  "to detect Nextor from BASIC.",13,10
+	db	13,10
+	db  "Registers buffer is read before",1
+	db  "and updated after execution",13,10
+	db	13,10
+	db  "Order of registers in buffer:",13,10
+	db  "F, A, C, B, E, D, L, H,",1
+	db  "IXl, IXh, IYl, IYh"
+	db 0
+
+;HLP_LOCKDRV (2)
+	;    ---------------------------------------- 
+	db	"CALL LOCKDRV(<drive>[,<action>])",13,10
+	db	13,10
+	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
+	db  "         or 0 for default drive",13,10
+	db  "<action>: 0 to unlock, non-0 to lock,",1
+	db  "          omit to show current status"
+	db 0
+
+;HLP_CHDRV (3)
+	;    ---------------------------------------- 
+	db	"CALL CHDRV(<drive>)",13,10
+	db  13,10
+	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8"
+	db 0
+
+;HLP_UDRIVER (4)
+	defb	"UDRIVER(<slot>,<seg>[,<flags>])",13,10
+	defb	13,10
+	defb	"<flags>: 2 for silent mode",13,10
+	defb	0
+
+;HLP_IDRIVER (5)
+	;    ----------------------------------------
+	defb	"IDRIVER(<file>[,<flags>[,<data>",2
+	defb	"  [,<data>...]]])",13,10
+	defb	"IDRIVER(<file>,<flags>,<pointer>",2
+	defb	"  ,<length>)",13,10
+	defb	13,10
+	defb	"<data>: initialization bytes/words",13,10
+	defb	"<pointer>, <length>: init data area",13,10
+	defb	"<flags>: the sum of zero or more of:",13,10
+	defb	"  1: Map drive after install",13,10
+	defb	"  2: Silent mode",13,10
+	defb	"  4: Use <pointer>,<length> syntax",13,10
+	defb	0
+
+;HLP_BOOTKEYS (6)
+	db	"BOOTKEYS([<keys>])",13,10
+	db	13,10
+	db	"Set the boot keys whose meaning is",1
+	db	"inverted, in the persistent storage.",13,10
+	db	13,10
+	db	"<keys>: sum of 2 4 8 16 32 64 128 for",1
+	db	"the keys 1 to 7,",13,10
+	db	"&H1000 for SHIFT, &H2000 for CTRL.",13,10
+	db	"-1: not set, use the ones in the ROM.",13,10
+	db	"-2 or nothing: show the current state.",13,10
+	db	0
+
+;HLP_SETSCREEN (7)
+	db	"SETSCREEN([<items>])",13,10
+	db	13,10
+	db	"Keep the screen parameters in the",1
+	db	"persistent storage.",13,10
+	db	"They are applied at boot time.",13,10
+	db	13,10
+	db	"1: store the current parameters,",1
+	db	"as SET SCREEN, SET ADJUST, SET BEEP.",13,10
+	db	"-1: remove the stored parameters.",13,10
+	db	"0 or nothing: show what's stored.",13,10
+	db	0
+
+;HLP_NEXTOR (8)
+;    ---------------------------------------- 
+    db	13,10,"Available Nextor CALL commands:",13,10
+	db	13,10
+	db  "_BOOTKEYS()",13,10
+	db	"_CHDRV (same as MSX-DOS 2,",1
+	db	"        but works in DOS 1 mode)",13,10
+	db	"_CURDRV",13,10
+	db	"_DRIVERS",13,10
+	db	"_DRVINFO",13,10
+	db  "_EMUKILL",13,10
+	db	"_FDISK",13,10
+	db  "_IDRIVER()",13,10
+	db	"_LOCKDRV() *",13,10
+	db	"_MAPDRV()",13,10
+	db	"_MAPDRVL() *",13,10
+	db  "_SETSCREEN()",13,10
+	db  "_UDRIVER()",13,10
+	db	"_USR()",13,10
+	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10
+	db	13,10
+	db	"Commands with * are not available",1
+	db	"in MSX-DOS 1 mode.",13,10
+	db	13,10
+	db  3 ;Pause and ask for key press
+	db	"Commands with () accept parameters.",13,10
+	db	"Invoke them without parameters",1
+	db	"for parameter usage information."
+	db	0
+
+	end

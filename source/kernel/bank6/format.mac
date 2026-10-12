@@ -75,9 +75,9 @@ TWOCRLF: db 13,10,13,10,0
 
 	ld	a,b
 	or	a
-	jp	z,fformat_iform
+	jr	z,fformat_iform
 	cp	MAX_UNITS+1
-	jp	nc,fformat_iform
+	jr	nc,fformat_iform
 
 	push	hl
 	push	de
@@ -91,7 +91,7 @@ TWOCRLF: db 13,10,13,10,0
 	or	a
 	sbc	hl,de		;Carry if DE > 512
 	pop	hl
-	jp	c,fformat_pop_iform
+	jr	c,fformat_pop_iform
 fformat_size_ok:
 
 	ld	a,b
@@ -105,7 +105,7 @@ fformat_drvtbl:			; assigned to a driver at boot time
 	inc	hl		;Next DRVTBL entry
 	dec	d
 	jr	nz,fformat_drvtbl
-	jp	fformat_pop_iform	;Not a driver drive: can't format.
+	jr	fformat_pop_iform	;Not a driver drive: can't format.
 fformat_found_drv:
 	add	a,(hl)		;A = 0-based relative drive within driver
 	ld	(BUF+102),a	;Save for CHOICE call
@@ -121,7 +121,7 @@ fformat_found_drv:
 	ld	hl,(KERNEX_DOS1##)
 	ld	a,(hl)		;A = KERNEX_DOS1 entry count
 	or	a
-	jp	z,fformat_msxdos_drv	;No Nextor entries: must be MSX-DOS
+	jr	z,fformat_msxdos_drv	;No Nextor entries: must be MSX-DOS
 	ld	e,a		;E = entry count
 	inc	hl		;HL = first entry
 	ld	d,0		;D = current 1-based drive index
@@ -137,7 +137,7 @@ fformat_kd1_loop:
 	dec	e
 	jr	nz,fformat_kd1_loop
 	;Not found in KERNEX_DOS1: it's a MSX-DOS drive
-	jp	fformat_msxdos_drv
+	jr	fformat_msxdos_drv
 
 fformat_nextor_drv:
 
@@ -145,134 +145,23 @@ fformat_nextor_drv:
 
 	inc	hl		;HL = &UD1_RELATIVE_DRIVE
 	bit	6,(hl)
-	jp	z,fformat_pop_iform	;Not FDD: can't format
+	jr	z,fformat_pop_iform	;Not FDD: can't format
 
 	;--- Dispatch Nextor FDD by sub-function
 
 	ld	a,c
 	or	a
-	jp	z,fformat_probe
+	jr	z,fformat_probe
 	cp	80h
-	jr	z,fformat_nxt_choice
-	jp	fformat_nxt_do_format	;1-9: do format via DEVICE_QUERY
+	jr	nz,fformat_nxt_do_format	;1-9: do format via DEVICE_QUERY
 
-fformat_nxt_choice:
-
-	;--- Nextor FDD: query driver for format choices via DEVICE_QUERY
+	;--- 80h: query driver for format choices via DEVICE_QUERY,
+	;    as DSK_CHOICE_BUF does
 
 	inc	hl		;HL = &UD1_DEVICE_NUMBER
 	ld	c,(hl)		;C = device number (1-based)
-	pop	de		;DE = user buffer size
-	pop	hl		;HL = user buffer address
-	push	hl		;Save user buffer address
-	push	de		;Save user buffer size
+	jp	dcb_nxt_query
 
-	;Always use SECBUF as intermediate for the driver query,
-	;then copy from SECBUF to user buffer with boundary handling.
-	ld	hl,($SECBUF##)	;HL = SECBUF (page 3, always accessible)
-	ld	de,512		;DE = SECBUF size
-
-	ld	a,DEVICE_QUERY.GET_FORMAT_CHOICES##
-	call	CALL_DEVICE_QUERY
-
-	;Handle result
-	cp	DRIVER.RESULT_TRUNCATED_STRING##
-	jr	z,fnc_truncated
-	cp	DRIVER.RESULT_NOT_IMPLEMENTED##
-	jr	z,fnc_default
-	or	a
-	jr	nz,fnc_err	;Error from driver
-
-	;B = format type: 0=none, 1=SS/DS, 2=SS/DS/HD, 255=driver wrote SECBUF
-	ld	a,b
-	or	a
-	jr	z,fnc_empty	;No choices
-	cp	255
-	jr	z,fnc_has_str	;String already in SECBUF
-	jr	fnc_build	;B=1 or 2: build standard choices
-
-fnc_default:
-	ld	b,1		;Default: SS/DS choices
-fnc_build:
-	call	?BUILD_FMT_CHOICES
-	jr	fnc_has_str
-
-fnc_truncated:
-	;Driver truncated string; if buffer is SECBUF, return .ELONG directly
-	pop	de		;DE = user buffer size
-	pop	hl		;HL = user buffer address
-	ld	bc,($SECBUF##)
-	or	a
-	sbc	hl,bc
-	jr	nz,fnc_trunc_copy	;Not SECBUF: copy with truncation check
-	ld	a,.ELONG##
-	or	a
-	ret
-fnc_trunc_copy:
-	;Restore HL = user buffer address (was zeroed by sbc)
-	add	hl,bc
-	push	hl		;Re-save user buffer address
-	push	de		;Re-save user buffer size
-	;fall through to fnc_has_str
-
-fnc_has_str:
-	;Copy from SECBUF to user buffer with page 2 remapping.
-	;Skip copy if user buffer is SECBUF itself (string already there).
-	pop	de		;DE = user buffer size
-	pop	ix		;IX = user buffer address
-	push	ix
-	pop	hl		;HL = user buffer address
-	ld	bc,($SECBUF##)
-	or	a
-	sbc	hl,bc		;HL == SECBUF?
-	jr	z,fnc_is_secbuf
-	call	MAP_USER_BUF	;Remap page 2 to user's TPA segment
-	ld	hl,($SECBUF##)
-	push	de
-	pop	bc		;BC = 16-bit counter
-fnc_copy:
-	ld	a,(hl)
-	ld	(ix),a
-	or	a
-	jr	z,fnc_ok
-	inc	hl
-	inc	ix
-	call	CHECK_IX_BOUNDARY
-	dec	bc
-	ld	a,b
-	or	c
-	jr	nz,fnc_copy
-	;Buffer full: null-terminate and return truncation error
-	ld	(ix-1),0
-	call	RESTORE_PAGE2
-	ld	a,.ELONG##
-	or	a
-	ret
-
-fnc_is_secbuf:
-	;Buffer is SECBUF itself: string already there, no copy needed
-	xor	a
-	ret
-
-fnc_empty:
-	pop	de
-	pop	ix
-	call	MAP_USER_BUF
-	ld	(ix),0
-	call	RESTORE_PAGE2
-	xor	a
-	ret
-
-fnc_ok:
-	call	RESTORE_PAGE2
-	xor	a
-	ret
-
-fnc_err:
-	pop	de		;Discard saved values
-	pop	hl
-	or	a		;Ensure NZ
-	ret
 
 fformat_msxdos_drv:
 
@@ -282,67 +171,13 @@ fformat_msxdos_drv:
 	or	a
 	jr	z,fformat_probe
 	cp	80h
-	jr	z,fformat_dos_choice
-	jp	fformat_dos_do_format	;1-9: call DSKFMT via CALSLT
+	jr	nz,fformat_dos_do_format	;1-9: call DSKFMT via CALSLT
 
-fformat_dos_choice:
+	;--- 80h: call CHOICE in driver ROM, as DSK_CHOICE_BUF does
 
-	;--- MSX-DOS: call CHOICE (4019h) in driver ROM via CALSLT
-
-	ld	a,(BUF+100)
-	ld_	iyh,a		;IYh = driver slot
 	ld	a,(BUF+102)	;A = relative drive number within driver
-	ld	ix,4019h	;CHOICE entry point
-	call	001Ch		;CALSLT -> HL = ROM choice string addr
+	jp	dcb_msxdos_choice
 
-	;--- Check for null pointer
-
-	ld	a,h
-	or	l
-	jr	z,fformat_dos_empty
-
-	;--- Copy ROM string to buffer via RDSLT
-
-	pop	de		;DE = buffer size
-	pop	ix		;IX = buffer address
-	call	MAP_USER_BUF	;Remap page 2 to user's TPA segment
-fformat_dos_copy:
-	ld	a,(BUF+100)	;Slot for RDSLT
-	push	ix
-	push	de
-	call	000Ch		;RDSLT: A = byte at (HL) in slot
-	pop	de
-	pop	ix
-	inc	hl
-	or	a
-	jr	z,fformat_dos_done
-	ld	(ix),a
-	inc	ix
-	call	CHECK_IX_BOUNDARY
-	dec	de
-	ld	a,d
-	or	e
-	jr	nz,fformat_dos_copy
-	;Buffer full: null-terminate at last position
-	ld	(ix-1),0
-	call	RESTORE_PAGE2
-	xor	a
-	ret			;Truncated string is still usable
-
-fformat_dos_done:
-	ld	(ix),0		;Null-terminate
-	call	RESTORE_PAGE2
-	xor	a
-	ret
-
-fformat_dos_empty:
-	pop	de
-	pop	ix
-	call	MAP_USER_BUF
-	ld	(ix),0		;Empty string
-	call	RESTORE_PAGE2
-	xor	a
-	ret
 
 fformat_probe:
 	pop	de
@@ -408,8 +243,7 @@ fformat_dos_do_format:
 	ld	d,a		;D = relative drive (0-based)
 	ld	a,(BUF+103)	;A = choice (1-9)
 	ld	ix,401Ch	;DSKFMT entry point
-	call	001Ch		;CALSLT → DSKFMT
-	ret			;Carry from DSKFMT indicates error
+	jp	001Ch		;CALSLT → DSKFMT, carry indicates error
 
 
 ;-----------------------------------------------------------------------------
@@ -536,7 +370,7 @@ fpc_nxt_truncated:
 	ld	a,(hl)
 	or	a
 	jp	z,fpc_no_choice
-	jp	fpc_truncated
+	jr	fpc_truncated
 
 fpc_msxdos:
 
@@ -594,7 +428,7 @@ fpc_copy_done:
 	pop	hl		;Buffer start
 	ld	a,(hl)
 	or	a
-	jp	z,fpc_no_choice
+	jr	z,fpc_no_choice
 	jr	fpc_print
 
 fpc_truncated:
@@ -798,7 +632,15 @@ dcb_msxdos:
 
 	ld	a,(iy+UD_SLOT##)
 	ld	(BUF+100),a	;Save slot for RDSLT
-	ld	c,(iy+UD_RELATIVE_UNIT_NUMBER##) ;Save relative drive number
+	ld	a,(iy+UD_RELATIVE_UNIT_NUMBER##)
+
+	;--- Entry point also used by F_FORMAT
+	;    Input: A = relative drive number, (BUF+100) = driver slot
+	;           Stack: buffer address, buffer size (on top)
+
+dcb_msxdos_choice:
+	ld	c,a
+	ld	a,(BUF+100)
 	ld_	iyh,a		;IYh = driver slot for CALSLT
 	ld	a,c		;A = relative drive number for CHOICE
 	ld	ix,4019h	;CHOICE entry point
@@ -868,10 +710,12 @@ dcb_nxt_fdd:
 	ld	(BUF+106),a		;FFh = ROM driver
 	ld	c,(iy+UD_DEVICE_NUMBER##)
 
-	pop	de		;DE = user buffer size
-	pop	hl		;HL = user buffer address
-	push	hl		;Save user buffer address
-	push	de		;Save user buffer size
+	;--- Entry point also used by F_FORMAT
+	;    Input: C = device number, (BUF+100) = driver slot,
+	;           (BUF+106) = driver segment (DOS 2 only)
+	;           Stack: buffer address, buffer size (on top)
+
+dcb_nxt_query:
 
 	;Always use SECBUF as intermediate for the driver query,
 	;then copy from SECBUF to user buffer with boundary handling.

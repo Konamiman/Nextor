@@ -169,11 +169,11 @@ SNEXT2:		LD	DE,FIB_1##		;Get information about file
 		LD	A,(HL)			;Check to see if a previous
 		CP	0FFh			; S_F_F has really been done
 		LD	A,.NOFIL##		; by seeing if the FCB that
-		JP	NZ,RET_ERR		; would have been stored is
+		JR	NZ,RET_ERR		; would have been stored is
 		LDIR				; legal.
 ;
 		CALL	S_F_N
-		JP	NZ,RET_ERR
+		JR	NZ,RET_ERR
 ;
 GOT_SEARCH:	PUSH	DE			;Address of directory entry.
 		LD	HL,FIB_1##		;Copy search FIB into an
@@ -1417,7 +1417,7 @@ FOUR_BYTE_REC:	CALL	MULTIPLY		;Multiply top word of record
 		CALL	MULTIPLY
 		LD	A,H			;Complain if the transfer size
 		OR	L			; is greater than 64k.
-MSX_FAIL_1_NZ:	JP	NZ,MSX_FAIL_1
+MSX_FAIL_1_NZ:	JR	NZ,MSX_FAIL_1
 ;
 		LD	C,E			;BC := transfer size
 		LD	B,D

@@ -307,6 +307,20 @@ EFM_KERNEL	equ	EFM_HZ+(1 SHL EF_R800)
 
 NUMKEYS	equ	0FCBBh
 
+;
+;         NUMBERS OF THE CALL COMMAND HELP TEXTS
+;         (internal use only; the texts are in bank1/callhelp.mac, in this order)
+;
+HLP_MAPDRV	equ	0
+HLP_USR	equ	1
+HLP_LOCKDRV	equ	2
+HLP_CHDRV	equ	3
+HLP_UDRIVER	equ	4
+HLP_IDRIVER	equ	5
+HLP_BOOTKEYS	equ	6
+HLP_SETSCREEN	equ	7
+HLP_NEXTOR	equ	8
+
 
 ;-----------------------------------------------------------------------------
 ;
