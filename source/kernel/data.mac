@@ -132,8 +132,8 @@ ram_ad	defl	DATABASE
 	var3	RANDOM		;23 bit random number value.
 	var1	ST_COUNT	;Timeout counter for BIOS console status
 				; reset to 1 by each interrupt forces check.
-	var1	CH_COUNT	;Timeout counter for BIOS console buffer
-				; flush.
+	var1	CH_COUNT	;Unused (was the BIOS console buffer flush
+				; timeout, the buffer was never implemented).
 	var1	TIM_TICK	;Deferred timeout counter for unit descriptor
 				; timeouts.
 ;

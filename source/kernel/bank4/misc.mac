@@ -25,7 +25,6 @@
 ;           B = current lock status
 
 	;ld	c,a		;A for the routine is passed in C
-	ld	iy,RAM_BASE##
 
 	ld	a,e
 	cp	MAX_UNITS

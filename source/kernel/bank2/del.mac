@@ -387,7 +387,7 @@ not_05h_fiddle:	ld	(hl),a			; being 05h.
 ;
 		pcall	DI_INIT			;Search the moved directory
 		pcall	DI_FIRST		; for the ".." entry which
-		ld	bc,DOT_DOT_NAME		; must be updated with the
+		ld	bc,?DOT_DOT_NAME##-OFFSET	; must be updated with the
 		ld	(FNM_PTR##),bc		; new parent directory 
 		pcall	NM_SEARCH		; cluster number.
 		pop	bc
@@ -542,21 +542,17 @@ no_set_archive:	pcall	DIRT_CACHE		;Mark buffer as dirty and
 ;
 		push	hl
 		push	bc
-		ld	hl,DOT_NAME
+		ld	hl,?DOT_NAME##-OFFSET
 		xor	a
 		pcall	CMP_NAME		;Test for "."
 		jr	z,is_dot_name
-		ld	hl,DOT_DOT_NAME
+		ld	hl,?DOT_DOT_NAME##-OFFSET
 		xor	a			;If not the test for ".."
 		pcall	CMP_NAME
 is_dot_name:	pop	bc
 		pop	hl
 		ld	a,.DOT##		;Prepare error code in case
 		ret
-;
-;
-DOT_DOT_NAME:	db	"."
-DOT_NAME:	db	".       ","   "
 ;
 ;-----------------------------------------------------------------------------
 ;

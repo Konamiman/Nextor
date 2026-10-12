@@ -881,26 +881,6 @@ PRT_CRLF:
 	pop	af
 	ret
 
-PRSLOT:
-;	push	bc
-	push	af
-	and	11b
-	add	a,"0"
-	call	CHPUT		;Print main slot number
-
-	pop	af
-	bit	7,a
-	ret	z
-	rrca
-	rrca
-	and	11b
-	add	a,"0"
-	push	af
-	ld	a,"-"
-	call	CHPUT
-	pop	af
-	jp	CHPUT		;Print sub-slot number
-
 	ALIGN	4775h
 RDSEQ:	CALLDOS	14h	;;Read sequential (FCB)
 ;
@@ -927,20 +907,6 @@ RDBLK:	CALLDOS	27h	;;Read random block (FCB)
 	ALIGN	47BEh
 WRBLK:	CALLDOS	26h	;;Write random block (FCB)
 ;
-;
-;	Get base address of work area for this cartridge to [IX] and
-;	[HL].  preserves [DE].
-;
-	public	GETWRK
-GETWRK:
-	call	GET_SLTWRK_ENTRY
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a
-	push	hl
-	pop	ix
-	ret
 
 	ALIGN	47D1h
 WRZER:	CALLDOS	28h	;;Write random with zero fill (FCB)
@@ -2451,12 +2417,6 @@ GET_SLTWRK_ENTRY:
 	pop	hl
 	ret
 
-ADDHLBC:
-	ld	c,a
-	ld	b,0
-	add	hl,bc
-	ret
-
 ;
 ;-----------------------------------------------------------------------
 ;
@@ -2465,19 +2425,6 @@ ADDHLBC:
 ; each  page  is  handled as a special case, although this does make the
 ; code rather large.  All registers except AF are preserved.
 ;
-; Get slot address for page 0
-GSLOT0::
-	push	hl
-	push	bc
-	in	a,(PPI.AR)	;Get primary slot register
-				;Isolate primary slot number
-				; for page-0.
-	call	GSLT_SLTTBL
-	jr	z,GSLT_RET	;Slot is not expanded.
-	rlca
-	rlca
-	jr	GSLT_EXP
-
 ; Get slot address for page 1
 GSLT1::
 	push	hl
@@ -3093,35 +3040,7 @@ RD_MEM:
 	jp	$DOSOFF##
 
 
-;DIV16 and PANIC routines mnoved here since code overwrapped
-
-;
-; DIV16     [BC]=[BC]/[DE], remainder in HL.  Preserves DE, IX, IY.
-;
-	public	DIV16
-DIV16:
-	ld	hl,0
-;;	call	H.DIV32
-	ld	a,17
-div_loop:
-	rl	c
-	rl	b
-	dec	a
-	ret	z
-;
-	adc	hl,hl
-	jr	nc,fit_16bit
-	or	a		;Remainder exceeds 16 bit
-	sbc	hl,de		;This always generates carry
-	jr	div_loop
-fit_16bit:
-	sbc	hl,de
-	jr	nc,no_rest
-	add	hl,de		;Restore since divisor didn't fit
-no_rest:
-	ccf			;Prepare quotient bit
-	jr	div_loop
-
+;PANIC routines moved here since code overwrapped
 
 PANIC_TOOMD:
 	ld	a,__TOOMD##
@@ -3847,8 +3766,6 @@ CALL_DRIVER:
 	ex	af,af'
 	ld	a,DV_BANK##
 	jp	CALBNK##
-
-FOURZEROS:	db	0,0,0,0
 
 ;-----------------------------------------------------------------------------
 ;

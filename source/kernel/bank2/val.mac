@@ -1284,12 +1284,17 @@ fat_str:	db	"FAT1"
 ;
 ;
 		ld	b,4
-cp_volid_loop:	ld	a,(de)
+;
+;--- Compare strings of fixed length
+;    Input: HL, DE=strings, B=length
+;    Output: Z set if same strings (and then A=B=0, HL=HL+B, DE=DE+B)
+;
+CP_FLSTR:	ld	a,(de)
 		sub	(hl)
 		ret	nz
 		inc	de
 		inc	hl
-		djnz	cp_volid_loop
+		djnz	CP_FLSTR
 		ret
 ;
 ;
@@ -1318,7 +1323,6 @@ DO_MEDIA_CHANGE:
 	push	bc
 	push	de
 	push	hl
-	push	iy
 
 	ld	b,(ix+UD_SLOT##)
 	ld	c,(ix+UD_RAM_SEGMENT##)
@@ -1326,7 +1330,6 @@ DO_MEDIA_CHANGE:
 	ld	ix,UNMAPALL##
 	call CALL4_PRESERVE_ALT
 
-	pop	iy
 	pop	hl
 	pop	de
 	pop	bc
@@ -1439,13 +1442,11 @@ build_upb_do_findpart:
         push hl
 
 		push ix
-	    push iy
 
         ld d,0
 		ld	ix,AUTO_ASPART##
         call CALL4_PRESERVE_ALT
 
-        pop iy
         pop ix
 
         pop	hl	;Restore unit desciptor
@@ -1603,9 +1604,6 @@ upb_not_found:	pop	hl			;If anything was wrong with
 MKDPB_DEVBASED:
 		push	hl
 		push	ix
-		push	iy
-		ex	af,af'
-		push	af
 		push	ix
 		ex	(sp),hl
 		pop	ix
@@ -1616,10 +1614,7 @@ MKDPB_DEVBASED:
         ld ix,MKDPB##
         call CALL4_PRESERVE_ALT ;Since we don't know state of page 1 when KBDOS is called.
 		
-		pop	af
-		ex	af,af'
 		xor	a
-		pop	iy
 		pop	ix
 		pop	hl
 		ret
@@ -2029,7 +2024,7 @@ end_reduce_clus:
 		;gives a number that fits in 16 bits
 		;(that is, gives less than 32MB of disk space)		
 
-		call	COMPHLDE		;Store the minimum of reduced
+		call	COMP16			;Store the minimum of reduced
 		jr	nc,reduce_set		;cluster count and actual count.
 		ex	de,hl
 reduce_set:
@@ -2154,16 +2149,7 @@ no_cur_dir:	pop	hl
 		ret
 ;
 
-msxdos_str:	db	"MSXDOS"
-nextor_str:	db	"NEXTOR"
 
-COMPHLDE:
-	ld	a,h
-	sub	d
-	ret	nz
-	ld	a,l
-	sub	e
-	ret
 ;
 ;------------------------------------------------------------------------------
 ;
@@ -2836,7 +2822,7 @@ CALL_DRV:
 ; Corrupts:  all registers
 ;
 ;
-		pcall	CH_FLUSH		;Flush any screen buffer
+		call	H_CHFL##		;Screen buffer flush hook
 ;		pcall	STOP_TST		;Check for ctrl-STOP
 ;
 CALLDRV2:
@@ -3153,19 +3139,6 @@ ud_tick_ret:	pop	hl
 ;
 ;
 
-;--- Compare strings of fixed length
-;    Input: HL, DE=strings, B=length
-;    Output: Z set if same strings
-
-CP_FLSTR:
-	ld	a,(de)
-	cp	(hl)
-	ret	nz
-	inc	hl
-	inc	de
-	djnz	CP_FLSTR
-	ret
-
 COMP16:
 	ld	a,h
 	sub	d
@@ -3175,9 +3148,11 @@ COMP16:
 	ret
 
     ;Call a routine in bank 4 (or 6 if bit 15 of IX is set) of master slot,
-    ;preserving alternate registers.
+    ;preserving IY and the alternate registers.
     ;Input: IX=Routine to call
-CALL4_PRESERVE_ALT:
+    ;Output: AF, BC, DE, HL as returned by the routine; IX corrupted.
+	PROC	CALL4_PRESERVE_ALT
+    push iy
     exx
     ex af,af'
     push af
@@ -3200,6 +3175,7 @@ CALL4_PRESERVE_ALT:
     pop af
     ex af,af'
     exx
+    pop iy
 
     ret
 

@@ -237,10 +237,6 @@ link_dev_done:
 ;	+++++  INITIALISE BIOS CHARACTER I/O VARIABLES  +++++
 ;
 		pcall	CHAR_INIT
-		ld	hl,CURSOR_SEQS		;Copy cursor on and off
-		ld	de,CH_BUF##-6		; escape sequences to start
-		ld	bc,6			; of BIOS screen buffer.
-		ldir
 ;
 		ld	a,1			;Initialise console status
 		ld	(ST_COUNT##),a		; check counter.
@@ -291,10 +287,6 @@ DEV_LIST:	db	0FFh				;List of devices for
 		db	10100000b, "AUX     ","   "
 ;
 		db	0
-;
-;
-CURSOR_SEQS:	db	ESC,"y5"		;Cursor on sequence
-		db	ESC,"x5"		;Cursor off sequence
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -595,10 +587,6 @@ KBDOS:
 KBDOS_CALL:	push	hl			;Remember HL in case it is
 		push	bc			; required, and save BC
 		ex	af,af'
-;
-		ld	a,(CH_COUNT##)		;If character buffer needs
-		dec	a			; flushing then flush it.
-		pcall	z,CH_FLUSH
 ;
 		ld	a,c
 		cp	_DOSVER##			;Treat DOSVER as a special case (must preserve IY or not depending on input)

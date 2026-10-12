@@ -4647,24 +4647,12 @@ ISGH_NO:
 	or	a
 	ret
 
-	ALIGN	5897h
+	ALIGN	58A8h
 
-;	Subroutine	H.RUNC interceptor
-;	Inputs		-
-;	Outputs		-
-;	Remark		Control is passed to this routine when the BASIC interpreter is initialized
-;			There are two ways: a BASIC program in ROM is started OR at the start of MSX-BASIC
+;	The H.RUNC interceptor that was at 5897h (right before A58A8) has been
+;	removed: the code that hooked it is disabled (see T5807), and bank 0
+;	enters the DOS 1 initialization directly at 58A8h.
 
-A5897:	ld	hl,H.RUNC
-	ld	b,5
-A589C:	ld	(hl),0C9H
-	inc	hl
-	djnz	A589C			; clear RUNC hook
-	ld	hl,DEVICE
-	xor	a
-	cp	(hl)
-	ld	(hl),a			; clear diskinterface count
-	ret	p			; already cleared, return control
 A58A8:	call	A622D			; hook H.LOPD when H.CLEA is hooked (for register system bottom)
 	ld	(YF348),a		; disksystem diskrom slotid
 	ld	hl,A7397
@@ -5662,45 +5650,11 @@ A5FBE:	and	00CH
 	or	c
 	ret
 
-;	Subroutine	get my diskdriver workarea
-;	Inputs		-
-;	Outputs		HL = IX = pointer to workarea
-;	Remark		used by the diskdriver
+;	GETWRK (get my diskdriver workarea, at 5FC2h) and A5FCD (get my SLTWRK
+;	entry) were here. Nothing uses them anymore: the old linked disk driver
+;	interface is gone and Nextor drivers use GWORK (via CALBNK to bank 0).
 
-GETWRK:
-A5FC2:	call	A5FCD			; get my SLTWRK entry
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a			; pointer to workarea
-	push	hl
-	pop	ix
-	ret
-
-;	Subroutine	get my SLTWRK entry
-;	Inputs		-
-;	Outputs		HL = pointer to SLTWRK entry
-
-A5FCD:	call	A5FE7			; get my primairy slot
-	add	a,a
-	add	a,a
-	add	a,a
-	scf
-	adc	a,a			; primary slot*4 + 1
-	ld	c,a
-	ld	a,(hl)
-	add	a,a
-	sbc	a,a
-	and	00CH			; 0 for non expanded, 0CH for expanded
-	inc	hl
-	inc	hl
-	inc	hl
-	inc	hl
-	and	(hl)
-	or	c
-	add	a,a			; word entries
-	ld	hl,SLTWRK
-	jr	A5FF3
+	ALIGN	5FE7h
 
 ;	Subroutine	get my EXPTBL entry
 ;	Inputs		-
@@ -5751,25 +5705,9 @@ KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
 	push	hl			; if quit anywhere start diskbasic
 	jp	BOOT_D1_CONT
 
-	ALIGN	603Dh
+	;A603D/A603F (the tail of PRVINT, removed) were here.
 
-A603D:	pop	af
-	ret				; quit
-
-A603F:	ex	de,hl
-	ld	a,(hl)
-	and	a
-	jr	z,A603D			; DRVINT entry not used, quit
-	push	af
-	pop	iy			; slotid
-	inc	hl
-	ld	c,(hl)
-	inc	hl
-	ld	b,(hl)
-	push	bc
-	pop	ix			; address
-	pop	af
-	jp	CALSLT
+	ALIGN	6052h
 
 ;	Subroutine	read disksector
 ;	Inputs		A = driveid, B = number of sectors, C = mediadescriptor, DE = start sector, HL = transferaddress

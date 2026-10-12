@@ -710,34 +710,13 @@ IDRIVER_HELP:
 ;=============================================================================
 
 
-;-----------------------------------------------------------------------------
-;
-;    IDRV_PRINT_OK
-;
-;    Print CIDRIVER success message: "Driver loaded in <slot:seg>\r\n"
-;
-;    Called from bank 4 via CALBNK (kept for backward compatibility).
-;
-
-	public	?IDRV_PRINT_OK
-
-?IDRV_PRINT_OK:
-	ld	hl,IDRV_OK_MSG
-	call	PRINT_CALL_HELP##
-	ld	a,(IDRV_SEG)
-	ld	b,a
-	ld	a,(IDRV_SLOT)
-	call	PRSLOT6
-	ld	hl,CRLF_MSG
-	jp	PRINT_CALL_HELP##
-
 IDRV_OK_MSG:
 	defb	"Driver loaded in ",0
 
 
 ;--- Print slot number with optional sub-slot and segment.
 ;    Input: A = slot, B = segment (FFh = ROM, skip segment)
-;    Uses RST 18h. Shared with IDRV_PRINT_OK.
+;    Uses RST 18h.
 
 PRSLOT6:
 	push	bc
@@ -811,21 +790,6 @@ PRD6_D4:
 PRS6_SEG_S:
 	defb	", segment ",0
 
-
-;-----------------------------------------------------------------------------
-;
-;    UDRV_PRINT_OK
-;
-;    Print CUDRIVER success message: "Driver unloaded\r\n"
-;
-;    Called from bank 4 via CALBNK (kept for backward compatibility).
-;
-
-	public	?UDRV_PRINT_OK
-
-?UDRV_PRINT_OK:
-	ld	hl,UDRV_OK_MSG
-	jp	PRINT_CALL_HELP##
 
 UDRV_OK_MSG:
 	defb	"Driver unloaded",13,10,0

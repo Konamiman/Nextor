@@ -2129,12 +2129,6 @@ MUL32NOADD:
 		or	a
         RET
 
-mul32ov:
-        EXX
-		ret
-
-	ret
-
 
 
 	subttl	random I/O - PUT, GET -
@@ -3583,11 +3577,12 @@ GETERR::
 	jr	c,GO_ERROR	; yes, file #0 will be closed by MSX-BASIC.
 DOS_UNKNOWN:
 ;
+;	DERMAK only defines the error code; the "J&ERRNAM: ld e,ERRNAM"
+;	entry points (chained with 'LD BC' skip instructions) are written
+;	below only for the errors that are actually raised that way.
+;
 DERMAK	macro	ERRNAM
 ERRNAM	equ	QQQQ
-	defb	1		;; 'LD BC' instruction (skip next 2 bytes)
-J&ERRNAM:
-	ld	e,ERRNAM
 QQQQ	defl	QQQQ+1
 	endm
 ;
@@ -3624,6 +3619,13 @@ QQQQ	defl	DERFST
 ;
 DERLST	equ	QQQQ-1		;
 ;
+	defb	1		;'LD BC' instruction (skip next 2 bytes)
+JDERBFM:
+	ld	e,DERBFM
+	defb	1		;'LD BC' instruction (skip next 2 bytes)
+JDERBDN:
+	ld	e,DERBDN
+;
 	xor	a		;clear NLONLY so that file #0 is closed
 	ld	(NLONLY),a
 	push	de		;save error code
@@ -3656,13 +3658,7 @@ if DEBUG
 JDERIER:ld	e,ERRIER
 	defb	1		;skip 2 bytes
 endif
-JDERIFN:ld	e,ERRIFN
-	defb	1		;skip 2 bytes
-JDERFNF:ld	e,ERRFNF
-	defb	1		;skip 2 bytes
 JDERFAO:ld	e,ERRFAO
-	defb	1		;skip 2 bytes
-JDERRPE:ld	e,ERRRPE
 	defb	1		;skip 2 bytes
 JDERBFN:ld	e,ERRBFN
 	defb	1		;skip 2 bytes

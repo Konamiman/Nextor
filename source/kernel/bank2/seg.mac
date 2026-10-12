@@ -30,32 +30,8 @@
 		ld	ix,FREUSEG##
 
 DO_CALL:
-	push	iy
-	exx
-	push	hl
-	push	de
-	push	bc
-	exx
-	ex	af,af'
-	push	af
-	ex	af,af'
-
 	ld	(A_SAVE##),a
-	ld	(BK4_ADD##),ix
-	ld	ix,C4PBK##
-	ld	iy,(MASTER_SLOT##-1)
-	call	CALSLT
-
-	ex	af,af'
-	pop	af
-	ex	af,af'
-	exx
-	pop	bc
-	pop	de
-	pop	hl
-	exx
-
-	pop	iy
+	pcall	CALL4_PRESERVE_ALT
 	pop	ix
 	ret
 

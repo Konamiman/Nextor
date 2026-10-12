@@ -41,11 +41,11 @@ MSX_CNSDFG	equ	0F3DEh
 	PROC	CHR_IN
 ;
 ;    This is the BIOS keyboard input routine.  It simply calls  the  MSX  BIOS
-; ROM  to  get a character, but first flushes anything which may be waiting in
-; the screen buffer.
+; ROM  to  get a character, but first calls the screen buffer flush hook (the
+; screen buffer itself was never implemented, see CHR_OUT).
 ;
 		call	H_CHIN##		;Call a hook in page-3
-		call	CH_FLUSH		;Flush screen buffer if req.
+		call	H_CHFL##		;Screen buffer flush hook
 		push	ix
 		ld	ix,MSX_CHGET
 		call	GO_BIOS
@@ -76,10 +76,6 @@ MSX_CNSDFG	equ	0F3DEh
 		inc	(hl)			;Set timeout back to 1 in
 						; anticipation.
 ;
-		ld	a,(CH_COUNT##)		;If console output timeout
-		dec	a			; has expired then flush
-		call	z,CH_FLUSH		; the output buffer.
-;
 		push	ix
 		ld	ix,MSX_CHSNS		;Actually do the console
 		call	GO_BIOS			; status call and also test
@@ -100,145 +96,18 @@ no_char_ready:	xor	a			;No character ready so return
 		ld	a,c
 	PROC	CHR_OUT
 ;
-;   This is the BIOS screen output routine.  The character is  stored  in  the
-; character  output  buffer  which is then flushed if it is full, if we are in
-; the middle of an escape sequence, or if the character is an LF or  BELL.  If
-; the  character  is  an  ESCAPE then the buffer is flushed before putting the
-; character into the buffer.  Before storing the character, the  buffer  flush
-; timeout  counter  "CH_COUNT"  is  reset to its maximum value.  There is also
-; code to maintain a 16-bit character flag.  This is used in the buffer  flush
-; routine to ensure that the two bytes of a 16-bit character will not be split
-; up with cursor control escape sequences.
+;   This is the BIOS screen output routine.  MSX-DOS 2 had code to buffer the
+; screen output here, but the buffering was never enabled: the character goes
+; straight to the BIOS.  The never used buffer flushing code (CH_FLUSH and
+; FLUSH_BUF) has been removed; the H_CHFL hook is still called in the places
+; where the buffer used to be flushed.
 ;
 		call	H_CHOUT##		;Call a hook in page-3
-        ;==HF== Skip buffering fiddle at the moment...
 		push	ix
 		ld	ix,MSX_CHPUT
 		call	GO_BIOS
 		pop	ix
 		ret
-;
-;------------------------------------------------------------------------------
-;
-	PROC	CH_FLUSH
-;
-;   This  is  the  flush  buffer routine which is called when the buffer flush
-; timeout has expired or when any other I/O operation is done to  ensure  that
-; the  buffer is empty.  It preserves all registers and is reasonably quick if
-; there is nothing in the buffer.  All  the  work  is  actually  done  by  the
-; routine "FLUSH_BUF".
-;
-; Entry:    None
-; Returns:  None
-; Corrupts: None
-;
-		call	H_CHFL##		;Call a hook in page-3
-		push	af
-		ld	a,(CH_PTR##)		;If there is nothing in the
-		or	a			; buffer then don't try to
-		jr	z,no_flush		; flush it.
-		push	bc
-		push	de			;If there is something in the
-		push	hl			; buffer then flush it out
-		call	FLUSH_BUF		; preserving all registers.
-		pop	hl
-		pop	de
-		pop	bc
-no_flush:	pop	af
-		ret
-;
-;
-;------------------------------------------------------------------------------
-;
-FLUSH_BUF:
-;
-;    This is the internal flush buffer routine which is called when the buffer
-; must  be  flushed.   It  is  only ever called when there is something in the
-; buffer.  Its normal operation is to send a cursor off escape sequence at the
-; start  of  the  buffer  and  a  cursor  on at the end.  However these escape
-; sequences  will  not  be sent if the MXS variable "ESCCNT" is non-zero since
-; this  means  it is already in the middle of an escape sequence.  The initial
-; "cursor off" sequence is sent by tacking it onto the  front  of  the  buffer
-; (the data is already there so just the pointer and count are adjusted).  The
-; final "cursor on" sequence is sent separately.
-;
-;    There  is  also  code  to ensure that the two bytes of a 16-bit character
-; will not be split up by cursor control escape sequences.  This  is  done  by
-; examining  a  flag  ("CH_16FLG")  which  is set if the last character in the
-; buffer is the first byte of a 16-bit character.  If this flag  is  set  then
-; the  buffer  count  is  decremented to ensure that the last character is not
-; sent. After the buffer has been flushed, the last character is then  put  at
-; the  start of the buffer and the buffer count set to 1.  In the special case
-; where there is only one character in the buffer and it is the first byte  of
-; a 16-bit character, then no bytes will be flushed.
-;
-; Entry:     None
-; Returns:   None
-; Corrupts:  AF,BC,DE,HL
-;
-		ex	af,af'
-		exx
-		push	af
-		push	bc
-		push	de
-		push	hl
-		push	ix
-		push	iy
-;
-;   Modified by Hal_F
-;	This line must be here, or "no_flush_16ch" will corrupt first
-;	byte of 16-bit character.  Codes after "not_1st_of_16" are
-;	also optimized.
-;
-		ld	hl,CH_BUF##
-		ld	a,(CH_16FLG##)		;If last character is first
-		bit	0,a			; of a 16-bit character then
-		push	af			; decrement the buffer index
-		ld	a,(CH_PTR##)		; in register A.  Also saves
-		jr	z,not_1st_of_16		; flag on stack.
-		dec	a			;If count goes to zero then
-		jr	z,no_flush_16ch		; skip the actual flushing.
-not_1st_of_16:
-		ld	b,a			;If we are in the middle of an
-		ld	a,(ESCCNT##)		; escape sequence then do not
-		or	a			; include the "cursor off"
-		jr	nz,do_no_cursor_off	; sequence.
-		ld	hl,CH_BUF##-3		;Set buffer pointer and count
-		inc	b			; to include the "cursor off"
-		inc	b			; escape sequence at the
-		inc	b			; start of the buffer.
-do_no_cursor_off:
-		call	$FLUSH##		;Write out the buffer.
-;
-		push	hl
-		ld	hl,CH_BUF##-6		;If we are not in the middle
-		ld	b,3			; of an escape sequence now,
-		ld	a,(ESCCNT##)		; then write out a "cursor on"
-		or	a			; escape sequence from the
-		call	z,$FLUSH##		; start of the buffer.
-		pop	hl
-;
-no_flush_16ch:	xor	a			;Zero the buffer index and
-		ld	(CH_PTR##),a		; also the buffer flush
-		ld	(CH_COUNT##),a		; timeout counter.
-;
-		pop	af			;If the last character was
-		jr	z,no_16ch_fiddle	; 1st byte of a 16-bit char
-		ld	a,(hl)			; then it was not written
-		ld	(CH_BUF##),a		; out so put it back at the
-		ld	a,1			; start of the buffer and
-		ld	(CH_PTR##),a		; set buffer count to 1.
-no_16ch_fiddle:
-		pop	iy
-		pop	ix
-		pop	hl
-		pop	de
-		pop	bc
-		pop	af
-		exx
-		ex	af,af'
-		ret
-;
 ;
 ;==============================================================================
 ;
@@ -246,7 +115,7 @@ no_16ch_fiddle:
 	PROC	LST_OUT
 ;
 		call	H_LSTOUT##		;Call a hook in page-3
-		call	CH_FLUSH
+		call	H_CHFL##		;Screen buffer flush hook
 		push	ix
 		ld	ix,MSX_LPTOUT
 		call	GO_BIOS
@@ -270,7 +139,7 @@ no_16ch_fiddle:
 	PROC	KREADER
 	PROC	AUX_IN
 ;
-		call	CH_FLUSH
+		call	H_CHFL##		;Screen buffer flush hook
 		ld	hl,$AUXIN##
 		pcall	GO_EXIT			;Call page-3 routine
 		ret
@@ -280,7 +149,7 @@ no_16ch_fiddle:
 		ld	a,c
 	PROC	AUX_OUT
 ;
-		call	CH_FLUSH
+		call	H_CHFL##		;Screen buffer flush hook
 		ld	hl,$AUXOUT##
 		pcall	GO_EXIT			;Call page-3 routine
 		ret
