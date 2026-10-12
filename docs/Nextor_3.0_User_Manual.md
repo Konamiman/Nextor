@@ -568,6 +568,8 @@ If no suitable partition is found in any device, the drive remains attached to i
 
 The automatic mapping procedure only supports devices with numbers 1 to 63: this is a current limitation of Nextor that could disappear in future versions. In the case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
 
+The partitions of each device are scanned in this order: first the primary partitions (empty entries in the partition table are skipped), until an extended one is found; then, if an extended partition was found (it can be any of the primary partitions), the logical partitions inside it. Primary partitions placed after the extended partition in the partition table are ignored.
+
 Note that in order to speed up the booting procedure, only the first 9 partitions of each device are scanned during this procedure; consequently, FDISK (see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_) allows changing the "active" flag on these first 9 partitions only.
 
 After the automatic mapping is finished, the boot procedure will continue with the following steps:
@@ -678,7 +680,7 @@ MAPDRV [/L] <drive>:
        [<device index> [<driver location>]]
 ```
 
-Partition number 1 refers to the first primary partition on the device. Partitions 2 to 4 refer to extended partitions 2-1 to 2-3 if partition 2 of the device is extended, otherwise they refer to primary partitions 2 to 4. Partitions 5 onwards always refer to the extended partition 2-(P-1).
+If the device has an extended partition and it is primary partition K (K is 2 for devices partitioned with the built-in partitioning tool), partitions 1 to K-1 refer to the primary partitions and partitions K onwards refer to the extended partitions K-1, K-2, etc; that is, partition P refers to the extended partition K-(P-K+1). Otherwise partitions 1 to 4 refer to the primary partitions. Primary partitions placed after the extended partition in the partition table can't be mapped.
 
 The segment number is required only when referring to a driver loaded in RAM. The rest of this section uses the word "slot" with the meaning "main slot, plus subslot and/or segment where applicable".
 
@@ -1154,9 +1156,7 @@ The command parameters syntax is as follows:
 
 * `<partition>` is a number in the range 0-255, interpreted as follows:
     * 0: Assumes that the device has no partitions. The drive will be mapped to the absolute sector 0 of the device.
-    * 1: First primary partition of the device.
-    * 2, 3 or 4: If device partition 2 is extended, the number is interpreted as the first, second or third extended partition, respectively. Otherwise, the number is interpreted as the second, third or fourth primary partition of the device, respectively. 
-    * 5 or greater: The number is interpreted as the (n-1)th extended partition of the device.
+    * 1 or greater: If primary partition K of the device is extended (K is 2 for devices partitioned with the built-in partitioning tool), numbers smaller than K are interpreted as primary partitions, and K or greater as the (n-K+1)th extended partition of the device. If the device has no extended partition, numbers 1 to 4 are interpreted as primary partitions.
 
 * `<device>` is a device index in the range 1-255.
 

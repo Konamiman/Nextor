@@ -10,7 +10,7 @@ PT_EXT_LBA: equ 15
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV v1.3 - map a drive to a driver, device and partition,",13,10
+	db	"MAPDRV v1.4 - map a drive to a driver, device and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
@@ -26,8 +26,8 @@ PT_EXT_LBA: equ 15
 	db	13,10
 	db	"<partition> can be any number starting at 1, or 0 to map the drive directly",13,10
 	db	"to the device (needed for partitionless devices such as floppy disks).",13,10
-	db	"Partition numbers 2 to 4 refer to extended partitions 2-1 to 2-3 if partition",13,10
-	db	"2 of the device is extended, otherwise they refer to primary partitions.",13,10
+	db	"If primary partition K is extended, partition numbers K and above refer to",13,10
+	db	"extended partitions K-1, K-2..., otherwise they refer to primary partitions.",13,10
         db	13,10
 	db	"<device> must be a number from 1 to 255.",13,10
 	db	13,10
@@ -272,27 +272,43 @@ NO_SKIP_PART:
 
 	;* Convert partition to primary or extended as appropriate
 
+	;  If the first extended partition in the primary partition table
+	;  is primary partition K, partitions K and above are its logical
+	;  partitions K-1, K-2...; otherwise the partition is primary.
+	;  Only primary partitions 1 to <partition> need to be examined.
+
 	ld	a,(PARTITION)
 	or	a
 	jp	z,OK_ADJUST_PARTITION
-	cp	1
-	jr	z,IS_PRIM_PART
-	cp	5
-	jr	nc,IS_EXT_PART
 
-	ld	hl,0
-	ld	de,0
+	ld	b,0		;Primary partition being examined
+FIND_EXT_LOOP:
+	inc	b
+	ld	a,b
+	cp	5
+	jr	nc,IS_PRIM_PART	;No extended partition in the primary partition table
+	dec	a
+	ld	hl,PARTITION
+	cp	(hl)
+	jr	nc,IS_PRIM_PART	;Partition is before the first extended partition
+
+	push	bc
 	ld	ix,DRIVE
 	ld	a,(ix+3)	;Slot
+	ld	h,b			;Primary partition
+	ld	l,0			;Extended partition
 	ld	b,(ix+4)	;Segment
 	ld	d,(ix+5)	;Device
-	ld	h,2			;Primary partition
-	ld	l,0			;Extended partition
+	ld	e,0
 	ld	c,_GPART##
 	call	5
+	pop	de			;D = primary partition examined
+	cp	.IPART##
+	jr	z,FIND_EXT_NEXT	;Empty primary partition: keep searching
 	ld	h,b
 	ld	b,a
 	ld	c,_TERM##
+	or	a
 	jp	nz,5
 
 	ld	a,h
@@ -300,19 +316,27 @@ NO_SKIP_PART:
 	jr	z,IS_EXT_PART
 	cp	PT_EXT_LBA
 	jr	z,IS_EXT_PART
+FIND_EXT_NEXT:
+	ld	b,d
+	jr	FIND_EXT_LOOP
 
 IS_PRIM_PART:
 	ld	a,(PARTITION)
+	cp	5
+	jr	c,IS_PRIM_PART_2
+	ld	a,5		;Non existing primary partition (and keep bit 7 of H clear)
+IS_PRIM_PART_2:
 	ld	(PRIMARY),a
 	xor	a
 	ld	(EXTENDED),a
 	jr	OK_ADJUST_PARTITION
 
 IS_EXT_PART:
-	ld	a,2
+	ld	a,d
 	ld	(PRIMARY),a
 	ld	a,(PARTITION)
-	dec	a
+	sub	d
+	inc	a
 	ld	(EXTENDED),a
 
 OK_ADJUST_PARTITION::

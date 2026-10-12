@@ -38,6 +38,8 @@
 
 [2.16. NEXTOR3.SYS: one boot medium for Nextor 2 and Nextor 3](#216-nextor3sys-one-boot-medium-for-nextor-2-and-nextor-3)
 
+[2.17. Extended partitions in any entry of the partition table](#217-extended-partitions-in-any-entry-of-the-partition-table)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -203,6 +205,12 @@ Some computers have proprietary built-in software (such as the HiTBiT menu of ma
 ### 2.16. NEXTOR3.SYS: one boot medium for Nextor 2 and Nextor 3
 
 `NEXTOR.SYS` version 3 doesn't run on a Nextor 2 kernel, so a boot medium with only one `NEXTOR.SYS` can boot to the DOS prompt with either Nextor 2 or Nextor 3, but not both. To solve this, the Nextor 3 kernel looks for `NEXTOR3.SYS` in the root directory of the boot drive before looking for `NEXTOR.SYS`: copy the Nextor 3 `NEXTOR.SYS` as `NEXTOR3.SYS`, keep the Nextor 2 `NEXTOR.SYS` with its usual name, and the medium will boot with both versions. The file is still distributed as `NEXTOR.SYS`, and renaming it is necessary only for media that need to boot both versions. See _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](Nextor_3.0_User_Manual.md#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_ in the user manual.
+
+### 2.17. Extended partitions in any entry of the partition table
+
+Nextor 2 only recognized an extended partition when it was in the second entry of the primary partition table, which is where the built-in partitioning tool creates it; but other partitioning tools may place it elsewhere (for example, a device partitioned on a PC with three primary partitions plus an extended one will have the extended partition in the fourth entry), and the logical partitions inside it were then unreachable. Nextor 3 recognizes the first extended partition found in the primary partition table, whatever its entry is: its logical partitions are taken into account by the automatic drive mapping procedure at boot time and after media changes, and can be mapped with `MAPDRV` and `CALL MAPDRV`.
+
+When the extended partition is primary partition K, the partition numbers accepted by these commands are 1 to K-1 for the primary partitions and K onwards for the logical partitions; for devices partitioned with the built-in partitioning tool (K = 2) this is the same numbering as in Nextor 2. Primary partitions placed after the extended partition in the partition table are not supported. Also, empty entries in the primary partition table (e.g. left by deleting a partition with a PC tool) no longer stop the scan for partitions done by the automatic drive mapping procedure. See _[3.4.1. MAPDRV: the drive mapping tool](Nextor_3.0_User_Manual.md#341-mapdrv-the-drive-mapping-tool)_ in the user manual.
 
 ## 3. Information for application developers
 

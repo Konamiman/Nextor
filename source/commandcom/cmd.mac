@@ -3537,8 +3537,9 @@ GLK10:	OR	A	; NZ => locked.
 ; boot time mapping and 'u' unmaps it (further arguments are ignored);
 ; 's' attaches the drive to the device without a partition, so that a
 ; suitable one is searched on each access. Partition 0 maps the drive
-; directly to the device; partitions 2 to 4 mean the extended
-; partitions 2-1 to 2-3 when partition 2 of the device is extended.
+; directly to the device; when the first extended partition of the
+; primary partition table is K, partitions K and above mean the
+; extended partitions K-1, K-2..., otherwise they are primary ones.
 ; When the slot (0 = the master disk ROM slot) is omitted, the driver
 ; currently controlling the drive is kept; when the device is omitted
 ; or 0, the device the drive is mapped to is kept (both require the
@@ -3703,23 +3704,32 @@ MDM20:	LD	A,(ENVNAME##+12)	; 's': mapping sector FFFFFFFFh
 	JR	Z,MDM30	;   device with no partition
 	LD	HL,#FFFF	;   assigned.
 	LD	DE,#FFFF
-	JR	MDM60
-MDM30:	LD	A,(ENVNAME##+11)	; Adjust the partition number:
+	JP	MDM60
+MDM30:	LD	A,(ENVNAME##+11)	; Adjust the partition number N:
 	OR	A	;   0 = direct mapping (sector 0),
 	JR	Z,MDM55
-	CP	#01	;   1 = primary partition 1,
-	JR	Z,MDM40
-	CP	#05	;   5 on = always extended,
-	JR	NC,MDM45
-	LD	IX,ENVNAME##	;   2 to 4 = extended 2-1 to 2-3
-	LD	A,(IX+3)	;   when partition 2 of the device
-	LD	B,(IX+4)	;   is extended, else primary.
+	LD	B,#00	;   if the first extended primary
+MDM32:	INC	B	;   partition is K, N >= K means
+	LD	A,B	;   extended K-(N-K+1), else N is
+	CP	#05	;   a primary partition. Only
+	JR	NC,MDM40	;   primaries 1 to N need to be
+	DEC	A	;   examined.
+	LD	HL,ENVNAME##+11
+	CP	(HL)
+	JR	NC,MDM40
+	PUSH	BC
+	LD	IX,ENVNAME##
+	LD	A,(IX+3)
+	LD	H,B
+	LD	B,(IX+4)
 	LD	D,(IX+5)
 	LD	E,#00
-	LD	H,#02
 	LD	L,#00
 	LD	C,_GPART##
 	CALL	BDOS
+	POP	DE	; D = the primary partition.
+	CP	.IPART##	; An empty one is skipped,
+	JR	Z,MDM35	;   other errors are fatal.
 	OR	A
 	RET	NZ
 	LD	A,B	; B = the partition type.
@@ -3727,15 +3737,21 @@ MDM30:	LD	A,(ENVNAME##+11)	; Adjust the partition number:
 	JR	Z,MDM45
 	CP	PT_EXTL
 	JR	Z,MDM45
-MDM40:	LD	A,(ENVNAME##+11)	; Primary partition, as given.
-	LD	(ENVNAME##+1),A
+MDM35:	LD	B,D
+	JR	MDM32
+MDM40:	LD	A,(ENVNAME##+11)	; Primary partition, as given
+	CP	#05	;   (5 on don't exist, and must
+	JR	C,MDM42	;   not reach _GPART as they are,
+	LD	A,#05	;   since bit 7 has a meaning).
+MDM42:	LD	(ENVNAME##+1),A
 	XOR	A
 	LD	(ENVNAME##+2),A
 	JR	MDM50
-MDM45:	LD	A,#02	; Extended partition 2-(n-1).
+MDM45:	LD	A,D	; Extended partition K-(N-K+1).
 	LD	(ENVNAME##+1),A
 	LD	A,(ENVNAME##+11)
-	DEC	A
+	SUB	D
+	INC	A
 	LD	(ENVNAME##+2),A
 MDM50:	LD	IX,ENVNAME##	; Get the partition's starting
 	LD	A,(IX+3)	;   sector.
