@@ -34,7 +34,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$here/../.." && pwd)"
 tool_dir="$repo_root/bin/categorized-releases"
 tool_repo="https://github.com/Konamiman/github-categorized-releases"
-tool_ref="v1.1.0"   # Exact version tag, see the note above
+tool_ref="v1.2.0"   # Exact version tag, see the note above
 fake_releases="$here/fake-releases.json"
 
 for cmd in node git; do

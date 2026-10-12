@@ -433,7 +433,7 @@ function toggleTruncationInfo(btn) {
       </div>
     </div>
     <div class="popup-section">
-      <div class="popup-label">Releases in "${categoryName}" category:</div>
+      <div class="popup-label">Releases in "<span class="popup-category-name"></span>" category:</div>
       <div class="popup-indent">
         <div class="popup-row">
           <span>Matching:</span>
@@ -466,6 +466,7 @@ function toggleTruncationInfo(btn) {
   }
 
   popupContent.innerHTML = html;
+  popupContent.querySelector('.popup-category-name').textContent = categoryName;
   popup.classList.add('show');
 
   function closeOnClickOutside(e) {
@@ -554,6 +555,7 @@ if (document.readyState === 'loading') {
 // Latest Page Display Modes
 // ============================================================================
 
+const LATEST_DISPLAY_MODES = ['releases', 'assets-date-desc', 'assets-date-asc', 'assets-name-asc', 'assets-name-desc'];
 let currentLatestDisplayMode = 'releases';
 
 function setLatestDisplayMode(mode) {
@@ -641,8 +643,15 @@ function updateUrlParams() {
   if (prereleases && !prereleases.checked) params.set('prereleases', '0');
   if (assets && !assets.checked) params.set('assets', '0');
 
+  // Include display mode for latest-page
+  if (currentCategoryId === 'latest-page' && currentLatestDisplayMode !== 'releases') {
+    params.set('mode', currentLatestDisplayMode);
+  }
+
   const queryString = params.toString();
-  const hash = window.location.hash;
+  // No hash for index page
+  const hash = currentCategoryId === null ? window.location.hash
+    : (currentCategoryId === 'index' ? '' : '#' + currentCategoryId);
   const newUrl = window.location.pathname + (queryString ? '?' + queryString : '') + hash;
   history.replaceState(null, '', newUrl);
 }
@@ -676,6 +685,11 @@ function applyUrlParams() {
       assets.checked = val;
       document.body.classList.toggle('hide-assets', !val);
     }
+  }
+
+  // Restore display mode for latest-page (applied when the category is rendered)
+  if (params.has('mode') && LATEST_DISPLAY_MODES.includes(params.get('mode'))) {
+    currentLatestDisplayMode = params.get('mode');
   }
 }
 
@@ -753,16 +767,18 @@ function doSelectCategory(categoryId, html) {
     `;
   }
 
-  // Update URL hash (no hash for index page)
-  const hash = categoryId === 'index' ? '' : '#' + categoryId;
-  const query = window.location.search;
-  history.replaceState(null, '', window.location.pathname + query + hash);
+  // The latest-page HTML always renders in releases mode, restore the selected mode
+  if (category && category.isLatestPage && currentLatestDisplayMode !== 'releases') {
+    setLatestDisplayMode(currentLatestDisplayMode);
+  }
+
+  updateUrlParams();
 }
 
-// Handle browser back/forward for hash changes
+// Handle browser back/forward for hash changes (no hash means the default category)
 window.addEventListener('hashchange', () => {
-  const hash = window.location.hash.slice(1);
-  if (hash && categoryData[hash] && hash !== currentCategoryId) {
-    selectCategory(hash);
+  const target = window.location.hash.slice(1) || defaultCategoryId;
+  if (target && categoryData[target] && target !== currentCategoryId) {
+    selectCategory(target);
   }
 });
