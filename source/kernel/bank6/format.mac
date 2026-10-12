@@ -63,7 +63,7 @@ TWOCRLF: db 13,10,13,10,0
 ;                   80h  = Get choice string into buffer
 ;                   1-9  = Do format with given choice
 ;              HL = Buffer address (for C=80h)
-;              DE = Buffer size (for C=80h, max 512)
+;              DE = Buffer size (for C=80h, max 512; .ELONG if 0)
 ;    Returns:   A  = Error code (0 = OK, .IFORM = not supported or DE>512)
 
 	public	?F_FORMAT
@@ -92,6 +92,10 @@ TWOCRLF: db 13,10,13,10,0
 	sbc	hl,de		;Carry if DE > 512
 	pop	hl
 	jr	c,fformat_pop_iform
+	ld	a,d
+	or	e
+	ld	a,.ELONG##
+	jr	z,fformat_pop_err	;DE=0: no room even for the terminator
 fformat_size_ok:
 
 	ld	a,b
@@ -186,8 +190,12 @@ fformat_probe:
 	ret
 
 fformat_pop_iform:
+	ld	a,.IFORM##
+fformat_pop_err:
 	pop	de
 	pop	hl
+	or	a
+	ret
 fformat_iform:
 	ld	a,.IFORM##
 	or	a
@@ -584,7 +592,8 @@ CDQ_RAM:
 ;
 ;    Input:  HL = Address of unit descriptor
 ;            BC = Address of buffer
-;            DE = Size of buffer (max 512, returns .IFORM if exceeded)
+;            DE = Size of buffer (max 512, returns .IFORM if exceeded
+;                 and .ELONG if 0)
 ;    Output: A  = Error code (0=OK)
 ;    Corrupts: AF,BC,DE,HL,IX,IY
 
@@ -601,9 +610,14 @@ CDQ_RAM:
 	pop	hl
 	jr	nc,dcb_size_ok
 	ld	a,.IFORM##
+dcb_err:
 	or	a		;NZ
 	ret
 dcb_size_ok:
+	ld	a,d
+	or	e
+	ld	a,.ELONG##
+	jr	z,dcb_err	;DE=0: no room even for the terminator
 
 	push	bc		;Save buffer address
 	push	de		;Save buffer size

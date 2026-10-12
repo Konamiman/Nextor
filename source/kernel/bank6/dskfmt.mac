@@ -243,7 +243,11 @@ fmt_ok_gate:
 		pcall	CALL_UNIT		;Do the format command
 		ret	nz			; and give up if error.
 
-		bit	UF_DBD,(iy+UD_DFLAGS##)
+		push	hl			;HL = unit descriptor (IY is
+		ld	de,UD_DFLAGS##		; RAM_BASE here, see above).
+		add	hl,de
+		bit	UF_DBD,(hl)
+		pop	hl
 		jp	nz,nxt_fdd_boot_sec	;Nextor FDD: driver already
 						; wrote valid BPB, just add
 						; DOS 2 extras.
