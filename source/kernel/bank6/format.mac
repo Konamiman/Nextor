@@ -834,10 +834,18 @@ dcb_nxt_err:
 ;                 or unchanged if already in page 3
 ;            BUF+104 = saved original page 2 segment
 ;            BUF+105 = next TPA segment (for boundary crossing)
-;            Cy set if page 3 (no remapping done)
+;            Cy set if page 3 or DOS 1 mode (no remapping done)
 ;    Corrupts: AF
 ;
+;    In DOS 1 mode the caller's memory is visible as it is (the buffer
+;    can't be in page 1, as for all the Nextor functions in DOS 1 mode)
+;    and the mapper variables used here don't exist, so nothing is done
+;    (and RESTORE_PAGE2 and CHECK_IX_BOUNDARY do nothing either).
+;
 MAP_USER_BUF:
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,mub_page3
 	call	GET_P2##
 	ld	(BUF+104),a	;Save original page 2 segment
 
@@ -891,6 +899,9 @@ mub_page3:
 ;    Corrupts: AF
 ;
 RESTORE_PAGE2:
+	ld	a,(DOS_VER##)
+	or	a
+	ret	z
 	ld	a,(BUF+104)
 	jp	PUT_P2##
 
@@ -914,6 +925,9 @@ CHECK_IX_BOUNDARY:
 	or	a
 	ret	nz		;Low byte not 00h: not at boundary
 	;IX = C000h exactly: crossed from BFFFh to C000h
+	ld	a,(DOS_VER##)
+	or	a
+	ret	z		;DOS 1: no remapping (see MAP_USER_BUF)
 	ld	a,(BUF+105)
 	call	PUT_P2##
 	ld_	ixh,80h		;Wrap to start of page 2 (IXl already 0)

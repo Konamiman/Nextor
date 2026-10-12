@@ -4340,7 +4340,7 @@ Z80MODE_SET_OF_LOOP:
 	inc	hl
 	ld	a,(hl)
 	cp	c
-	jr	nz,Z80MODE_SET_ON_LOOP
+	jr	nz,Z80MODE_SET_OF_LOOP
 	ld	(hl),0
 	ld	d,0
 
