@@ -343,12 +343,12 @@ not_abort_err:	or	a			; original error code in A.
 ;
 ;
 BOOT_DISK:	ld	c,2			;During boot, always abort
-BOOT_BREAK:	ret				; and return the error code of
+		ret				; and return the error code of
 						; disk errors.
 ;
 ;
-BOOT_DISKVECT:	dw	BOOT_DISK		;Pointers to disk error and
-BOOT_BREAKVECT:	dw	BOOT_BREAK		; abort routines for booting.
+BOOT_DISKVECT:	dw	BOOT_DISK		;Pointer to disk error routine
+						; for booting.
 ;
 ;
 ;-----------------------------------------------------------------------------

@@ -136,7 +136,7 @@ NEXT_CALL_PAR6:
 
 
 ; Try to extract '(' from text. If end of instruction,
-; show zero-terminated help pointed by DE.
+; show the help text number E (HLP_xxx in const.inc, texts in bank 1).
 
 GET_PARENT_OR_HELP6:
 	dec	hl
@@ -149,13 +149,15 @@ GET_PARENT_OR_HELP6:
 	cp	"("
 	ret	z
 	ld	e,2	;"Syntax error"
-	jp	BASIC_ERR6
+	jr	BASIC_ERR6
 
 DO_CALL_HELP6:
 	pop	af	;To prevent the rest of the CALL from being executed
-	ex	de,hl
-	call	PRINT_CALL_HELP##
-	ex	de,hl
+	push	hl
+	ld	a,1	;B.INIT
+	ld	ix,B1V_PRINT_HELP##
+	call	CALBNK##
+	pop	hl
 	ret
 
 
@@ -180,7 +182,7 @@ UDRV_SLOT	equ	PROCNM
 UDRV_SEG	equ	PROCNM+1
 UDRV_FLAGS	equ	PROCNM+2
 
-	ld	de,UDRIVER_HELP
+	ld	e,HLP_UDRIVER
 	call	GET_PARENT_OR_HELP6
 
 	;* Parse slot number (main+4*subslot format)
@@ -266,13 +268,6 @@ UDRV_OK:
 	pop	hl		;Restore BASIC text pointer
 	ret
 
-UDRIVER_HELP:
-	defb	"UDRIVER(<slot>,<seg>[,<flags>])",13,10
-	defb	13,10
-	defb	"<flags>: 2 for silent mode",13,10
-	defb	0
-
-
 ;=============================================================================
 ;
 ;    CIDRIVER — CALL IDRIVER
@@ -304,7 +299,7 @@ IDRV_INITLEN	equ	PROCNM+5	;1 byte: length of init data
 IDRV_INITDAT	equ	PROCNM+6	;2 bytes: address of init data in $SECBUF
 IDRV_FLAGS	equ	PROCNM+8	;1 byte: flags
 
-	ld	de,IDRIVER_HELP
+	ld	e,HLP_IDRIVER
 	call	GET_PARENT_OR_HELP6
 
 	;* Parse filename string
@@ -364,7 +359,7 @@ IDRV_STROK:
 	ld	(IDRV_FLAGS),a
 
 	call	NEXT_CALL_PAR6
-	jp	c,IDRV_PARSED	;')' → flags only, no init data
+	jr	c,IDRV_PARSED	;')' → flags only, no init data
 
 	;* Check flags bit 2 for pointer mode vs inline mode
 
@@ -687,22 +682,6 @@ DRVRO_BERR6:
 	jp	BASIC_ERR6
 
 
-IDRIVER_HELP:
-	;    ----------------------------------------
-	defb	"IDRIVER(<file>[,<flags>[,<data>",2
-	defb	"  [,<data>...]]])",13,10
-	defb	"IDRIVER(<file>,<flags>,<pointer>",2
-	defb	"  ,<length>)",13,10
-	defb	13,10
-	defb	"<data>: initialization bytes/words",13,10
-	defb	"<pointer>, <length>: init data area",13,10
-	defb	"<flags>: the sum of zero or more of:",13,10
-	defb	"  1: Map drive after install",13,10
-	defb	"  2: Silent mode",13,10
-	defb	"  4: Use <pointer>,<length> syntax",13,10
-	defb	0
-
-
 ;=============================================================================
 ;
 ;    Existing bank 6 routines
@@ -710,34 +689,13 @@ IDRIVER_HELP:
 ;=============================================================================
 
 
-;-----------------------------------------------------------------------------
-;
-;    IDRV_PRINT_OK
-;
-;    Print CIDRIVER success message: "Driver loaded in <slot:seg>\r\n"
-;
-;    Called from bank 4 via CALBNK (kept for backward compatibility).
-;
-
-	public	?IDRV_PRINT_OK
-
-?IDRV_PRINT_OK:
-	ld	hl,IDRV_OK_MSG
-	call	PRINT_CALL_HELP##
-	ld	a,(IDRV_SEG)
-	ld	b,a
-	ld	a,(IDRV_SLOT)
-	call	PRSLOT6
-	ld	hl,CRLF_MSG
-	jp	PRINT_CALL_HELP##
-
 IDRV_OK_MSG:
 	defb	"Driver loaded in ",0
 
 
 ;--- Print slot number with optional sub-slot and segment.
 ;    Input: A = slot, B = segment (FFh = ROM, skip segment)
-;    Uses RST 18h. Shared with IDRV_PRINT_OK.
+;    Uses RST 18h.
 
 PRSLOT6:
 	push	bc
@@ -811,21 +769,6 @@ PRD6_D4:
 PRS6_SEG_S:
 	defb	", segment ",0
 
-
-;-----------------------------------------------------------------------------
-;
-;    UDRV_PRINT_OK
-;
-;    Print CUDRIVER success message: "Driver unloaded\r\n"
-;
-;    Called from bank 4 via CALBNK (kept for backward compatibility).
-;
-
-	public	?UDRV_PRINT_OK
-
-?UDRV_PRINT_OK:
-	ld	hl,UDRV_OK_MSG
-	jp	PRINT_CALL_HELP##
 
 UDRV_OK_MSG:
 	defb	"Driver unloaded",13,10,0

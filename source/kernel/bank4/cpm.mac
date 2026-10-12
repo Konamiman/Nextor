@@ -42,7 +42,6 @@ CP_MOD	EQU	7
 ;
 ; Entry:        DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		LD	(IY+@SE_FLAGS##),SEM_SR	;OPEN searches, doesn't CREATE.
 		LD	A,ATM_HID		;Find hidden files as well.
@@ -100,7 +99,6 @@ RET_ERR:	LD	HL,00FFh		;L=0FFh => error.
 ; buffers are flushed to disk.
 ;
 ;
-		ld	iy,RAM_BASE##
 
 		CALL	GET_FAB			;Setup FAB from CP/M FCB.
 
@@ -140,7 +138,6 @@ RET_ERR:	LD	HL,00FFh		;L=0FFh => error.
 ;
 	PROC	F_SFIRST
 ;
-		ld	iy,RAM_BASE##
 
 		LD	HL,FCB_EXTENT_LOW
 		ADD	HL,DE			;-> low extent byte.
@@ -165,7 +162,6 @@ RET_ERR:	LD	HL,00FFh		;L=0FFh => error.
 ;
 	PROC	F_SNEXT
 
-		ld	iy,RAM_BASE##
 ;
 SNEXT2:		LD	DE,FIB_1##		;Get information about file
 		LD	HL,SRCH_FIB##		; to search for.
@@ -173,11 +169,11 @@ SNEXT2:		LD	DE,FIB_1##		;Get information about file
 		LD	A,(HL)			;Check to see if a previous
 		CP	0FFh			; S_F_F has really been done
 		LD	A,.NOFIL##		; by seeing if the FCB that
-		JP	NZ,RET_ERR		; would have been stored is
+		JR	NZ,RET_ERR		; would have been stored is
 		LDIR				; legal.
 ;
 		CALL	S_F_N
-		JP	NZ,RET_ERR
+		JR	NZ,RET_ERR
 ;
 GOT_SEARCH:	PUSH	DE			;Address of directory entry.
 		LD	HL,FIB_1##		;Copy search FIB into an
@@ -233,7 +229,6 @@ GOT_SEARCH:	PUSH	DE			;Address of directory entry.
 ; sectors have to be padded out with zeros.
 ;
 ;
-		ld	iy,RAM_BASE##
 
 		CALL	GET_FAB			;Set up FAB w/o filename.
 
@@ -283,7 +278,6 @@ RD_ERR:		LD	HL,0001			;Read error.
 ; invalidate  any data in the file buffer if it corresponds to this file.
 ;
 ;
-		ld	iy,RAM_BASE##
 
 		CALL	GET_FAB			;Set up FAB w/o filename.
 
@@ -332,7 +326,6 @@ REC_COUNT_OK:	JP	RET_NO_ERR		;Successful
 ;
 ; Entry:     DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		LD	HL,FCB_EXTENT_LOW
 		ADD	HL,DE			;-> low byte of extent.
@@ -364,7 +357,6 @@ NEW_CREATE:	LD	(IY+@SE_FLAGS##),0	;Extent is zero or file does
 ;
 ; Entry:   DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		ld	bc,00FFh		;Store result on stack.
 		push	bc			;Save on stack throughout.
@@ -405,7 +397,6 @@ START_DELETE:	JR	NZ,DELETE_ERR		; if not found
 ;
 ; Entry:        DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		LD	BC,00FFh		;Flag no file renamed yet
 		PUSH	BC			;Stored on stack throughout.
@@ -461,7 +452,6 @@ RENAME_ERR:	LD	B,A			;Save any error code.
 ;
 	PROC	F_RDRND
 
-		ld	iy,RAM_BASE##
 ;
 		LD	A,RFM_RD		;Signify doing a read function.
 		CALL	TRANSFER_RAND		;Set up FAB and do read.
@@ -512,7 +502,6 @@ RAND_ERR:	LD	HL,0001			;If error from read or write
 ;
 ; Entry:        DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		LD	(IY+@SE_FLAGS),SEM_SR	;Search rather than create.
 		LD	A,ATM_HID		;Find normal + hidden files.
@@ -559,7 +548,6 @@ NO_SIZE_CARRY:
 ;
 ; Entry:        DE -> FCB.
 ;
-		ld	iy,RAM_BASE##
 
 		PUSH	DE			;Put FCB address into IX.
 		POP	IX
@@ -687,14 +675,19 @@ LDIR_FROM_BUFF:
 ;------------------------------------------------------------------------------
 ;
 
-; This routine does the same as S_F_F but returns an error
-; if the file is mounted to a drive.
+; These routines do the same as S_F_F and S_F_N but return an error
+; if the file found is mounted to a drive.
+
+M_F_N:
+	call	S_F_N
+	jr	M_F_CHK
 
 M_F_F:
 	call	S_F_F
+M_F_CHK:
 	ret	nz
 
-	pcall	CHKMNT
+	pcall	CHKMNT		;Checks the file in the FIB filled by FOUND_FILE
 	ret
 
 S_F_F:
@@ -795,12 +788,12 @@ TRY_APPEND:	LD	(CPM_BUFF##+300),A	;Save error code.
 		ld	(iy+@BUF_UNIT##),b	;Invalidate any info there.
 		LD	A,1			;=> copy to current paging.
 		;The following was PCALL GET_ENV (now cpm.mac and env.mac are in bank 4)
-		CALL	GET_ENV##		;Find string.
+		CALL	?GET_ENV##		;Find string.
 
 if 0	
 		;This is to be used if cpm.mac executes from RAM but env.mac executes from ROM
 		push	iy
-		ld	ix,GET_ENV##
+		ld	ix,?GET_ENV##
 		ld	(BK4_ADD##),ix
 		ld	ix,?CALL4##
 		ld	iy,(MASTER_SLOT##-1)
@@ -852,25 +845,6 @@ APPEND_STRING:	DB	'APPEND',0
 ;
 ;
 
-
-; Special versipn of S_F_N that acts as if FND_NEXT had returned an error
-; when the file is mounted. 
-
-M_F_N:
-		LD	IX,FIB_1##
-		LD	(IY+@SE_FLAGS),SEM_SR	;Flag not doing create.
-		PCALL	O_FIB			;Download directory variables
-		RET	NZ			; ready to continue search.
-		LD	DE,FIB_1##+FIB_EXPANDED_SEARCH_PATTERN##	;Expanded version of filename.
-		PCALL	FND_NEXT
-		jr	nz,M_F_N2
-
-		pcall	CHKMNT
-
-M_F_N2:
-		LD	C,0			;Make sure don't do funny
-		PUSH	BC			; things with append.
-		JP	FOUND_FILE
 
 S_F_N:
 ;
@@ -1386,7 +1360,6 @@ NO_FID1:	LD	(HL),A			;Shift filename back to user's
 ;
 	PROC	F_WRBLK
 ;
-		ld	iy,RAM_BASE##
 
 		XOR	A			;Signify write function.
 ;
@@ -1444,7 +1417,7 @@ FOUR_BYTE_REC:	CALL	MULTIPLY		;Multiply top word of record
 		CALL	MULTIPLY
 		LD	A,H			;Complain if the transfer size
 		OR	L			; is greater than 64k.
-MSX_FAIL_1_NZ:	JP	NZ,MSX_FAIL_1
+MSX_FAIL_1_NZ:	JR	NZ,MSX_FAIL_1
 ;
 		LD	C,E			;BC := transfer size
 		LD	B,D

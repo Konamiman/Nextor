@@ -1,0 +1,446 @@
+	.z80
+	name('upb')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	Set up the unit descriptor from a new UPB
+;******************************************************************************
+;
+	INCLUDE	../macros.inc
+	INCLUDE	../const.inc
+;
+;    NEW_UPB, moved here from bank 2 (val.mac) since it runs only when a new
+; UPB is read (e.g. after a disk change).  It runs in the BDOS context (called
+; by the NEW_UPB stub in val.mac through C4PBK, or directly by DSK_FORMAT in
+; dskfmt.mac; page 0 has the kernel code segment, page 2 the kernel data
+; segment and IY=RAM_BASE), and calls the routines that stay in bank 2 with
+; pcall.
+;
+MAXCLUS_FAT12	equ	4084
+MAXCLUS_12BITS	equ	4095
+;
+;------------------------------------------------------------------------------
+;
+	public	?NEW_UPB6
+?NEW_UPB6:
+;
+;    This routine is called when a new UPB has been read in for  a  unit.   It
+; sets up the unit descriptor with all the details from the new UPB, including
+; the volume-id, and zaps the current directory cluster (if one is defined) to
+; ensure  that it will be re-searched next time the disk is accessed.  It ends by
+; jumping to ZAP_CD in bank 2,  which sets  the current  directory cluster to
+; zero to indicate that it is not known.
+;
+; Entry:        HL -> Unit descriptor
+;		        (IX -> New UPB in UPB_BUF: all the callers have it there, and
+;		         since the call from bank 2 (NEW_UPB) can't pass IX, it's
+;		         set here)
+; Returns:      None
+; Corrupts:     AF,BC,DE
+;
+; Assumes:      UPB_DIRTY_FLAG=UPB_VOLUME_ID+6       UPB_RANDOM_ID=UPB_DIRTY_FLAG+1
+;		  (UD_CLUSTER_MASK, UD_CLUSTER_SHIFT, UD_RESERVED_SECTORS, UD_NUMBER_OF_FATS, UD_ODD_DIR_ENTRIES, UD_WHOLE_DIR_SECTORS
+;		   UD_SECTORS_PER_FAT, UD_FIRST_ROOT_DIR_SECTOR, UD_FIRST_DATA_SECTOR, UD_CLUSTER_COUNT, UD_DIRTY_DISK_FLAG, UD_VOLUME_ID,
+;		   and UD_MEDIA_DESC_BYTE) must all be sequential.
+;
+;
+		ld	ix,UPB_BUF##
+		call	_NEW_UPB
+		push	hl
+		ex	(sp),ix
+		bit	UF_DBD,(ix+UD_DFLAGS##)
+		ex	(sp),ix
+		pop	hl
+		ret	z
+
+		ld	b,0
+		push	ix
+		push	hl
+
+		ld	hl,0
+        ld a,(ix+26h)
+        and 28h
+        cp 28h
+        jr z,NUPBL
+		ld	(ix+26h),0	;Clear dirty disk flag for the checksum
+NUPBL:	ld	e,(ix)
+		ld	d,(ix+1)
+		add	hl,de
+		inc	ix
+		inc	ix
+		djnz	NUPBL
+
+		pop	ix
+		push	ix
+		ld	(ix+UD_CHKSUM##),l
+		ld	(ix+UD_CHKSUM##+1),h
+		set	5,(ix+UD_DFLAGS##)
+
+		pop	hl
+		pop	ix
+		ret
+
+_NEW_UPB:
+		push	hl
+
+		ld	bc,UD_FLAGS##		;HL -> start of parameter
+		add	hl,bc			; variables in unit descriptor
+		ld	a,(hl)
+		and	01000000b	;Preserve mounted file flag
+		or	UFM_F2
+		ld	(hl),a		;Assume first a FAT12 drive
+
+		ld	bc,UD_CLUSTER_MASK##-UD_FLAGS##
+		add	hl,bc
+;
+		ld	a,(ix+UPB_SECTORS_PER_CLUSTER##)		;Set CLUSTER MASK to:
+		dec	a			; (sectors per cluster) - 1.
+		ld	(hl),a
+		inc	hl
+;
+		ld	c,0
+cshft_loop:	inc	c			;Set CLUSTER SHIFT to:
+		rrca				; LOG (sectors per cluster) + 1
+		jr	c,cshft_loop
+		ld	(hl),c
+		inc	hl
+;
+		ld	e,(ix+UPB_RESERVED_SECTORS##)
+		ld	(hl),e			;Copy RESERVED SECTORS straight
+		inc	hl			; from UPB to unit descriptor.
+		ld	d,(ix+UPB_RESERVED_SECTORS##+1)
+		ld	(hl),d
+		inc	hl
+		push	de
+;
+		ld	b,(ix+UPB_NUM_FATS##)	;Copy NUMBER OF FATs straight
+		ld	(hl),b			; from UPB to unit descriptor.
+		inc	hl
+;
+		ld	e,(ix+UPB_NUM_ROOT_DIR_ENTRIES##)	;Get number of root directory
+		ld	d,(ix+UPB_NUM_ROOT_DIR_ENTRIES##+1)	; entries from UPB.
+;
+		ld	a,e			;Set ODD DIRECTORY ENTRIES
+		and	512/32-1		; (UD_ODD_DIR_ENTRIES) to the number of
+		ld	(hl),a			; entries in the last directory
+						; sector (0...0Fh)
+;
+		ld	a,4			;Divide number of directory
+dir_sec_loop:	srl	d			; entries by 16 to get number
+		rr	e			; of whole directory sectors.
+		dec	a
+		jr	nz,dir_sec_loop
+		cp	(hl)			;Set carry if there is a
+		inc	hl			; partial sector (UD_ODD_DIR_ENTRIES<>0).
+		ld	(hl),e			;Record WHOLE DIRECTORY SECTORS
+		inc	hl			; in unit descriptor
+;
+		jr	nc,no_partial_sec	;If there is a partial sector
+		inc	de			; then count one extra sector
+no_partial_sec:					; reserved for directory.
+
+		ld	a,(ix+UPB_SECTORS_PER_FAT##)	;Copy SECTORS PER FAT straight
+		ld	(hl),a			; from UPB to unit descriptor.
+		inc	hl
+;
+		ex	(sp),hl			;HL := reserved sectors
+		push	de			;Save directory sectors
+;
+		ld	e,a
+		xor	a
+		ld	d,a
+sfat_loop:	inc	e			;DE :=   (sectors per FAT)
+		dec	e			;      * (number of FATs)
+		jr	z,sfat_no_8bit
+		add	a,e
+		jr	nc,sfat_no_cy
+sfat_no_8bit:	inc	d
+sfat_no_cy:	djnz	sfat_loop
+		ld	e,a
+;
+		add	hl,de
+		ex	de,hl			;DE := first directory sector
+		pop	hl
+		add	hl,de			;HL := first data sector
+;
+		ex	(sp),hl
+		ld	(hl),e			;Store FIRST DIRECTORY SECTOR
+		inc	hl
+		ld	(hl),d
+		inc	hl
+;
+		pop	de
+		ld	(hl),e			;Store FIRST DATA SECTOR
+		inc	hl
+		ld	(hl),d
+		inc	hl
+;
+		push	hl
+		ld	l,(ix+UPB_TOTAL_SECTORS##)	;Get total number of sectors
+		ld	h,(ix+UPB_TOTAL_SECTORS##+1)
+		ld	a,l
+		or	h
+		ld	a,0
+		jr	nz,nclu_fat12
+		ld	l,(ix+UPB_BIG_TOTAL_SECTORS##)	;Get total number of sectors (23bit)
+		ld	h,(ix+UPB_BIG_TOTAL_SECTORS##+1)
+		ld	a,(ix+UPB_BIG_TOTAL_SECTORS##+2)
+nclu_fat12:	sbc	hl,de			;HL := (data sectors)
+		sbc	a,0
+
+nclu_loop:	dec	c
+		jr	z,nclu_done		;Shift this by the CLUSTER
+		srl	a			; SHIFT to get number of
+		rr	h			; clusters (rounded down to
+		rr	l			; nearest whole cluster).
+		jr	nclu_loop
+nclu_done:
+		inc	hl			;+2 to get maximum cluster
+;
+		ex	de,hl
+		pop	hl			;Record MAXIMUM CLUSTER in
+		ld	(hl),e			; unit descriptor
+		inc	hl
+		ld	(hl),d
+		inc	hl
+
+		;--- Decide if the drive is FAT12 or FAT16
+
+		dec	de	;Now DE = Cluster count
+
+		push	hl
+		push	de
+		ex	de,hl
+		ld	de,MAXCLUS_FAT12+1
+		call	COMP16
+		pop	de
+		pop	hl
+		jr	c,ok_fattype
+
+		push	hl
+		push	de
+		ex	de,hl
+		ld	de,MAXCLUS_12BITS+1
+		call	COMP16
+		pop	de
+		pop	hl
+		jr	nc,is_fat16
+
+		push	hl
+		push	de
+		push	ix
+		pop	hl
+		ld	de,UPB_FILESYSTEM##
+		add	hl,de
+		ld	de,FAT16_S
+		ld	b,5
+		pcall	CP_FLSTR
+		pop	de
+		pop	hl
+		jr	nz,ok_fattype
+
+is_fat16:	ex	(sp),hl
+		push	hl
+		ld	bc,UD_FLAGS##
+		add	hl,bc
+		res	UF_F12,(hl)	;Set FAT16 flag
+		set	UF_F16,(hl)
+		pop	hl
+		ex	(sp),hl
+
+ok_fattype:
+		push	hl
+		pcall	GET_VOLID		;Copy DIRTY DISK FLAG and
+		pop	de			; VOLUME ID into unit
+		dec	hl			; descriptor (using default if not present).
+
+		jr	nz,upb_noundel
+
+ok_upb_undel:
+		ex	(sp),hl
+		push	hl
+		ld	bc,UD_FLAGS##
+		add	hl,bc
+		set	UF_UNDL,(hl)		;Set undelete supported flag
+		pop	hl
+		ex	(sp),hl
+upb_noundel:
+		ld	a,(hl)
+		and	28h
+		cp	28h
+		ld	bc,5			
+		jr	nz,upb_dos220
+
+		dec	hl
+		ld	a,(hl)
+		ld	(de),a
+		inc	hl
+		inc	hl
+		inc	de
+		ld	bc,4
+
+upb_dos220:
+		ldir
+		ex	de,hl
+;
+		ld	a,(ix+UPB_MEDIA_DESC_BYTE##)	;Copy MEDIA DESCRIPTOR BYTE
+						; from UPB to unit descriptor
+        ld	(hl),a
+
+		pop hl
+		push hl
+		ld bc,UD_ALLOCATION_CLUSTER##
+		add hl,bc  
+		ld (hl),1     ;Initialize next cluster to check for allocation to 2
+		inc hl        ;(it's stored as value-1)
+		ld (hl),0
+
+		pop	hl
+
+		;--- If drive is FAT16, calculate reduced cluster count
+		;    and set the reduced allocation information mode flag
+		;    if necessary.
+
+		push	af
+		push	hl
+		ex	(sp),ix
+		bit	UF_F16,(ix+UD_FLAGS##)
+		jr	z,reduce_end
+
+		ld	e,(ix+UD_CLUSTER_COUNT##)
+		ld	d,(ix+UD_CLUSTER_COUNT##+1)
+		dec	de		;DE=Actual cluster count
+		ld	a,(ix+UD_CLUSTER_MASK##)
+		ld	h,80h		;Start by assuming 32768 clusters...
+		srl	a		;...and 2 sectors/cluster...
+reduce_clus_lp:
+		srl	a		;...then adjust cluster count according to cluster size.
+		jr	nc,end_reduce_clus
+		srl	h
+		jr	reduce_clus_lp
+end_reduce_clus:
+		ld	l,0
+		dec	hl
+
+		;Now HL is the maximum cluster number that,
+		;when multiplied by sectors/cluster,
+		;gives a number that fits in 16 bits
+		;(that is, gives less than 32MB of disk space)		
+
+		call	COMP16			;Store the minimum of reduced
+		jr	nc,reduce_set		;cluster count and actual count.
+		ex	de,hl
+reduce_set:
+		ld	(ix+UD_REDUCED_CLUSTER_COUNT##),e	
+		ld	(ix+UD_REDUCED_CLUSTER_COUNT##+1),d
+
+		;--- Set the reduced allocation information mode flag
+		;    if necessary
+
+		ld	b,(ix+UD_PHYSICAL_UNIT##)
+
+		;*** NOTE: M80 gives a R error on "if MAX_UNITS" lines
+		;          and compiles always the else clause.
+		;          Solve this if MAX_UNITS needs to grow over 8.
+
+;if MAX_UNITS GT 8
+;		ld	hl,(RALL_VECT##)
+;else
+		ld	a,(RALL_VECT##)
+;endif
+
+reduce_bit_loop:
+;if MAX_UNITS GT 8
+;		srl	h
+;		rr	l
+;else
+		rrca
+;endif
+		djnz	reduce_bit_loop
+		jr	nc,reduce_end	;Here Cy is the red. all. flag for this drive
+		set	UF_RALL,(ix+UD_FLAGS##)
+reduce_end:
+;
+		;--- Set the Z80 access mode flag if necessary
+
+		ld	c,(ix+UD_SLOT##)
+		ld	hl,TURBO_VECT##
+		ld	b,4
+z80mode_loop:
+		ld	a,(hl)
+		cp	c
+		jr	z,do_set_z80mode
+		inc	hl
+		djnz	z80mode_loop
+		jr	z80mode_done
+
+do_set_z80mode:
+		set	UF_Z80,(ix+UD_FLAGS##)
+z80mode_done:
+
+		ex	(sp),ix
+		pop	hl
+		pop	af
+
+;
+; Build MSX DPB from unit descriptor.
+; Assumes:  UD_DPB_ADDRESS=2, ...etc.
+;
+		push	hl
+		inc	hl
+		inc	hl
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		ex	de,hl
+		inc	hl			;Copy MEDIA DESCRIPTOR BYTE
+		ld	(hl),a			; to MSX Disk Parameter Block.
+		inc	hl
+		ld	(hl),0			;Sector size is always 512.
+		inc	hl
+		ld	(hl),2
+		inc	hl
+		ld	(hl),0Fh		;So, directory mask is 0Fh,
+		inc	hl			; and directory shift is 4.
+		ld	(hl),4
+		inc	hl
+		ex	de,hl
+		ld	bc,UD_CLUSTER_MASK##-UD_DPB_ADDRESS##-1	;Copy down
+		add	hl,bc			; UD_CLUSTER_MASK, UD_CLUSTER_SHIFT,
+		ld	bc,1+1+2+1		; UD_RESERVED_SECTORS and UD_NUMBER_OF_FATS.
+		ldir
+		ld	c,(hl)			;Get UD_ODD_DIR_ENTRIES and UD_WHOLE_DIR_SECTORS
+		inc	hl
+		ld	a,(hl)			;Calc number of directory
+		inc	hl			; entries.
+		add	a,a
+		add	a,a
+		add	a,a
+		add	a,a
+		or	c
+		ld	(de),a			;Store low byte
+		inc	de
+		push	hl			;Save pointer to UD_SECTORS_PER_FAT
+		inc	hl
+		inc	hl
+		inc	hl
+		ld	bc,2+2			;Copy down UD_FIRST_DATA_SECTOR and UD_CLUSTER_COUNT
+		ldir
+		pop	hl
+		ld	bc,1+2			;Copy down UD_SECTORS_PER_FAT and UD_FIRST_ROOT_DIR_SECTOR
+		ldir
+		pop	hl
+		jp	?ZAP_CD##-OFFSET	;Ends at ZAP_CD in bank 2
+;
+;
+COMP16:
+	ld	a,h
+	sub	d
+	ret	nz
+	ld	a,l
+	sub	e
+	ret
+
+FAT16_S:	db	"FAT16"
+;
+;------------------------------------------------------------------------------
+;
+	end

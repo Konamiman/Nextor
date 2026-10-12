@@ -18,7 +18,8 @@
 ;
 rom_st:
 ;
-	jp	KINIT			;Entry from DOSINIT
+;    0000h used to have a "jp KINIT" (entry from DOSINIT), KINIT is in
+; bank 1 now.
 ;
 	ds	05h-($-rom_st),0	;Fixed BDOS entry point, at 0005h
 	jp	KBDOS			; just for the sake of it.
@@ -83,6 +84,32 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 	jp	?ALL_SEG## -OFFSET	;Entry jumps to the mapper
 	jp	?FRE_SEG## -OFFSET	; allocation routines.
 ;
+;	--------------------------------
+;
+;   Second half of GO_EXIT (err.mac), placed here to use the free space
+; before the BIOS entries: GO_EXIT makes the exit routine return here,
+; with the bank to restore in the stack (FFh = kernel ROM was not in page 1).
+;
+	PROC	GE_RESTORE
+		ex	(sp),hl			;L := bank to restore
+		push	af
+		ld	a,l
+		inc	a
+		jr	z,ge_restore_end	;Kernel ROM wasn't in page 1
+		push	bc
+		push	de
+		ld	a,(MASTER_SLOT##)	;Put the kernel ROM in page 1
+		ld	h,40h			; again (preserves HL)
+		call	$ENASLT##
+		ld	a,l			;Select the bank it had
+		call	CHGBNK
+		ei
+		pop	de
+		pop	bc
+ge_restore_end:	pop	af
+		pop	hl
+		ret
+;
 ;
 ;	--------------------------------
 ;
@@ -95,291 +122,6 @@ wr_secondary:	ld	(0FFFFh),a	;Write out new value
 	jp	?KLSTST##  -OFFSET
 	jp	?KPUNCH##  -OFFSET
 	jp	?KREADER## -OFFSET
-;
-;
-;******************************************************************************
-;
-	PROC	KINIT
-;
-;   This is the main RAM base  part  of  the  kernel  initialisation.   It  is
-; entered with the slot selection and paging as follows:
-;
-;		page-0 - RAM slot - Kernel code segment (this code)
-;		page-1 - Master disk ROM slot
-;		page-2 - RAM slot - Kernel data segment
-;		page-3 - RAM slot - System page-3 segment
-;
-;    It sets up all of the kernel data structures in the kernel  RAM  segment.
-; This  includes  allocating  and setting up unit descriptors and linking them
-; with the DPB's in system RAM.  Sector buffers are also allocated and set  up
-; here.  It is passed the address of the RAMDISK DPB in HL.
-;
-; On error, returns Cy=1 and A=error code starting at 4.
-;
-		ld	iy,RAM_BASE##		;Setup IY for addressability
-		ld	(iy+@RW_FLAGS##),0
-;
-;	+++++  SETUP RAMDISK UNIT DESCRIPTOR  +++++
-;
-		ld	de,RM_DPB##		;Get address of DPB pointer
-		ld	bc,(MASTER_SLOT##)	;C := RAM disk slot number
-		ld	l,0			;L := entry table offset (unused for RAM disk)
-		ld	b,1			;Only one unit.
-		call	INIT_UNITS		;Create a unit descriptor
-		ld	a,4
-		jr	nz,kinit_fail_nz	; for the RAM disk.
-		set	UF_RDD,(ix+UD_DFLAGS##)	;Mark as built-in RAM disk
-;
-;	+++++  SETUP UNIT DESCRIPTORS FOR ALL DRIVES  +++++
-;
-		ld	hl,DRVTBL##		;Point to disk driver table
-		ld	de,$DPBLIST##		;Point to DPB table
-		ld	b,4			;B=loop count
-init_drv_loop:	ld	a,(hl)			;A := number of drives
-		inc	hl			;     in this slot.
-		ld	c,(hl)			;C := Slot number
-		inc	hl
-		or	a			;Set Z-flag if no drives
-		push	hl
-		push	bc
-		ld	b,a			;B := number of units
-		ld	l,10h			;L := offset to entry table
-		call	nz,INIT_UNITS		;Create the unit descriptors
-		pop	bc			; unless there are none.
-		pop	hl
-		ld	a,5
-		jr	nz,kinit_fail_nz	;Give up if no more RAM
-		djnz	init_drv_loop		;Loop back for next driver
-;
-		ld	d,b			;Initialise ASG_TAB to assign
-		pcall	F_ASSIGN		; each unit to itself.
-
-
-;	+++++  INITIALIZE UNIT DESCRIPTORS FOR NEXTOR DRIVERS  +++++
-
-		push	iy
-		ex	af,af'
-		ld	a,4
-		ld	ix,AUTODRV##
-		call	CALBNK##
-
-	;--- Ghost drive setup for DOS 2.
-	;    Called here (inside DOSINIT) so page 0 = kernel RAM
-	;    and pcall works from bank 6.
-
-		ex	af,af'
-		ld	a,6
-		ld	ix,SETUP_GHOST_DOS2##
-		call	CALBNK##
-
-		pop	iy
-
-;
-;	+++++  SETUP DEVICE DESCRIPTOR CHAIN  +++++
-;
-		ld	hl,DEV_LIST
-link_dev_loop:	ld	a,(hl)			;Look at next device
-		or	a			; and exit loop if zero
-		jr	z,link_dev_done		; (end of list).
-		inc	hl
-;
-		push	hl
-		ld	hl,DD_DESC_SIZE##		;Allocate RAM for another
-		call	ALL_P2			; device descriptor and
-		pop	de			; die if not enough memory.
-		ld	a,6
-kinit_fail_nz:	jr	nz,kinit_fail
-		ld	bc,(DEV_CHAIN##)
-		ld	(DEV_CHAIN##),hl	;Link it into chain.
-		ld	(hl),c
-		inc	hl
-		ld	(hl),b
-		inc	hl
-		ex	de,hl
-		ldi				;Copy address of device
-		ldi				; handler into descriptor.
-		ex	de,hl
-		ld	bc,DD_MODE##-(DD_NEXT_DESC_ADDRESS##+4) ;Copy the device flags and
-		add	hl,bc			   ; device name into the
-		ex	de,hl			   ; device descriptor.
-		ld	bc,1+8+3
-		ldir
-		ld	a,ATM_DEV		;Insert an attribute byte to
-		ld	(de),a			; indicate that it is a device
-		ld	b,32-(8+3+1)		; directory entry.
-		xor	a
-clr_dd_loop:	inc	de			;Fill up the rest of the entry
-		ld	(de),a			; with nulls (date time etc).
-		djnz	clr_dd_loop
-		jr	link_dev_loop		;Loop back for next one.
-;
-link_dev_done:
-;
-;	+++++  SETUP SECTOR BUFFER CHAIN  +++++
-;
-		ld	b,DEFAULT_SECTOR_BUFFERS##		;Allocate the default number
-		pcall	F_BUFFER		; of sector buffers.
-;
-;	+++++  INITIALISE FILE HANDLE SYSTEM  +++++
-;
-		ld	b,0			;Setup file handles and
-		pcall	F_JOIN			; file access blocks.
-;
-;	+++++  INITIALISE RAM DISK +++++
-;
-		push	iy			;Just kill the RAMdisk boot sector.
-		ex	af,af'
-		ld	a,4
-		ld	ix,ZAP_RAMD##
-		call	CALBNK##
-		pop	iy
-;
-;	+++++  INITIALISE BIOS CHARACTER I/O VARIABLES  +++++
-;
-		pcall	CHAR_INIT
-		ld	hl,CURSOR_SEQS		;Copy cursor on and off
-		ld	de,CH_BUF##-6		; escape sequences to start
-		ld	bc,6			; of BIOS screen buffer.
-		ldir
-;
-		ld	a,1			;Initialise console status
-		ld	(ST_COUNT##),a		; check counter.
-;
-;
-;	+++++  INITIALISE CP/M FILE FUNCTIONS  +++++
-;
-		ld	(iy+@BUF_UNIT##),0FFh	;Nothing in file buffer
-;
-
-		push	iy
-		ex	af,af'
-		ld	a,4
-		ld	ix,CLK_INIT##
-		call	CALBNK##
-		pop	iy
-		;pcall	CLK_INIT		;Initialise clock chip
-;
-		or	a			;Return with carry clear to
-		ret				; indicate success.
-;
-;
-kinit_fail:	scf				;Return a fatal error if
-		ret				; anything went wrong with
-						; initialisation.
-;
-;
-;	----------------------------------------
-;
-DEV_LIST:	db	0FFh				;List of devices for
-		dw	?DEV_CON##-OFFSET		; setting up the
-		db	10100011b, "CON     ","   "	; descriptor chain.
-;
-		db	0FFh
-		dw	?DEV_LST##-OFFSET
-		db	10100000b, "LST     ","   "
-;
-		db	0FFh
-		dw	?DEV_LST##-OFFSET
-		db	10100000b, "PRN     ","   "
-;
-		db	0FFh
-		dw	?DEV_NUL##-OFFSET
-		db	10100000b, "NUL     ","   "
-;
-		db	0FFh
-		dw	?DEV_AUX##-OFFSET
-		db	10100000b, "AUX     ","   "
-;
-		db	0
-;
-;
-CURSOR_SEQS:	db	ESC,"y5"		;Cursor on sequence
-		db	ESC,"x5"		;Cursor off sequence
-;
-;
-;------------------------------------------------------------------------------
-;
-INIT_UNITS:
-;
-;   This routine creates and  initialises  all  the  unit  descriptors  for  a
-; particular disk driver (including the RAM disk). A pointer to the MSX DPB is
-; put in the unit descriptor.  The unit descriptor has its UD_SLOT,
-; UD_DPB_ADDRESS,  UD_RELATIVE_UNIT_NUMBER and UD_PHYSICAL_UNIT fields set up and UD_CURRENT_DIR_FIRST_CLUSTER is set -ve to indicate
-; the root directory.  The rest of the unit descriptor is zeroed.   A  pointer
-; to  the unit descriptor is store in the appropriate place in UNIT_TAB unless
-; it is the RAM unit being initialised (physical unit zero) in which  case  it
-; is  stored  in the variable RM_UD.  The physical unit number (less one) must
-; be set up in the MSX DPB.
-;
-; Entry:       DE = Address of array of pointers to the MSX DPBs
-;		C = Slot address of the disk driver
-;		L = Offset of entry table from 4000h in that slot
-;		B = Number of units required
-; Returns:     Z-flag set (and A=0) if succesful.
-;		      cler (and A<>0) if insufficient memory
-;	       HL = Pointer to next entry in DPB pointer array (if A=0)
-;	       IX = Pointer to the last allocated unit descriptor
-; Corrupts:    AF,BC,DE,HL,IX,AF'
-;
-		xor	a			;Start at relative unit 0
-init_unit_loop:	ex	af,af'
-		push	hl			;Save entry table offset
-;
-		ld	hl,UD_SIZE##		;Allocate RAM for a unit
-		call	ALL_P2			; descriptor.
-		jr	nz,init_unit_fail	;Error if not enough RAM.
-		ex	de,hl			;Get UD address into DE and
-		push	de			; IX, and DPB address pointer
-		pop	ix			; into HL.
-;
-		push	bc			;Save loop count & slot
-		ld	c,(hl)
-		inc	hl			;Get DPB address and adjust
-		ld	b,(hl)			; pointer for next one.
-		inc	hl
-		push	hl			;Save new DPB pointer address
-		ld	(ix+UD_DPB_ADDRESS##),c		;Store a pointer to the DPB
-		ld	(ix+UD_DPB_ADDRESS##+1),b	; in the unit descriptor.
-;
-		ld	a,(bc)			;Get physical unit number
-		inc	a			; from DPB and store it in
-		ld	(ix+UD_PHYSICAL_UNIT##),a	; unit descriptor after
-		ld	l,a			; adjusting it.
-		ld	h,0			;HL := unit number (1...8)
-;
-		inc	bc			;Get media descriptor from
-		ld	a,(bc)			; DPB and store it in the
-		ld	(ix+UD_MEDIA_DESC_BYTE##),a	; unit descriptor.
-;
-		ld	bc,RM_UD##		;If physical unit is non-zero
-		jr	z,init_ramunit		; (ie. not RAM disk) then
-		ld	bc,UNIT_TAB##		; find the correct entry in
-init_ramunit:	add	hl,hl			; UNIT_TAB depending on the
-		add	hl,bc			; physical unit number.
-		ld	(hl),e			;Store a pointer to the unit
-		inc	hl			; descriptor in UNIT_TAB, or
-		ld	(hl),d			; at RM_UD if it is the RAM
-						; disk unit.
-;
-		pop	de			;Restore next DPB addr pointer
-		pop	bc			;Restore loop count & slot
-		pop	hl			;Restore entry table offset
-		ld	(ix+UD_SLOT##),c	;Store slot number
-;
-		ex	af,af'
-		ld	(ix+UD_RELATIVE_UNIT_NUMBER##),a		;Store relative unit number
-		inc	a			; and increment for next time.
-		ld	(ix+UD_CURRENT_DIR_FIRST_CLUSTER##+1),0FFh	;set current dir -ve => root
-		ld	(ix+UD_CURRENT_DIR_FIRST_CLUSTER##),0FFh
-;
-		ld	(ix+UD_RAM_SEGMENT##),0FFh
-		djnz	init_unit_loop		;Loop for next unit
-		xor	a
-		ret				;Return with no error
-;
-;
-init_unit_fail:	pop	hl			;Return with error if not
-		ret				; enough memory.
 ;
 ;
 ;******************************************************************************
@@ -596,10 +338,6 @@ KBDOS_CALL:	push	hl			;Remember HL in case it is
 		push	bc			; required, and save BC
 		ex	af,af'
 ;
-		ld	a,(CH_COUNT##)		;If character buffer needs
-		dec	a			; flushing then flush it.
-		pcall	z,CH_FLUSH
-;
 		ld	a,c
 		cp	_DOSVER##			;Treat DOSVER as a special case (must preserve IY or not depending on input)
 		jr	z,KBDOS_DOSVER
@@ -675,7 +413,7 @@ kbdos_table:
 	dw	?F_DIN##   -OFFSET	;Direct console input, no echo
 	dw	?F_INNOE## -OFFSET	;Console input, no echo
 	dw	?F_STROUT##-OFFSET	;String output
-	dw	?F_BFIN##  -OFFSET	;Buffered line input
+	dw	F_BFIN##+8000h	;Buffered line input (bank 6)
 	dw	?F_CNST##  -OFFSET	;Console status
 ;
 	dw	?F_CPMVER##-OFFSET	;Return CP/M version number
@@ -783,7 +521,7 @@ kbdos_table:
 	dw	?F_ERROR## -OFFSET	;Get previous error code
 	dw	?F_EXPLAIN##-OFFSET	;Explain error code
 ;
-	dw	?F_FMT##   -OFFSET	;Format a disk
+	dw	F_FMT##+8000h		;Format a disk (bank 6)
 	dw	F_RAMD##			;Create or destroy RAMdisk
 	dw	?F_BUFFER##-OFFSET	;Allocate sector buffers
 	dw	?F_ASSIGN##-OFFSET	;Logical drive assignment

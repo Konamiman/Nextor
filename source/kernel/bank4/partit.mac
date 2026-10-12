@@ -318,60 +318,24 @@ UPDATE_SEC:
 
 
 ;This routine reads one sector into SECBUF
+;(media descriptor 0, all the callers read MBRs/EBRs)
 ;Input: C = Driver slot
 ;       B = Driver segment (FFh for ROM drivers)
 ;       D = Device number
-;       E = Media descriptor
 ;       (TMP_SEC##) = Sector number
 ;Output: A = Error code from DEV_RW
 ;        NZ if A<>0
-;Corrupts: AF, IX, IY
+;Corrupts: AF, IY
 
 DEV_READ:
 	push	bc
 	push	de
 	push	hl
-;
-	ld	a,b
-	cp	0FFh
-	jr	nz,DEV_READ_RAM
-;
-	;--- ROM driver path
-	ld_	iyh,c
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	ld	(BK4_ADD##),ix
-	ld	ix,CALDRV##
-
 	ld	a,d		;A = device number
-	ld	c,e		;C = media descriptor
-	ld	b,1		;B = 1 sector
-	ld	hl,($SECBUF##)
-	ld	de,TMP_SEC##
-
-	call	CALSLT
-	jr	DEV_READ_DONE
-;
-	;--- RAM driver path
-DEV_READ_RAM:
-	ld	h,c		;H = slot
-	ld	l,b		;L = segment
-	ld	a,d		;A = device number
-	ld	c,e		;C = media descriptor
-	ld	b,1		;B = 1 sector
-	push	hl		;Save slot:segment for IY
-	ld	hl,($SECBUF##)	;HL = buffer
-	ld	de,TMP_SEC##	;DE = sector number pointer
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	pop	iy		;IY = slot:segment
-	or	a		;NC = read (the CP 0FFh above left
-	call	CALL_MAP##	; the carry set, and CALL_MAP
-;				; passes the flags to the driver)
-DEV_READ_DONE:
+	call	AA_RSEC
 	pop	hl
 	pop	de
 	pop	bc
-
-	or	a
 	ret
 
 
@@ -620,22 +584,22 @@ AUTODRV_LOOP:
 	pop	iy
 	pop	ix
 	or	a
-	jp	nz,AUTODRV_END
+	jr	nz,AUTODRV_END
 
 	;* Check driver type
 	
 	ld	a,(iy+1)
 	inc	a
-	jp	nz,AUTODRV_NEXT		;Skip if no ROM driver (should never occur)
+	jr	nz,AUTODRV_NEXT		;Skip if no ROM driver (should never occur)
 
 	ld	a,(iy+2)
 	or	a
-	jp	z,AUTODRV_NEXT		;Skip if no drives assigned
+	jr	z,AUTODRV_NEXT		;Skip if no drives assigned
 
 	ld	a,(iy+4)
 	and	10000001b
 	cp	10000001b
-	jp	nz,AUTODRV_NEXT		;Skip if no Nextor driver
+	jr	nz,AUTODRV_NEXT		;Skip if no Nextor driver
 
 	;* Perform auto-assign for each drive associated to the driver
 
@@ -669,7 +633,7 @@ AUTODRV_DRVLOOP:
 	ld	d,1
 	call	AUTO_ASSIGN
 	cp	2			;Did we enter disk emulation mode?
-	jp	z,AUTOD_EMU	;Yes: discard everything else and return
+	jr	z,AUTOD_EMU	;Yes: discard everything else and return
 
 	ld	hl,(KERNEX_DOS1##)
 	inc	(hl)		;Increment size of table
@@ -682,12 +646,12 @@ AUTODRV_DRVLOOP:
 	;Go to next drive on a given driver
 	pop	af
 	inc	a
-	djpnz	AUTODRV_DRVLOOP
+	djnz	AUTODRV_DRVLOOP
 
 AUTODRV_NEXT:			;Go to next driver
 	pop	bc
 	inc	c
-	jp	AUTODRV_LOOP
+	jr	AUTODRV_LOOP
 
 	;--- All drives on all drivers processed
 
@@ -721,7 +685,7 @@ AUTOD_LOOP:
 	inc	hl
 	inc	hl
 	djnz	AUTOD_LOOP	;No unit descriptor found at that address
-	jp	SETNUMDRV
+	jr	SETNUMDRV
 AUTOD_UDFND:
 
 	;*** Unit descriptor found
@@ -744,7 +708,7 @@ AUTOD_UDFND:
 	inc	hl
 	inc	hl
 	djnz	AUTOD_LOOP
-	jp	SETNUMDRV
+	jr	SETNUMDRV
 
 AUTOD_OKNEX:
 	push	bc
@@ -758,7 +722,7 @@ AUTOD_OKNEX:
 	call	AUTO_ASSIGN
 
 	cp	2			;Did we enter disk emulation mode?
-	jp  z,AUTOD_EMU	;Yes: discard everything else and return
+	jr  z,AUTOD_EMU	;Yes: discard everything else and return
     ;(note that we'll enter DOS 1 mode after returning)
 
 	pop	hl	;Pointer in UNIT_TAB
@@ -784,8 +748,8 @@ AUTOD_OK:
 	inc	hl
 	inc	hl
 	pop	bc
-	djpnz AUTOD_LOOP
-	jp	SETNUMDRV
+	djnz AUTOD_LOOP
+	jr	SETNUMDRV
 
     ;--- We entered disk emulation mode, so return immediately
 
@@ -1000,7 +964,7 @@ AUTO_NOEMU:
 	ld (ix+AAD_SAW_VALID_PART),a
 	ld (ix+AAD_DEV_HAS_MAPPED),a
 
-	jp AA_GET_DEVINFO
+	jr AA_GET_DEVINFO
 
 AUTO_COMMON3:
 	xor a
@@ -1033,29 +997,13 @@ AA_GET_DEVINFO:
 	ld	c,(ix+AAD_LOOP_DEVICE_NUMBER)
 	ld  a,DEVICE_QUERY.GET_PARAMS##
 	call	AA_CALLDRV
-	call CHECK_DEVQ_GET_PARAMS_ERROR
-	jp	nz,AA_LLOOP_NEXT	;No device available
+	call CHECK_DEVQ_BLOCK_DEVICE
+	jp	nz,AA_LLOOP_NEXT	;No device available, or no block device with 512 byte sectors
 
 AA_OK_PARAMS:
 	ld	hl,($SECBUF##)
-	ld	a,(hl)
-	or	a
-	jp	nz,AA_LLOOP_NEXT	;No block device
-
-	inc	hl
-	ld	a,(hl)
-	or	a
-	jp	nz,AA_LLOOP_NEXT	;No 512 byte sector (low byte)
-	inc	hl
-	ld	a,(hl)
-	cp	2
-	jp	nz,AA_LLOOP_NEXT	;No 512 byte sector (high byte)
-
-	inc	hl	;Skip sector count
-	inc	hl
-	inc	hl
-	inc	hl
-	inc	hl
+	ld	bc,7
+	add	hl,bc
 	ld	a,(hl)	;Flags
 	bit AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
 	jr nz,AA_NO_SKIP_AUTOMAP
@@ -1129,7 +1077,7 @@ AA_PX_1ST:
     call F_GPART
     pop ix
     cp  .IPART
-    jp z,AA_PLOOP_END
+    jr z,AA_PLOOP_END
     or a
     jr z,AA_PX_POK
 
@@ -1152,7 +1100,7 @@ AA_PX_POK:
     jr  nz,AA_PX_NOEX
     ld a,(ix+AAD_CURR_PART_INDEX)
     or 80h
-    jp AA_PXLOOP
+    jr AA_PXLOOP
 AA_PX_NOEX:    
 	cp	PT_FAT12
 	jr	z,AA_PLOOP_OKTYPE
@@ -1171,11 +1119,11 @@ AA_PLOOP_NEXT:
     inc a     ;FFh if no more partitions left (we were examining the MBR itself)
     jp z,AA_DEV_EXHAUSTED
     cp 5    ;We examine the first 4 primary partitions only...
-    jp c,AA_PXLOOP
+    jr c,AA_PXLOOP
     bit 7,a
     jr z,AA_PLOOP_END
     cp 80h+10    ;...or up to 9 extended partitions
-    jp c,AA_PXLOOP
+    jr c,AA_PXLOOP
 
 AA_PLOOP_END:
     ld	hl,0            ;No suitable partitions found: try the MBR itself as last resort
@@ -1205,7 +1153,7 @@ AA_PLOOP_OKTYPE:
 
 AA_CHECK_BOOT:
 	call	CHECK_FAT_BOOT
-	jp	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
+	jr	nz,AA_PLOOP_NEXT	;AA_LLOOP_NEXT
 
 	;* The device holds at least one valid filesystem:
 	;  it must not be considered for a fallback assignment
@@ -1220,7 +1168,7 @@ AA_CHECK_BOOT:
     ld  h,(ix+AAD_CURR_PART_SECTOR+3)
 
 	call AA_CHECK_MAP_IN_USE
-	jp nz,AA_PART_IN_USE
+	jr nz,AA_PART_IN_USE
 
 	;* All checks ok, partition is good.
     ;  If it has the active flag set, go ahead and assign it.
@@ -1279,7 +1227,7 @@ AA_PART_IN_USE:
 
 AA_DEV_EXHAUSTED:
 	bit	AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
-	jp	nz,AA_LLOOP_NEXT	;Fixed device requested: keep the "no suitable partition" error
+	jr	nz,AA_LLOOP_NEXT	;Fixed device requested: keep the "no suitable partition" error
 
 	;If a valid partition of this device is already mapped to another drive,
 	;the device has already consumed the drive(s) that GET_BOOT_DRIVES_COUNT
@@ -1292,30 +1240,30 @@ AA_DEV_EXHAUSTED:
 	jr	z,AA_RECORD_FALLBACK
 	ld	a,(ix+AAD_CAND_PART_DEVNUM)
 	cp	(ix+AAD_CURR_PART_DEVNUM)
-	jp	nz,AA_LLOOP_NEXT	;Candidate is from another device: keep it
+	jr	nz,AA_LLOOP_NEXT	;Candidate is from another device: keep it
 	xor	a
 	ld	(ix+AAD_CAND_PART_DEVNUM),a
-	jp	AA_LLOOP_NEXT
+	jr	AA_LLOOP_NEXT
 
 AA_RECORD_FALLBACK:
 	ld	a,(ix+AAD_SAW_VALID_PART)
 	or	a
-	jp	nz,AA_LLOOP_NEXT	;The device holds some filesystem: don't use it as fallback
+	jr	nz,AA_LLOOP_NEXT	;The device holds some filesystem: don't use it as fallback
 
 	ld	a,(ix+AAD_FALLBACK_DEVNUM)
 	or	a
-	jp	nz,AA_LLOOP_NEXT	;We already have a fallback device
+	jr	nz,AA_LLOOP_NEXT	;We already have a fallback device
 
 	;Check if the device is already attached (with no partition) to another drive
 
 	ld	de,0FFFFh
 	ld	hl,0FFFFh
 	call	AA_CHECK_MAP_IN_USE
-	jp	nz,AA_LLOOP_NEXT	;Already attached to another drive: skip to next device
+	jr	nz,AA_LLOOP_NEXT	;Already attached to another drive: skip to next device
 
 	ld	a,(ix+AAD_CURR_PART_DEVNUM)
 	ld	(ix+AAD_FALLBACK_DEVNUM),a
-	jp	AA_LLOOP_NEXT
+	jr	AA_LLOOP_NEXT
 
 	;--- No suitable partitions in the current device,
 	;    so jump to the next device
@@ -1341,7 +1289,7 @@ AA_LLOOP_END:
 
 	and	111111b	;A=Device (bits 6-7 hold the removable and floppy flags)
 	ld	(ix+AAD_LOOP_DEVICE_NUMBER),a
-	jp	AA_DO_ASSIGN
+	jr	AA_DO_ASSIGN
 
 	;--- Attach the fallback device to the drive, with no partition assigned.
 	;    The device is either offline and removable, or online but without
@@ -1374,7 +1322,7 @@ AA_TRY_FALLBACK:
 	ld	a,(DOS_VER##)
 	or	a
 	jp	z,AA_DO_ASSDOS1
-	jp	AA_DO_ASSIGN_NO_FOK
+	jr	AA_DO_ASSIGN_NO_FOK
 
 AA_END_NOFOUND:
 	ld	a,1
@@ -1628,13 +1576,12 @@ AA_CALLDRV2:
 	pop	af		;ROM driver: CALSLT -> CALDRV.
 	ld	ix,CALDRV##
 	call	CALSLT
-	pop	ix
-	or	a
-	ret
+	jr	AA_CALLDRV_END
 AA_CALLDRV_RAM:
 	pop	af		;RAM driver: call via CALL_MAP.
 	ld	ix,(BK4_ADD##)
 	call	CALL_MAP##
+AA_CALLDRV_END:
 	pop	ix
 	or	a
 	ret
@@ -1655,18 +1602,18 @@ CHECK_FAT_BOOT:
 		jp	nz,upb_not_found
 ;
 		or	(iy+UPB_SECTORS_PER_CLUSTER##)
-		jp	z,upb_not_found		;Sectors/cluster must be
+		jr	z,upb_not_found		;Sectors/cluster must be
 		ld	d,a			; a non-zero power of 2.
 		dec	a
 		and	d
-		jp	nz,upb_not_found
+		jr	nz,upb_not_found
 ;
 		;Ignore number of reserved sectors
 ;
 		ld	a,(iy+UPB_NUM_FATS##)
 		dec	a			;Number of FATs must be
 		cp	7			; 1...7 (nobody has more
-		jp	nc,upb_not_found	; the 7 copies of the FAT!)
+		jr	nc,upb_not_found	; the 7 copies of the FAT!)
 ;
 		ld	a,(iy+UPB_NUM_ROOT_DIR_ENTRIES##)	;Zero directory entries
 		or	(iy+UPB_NUM_ROOT_DIR_ENTRIES##+1)	;means FAT32 drive.
@@ -2147,7 +2094,7 @@ GDRVR_OKSLOT:
 	ld	(ix+3),0
 	ld	a,b
 	cp	0FFh
-	jp	nz,GDRV_IS_RAM
+	jr	nz,GDRV_IS_NEXTOR	;RAM driver
 	ld	a,(ix)		;Reload slot for DRVTBL search
 
 	;--- Search the driver in DRVTBL
@@ -2182,7 +2129,7 @@ GDRVR_FOUND_DRVTBL:
 GDRVR_CHECK_KERNEX:
 	ld	e,a
 	call	IS_NEXTOR_KER
-	jr	nc,GDRV_IS_KERNEX
+	jr	nc,GDRV_IS_NEXTOR
 
 	;* Driver not found in KERNEX:
 	;  it is a MSX-DOS driver,
@@ -2193,34 +2140,30 @@ GDRVR_CHECK_KERNEX:
 	xor	a
 	ret
 
-	;--- It's a Nextor driver: get driver information
+	;--- It's a Nextor driver (ROM driver in KERNEX, or RAM driver):
+	;    get driver information
 
-GDRV_IS_KERNEX:
-	ld	d,a
-	push de
-	pop iy
+GDRV_IS_NEXTOR:
 	ld	(ix+4),85h	;Set driver flags ("is Nextor", "provides configuration" and "is device-based")
+	ld	d,(ix)		;D = slot
+	ld	e,(ix+1)	;E = segment (FFh for ROM drivers)
+	push	de
+	pop	iy		;IY = slot:segment (for AA_CALLDRV2)
 
-	push	iy
-	push	ix
 	ld	hl,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl
-	ld	ix,CALDRV##
+	push	iy
 	ld a,DRIVER_QUERY.GET_VERSION##
-	call	CALSLT
-	or a
+	call	AA_CALLDRV2
+	pop	iy
 	jr z,GDRV_OK_GET_VERSION
 	ld bc,0100h
 	ld d,0
 GDRV_OK_GET_VERSION:
-	pop	ix
-	pop	iy
 	ld	(ix+5),b	;Set driver version number
 	ld	(ix+6),c
 	ld	(ix+7),d
 
-	push	iy
-	push	ix
 	push	hl
 	push	bc
 
@@ -2237,14 +2180,11 @@ GDRV_LEGACY_STRING_SIZE:
 	ld bc,8
 	add hl,bc
 	push hl	;Save pointer to driver name
-	ld a,d
-	ld	de,DRIVER.DRIVER_QUERY_ENTRY##
-	ld	(BK4_ADD##),de
-	ld d,a
+	ld	bc,DRIVER.DRIVER_QUERY_ENTRY##
+	ld	(BK4_ADD##),bc
 	ld a,DRIVER_QUERY.GET_STRING##
 	ld b,DRIVER_QUERY.STR_DRIVER_NAME##
-	ld	ix,CALDRV##
-	call	CALSLT
+	call	AA_CALLDRV2
 
 	pop hl
 	pop bc
@@ -2270,8 +2210,6 @@ GDRV_ADAPT_DRIVER_NAME_LOOP_2:
 GDRV_END:
 	pop	bc
 	pop	hl
-	pop	ix
-	pop	iy
 
 	xor	a
 	ret
@@ -2289,81 +2227,6 @@ GDRVR_CHK_RAM:
 	ld	b,e		;B=segment
 	jp	GDRVR_OKSLOT
 
-	;--- RAM driver: get version and name via CALL_MAP
-
-GDRV_IS_RAM:
-	ld	(ix+4),85h	;Nextor, device-based, provides config
-	ld	d,(ix)		;D = slot
-	ld	e,(ix+1)	;E = segment
-	push	de
-	pop	iy		;IY = slot:segment
-;
-	push	iy
-	push	ix
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
-	ld	a,DRIVER_QUERY.GET_VERSION##
-	call	CALL_MAP##
-	or	a
-	jr	z,GDRV_RAM_VER_OK
-	ld	bc,0100h
-	ld	d,0
-GDRV_RAM_VER_OK:
-	pop	ix
-	pop	iy
-	ld	(ix+5),b	;Major version
-	ld	(ix+6),c	;Minor version
-	ld	(ix+7),d	;Revision
-;
-	push	iy
-	push	ix
-	push	hl
-	push	bc
-;
-	ld	a,(ix+8)	;Extended name flag
-	and	80h
-	ld	d,33
-	jr	z,GDRV_RAM_STR_SZ
-	ld	d,64-8
-GDRV_RAM_STR_SZ:
-	push	af		;Save extended flag
-	ld	(ix+8),0	;Clear in case of error
-	push	ix
-	pop	hl
-	ld	bc,8
-	add	hl,bc
-	push	hl		;Save dest pointer
-	ld	a,DRIVER_QUERY.GET_STRING##
-	ld	b,DRIVER_QUERY.STR_DRIVER_NAME##
-	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
-	call	CALL_MAP##
-;
-	pop	hl		;String dest pointer
-	pop	bc		;B = extended flag (high byte from push af)
-	bit	7,b
-	jr	nz,GDRV_RAM_END	;Extended format, no conversion
-;
-	;Convert from zero-terminated to space-padded
-	ld	b,32
-GDRV_RAM_PAD_LOOP:
-	ld	a,(hl)
-	or	a
-	jr	z,GDRV_RAM_PAD
-	inc	hl
-	djnz	GDRV_RAM_PAD_LOOP
-	jr	GDRV_RAM_END
-;
-GDRV_RAM_PAD:
-	ld	(hl),' '
-	inc	hl
-	djnz	GDRV_RAM_PAD
-;
-GDRV_RAM_END:
-	pop	bc
-	pop	hl
-	pop	ix
-	pop	iy
-	xor	a
-	ret
 
 
 ;-----------------------------------------------------------------------------
@@ -2707,51 +2570,21 @@ F_CDRVR_GO:
 	or	a
 	ret	nz
 
-	ld	a,b
-	cp	0FFh
-	jr	nz,CDRVR_RAM
+	ld	(BK4_ADD##),de	;Routine address (read by CALDRV for ROM drivers)
+	ld_	iyh,c		;IY = slot:segment
+	ld_	iyl,b
 
-	;--- ROM driver path
-
-	ld	(BK4_ADD##),de
-	ld_ iyh,c
-	ld	l,(ix)
-	ld	h,(ix+1)
-	push	hl
-	ld	c,(ix+2)
-	ld	e,(ix+4)
-	ld	d,(ix+5)
-	ld	l,(ix+6)
-	ld	h,(ix+7)
-
-	;--- We need to ensure that the user environment is mapped in
-	;    so that the driver can see any possible user supplied data.
-
-	ld	a,(DOS_VER##)
-	or	a
-	jr nz,CDRV_NODOS1
-
-	;--- We are in DOS 1 mode:
-	;    We can just call the driver right away.
-
-	ld	b,(ix+3)
-	ld	ix,CALDRV##
-	pop	af
-	call	CALSLT
-	push	af
-	pop	ix
-
-    xor a
-	ret
-CDRV_NODOS1:
-
-	;--- We are in DOS 2 mode:
-	;    We need to restore TPA segments so that the driver
+	;--- In DOS 2 mode we need to restore TPA segments so that the driver
 	;    can see any possible user supplied data.
 	;    We always restore TPA segment in page 2.
 	;    We restore TPA segment in page 0 only if it was already
 	;    in place when the function was called; otherwise
 	;    that TPA segment could be uninitialized.
+	;    In DOS 1 mode we can just call the driver right away.
+
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,CDRV_CALL
 
 	ld a,(PS_BDOS##)
 	and 11b
@@ -2775,12 +2608,7 @@ CDRV_NORAM0:
 	ld	a,(P2_TPA##)
 	call	PUT_P2##
 
-	ld	b,(ix+3)
-	pop	af
-	ld	ix,CALDRV##
-	call	$CALSLT##
-	push	af
-	pop	ix
+	call	CDRV_CALL
 
 	ld	a,(CODE_SEG##)
 	call	PUT_P0##
@@ -2790,21 +2618,15 @@ CDRV_NORAM0:
 	xor	a
 	ret
 
-	;--- RAM driver path
+	;--- Load the input registers from the buffer and call the routine
+	;    Input:  IX = Buffer with the input registers
+	;            IY = slot:segment, (BK4_ADD) = routine address
+	;    Output: IX = AF returned by the routine, A = 0
 
-CDRVR_RAM:
-	; B=segment, C=slot, DE=routine addr, IX=input buffer ptr
-
-	ld	(BUF),de	;Save routine address to page-3 scratch
-
-	ld_	iyh,c		;IY = slot:segment
-	ld_	iyl,b
-
-	;Load input params from buffer (IX still = buffer ptr)
-
+CDRV_CALL:
 	ld	l,(ix)
 	ld	h,(ix+1)
-	push	hl		;Save input AF on stack
+	push	hl		;Input AF
 	ld	c,(ix+2)
 	ld	b,(ix+3)
 	ld	e,(ix+4)
@@ -2812,105 +2634,37 @@ CDRVR_RAM:
 	ld	l,(ix+6)
 	ld	h,(ix+7)
 
-	ld	ix,(BUF)	;IX = routine address
+	ld_	a,iyl
+	inc	a
+	jr	z,CDRV_ROM
 
-	;Check DOS version (A is free, input AF on stack)
+	;--- RAM driver
 
-	ld	a,(DOS_VER##)
-	or	a
-	jr	nz,CDRV_RAM_D2
-
-	;--- DOS 1: call CALL_MAP directly
-
+	ld	ix,(BK4_ADD##)
 	pop	af
 	call	CALL_MAP##
+	jr	CDRV_END
+
+	;--- ROM driver: inter-slot call to CALDRV in the driver slot
+
+CDRV_ROM:
+	ld	ix,CALDRV##
+	ld	a,(DOS_VER##)
+	or	a
+	jr	z,CDRV_ROM_DOS1
+	pop	af
+	call	$CALSLT##
+	jr	CDRV_END
+CDRV_ROM_DOS1:
+	pop	af
+	call	CALSLT
+
+CDRV_END:
 	push	af
 	pop	ix		;IX = result AF
 	xor	a
 	ret
 
-CDRV_RAM_D2:
-	;--- DOS 2: restore TPA segments, call, restore kernel segments
-
-	push	bc		;Save input BC (BDOS slot check uses B)
-	push	de		;Save input DE
-
-	ld	a,(PS_BDOS##)
-	and	11b
-	ld	b,a
-	ld	a,(SS_BDOS##)
-	rla
-	rla
-	and	1100b
-	or	b
-	ld	b,a
-
-	ld	a,(RAMAD0##)
-	and	1111b
-	cp	b
-	jr	nz,CRMD2_NOP0
-
-	ld	a,(P0_TPA##)
-	call	PUT_P0##
-
-CRMD2_NOP0:
-	ld	a,(P2_TPA##)
-	call	PUT_P2##
-
-	pop	de		;Restore input DE
-	pop	bc		;Restore input BC
-	pop	af		;Input AF
-
-	call	CALL_MAP##
-	push	af
-	pop	ix		;IX = result AF
-
-	ld	a,(CODE_SEG##)
-	call	PUT_P0##
-	ld	a,(DATA_SEG##)
-	call	PUT_P2##
-
-	xor	a
-	ret
-
-
-;-----------------------------------------------------------------------
-;
-; Get slot address for page 0
-GSLOT0:
-	push	hl
-	push	bc
-	in	a,(0A8h)	;Get primary slot register
-				;Isolate primary slot number
-				; for page-0.
-	call	GSLT_SLTTBL
-	jr	z,GSLT_RET	;Slot is not expanded.
-	rlca
-	rlca
-	and	00001100b	;Isolate secondary slot bits
-	or	10000000b	;Set "expanded slot" flag
-	or	c		;Include primary slot.
-;
-GSLT_RET:
-	pop	bc
-	pop	hl
-	ret
-
-GSLT_SLTTBL:
-	and	00000011b
-	ld	c,a
-	ld	b,0
-	ld	hl,EXPTBL
-	add	hl,bc		;Look at expanded slot flag
-	bit	7,(hl)		; for this slot and return
-	ret	z		; if slot is not expanded.
-;
-	inc	hl
-	inc	hl
-	inc	hl		;Get current secondary slot
-	inc	hl		; register value for this
-	ld	a,(hl)		; slot
-	ret
 
 
 ;-----------------------------------------------------------------------------
@@ -3260,9 +3014,9 @@ MAP_FOUND:
 	pop	hl
 	xor	a
 	bit	7,(iy+4)
-	jp	z,MAP_DEF_DRVB	;MSX-DOS driver
+	jr	z,MAP_DEF_DRVB	;MSX-DOS driver
 	bit	0,(iy+4)
-	jp	nz,MAP_DEF_DEVB
+	jr	nz,MAP_DEF_DEVB
 
 	;* Legacy MSX-DOS driver: set the default media byte
 
@@ -3411,50 +3165,12 @@ MAPS_SEG_OK:
 	;  and is a block-based device
 
 	push	bc
-	push	iy
-
-	ld	a,(iy+1)
-	cp	0FFh
-	jr	nz,MAPS_RAM_GP
-
-	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	(BK4_ADD##),hl
-	ld	a,(iy)
-	ld	c,(iy+2)
-	ld_ iyh,a
-	ld	hl,($SECBUF##)
-	ld	ix,CALDRV##
-	ld a,DEVICE_QUERY.GET_PARAMS##
-	call	CALSLT
-	jr	MAPS_DONE_GP
-
-MAPS_RAM_GP:
-	ld	c,(iy+2)
-	ld	h,(iy)
-	ld	l,(iy+1)
-	push	hl
-	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	hl,($SECBUF##)
 	ld	a,DEVICE_QUERY.GET_PARAMS##
-	call	CALL_MAP##
-
-MAPS_DONE_GP:
-	pop	iy
+	call	MAPS_DEVQ
 	pop	bc
 	pop	hl
-	call CHECK_DEVQ_GET_PARAMS_ERROR
-	jp	nz,MAP_IDEVN_END
-
-	ld	ix,($SECBUF##)
-	ld	a,(ix)
-	or	a		;Block device?
-	jp	nz,MAP_IDEVN_END
-	ld	a,(ix+1)
-	or	a		;512 byte sectors?
-	jp	nz,MAP_IDEVN_END
-	ld	a,(ix+2)
-	cp	2
+	call CHECK_DEVQ_BLOCK_DEVICE
 	jp	nz,MAP_IDEVN_END
 
 	;>>> Driver and device are OK
@@ -3467,35 +3183,9 @@ MAPS_DONE_GP:
 
 	push	bc
 	push	hl
-	push	iy
-
-	ld	a,(iy+1)
-	cp	0FFh
-	jr	nz,MAPS_RAM_GS
-
-	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	(BK4_ADD##),hl
-	ld	a,(iy)
-	ld	c,(iy+2)
-	ld_ iyh,a
 	ld a,DEVICE_QUERY.GET_STATUS##
-	ld	ix,CALDRV##
-	call	CALSLT
-	jr	MAPS_DONE_GS
-
-MAPS_RAM_GS:
-	ld	c,(iy+2)
-	ld	h,(iy)
-	ld	l,(iy+1)
-	push	hl
-	pop	iy
-	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
-	ld	a,DEVICE_QUERY.GET_STATUS##
-	call	CALL_MAP##
-
-MAPS_DONE_GS:
+	call	MAPS_DEVQ
 	ld d,b
-	pop	iy
 	pop	hl
 	pop	bc
 
@@ -3692,58 +3382,10 @@ MF_CHK_INCEPTION:
 	jp	nz,POPIX_RET
 
 	;* Error if the file is already mounted to another drive
+	;  (CHKMNT preserves BC, DE, HL, IX, IY)
 
-	push	de
-	push	hl
-	push	iy
-	push	bc
-	push	ix
-	ld	iy,UNIT_TAB##+2
-	ld	b,8
-MF_CHK_ALRMNT:
-	ld	l,(iy)
-	ld	h,(iy+1)
-	ld	a,h
-	or	l
-	jr	z,MF_ALRMNT_NEXT2
-	push	hl
-	pop	ix	;IX = Unit descriptor
-	ex	(sp),iy	;Now IY = FIB of file to mount
-
-	bit	UF_MNT,(ix+UD_FLAGS##)
-	jr	z,MF_ALRMNT_NEXT
-
-	ld	a,(iy+25)
-	dec	a
-	cp	(ix+UD_MOUNT_DRIVE##)
-	jr	nz,MF_ALRMNT_NEXT
-
-	ld	a,(iy+19)
-	cp	(ix+UD_MOUNT_START_CLUSTER##)
-	jr	nz,MF_ALRMNT_NEXT
-	ld	a,(iy+20)
-	cp	(ix+UD_MOUNT_START_CLUSTER##+1)
-	jr	nz,MF_ALRMNT_NEXT
-
-	pop	ix
-	pop	bc
-	pop	iy
-	pop	hl
-	pop	de
-	ld	a,.FMNT##
-	jp	POPIX_RET
-MF_ALRMNT_NEXT:
-	ex	(sp),iy
-MF_ALRMNT_NEXT2:
-	inc	iy
-	inc	iy
-	djnz	MF_CHK_ALRMNT
-
-	pop	ix
-	pop	bc
-	pop	iy
-	pop	hl
-	pop	de
+	pcall	CHKMNT
+	jp	nz,POPIX_RET
 
 	;* Check if the file size is <512B or >32MB
 
@@ -3800,7 +3442,7 @@ MF_OK_SIZE:
 	call	CREATE_UD
 	pop	de	;Now DE = Pointer to FIB
 
-	jp	z,MF_UD_OK
+	jr	z,MF_UD_OK
 
 	;UD allocation failed
 
@@ -4384,7 +4026,7 @@ MAPDOS1_NOUNMAP:
 	;--- Map to default value
 
 	dec	a
-	jp	nz,MAPDOS1_NODEF
+	jr	nz,MAPDOS1_NODEF
 
 MAPDOS1_DEF:
 	ld	(ix+UD1_DEVICE_NUMBER##),0	;At the moment leave the drive unmapped
@@ -4409,51 +4051,19 @@ MAPDOS1_NODEF:
 
 	;* First check that the same drive and partition is not mapped to another drive
 
-	ld	a,(ix+UD1_DEVICE_NUMBER##)
-	push	af
-	ld	(ix+UD1_DEVICE_NUMBER##),0	;At the moment leave the drive unmapped
-	push	ix
-
-	ld	ix,(KERNEX_DOS1)
-	inc	ix
-	ld	b,(ix-1)
-MAPDOS1_CHECK_LOOP:
-	ld	a,(ix+UD1_SLOT##)	;Check slot number
-	cp	(iy)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_DEVICE_NUMBER##)	;Check device number
-	cp	(iy+2)
-	jr	nz,MAPDOS1_CHK_NEXT
-
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##)	;Check starting sector
-	cp	(iy+4)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+1)
-	cp	(iy+5)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+2)
-	cp	(iy+6)
-	jr	nz,MAPDOS1_CHK_NEXT
-	ld	a,(ix+UD1_FIRST_ABSOLUTE_SECTOR##+3)
-	cp	(iy+7)
-	jr	nz,MAPDOS1_CHK_NEXT
-
-	pop	ix
-	pop	af
-	ld	(ix+UD1_DEVICE_NUMBER##),a	;Leave old partition mapped
+	push	iy
+	ld	h,(iy)		;Slot
+	ld	d,(iy+2)	;Device
+	exx
+	ld	e,(iy+4)	;First sector
+	ld	d,(iy+5)
+	ld	l,(iy+6)
+	ld	h,(iy+7)
+	exx
+	call	CMIU_DOS1	;Preserves IX
+	pop	iy
 	ld	a,.PUSED##
-	ret
-
-MAPDOS1_CHK_NEXT:
-	push	bc
-	ld	bc,UD1_SIZE##
-	add	ix,bc
-	pop	bc
-	djnz	MAPDOS1_CHECK_LOOP
-
-	pop	ix
-	pop	af
-	ld	(ix+UD1_DEVICE_NUMBER##),a	;Leave old partition mapped
+	ret	nz
 
 	;* Now check that the specified driver and device are valid
 
@@ -4476,18 +4086,7 @@ MAPDOS1_CHK_NEXT:
 	ld a,DEVICE_QUERY.GET_PARAMS##
 	call	CALSLT
 	pop	iy
-	call CHECK_DEVQ_GET_PARAMS_ERROR
-	jr	nz,MAPDOS1_IDEVN
-
-	ld	ix,($SECBUF##)
-	ld	a,(ix)
-	or	a		;Block device?
-	jr	nz,MAPDOS1_IDEVN
-	ld	a,(ix+1)
-	or	a		;512 byte sectors?
-	jr	nz,MAPDOS1_IDEVN
-	ld	a,(ix+2)
-	cp	2
+	call CHECK_DEVQ_BLOCK_DEVICE
 	jr	nz,MAPDOS1_IDEVN
 
 	;* Everything OK, now perform the mapping
@@ -4668,21 +4267,21 @@ F_Z80MODE_GO:
 CHKLEGACY_LOOP:
 	ld	a,(hl)
 	or	a
-	jp	z,IDRVR_RET
+	jr	z,IDRVR_RET
 	inc	hl
 	ld	a,(hl)
 	cp	c
 	jr	z,CHKLEGACY_STEP2
 	inc	hl
 	djnz	CHKLEGACY_LOOP
-	jp	IDRVR_RET
+	jr	IDRVR_RET
 
 CHKLEGACY_STEP2:
 	push	de		;Preserve D = mode, E = action
 	ld	e,c
 	call	IS_NEXTOR_KER
 	pop	de
-	jp	nc,IDRVR_RET
+	jr	nc,IDRVR_RET
 
 	;--- The slot number is OK, determine wether to get or to set the information
 
@@ -4741,7 +4340,7 @@ Z80MODE_SET_OF_LOOP:
 	inc	hl
 	ld	a,(hl)
 	cp	c
-	jr	nz,Z80MODE_SET_ON_LOOP
+	jr	nz,Z80MODE_SET_OF_LOOP
 	ld	(hl),0
 	ld	d,0
 
@@ -4901,7 +4500,7 @@ MAPDRV_MNT	equ	MAPDRV_SEC+5	;0=no file mount, 1=mount normal, 2=mount read-only
 	ld	(MAPDRV_SLT),a
 	ld	(MAPDRV_MNT),a
 
-	ld	de,MAPDRV_HELP
+	ld	e,HLP_MAPDRV
 	call	GET_PARENT_OR_HELP
 
 	;* Extract and parse drive letter
@@ -4948,7 +4547,7 @@ MAPDRV_MNT	equ	MAPDRV_SEC+5	;0=no file mount, 1=mount normal, 2=mount read-only
 	ld	a,1
 	ld	(MAPDRV_MNT),a
 	call	NEXT_CALL_PAR
-	jp	c,MAPDRV_OKPARS
+	jr	c,MAPDRV_OKPARS
 
 	ld	ix,GETBYT
 	call	BASIC_ROUT
@@ -4958,7 +4557,7 @@ MAPDRV_MNT	equ	MAPDRV_SEC+5	;0=no file mount, 1=mount normal, 2=mount read-only
 	
 	ld	a,')'
 	call	SYNCHR
-	jp	MAPDRV_OKPARS
+	jr	MAPDRV_OKPARS
 
 MAPDRV_NOSTR:
 	pop	hl
@@ -4968,7 +4567,7 @@ MAPDRV_NOMNT:
 	ld	(MAPDRV_PAR),de
 
 	call	NEXT_CALL_PAR
-	jp	c,MAPDRV_OKPARS
+	jr	c,MAPDRV_OKPARS
 
 	;* Extract device
 
@@ -4978,7 +4577,7 @@ MAPDRV_NOMNT:
 	ld	(MAPDRV_DEV),a
 
 	call	NEXT_CALL_PAR
-	jp	c,MAPDRV_OKPARS
+	jr	c,MAPDRV_OKPARS
 
 	;* Extract slot number
 
@@ -5002,7 +4601,7 @@ MAPDRV_NOPRIM:
 	ld	(MAPDRV_SLT),a
 
 	call	NEXT_CALL_PAR
-	jp	c,MAPDRV_OKPARS
+	jr	c,MAPDRV_OKPARS
 
 	;* Extract segment number
 
@@ -5143,7 +4742,7 @@ MAPDRV_NOGETCUR:
 	ld	hl,(MAPDRV_PAR)
 	ld	de,-3
 	call	DCOMPR
-	jp	z,MAPDRV_GOT_PAR_SEC
+	jr	z,MAPDRV_GOT_PAR_SEC
 
 	ld	a,(MAPDRV_PAR)
 	cp	1
@@ -5247,39 +4846,6 @@ MAPDRV_END:
 	ret
 
 
-MAPDRV_HELP:
-	;    ----------------------------------------
-	db	"CALL MAPDRV[L](<drive>[,<partition>",2
-	db  "  [,<device>[,<slot>[,<segment>]]]])",13,10
-	db	"CALL MAPDRV[L](<drive>,<filename>",2
-	db  "  [,<flags>])",13,10
-	db  13,10
-	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
-	db  "         or 0 for default drive",13,10
-	db  "<partition>: >=1: partition number",13,10
-	db  "             0: device sector zero",13,10
-	db  "             -1: unmap drive",13,10
-	db  "             -2: automatic mapping",13,10
-	db  "             -3: don't set partition",13,10
-	db	"<device>: device number (1-255)",13,10
-	db  "<slot>: of driver, main + 4*sub, or",1
-	db  "        0 for primary controller",13,10
-	db  "<segment>: RAM driver segment",1
-	db  "           (FFh or omit for ROM)",13,10
-	db	13,10
-	db	"<filename>: full path of file to mount",13,10
-	db	"<flags>: 1 for read-only mount mode",1
-	db  "         0 for default (read/write)",13,10
-	db  13,10
-	db  3 ;Pause and ask for key press
-	db  "MAPDRVL locks drive after mapping",1
-	db  "      (not available in MSX-DOS 1 mode)",13,10
-	db  "Default <partition>: automatic mapping",13,10
-	db  "Default <device>, <slot>:",1
-	db  "  the ones already mapped",13,10
-	db 0
-
-
 ;-----------------------------------------------------------------------------
 ;
 	PROC	CUSR
@@ -5299,7 +4865,7 @@ MAPDRV_HELP:
 ;  F, A, C, B, E, D, L, H, IXl, IXh, IYl, IYh.
 ;
 
-	ld	de,USR_HELP
+	ld	e,HLP_USR
 	call	GET_PARENT_OR_HELP
 
 	;* Extract code address
@@ -5404,29 +4970,6 @@ CUSR_GO:
 	ret
 
 
-USR_HELP:
-	;    ---------------------------------------- 
-	db	"CALL USR(<run address>",2
-	db  "         [,<registers address>])",13,10
-	db  13,10
-	db  "<run address>: Address of code to run",13,10
-	db  "<registers address>: Address of a",1
-	db  "      12-byte buffer for Z80 registers",13,10
-	db  13,10
-	db	"CALL USR(-1) does nothing.",1
-	db  "Use it together with ON ERROR GOTO",13,10
-	db  "to detect Nextor from BASIC.",13,10
-	db	13,10
-	db  "Registers buffer is read before",1
-	db  "and updated after execution",13,10
-	db	13,10
-	db  "Order of registers in buffer:",13,10
-	db  "F, A, C, B, E, D, L, H,",1
-	db  "IXl, IXh, IYl, IYh"
-	db 0
-
-
-
 ;-----------------------------------------------------------------------------
 ;
 	PROC	CLOCKDRV
@@ -5443,7 +4986,7 @@ USR_HELP:
 ; _LOCKDRV("x:", non-0)
 ;  Unlock drive
 
-	ld	de,LOCKDRV_HELP
+	ld	e,HLP_LOCKDRV
 	call	GET_PARENT_OR_HELP
 
 	;* Extract and parse drive letter
@@ -5452,7 +4995,7 @@ USR_HELP:
 	ld	(MAPDRV_TMP),a	;Save drive number (0=A:, etc)
 
 	call	NEXT_CALL_PAR
-	jp	c,LOCKDRV_SHOW
+	jr	c,LOCKDRV_SHOW
 
 	;* Extract lock or unlock flag, then perform lock or unlock
 
@@ -5519,17 +5062,6 @@ LOCK_S:
 	db	": is locked",0
 
 
-LOCKDRV_HELP:
-	;    ---------------------------------------- 
-	db	"CALL LOCKDRV(<drive>[,<action>])",13,10
-	db	13,10
-	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8,",1
-	db  "         or 0 for default drive",13,10
-	db  "<action>: 0 to unlock, non-0 to lock,",1
-	db  "          omit to show current status"
-	db 0
-
-
 ;-----------------------------------------------------------------------------
 ;
 	PROC	CCHDRV
@@ -5538,7 +5070,7 @@ LOCKDRV_HELP:
 ;
 ;  _CHDRV jumps here in DOS 1 mode, in normal mode it jumps to the old code in bank 0
 
-	ld	de,CHDRV_HELP
+	ld	e,HLP_CHDRV
 	call	GET_PARENT_OR_HELP
 
 	call	PARSE_DRIVE_NUMBER
@@ -5548,7 +5080,7 @@ LOCKDRV_HELP:
 	pop	af
 	dec	a			;Reject zero as well as invalid drive numbers
 	cp	8
-	jp	nc,JDERBDN
+	jr	nc,JDERBDN
 	push	hl
 
 CHDRV_DO:
@@ -5571,21 +5103,13 @@ FIND_DRV:
 	rr	l
 	dec	a
 	jr	nz,FIND_DRV
-	jp	nc,JDERBDN	; bad drive name
+	jr	nc,JDERBDN	; bad drive name
 	pop	af
 	ret
 
 JDERBDN:
 	ld	e,62
-	jp	BASIC_ERR
-
-CHDRV_HELP:
-	;    ---------------------------------------- 
-	db	"CALL CHDRV(<drive>)",13,10
-	db  13,10
-	db  "<drive>: ",34,"A:",34," to ",34,"H:",34," or 1 to 8"
-	db 0
-
+	jr	BASIC_ERR
 
 ; PRINT_CALL_HELP is in print_call_help.mac (linked into this bank)
 
@@ -5720,7 +5244,7 @@ GDRL_NOCUR:
 	dec	a
 	cp	8
 	ld	e,62
-	jp	nc,BASIC_ERR
+	jr	nc,BASIC_ERR
 
 	ret
 
@@ -5828,40 +5352,10 @@ NEXVER_LOOP:
 	jr NEXVER_LOOP
 NEXVER_END:
 
-	ld	hl,CNEXTOR_S
-	call	PRINT_CALL_HELP##
+	ld	e,HLP_NEXTOR
+	call	PRINT_HELP_B1
 	pop	hl
 	ret
-
-CNEXTOR_S:
-;    ---------------------------------------- 
-    db	13,10,"Available Nextor CALL commands:",13,10
-	db	13,10
-	db  "_BOOTKEYS()",13,10
-	db	"_CHDRV (same as MSX-DOS 2,",1
-	db	"        but works in DOS 1 mode)",13,10
-	db	"_CURDRV",13,10
-	db	"_DRIVERS",13,10
-	db	"_DRVINFO",13,10
-	db  "_EMUKILL",13,10
-	db	"_FDISK",13,10
-	db  "_IDRIVER()",13,10
-	db	"_LOCKDRV() *",13,10
-	db	"_MAPDRV()",13,10
-	db	"_MAPDRVL() *",13,10
-	db  "_SETSCREEN()",13,10
-	db  "_UDRIVER()",13,10
-	db	"_USR()",13,10
-	db  "_SYSTEM2() - boot DOS using MSXDOS2.SYS",13,10
-	db	13,10
-	db	"Commands with * are not available",1
-	db	"in MSX-DOS 1 mode.",13,10
-	db	13,10
-	db  3 ;Pause and ask for key press
-	db	"Commands with () accept parameters.",13,10
-	db	"Invoke them without parameters",1
-	db	"for parameter usage information."
-	db	0
 
 
 ;-----------------------------------------------------------------------------
@@ -5963,7 +5457,7 @@ DRVI_NOGHOST:
 
 	ld	a,0FFh
 	ld	(BUF_LETTER),a
-	jp	NEXT_DRIVE
+	jr	NEXT_DRIVE
 
 DRVI_NOMOUNT:
 
@@ -6190,8 +5684,6 @@ DRVASSIGN_MSG:
 	db	"Boot drives: ",0
 COMMA_MSG:
 	db	", ",0
-FROM_MSG:
-	db	", from ",0
 TO_MSG:
 	db	": to ",0
 
@@ -6296,9 +5788,8 @@ PDI_DONE:
 
 	ld	a,(ix+7)
 	add	a,"0"
-	call	DO_CHPUT		;Revision number, only if not zero
+	jp	DO_CHPUT		;Revision number, only if not zero
 
-	ret
 
 STR_UNNAMED_DRIVER:
 	db	"Unnamed driver",0
@@ -6390,7 +5881,7 @@ PRSEG_S:
 ;-----------------------------------------------------------------------------
 ;
 ; Try to extract '(' from text. If end of instruction,
-; show zero-terminated help pointed by DE.
+; show the help text number E (HLP_xxx in const.inc, texts in bank 1).
 
 gopoh::
 GET_PARENT_OR_HELP:
@@ -6408,9 +5899,15 @@ GET_PARENT_OR_HELP:
 
 DO_CALL_HELP:
 	pop	af	;To prevent the rest of the CALL from being executed
-	ex	de,hl
-	call	PRINT_CALL_HELP##
-	ex	de,hl
+
+;Print the help text number E (in bank 1). Preserves HL.
+
+PRINT_HELP_B1:
+	push	hl
+	ld	a,1	;B.INIT
+	ld	ix,B1V_PRINT_HELP##
+	call	CALBNK##
+	pop	hl
 	ret
 
 
@@ -6732,7 +6229,7 @@ DRVS1NX2:
 CHECK_MAP_IN_USE:
 	ld	a,(DOS_VER##)
 	or a
-	jp z,CMIU_DOS1
+	jr z,CMIU_DOS1
 
 CMIU_DOS2:
 	push    de
@@ -6912,9 +6409,17 @@ STRCOMP:
 	jr	STRCOMP
 
 
-CHECK_DEVQ_GET_PARAMS_ERROR:
+; Check the result of a DEVICE_QUERY.GET_PARAMS query done with
+; HL = ($SECBUF): "not implemented" counts as a block device with
+; 512 byte sectors (the buffer is filled accordingly).
+; Input:  A = Result of the query
+; Output: Z if the device is a block device with 512 byte sectors,
+;         NZ on error or if it isn't
+; Modifies: AF
+
+CHECK_DEVQ_BLOCK_DEVICE:
 	or a
-	ret z
+	jr z,CDBD_CHECK
 	cp DRIVER.RESULT_NOT_IMPLEMENTED##
 	ret nz
 	push ix
@@ -6925,6 +6430,40 @@ CHECK_DEVQ_GET_PARAMS_ERROR:
 	ld (ix+7),0
 	pop ix
 	xor a
+	ret
+
+CDBD_CHECK:
+	push hl
+	ld hl,($SECBUF##)
+	ld a,(hl)	;Block device...
+	inc hl
+	or (hl)		;...with 512 byte sectors?
+	jr nz,CDBD_END
+	inc hl
+	ld a,(hl)
+	cp 2
+CDBD_END:
+	pop hl
+	ret
+
+
+; Call DEVICE_QUERY of the driver and device in a MAPDRV mapping data block.
+; Input:  IY = Mapping data block (+0: slot, +1: segment, +2: device)
+;         A, HL = Query and parameters for it
+; Output: Results of the query, flags set from A
+; Preserves IX, IY
+
+MAPS_DEVQ:
+	push	iy
+	ld	d,(iy)
+	ld	e,(iy+1)
+	ld	c,(iy+2)
+	push	de
+	pop	iy		;IY = slot:segment
+	ld	de,DRIVER.DEVICE_QUERY_ENTRY##
+	ld	(BK4_ADD##),de
+	call	AA_CALLDRV2
+	pop	iy
 	ret
 
 
@@ -6959,10 +6498,10 @@ COUNT_DEVICE_PARTITIONS::
 	ld hl,0100h
 	call CDP_GPART
 	or a
-	jp nz,CDP_DONE		;Error reading partition table = done
+	jr nz,CDP_DONE		;Error reading partition table = done
 	ld a,b
 	or a
-	jp z,CDP_DONE		;Empty = no partitions at all
+	jr z,CDP_DONE		;Empty = no partitions at all
 	call CDP_COUNT_ACTIVE
 
 	;--- Check primary partition 2: determines if we have extended partitions
@@ -7550,17 +7089,11 @@ RDRV_SIG_STR:
 
 	ld	a,h
 	cp	1
-	jr	z,DRVRO_DO_INIT
+	jr	z,DRVRO_INIT
 	cp	2
-	jr	z,DRVRO_DO_SHUT
+	jr	z,DRVRO_SHUT
 	ld	a,.ISBFN##
 	ret
-
-DRVRO_DO_INIT:
-	jp	DRVRO_INIT
-
-DRVRO_DO_SHUT:
-	jp	DRVRO_SHUT
 
 ;--------------------------------------
 ; Operation 1: Initialize a RAM driver
@@ -7613,8 +7146,7 @@ DRVRO_I3B:
 	ld	c,a
 	ld	a,b
 	ld	b,c		;A=slot+timer, B=segment
-	call	RAMDRV_REGISTER
-	ret			;0 or .NORAM
+	jp	RAMDRV_REGISTER	;Returns 0 or .NORAM
 
 ;--------------------------------------
 ; Operation 2: Shut down a RAM driver
@@ -7684,7 +7216,7 @@ DRVRO_QUERY_PRINT:
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	pop	af
 	call	CALL_MAP##
-	jp	DRVRO_TPA_OFF	;Restore kernel mapping, preserving driver results
+	jr	DRVRO_TPA_OFF	;Restore kernel mapping, preserving driver results
 
 ;--- Load slot and segment from BUF
 ;    Returns: A=slot, B=segment
@@ -8005,8 +7537,7 @@ TRAM_NXT:
 ;
 TRAM_EXIT:
 	pop	af
-	call	PUT_P2##		;Restore original page 2 segment
-	ret
+	jp	PUT_P2##		;Restore original page 2 segment
 ;
 ;
 ;-----------------------------------------------------------------------------

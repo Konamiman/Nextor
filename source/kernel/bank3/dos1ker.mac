@@ -4647,24 +4647,12 @@ ISGH_NO:
 	or	a
 	ret
 
-	ALIGN	5897h
+	ALIGN	58A8h
 
-;	Subroutine	H.RUNC interceptor
-;	Inputs		-
-;	Outputs		-
-;	Remark		Control is passed to this routine when the BASIC interpreter is initialized
-;			There are two ways: a BASIC program in ROM is started OR at the start of MSX-BASIC
+;	The H.RUNC interceptor that was at 5897h (right before A58A8) has been
+;	removed: the code that hooked it is disabled (see T5807), and bank 0
+;	enters the DOS 1 initialization directly at 58A8h.
 
-A5897:	ld	hl,H.RUNC
-	ld	b,5
-A589C:	ld	(hl),0C9H
-	inc	hl
-	djnz	A589C			; clear RUNC hook
-	ld	hl,DEVICE
-	xor	a
-	cp	(hl)
-	ld	(hl),a			; clear diskinterface count
-	ret	p			; already cleared, return control
 A58A8:	call	A622D			; hook H.LOPD when H.CLEA is hooked (for register system bottom)
 	ld	(YF348),a		; disksystem diskrom slotid
 	ld	hl,A7397
@@ -5662,45 +5650,11 @@ A5FBE:	and	00CH
 	or	c
 	ret
 
-;	Subroutine	get my diskdriver workarea
-;	Inputs		-
-;	Outputs		HL = IX = pointer to workarea
-;	Remark		used by the diskdriver
+;	GETWRK (get my diskdriver workarea, at 5FC2h) and A5FCD (get my SLTWRK
+;	entry) were here. Nothing uses them anymore: the old linked disk driver
+;	interface is gone and Nextor drivers use GWORK (via CALBNK to bank 0).
 
-GETWRK:
-A5FC2:	call	A5FCD			; get my SLTWRK entry
-	ld	a,(hl)
-	inc	hl
-	ld	h,(hl)
-	ld	l,a			; pointer to workarea
-	push	hl
-	pop	ix
-	ret
-
-;	Subroutine	get my SLTWRK entry
-;	Inputs		-
-;	Outputs		HL = pointer to SLTWRK entry
-
-A5FCD:	call	A5FE7			; get my primairy slot
-	add	a,a
-	add	a,a
-	add	a,a
-	scf
-	adc	a,a			; primary slot*4 + 1
-	ld	c,a
-	ld	a,(hl)
-	add	a,a
-	sbc	a,a
-	and	00CH			; 0 for non expanded, 0CH for expanded
-	inc	hl
-	inc	hl
-	inc	hl
-	inc	hl
-	and	(hl)
-	or	c
-	add	a,a			; word entries
-	ld	hl,SLTWRK
-	jr	A5FF3
+	ALIGN	5FE7h
 
 ;	Subroutine	get my EXPTBL entry
 ;	Inputs		-
@@ -5751,25 +5705,9 @@ KANJI_BOOT_RESUME::			; (comes back here via the H.ERRO hook, see drv.mac)
 	push	hl			; if quit anywhere start diskbasic
 	jp	BOOT_D1_CONT
 
-	ALIGN	603Dh
+	;A603D/A603F (the tail of PRVINT, removed) were here.
 
-A603D:	pop	af
-	ret				; quit
-
-A603F:	ex	de,hl
-	ld	a,(hl)
-	and	a
-	jr	z,A603D			; DRVINT entry not used, quit
-	push	af
-	pop	iy			; slotid
-	inc	hl
-	ld	c,(hl)
-	inc	hl
-	ld	b,(hl)
-	push	bc
-	pop	ix			; address
-	pop	af
-	jp	CALSLT
+	ALIGN	6052h
 
 ;	Subroutine	read disksector
 ;	Inputs		A = driveid, B = number of sectors, C = mediadescriptor, DE = start sector, HL = transferaddress
@@ -8584,43 +8522,24 @@ DO_BAS_ERR:	;Jump here for BASIC error, E = error code
 ;	Outputs		________________________
 
 A71D3:
-	jp	HERRP_NEW
-	;ld	a,e
-	;cp	03CH			; normal BASIC error ?
-	nop	;ret	c			; yep, quit
-HERRP_OLD:
-	cp	048H			; DiskBASIC error ?
-	ret	nc			; nope, quit
+	ld	a,e
+	cp	03CH			; normal BASIC error ?
+	ret	c			; yep, quit
+	cp	048H			; DiskBASIC error (60-71) ?
+	jr	c,A71D3_MSG		; yep
+	cp	76
+	ret	c			; 72-75 aren't used in DOS 1 mode
+	cp	80
+	jr	c,A71D3_MSG		; 76-79: Nextor errors
+	ret	nz			; 81+: not ours
+	ld	a,03BH+25		; 80 is "Illegal in emulation", message 25
+A71D3_MSG:
 	sub	03BH
 	ld	b,a			; 1 based offset
-	ld	hl,T71F5
-A71E0:	ld	a,(hl)
-	and	a
-	inc	hl
-	jr	nz,A71E0
-	djnz	A71E0			; next errormessage
-	dec	hl			; include trailing zero
-	ld	de,BUF+166
-	push	de
-	ld	bc,25	;was 22
-	ldir				; copy errormessage to temporary place
-	ld	e,1			; erroroffset 1
-	pop	hl
-	ret
-
-T71F5:	defb	0
-	defb	"Bad FAT",0
-	defb	"Bad file mode",0
-	defb	"Bad drive name",0
-	defb	"Bad sector number",0
-	defb	"File still open",0
-	defb	"File already exists",0
-	defb	"Disk full",0
-	defb	"Too many files",0
-	defb	"Disk write protected",0
-	defb	"Disk I/O error",0
-	defb	"Disk offline",0
-	defb	"Rename across disk",0
+	ld	de,BUF+166		; temporary place for the message
+	ld	a,1			; B.INIT (bank 1)
+	ld	ix,B1V_DSKERRMSG##	; copy it (bank 1, shared with DOS 2 mode)
+	jp	CALBNK##
 
 
 T72AE:	defw	A72B0			; pointer to the default diskerror handler for DiskBASIC
@@ -9122,6 +9041,8 @@ DO_FDISK:
 	xor a
 	ld ix,FDISK##
 	call	CALBNK##
+	ccf			;Cy=1 if FDISK didn't run because there's a
+	ret	nc		; BASIC program: keep it (Cy=0 = command done)
 
 	;Execute NEW and return to BASIC.
 	;FDISK:: in bank 0 returns normally in DOS 1 mode
@@ -9256,29 +9177,6 @@ CMD_NAMES:
 	dw	CDRIVERS##+8000h
 	defb	0
 
-; Handling of new BASIC error codes
-
-HERRP_NEW:
-	ld	a,e
-	cp	03Ch
-	ret	c
-	cp	76
-	jp	c,HERRP_OLD
-	cp	76+5
-	jp	nc,HERRP_OLD
-
-	sub	76-1
-	ld	b,a			; 1 based offset
-	ld	hl,NEW_ERRS
-	jp	A71E0
-
-NEW_ERRS:
-	defb	0
-	defb	'Invalid device driver', 0
-	defb	'Invalid device number', 0
-	defb	'Invalid partition number', 0
-	defb	'Partition already in use', 0
-	defb	'Illegal in emulation', 0
 
 
 	;Allocate page 3 memory for the FAT buffer of a drive.

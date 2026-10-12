@@ -25,9 +25,9 @@
 ; unless it was the cached buffer in which case it will not be moved.
 ;
 ;    If a new buffer is needed then the first one on the chain will always  be
-; used, after being flushed if it is dirty.  However if the first buffer has a
-; -ve  unit  number  then it will not be used as it has been reserved for some
-; purpose (this feature is not currently used in MSX-DOS).
+; used, after being flushed if it is dirty.  (MSX-DOS 2 skipped the first
+; buffer if it had a -ve unit number, "reserved for some purpose", but it never
+; used that feature and Nextor unit numbers are always 0-8, so it was removed.)
 ;
 ;
 ; Entry:       IX = Address of unit descriptor
@@ -96,17 +96,6 @@ bf_sector_loop:	ld	c,(ix+UD_PHYSICAL_UNIT##)	;C := physical unit number
 				; SECTOR NOT ALREADY BUFFERED
 ;
 		pop	hl			;HL -> first buffer on chain
-
-		inc	hl
-		inc	hl
-		bit	7,(hl)			;Look at unit number and
-		dec	hl			; skip to use this first
-		ld	a,(hl)			; buffer unless it is -ve.
-		dec	hl
-		jr	z,first_buf_ok
-		ld	l,(hl)			;If unit number is -ve then
-		ld	h,a			; use next buffer on chain.
-first_buf_ok:
 		call	BF_FLUSH		;Flush the buffer
 		push	hl			;Save buffer descriptor address
 ;
@@ -389,8 +378,8 @@ FLG_PHYS:
 ;
 ;    This routine sets the flag (bit-0 of "BD_FLAGS") of  all  buffers  for  a
 ; specified  physical  unit and clears the flag for all other buffers.  If the
-; unit number is 0FFh then all buffers which are in use will have the flag set
-; unless  their  unit number is -ve (reserved for special use). If the routine
+; unit number is 0FFh then all buffers which are in use will have the flag set.
+; (Buffers with a -ve unit number used to be excluded, see BF_SECTOR.) If the routine
 ; is entered at "FLG_UD" then the unit  number  is  extracted  from  the  unit
 ; descriptor  pointed to by HL.  If it is entered at "FLG_BUFS" then the carry
 ; flag specifies whether the unit number is in A or must be extracted from the
@@ -421,8 +410,6 @@ flag_loop:	ld	e,(hl)
 		jr	z,unflag_buf		; is not in use.
 		cp	b			;Flag the buffer if it is for
 		jr	z,flag_buf		; the required drive.
-		rlca				;If unit number is -ve then
-		jr	c,unflag_buf		; don't flag this buffer.
 		ld	a,b
 		inc	a			;If not for required drive then
 		jr	nz,unflag_buf		; only flag it if required

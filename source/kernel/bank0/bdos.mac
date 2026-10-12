@@ -160,11 +160,6 @@ TIME_IRQ::
 		jr	nz,skip_kirq		;If reached limit then reset
 		ld	(hl),0			; it to zero.
 ;
-		ld	a,(CH_COUNT##)		;If character buffer timeout
-		cp	2			; counter is greater than
-		adc	a,0FFh			; 1 then decrement it, else
-		ld	(CH_COUNT##),a		; leave it unaltered.
-;
 		ld	a,(TIM_TICK##)		;If deferred UD timeout ticks
 		cp	UD_MEDIA_CHECK_TIMEOUT##		; is less than UD_MEDIA_CHECK_TIMEOUT
 		adc	a,0			; then increment it, else

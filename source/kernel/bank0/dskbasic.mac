@@ -221,92 +221,14 @@ SYNCHK	macro	CHAR
 $HOOK	macro	NAME
 ;;	public	NAME	;;provides debugging information
 NAME:
+HK_&NAME&::		;;For SETHOOKS in bank 1
 	endm
 
 $$BASIC::
 ;
 	subttl	Initialize procedure
 
-	public	SETHOOKS
-SETHOOKS:
-;
-;	Cancel hook at POSDSK to allow FILES "*.COM" etc.
-;
-	ld	hl,POSDSK
-	ld	de,0FEBCH	;H.POSD
-	ld	bc,5
-	ldir
-;
-;	Set up other hooks
-;
-	ld	hl,HOKTBL
-SDSKL:
-	ld	e,(hl)		;get hook address to [DE]
-	inc	hl
-	ld	d,(hl)
-	inc	hl
-	ld	a,e		;end of table?
-	or	d
-	ret	z		;yes
-	ex	de,hl
-	ld	(hl),0F7H	;RST 30H operation code
-	inc	hl
-	ld	a,(MASTER_SLOT)
-	ld	(hl),a		;set my slot address
-	inc	hl
-	ex	de,hl
-	ldi			;set address
-	ldi
-	ld	a,0C9H		;set "RET" instruction
-	ld	(de),a
-	jr	SDSKL
-;
-;	Hook data table
-;
-HOKTBL:
-	defw	0FDEFh,DSKO$
-	defw	0FE17h,DSKI$
-	defw	0FDF9h,NAME
-	defw	0FDFEh,KILL
-	defw	0FE08h,DKCOPY
-	defw	0FE12h,DSKF
-	defw	0FE21h,LSET
-	defw	0FE26h,RSET
-	defw	0FE2Bh,FIELD
-	defw	0FE30h,MKI$
-	defw	0FE35h,MKS$
-	defw	0FE3Ah,MKD$
-	defw	0FE3Fh,CVI
-	defw	0FE44h,CVS
-	defw	0FE49h,CVD
-	defw	0FE4Eh,GETPTR
-	defw	0FE58h,NOFOR
-	defw	0FE5Dh,NULOPN
-	defw	0FE62h,NTFL0
-	defw	0FE71h,BINSAV
-	defw	0FE76h,BINLOD
-	defw	0FE7Bh,FILES
-	defw	0FE80h,DGET
-	defw	0FE85h,FILOU1
-	defw	0FE8Ah,INDSKC
-	defw	0FE99h,LOC
-	defw	0FE9Eh,LOF
-	defw	0FEA3h,EOF
-	defw	0FEADh,BAKUPT
-	defw	0FEB2h,PARDEV
-	defw	0FEB7h,NODEV
-	defw	0FEFDh,ERRPRT
-	defw	0FFA7h,DSKRW##	;PHYDIO
-	defw	0FFACh,HOKFMT	;FORMAT
-NULSTR:	defw	0		;end of table
-
-;
-;	Routine which allows FILES "*.BAS" etc.
-;
-POSDSK:
-	inc	sp
-	inc	sp
-	jp	6F1Dh
+NULSTR:	defw	0		;Null string (SETHOOKS is in bank 1 now)
 
 	subttl	Expanded statements
 
@@ -335,23 +257,8 @@ STATEMENT:
 	ld	ix,COEM_RAM##
 	call	CALBNK##
 	ret	nc
-	push	hl			;Re-save text pointer for command search
-;
-	ld	hl,COMMAND
-CKCMD1:
-	ld	de,PROCNM
-CKCMD2:
-	ld	a,(de)		;get specified statement
-	cp	(hl)		;compare with my statement
-	jr	nz,NOTCMD	;failed, try next statement
-	inc	de
-	inc	hl
-	and	a		;end of name?
-	jr	nz,CKCMD2	;check more characters
-	ld	e,(hl)		;get address in [DE]
-	inc	hl
-	ld	d,(hl)
-	pop	hl		;restore text pointer
+	call	FIND_CMD##		;Search the CALL commands table (bank 1,
+	ret	c			; vector in bank.inc): DE = handler address
 ;
 ;	Check high byte of address for bank dispatch (before CHRGOT,
 ;	so the Z flag from CHRGOT is preserved for bank 0 handlers).
@@ -386,15 +293,6 @@ JPDE_CALB:
 	and	a
 	ret
 ;
-NOTCMD:
-	ld	c,0FFh		; skip till end of name
-	xor	a
-	cpir
-	inc	hl		; skip address
-	inc	hl
-	cp	(hl)		; end of table?
-	jr	nz,CKCMD1	; no, search next
-;
 ;	Here when not a disk command
 ;
 ABORT:
@@ -425,77 +323,20 @@ BASDEV_GO:
 	ld	a,4
 	jp	CALBNK##
 
-;
-;	Table of expanded statements.
-;
-;	Each entry is: name (zero-terminated), address (2 bytes).
-;	Address encoding for the dispatch routine:
-;	  - High byte = 41h: bank 4 jump table entry (called via CALBNK)
-;	  - High byte = C1h: bank 6 jump table entry (bit 15 set, called via CALBNK)
-;	  - Any other high byte: direct call in bank 0
-;
-;	This means bank 4 and 6 jump tables must not exceed 256 bytes
-;	(i.e. must stay within 4100h-41FFh), which allows up to 85 entries each.
-;
-COMMAND:
-	defb	'SYSTEM2',0
-	defw	SYSTEM2
-	defb	'SYSTEM',0
-	defw	SYSTEM
-	defb	'FORMAT',0
-	defw	FORMAT
-	defb	'CHDRV',0
-	defw	CCHDRV##
-	defb	'CHDIR',0
-	defw	CHDIR
-	defb	'MKDIR',0
-	defw	MKDIR
-	defb	'RMDIR',0
-	defw	RMDIR
-	defb	'RAMDISK',0
-	defw	RAMDISK
-	defb	'FDISK',0
-	defw	FDISK
-	defb	'MAPDRV',0
-	defw	MAPDRV
-	defb	'MAPDRVL',0
-	defw	MAPDRVL
-	defb	'LOCKDRV',0
-	defw	CLOCKDRV##
-	defb	'USR',0
-	defw	CUSR##
-	defb	'CURDRV',0
-	defw	CCURDRV##
-	defb	'NEXTOR',0
-	defw	CNEXTOR##
-	defb	'DRVINFO',0
-	defw	CDRVINFO##
-	defb	'DRIVERS',0
-	defw	CDRIVERS##
-	defb	'IDRIVER',0
-	defw	CIDRIVER## or 8000h
-	defb	'UDRIVER',0
-	defw	CUDRIVER## or 8000h
-	defb	'BOOTKEYS',0
-	defw	CBOOTKEYS## or 8000h
-	defb	'EMUKILL',0
-	defw	CEMUKILL## or 8000h
-	defb	'SETSCREEN',0
-	defw	CSETSCREEN## or 8000h
-;
-	defb	0		;end of table
 
 	subttl	Expanded statements - SYSTEM
 ;
 ;	_SYSTEM[("<command_string>")]
 ;
 SYSTEM2:
+HK_SYSTEM2::		;For the CALL commands table in bank 1
 	push hl
 	ld hl,MFLAGS##
 	set 7,(hl)	;SYST2
 	pop hl
 
 SYSTEM:
+HK_SYSTEM::		;For the CALL commands table in bank 1
 	ld	de,CMDTMP	; assume end of statement
 	jr	z,SYSTEM_NO_ARG	; good assumption
 	SYNCHK	'('
@@ -565,6 +406,7 @@ DO_SYSTEM:
 ;	_FORMAT
 ;
 FORMAT:
+HK_CFORMAT::		;For the CALL commands table in bank 1
 	ret	nz
 	push	hl		;save text pointer
 	call	HOKFMT
@@ -599,6 +441,7 @@ FIND_DRV:
 ;	_CHDIR("<new directory>")
 ;
 CHDIR:
+HK_CHDIR::		;For the CALL commands table in bank 1
 	call	CHK_CALL_NAMSCN
 	SYNCHK	')'
 	push	hl		; save text pointer
@@ -612,6 +455,7 @@ CHDIR:
 ;	_MKDIR("<new directory>")
 ;
 MKDIR:
+HK_MKDIR::		;For the CALL commands table in bank 1
 	call	CHK_CALL_NAMSCN
 	SYNCHK	')'
 	push	hl		; save text pointer
@@ -627,6 +471,7 @@ MKDIR:
 ;	_RMDIR("<directory>")
 ;
 RMDIR:
+HK_RMDIR::		;For the CALL commands table in bank 1
 	call	CHK_CALL_NAMSCN
 	SYNCHK	')'
 	ret	nz		; no, let NEWSTT generate 'syntax error'
@@ -660,6 +505,7 @@ RMDIR_NOT_DIR:
 ;	_RAMDISK([<new_size>][,<numeric_variable>])
 ;
 RAMDISK:
+HK_RAMDISK::		;For the CALL commands table in bank 1
 	SYNCHK	'('
 	cp	','		; <new_size> specified?
 	ld	a,0FFh		; assume not
@@ -756,26 +602,16 @@ NUMINT:
 ;	_FDISK
 ;
 FDISK::
+HK_FDISK::		;For the CALL commands table in bank 1
 
 	push	hl
 
-	ld hl,(TXTTAB)
-	ld a,(hl)
-	inc hl
-	ld h,(hl)
-	or h
-	jr z,DO_FDISK_OK
-
-	ld hl,FDISK_PROGRAM_EXISTS_WARNING
-	call PRINT_HL
-	pop hl
+	call	CHK_FDISK##	;Z if there's no BASIC program, else the
+	jr	z,DO_FDISK_OK	; warning was printed (bank 1)
+	pop	hl
 	ei
+	scf			;Tell DO_FDISK (DOS 1 mode) to not do NEW
 	ret
-
-FDISK_PROGRAM_EXISTS_WARNING:
-	db "There's a BASIC program in memory!",13,10
-	db "Save it if you want to keep it,",13,10
-	db "delete it with NEW, then try again.",0
 
 DO_FDISK_OK:
 	ld	a,5
@@ -807,9 +643,11 @@ NEWTXT:	db	3ah, 94h, 0	; ":NEW"
 ;	_MAPDRV(L)
 ;
 MAPDRV:
+HK_MAPDRV::		;For the CALL commands table in bank 1
 	xor	a
 	jr	MAPDRV_DO
 MAPDRVL:
+HK_MAPDRVL::		;For the CALL commands table in bank 1
 	ld	a,1
 
 MAPDRV_DO:
@@ -2128,12 +1966,6 @@ MUL32NOADD:
 ; RESULT IN H'L'HL
 		or	a
         RET
-
-mul32ov:
-        EXX
-		ret
-
-	ret
 
 
 
@@ -3583,11 +3415,12 @@ GETERR::
 	jr	c,GO_ERROR	; yes, file #0 will be closed by MSX-BASIC.
 DOS_UNKNOWN:
 ;
+;	DERMAK only defines the error code; the "J&ERRNAM: ld e,ERRNAM"
+;	entry points (chained with 'LD BC' skip instructions) are written
+;	below only for the errors that are actually raised that way.
+;
 DERMAK	macro	ERRNAM
 ERRNAM	equ	QQQQ
-	defb	1		;; 'LD BC' instruction (skip next 2 bytes)
-J&ERRNAM:
-	ld	e,ERRNAM
 QQQQ	defl	QQQQ+1
 	endm
 ;
@@ -3624,6 +3457,13 @@ QQQQ	defl	DERFST
 ;
 DERLST	equ	QQQQ-1		;
 ;
+	defb	1		;'LD BC' instruction (skip next 2 bytes)
+JDERBFM:
+	ld	e,DERBFM
+	defb	1		;'LD BC' instruction (skip next 2 bytes)
+JDERBDN:
+	ld	e,DERBDN
+;
 	xor	a		;clear NLONLY so that file #0 is closed
 	ld	(NLONLY),a
 	push	de		;save error code
@@ -3656,13 +3496,7 @@ if DEBUG
 JDERIER:ld	e,ERRIER
 	defb	1		;skip 2 bytes
 endif
-JDERIFN:ld	e,ERRIFN
-	defb	1		;skip 2 bytes
-JDERFNF:ld	e,ERRFNF
-	defb	1		;skip 2 bytes
 JDERFAO:ld	e,ERRFAO
-	defb	1		;skip 2 bytes
-JDERRPE:ld	e,ERRRPE
 	defb	1		;skip 2 bytes
 JDERBFN:ld	e,ERRBFN
 	defb	1		;skip 2 bytes
@@ -3966,54 +3800,9 @@ $HOOK	ERRPRT
 	cp	DERLST-DERFST+1	;disk error?
 	ret	nc		;no
 	inc	a		;start with 1 for DJNZ
-	ld	b,a		;find corresponding message
-	ld	hl,DERMSG
-ERPRT1:	ld	a,(hl)
-	and	a
-	inc	hl
-	jr	nz,ERPRT1
-	djnz	ERPRT1
-	dec	hl
+	ld	b,a		;B = message number
 	ld	de,MSGTMP	;copy string to system area
-	push	de
-	ld	bc,MAXMSGLEN
-	ldir
-	ld	e,1		;modify error code
-	pop	hl		;modify error message address
-	ret
-;
-DERMSG:	defb	0
-	defb	'Bad FAT',                 0
-	defb	'Bad file mode',           0
-	defb	'Bad drive name',          0
-	defb	'Bad sector number',       0
-	defb	'File still open',         0
-	defb	'File already exists',     0
-	defb	'Disk full',               0
-	defb	'Too many files',          0
-	defb	'Disk write protected',    0
-	defb	'Disk I/O error',          0
-	defb	'Disk offline',            0
-	defb	'Rename across disk',      0
-;
-	defb	'File write protected',    0
-	defb	'Directory already exists',0
-	defb	'Directory not found',     0
-	defb	'RAM disk already exists', 0
-
-	defb	'Invalid device driver',   0
-	defb	'Invalid device number',   0
-	defb	'Invalid partition number',0
-	defb	'Partition already in use',0
-
-	defb	'File is mounted',         0
-	defb	'Bad file size',           0
-	defb	'Cluster sequence error',  0
-	defb	'Initialization error',    0
-
-;		    '----+----1----+----2----'
-;
-MAXMSGLEN	equ	24+2	;2 extra spaces are for terminators
+	jp	DSKERRMSG##	;In bank 1 (vector in bank.inc)
 
 ;
 ;	Remove hook return

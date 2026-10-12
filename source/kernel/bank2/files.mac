@@ -45,10 +45,6 @@
 ; Corrupts:   AF,BC,DE,HL,AF',BC',DE',HL'
 ;
 ;
-	PROC	ZWR_FAB
-		and	RFM_PG		;Preserve paging mode, clear read
-		or	RFM_ZF		; flag and set zero fill flag.
-		jr	rdwr_fab
 ;
 	PROC	WR_FAB
 		and	RFM_PG		;Preserve paging mode and clear read

@@ -178,9 +178,53 @@ stop_abort:	push	af
 ;
 ; This routine calls various exit routines in user address space.
 ;
+; PUT_USER restores the user slot in page 1 too, but the caller may be code
+; running in bank 4 or 6 of the kernel ROM in page 1 (e.g. the FCB functions):
+; so if the kernel ROM is in page 1, the main bank is selected while the exit
+; routine runs (it may do BDOS calls that need it, e.g. _EXPLAIN), and the ROM
+; and its bank are restored when the exit routine returns.
+;
 ; Entry:  HL = Address of exit routine
 ;
+		push	hl			;Save exit routine address
+		push	af
+		push	bc
+		ld	a,(MASTER_SLOT##)
+		ld	c,a
+		in	a,(0A8h)		;Is the kernel ROM in page 1?
+		rrca
+		rrca
+		xor	c			;Compare the primary slot
+		and	3
+		jr	nz,ge_no_rom
+		bit	7,c
+		jr	z,ge_is_rom
+		ld	a,c			;If expanded, compare also
+		and	3			; the secondary slot
+		ld	hl,0FCC5h		; (from SLTTBL).
+		add	a,l
+		ld	l,a
+		ld	a,(hl)
+		xor	c
+		and	00001100b
+		jr	z,ge_is_rom
+ge_no_rom:	ld	a,0FFh			;FFh = kernel ROM not in page 1
+		jr	ge_save
+ge_is_rom:	ld	a,(MAIN_BANK##)
+		ld	c,a
+		ld	a,(40FFh)		;A := current bank (bank id byte)
+		ld	b,a
+		ld	a,c
+		call	CHGBNK		;Select the main bank
+		ld	a,b
+ge_save:	ld	l,a			;L := bank to restore
+		pop	bc
+		pop	af
+		ex	(sp),hl			;(SP) := bank, HL := exit routine
 		push	hl
+		ld	hl,?GE_RESTORE##-OFFSET	;Exit routine will return to
+		ex	(sp),hl			; PUT_BDOS, which will return
+		push	hl			; to ge_restore.
 		ld	hl,PUT_BDOS##
 		ex	(sp),hl
 		push	hl

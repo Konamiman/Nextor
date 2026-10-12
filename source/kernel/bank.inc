@@ -24,12 +24,22 @@ GETSLOT	equ	402Dh	;GETSLOT routine referenced by _XFER
 	public  CHGBNK
 CHGBNK  equ     7FD0h
 ;
-; Generate inter-bank call anchors.
+; Generate inter-bank call anchors (in bank 1), or define B1V_NAME as the
+; address of the anchor of NAME (in the other banks) to call it from there
+; with CALBNK, A=B.INIT, IX=B1V_NAME.
+;
+QQQQ	defl	$
 ;
 BPROC	macro	BNO,NAME
 if BANK eq B.&BNO
 	jp	NAME##
+else
+ifnb <NAME>
+	public	B1V_&NAME
+B1V_&NAME	equ	QQQQ
 endif
+endif
+QQQQ	defl	QQQQ+3
 endm
 
 else
@@ -106,6 +116,11 @@ INITVECT:
 	BPROC	INIT,	MAPBIO
 	BPROC	INIT,	BOOT_MENU
 	BPROC	INIT,	SKIP_FIRM
+	BPROC	INIT,	SETHOOKS
+	BPROC	INIT,	DSKERRMSG
+	BPROC	INIT,	FIND_CMD
+	BPROC	INIT,	CHK_FDISK
+	BPROC	INIT,	PRINT_HELP
 	
 ;	Entries for KERNEL code.
 ;

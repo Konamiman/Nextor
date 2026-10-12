@@ -879,8 +879,10 @@ INIT_SUB_DIR:
 		ret
 ;
 ;
-DOT_DOT_NAME:	db	"."
-DOT_NAME:	db	".       ","   "
+	PROC	DOT_DOT_NAME		;Also used by del.mac
+		db	"."
+	PROC	DOT_NAME
+		db	".       ","   "
 ;
 ;
 ;------------------------------------------------------------------------------
@@ -967,22 +969,10 @@ not_root:	ld	bc,-4			;Point back at start cluster
 		push	hl			; current date and time.
 		
 		push	ix
-		push	iy
-		ex	af,af'
-		push af
-		ex af,af'
-		ld	ix,GT_DATE_TIME##
-		ld	(BK4_ADD##),ix
-		ld	ix,C4PBK##
-		ld	iy,(MASTER_SLOT##-1)
-		call	CALSLT
-		ex	af,af'
-		pop af
-		ex af,af'
-		pop	iy
+		ld	ix,GT_DATE_TIME##	;In bank 4
+		pcall	CALL4_PRESERVE_ALT
 		pop	ix
-		
-		;pcall	GT_DATE_TIME
+
 		ex	(sp),hl
 ;
 		ld	a,c

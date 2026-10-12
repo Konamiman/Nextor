@@ -1,0 +1,847 @@
+	.z80
+	name('dskfmt')
+	title	MSX-DOS 2 KERNEL   Copyright (1986)  IS Systems Ltd.
+	subttl	The _FORMAT function call (DOS 2 mode)
+;******************************************************************************
+;
+	INCLUDE	../macros.inc
+	INCLUDE	../const.inc
+	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
+;
+;    The _FORMAT function call and the routines used only by it, moved here
+; from bank 2 (misc.mac and val.mac) since they are not used often.  They run
+; in the BDOS context (called by KBDOS through C4PBK, so page 0 has the kernel
+; code segment, page 2 the kernel data segment and IY=RAM_BASE), and call the
+; routines that stay in bank 2 with pcall.
+;
+MAXCLUS_FAT12	equ	4084
+;
+RD_CMD	equ	0		;Command codes for CALL_UNIT
+WR_CMD	equ	1		; (as defined in val.mac).
+DP_CMD	equ	3
+CH_CMD	equ	4
+FMT_CMD	equ	5
+;
+;------------------------------------------------------------------------------
+;
+	public	?F_FMT
+?F_FMT:
+;
+;    This is the "format disk" KBDOS function.  It is passed the logical drive
+; number  to  be  formatted  and  a pointer to a buffer in the TPA space. This
+; buffer must not cross a segment boundary.
+;
+; Entry:      A = Choice number:
+;                  00h = get choice string pointer (MSX-DOS drivers only)
+;                  80h = get choice string into buffer
+;                  01h..09h = do format with given choice
+;                  FBh..FFh = new boot sector / quick format
+;             B = Logical drive number
+;            HL = Pointer to working buffer area (if A=01h..09h)
+;            DE = Size of working buffer area (if A=01h..09h)
+;            HL = Pointer for the choice string (if A=80h)
+;            DE = Size of buffer for choice string (if A=80h, max 512)
+; Returns:    A = Error code
+;             B = Slot address of choice string (if A=0 on entry)
+;            HL = Pointer to choice string (if A=0 on entry)
+;            (A arrives in C, as for all the KBDOS functions in banks 4 and 6)
+; Notes:
+; - Choice 00h works for drives assigned by MSX-DOS drives only
+;   (obsolete, 80h should be used instead)
+; - All other choices work for drives assigned by MSX-DOS drives
+;   and for drives assigned to Nextor devices that are floppy disks;
+;   FBh-FDh work on any drive, and FEh-FFh on mounted files too;
+;   on Nextor drives FEh-FFh need a FAT12 disk (see nxt_new_boot_sec)
+
+		ld	a,c
+		ex	af,af'			;Save choice number in A'
+		push	hl
+		pop	ix			;IX -> buffer pointer
+		ld	a,b
+		pcall	LG_TO_PHYS		;Find the physical drive
+		ld	a,(hl)			; and error get a pointer
+		inc	hl			; to the unit descriptor
+		ld	h,(hl)			; into HL.
+		ld	l,a
+		or	h			;Return an error if the
+		ld	a,c			; drive does not exist.
+		ret	z
+;
+		ex	af,af'			;If choice <> 00h then
+		or	a			; jump to actually do the
+		jr	nz,fmt_not_zero		; format operation.
+;
+		call	DSK_CHOICE		;Get prompt string from
+		push	hl			; driver.
+		pop	ix
+		ld	b,(ix+UD_SLOT##)	; B := slot address of driver
+		ex	de,hl			;HL := address of string
+		or	a
+		ret
+;
+fmt_not_zero:
+		cp	80h			;80h => get choice string
+		jr	nz,do_format		; into buffer at IX.
+;
+		push	ix
+		pop	bc			;BC = buffer pointer
+		jp	?DSK_CHOICE_BUF##	;In format.mac
+;
+;
+do_format:	ex	af,af'
+		pcall	FL_UD			;Flush and invalidate any
+		pcall	INV_UD			; buffers for the drive.
+;
+		push	hl			;Save unit descriptor
+check_buf_loop:	push	de			;Save buffer size
+		push	ix
+		pop	de			;DE -> start of buffer
+		xor	a
+		pcall	GET_SEGMENT		;Find out the segment.
+		ld	hl,4000h
+		or	a
+		sbc	hl,de			;HL := size of room in page-0
+		ex	(sp),hl			;HL := buffer size
+		pop	bc			;BC := size of room in page-0
+		sbc	hl,bc			;If whole of buffer is in
+		jr	c,got_buf_hl_bc		; page-0 then skip.
+		sbc	hl,bc			;Skip if bottom half of buffer
+		jr	c,got_buf_bc		; is bigger than top.
+		add	hl,bc
+		ex	de,hl			;DE := reduced buffer size
+		add	ix,bc			;IX := adjusted buffer pointer
+		jr	check_buf_loop
+;
+got_buf_hl_bc:	add	hl,bc
+		ld	b,h			;BC := size of buffer to use
+		ld	c,l
+got_buf_bc:	set	7,d
+		push	de			;IX -> start of buffer to
+		pop	ix			;      use in page-2.
+		ld	d,a			;D := segment number
+		ex	af,af'			;A := choice number (1...9)
+		pop	hl			;HL -> unit descriptor
+;
+		call	DSK_FORMAT		;Do the format operation
+;
+		ld	bc,UD_TIME##		;Zero the UD_TIME field to
+		add	hl,bc			; ensure that we will get
+		ld	(hl),0			; a new UPB next time.
+
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+DSK_CHOICE:
+;
+;    This routine calls the "choice" routine of the disk driver defined by the
+; unit  descriptor in HL.  It does a special test for a pointer returned value
+; of 0FFFFh since this indicates that the drive does  not  support  formatting
+; and so an error is returned.
+;
+; Entry:     HL = Address of unit descriptor
+; Returns:    A = Error code (flags not set)
+;	     DE = Address of choice string for this unit
+; Corrupts:  AF,BC,DE
+;
+;
+		ld	a,CH_CMD		;Do the choice command and
+		pcall	CALL_UNIT		; give up if any error
+		ret	nz			; (shouldn't be!)
+;
+		ld	a,e			;Null pointer is OK.
+		or	d
+		ret	z
+;
+		push	hl
+		ex	(sp),ix
+		ex	de,hl			;HL := address of string
+		ld	a,(ix+UD_SLOT##)	; A := slot address of driver
+		call	RDSLT
+		ex	de,hl
+		ex	(sp),ix
+		pop	hl			;If returned string is
+		or	a			; null then return an
+
+		ld	a,.IFORM##		; error.
+		ret	z
+		xor	a
+		ret
+
+;
+;
+;-----------------------------------------------------------------------------
+;
+DSK_FORMAT:
+;
+;    This routine calls the "format" routine of the disk  driver  defined  by
+; the  unit  descriptor  in  HL.  It shuffles the parameters around a bit and
+; calls the disk driver to do the actual format.  If this is  successful then
+; it reads the boot sector in and puts on a new boot routine (currently null)
+; and also puts on a random volume id.  This new boot sector is then  written
+; back out to the disk.
+;
+;    If the choice parameter is FFh then  this  function  does  a  "new  boot
+; sector" operation.  This determines the disk format from the FATid byte and
+; generates a new boot sector containing  the  correct  parameter  block  and
+; volume-id.   This  can  be  useful for modifying disks which were formatted
+; under MSX-DOS 1 and is used by the "FIXDISK" command.
+;
+;    The choice FEh is the same as FFh, but only the disk parameters are updated
+; correctly and the volume id does not overwrite the boot program.
+;
+;    The choice FDh will assume that disk parameters are correct, and will
+; put a manufacturer name "MSXDOS2 " at the beginning of the boot sector,
+; plus a extended block (29h, plus a volume name "NO NAME", plus a "FAT12" or
+; "FAT16" mark, plus a volume id) after the disk parameters, to make up
+; a standard boot disk. If there is already an extended block, only the
+; manufacturer name will be set.
+;
+;    The choice FCh is the same as FCh, except that if the disk is FAT12,
+; a MSX-DOS 2.20 style boot sector (with the "VOL_ID" string and DOS1 boot code)
+; will be built.
+;
+;    The choice FBh will do a "quick format", that is, it will clear the FAT
+; and root directory, thus effectively making the disk as if it were
+; just formatted.
+;
+;    Disk errors will be reported as a return error code. DISK_ERR
+; will not be invoked.
+;
+; Entry:      A =  Choice number (1...9, or FCh..FFh)
+;	      D =  Segment number for buffer in page-2
+;	     IX -> Buffer in page-2
+;	     BC =  Size of buffer in page-2
+;	     HL =  Address of unit descriptor
+; Returns:    A = Error code (flags not set)
+; Corrupts:  AF,BC,DE,IX,AF'
+;
+;
+
+		push	iy			;IY must keep pointing to
+		push	hl			; RAM_BASE after the gate
+		pop	iy			; (BUILD_UPB tests RW_FLAGS
+		ld	e,a			; through it).
+		call	FMT_GATE
+		ld	a,e
+		pop	iy
+		jr	nc,fmt_ok_gate
+		ld	a,.IFORM##
+		ret
+fmt_ok_gate:
+		cp	0FEh
+		jr	nc,new_boot_sec
+		cp	0FBh
+		jp	nc,new_choices
+;
+		ld	e,c
+		ld	c,d			; C := page-2 segment
+		ld	d,b			;DE := buffer size
+		ld	b,a			; B := choice number
+		ld	a,FMT_CMD
+		pcall	CALL_UNIT		;Do the format command
+		ret	nz			; and give up if error.
+
+		push	hl			;HL = unit descriptor (IY is
+		ld	de,UD_DFLAGS##		; RAM_BASE here, see above).
+		add	hl,de
+		bit	UF_DBD,(hl)
+		pop	hl
+		jp	nz,nxt_fdd_boot_sec	;Nextor FDD: driver already
+						; wrote valid BPB, just add
+						; DOS 2 extras.
+
+		inc	a			;At the moment
+;
+;
+new_boot_sec:	push	af
+
+		ld	ix,UPB_BUF##
+
+		ld	de,0		; Try to read the boot sector
+					; (sector 0) from the disk and
+					; if there was any error then
+					; give up immediately.
+		ld	bc,(DATA_SEG##)
+		ld	b,1
+		pcall	READ_UNIT
+
+		pop	bc
+		ret	nz
+;
+		push	bc			;Save choice again.
+		pcall	FIND_UPB
+		push	af
+		push	hl
+		ld	de,UD_DFLAGS##
+		add	hl,de
+		bit	UF_DBD,(hl)
+		pop	hl
+		jp	nz,nxt_new_boot_sec	;Nextor drive?
+		pop	af
+		ld	de,1
+		jr	nz,upb_read_fat
+		ld	e,(ix+UPB_RESERVED_SECTORS##)
+		ld	d,(ix+UPB_RESERVED_SECTORS##+1)
+upb_read_fat:				;Try to read the first FAT
+		ld	bc,(DATA_SEG##)		; sector and if there was
+		ld	b,1			; any error then give up
+						; immediately.
+		pcall	READ_UNIT
+		pop	bc			;Get back choice value
+
+		ret	nz
+;
+		ld	a,(ix+1)		;Error if second and third
+		and	(ix+2)			; bytes of the FAT are not
+		inc	a			; both FFh.
+		jr	nz,not_dos1_disk
+		ld	a,(ix)			;Also error if FATid byte
+		cp	0F8h			; is not F8h...FFh.
+		jr	c,not_dos1_disk
+;
+		ld	c,a			;C := FATid byte
+		push	bc
+		ld	de,0			;Try to read the boot sector
+
+		ld	bc,(DATA_SEG##)		; from the disk and if there
+		ld	b,1			; was any error then give up
+						; immediately.
+		pcall	READ_UNIT
+		pop	bc			;Restore choice and FATid byte.
+		ret	nz
+;
+		push	bc
+		ld	a,c
+;
+		call	MAKE_UPB		;Create the disk parameter
+						; block in the boot sector.
+		pop	bc
+		ret	nz			;Give up if there was an error.
+;
+chk_upb_only:	bit	0,b			;If choice code is "upb only"
+		jr	z,put_boot_sec		; skip to write out boot.
+;
+got_boot_sec:	push	hl
+		xor	a
+		call	SET_BOOT_EX
+		call	SET_RANDOM_VOLID	; Write new volume id even if there is already one,
+						; for compatibility with previous DOS version
+		ld	hl,UPB_BUF##+NEW_BOOT_SZ+1Eh
+		ld	de,512-NEW_BOOT_SZ-1Eh	;UPB_BOOT_CODE##+NEW_BOOT_SZ-256
+		ld	b,0
+zero_old_upb:	ld	(hl),b			;Zero the rest of the boot
+		inc	hl			; sector to keep things
+		dec	de			; neat and tidy.
+		ld	a,d
+		or	e
+		jr	nz,zero_old_upb
+already_got_volid:
+		pop	hl
+;
+put_boot_sec:	ld	ix,UPB_BUF##
+		ld	de,0			;Now try to write this new
+
+		ld	bc,(DATA_SEG##)		; boot sector out to the
+		ld	b,1			; disk and return with
+						; any error which may have
+		ld	a,WR_CMD		; been generated.
+		pcall	CALL_UNIT
+		ret
+;
+
+	;--- Nextor FDD: driver wrote valid boot sector, just add DOS 2 extras.
+
+nxt_fdd_boot_sec:
+		ld	ix,UPB_BUF##
+		ld	de,0			;Read sector 0 (boot sector)
+		ld	bc,(DATA_SEG##)
+		ld	b,1
+		pcall	READ_UNIT
+		ret	nz
+		jr	got_boot_sec
+;
+;
+not_dos1_disk:	ld	a,.NDOS##		;Error if was no valid
+		ret				; FATid byte.
+;
+;
+;
+NEW_BOOT_NAME:	db	0EBh,0FEh,090h		;Dummy 8086 jump instruction
+		db	"NEXTOR20"
+;
+;
+;    The choices allowed by DSK_FORMAT on each type of drive.  Drives on
+; MSX-DOS drivers and Nextor floppy disk drives allow all of them.  Other
+; Nextor drives allow only the FBh-FDh choices (quick format and boot
+; sector rebuild preserving the disk parameters): they work through
+; regular sector I/O on any drive with a valid FAT12/16 filesystem (e.g.
+; FORMAT /Q or the FDh choice on a hard disk / SD card partition).  The
+; physical format choices (1-9) are rejected (fmt_devcmd_routine would
+; reject them anyway, this just fails earlier), and so are FEh-FFh, which
+; are meant for floppy disks.  The exception are the mounted files (disk
+; images), where FEh-FFh are allowed (this is what FIXDISK needs); as on
+; Nextor floppy disk drives, they work on FAT12 disks only (see
+; nxt_new_boot_sec).
+;
+; Entry:     IY = Address of unit descriptor
+;	      A = Choice number
+; Returns:   Cy = 1 if the choice is not allowed on the drive
+; Corrupts:  AF
+;
+FMT_GATE:
+		or	a
+		bit	UF_DBD,(iy+UD_DFLAGS##)
+		ret	z
+		bit	UF_FDD,(iy+UD_DFLAGS##)
+		ret	nz
+		cp	0FBh
+		ret	c
+		cp	0FEh
+		ccf
+		ret	nc
+		bit	UF_MNT,(iy+UD_FLAGS##)
+		scf
+		ret	z
+		ccf
+		ret
+;
+
+;		------------------------------------
+
+		;Jump here if choice is FBh, FCh or FDh
+		;(make a standard or a DOS 2.20 boot sector, or quick format)
+
+new_choices:	push	af
+		pcall	BUILR_UPB
+		jr	nz,std_boot_err
+		call	?NEW_UPB6##		;In upb.mac
+
+		pop	af
+		cp	0FBh
+		jr	z,do_quick_format
+		cp	0FDh
+		jr	z,do_boot_sec
+
+		;Choice is FCh:
+		;Check if drive is FAT12, if so put DOS 2.20 boot sector,
+		;otherwise put standard boot sector
+
+		push	hl
+		pop	ix
+		bit	UF_F12,(ix+UD_FLAGS##)
+		ld	a,1
+		jr	z,do_boot_sec
+		xor	a
+
+do_boot_sec:	push	hl
+		call	SET_BOOT_EX
+		call	nz,SET_RANDOM_VOLID
+		pop	hl
+
+		;Write the boot sector back to disk.
+		;Note that we do NOT clear the rest of the boot sector,
+		;since there may be a partition table here.
+
+		jr	put_boot_sec
+
+std_boot_err:	pop	bc	;Throw away pushed AF (choice)
+		ret
+
+	;--- FEh/FFh on a Nextor drive (floppy disk drive or mounted file).
+	;    Nextor drivers can't provide disk parameters for a media ID
+	;    (DP_CMD is a no-op, MAKE_UPB would use a stale DPB), so the
+	;    disk must already have a valid UPB, which is kept as is:
+	;    FEh rewrites the boot sector unchanged, FFh adds the MSX-DOS 2
+	;    boot code and VOL_ID block. Only FAT12 disks with a 16 bit
+	;    total sector count are supported, since the VOL_ID block
+	;    overlaps the 32 bit total sector count, and MSX-DOS 2 boot
+	;    sectors are a FAT12 thing (the FCh choice does the same).
+	;    Input: IX = UPB_BUF with the boot sector, HL = unit descriptor,
+	;           stack = AF from FIND_UPB, choice
+
+nxt_new_boot_sec:
+		pop	af
+		pop	bc			;B = choice
+		jr	nz,not_dos1_disk	;No valid UPB: "Not a DOS disk"
+		ld	a,(ix+UPB_TOTAL_SECTORS##)
+		or	(ix+UPB_TOTAL_SECTORS##+1)
+		jr	z,nxt_new_boot_rej
+		push	hl
+		ld	de,UD_DPB_ADDRESS##	;DE := max cluster number from
+		add	hl,de			; the DPB just built by FIND_UPB
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+		ld	de,14
+		add	hl,de
+		ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		ld	hl,MAXCLUS_FAT12+1	;Cy := FAT16
+		or	a
+		sbc	hl,de
+		pop	hl
+		jp	nc,chk_upb_only
+nxt_new_boot_rej:
+		ld	a,.IFORM##
+		ret
+
+;		------------------------------------
+
+		;Quick format (choice FBh).
+		;Note that at this point, HL points that unit descriptor
+		;and we know already that the disk is valid.
+
+do_quick_format:
+		push	hl
+		pop	ix
+
+		ld	hl,UPB_BUF##		;Clear sector buffer only once,
+		ld	de,UPB_BUF##+1		;as we will be writing
+		ld	(hl),0			;mostly zeros to disk.
+		ld	bc,512-1
+		ldir
+
+		ld	e,(ix+UD_RESERVED_SECTORS##)
+		ld	d,(ix+UD_RESERVED_SECTORS##+1)	;DE = First FAT sector
+		xor	a			;Assume we will work exclusively
+		ld	(DIO_EX_SECTOR##),a	; on the first 32MB of the disk.
+		ld	b,(ix+UD_NUMBER_OF_FATS##)	;B = Number of FATs
+
+		;--- Loop for all FATs
+
+qf_fats_loop:	push	bc
+		
+		;* Clear the first FAT sector
+
+		ld	hl,UPB_BUF##
+		ld	a,(ix+UD_MEDIA_DESC_BYTE##)
+		ld	(hl),a
+		inc	hl
+		ld	(hl),0FFh
+		inc	hl
+		ld	(hl),0FFh
+		bit 	UF_F16,(ix+UD_FLAGS##)
+		jr	z,qf_is_notfat16
+		inc	hl
+		ld	(hl),0FFh
+qf_is_notfat16:	
+		ld	b,1
+		call	qf_write_sec
+		jr	nz,qf_error1
+
+		ld	hl,0
+		ld	(UPB_BUF##),hl		;Clear again the sector buffer
+		ld	(UPB_BUF##+2),hl
+
+		;* Clear other FAT sectors, if any
+
+		ld	a,(ix+UD_SECTORS_PER_FAT##)
+		dec	a
+		jr	z,qf_okfat
+
+		ld	b,a
+		call	qf_write_sec
+		jr	nz,qf_error1
+
+		;* Go for next FAT if any
+
+qf_okfat:	pop	bc
+		djnz	qf_fats_loop
+
+		;--- Now clear the root directory
+
+		ld	e,(ix+UD_FIRST_ROOT_DIR_SECTOR##)	;DE = first directory sector
+		ld	d,(ix+UD_FIRST_ROOT_DIR_SECTOR##+1)
+		ld	b,(ix+UD_WHOLE_DIR_SECTORS##)		;B = whole sectors for root directory
+		ld	a,(ix+UD_ODD_DIR_ENTRIES##)
+		or	a
+		jr	z,qf_no_ode
+		inc	b
+qf_no_ode:
+		jr	qf_write_sec
+
+qf_error1:	pop	bc
+		ret
+
+
+;This routine writes the sector data from UPB_BUF
+;repeatedly on consecutive sectors.
+;Input:  IX = Unit descriptor
+;        DE = First sector number
+;        B  = Number of sectors to write
+;Output: A  = Error code (Z set appropriately)
+;        DE = DE + B (except on error)
+;Preserves IX
+
+qf_write_sec:	push	ix
+		push	ix
+		pop	hl
+		ld	ix,UPB_BUF##
+		ld	a,(DATA_SEG##)
+		ld	c,a
+qf_wrsec_loop:
+		push	de
+		push	bc
+		ld	b,1
+		call	WRITE_UNIT
+		pop	bc
+		pop	de
+		inc	de
+
+		or	a
+		jr	nz,qf_wrsec_end
+
+		djnz	qf_wrsec_loop	;Sets Z flag when B=0
+qf_wrsec_end:
+		pop	ix
+		ret
+
+
+;		------------------------------------
+
+;This routine generates the extended block or the DOS 2.20 specific boot sector data.
+;Input:    A=0 for DOS 2.20 boot sector, A<>0 for standard boot sector.
+;	   HL=Address of unit descriptor (used for standard boot sector only)
+;Output:   Z if the disk had already the data of the type requested, NZ otherwise
+;Corrupts: AF, HL, DE, BC, IX
+
+SET_BOOT_EX:	
+		;Put manufacturer name
+
+		push	hl
+		ld	hl,NEW_BOOT_NAME
+		ld	de,UPB_BUF##
+		ld	bc,11
+		ldir
+		pop	hl
+
+		ld	ix,UPB_BUF##
+		or	a
+		jr	nz,set_boot_ex_std
+
+		;DOS 2 boot sector
+
+		push	hl
+		pcall	GET_VOLID
+		ld	a,b
+		dec	a
+		ld	hl,UPB_BUF##+UPB_DIRTY_FLAG##
+		jr	z,set_boot_ex_end
+		ld	hl,NEW_BOOT
+		ld	de,UPB_BUF##+UPB_BOOT_CODE##
+		ld	bc,NEW_BOOT_SZ
+		ldir
+		pop	hl
+		ld	a,1
+		or	a
+		ret
+
+		;Standard boot sector
+
+set_boot_ex_std:
+		push	hl
+		pcall	GET_VOLID
+		ld	a,b
+		cp	2
+		ld	hl,UPB_BUF##+UPB_RESERVED##
+		jr	z,set_boot_ex_end
+		ld	hl,NEW_BOOT_STD
+		ld	de,UPB_BUF##+UPB_PHYSICAL_DRIVE##
+		ld	bc,NEW_STDBOOT_SZ
+		ldir
+
+		ld	ix,UPB_BUF##		;Set big sector count to zero
+		ld	a,(ix+UPB_TOTAL_SECTORS##)	;if small sector count is not zero
+		or	(ix+UPB_TOTAL_SECTORS##+1)
+		jr	z,set_boot_ex_bigs
+		ld	(ix+UPB_BIG_TOTAL_SECTORS##),0
+		ld	(ix+UPB_BIG_TOTAL_SECTORS##+1),0
+		ld	(ix+UPB_BIG_TOTAL_SECTORS##+2),0
+		ld	(ix+UPB_BIG_TOTAL_SECTORS##+3),0
+set_boot_ex_bigs:
+
+		ld	(ix+UPB_BOOT_CODE##),0	;Clear old DOS1 jump, if any
+		ld	(ix+UPB_BOOT_CODE##+1),0
+
+		pop	hl
+		ld	bc,UD_FLAGS##
+		add	hl,bc
+		bit	UF_F16,(hl)
+		ld	a,"2"
+		jr	nz,fatmark_ok
+		ld	(UPB_BUF##+UPB_FILESYSTEM##+4),a	;Set "FAT12" mark if necessary
+fatmark_ok:
+		or	a
+		ret
+
+set_boot_ex_end:
+		ld	(hl),0	;Clear dirty disk flag
+		pop	hl
+		ret
+
+
+;This routine generates a random volume ID in the boot sector at UPB_BUF.
+;Corrupts AF, BC, HL
+
+SET_RANDOM_VOLID:
+		ld	hl,(RANDOM##)
+
+		ld	bc,(RANDOM##+2-1)	;Get the current 23-bit random
+						; number value and shift
+						; the top bit of each byte
+		xor	a
+		srl	l			; into A to make up a 4th
+		rla				; byte.  This ensures that
+		srl	h			; all 23 bits are used and
+		rla				; that each byte is 00h...7Fh.
+		srl	b
+		rla
+		ld	c,a
+		ld	(UPB_BUF##+UPB_RANDOM_ID##),hl   ;Store this as the volume-id
+		ld	(UPB_BUF##+UPB_RANDOM_ID##+2),bc ; in the boot sector.
+		ret
+
+;		------------------------------------
+
+		;* Standard boot sector after disk parameters and big sector count
+
+NEW_BOOT_STD:
+	db	0	;Physical drive num
+	db	0	;Reserved (used as dirty disk flag)
+	db	29h	;Extended block signature
+	db	0FFh,0FFh,0FFh,0FFh	;Volume id
+	db	"NO NAME    "		;Volume name
+	db	"FAT16   "	;FAT12 or FAT16 mark
+
+NEW_STDBOOT_SZ	equ	$-NEW_BOOT_STD
+
+
+		;* DOS 2.20 boot sector after disk parameters
+
+NEW_BOOT:
+	INCLUDE	../bank2/bootsect.mac
+
+NEW_BOOT_SZ	equ	$-NEW_BOOT
+;
+;------------------------------------------------------------------------------
+;
+MAKE_UPB:
+;
+;   This routine makes up a UPB from a FAT-id byte value which must be in  the
+; range  0F8h...0FFh.   It could be done by a simple table lookup and copy but
+; this way is much more interesting (and actually shorter).
+;
+; Entry:       IX -> buffer for creating UPB in
+;		HL = Address of unit descriptor
+;		A  = FAT-id byte (0F8h...0FFh)
+; Returns:     None
+; Corrupts:    AF,BC,DE
+;
+;
+		ld	b,a
+		ld	a,DP_CMD		;Try to get a DPB for this
+		pcall	CALL_UNIT		; FATid byte and give up if
+		ret	nz			; not supported.
+;
+		push	hl
+		ld	de,UD_DPB_ADDRESS##
+		add	hl,de
+		ld	e,(hl)			;DE -> address of DPB
+		inc	hl
+		ld	d,(hl)
+		push	de
+		ex	(sp),ix			;IX -> address of DPB
+		pop	hl			;HL -> buffer
+		push	hl
+		ld	de,UPB_SECTOR_SIZE##
+		add	hl,de			;Start from UPB.
+;
+		ld	c,(ix+2)		;Get sector size.
+		ld	b,(ix+3)
+		ld	(hl),c
+		inc	hl
+		ld	(hl),b
+		inc	hl
+		ld	a,(ix+6)		;Get cluster mask and increment
+		inc	a			; it by one to get sectors
+		ld	(hl),a			; per cluster
+		inc	hl
+		ld	c,(ix+8)		;Get number of reserved
+		ld	b,(ix+9)		; sectors.
+		ld	(hl),c
+		inc	hl
+		ld	(hl),b
+		inc	hl
+		ld	a,(ix+10)		;Get media descriptor byte.
+		ld	(hl),a
+		inc	hl
+		ex	de,hl
+		ld	l,(ix+12)		;Get first data sector
+		ld	h,(ix+13)		; and save it for later use.
+		push	hl
+		ld	c,(ix+17)		;Get first directory sector.
+		ld	b,(ix+18)
+		or	a
+		sbc	hl,bc			;Calc no. of directory sectors.
+		ld	b,(ix+5)		;Get directory shift and
+dirsize_loop:	add	hl,hl			; calc no. of directory
+		djnz	dirsize_loop		; entries for the whole sector.
+		dec	hl
+		ld	l,(ix+11)		;Patch the low byte in case
+		dec	l			; of partial sectors, taking
+		inc	hl			; care the case of 0 and FFh,
+		ex	de,hl			; because MSX DPB has only one
+		ld	(hl),e			;  byte for no. of entries.
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ex	de,hl
+		ld	l,(ix+14)		;Get last cluster number and
+		ld	h,(ix+15)		; decrement it by one to get
+		dec	hl			; number of clusters.
+		ld	b,(ix+7)		;Get cluster shift and
+		code	mvi c			; calc no. of data sectors.
+secsize_loop:	add	hl,hl
+		djnz	secsize_loop
+		pop	bc			;Add the first data sector
+		add	hl,bc			; to it to get total number
+		ex	de,hl			; of sectors.
+		ld	(hl),e
+		inc	hl
+		ld	(hl),d
+		inc	hl
+		ld	a,(ix+1)		;Get media descriptor byte
+		ld	(hl),a
+		inc	hl
+		ld	a,(ix+16)		;Get size of FAT and pad with
+		ld	(hl),a			; zero to make word.
+		inc	hl
+		xor	a
+		ld	(hl),a
+		pop	ix			;Restore buffer address
+		pop	hl			; and unit descriptor.
+		ret				;Return with no error (zero).
+;
+;
+;
+;------------------------------------------------------------------------------
+;
+; Input for WRITE_UNIT:
+; B  = Number of sectors
+; DE = First sector (3rd byte is always 0)
+; HL = Unit descriptor
+; IX = Transfer address
+;
+WRITE_UNIT:
+		xor a
+		ld (DIO_EX_SECTOR##),a
+		ld	a,WR_CMD
+		jp	?CALL_UNIT##-OFFSET
+;
+;------------------------------------------------------------------------------
+;
+	end

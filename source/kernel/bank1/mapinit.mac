@@ -1031,20 +1031,6 @@ RESET_EXX_D:
     ret
 
 
-; Returns NZ for superturbo mode, Z otherwise
-
-IS_SUPER_TURBO:
-	ld	a,(MSXVER)
-	cp	3
-	ret
-
-	push	hl
-	ld	hl,(MAP_TAB##)
-	inc	hl
-	bit	2,(hl)
-	pop	hl
-	ret
-
 ;
 ;-----------------------------------------------------------------------------
 ;

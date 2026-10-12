@@ -261,17 +261,12 @@ CAPSOFF:
     ALIGN 781Fh
 ;-----------------------------------------------------------------------------
 ;
-; Null message. The address of this message can be returned by
-; the CHOICE routine in the disk driver when the device can't be formatted.
+; Null message. CHO_ENTRY returns its address (781Fh) since formatting
+; is not supported via that entry point. (In Nextor 2 the drivers could also
+; return 781Fh, or 7820h for a "1 - Single side / 2 - Double side" string that
+; was here; Nextor 3 drivers return a choice number instead.)
 
 null_message:
-	db	0
-
-; "Single side/double side" message, can be used when driving
-; a legacy MSX disk drive
-
-	db	"1 - Single side",13,10
-	db	"2 - Double side",13,10
 	db	0
 
 ;-----------------------------------------------------------------------------
@@ -1172,25 +1167,6 @@ KANJI_BOOT_ERROR:
 KB_RESUME:
 	ld	sp,BOOTAD+512		;Same stack as the caller had
 	jp	KANJI_BOOT_RESUME##
-
-;-----------------------------------------------------------------------------
-;
-; Read the MBR of the device whose entry in KERNEX_DOS1
-; is pointed by IY. Returns the disk error in A.
-; Corrupts AF, BC, DE, HL, IX, IY.
-
-READ_BOOT:
-	ld	de,0
-	ld	(TMP_SEC##),de
-	ld	(TMP_SEC##+2),de
-	ld	a,(iy+UD1_DEVICE_NUMBER##)
-	ld	bc,0100h	;B = 1 sector, C = 0 (media descriptor not known yet)
-	ld	de,TMP_SEC##
-	ld	hl,($SECBUF##)
-	or	a
-	ld	ix,DRIVER.READ_WRITE_ENTRY##
-	jp	DO_CALBNK
-
 
 ;-----------------------------------------------------------------------------
 ;

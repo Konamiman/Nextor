@@ -5,7 +5,6 @@
 	jentry	F_GENV
 	jentry	F_SENV
 	jentry	F_FENV
-	jentry	GET_ENV
 
 	jentry	F_FOPEN
 	jentry	F_FCLOSE
@@ -25,7 +24,6 @@
 	jentry	F_WRBLK
 
 	jentry	F_GPART
-	jentry	GDRIVER
 	jentry	AUTODRV
 	jentry	MKDPB
 

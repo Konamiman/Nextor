@@ -929,8 +929,14 @@ _PROMPT:
 ...	      < call	_PUT_USER >
 ;
 		ld	iy,(MASTER_SLOT##-1)
-		ld	ix,($PROMPT##)	;Call prompt routine with user hook
-		call	CALSLT	; active.
+		ld	hl,(BK4_ADD##)	;Call prompt routine with user hook
+		push	hl		; active, via CALLB0 since bank 4 or 6
+		ld	hl,($PROMPT##)	; may be selected in the master slot
+		ld	(BK4_ADD##),hl	; (when the disk driver is called from
+		ld	ix,CALLB0##	; code in one of these banks).
+		call	CALSLT
+		pop	hl
+		ld	(BK4_ADD##),hl
 ;
 ...	      < call	_PUT_BDOS >
 		pop	af
