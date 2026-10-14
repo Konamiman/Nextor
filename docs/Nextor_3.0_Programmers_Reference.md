@@ -994,6 +994,8 @@ These routines are compatible with the [UNAPI RAM helper specification](https://
 including the extended BIOS based discovery mechanism; this means that any application program that relies on the presence of the UNAPI RAM helper will work out of the box
 with Nextor, without needing to first install a standalone helper.
 
+The mapper support routines, and thus these new routines, are not available when Nextor runs in MSX-DOS 1 mode (the extended BIOS calls described in "5.2 Mapper variables and routines" in the MSX-DOS 2 Program Interface Specification and in _[5.5. The UNAPI RAM Helper discovery procedure](#55-the-unapi-ram-helper-discovery-procedure)_ aren't answered by the kernel in this mode). The `MSR.COM` tool can be used to install them in MSX-DOS 1 (Nextor's MSX-DOS 1 mode included): it installs the same page-3 routines that the kernel uses, the extended routines included, with the same jump table layout, and answers the extended BIOS calls that return the mapper variable table, the mapper support routines jump table and the RAM helper jump table (D=4 with E=1 or 2, and the RAM helper discovery) the same way as Nextor does in MSX-DOS 2 mode. See _[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](Nextor_3.0_User_Manual.md#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)_ in the user manual.
+
 The names and locations of these routines in the mapper support routines jump table are as follows:
 
 ```

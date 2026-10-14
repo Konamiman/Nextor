@@ -7,6 +7,10 @@ prompt on a computer with a Nextor kernel ROM.
                 messages; to use it, delete NEXTOR.SYS and
                 rename NEXTORJ.SYS to NEXTOR.SYS.
   COMMAND3.COM  The command interpreter.
+  MSR.COM       Installs the mapper support routines and an
+                UNAPI RAM helper in MSX-DOS 1 (it's here and
+                not in TOOLS because MSX-DOS 1 can't access
+                directories).
   AUTOEXEC.BAT  Sets the PATH and HELP environment items so
                 that the tools and the help files are found
                 from any directory.

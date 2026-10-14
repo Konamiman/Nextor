@@ -1,0 +1,1091 @@
+; MSR - Install the MSX-DOS 2 mapper support routines and an UNAPI RAM
+; helper in MSX-DOS 1.
+;
+; Originally a standalone tool (MSR.COM 1.2, 2019, generated from the
+; RAMHELPR.COM source of the MSX-UNAPI specification repository with
+; INSTALL_MSR=1), now part of the Nextor tools and built from Nextor's own
+; kernel code:
+;
+; - The page-3 resident routines (RD_SEG, WR_SEG, CAL_SEG, CALLS, PUT/GET_Pn,
+;   PUT/GET_PH and the UNAPI RAM helper routines CALL_MAP, RD_MAP, CALL_MAPI
+;   and WR_MAP) are the kernel's, from source/kernel/bank1/mapsup.inc, and
+;   they get relocated exactly as DOSINIT does it (the "..." markers and the
+;   adjust table, from source/kernel/bank1/p3reloc.inc).
+; - ALL_SEG and FRE_SEG run the kernel's allocation code
+;   (source/kernel/bank4/seg.mac) in a RAM segment, see MSRSEG.MAC.
+; - The mappers are detected with the kernel's TEST_MAPPER_SLOT
+;   (source/kernel/bank1/maptest.mac).
+;
+; How the installation works:
+;
+; 1. All the slots are scanned for mappers (in page 2). The primary mapper
+;    is the one of the RAM in page 3 (unlike MSX-DOS 2, we can't switch page
+;    3 to another slot), and it must have at least 5 segments (9 on MSX turbo
+;    R): the 4 TPA segments, one for the allocation code, and the 4 ones that
+;    hold the R800 DRAM mode ROM copies on turbo R (marked as system
+;    segments, as the kernel does).
+; 2. If the TPA is spread across several slots, pages 0 and 1 are switched
+;    to the slot of page 3 (the DOS2 specification says that all the TPA
+;    pages are in the primary mapper slot).
+; 3. The page-3 resident code is built at 0B004h, relocated for an area
+;    allocated below HIMSAV, and the allocation code plus the segment lists
+;    are put in the last segment of the primary mapper (last but 4 on turbo
+;    R).
+; 4. A small program is run in BASIC to copy the page-3 code to its final
+;    address (in MSX-DOS 1 that area is still in use until MSX-DOS is
+;    restarted), hook EXTBIO and do CALL SYSTEM. This restarts MSX-DOS with
+;    the new HIMSAV.
+;
+; The resident code chains the old EXTBIO hook and answers the mapper
+; support routines functions (D=4, E=1 and 2) and the UNAPI RAM helper
+; discovery (A=FFh, DE=2222h, HL=0), returning the same as Nextor does in
+; MSX-DOS 2 mode (the RAM helper jump table is right after the mapper
+; support routines one, with four entries, and no reduced mappers table).
+;
+; User segments are not freed when a program terminates in MSX-DOS 1,
+; "MSR C" frees them all.
+
+	.z80
+
+	include	../../sdk/asm/macros/undoc.inc
+	include	../../sdk/asm/constants/msx_bios.inc
+	include	../../sdk/asm/constants/msx_workarea.inc
+	include	../../sdk/asm/constants/dos_calls.inc
+
+ENDTPA	equ	0006h
+MSXVER	equ	002Dh
+RAMAD0	equ	0F341h
+RAMAD1	equ	0F342h
+RAMAD2	equ	0F343h
+RAMAD3	equ	0F344h
+HIMSAV	equ	0F349h
+
+;Work area used while installing (with the TPA RAM in page 2 in MSX-DOS,
+;and the BASIC RAM in BASIC, which is the same)
+
+P3_ADDRESS	equ	0B000h	;Final address of the page-3 code
+P3_SIZE		equ	0B002h	;Size of the page-3 code
+P3_STAGING	equ	0B004h	;Page-3 code ready to be copied
+
+;Minimum TPA end address (high byte) needed: the page-3 code is prepared
+;at P3_STAGING, and up to 16 mapper entries could be needed.
+
+MIN_TPA_END	equ	0C2h
+
+	jp	START
+
+        ;        -------------------------------------------------------------------------------
+	db	13
+USAGE_S:
+	db	"MSR - Mapper support routines and UNAPI RAM helper installer for MSX-DOS 1",13,10
+	db	13,10
+	db	"Installs the MSX-DOS 2 compatible mapper support routines together with",13,10
+	db	"an UNAPI RAM helper (the same routines that Nextor provides in MSX-DOS 2",13,10
+	db	"mode) in MSX-DOS 1, including Nextor in MSX-DOS 1 mode. A memory mapper",13,10
+	db	"of at least 80K (144K in MSX turbo R) is needed. The install process goes",13,10
+	db	"through BASIC and ends with CALL SYSTEM.",13,10
+	db	13,10
+	db	"Usage: MSR I|F",13,10
+	db	"       MSR C",13,10
+	db	13,10
+	db	"I: Install, unless an UNAPI RAM helper is already installed.",13,10
+	db	"F: Install, even if an UNAPI RAM helper is already installed.",13,10
+	db	"C: Cleanup: free all the segments allocated in user mode.",13,10
+	db	"   This is necessary because in MSX-DOS 1 these segments aren't freed",13,10
+	db	"   automatically when the program that allocated them terminates.",13,10
+	db	1Ah
+
+
+;********************
+;***  ENTRY POINT ***
+;********************
+
+START:
+
+	;--- Put a 0 at the end of the command line
+	;    (MSX-DOS 1 doesn't do it)
+
+	ld	hl,(0080h)
+	ld	h,0
+	ld	bc,0081h
+	add	hl,bc
+	ld	(hl),0
+
+	;--- Search the parameter, it must be one single letter
+
+	ld	hl,80h
+SRCHPAR:
+	inc	hl
+	ld	a,(hl)
+	cp	" "
+	jr	z,SRCHPAR
+	or	a
+	jr	z,SHOWINFO
+
+	inc	hl
+	ld	b,(hl)
+	ld	c,a
+	ld	a,b
+	or	a
+	jr	z,PARAM_END
+	cp	" "
+	jr	nz,SHOWINFO
+PARAM_END:
+	ld	a,c
+	or	32
+
+	cp	"c"
+	jp	z,DO_CLEANUP
+	cp	"f"
+	jr	z,DO_INSTALL
+	cp	"i"
+	jr	nz,SHOWINFO
+
+	;--- Parameter is "i": check if a RAM helper is already installed
+
+	ld	a,0FFh
+	ld	de,2222h
+	ld	hl,0
+	call	CALL_EXTBIO
+	ld	a,h
+	or	l
+	jr	z,DO_INSTALL
+
+	ld	de,RH_ALINST_S
+	jp	PRINT_END
+
+	;--- No parameters or invalid parameter:
+	;    show usage information and terminate
+
+SHOWINFO:
+	ld	hl,USAGE_S
+SHOWINFO_LOOP:
+	ld	a,(hl)
+	cp	1Ah
+	jr	z,SHOWINFO_END
+	push	hl
+	ld	e,a
+	ld	c,_CONOUT
+	call	5
+	pop	hl
+	inc	hl
+	jr	SHOWINFO_LOOP
+SHOWINFO_END:
+	ld	c,_TERM0
+	jp	5
+
+
+;**********************
+;***  INSTALLATION  ***
+;**********************
+
+DO_INSTALL:
+
+	;--- Refuse to install if there are mapper support routines already
+
+	xor	a
+	ld	de,0402h
+	call	CALL_EXTBIO
+	or	a
+	ld	de,MSR_ALINST_S
+	jp	nz,PRINT_END
+
+	;--- Check that TPA end address is high enough
+
+	ld	a,(ENDTPA+1)
+	cp	MIN_TPA_END
+	ld	de,NOTPA_S
+	jp	c,PRINT_END
+
+	;--- Check if we are on a MSX turbo R
+
+	ld	a,(EXPTBL)
+	ld	hl,MSXVER
+	call	RDSLT
+	ei
+	cp	3
+	ld	a,0
+	jr	c,OK_MSXVER
+	ld	a,4
+OK_MSXVER:
+	ld	(RESERVED_SEGS),a
+
+	;--- Scan the mappers and build the mapper variable table
+
+	call	SCAN_MAPPERS
+
+	ld	a,(RECORDS+1)	;Primary mapper size
+	or	a
+	ld	de,NOMAPPER_S
+	jp	z,PRINT_END
+
+	ld	b,a
+	ld	a,(RESERVED_SEGS)
+	add	a,4+1		;TPA + code segment
+	ld	c,a
+	ld	a,b
+	cp	c
+	ld	de,SMALLMAPPER_S
+	jp	c,PRINT_END
+
+	;Setup counters in primary mapper record and the code segment number
+
+	sub	c
+	ld	(RECORDS+2),a	;Free segments
+	ld	a,c
+	ld	(RECORDS+3),a	;Segments allocated to system
+
+	ld	a,(RESERVED_SEGS)
+	ld	c,a
+	ld	a,b
+	sub	c
+	dec	a
+	ld	(CODE_SEGMENT),a
+
+	;--- From here on nothing can fail.
+	;    If the TPA is spread across multiple slots, unify them.
+
+	call	UNIFY_TPA
+
+	;--- Initialize the extended BIOS hooks if nobody did it yet
+	;    (the same thing that the kernel and the MSX-DOS 1 disk ROMs do)
+
+	ld	hl,HOKVLD
+	bit	0,(hl)
+	jr	nz,OK_HOKVLD
+	set	0,(hl)
+	ld	hl,EXTBIO
+	ld	b,3*5		;EXTBIO, DISINT and ENAINT
+INIT_HOOKS:
+	ld	(hl),0C9h
+	inc	hl
+	djnz	INIT_HOOKS
+OK_HOKVLD:
+
+	;--- Calculate final size of page 3 area and allocate it
+
+	ld	a,(NUM_RECORDS)
+	ld	l,a
+	ld	h,0
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	inc	hl		;For the end of table mark
+	ld	(RECORDS_SIZE),hl
+	ld	bc,MAPRECS-P3_START
+	add	hl,bc
+	ld	(P3_SIZE),hl
+
+	ld	b,h
+	ld	c,l
+	ld	hl,(HIMSAV)
+	or	a
+	sbc	hl,bc
+	ld	(HIMSAV),hl
+	ld	(P3_ADDRESS),hl
+
+	;--- Generate the page 3 code at P3_STAGING:
+	;    code, then mapper records
+
+	ld	hl,P3_CODE
+	ld	de,P3_STAGING
+	ld	bc,MAPRECS-P3_START
+	ldir
+	ld	hl,RECORDS
+	ld	bc,(RECORDS_SIZE)
+	ldir
+
+	;Old EXTBIO hook
+
+	ld	hl,EXTBIO
+	ld	de,P3_STAGING+HOLDEXT
+	ld	bc,5
+	ldir
+
+	;Code segment number and pointer to the mapper records
+
+	ld	a,(CODE_SEGMENT)
+	ld	(P3_STAGING+CODE_SEG),a
+
+	ld	hl,(P3_ADDRESS)
+	ld	bc,MAPRECS
+	add	hl,bc
+	ld	(P3_STAGING+MAP_TAB),hl
+
+	;Adjust the absolute references to the page 3 code itself
+
+	ld	de,(P3_ADDRESS)
+	ld	hl,P3_ADJUST_TAB
+ADJUST_LOOP:
+	ld	c,(hl)
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	ld	a,b
+	or	c
+	jr	z,ADJUST_DONE
+	push	hl
+	ld	hl,P3_STAGING
+	add	hl,bc		;HL := address to adjust
+	ld	a,(hl)
+	add	a,e		;Add the final start address
+	ld	(hl),a		; to the offset which is already
+	inc	hl		; at this address.
+	ld	a,(hl)
+	adc	a,d
+	ld	(hl),a
+	pop	hl
+	jr	ADJUST_LOOP
+ADJUST_DONE:
+
+	;--- Install the code that runs in a segment
+
+	call	SETUP_SEGMENT
+
+	;--- All done, now we need to jump to BASIC and do CALL SYSTEM
+
+	ld	de,OK_S
+	ld	c,_STROUT
+	call	5
+
+	ld	hl,SystemProg
+	ld	de,08000h
+	ld	bc,SystemProgEnd-SystemProg
+	ldir
+	jp	08000h
+
+
+;*************************************
+;***  CLEANUP USER MODE SEGMENTS  ***
+;*************************************
+
+DO_CLEANUP:
+	xor	a
+	ld	de,0402h
+	call	CALL_EXTBIO
+	or	a
+	ld	de,NOMSR_S
+	jp	z,PRINT_END
+
+	;--- Check that the routines were installed by us
+
+	ld	(JUMP_TABLE),hl
+	ld	a,b
+	ld	(PRIMARY_SLOT),a
+
+	ld	de,-(MSR_JUMP-MSR_SIG)
+	add	hl,de
+	ld	de,P3_CODE+MSR_SIG
+	ld	b,MSR_JUMP-MSR_SIG
+CHECK_SIG:
+	ld	a,(de)
+	cp	(hl)
+	jr	nz,NOT_MINE
+	inc	hl
+	inc	de
+	djnz	CHECK_SIG
+
+	ld	hl,(JUMP_TABLE)
+	ld	de,-(MSR_JUMP-CODE_SEG)
+	add	hl,de
+	ld	a,(hl)
+	ld	(CODE_SEGMENT),a
+
+	;--- Count the user segments, these are the ones that will be freed
+
+	xor	a
+	ld	de,0401h
+	call	CALL_EXTBIO
+	ld	de,0		;DE = Count
+COUNT_USER:
+	ld	a,(hl)
+	or	a
+	jr	z,COUNT_USER_END
+	push	hl
+	ld	bc,4
+	add	hl,bc
+	ld	a,(hl)		;Segments allocated to user
+	add	a,e
+	ld	e,a
+	ld	a,0
+	adc	a,d
+	ld	d,a
+	pop	hl
+	ld	bc,8
+	add	hl,bc
+	jr	COUNT_USER
+COUNT_USER_END:
+
+	ld	a,d
+	or	e
+	ld	(FREED_COUNT),de
+	ld	de,IHAVENTFREED_S
+	jp	z,PRINT_END
+
+	;--- Free them by calling the code in the segment via CALL_MAP
+
+	ld	a,(PRIMARY_SLOT)
+	ld_	iyh,a
+	ld	a,(CODE_SEGMENT)
+	ld_	iyl,a
+	ld	ix,4006h	;Free all the user segments
+	ld	hl,(JUMP_TABLE)
+	ld	bc,RH_JUMP-MSR_JUMP	;CALL_MAP
+	add	hl,bc
+	call	CALL_HL
+
+	ld	de,IHAVEFREED_S
+	ld	c,_STROUT
+	call	5
+	ld	hl,(FREED_COUNT)
+	ld	de,FREEDSEGCOUNT_S
+	push	de
+	call	NUMTOASC
+	pop	de
+	ld	c,_STROUT
+	call	5
+	ld	de,USERSEGMENTS_S
+	jr	PRINT_END
+
+NOT_MINE:
+	ld	de,NOMYMSR_S
+
+PRINT_END:
+	ld	c,_STROUT
+	call	5
+	ld	c,_TERM0
+	jp	5
+
+CALL_HL:
+	jp	(hl)
+
+
+;--- CALL_EXTBIO: Call EXTBIO only if the extended BIOS has been
+;    initialized (bit 0 of HOKVLD set), otherwise return without
+;    changing anything, as if no extended BIOS handler had answered.
+
+CALL_EXTBIO:
+	push	hl
+	ld	hl,HOKVLD
+	bit	0,(hl)
+	pop	hl
+	ret	z
+	jp	EXTBIO
+
+
+;--- SCAN_MAPPERS: Build the mapper variable table at RECORDS
+;    (the primary mapper is always the first entry, with a size of 0
+;    if the RAM in page 3 isn't mapped RAM) and set NUM_RECORDS.
+;    The mappers are tested in page 2, as MAP_SCAN does in the kernel.
+
+SCAN_MAPPERS:
+	ld	hl,RECORDS
+	ld	de,RECORDS+1
+	ld	bc,16*8
+	ld	(hl),0
+	ldir
+
+	di
+
+	ld	a,(RAMAD3)
+	ld	(RECORDS),a
+	ld	h,80h
+	call	ENASLT
+	call	TEST_MAPPER_SLOT##
+	ld	(RECORDS+1),a
+
+	ld	hl,RECORDS+8
+	ld	(RECORD_PNT),hl
+	ld	a,1
+	ld	(NUM_RECORDS),a
+
+	xor	a
+	ld	hl,EXPTBL
+SCAN_PRI_LOOP:
+	bit	7,(hl)			;Set expanded slot flag in A
+	jr	z,SCAN_NOT_EXP		; if this slot is expanded.
+	set	7,a
+SCAN_NOT_EXP:
+SCAN_SEC_LOOP:
+	push	hl
+	push	af
+	ld	hl,RAMAD3		;Skip the primary mapper,
+	cp	(hl)			; already tested
+	jr	z,SCAN_NEXT
+
+	ld	h,80h
+	call	ENASLT
+	call	TEST_MAPPER_SLOT##
+	or	a
+	jr	z,SCAN_NEXT
+
+	ld	b,a
+	pop	af
+	push	af
+	ld	hl,(RECORD_PNT)
+	ld	(hl),a			;Slot number
+	inc	hl
+	ld	(hl),b			;Total segments
+	inc	hl
+	ld	(hl),b			;Free segments
+	ld	de,8-2
+	add	hl,de
+	ld	(RECORD_PNT),hl
+	ld	hl,NUM_RECORDS
+	inc	(hl)
+
+SCAN_NEXT:
+	pop	af
+	pop	hl
+	bit	7,a
+	jr	z,SCAN_NOT_EXP_2	;If it is an expanded slot
+	add	a,4			; then step on to next
+	bit	4,a			; secondary slot and loop
+	jr	z,SCAN_SEC_LOOP		; back if not last one.
+SCAN_NOT_EXP_2:
+	inc	hl
+	inc	a			;Step onto next primary slot
+	and	03h			; and loop back if not done
+	jr	nz,SCAN_PRI_LOOP	; the last one.
+
+	ld	a,(RAMAD2)		;Restore TPA in page 2
+	ld	h,80h			; (TEST_MAPPER_SLOT leaves
+	call	ENASLT			; segment 1 selected)
+	ei
+	ret
+
+
+;--- UNIFY_TPA: If the RAM in page 0 or 1 is not the same as the one
+;    in page 3, switch them to the page 3 slot (the contents of page 0,
+;    where this program is, are copied to its segment first).
+
+UNIFY_TPA:
+	ld	a,(RAMAD3)
+	ld	b,a
+	ld	a,(RAMAD0)
+	cp	b
+	jr	nz,DO_UNIFY_TPA
+	ld	a,(RAMAD1)
+	cp	b
+	ret	z
+DO_UNIFY_TPA:
+
+	di
+
+	ld	a,(RAMAD3)
+	ld	h,40h
+	call	ENASLT
+	ld	a,3
+	out	(0FDh),a
+
+	ld	hl,0
+	ld	de,4000h
+	ld	bc,4000h
+	ldir
+
+	ld	a,2
+	out	(0FDh),a
+
+	ld	h,0
+	ld	a,(RAMAD3)
+	call	ENASLT
+
+	ld	a,(RAMAD3)
+	ld	(RAMAD0),a
+	ld	(RAMAD1),a
+
+	ei
+
+	ld	de,IHAVESETSLOTS_S
+	ld	c,_STROUT
+	jp	5
+
+
+;--- SETUP_SEGMENT: Copy MSRSEG.BIN to the code segment,
+;    build the segment lists after it and fill MAP_TBL
+
+SETUP_SEGMENT:
+	di
+	ld	a,(RAMAD3)
+	ld	h,40h
+	call	ENASLT
+	ld	a,(CODE_SEGMENT)
+	out	(0FDh),a
+
+	ld	hl,SEGBIN
+	ld	de,4000h
+	ld	bc,SEGBIN_END-SEGBIN
+	ldir
+
+	;Zero the rest of the segment, that's the initial state
+	;of the segment lists (all segments free)
+
+	ld	h,d
+	ld	l,e
+	ld	(hl),0
+	inc	de
+	ld	bc,8000h-4000h-(SEGBIN_END-SEGBIN)-1
+	ldir
+
+	;Setup the MAP_TBL entry for each mapper
+
+	ld	ix,RECORDS
+	ld	hl,(P3_ADDRESS)
+	ld	bc,MAPRECS+1
+	add	hl,bc
+	ex	de,hl		;DE = Pointer to counters of mapper in page 3
+	ld	hl,4000h+(SEGBIN_END-SEGBIN)	;HL = Pointer to segment list
+SETUP_MAP_TBL_LOOP:
+	ld	a,(ix)
+	or	a
+	jr	z,SETUP_MAP_TBL_END
+
+	push	hl
+	and	00001111b
+	add	a,a
+	add	a,a
+	ld	c,a
+	ld	b,0
+	ld	hl,(4009h)	;MAP_TBL address
+	add	hl,bc
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	inc	hl
+	pop	bc		;BC = Pointer to segment list
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+
+	ld	l,(ix+1)	;Next segment list = this one + total segments
+	ld	h,0
+	add	hl,bc
+
+	push	hl
+	ld	hl,8
+	add	hl,de
+	ex	de,hl
+	pop	hl
+	ld	bc,8
+	add	ix,bc
+	jr	SETUP_MAP_TBL_LOOP
+SETUP_MAP_TBL_END:
+
+	;Mark the system segments in the list of the primary mapper:
+	;the TPA segments, the code segment and the turbo R ROM copies
+
+	ld	hl,4000h+(SEGBIN_END-SEGBIN)
+	ld	a,0FFh
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a
+
+	ld	hl,4000h+(SEGBIN_END-SEGBIN)
+	ld	a,(CODE_SEGMENT)
+	ld	c,a
+	ld	b,0
+	add	hl,bc
+	ld	a,(RESERVED_SEGS)
+	inc	a
+	ld	b,a
+MARK_SYS_LOOP:
+	ld	(hl),0FFh
+	inc	hl
+	djnz	MARK_SYS_LOOP
+
+	ld	a,2
+	out	(0FDh),a
+	ld	a,(RAMAD1)
+	ld	h,40h
+	call	ENASLT
+	ei
+	ret
+
+
+;--- NUMTOASC: Converts a 16 bit unsigned value to an ASCII string,
+;    terminating it with a "$" character
+;    Input: HL = Number to convert
+;           DE = Destination address for the string
+;
+;    This routine is a modification of one borrowed from:
+;    http://map.tni.nl/sources/external/z80bits.html
+;    (this one skips dummy zeros and adds "$" at the end)
+
+NUMTOASC:
+	;* HL=0 is a special case
+	ld	a,h
+	or	l
+	jr	nz,n2anozero
+	ex	de,hl
+	ld	(hl),"0"
+	inc	hl
+	ld	(hl),"$"
+	ret
+
+n2anozero:
+	;* Generate string
+	push	de
+	ld	de,n2abuf
+
+	ld	bc,-10000
+	call	Num1
+	ld	bc,-1000
+	call	Num1
+	ld	bc,-100
+	call	Num1
+	ld	c,-10
+	call	Num1
+	ld	c,-1
+	call	Num1
+
+	;* Copy string to destination, skipping initial zeros
+	pop	de
+	ld	hl,n2abuf-1
+n2acopy1:
+	inc	hl
+	ld	a,(hl)
+	cp	"0"
+	jr	z,n2acopy1
+n2acopy2:
+	ld	(de),a
+	cp	"$"
+	ret	z
+	inc	de
+	inc	hl
+	ld	a,(hl)
+	jr	n2acopy2
+
+	;* Generate a single digit
+Num1:	ld	a,'0'-1
+Num2:	inc	a
+	add	hl,bc
+	jr	c,Num2
+	sbc	hl,bc
+
+	ld	(de),a
+	inc	de
+	ret
+
+n2abuf:	db	"00000$"
+
+
+;*****************************************
+;***  PROGRAM TO BE RUN IN BASIC MODE  ***
+;*****************************************
+
+;Copied to 8000h. It switches to BASIC and runs the statements in SysTxt2.
+
+SystemProg:
+	ld	a,(EXPTBL)
+	push	af
+	ld	h,0
+	call	ENASLT
+	pop	af
+	ld	h,040h
+	call	ENASLT
+	xor	a
+	ld	hl,0F41Fh
+	ld	(0F860h),hl
+	ld	hl,0F423h
+	ld	(0F41Fh),hl
+	ld	(hl),a
+	ld	hl,0F52Ch
+	ld	(0F421h),hl
+	ld	(hl),a
+	ld	hl,0F42Ch
+	ld	(0F862h),hl
+	ld	hl,SysTxT2-SystemProg+8000h
+	jp	04601h		;NEWSTT
+
+SysTxT2:
+	db	3Ah		;:
+	db	97h,0DDh,0EFh	;DEF USR =
+	db	0Ch		;&H
+	dw	UsrCode-SystemProg+8000h
+	db	3Ah,91h,0DDh,"(",34,34,")"	;:? USR("")
+	db	03Ah,0CAh	;:CALL
+	db	"SYSTEM"
+	db	0,0,0
+
+	;>>> This is the code that will be executed by the USR instruction
+
+UsrCode:
+
+	;--- Copy page 3 code to its definitive address
+
+	ld	hl,P3_STAGING
+	ld	de,(P3_ADDRESS)
+	ld	bc,(P3_SIZE)
+	ldir
+
+	;--- Setup new EXTBIO hook
+
+	di
+	ld	a,0C3h
+	ld	(EXTBIO),a
+	ld	hl,(P3_ADDRESS)
+	ld	bc,NEWEXT
+	add	hl,bc
+	ld	(EXTBIO+1),hl
+	ei
+
+	ret
+
+SystemProgEnd:
+
+
+;*********************
+;***  PAGE 3 CODE  ***
+;*********************
+
+;This is assembled for address 0 and relocated at install time to the area
+;allocated below HIMSAV. Absolute references to itself are marked with "..."
+;(see p3reloc.inc). The variables used by mapsup.inc (P0_SEG to P3_SEG and
+;MAP_TAB) are part of the relocated code too.
+
+RELOC_P3_VARS	equ	1
+
+P3_CODE:
+	.phase	0
+
+	include	../kernel/bank1/p3reloc.inc
+
+P3_START:
+
+HOLDEXT:	db	0,0,0,0,0	;Old EXTBIO hook
+
+CODE_SEG:	db	0		;Segment with the ALL_SEG and FRE_SEG code
+MSR_SIG:	db	"MSR",1		;Signature, used by "MSR C"
+
+	;--- Mapper support routines jump table
+
+MSR_JUMP:
+...	<jp	_ALL_SEG>
+...	<jp	_FRE_SEG>
+...	<jp	_RD_SEG>
+...	<jp	_WR_SEG>
+...	<jp	_CAL_SEG>
+...	<jp	_CALLS>
+...	<jp	_PUT_PH>
+...	<jp	_GET_PH>
+...	<jp	_PUT_P0>
+...	<jp	_GET_P0>
+...	<jp	_PUT_P1>
+...	<jp	_GET_P1>
+...	<jp	_PUT_P2>
+...	<jp	_GET_P2>
+...	<jp	_PUT_P3>
+...	<jp	_GET_P3>
+
+	;--- UNAPI RAM helper jump table, at +30h like in Nextor
+
+RH_JUMP:
+...	<jp	_U_CALLRAM>
+...	<jp	_U_READRAM>
+...	<jp	_U_CALLRAM2>
+...	<jp	_U_WRITERAM>
+
+	if	RH_JUMP-MSR_JUMP ne 30h
+	.error	The RAM helper jump table must be at offset 30h of the mapper support routines one
+	endif
+
+
+	;--- New destination of the EXTBIO hook
+
+NEWEXT:
+	push	af
+	ld	a,d
+	cp	4
+	jr	nz,NEWEXT_RH
+	ld	a,e
+	dec	a
+	jr	nz,NEWEXT_NO_TABLE
+
+	;Get mapper variable table
+
+	pop	af
+...	<ld	a,(MAPRECS)>
+...	<ld	hl,MAPRECS>
+	ret
+
+NEWEXT_NO_TABLE:
+	dec	a
+	jr	nz,NEWEXT_OLD
+
+	;Get mapper support routines address
+
+	pop	af
+...	<ld	a,(MAPRECS)>
+	ld	b,a		;Slot number of primary mapper
+...	<ld	a,(MAPRECS+2)>
+	ld	c,a		;Free segments in primary mapper
+...	<ld	a,(MAPRECS+1)>	;Total segments in primary mapper
+...	<ld	hl,MSR_JUMP>
+	ret
+
+	;UNAPI RAM helper discovery: A=FFh, DE=2222h, HL=0
+
+NEWEXT_RH:
+	cp	22h
+	jr	nz,NEWEXT_OLD
+	cp	e
+	jr	nz,NEWEXT_OLD
+	ld	a,h
+	or	l
+	jr	nz,NEWEXT_OLD
+	pop	af
+	push	af
+	inc	a
+	jr	nz,NEWEXT_OLD
+
+	pop	af
+...	<ld	hl,RH_JUMP>
+	ld	bc,0		;No reduced mappers table
+	ld	a,4		;Number of entries in the jump table
+	ret
+
+NEWEXT_OLD:
+	pop	af
+...	<jp	HOLDEXT>
+
+
+	;--- ALL_SEG and FRE_SEG: call the code in the code segment
+	;    (the kernel's, see MSRSEG.MAC) via CALL_MAP,
+	;    preserving everything that the kernel's routines preserve
+
+_ALL_SEG:
+	push	ix
+	ld	ix,4000h
+	jr	_ALLFRE
+_FRE_SEG:
+	push	ix
+	ld	ix,4003h
+
+_ALLFRE:
+	push	iy
+	push	hl
+	push	de
+	ex	af,af'
+	exx
+	push	af
+	push	bc
+	push	de
+	push	hl
+	exx
+	ex	af,af'
+
+	push	af
+...	<ld	a,(MAPRECS)>	;Slot number of primary mapper
+	ld_	iyh,a
+...	<ld	a,(CODE_SEG)>
+	ld_	iyl,a
+	pop	af
+...	<call	_U_CALLRAM>
+
+	ex	af,af'
+	exx
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	exx
+	ex	af,af'
+	pop	de
+	pop	hl
+	pop	iy
+	pop	ix
+	di
+	ret
+
+
+	;--- The rest of the mapper support routines are the kernel's
+
+	include	../kernel/bank1/mapsup.inc
+
+	;--- Variables used by mapsup.inc
+
+P0_SEG:		db	3
+P1_SEG:		db	2
+P2_SEG:		db	1
+P3_SEG:		db	0
+MAP_TAB:	dw	0	;Set to the address of MAPRECS at install time
+
+	;--- Mapper variable table, built at install time
+
+MAPRECS:
+
+	.dephase
+
+P3_ADJUST_TAB:
+	ADJUST_TABLE
+
+
+;*******************************
+;***  VARIABLES AND STRINGS  ***
+;*******************************
+
+RESERVED_SEGS:	db	0	;Segments reserved at the end of the primary mapper
+CODE_SEGMENT:	db	0
+NUM_RECORDS:	db	0
+RECORDS_SIZE:	dw	0
+RECORD_PNT:	dw	0
+JUMP_TABLE:	dw	0
+PRIMARY_SLOT:	db	0
+FREED_COUNT:	dw	0
+
+NOMSR_S:
+	db	"*** No mapper support routines are installed.",13,10,"$"
+
+NOMYMSR_S:
+	db	"*** The mapper support routines weren't installed by MSR,",13,10
+	db	"    therefore user segments can't be freed.",13,10,"$"
+
+IHAVENTFREED_S:
+	db	"No segments allocated in user mode were found.",13,10,"$"
+
+IHAVEFREED_S:
+	db	"Freed $"
+
+USERSEGMENTS_S:
+	db	" segments allocated in user mode.",13,10,"$"
+
+FREEDSEGCOUNT_S:
+	ds	6
+
+MSR_ALINST_S:
+	db	"*** Mapper support routines are already installed.",13,10,"$"
+
+IHAVESETSLOTS_S:
+	db	"- The same RAM slot has been set for all the TPA pages.",13,10,"$"
+
+RH_ALINST_S:
+	db	"*** An UNAPI RAM helper is already installed.",13,10,"$"
+
+NOMAPPER_S:
+	db	"*** ERROR: The RAM in page 3 is not mapped RAM.",13,10,"$"
+
+SMALLMAPPER_S:
+	db	"*** ERROR: Not enough mapped RAM.",13,10,"$"
+
+NOTPA_S:
+	db	"*** ERROR: Not enough TPA space.",13,10,"$"
+
+OK_S:	db	"Installed. Have fun!",13,10,"$"
+
+	;--- The code to be installed in a segment (see MSRSEG.MAC)
+
+SEGBIN:
+	incbin	MSRSEG.BIN
+SEGBIN_END:
+
+	;--- The mapper variable table is built here.
+	;    It must be the last thing in the program.
+
+RECORDS:
+	ds	16*8+1
+
+	end

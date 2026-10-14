@@ -31,6 +31,8 @@ nextor2.rom
 info/*.pdf
 source/kernel/*.bytes
 source/kernel/bank*/*.inc
+!source/kernel/bank1/p3reloc.inc
+!source/kernel/bank1/mapsup.inc
 source/kernel/drivers/*.inc
 source/kernel/drivers/**/*.inc
 source/kernel/drivers/**/*.lst
@@ -46,6 +48,7 @@ source/tools/**.inc
 source/tools/**.asm
 source/tools/**.com
 source/tools/**.COM
+source/tools/*.stamp
 source/tools/codes.mac
 source/tools/data.mac
 *conflicto*.*

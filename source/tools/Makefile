@@ -29,11 +29,11 @@ endef
 
 uc = $(shell echo $(1) | tr a-z A-Z)
 
-COMS := CHKDSK.COM CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM FIXDISK.COM KMODE.COM LOCK.COM MAPDRV.COM NSYSVER.COM RALLOC.COM UNDEL.COM Z80MODE.COM
+COMS := CHKDSK.COM CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM FIXDISK.COM KMODE.COM LOCK.COM MAPDRV.COM MSR.COM NSYSVER.COM RALLOC.COM UNDEL.COM Z80MODE.COM
 
 # Tools with their own link rule (see below), excluded from the generic
 # one-MAC-per-COM rule.
-SPECIAL_COMS := CHKDSK.COM UNDEL.COM
+SPECIAL_COMS := CHKDSK.COM UNDEL.COM MSR.COM
 GENERIC_COMS := $(filter-out $(SPECIAL_COMS),$(COMS))
 INCS := ../kernel/macros.inc ../kernel/const.inc
 SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
@@ -96,6 +96,50 @@ UNDEL.COM: UNDEL.MAC $(SDK_RELS)
 	$(call assemble,UNDEL.MAC)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) UNDEL.REL
 
+# MSR is built mostly from kernel code (see the header of MSR.MAC):
+#
+# - MSRSEG.BIN is the part that MSR installs in a RAM segment, mapped at
+#   4000h: MSRSEG.MAC followed by the kernel's segment allocation code
+#   (bank4/seg.mac), plus DATA.REL for the kernel symbols it uses.
+#   MSR.MAC includes it with INCBIN.
+# - The page-3 resident routines (bank1/mapsup.inc) and the relocation
+#   macros (bank1/p3reloc.inc) are included by MSR.MAC.
+# - The mapper detection routine (bank1/maptest.mac) is linked.
+#
+# The resident routines use undocumented Z80 instructions (like the kernel,
+# whose code they are): pass NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180
+# compatible MSR.COM.
+MSR_DEFINES := $(if $(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),--define-symbols NO_UNDOC_CPU_INSTRUCTIONS)
+
+# Switching the variant rebuilds MSR.COM: the stamp file name depends on it.
+MSR_UNDOC_STAMP := MSR-UNDOC-$(if $(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),NO,YES).stamp
+
+$(MSR_UNDOC_STAMP):
+	@rm -f MSR-UNDOC-*.stamp
+	@touch $@
+
+SEG.REL: ../kernel/bank4/seg.mac $(INCS)
+	$(call assemble_as,../kernel/bank4/seg.mac,SEG.REL)
+
+MAPTEST.REL: ../kernel/bank1/maptest.mac $(INCS)
+	$(call assemble_as,../kernel/bank1/maptest.mac,MAPTEST.REL)
+
+MSRSEG.BIN: MSRSEG.MAC SEG.REL DATA.REL
+	$(call assemble,MSRSEG.MAC)
+	@$(LK80) --output-file $@ --code 4000h MSRSEG.REL SEG.REL DATA.REL
+
+MSR.COM: \
+	MSR.MAC \
+	$(MSR_UNDOC_STAMP) \
+	MSRSEG.BIN \
+	MAPTEST.REL \
+	../kernel/bank1/p3reloc.inc \
+	../kernel/bank1/mapsup.inc \
+	../../sdk/asm/macros/undoc.inc
+
+	$(call assemble,MSR.MAC,$(MSR_DEFINES))
+	@$(LK80) --output-file $@ --code 0100h MSR.REL MAPTEST.REL
+
 # Build rules for each individual SDK shared routine .asm file (one per public routine).
 define shared_rel_rule
 $(2).REL: ../../sdk/asm/code/$(1).asm
@@ -125,7 +169,8 @@ DATA.REL: \
 # The disk image and the zip archive (see below) have the same contents:
 #
 # - In the root directory: NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
-#   NEXTORJ.SYS), COMMAND3.COM, an AUTOEXEC.BAT that points the HELP and
+#   NEXTORJ.SYS), COMMAND3.COM, MSR.COM (it's for MSX-DOS 1, which can't
+#   access the TOOLS directory), an AUTOEXEC.BAT that points the HELP and
 #   PATH environment items to the HELP and TOOLS directories, and a
 #   README.TXT (sourced from tools-disk-readme.txt).
 # - In a TOOLS directory: every other .COM file present in bin/tools.
@@ -149,10 +194,10 @@ PACKAGE_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM $(COMS) $(C_COMS
 PACKAGE_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(PACKAGE_REQUIRED)))),$(PACKAGE_REQUIRED))
 
 # The .COM files for the TOOLS directory: every .COM file in bin/tools
-# except COMMAND3.COM (in either letter case, in case the filesystem
-# preserved a lowercase copy). $(sort ...) also removes duplicates, in case
-# the filesystem is case-insensitive.
-TOOL_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com,\
+# except COMMAND3.COM and MSR.COM (in either letter case, in case the
+# filesystem preserved a lowercase copy). $(sort ...) also removes
+# duplicates, in case the filesystem is case-insensitive.
+TOOL_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com $(BIN_TOOLS)/MSR.COM $(BIN_TOOLS)/msr.com,\
 	$(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)))
 
 # The COMMAND3.COM help files, stored in the HELP directory.
@@ -179,6 +224,7 @@ define stage_package
 	@cp $(BIN_TOOLS)/NEXTOR.SYS $(1)/NEXTOR.SYS
 	@cp $(BIN_TOOLS)/NEXTOR.SYS.japanese $(1)/NEXTORJ.SYS
 	@cp $(BIN_TOOLS)/COMMAND3.COM $(1)/COMMAND3.COM
+	@cp $(BIN_TOOLS)/MSR.COM $(1)/MSR.COM
 	@sed 's/\r*$$/\r/' tools-disk-autoexec.bat > $(1)/AUTOEXEC.BAT
 	@sed 's/\r*$$/\r/' tools-disk-readme.txt > $(1)/README.TXT
 	@for f in $(TOOL_COMS); do \
@@ -189,7 +235,7 @@ endef
 
 # The root directory files, in the order they are added to the disk and
 # the archive.
-PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM AUTOEXEC.BAT README.TXT
+PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM MSR.COM AUTOEXEC.BAT README.TXT
 
 # ---------------------------------------------------------------------------
 # Tools disk image.
@@ -307,6 +353,6 @@ tools-zip: $(HELPFILES_DIR)/JINDEX.HLP
 .PHONY: clean
 
 clean:
-	for ext in REL rel SYM sym HEX COM bin; do find . -type f -name "*.$$ext" -delete; done
+	for ext in REL rel SYM sym HEX COM bin BIN stamp; do find . -type f -name "*.$$ext" -delete; done
 	rm -f $(HELPFILES_DIR)/JINDEX.HLP
 	rm -rf $(DISK_STAGING) $(ZIP_STAGING)
