@@ -1,0 +1,335 @@
+	SUBTTL	DATE, TIME, MODE, BASIC and FORMAT commands
+;******************************************************************************
+;
+;        Internal commands DATE, TIME, MODE, BASIC and FORMAT.
+;
+;******************************************************************************
+;
+;        DATE [date]
+;
+;        Sets the date. If no date is given in the command line, the current
+; one is shown and the user is asked for a new one (an empty line leaves
+; the date unchanged). The date is entered in the format given by COUNTRY:
+; Y-M-D, M-D-Y or D-M-Y, with "-", "/" or "." as separators (the same one
+; twice). The year can be omitted in the M-D-Y and D-M-Y formats, and can
+; have two digits (80 to 99 for 1980 to 1999, 00 to 79 for 2000 to 2079)
+; or four.
+;
+;        This routine is also called at start up when there is no
+; AUTOEXEC.BAT and no clock chip, with an empty command line.
+;
+;        Note that when the year is omitted, anything after the second number
+; is ignored (unless it's the separator).
+;
+@DATE:	LD	HL,CMDLIN+1
+	CALL	SCANNUM		; Date in the command line?
+	JR	NZ,COMDAT
+	LD	DE,CURDAT$	; No: show the current date...
+	LD	C,_STROUT
+	CALL	BDOS
+	LD	C,_GDATE
+	CALL	BDOS
+	PUSH	HL
+	LD	C,A		; ...starting with the day of the week...
+	ADD	A,A
+	ADD	A,C
+	LD	C,A
+	LD	B,0
+	LD	HL,WEEKTAB
+	ADD	HL,BC
+	LD	B,3
+	CALL	OUTCNT
+	CALL	ONESPC
+	POP	HL
+	CALL	FMTDATE		; ...then the date. In Y-M-D format with a
+	LD	B,10		;   narrow screen, the year is shown with
+	LD	A,(COUNTRY)	;   two digits only.
+	OR	A
+	JR	NZ,DAT10
+	LD	A,(LINLEN)
+	CP	30
+	JR	NC,DAT10
+	LD	B,8
+	INC	HL
+	INC	HL
+DAT10:	CALL	OUTCNT
+;
+GETDAT:	LD	DE,NEWDAT$	; Ask for the new date (with the current
+	CALL	GETBUF		;   one as the template), do nothing if an
+	RET	Z		;   empty line is entered.
+;
+;        Parse the date, with A = first number, and HL pointing past it.
+;
+COMDAT:	JR	C,DATERR
+	LD	B,A
+	LD	A,(COUNTRY)
+	OR	A
+	LD	A,B
+	JR	NZ,DAT20
+;
+	CALL	MKYEAR		; Y-M-D: IX = year,
+	JR	C,DATERR
+	CALL	DATESEP		;   D = month,
+	JR	C,DATERR
+	LD	D,A
+	LD	A,(HL)		;   check the second separator,
+	INC	HL
+	CP	B
+	JR	NZ,DATERR
+	CALL	GETNUM		;   E = day.
+	JR	C,DATERR
+	LD	E,A
+	JR	DAT40
+;
+DAT20:	LD	D,A		; M-D-Y or D-M-Y: D = first number,
+	CALL	DATESEP		;   E = second number,
+	JR	C,DATERR
+	LD	E,A
+	LD	A,(HL)		;   and IX = year if there is a second
+	INC	HL		;   separator...
+	CP	B
+	JR	NZ,DAT30
+	CALL	GETYEAR
+	JR	C,DATERR
+	JR	DAT40
+DAT30:	PUSH	DE		;   ...else the current year.
+	LD	C,_GDATE
+	CALL	BDOS
+	PUSH	HL
+	POP	IX
+	POP	DE
+;
+DAT40:	LD	A,(COUNTRY)	; D-M-Y: swap day and month.
+	CP	2
+	JR	C,DAT50
+	LD	A,E
+	LD	E,D
+	LD	D,A
+DAT50:	PUSH	IX		; Set the date.
+	POP	HL
+	LD	C,_SDATE
+	CALL	BDOS
+	OR	A
+	RET	Z
+;
+DATERR:	LD	DE,BADDAT$	; "Invalid date", and ask again.
+	LD	C,_STROUT
+	CALL	BDOS
+	JR	GETDAT
+;
+;------------------------------------------------------------------------------
+;
+;        Get a year: either a two digit year (see @DATE) or a four digit
+; year.
+;
+; Entry:  GETYEAR: HL = pointer to the text
+;         MKYEAR:  A = first number already read with GETNUM, HL = pointer
+;                  past it
+; Exit:   Cy set if error, else IX = year and HL = pointer past it
+; Corrupts: AF, BC
+;
+GETYEAR: CALL	GETNUM
+	RET	C
+MKYEAR:	LD	B,A
+	CALL	INDIG		; More digits after the first two?
+	JR	C,MKY10
+	DEC	HL		; Yes: four digit year, get the last two
+	CALL	GETNUM		;   digits and add the first two times 100.
+	RET	C
+	PUSH	HL
+	LD	C,A
+	PUSH	BC
+	LD	C,B
+	LD	B,0
+	PUSH	DE
+	LD	DE,100
+	CALL	MUL16
+	POP	DE
+	POP	HL
+	LD	H,0
+	JR	MKY20
+;
+MKY10:	PUSH	HL		; No: two digit year.
+	LD	C,B
+	LD	B,0
+	LD	HL,1900
+	LD	A,C
+	CP	80
+	JR	NC,MKY20
+	LD	HL,2000
+MKY20:	ADD	HL,BC
+	PUSH	HL
+	POP	IX
+	POP	HL
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Get a date separator and the number that follows it.
+;
+; Entry:  HL = pointer to the text
+; Exit:   Cy set if error, else A = number, B = separator found ("/", "."
+;           or "-"), and HL = pointer past the number
+;
+DATESEP: LD	A,(HL)
+	INC	HL
+	LD	B,A
+	CP	"/"
+	JR	Z,DSP10
+	CP	"."
+	JR	Z,DSP10
+	CP	"-"
+	SCF
+	RET	NZ
+DSP10:	JP	GETNUM
+;
+;------------------------------------------------------------------------------
+;
+;        TIME [time]
+;
+;        Sets the time. As DATE, if no time is given in the command line the
+; current one is shown and a new one is asked for. The time is entered as
+; hours[:minutes[:seconds]], optionally followed by "a" or "p" (with no
+; space before it) for 12 hour format. The hundredths of second are always
+; set to zero.
+;
+@TIME:	LD	HL,CMDLIN+1
+	CALL	SCANNUM		; Time in the command line?
+	JR	NZ,COMTIM
+	LD	DE,CURTIM$	; No: show the current time.
+	LD	C,_STROUT
+	CALL	BDOS
+	LD	C,_GTIME
+	CALL	BDOS
+	CALL	FMTTIME
+	LD	B,12
+	CALL	OUTCNT
+;
+GETTIM:	LD	HL,(DATBUF+13)	; Move the "a" or "p" (and the CR after it)
+	LD	(DATBUF+10),HL	;   to after the seconds, so that the
+	LD	DE,NEWTIM$	;   template is "hh:mm:ssa". Then ask for
+	CALL	GETBUF		;   the new time, and do nothing if an
+	RET	Z		;   empty line is entered.
+;
+;        Parse the time, with A = hours, and HL pointing past them.
+;
+COMTIM:	JR	C,TIMERR
+	LD	B,A		; B = hours.
+	LD	DE,0
+	LD	A,(HL)
+	INC	HL
+	CP	":"
+	JR	NZ,TIM10
+	CALL	GETNUM		; E = minutes.
+	JR	C,TIMERR
+	LD	E,A
+	LD	A,(HL)
+	INC	HL
+	CP	":"
+	JR	NZ,TIM10
+	CALL	GETNUM		; D = seconds.
+	JR	C,TIMERR
+	LD	D,A
+	LD	A,(HL)
+;
+TIM10:	LD	L,E		; H = hours, L = minutes, D = seconds,
+	LD	H,B		;   E = hundredths.
+	LD	E,0
+	CP	CR
+	JR	Z,SAVTIM
+	AND	5FH		; Convert to upper case.
+	CP	"A"
+	JR	Z,TIM20
+	CP	"P"
+	JR	NZ,TIMERR
+	LD	A,H		; PM: add 12 to 1 to 11, leave 12 and up
+	CP	12		;   unchanged, reject 0.
+	JR	NC,SAVTIM
+	OR	A
+	JR	Z,TIMERR
+	ADD	A,12
+	LD	H,A
+;
+SAVTIM:	LD	C,_STIME	; Set the time.
+	CALL	BDOS
+	OR	A
+	RET	Z
+;
+TIMERR:	LD	DE,BADTIM$	; "Invalid time", and ask again.
+	LD	C,_STROUT
+	CALL	BDOS
+	JR	GETTIM
+;
+TIM20:	LD	A,H		; AM: 12 is 0, reject 13 and up.
+	CP	13
+	JR	NC,TIMERR
+	SUB	12
+	JR	NZ,SAVTIM
+	LD	H,A
+	JR	SAVTIM
+;
+;------------------------------------------------------------------------------
+;
+;        MODE width
+;
+;        Sets the screen width, from 1 to 80 (more than 40 only in MSX2 or
+; later, that is, if there is a SUB-ROM). Up to 32 SCREEN 1 is used, else
+; SCREEN 0. The BIOS routine is called with CALSLT, which returns to the
+; main loop.
+;
+@MODE:	LD	HL,CMDLIN+1
+	CALL	SCANOFF
+	CALL	GETNUM
+	JR	C,MOD40
+	OR	A
+	JR	Z,MOD40
+	CP	80+1
+	JR	NC,MOD40
+	CP	40+1
+	JR	C,MOD10
+	LD	B,A
+	LD	A,(EXBRSA)
+	OR	A
+	JR	Z,MOD40
+	LD	A,B
+MOD10:	LD	B,A		; Nothing else allowed after the number.
+	CALL	SCANOFF
+	CP	CR
+	JR	NZ,MOD40
+	LD	A,B
+	CP	32+1
+	JR	NC,MOD20
+	LD	(LINL32),A
+	LD	IX,INIT32
+	JR	MOD30
+MOD20:	LD	(LINL40),A
+	LD	IX,INITXT
+MOD30:	LD	IY,(EXPTBL-1)	; IYh = main BIOS slot.
+	JP	CALSLT
+;
+MOD40:	LD	DE,BADPARM$	; "Invalid parameter".
+	JP	ERROR
+;
+;------------------------------------------------------------------------------
+;
+;        BASIC
+;
+;        Starts Disk BASIC.
+;
+@BASIC:	CALL	$DOSON
+	JP	K_BASIC
+;
+;------------------------------------------------------------------------------
+;
+;        FORMAT
+;
+;        Formats a disk, using the disk ROM format routine (which asks for
+; the drive and the format to use). The TPA up to TCOMMAND is passed as
+; its work buffer.
+;
+@FORMAT: LD	HL,TPA
+	LD	BC,TPASIZ
+	CALL	$DOSON
+	CALL	K_FORMAT
+	CALL	$DOSOFF
+	JP	CRLF

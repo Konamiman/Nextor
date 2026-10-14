@@ -1,0 +1,667 @@
+	SUBTTL	Start up
+;******************************************************************************
+;
+;        This is the code that is copied to the top of the TPA by the loader.
+; It is always on a page boundary, so that the BDOS page (where the jump at
+; 0005h points into) and the BIOS jump table are on page boundaries as well,
+; as required for CP/M compatibility.
+;
+;        The first page contains code that is used only once, at start up.
+; Once COMMAND.COM is loaded it gets overwritten by the last page of
+; COMMAND.COM, which places itself right below the BDOS page.
+;
+;******************************************************************************
+;
+;        Start up entry point, jumped to by the loader after relocating the
+; code. Sets up the disk error and Ctrl-C handlers, saves the first boot
+; flag for COMMAND.COM (so that it knows whether to execute AUTOEXEC.BAT),
+; and continues as in a warm boot.
+;
+;        The kernel calls the disk error and Ctrl-C handlers through two
+; levels of indirection: DISKVECT and BREAKVECT point to a word that holds
+; the address of the handler.
+;
+IMAGE:	LD	HL,DSKVEC	; Set up the disk error handler.
+	LD	(DISKVECT),HL
+	LD	HL,BRKVEC	; Set up the Ctrl-C handler.
+	LD	(BREAKVECT),HL
+	LD	HL,NOTFIRST	; Copy the first boot flag to BOOTFLG,
+	LD	A,(HL)		;   and set it to non-zero (H=0F3h) so
+	LD	(HL),H		;   that the next boot is not the first one.
+	LD	(BOOTFLG),A
+	JP	WBOOT		; Go and load COMMAND.COM.
+;
+;------------------------------------------------------------------------------
+;
+;        Print the "$" terminated string pointed by DE. This is called only
+; by the loader, before the code is relocated: it works at its assembled
+; address since it uses relative jumps only. The disk ROM BDOS function
+; routine is called directly since the BDOS is not set up yet (and the disk
+; ROM is in page 1 at this point).
+;
+PRTMSG:	LD	A,(DE)
+	CP	"$"
+	RET	Z
+	PUSH	DE
+	LD	E,A
+	CALL	F_DIRIO
+	POP	DE
+	INC	DE
+	JR	PRTMSG
+;
+;        Padding up to the BDOS page.
+;
+	.ALIGN	100H
+;
+;
+	SUBTTL	BDOS page and shared data
+;******************************************************************************
+;
+;        This is the BDOS page. As in CP/M, the jump at 0005h points to
+; offset 6 of the page, and the first six bytes hold the serial number.
+;
+;        It is followed by the data area that is shared with COMMAND.COM
+; (see SH_xxx in dos1.inc). The fields are referenced by COMMAND.COM with
+; the offsets defined there, and SHARED below checks that both agree.
+;
+;******************************************************************************
+;
+SERNO:	DEFB	0,0,0,0,0,0	; CP/M serial number.
+BDOSJP:	JP	BDOSFN		; BDOS entry point.
+;
+DSKVEC:	DEFW	DSKERR		; Disk error handler, pointed by DISKVECT.
+	DEFW	DSKERR		; (These three are not used.)
+	DEFW	DSKERR
+	DEFW	DSKERR
+BRKVEC:	DEFW	CONTC		; Ctrl-C handler, pointed by BREAKVECT.
+;
+;        The initial values of the following three make sure that the
+; checksum check fails at the first warm boot (the word at BDOSJP can't be
+; 0FFFFh), so that COMMAND.COM gets loaded from disk.
+;
+CMDADR:	DEFW	BDOSJP		; Re-entry address of COMMAND.COM.
+CMDLEN:	DEFW	1		; Number of words to checksum.
+CMDSUM:	DEFW	0FFFFH		; Expected checksum.
+;
+BATFLG:	DEFB	0		; NZ => batch file being executed.
+BOOTFLG: DEFB	0		; Zero on the very first boot.
+PARMTAB: DEFW	0,0,0,0,0,0,0,0,0,0 ; Pointers to %0 to %9, 0 if none.
+BATFCB:	DEFS	FCB_LEN,0	; FCB of the batch file.
+BATLIN:	DEFS	100H-LOW $,0	; Batch command line copy (up to the end of
+				;   the page).
+;
+SHARED	MACRO	NAME,OFFSET
+	IF	NAME-SERNO NE OFFSET
+	 .ERROR	NAME is not at the offset specified by OFFSET
+	ENDIF
+	ENDM
+;
+	SHARED	BDOSJP,SH_BDOS
+	SHARED	DSKVEC,SH_DSKVEC
+	SHARED	BRKVEC,SH_BRKVEC
+	SHARED	CMDADR,SH_CMDADR
+	SHARED	CMDLEN,SH_CMDLEN
+	SHARED	CMDSUM,SH_CMDSUM
+	SHARED	BATFLG,SH_BATFLG
+	SHARED	BOOTFLG,SH_BOOTFLG
+	SHARED	PARMTAB,SH_PARMTAB
+	SHARED	BATFCB,SH_BATFCB
+	SHARED	BATLIN,SH_BATLIN
+;
+;
+	SUBTTL	Disk error and Ctrl-C handlers
+;******************************************************************************
+;
+;        Disk error handler, called by the kernel (with the disk ROM in page
+; 1) through DISKVECT when a disk operation fails.
+;
+; Entry:  A = drive number (0 = A:)
+;         C = error code:
+;             bit 7 set: bad FAT, nothing else matters.
+;             bit 0 set: error when writing, else when reading.
+;             bits 1-6: 0 = write protect, 2 = not ready, 0Ah = unsupported
+;             media type (only when reading), anything else is reported as
+;             a generic disk error.
+; Exit:   C = 0 to ignore the error, 1 to retry, 2 to abort.
+;
+;        The messages are built by copying "read" or "writ" and the drive
+; letter into the "error reading drive A" message. No questions are asked
+; for unsupported media type and bad FAT errors, which are always aborted.
+;
+DSKERR:	ADD	A,"A"		; Drive letter.
+	BIT	7,C
+	JR	NZ,FATERR
+	LD	(DRVLET),A	; Put drive letter in the message.
+	LD	HL,READ$	; Put "read" or "writ" in the message.
+	LD	DE,IOTYP
+	LD	A,C
+	BIT	0,A
+	LD	BC,4
+	JR	Z,DSK10
+	LD	HL,WRITE$
+DSK10:	LDIR
+	CP	0AH		; Select the message for the error type.
+	LD	DE,MEDIA$	;   Z is kept on the stack, to know later
+	PUSH	AF		;   whether to ask Abort/Retry/Ignore.
+	JR	Z,DSK20
+	AND	0FEH
+	LD	DE,ERR0$
+	JR	Z,DSK20
+	CP	2
+	LD	DE,ERR2$
+	JR	Z,DSK20
+	LD	DE,ERR12$
+DSK20:	CALL	PRTBUF		; Print error type...
+	LD	DE,ERRMES$	; ...and " error reading/writing drive X".
+	CALL	PRTBUF
+	POP	AF
+	LD	C,2		; Abort if unsupported media type.
+	RET	Z
+;
+ASK:	LD	DE,REQUEST$	; Ask "Abort, Retry, Ignore?" until a valid
+	CALL	PRTBUF		;   answer is given.
+	CALL	F_CONIN
+	PUSH	AF
+	CALL	K_CRLF
+	POP	AF
+	AND	5FH		; Convert to upper case.
+	LD	C,0
+	CP	"I"
+	RET	Z
+	INC	C
+	CP	"R"
+	RET	Z
+	INC	C
+	CP	"A"
+	RET	Z
+	JR	ASK
+;
+FATERR:	LD	(FATDRV),A	; Bad FAT: print the message and abort.
+	LD	DE,BADFAT$
+	CALL	PRTBUF
+	LD	C,2
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Ctrl-C handler, jumped to by the kernel through BREAKVECT (with the
+; disk ROM in page 1) when Ctrl-C or Ctrl-STOP is detected. It prints "^C"
+; and, if a batch file is being executed, asks whether it must be
+; terminated. It then terminates the program by jumping to 0, which ends up
+; re-entering COMMAND.COM.
+;
+;        When the printer echo is on, the console status routine is called
+; 1200 times before doing anything else. The console status routine is the
+; one that processes the ^P, ^N and ^S keys, but the purpose of this is not
+; clear.
+;
+CONTC:	CALL	$DOSON
+	EI
+	LD	SP,BIOS		; Use our own stack.
+	LD	A,(PRTECHO)
+	OR	A
+	JR	Z,CTC20
+	LD	BC,1200
+CTC10:	PUSH	BC
+	CALL	F_CONST
+	POP	BC
+	DEC	BC
+	LD	A,C
+	OR	B
+	JR	NZ,CTC10
+;
+CTC20:	LD	A,3		; Print "^C".
+	CALL	K_CTLOUT
+	LD	A,(BATFLG)	; Skip the question if no batch file is
+	OR	A		;   being executed.
+	JR	Z,CTC30
+ASKEND:	LD	DE,ENDBATMES$	; "Terminate batch file (Y/N)?"
+	CALL	PRTBUF
+	CALL	F_CONIN
+	AND	5FH		; Convert to upper case.
+	CP	"N"
+	JR	Z,CTC30
+	CP	"Y"
+	JR	NZ,ASKEND
+	XOR	A		; Yes: cancel the batch file.
+	LD	(BATFLG),A
+CTC30:	CALL	$DOSOFF
+	EI
+	JP	JWBOOT		; Terminate the program.
+;
+;
+	SUBTTL	Warm boot
+;******************************************************************************
+;
+;        Warm boot routine, jumped to via the BIOS jump table (and so via
+; the jump at 0000h) whenever a program terminates, and at start up. Sets up
+; the jumps at 0000h and 0005h, flushes the disk buffers and re-enters
+; COMMAND.COM.
+;
+;        COMMAND.COM keeps itself in high memory, right below the BDOS page,
+; and stores in CMDADR, CMDLEN and CMDSUM the information needed to check
+; whether it is still intact: if the checksum of CMDLEN words starting at
+; CMDADR matches CMDSUM it is simply re-entered at CMDADR. Otherwise it is
+; loaded from disk at 100h and executed as a transient program, and it will
+; then move itself to high memory again.
+;
+;        The kernel BDOS routines are called directly to load COMMAND.COM,
+; since the disk ROM is in page 1 during all this process.
+;
+WBOOT:	LD	SP,BIOS		; Use our own stack.
+	CALL	$DOSON
+	EI
+	LD	HL,BIOS+3	; Set up the jumps at 0000h (to the warm
+	LD	(JWBOOT+1),HL	;   boot entry of the BIOS jump table) and
+	LD	HL,BDOSJP	;   at 0005h (to the BDOS entry).
+	LD	(BDOS+1),HL
+	LD	A,0C3H		; JP opcode.
+	LD	(JWBOOT),A
+	LD	(BDOS),A
+	CALL	K_FLUSH		; Flush the disk buffers.
+;
+	LD	HL,(CMDADR)	; Calculate the checksum of COMMAND.COM.
+	LD	BC,(CMDLEN)
+	LD	DE,0
+CHK:	LD	A,(HL)
+	INC	HL
+	ADD	A,E
+	LD	E,A
+	LD	A,(HL)
+	INC	HL
+	ADC	A,D
+	LD	D,A
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,CHK
+	LD	HL,(CMDSUM)	; If it matches the stored one, re-enter
+	SBC	HL,DE		;   COMMAND.COM (Cy is reset here).
+	JR	NZ,LOADCOM
+	LD	HL,(CMDADR)
+	CALL	$DOSOFF
+	EI
+	JP	(HL)
+;
+;        COMMAND.COM is not intact: load it from disk. If it can't be opened,
+; ask for a DOS disk and try again.
+;
+LOADCOM: LD	DE,COMFCB
+	CALL	F_FOPEN
+	OR	A
+	JR	Z,READCOM
+PROMPTCOM: LD	DE,NEEDCOM$	; "Insert DOS disk in default drive..."
+	CALL	PRTBUF
+	CALL	F_INNOE
+	JR	LOADCOM
+;
+;        Load the file at 100h in a single random block read, with record
+; size 1. The number of bytes to read is the address of IMAGE, which is
+; just a big enough number. The read should hit the end of file (A=1): if
+; it doesn't, the file is too big to be the right one.
+;
+READCOM: LD	HL,0
+	LD	(COMFCB+FCB_RR),HL
+	LD	(COMFCB+FCB_RR+2),HL
+	INC	HL
+	LD	(COMFCB+FCB_RSZ),HL
+	LD	HL,TPA		; Set the DMA address directly.
+	LD	(DTA_ADDR),HL
+	LD	DE,COMFCB
+	LD	HL,IMAGE
+	CALL	F_RDBLK
+	OR	A
+	JR	Z,PROMPTCOM
+	CALL	$DOSOFF
+	EI
+	JP	TPA		; Execute COMMAND.COM.
+;
+;
+	SUBTTL	BDOS
+;******************************************************************************
+;
+;        BDOS function dispatcher, jumped to from 0005h (via BDOSJP). The
+; function routines are in the disk ROM, in page 1, so the disk ROM must be
+; switched in before calling them. But then the user data that the caller
+; passes in page 1 (an FCB or a buffer) would not be accessible, so this
+; data is copied to a buffer in page 3 (DATBUF) before calling the
+; function, and back to the caller's buffer after it. FUNTAB specifies how
+; many bytes to copy for each function.
+;
+;        As in CP/M, the functions return the result in A and in HL (L=A,
+; H=B), but the kernel can prevent the latter by resetting CPMCALL (the
+; functions that return a result in HL do this).
+;
+;        "Search next" doesn't take an FCB, so the address of the FCB passed
+; to "search first" is saved and passed again.
+;
+; Entry:  C = function number
+;         DE, HL = parameters
+; Exit:   Results returned by the function.
+;
+NOFUNC:	XOR	A		; Function not implemented: return A=B=0.
+	LD	B,A
+	RET
+;
+BDOSFN:	LD	A,1		; Assume that HL must be set to BA.
+	LD	(CPMCALL),A
+	LD	A,C
+	CP	30H+1		; Function 30h is the last one.
+	JR	NC,NOFUNC
+	LD	(SPSAVE),SP	; Switch to our own stack.
+	LD	SP,BIOS
+	CP	_SFIRST		; Save the FCB of "search first",
+	JR	NZ,BDS10
+	LD	(SRCHFCB),DE
+BDS10:	CP	_SNEXT		;   and use it for "search next".
+	JR	NZ,BDS20
+	LD	DE,(SRCHFCB)
+;
+BDS20:	PUSH	HL		; Put BDOSRET as the return address, and
+	LD	HL,BDOSRET	;   then the address of the function
+	EX	(SP),HL		;   routine on top of it so that it is
+	PUSH	HL		;   jumped to by the final RET.
+	LD	HL,FUNTAB
+	LD	B,0
+	ADD	HL,BC		; HL = FUNTAB + function*3.
+	ADD	HL,BC
+	ADD	HL,BC
+	LD	A,(HL)		; A = number of bytes to copy.
+	INC	HL
+	LD	B,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,B
+	EX	(SP),HL		; Routine address on stack, and restore HL.
+	LD	(DATLEN),A
+	OR	A
+	JR	Z,BDS40		; Skip if no data to copy.
+;
+	PUSH	HL		; Copy the caller's data to DATBUF.
+	EX	DE,HL
+	LD	(DATPTR),HL
+	LD	DE,DATBUF
+	LD	B,0
+	LD	C,A
+	INC	A		; If the length is 0FFh, this is a line
+	JR	NZ,BDS30	;   input buffer: copy its two header
+	LD	A,(HL)		;   bytes plus the buffer size given in
+	LD	C,A		;   the first one.
+	INC	BC
+	INC	BC
+BDS30:	LDIR
+	POP	HL
+	LD	DE,DATBUF	; Pass DATBUF to the function routine.
+;
+BDS40:	CALL	$DOSON		; Jump to the function routine.
+	EI
+	RET
+;
+;        The function routines return here.
+;
+BDOSRET: PUSH	AF
+	CALL	$DOSOFF
+	EI
+	LD	A,(DATLEN)	; Copy the data back to the caller, if
+	OR	A		;   there was data.
+	JR	Z,BDR20
+	LD	C,A
+	LD	B,0
+	PUSH	HL
+	LD	DE,(DATPTR)
+	LD	HL,DATBUF
+	INC	A		; Length 0FFh: line input buffer, as above.
+	JR	NZ,BDR10
+	LD	A,(DE)
+	LD	C,A
+	INC	BC
+	INC	BC
+BDR10:	LDIR
+	POP	HL
+;
+BDR20:	LD	A,(CPMCALL)	; Return BA in HL if requested, and
+	OR	A		;   restore the caller's stack.
+	JR	Z,BDR30
+	POP	AF
+	LD	L,A
+	LD	H,B
+	LD	SP,(SPSAVE)
+	RET
+BDR30:	POP	AF
+	LD	SP,(SPSAVE)
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Function table: for each function, the number of bytes of the data
+; pointed by DE to copy to DATBUF before calling the function routine (and
+; back after it), and the address of the routine. 0FFh means that DE points
+; to a line input buffer.
+;
+;        Function 0 jumps to 0000h, so it does a warm boot.
+;
+FUNTAB:	DEFB	0
+	DEFW	JWBOOT		; 00h  Terminate program
+	DEFB	0
+	DEFW	F_CONIN		; 01h  Console input
+	DEFB	0
+	DEFW	F_CONOUT	; 02h  Console output
+	DEFB	0
+	DEFW	F_AUXIN		; 03h  Auxiliary input
+	DEFB	0
+	DEFW	F_AUXOUT	; 04h  Auxiliary output
+	DEFB	0
+	DEFW	F_LSTOUT	; 05h  Printer output
+	DEFB	0
+	DEFW	F_DIRIO		; 06h  Direct console I/O
+	DEFB	0
+	DEFW	F_DIRIN		; 07h  Direct console input
+	DEFB	0
+	DEFW	F_INNOE		; 08h  Console input without echo
+	DEFB	0
+	DEFW	PRTBUF		; 09h  String output
+	DEFB	0FFH
+	DEFW	F_BUFIN		; 0Ah  Buffered line input
+	DEFB	0
+	DEFW	F_CONST		; 0Bh  Console status
+	DEFB	0
+	DEFW	F_CPMVER	; 0Ch  Get CP/M version number
+	DEFB	0
+	DEFW	F_DSKRST	; 0Dh  Disk reset
+	DEFB	0
+	DEFW	F_SELDSK	; 0Eh  Select disk
+	DEFB	20H
+	DEFW	F_FOPEN		; 0Fh  Open file
+	DEFB	20H
+	DEFW	F_FCLOSE	; 10h  Close file
+	DEFB	0FH
+	DEFW	F_SFIRST	; 11h  Search for first
+	DEFB	0FH
+	DEFW	F_SNEXT		; 12h  Search for next
+	DEFB	20H
+	DEFW	F_FDEL		; 13h  Delete file
+	DEFB	21H
+	DEFW	F_RDSEQ		; 14h  Sequential read
+	DEFB	21H
+	DEFW	F_WRSEQ		; 15h  Sequential write
+	DEFB	20H
+	DEFW	F_FMAKE		; 16h  Create file
+	DEFB	20H
+	DEFW	F_FREN		; 17h  Rename file
+	DEFB	0
+	DEFW	F_LOGIN		; 18h  Get login vector
+	DEFB	0
+	DEFW	F_CURDRV	; 19h  Get current drive
+	DEFB	0
+	DEFW	F_SETDTA	; 1Ah  Set DMA address
+	DEFB	0
+	DEFW	F_ALLOC		; 1Bh  Get allocation information
+	DEFB	0
+	DEFW	NOFUNC		; 1Ch
+	DEFB	0
+	DEFW	NOFUNC		; 1Dh
+	DEFB	0
+	DEFW	NOFUNC		; 1Eh
+	DEFB	0
+	DEFW	NOFUNC		; 1Fh
+	DEFB	0
+	DEFW	NOFUNC		; 20h
+	DEFB	24H
+	DEFW	F_RDRND		; 21h  Random read
+	DEFB	24H
+	DEFW	F_WRRND		; 22h  Random write
+	DEFB	24H
+	DEFW	F_FSIZE		; 23h  Get file size
+	DEFB	24H
+	DEFW	F_SETRND	; 24h  Set random record
+	DEFB	0
+	DEFW	NOFUNC		; 25h
+	DEFB	25H
+	DEFW	F_WRBLK		; 26h  Random block write
+	DEFB	25H
+	DEFW	F_RDBLK		; 27h  Random block read
+	DEFB	24H
+	DEFW	F_WRZER		; 28h  Random write with zero fill
+	DEFB	0
+	DEFW	NOFUNC		; 29h
+	DEFB	0
+	DEFW	F_GDATE		; 2Ah  Get date
+	DEFB	0
+	DEFW	F_SDATE		; 2Bh  Set date
+	DEFB	0
+	DEFW	F_GTIME		; 2Ch  Get time
+	DEFB	0
+	DEFW	F_STIME		; 2Dh  Set time
+	DEFB	0
+	DEFW	F_VERIFY	; 2Eh  Set/reset verify flag
+	DEFB	0
+	DEFW	F_RDABS		; 2Fh  Absolute sector read
+	DEFB	0
+	DEFW	F_WRABS		; 30h  Absolute sector write
+;
+;------------------------------------------------------------------------------
+;
+;        Messages. The error ones are printed by DSKERR as the error type
+; followed by ERRMES$, after having patched IOTYP and DRVLET.
+;
+ENDBATMES$: DEFB CR,LF,"Terminate batch file (Y/N)? $"
+NEEDCOM$: DEFB	CR,LF,"Insert DOS disk in default drive"
+	DEFB	CR,LF,"and strike any key when ready",CR,LF,"$"
+BADFAT$: DEFB	CR,LF,"Bad FAT, drive "
+FATDRV:	DEFB	"A",CR,LF,"$"
+READ$:	DEFB	"read"
+WRITE$:	DEFB	"writ"
+ERR0$:	DEFB	CR,LF,"Write protect$"
+ERR2$:	DEFB	CR,LF,"Not ready$"
+MEDIA$:	DEFB	CR,LF,"Unsupported media type$"
+ERR12$:	DEFB	CR,LF,"Disk$"
+ERRMES$: DEFB	" error "
+IOTYP:	DEFB	"reading drive "
+DRVLET:	DEFB	"A",CR,LF,"$"
+REQUEST$: DEFB	"Abort, Retry, Ignore? $"
+;
+;------------------------------------------------------------------------------
+;
+;        BDOS data, and the stack used by the BDOS and the BIOS routines.
+;
+;        Note that DATBUF has room for an FCB or a line input buffer of up
+; to 130 characters, but nothing prevents BUFIN from being called with a
+; bigger buffer; the excess would be copied to the bottom of the stack
+; area.
+;
+DATLEN:	DEFB	0		; Number of bytes copied to DATBUF.
+DATPTR:	DEFW	0		; Address of the caller's data.
+DATBUF:	DEFS	132,0		; Copy of the caller's data.
+;
+;        Stack area, up to the next page boundary plus one more page. Its top
+; is the start of the BIOS jump table.
+;
+	DEFS	100H-LOW $,0
+	DEFS	100H,0
+;
+;
+	SUBTTL	BIOS
+;******************************************************************************
+;
+;        Partial CP/M BIOS jump table. Only the first five entries are
+; implemented, which are the cold and warm boot entries (both doing a
+; warm boot) and the console ones. As in CP/M, the jump at 0000h points
+; to the warm boot entry.
+;
+;        The table is on a page boundary, as required by CP/M, since it
+; follows the BDOS page and the stack area is padded up to here.
+;
+;******************************************************************************
+;
+	IF	LOW $
+	 .ERROR	The BIOS jump table is not on a page boundary
+	ENDIF
+;
+BIOS:	JP	WBOOT		; Cold boot.
+	JP	WBOOT		; Warm boot.
+	JP	CONST		; Console status.
+	JP	CONIN		; Console input.
+	JP	CONOUT		; Console output.
+;
+;------------------------------------------------------------------------------
+;
+;        Console status.
+;
+; Exit:   A = 0FFh if a character is available, 0 otherwise.
+;
+CONST:	LD	(SPSAVE),SP
+	LD	SP,BIOS
+	CALL	$DOSON
+	EI
+	CALL	BIOS_STAT
+	PUSH	AF
+	CALL	$DOSOFF
+	EI
+	POP	AF
+	LD	SP,(SPSAVE)
+	LD	A,0		; (Keeping Z from BIOS_STAT.)
+	RET	Z
+	DEC	A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Console input.
+;
+; Exit:   A = character read.
+;
+CONIN:	LD	(SPSAVE),SP
+	LD	SP,BIOS
+	CALL	$DOSON
+	EI
+	CALL	BIOS_IN
+	CALL	$DOSOFF
+	EI
+	LD	SP,(SPSAVE)
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Console output.
+;
+; Entry:  C = character to print.
+;
+CONOUT:	LD	A,C
+	LD	(SPSAVE),SP
+	LD	SP,BIOS
+	CALL	$DOSON
+	EI
+	CALL	BIOS_OUT
+	CALL	$DOSOFF
+	EI
+	LD	SP,(SPSAVE)
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        FCB used to load COMMAND.COM from the default drive.
+;
+COMFCB:	DEFB	0,"COMMAND COM"
+	DEFS	FCB_LEN-12,0
+;
+IMGEND:				; End of the relocated code.

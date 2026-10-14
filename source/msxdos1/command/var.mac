@@ -1,0 +1,79 @@
+	SUBTTL	Variables and stack
+;******************************************************************************
+;
+;        Variables and stack. These are part of the relocated program, but
+; are not included in the checksum that MSXDOS.SYS uses to check whether
+; the program is still intact. The stack area goes up to the end of the
+; program, which is the start of the MSXDOS.SYS BDOS page.
+;
+;        Some of the variables have initial values, which are relevant only
+; until they are first modified.
+;
+;******************************************************************************
+;
+;        Buffers for the BUFIN function: maximum size, number of characters
+; read, and the characters. The CR after each buffer is never used.
+;
+COMBUF:	DEFB	128,0		; Command line buffer.
+	DEFS	128,0
+	DEFB	CR
+;
+DATBUF:	DEFB	12,0		; Buffer for the new date or time typed by
+	DEFS	12,0		;   the user, also used to build the current
+	DEFB	CR		;   date or time as text (see FMTDATE).
+;
+SAVTPL:	DEFW	0		; COMBUF+1 and +2 before reading a command.
+;
+COMSW:	DEFB	0		; Switches after the command name,
+ARG1S:	DEFB	0		;   after the first parameter,
+ARG2S:	DEFB	0		;   and after the second parameter.
+;
+IDFCB:	DEFS	FCB_LEN,0	; FCB with the command name.
+DIRBUF:	DEFS	FCB_LEN,0	; Search results and FCB of found files.
+BATBYT:	DEFB	0		; Byte read from the batch file.
+CURDRV:	DEFB	0		; Current drive (0 = A:).
+NUMDRV:	DEFB	0		; Number of drives.
+FILECNT: DEFB	0		; Files found by DIR, or copied by COPY.
+;
+PERLIN:	DEFB	0		; DIR: entries per line,
+LINCNT:	DEFB	0		;   entries left in the current line,
+FULLSCR: DEFB	0		;   and lines left in the current page.
+BCDBUF:	DEFS	4,0		; Number being converted by DISP32BITS.
+;
+CPYSP:	DEFW	0		; COPY variables, see copy.mac.
+CURHDR:	DEFW	0
+DEST:	DEFS	12,0
+NXTADD:	DEFW	0
+SRCPT:	DEFW	0
+INEXACT: DEFB	0
+APPEND:	DEFB	0
+NOWRITE: DEFB	0
+ASCII:	DEFB	0
+PLUS:	DEFB	0
+PARM2:	DEFB	0
+SOURCE:	DEFS	11,0
+;
+;        Stack area: up to the next page boundary, plus the last page of the
+; program. When a .COM program is executed, its first stack entries and a
+; copy of its FCB are placed at the top of the stack area (see EXECUTE),
+; so that the program can be loaded on top of everything else.
+;
+	DEFS	100H-LOW $,0
+	DEFS	100H-EXESIZ-FCB_LEN,0
+EXESTK:	DEFS	EXESIZ,0	; Copy of EXESTUB.
+EXEFCB:	DEFS	FCB_LEN,0	; Copy of the program FCB.
+;
+STACK:
+IMGEND:				; End of the program.
+;
+;        Fields of the MSXDOS.SYS shared data area, which is right after
+; the program.
+;
+CMDADR	EQU	IMGEND+SH_CMDADR
+CMDLEN	EQU	IMGEND+SH_CMDLEN
+CMDSUM	EQU	IMGEND+SH_CMDSUM
+BATFLG	EQU	IMGEND+SH_BATFLG
+BOOTFLG	EQU	IMGEND+SH_BOOTFLG
+PARMTAB	EQU	IMGEND+SH_PARMTAB
+BATFCB	EQU	IMGEND+SH_BATFCB
+BATLIN	EQU	IMGEND+SH_BATLIN

@@ -40,6 +40,8 @@
 
 [2.17. Extended partitions in any entry of the partition table](#217-extended-partitions-in-any-entry-of-the-partition-table)
 
+[2.18. The MSX-DOS 1 system files are included](#218-the-msx-dos-1-system-files-are-included)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -213,6 +215,10 @@ Some computers have proprietary built-in software (such as the HiTBiT menu of ma
 Nextor 2 only recognized an extended partition when it was in the second entry of the primary partition table, which is where the built-in partitioning tool creates it; but other partitioning tools may place it elsewhere (for example, a device partitioned on a PC with three primary partitions plus an extended one will have the extended partition in the fourth entry), and the logical partitions inside it were then unreachable. Nextor 3 recognizes the first extended partition found in the primary partition table, whatever its entry is: its logical partitions are taken into account by the automatic drive mapping procedure at boot time and after media changes, and can be mapped with `MAPDRV` and `CALL MAPDRV`.
 
 When the extended partition is primary partition K, the partition numbers accepted by these commands are 1 to K-1 for the primary partitions and K onwards for the logical partitions; for devices partitioned with the built-in partitioning tool (K = 2) this is the same numbering as in Nextor 2. Primary partitions placed after the extended partition in the partition table are not supported. Also, empty entries in the primary partition table (e.g. left by deleting a partition with a PC tool) no longer stop the scan for partitions done by the automatic drive mapping procedure. See _[3.4.1. MAPDRV: the drive mapping tool](Nextor_3.0_User_Manual.md#341-mapdrv-the-drive-mapping-tool)_ in the user manual.
+
+### 2.18. The MSX-DOS 1 system files are included
+
+Booting to the DOS prompt in MSX-DOS 1 mode requires `MSXDOS.SYS` and `COMMAND.COM`, the system files of MSX-DOS 1, which previously had to be obtained separately. Nextor 3 includes them: `MSXDOS.SYS` 1.03 and `COMMAND.COM` 1.11 are built from source code reverse engineered from the original files (and functionally identical to them), and are supplied in the root directory of the Nextor tools disk image and the tools zip archive, so that the tools disk boots to the DOS prompt both in the normal mode and in MSX-DOS 1 mode. The batch file that sets the `PATH` and `HELP` environment items in the tools disk is now `AUTOEXEC.BTM` instead of `AUTOEXEC.BAT`, so that it's executed only by `NEXTOR.SYS` (see _[2.14. Enhanced NEXTOR.SYS](Nextor_3.0_User_Manual.md#214-enhanced-nextorsys)_ in the user manual). See _[3.1. Installing Nextor](Nextor_3.0_User_Manual.md#31-installing-nextor)_ in the user manual.
 
 ## 3. Information for application developers
 

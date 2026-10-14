@@ -1,0 +1,81 @@
+	SUBTTL	Loader
+;******************************************************************************
+;
+;        This is the code that gets control when MSXDOS.SYS is executed at
+; 100h by the disk ROM boot code (which leaves the disk ROM switched in
+; page 1). It prints the sign-on message if this is the very first boot,
+; then relocates the code in sys.mac to the top of the TPA and jumps to it.
+;
+;        This page is the start of the relocatable part (see msxdos.mac),
+; so it contains relocated addresses too. These are relocated in place
+; together with the rest of the code, but this is harmless since by then
+; this code has done its work and is never executed again.
+;
+;******************************************************************************
+;
+LOADER:	JR	LDR10		; Skip the sign-on message.
+;
+BANNER$: DEFB	CR,LF,"MSX-DOS version 1.03"
+	DEFB	CR,LF,"Copyright 1984 by Microsoft",CR,LF,"$"
+;
+;        The code is relocated in place and then copied, rather than the
+; other way around: the relocation table is relative to the loader page,
+; so B is set to the high byte of the loader page (the high byte of IMAGE
+; minus one) for the table entries to point at the bytes in their current
+; location.
+;
+LDR10:	LD	SP,9000H	; Get a stack in a safe place.
+	LD	HL,PRTBUF	; (Useless: K_SYSBOT overwrites HL.)
+	CALL	K_SYSBOT	; HL = lowest address used by the system.
+	PUSH	HL
+	PUSH	DE		; (Popped and discarded below.)
+	LD	DE,BANNER$	; Print the sign-on message only on the
+	LD	A,(NOTFIRST)	;   very first boot (not when coming back
+	AND	A		;   from BASIC with CALL SYSTEM).
+	CALL	Z,PRTMSG
+	POP	HL
+;
+	LD	HL,IMGEND	; DE = size of the code to relocate.
+	LD	BC,IMAGE
+	XOR	A
+	SBC	HL,BC
+	EX	DE,HL
+	POP	HL		; HL = system bottom minus the size, rounded
+	SBC	HL,DE		;   down to a page boundary: destination
+	LD	L,A		;   address of the code.
+	PUSH	HL		; Save destination (also the jump address),
+	PUSH	DE		;   size,
+	PUSH	BC		;   and source.
+	LD	A,H		; C = page offset between source and
+	SUB	B		;   destination (the value to add to the
+	LD	C,A		;   high bytes of addresses).
+	DEC	B		; B = high byte of the loader page.
+;
+	LD	HL,RELTAB	; Adjust the bytes pointed by each entry
+LDR20:	LD	E,(HL)		;   of the relocation table, until the
+	INC	HL		;   terminating zero is found.
+	LD	D,(HL)
+	INC	HL
+	LD	A,D
+	OR	E
+	JR	Z,LDR30
+	EX	DE,HL
+	LD	A,H
+	ADD	A,B
+	LD	H,A
+	LD	A,(HL)
+	ADD	A,C
+	LD	(HL),A
+	EX	DE,HL
+	JR	LDR20
+;
+LDR30:	POP	HL		; Copy the code to its final place.
+	POP	BC
+	POP	DE
+	PUSH	DE
+	LDIR
+	RET			; Jump to IMAGE at its final address.
+;
+;        Padding up to the start of the relocated code.
+;
+	.ALIGN	100H

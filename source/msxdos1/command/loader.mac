@@ -1,0 +1,55 @@
+	SUBTTL	Loader
+;******************************************************************************
+;
+;        Copies the program to the top of the TPA, so that it ends just
+; below the MSXDOS.SYS BDOS page (the one where the jump at 0005h points
+; into), adjusts it for its new address and jumps to its first instruction
+; (INIT).
+;
+;        Unlike the MSXDOS.SYS loader, this one copies the code first and
+; relocates it in its final place. The relocation table is relative to the
+; start of this page, so B is set to the page before the destination; the
+; first two table entries are for the two relocated operands of this very
+; loader, which therefore end up adjusting two bytes in the TPA below the
+; copied code (harmlessly).
+;
+;******************************************************************************
+;
+LOADER:	LD	A,(BDOS+2)	; A = BDOS page.
+	LD	BC,IMGSIZ
+	SUB	B		; DE = destination: the program size below
+	LD	D,A		;   the BDOS page.
+	LD	E,0
+	LD	HL,IMAGE
+	LDIR
+	LD	B,A		; B = page before the destination.
+	DEC	B
+	SUB	HIGH IMAGE	; C = page offset between the assembled and
+	LD	C,A		;   the final address.
+;
+	LD	HL,RELTAB	; Adjust the bytes pointed by each entry
+LDR10:	LD	E,(HL)		;   of the relocation table, until the
+	INC	HL		;   terminating zero is found.
+	LD	D,(HL)
+	INC	HL
+	LD	A,D
+	OR	E
+	JR	Z,LDR20
+	EX	DE,HL
+	LD	A,H
+	ADD	A,B
+	LD	H,A
+	LD	A,(HL)
+	ADD	A,C
+	LD	(HL),A
+	EX	DE,HL
+	JR	LDR10
+;
+LDR20:	INC	B		; Jump to the relocated INIT.
+	LD	H,B
+	LD	L,0
+	JP	(HL)
+;
+;        Padding up to the start of the relocated code.
+;
+	.ALIGN	100H

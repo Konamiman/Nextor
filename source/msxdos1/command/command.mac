@@ -1,0 +1,80 @@
+	TITLE	MSX-DOS 1 - COMMAND.COM 1.11
+	SUBTTL	Master file
+	.Z80
+;******************************************************************************
+;
+;        Source code of COMMAND.COM 1.11, the command interpreter of MSX-DOS
+; 1. It is a Z80 port of the COMMAND.COM of MS-DOS 1.x (so a good number of
+; the labels are those of the MS-DOS 1.25 source code, released by
+; Microsoft in 2018), with some features of its own: a COPY that buffers
+; several files in memory at once, and the MSX specific commands MODE,
+; BASIC and FORMAT.
+;
+;        Reverse engineered from the original COMMAND.COM 1.11, copyright
+; (1984) Microsoft. The assembled file is identical to the original one,
+; except for the padding areas, which are zero filled here, and the
+; leftover bytes at the end of the original file, which are not part of
+; the program.
+;
+;        This file just puts together the modules, which are:
+;
+;   head.mac      Entry jump and relocation table.
+;   loader.mac    Code that relocates the rest of the program to high memory.
+;   init.mac      Initialization, run once after each load from disk.
+;   cli.mac       Main loop: command input, batch files, command dispatch.
+;   cmd.mac       DIR, TYPE, PAUSE, REN, DEL and VERIFY commands.
+;   copy.mac      COPY command.
+;   misc.mac      DATE, TIME, MODE, BASIC and FORMAT commands.
+;   util.mac      File name parsing and other utility routines.
+;   messages.mac  Command table and messages.
+;   var.mac       Variables and stack.
+;
+;        Everything from loader.mac on is the "relocatable part", which is
+; copied to the top of the TPA (just below the MSXDOS.SYS BDOS page) and
+; adjusted for its new address. See msxdos/msxdos.mac for how the
+; relocation table (reltab.inc) is generated.
+;
+;        The relocated program stays in memory while transient programs run
+; (unless they overwrite it), and MSXDOS.SYS re-enters it at TCOMMAND
+; after checking that it is still intact. The part checked is TCOMMAND to
+; COMBUF (code and messages); the variables are not checked, and the
+; initialization code before TCOMMAND is not needed any more after it has
+; run, so that page is used as part of the COPY and TYPE buffer.
+;
+;******************************************************************************
+;
+	include	"../include/dos1.inc"
+;
+RELTAB	EQU	TPA+3		; The relocation table is right after the
+				;   initial jump.
+;
+	IFDEF	RELBASE
+	 ORG	RELBASE		; Relocatable part only.
+	ELSE
+	 ORG	TPA
+	 include "head.mac"
+	ENDIF
+	include	"loader.mac"
+	include	"init.mac"
+	include	"cli.mac"
+	include	"cmd.mac"
+	include	"copy.mac"
+	include	"misc.mac"
+	include	"util.mac"
+	include	"messages.mac"
+	include	"var.mac"
+;
+;
+;        Global constants derived from the layout of the program.
+;
+IMGSIZ	EQU	IMGEND-IMAGE	; Size of the relocated program.
+TPASIZ	EQU	TCOMMAND-TPA	; Size of the TPA area usable as a buffer by
+				;   COPY, TYPE and FORMAT: from 100h up to
+				;   the initialization code (included).
+BUFEND	EQU	TCOMMAND-1	; Last byte of that area.
+;
+	IF	LOW IMGSIZ
+	 .ERROR	The size of the relocated program must be a multiple of 256
+	ENDIF
+;
+	END

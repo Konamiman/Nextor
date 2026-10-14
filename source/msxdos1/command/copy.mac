@@ -1,0 +1,658 @@
+	SUBTTL	COPY command
+;******************************************************************************
+;
+;        The COPY command. Its semantics are those of COPY in MS-DOS 1.x:
+;
+;   - Several sources can be concatenated into one destination with "+"
+;     (COPY A+B+C D). A source with wildcards and a destination without
+;     them also means concatenation (COPY *.TXT ALL.TXT).
+;   - If the destination has wildcards (or is just a drive) there is one
+;     destination file per source file found, and the "?" characters of
+;     the destination name are replaced by the characters of the source
+;     name (BUILDNAME). In this case the names of the source files are
+;     printed as they are copied, and "+" pieces are paired with each
+;     source file found: COPY *.A+*.B *.C copies X.A+X.B to X.C for each
+;     X.A found.
+;   - /A (ASCII) and /B (binary) switches set the mode for the file they
+;     follow, and for the following ones (SETASC). In ASCII mode a source
+;     file is read up to its first ^Z, and a ^Z is added at the end of the
+;     destination file. Concatenation implies ASCII mode by default.
+;   - The destination gets the date and time of the (last) source, unless
+;     ASCII mode was used at any point (INEXACT).
+;   - If the destination is also the first source of a concatenation
+;     (COPY A+B A) the other sources are appended to it, after its first
+;     ^Z in ASCII mode. If it is any other source, it is skipped with a
+;     "Content of destination lost before copy" warning.
+;
+;        What is MSX specific is the way the files are buffered: the TPA
+; area from TPA up to BUFEND is filled with as many files (or file
+; pieces) as fit before anything is written, so that the number of disk
+; swaps is minimized when copying between disks on a machine with only
+; one drive. The buffer holds a sequence of blocks, one for each
+; destination file (or piece of it) to write, each one being a CH_LEN
+; bytes header followed by the file data:
+;
+;   +00h  FCB of the destination file (FCB_LEN bytes).
+;   +25h  CH_END: address of the end of the data of this block.
+;   +27h  CH_OPEN: NZ if the destination file has been created already,
+;         so that it must be opened instead.
+;   +28h  CH_DONE: NZ if this is the last piece of the file, so that the
+;         file must be counted as copied after writing it.
+;   +29h  CH_DATE: date and time of the source file (4 bytes).
+;
+;        CURHDR points to the header of the block being filled, and NXTADD
+; to the first free byte in the buffer (the end of its data). FLSHFIL
+; writes all the blocks: a 0FFh byte in place of the FCB drive number of
+; the next header marks the end of the list. Each header is moved to TPA
+; before writing its block, so that the FCB is in a fixed place. When the
+; block being filled is not complete yet, its header is left at TPA, and
+; filling continues right after it.
+;
+;        The buffer can extend past the TPA up to the end of the
+; initialization code of COMMAND.COM itself, which is not needed any more
+; (see command.mac).
+;
+;        Errors detected while copying go to COPERR, which discards the
+; block being filled, writes the complete ones, and reports the number of
+; files copied. The stack is restored from CPYSP so that this can be done
+; at any nesting level, including from FLSHFIL itself; in that case the
+; buffer is flushed again starting at TPA, where a copy of the header of
+; the failing block now is, so a second error message may be printed.
+;
+;******************************************************************************
+;
+CH_END	EQU	25H		; End of the data of the block (2 bytes).
+CH_OPEN	EQU	27H		; NZ => destination file already created.
+CH_DONE	EQU	28H		; NZ => last piece of the destination file.
+CH_DATE	EQU	29H		; Date and time of the source (4 bytes).
+CH_LEN	EQU	2DH		; Size of a block header.
+;
+;------------------------------------------------------------------------------
+;
+;        COPY command handler.
+;
+;        The parameters are scanned first, in order to find the destination
+; (the last name not preceded by "+") and to know whether there are "+"
+; signs. The command line is then scanned again for the "+" pieces while
+; copying (SRCPT keeps the position).
+;
+;        PARM2 bit 0 is set if the destination name has wildcards even after
+; replacing them with the characters of the first source (so there is one
+; destination per source file found), bit 1 if the files are concatenated.
+;
+@COPY:	LD	(CPYSP),SP	; Save the stack for COPERR.
+	XOR	A
+	LD	(PLUS),A	; No "+" found yet.
+	LD	(FILECNT),A	; No files copied yet.
+	LD	HL,TPA		; Empty buffer.
+	LD	(CURHDR),HL
+	LD	(NXTADD),HL
+	LD	HL,CMDLIN+1	; Skip the switches after the command name
+	CALL	SWITCH		;   (already in COMSW),
+	LD	DE,FCB		;   and parse the first source into FCB.
+	CALL	PARSNAM
+	LD	(SRCPT),HL	; Remember where the "+" pieces start.
+SCANNAM: CALL	PARSE		; Skip all the "+" pieces.
+	JR	NZ,SCANNAM
+	LD	DE,DIRBUF	; Parse the destination into DIRBUF, and
+	CALL	PARSNAM		;   save its switches.
+	LD	A,C
+	LD	(ARG2S),A
+	JR	NZ,HAVDESTNAM
+	INC	DE		; No destination name: use "*.*".
+	CALL	WILD11
+;
+HAVDESTNAM: LD	HL,DIRBUF	; DEST = destination drive, and name with
+	LD	DE,DEST		;   the "?" replaced by the characters of the
+	LDI			;   first source name, to see if it can be
+	LD	IX,FCB+FCB_NAM	;   made unambiguous.
+	CALL	BUILDNAME
+	LD	HL,DEST+1	; E = 1 if still ambiguous (multiple
+	CALL	CHKAMB		;   destinations).
+	LD	E,A
+	XOR	1		; C = 1 if the first source is ambiguous
+	LD	C,A		;   and the destination is not.
+	LD	HL,FCB+FCB_NAM
+	CALL	CHKAMB
+	AND	C
+	LD	C,A
+	LD	A,(PLUS)	; That, or a "+", means concatenation,
+	OR	C		;   which implies ASCII mode (and an
+	LD	(ASCII),A	;   inexact copy).
+	LD	(INEXACT),A
+	ADD	A,A		; PARM2 = concatenation flag in bit 1,
+	OR	E		;   multiple destinations flag in bit 0.
+	LD	(PARM2),A
+	LD	A,(COMSW)	; Apply /A and /B after the command name and
+	CALL	SETASC		;   after the first source, and keep the
+	LD	A,(ARG1S)	;   resulting ASCII flag as the starting one
+	CALL	SETASC		;   for each destination file.
+	LD	(COMSW),A
+	LD	C,_SFIRST	; Search the first source file.
+	CALL	SEARCH
+	LD	DE,NOTFND$
+	JP	NZ,ERROR
+;
+;        Process a source file found: start a new block for its destination
+; file, whose name is DEST with the "?" replaced by the characters of the
+; found file name.
+;
+MULTDEST: LD	A,(PARM2)	; Multiple destinations: show the name of
+	AND	1		;   the source file.
+	JR	Z,NOPRT
+	CALL	SHONAME
+	CALL	CRLF
+NOPRT:	CALL	NEWHDR		; DE = new header.
+	LD	HL,DEST		; Build the destination FCB in it.
+	LDI
+	LD	IX,DIRBUF+FCB_NAM
+	CALL	BUILDNAME
+	XOR	A		; Extent = 0.
+	LD	(DE),A
+	LD	(APPEND),A
+	LD	(NOWRITE),A
+	CALL	COMPNAME	; Source and destination the same?
+	JR	NZ,DOREAD	; No: just read the source.
+	LD	A,(PARM2)	; Yes: error unless concatenating.
+	AND	2
+	LD	DE,OVERWR$
+	JP	Z,COPERR
+;
+	LD	A,1		; Concatenating to the first source: append
+	LD	(APPEND),A	;   to the existing file.
+	LD	IY,(CURHDR)
+	LD	(IY+CH_OPEN),1
+	LD	A,(ASCII)
+	OR	A
+	JR	NZ,CPY10
+	LD	DE,DIRBUF	; Binary: the writing starts at the end of
+	LD	C,_FOPEN	;   the file, so open it and set the random
+	CALL	BDOS		;   record of the destination FCB to its
+	LD	HL,(CURHDR)	;   size.
+	LD	DE,FCB_RR
+	ADD	HL,DE
+	EX	DE,HL
+	LD	HL,DIRBUF+FCB_SIZ
+	LD	BC,4
+	LDIR
+	JR	SNGLCHK
+;
+CPY10:	LD	(NOWRITE),A	; ASCII: read the file just to find its
+DOREAD:	CALL	READIN		;   first ^Z (see SEEKEND).
+;
+;        With multiple destinations, append the "+" pieces to the file
+; just read, replacing their "?" with the characters of its name. Then
+; finish the destination file and go for the next source file found.
+;
+SNGLCHK: LD	A,(PARM2)
+	AND	1
+	JR	Z,SNGLOOP
+	LD	HL,DIRBUF+FCB_NAM ; Keep the source name in SOURCE.
+	LD	DE,SOURCE
+	LD	BC,11
+	LDIR
+	LD	HL,(SRCPT)
+MULTAPP: CALL	PARSE		; Next "+" piece into DIRBUF.
+	JR	Z,MULTCLOS
+	PUSH	HL
+	LD	HL,DIRBUF+FCB_NAM ; Replace its "?" with the source name.
+	LD	E,L
+	LD	D,H
+	LD	IX,SOURCE
+	CALL	BUILDNAME
+	CALL	CHECKREAD	; Read it (no search is done).
+	POP	HL
+	JR	MULTAPP
+;
+MULTCLOS: CALL	CLOSEFIL	; Finish this destination file.
+	LD	A,(COMSW)	; Restore the starting ASCII flag.
+	LD	(ASCII),A
+	CALL	SEARCHNEXT	; Next source file.
+	JP	Z,MULTDEST
+	JR	ENDCOPY
+;
+;        Single destination: read all the files matching the current
+; source, then parse the next "+" piece into FCB and do the same, until
+; there are no more pieces. Note that a "+" piece not found aborts the
+; command with "File not found" without writing the data already
+; buffered.
+;
+NEXTSNG: LD	C,_SFIRST	; Search the new source.
+	CALL	SEARCH
+	LD	DE,NOTFND$
+	JP	NZ,ERROR
+READSNG: CALL	CHECKREAD
+SNGLOOP: CALL	SEARCHNEXT	; More files for this source?
+	JR	Z,READSNG
+	LD	HL,(SRCPT)	; No: next "+" piece into FCB.
+	LD	DE,FCB
+	CALL	PARSESRC
+	LD	(SRCPT),HL
+	JR	NZ,NEXTSNG
+	CALL	CLOSEFIL	; No more: finish the destination file.
+;
+;        End of the command: write the buffer, and report the number of
+; files copied.
+;
+ENDCOPY: CALL	FLSHFIL
+	CALL	SHOCNT
+	LD	DE,COPIED$
+	JP	ERROR
+;
+;        Error while copying, DE = message.
+;
+COPERR:	LD	SP,(CPYSP)	; Restore the stack.
+	LD	HL,(CURHDR)	; Discard the block being filled.
+	LD	(NXTADD),HL
+	LD	C,_STROUT
+	CALL	BDOS
+	CALL	CRLF
+	JR	ENDCOPY
+;
+;------------------------------------------------------------------------------
+;
+;        Parse a file name from the command line, for COPY.
+;
+;        PARSE parses into DIRBUF, PARSESRC into the FCB pointed by DE. Both
+; expect the name to be preceded by "+" (setting PLUS if so), and return
+; Z if there is none. PARSNAM doesn't expect the "+".
+;
+;        The default drive is replaced by the actual current drive, so that
+; the source and destination names can be compared. An invalid drive
+; aborts the command. The switches after the name are applied to the
+; ASCII flag (SETASC).
+;
+; Entry:  HL = pointer to the command line
+;         DE = FCB to fill (PARSESRC and PARSNAM)
+; Exit:   HL = updated pointer
+;         C = switches found after the name
+;         Z if no "+" was found (PARSE and PARSESRC) or no name was
+;         found (all)
+;
+PARSE:	LD	DE,DIRBUF
+PARSESRC: CALL	SCANOFF		; Get the next character.
+	CP	"+"		; Not a "+": return Z.
+	JR	NZ,RETZF
+	LD	A,1
+	LD	(PLUS),A
+	INC	HL
+PARSNAM: PUSH	DE		; Parse the name, skipping the leading
+	LD	A,1		;   separators.
+	CALL	MAKEFCB
+	POP	DE
+	LD	A,(DE)		; Invalid drive?
+	CP	0FFH
+	JR	Z,PRS10
+	OR	A		; Default drive: replace with the current
+	JR	NZ,PARSW	;   one.
+	LD	A,(CURDRV)
+	INC	A
+	LD	(DE),A
+PARSW:	CALL	SWITCH		; Process the switches after the name.
+	CALL	SETASC
+	INC	DE		; Z if no file name.
+	LD	A,(DE)
+	DEC	DE
+	CP	" "
+	RET
+;
+RETZF:	XOR	A
+	RET
+;
+PRS10:	LD	DE,BADDRV$	; "Invalid drive specification".
+	JP	COPERR
+;
+;------------------------------------------------------------------------------
+;
+;        Build a file name from an ambiguous one, replacing each "?" with
+; the character at the same position in another name.
+;
+; Entry:  HL = ambiguous file name (11 characters)
+;         IX = name with the replacement characters
+;         DE = destination for the resulting name (can be equal to HL)
+; Exit:   HL, IX, DE pointing past the names
+; Corrupts: AF, B
+;
+BUILDNAME: LD	B,11
+BUILDNAM: LD	A,(HL)
+	INC	HL
+	CP	"?"
+	JR	NZ,NOTAMBIG
+	LD	A,(IX+0)
+NOTAMBIG: LD	(DE),A
+	INC	DE
+	INC	IX
+	DJNZ	BUILDNAM
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Update the ASCII flag according to the /A and /B switches: /A sets
+; it (and INEXACT), /B resets it, neither or both leave it unchanged. The
+; parity flag after masking the two switch bits tells whether exactly one
+; of them is set.
+;
+; Entry:  A = switches, as returned by SWITCH (/B = 10h, /A = 08h)
+; Exit:   A = ASCII flag, NZ if set
+;
+SETASC:	AND	18H		; Neither or both: nothing to do.
+	JP	PE,LOADSW
+	AND	08H		; A = 0 for /B, 08h for /A.
+	LD	(ASCII),A
+	JR	Z,LOADSW
+	LD	(INEXACT),A
+LOADSW:	LD	A,(ASCII)
+	OR	A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Start a new block in the buffer, after flushing the buffer if
+; there is no room for the header plus at least 100h data bytes.
+;
+; Exit:   DE = IY = CURHDR = address of the new header
+;         NXTADD = CH_END of the header = address after the header
+;         Fields from FCB_RR to CH_DONE of the header zeroed
+;
+NEWHDR:	LD	HL,(NXTADD)	; Flush if no room.
+	LD	DE,BUFEND-CH_LEN-100H
+	OR	A
+	SBC	HL,DE
+	CALL	NC,FLSHFIL
+	LD	HL,(NXTADD)	; The new header is at the first free
+	LD	(CURHDR),HL	;   address, and its data goes after it.
+	EX	DE,HL
+	LD	HL,CH_LEN
+	ADD	HL,DE
+	LD	(NXTADD),HL
+	LD	HL,FCB_RR	; Zero the random record, CH_END, CH_OPEN
+	ADD	HL,DE		;   and CH_DONE.
+	LD	B,8
+	XOR	A
+NWH10:	LD	(HL),A
+	INC	HL
+	DJNZ	NWH10
+	PUSH	DE
+	POP	IY
+	LD	HL,(NXTADD)	; No data yet.
+	LD	(IY+CH_END),L
+	LD	(IY+CH_END+1),H
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Read the source file in DIRBUF into the current block, unless it is
+; the destination file. In that case, warn that its contents are lost
+; (it is going to be overwritten before being read) unless the
+; destination file is being appended to, which means that the file was
+; already read as the first source.
+;
+CHECKREAD: CALL	COMPNAME	; Source and destination the same?
+	JR	NZ,READIN	; No: read the source.
+	LD	A,(APPEND)
+	OR	A
+	RET	NZ
+	LD	DE,LOSTERR$	; "Content of destination lost before copy"
+	LD	C,_STROUT
+	CALL	BDOS
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Compare the drive and name of the file in DIRBUF with those of
+; the destination file of the current block.
+;
+; Exit:   Z if they are the same
+;
+;        COMPB is also used to compare any two strings.
+;
+; Entry:  HL, DE = strings to compare
+;         B = number of characters
+; Exit:   Z if equal
+;
+COMPNAME: LD	HL,(CURHDR)
+	LD	DE,DIRBUF
+	LD	B,12
+COMPB:	LD	A,(DE)
+	CP	(HL)
+	RET	NZ
+	INC	HL
+	INC	DE
+	DJNZ	COMPB
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Read the source file in DIRBUF into the current block, flushing
+; the buffer when it gets full. In ASCII mode, only the data up to the
+; first ^Z is kept.
+;
+;        A source file that can't be opened is silently ignored.
+;
+;        The file is opened again each time the buffer has been flushed,
+; since FLSHFIL may have required a disk change (the random record keeps
+; the read position). The date and time of the source file are copied to
+; the block header, to be given to the destination file.
+;
+;        If NOWRITE is set, the data is not kept: the destination file is
+; being appended to in ASCII mode, and it is read just to find its first
+; ^Z (see SEEKEND).
+;
+READIN:	LD	HL,0		; Read from the start.
+	LD	(DIRBUF+FCB_RR),HL
+	LD	(DIRBUF+FCB_RR+2),HL
+COPYLP:	XOR	A		; Open the file.
+	LD	(DIRBUF+FCB_EX),A
+	LD	DE,DIRBUF
+	LD	C,_FOPEN
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	HL,(CURHDR)	; Copy its date and time to the header.
+	LD	DE,CH_DATE
+	ADD	HL,DE
+	EX	DE,HL
+	LD	HL,DIRBUF+FCB_DAT
+	LD	BC,4
+	LDIR
+	LD	HL,1		; Record size = 1.
+	LD	(DIRBUF+FCB_RSZ),HL
+	LD	DE,(NXTADD)	; Read as much as fits in the buffer
+	PUSH	DE		;   (up to BUFEND, excluded) at NXTADD.
+	LD	C,_SETDTA
+	CALL	BDOS
+	POP	DE
+	LD	HL,BUFEND
+	OR	A
+	SBC	HL,DE
+	LD	DE,DIRBUF
+	LD	C,_RDBLK
+	CALL	BDOS
+	EX	DE,HL		; HL = end of the data read.
+	LD	HL,(NXTADD)
+	ADD	HL,DE
+	LD	A,(ASCII)	; In ASCII mode, if something was read,
+	OR	A		;   cut the data at the first ^Z.
+	JR	Z,BINREAD
+	LD	A,E
+	OR	D
+	JR	Z,BINREAD
+	LD	HL,(NXTADD)
+	LD	B,D
+	LD	C,E
+	LD	A,EOFCHR
+	CPIR
+	JR	NZ,BINREAD
+	DEC	HL		; HL = address of the ^Z.
+;
+BINREAD: LD	IY,(CURHDR)
+	LD	A,(NOWRITE)
+	OR	A
+	JR	NZ,SEEKEND
+	LD	(NXTADD),HL	; Keep the data, and set the end of the
+	LD	(IY+CH_END),L	;   block.
+	LD	(IY+CH_END+1),H
+	LD	DE,BUFEND	; Buffer full: flush it and continue reading
+	SBC	HL,DE		;   (Cy is reset by the OR A above).
+	RET	NZ
+	CALL	FLSHFIL
+	JR	COPYLP
+;
+;        NOWRITE set: add the size of the data read (up to the ^Z, if any)
+; to the random record of the destination FCB, so that the writing starts
+; at the ^Z. If the buffer got full the ^Z hasn't been found yet, so
+; continue reading.
+;
+;        Note that when the 16 bit addition into the low word of the random
+; record overflows, Cy remains set when comparing with BUFEND below. So in
+; this case (a destination file of more than 64K) the buffer full
+; condition is not detected and the search for the ^Z stops there.
+;
+SEEKEND: PUSH	HL		; HL = size of the data read.
+	LD	HL,(CURHDR)
+	LD	DE,CH_LEN
+	ADD	HL,DE
+	EX	DE,HL
+	POP	HL
+	PUSH	HL
+	SBC	HL,DE
+	LD	E,(IY+FCB_RR)	; Add it to the random record.
+	LD	D,(IY+FCB_RR+1)
+	ADD	HL,DE
+	LD	(IY+FCB_RR),L
+	LD	(IY+FCB_RR+1),H
+	JR	NC,SKE10
+	INC	(IY+FCB_RR+2)
+	JR	NZ,SKE10
+	INC	(IY+FCB_RR+3)
+SKE10:	POP	HL		; Buffer full: read more.
+	LD	DE,BUFEND
+	SBC	HL,DE
+	JP	Z,COPYLP
+	XOR	A		; Found: done with NOWRITE.
+	LD	(NOWRITE),A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Write all the blocks in the buffer. The header of each block is
+; copied to TPA, so that the FCB used for writing is always at TPA. The
+; files with CH_DONE set are counted as copied. If the last block is
+; not complete (CH_DONE not set), its header is left at TPA and the
+; buffer is set up for adding more data to it; otherwise the buffer is
+; left empty.
+;
+FLSHFIL: LD	HL,(NXTADD)	; Mark the end of the list of blocks.
+	LD	(HL),0FFH
+	LD	HL,TPA
+	LD	(NXTADD),HL
+FLS10:	LD	A,(HL)		; End of the list?
+	INC	A
+	RET	Z
+	LD	(CURHDR),HL	; Copy the header to TPA and write the
+	LD	DE,TPA		;   block.
+	LD	BC,CH_LEN
+	LDIR
+	CALL	WRFILE
+	LD	A,(TPA+CH_DONE)	; Not the last piece of the file: this
+	OR	A		;   is the last block.
+	JR	Z,FLS20
+	LD	HL,FILECNT	; Count the file, and go for the next block.
+	INC	(HL)
+	LD	HL,(TPA+CH_END)
+	JR	FLS10
+;
+FLS20:	LD	HL,TPA		; Keep the header at TPA, and continue
+	LD	(CURHDR),HL	;   filling the block after it.
+	LD	HL,TPA+CH_LEN
+	LD	(TPA+CH_END),HL
+	LD	(NXTADD),HL
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Write the data of the block whose header is at CURHDR, using the
+; copy of the header at TPA. The destination file is created the first
+; time, and opened the next ones (writing continues at the random record,
+; which is updated by the block write). The file is closed after writing,
+; with the date and time of the source file unless the copy is inexact.
+;
+;        If the disk gets full, the destination file is deleted, unless it
+; is being appended to.
+;
+WRFILE:	LD	A,(TPA+CH_OPEN)
+	OR	A
+	JR	NZ,EXISTS
+	INC	A		; First time: create the file.
+	LD	(TPA+CH_OPEN),A
+	LD	DE,TPA
+	LD	C,_FMAKE
+	CALL	BDOS
+	OR	A
+	LD	DE,FULDIR$	; "File creation error".
+	JP	NZ,COPERR
+	JR	SKPMAK
+;
+EXISTS:	LD	DE,TPA		; Next times: open the file.
+	LD	C,_FOPEN
+	CALL	BDOS
+	OR	A
+	LD	DE,WRTERR$	; "Write error".
+	JP	NZ,COPERR
+;
+SKPMAK:	LD	HL,1		; Record size = 1.
+	LD	(TPA+FCB_RSZ),HL
+	LD	HL,(CURHDR)	; DE = start of the data (at the original
+	LD	DE,CH_LEN	;   place of the block), HL = data size.
+	ADD	HL,DE
+	EX	DE,HL
+	LD	HL,(TPA+CH_END)
+	SBC	HL,DE
+	PUSH	HL
+	LD	C,_SETDTA
+	CALL	BDOS
+	POP	HL
+	LD	DE,TPA		; Write the data.
+	LD	C,_WRBLK
+	CALL	BDOS
+	PUSH	AF
+	LD	A,(INEXACT)	; Exact copy: set the date and time of the
+	OR	A		;   source.
+	JR	NZ,NODATE
+	LD	HL,TPA+CH_DATE
+	LD	DE,TPA+FCB_DAT
+	LD	BC,4
+	LDIR
+NODATE:	LD	DE,TPA		; Close the file.
+	LD	C,_FCLOSE
+	CALL	BDOS
+	POP	AF		; Done if the write was OK.
+	OR	A
+	RET	Z
+	LD	A,(APPEND)	; Disk full: delete the file, unless
+	OR	A		;   appending to it.
+	JR	NZ,WRF10
+	LD	DE,TPA
+	LD	C,_FDEL
+	CALL	BDOS
+WRF10:	LD	DE,NOSPACE$	; "Insufficient disk space".
+	JP	COPERR
+;
+;------------------------------------------------------------------------------
+;
+;        Finish the destination file of the current block: mark the block
+; as the last piece of the file, and add a ^Z at the end if in ASCII mode
+; (after applying the /A and /B switches of the destination).
+;
+CLOSEFIL: LD	IY,(CURHDR)
+	LD	(IY+CH_DONE),1
+	LD	A,(ARG2S)
+	CALL	SETASC
+	RET	Z
+	LD	HL,(NXTADD)
+	LD	(HL),EOFCHR
+	INC	HL
+	LD	(NXTADD),HL
+	LD	(IY+CH_END),L
+	LD	(IY+CH_END+1),H
+	RET
