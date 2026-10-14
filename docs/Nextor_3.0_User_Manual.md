@@ -100,6 +100,8 @@
 
 [3.4.15. The classic MSX-DOS tools](#3415-the-classic-msx-dos-tools)
 
+[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)
+
 [3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)
 
 [3.6. Extensions to BASIC](#36-extensions-to-basic)
@@ -330,6 +332,8 @@ Nextor introduces the _fast STROUT_ mode. When this mode is active, the string w
 ### 2.9. Extended mapper support routines
 
 MSX-DOS 2 provides a set of mapper support routines, which allow applications to allocate 16K RAM segments. Nextor maintains the original routines, but provides four new ones that allow reading data, writing data and calling routines with full slot and RAM segment number specification. See _[5. Extended mapper support routines](Nextor_3.0_Programmers_Reference.md#5-extended-mapper-support-routines)_ in the Nextor 3.0 Programmers Reference for details.
+
+None of these routines are available in MSX-DOS 1 mode, but `MSR.COM` can install them (see _[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)_).
 
 ### 2.10. Boot keys and the boot menu
 
@@ -608,6 +612,8 @@ Partitions of 16MB or less created with the built-in disk partitioning tool will
 
 Remember that MSX-DOS 1 can boot the DOS environment (`MSXDOS.SYS` and `COMMAND.COM`) if the computer has at least 64K of RAM. Otherwise, only Disk BASIC can be used.
 
+The mapper support routines and the UNAPI RAM helper (see _[2.9. Extended mapper support routines](#29-extended-mapper-support-routines)_) aren't available in MSX-DOS 1 mode, but they can be installed with `MSR.COM` (see _[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)_).
+
 On MSX Turbo-R computers, the CPU mode will be switched to Z80 when booting in MSX-DOS 1 mode, unless the 2 key is pressed during boot (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_).
 
 Note: when booting directly in the BASIC prompt in MSX-DOS 1 mode, it is not necessary to execute `POKE &HF346,1` for `CALL SYSTEM` to work, as it was the case with the original MSX-DOS 1.
@@ -658,7 +664,7 @@ This section explains how to use these tools. Note however that you can also get
 
 All the tools rely on the new function calls provided by Nextor for its behavior. If you are a developer and want to know more details, please refer to the _[Nextor 3.0 Programmers Reference](Nextor_3.0_Programmers_Reference.md)_ document.
 
-Please note that none of these tools work in MSX-DOS 1 mode; however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
+Please note that none of these tools work in MSX-DOS 1 mode (except `MSR`, which is intended for MSX-DOS 1, see _[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)_); however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
 
 Note also that when `COMMAND3.COM` is the command interpreter, the `MAPDRV`, `DRIVERS`, `DEVINFO`, `DRVINFO`, `LOCK`, `RALLOC` and `Z80MODE` tools are available as internal commands with the same names, syntax and behavior, so the `.COM` files are not needed: typing the bare command name runs the internal version, as with any internal command (see _[3.10.2. The new internal commands](#3102-the-new-internal-commands)_). The `.COM` tools are still supplied because they also work with `COMMAND2.COM` and with older Nextor versions.
 
@@ -966,6 +972,28 @@ The transient tools that were part of the original MSX-DOS 2 distribution are al
 All of these tools display their messages in Japanese when a Kanji screen mode is active, and in English otherwise. The tools that write disk sectors directly (`DISKCOPY`, `FIXDISK` and `KMODE /S`) work on drives handled by MSX-DOS drivers and, under Nextor 3 or later, also on drives mapped to floppy disk devices of Nextor drivers and on drives with a mounted disk image file (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_); for example, `DISKCOPY` can write a mounted disk image to a floppy disk, or create a disk image from a floppy disk.
 
 Except for `XDIR` (which simply lists the current directory), running any of these tools without arguments displays a usage summary instead of acting on the current drive or directory, a deliberate change from the original versions. `TYPE` on the `.COM` file displays a longer description, and the help files supplied in the tools disk (`HELP <tool name>` from the command prompt) contain the full details (these are also available in Markdown format: [CHKDSK](helpfiles/CHKDSK.md), [UNDEL](helpfiles/UNDEL.md), [KMODE](helpfiles/KMODE.md), [FIXDISK](helpfiles/FIXDISK.md), [DISKCOPY](helpfiles/DISKCOPY.md), [XDIR](helpfiles/XDIR.md), [XCOPY](helpfiles/XCOPY.md)).
+
+#### 3.4.16. MSR: the mapper support routines installer for MSX-DOS 1
+
+MSX-DOS 1 doesn't provide the mapper support routines that MSX-DOS 2 has (the routines that allow applications to allocate RAM segments, switch them and call code in them), and neither does Nextor when it runs in MSX-DOS 1 mode (see _[3.2.1. Booting in DOS 1 mode](#321-booting-in-dos-1-mode)_). `MSR.COM` installs them in MSX-DOS 1, Nextor's MSX-DOS 1 mode included, so that applications needing them can run there. It also installs an UNAPI RAM helper, the same one that Nextor provides in MSX-DOS 2 mode (see _[2.9. Extended mapper support routines](#29-extended-mapper-support-routines)_). The usage syntax is:
+
+```
+MSR I|F
+MSR C
+```
+
+* `I` installs the routines, unless an UNAPI RAM helper is already installed.
+* `F` installs the routines even if an UNAPI RAM helper is already installed (the new one will take precedence).
+* `C` frees all the RAM segments that are allocated in user mode. In MSX-DOS 2 user segments are freed automatically when the program that allocated them terminates, but in MSX-DOS 1 this doesn't happen, so run `MSR C` when you know that the user segments left allocated by previous programs aren't in use anymore.
+
+The tool refuses to install the routines if mapper support routines are already present (which is always the case in MSX-DOS 2), so it's safe to run it from `AUTOEXEC.BAT`. Other considerations:
+
+* A memory mapper is needed in the slot of the RAM in page 3 (the primary mapper), with a size of at least 128K (256K on MSX Turbo-R). Other mappers present in the system are detected and can be used too.
+* The routines and the variables for the mappers take less than 1K at the top of the TPA. The code that allocates and frees segments is placed in the last segment of the primary mapper (the last but four on an MSX Turbo-R, since these hold the ROM copies used by the R800 DRAM mode), which becomes a system segment.
+* If the RAM in page 0 or 1 of the TPA is in another slot, these pages are switched to the slot of page 3. The RAM in page 2 must be in that slot already, otherwise the tool refuses to install the routines (the routines that access segments in page 2 don't switch slots).
+* The installation process ends by going to BASIC and executing `CALL SYSTEM`, so that MSX-DOS is restarted with the new TPA size.
+
+`MSR.COM` is in the root directory of the tools disk and of the tools zip archive, not in the `TOOLS` directory, since MSX-DOS 1 can't access directories.
 
 
 ### 3.5. The built-in partitioning tool

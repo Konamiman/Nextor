@@ -1,0 +1,54 @@
+; MSRSEG - The part of MSR.COM that lives in a RAM segment.
+;
+; MSR.COM installs the code that allocates and frees RAM segments in the
+; last segment of the primary mapper (the last one but four on MSX turbo R,
+; where the last four hold the ROM copies used by the R800 DRAM mode),
+; mapped in page 1. The page-3 resident ALL_SEG and FRE_SEG routines call it
+; with an inter-slot call through CALL_MAP.
+;
+; The allocation logic itself is the kernel's (ALLSEG, FRESEG and FREUSEG in
+; source/kernel/bank4/seg.mac), which gets linked after this module at 4000h
+; by the tools Makefile (the result is MSRSEG.BIN, which MSR.MAC includes
+; with INCBIN). The kernel code uses these variables, which are defined here
+; (so they live in the segment as well):
+;
+; - A_SAVE: the value of A at the ALL_SEG/FRE_SEG call.
+; - PROC_ID: the owner id to mark user segments with. In MSX-DOS 2 this is
+;   the current process id, here it's always 1 (FFh = system segment, 0 =
+;   free segment).
+; - MAP_TBL: one 4 byte entry per slot (index = slot number AND 0Fh), the
+;   first word points to the counters (byte 1 of the mapper variable table
+;   entry for the slot, in page 3) and the second one to the segment list
+;   (one byte per segment with the owner id, in this segment, past the end
+;   of the code). Zero for slots without a mapper.
+;
+; Both MAP_TBL and the segment lists are filled by the MSR.COM installer.
+; RAMAD3 (primary mapper slot) comes from the kernel's data.mac.
+
+	.z80
+	name('msrseg')
+
+	;--- Header, its layout is known by MSR.MAC
+
+	jp	SEG_ALL		;4000h: ALL_SEG
+	jp	SEG_FRE		;4003h: FRE_SEG
+	jp	SEG_FREE_USER	;4006h: Free all the user segments
+	dw	MAP_TBL		;4009h: Address of MAP_TBL
+
+SEG_ALL:
+	ld	(A_SAVE),a
+	jp	?ALLSEG##
+
+SEG_FRE:
+	ld	(A_SAVE),a
+	jp	?FRESEG##
+
+SEG_FREE_USER:
+	ld	b,0		;Free segments with owner id > 0,
+	jp	?FREUSEG##	; that is, all the user segments
+
+A_SAVE::	db	0
+PROC_ID::	db	1
+MAP_TBL::	ds	16*4
+
+	end

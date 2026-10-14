@@ -11,7 +11,10 @@
 # on the high or low halves of IX/IY). See sdk/asm/macros/undoc.inc
 # for details. The flag is propagated only to the kernel and drivers
 # sub-builds; NEXTOR.SYS and the .COM tools contain no undoc opcodes,
-# so it has no effect on them.
+# so it has no effect on them. The exception is MSR.COM, which installs
+# the kernel's own page-3 mapper support routines: use
+# `make -C tools NO_UNDOC_CPU_INSTRUCTIONS=1` for a Z180 compatible
+# version.
 
 # Absolute path so drivers/Makefile uses the kernel-built base verbatim
 # (via its NEXTOR_BASE branch) instead of recursing back into ../kernel.

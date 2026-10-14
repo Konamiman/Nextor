@@ -1,0 +1,113 @@
+	.z80
+	name('maptest')
+	title	MSX-DOS 2 ROM   Copyright (1986)  IS Systems Ltd.
+	subttl	Mapper Detection
+;-----------------------------------------------------------------------------
+;
+;    This module is used by MAP_SCAN (mapinit.mac) at boot time, and is also
+; linked into MSR.COM (the standalone mapper support routines installer for
+; MSX-DOS 1, source/tools/MSR.MAC).
+;
+	INCLUDE	../macros.inc
+;
+P2_REG		equ	0FEh
+;
+;
+;------------------------------------------------------------------------------
+;
+TEST_MAPPER_SLOT::
+;
+;    This routine is called for each slot in the system to test  whether  the
+; slot  contains  a  mapper or not and if so then find out how much memory it
+; contains.  The slot will be enabled in page-2 and so this routine does  not
+; need to know which slot it is testing.
+;
+;   First it does a simple test to see whether there is a mapper  present  in
+; the  slot.   This  involves  writing  AAh to a byte in segment 1, paging in
+; segment zero and writing a 55h  at  the  same  address  and  then  checking
+; whether the AAh is still there in segment 1.  The old values of these bytes
+; are preserved while doing this.
+;
+;   Assuming that a mapper does exist we then must work out how many segments
+; it  contains.   This  is done by a similar process involving writing to the
+; first byte of each segment.  First the first byte of each segment is set to
+; AAh,  while  saving  the previous value.  Then we look through each segment
+; starting from zero checking that the AAh is still there, replacing it  with
+; a 55h and making sure that the 55h writes OK.  When we find a segment which
+; fails this indicates  that  we  have  reached  the  end  of  mapper  memory
+; (probably  with  a  segment  reflecting  segment  zero).  This tells us the
+; number of segments.  Finally we restore the original  first  byte  of  each
+; segment.
+;
+; Entry:     None
+; Returns:   A = Number of segments (0 => not a valid mapper slot)
+; Corrupts:  AF,BC,DE,HL
+;
+;
+		ld	hl,8000h		;Set 1st byte of segment 1
+		ld	b,(hl)			; to 0AAh, remembering its
+		ld	(hl),0AAh		; previous contents.
+		xor	a
+		out	(P2_REG),a		;Now set 1st byte of segment
+		ld	c,(hl)			; 0 to 055h, remembering its
+		ld	(hl),055h		; previous contents.
+		inc	a
+		out	(P2_REG),a		;Now see what is now in segment
+		ld	e,(hl)			; 1 (should be AAh).
+		xor	a
+		out	(P2_REG),a		;Restore original byte of
+		ld	(hl),c			; segment 0.
+		inc	a
+		out	(P2_REG),a		;Restore original byte of
+		ld	(hl),b			; segment 1.
+		ld	a,e			;If the 0AAh survived in
+		cp	0AAh			; segment 1 then we have a
+		ld	b,0			; mapper.  Jump to return
+		jr	nz,not_mapper		; zero if not.
+;
+		ld	hl,08000h
+		ld	b,0			;Look through each segment
+pass_1_loop:	ld	a,b			; in turn from 00h to FFh,
+		out	(P2_REG),a		; saving the first byte on
+		ld	a,(hl)			; the stack and replacing it
+		push	af			; with a 0AAh.
+		inc	sp
+		ld	(hl),0AAh
+		inc	b
+		jr	nz,pass_1_loop		;Always exits with B=0
+;
+pass_2_loop:	ld	a,b			;Now look at each segment
+		out	(P2_REG),a		; again and if the first byte
+		ld	a,(hl)			; is still 0AAh, replace it
+		cp	0AAh			; with 055h, making sure that
+		jr	nz,end_of_segs		; the 055h writes correctly.
+		ld	a,055h			;If it is not 0AAh, or if the
+		ld	(hl),a			; 055h didn't write correctly
+		cp	(hl)			; then this is not a valid
+		jr	nz,end_of_segs		; RAM segment so exit with
+		inc	b			; B = number of segments.
+		jr	nz,pass_2_loop
+		dec	b			;Maximum segments is 255
+end_of_segs:
+;
+		ld	c,0			;Now restore the original byte
+pass_3_loop:	ld	a,c			; to each of the 256 segments.
+		dec	a
+		out	(P2_REG),a
+		dec	sp
+		pop	af
+		ld	(hl),a
+		dec	c
+		jr	nz,pass_3_loop
+;
+not_mapper:	ld	a,1			;Make sure segment-1 is still
+		out	(P2_REG),a		; selected in page-2
+		ld	a,b
+		ret
+;
+;
+;-----------------------------------------------------------------------------
+;
+	finish	<MAPTEST>
+	end
+;
