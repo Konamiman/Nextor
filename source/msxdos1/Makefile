@@ -11,7 +11,8 @@
 # addresses one page apart, and the two results are compared with "cmp -l":
 # the differing bytes are the ones that need relocating, and tools/reltab.awk
 # turns their offsets into reltab.inc, which is then included when
-# assembling the complete program.
+# assembling the complete program. The build fails if cmp fails, if the two
+# assemblies have different sizes, or if no bytes differ (see reltab.awk).
 
 ifeq ($(strip $(N80)),)
 N80=N80
@@ -65,7 +66,11 @@ define program
 $(BUILD)/$(2)/reltab.inc: $(wildcard $(2)/*.mac) $(INCS) tools/reltab.awk | $(BUILD)/$(2)
 	$$(call assemble,$(2)/$(3),$(BUILD)/$(2)/rel1.bin,--define-symbols RELBASE=$(RELBASE1))
 	$$(call assemble,$(2)/$(3),$(BUILD)/$(2)/rel2.bin,--define-symbols RELBASE=$(RELBASE2))
-	@cmp -l $(BUILD)/$(2)/rel1.bin $(BUILD)/$(2)/rel2.bin | awk -f tools/reltab.awk > $$@.tmp
+	@cmp -l $(BUILD)/$(2)/rel1.bin $(BUILD)/$(2)/rel2.bin > $$@.cmp; [ $$$$? -le 1 ]
+	@[ $$$$(wc -c < $(BUILD)/$(2)/rel1.bin) -eq $$$$(wc -c < $(BUILD)/$(2)/rel2.bin) ] || \
+		{ echo "ERROR: the two assemblies of $(2)/$(3) have different sizes" >&2; exit 1; }
+	@awk -f tools/reltab.awk $$@.cmp > $$@.tmp
+	@rm $$@.cmp
 	@mv $$@.tmp $$@
 
 $(BUILD)/$(1): $(wildcard $(2)/*.mac) $(INCS) $(BUILD)/$(2)/reltab.inc
