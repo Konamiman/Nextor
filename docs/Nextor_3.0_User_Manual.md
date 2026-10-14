@@ -990,7 +990,7 @@ The tool refuses to install the routines if mapper support routines are already 
 
 * A memory mapper is needed in the slot of the RAM in page 3 (the primary mapper), with a size of at least 128K (256K on MSX Turbo-R). Other mappers present in the system are detected and can be used too.
 * The routines and the variables for the mappers take less than 1K at the top of the TPA. The code that allocates and frees segments is placed in the last segment of the primary mapper (the last but four on an MSX Turbo-R, since these hold the ROM copies used by the R800 DRAM mode), which becomes a system segment.
-* If the pages of the TPA are in different slots, pages 0 and 1 are switched to the slot of page 3.
+* If the RAM in page 0 or 1 of the TPA is in another slot, these pages are switched to the slot of page 3. The RAM in page 2 must be in that slot already, otherwise the tool refuses to install the routines (the routines that access segments in page 2 don't switch slots).
 * The installation process ends by going to BASIC and executing `CALL SYSTEM`, so that MSX-DOS is restarted with the new TPA size.
 
 `MSR.COM` is in the root directory of the tools disk and of the tools zip archive, not in the `TOOLS` directory, since MSX-DOS 1 can't access directories.

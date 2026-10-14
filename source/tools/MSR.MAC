@@ -23,10 +23,11 @@
 ;    3 to another slot), and it must have at least 5 segments (9 on MSX turbo
 ;    R): the 4 TPA segments, one for the allocation code, and the 4 ones that
 ;    hold the R800 DRAM mode ROM copies on turbo R (marked as system
-;    segments, as the kernel does).
-; 2. If the TPA is spread across several slots, pages 0 and 1 are switched
-;    to the slot of page 3 (the DOS2 specification says that all the TPA
-;    pages are in the primary mapper slot).
+;    segments, as the kernel does). The RAM in page 2 must be in the
+;    primary mapper slot too, otherwise the installation is refused.
+; 2. If the RAM in pages 0 or 1 is in another slot, these pages are
+;    switched to the slot of page 3 (the DOS2 specification says that all
+;    the TPA pages are in the primary mapper slot).
 ; 3. The page-3 resident code is built at 0B004h, relocated for an area
 ;    allocated below HIMSAV, and the allocation code plus the segment lists
 ;    are put in the last segment of the primary mapper (last but 4 on turbo
@@ -227,6 +228,22 @@ OK_MSXVER:
 	cp	c
 	ld	de,SMALLMAPPER_S
 	jp	c,PRINT_END
+
+	;--- The RAM in page 2 must be in the primary mapper slot too:
+	;    RD_SEG, WR_SEG and PUT_P2 don't switch slots, and if it's
+	;    in another mapper its segment 1 (the TPA one) would be
+	;    considered free. Unlike pages 0 and 1, we don't switch it
+	;    since BASIC uses it too (the install process goes through it).
+
+	push	bc
+	ld	a,(RAMAD3)
+	ld	b,a
+	ld	a,(RAMAD2)
+	cp	b
+	pop	bc
+	ld	de,PAGE2SLOT_S
+	jp	nz,PRINT_END
+	ld	a,b
 
 	;Setup counters in primary mapper record and the code segment number
 
@@ -1067,6 +1084,9 @@ RH_ALINST_S:
 
 NOMAPPER_S:
 	db	"*** ERROR: The RAM in page 3 is not mapped RAM.",13,10,"$"
+
+PAGE2SLOT_S:
+	db	"*** ERROR: The RAM in page 2 is not in the same slot as the RAM in page 3.",13,10,"$"
 
 SMALLMAPPER_S:
 	db	"*** ERROR: Not enough mapped RAM.",13,10,"$"
