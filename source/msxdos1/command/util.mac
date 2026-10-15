@@ -1,0 +1,806 @@
+	SUBTTL	Utility routines
+;******************************************************************************
+;
+;        Utility routines used by the rest of the program: file name parsing
+; into FCBs (MS-DOS function 29h, which the DOS 1 kernel lacks), switch
+; parsing, number input, directory search, formatting of dates and times,
+; 16 and 32 bit arithmetic, and console output.
+;
+;        Most of the input routines work on a text pointed by HL, and leave
+; HL pointing to the first character not processed.
+;
+;******************************************************************************
+;
+;        Parse a file name into an FCB, with the same semantics as the
+; MS-DOS function 29h. Leading blanks are always skipped; if bit 0 of A is
+; set, a single separator ("=", ";" or ",") is skipped as well, followed
+; by any more blanks. The drive is then taken if the second character is
+; ":", and the name and extension follow. A "*" fills the rest of the name
+; or extension with "?". Excess characters are ignored, and a missing
+; name or extension is filled with spaces unless bits 2 or 3 of A say
+; otherwise (in that case it is left untouched, so that a default can be
+; preset in the FCB). An extension given as just a "." is always filled
+; with spaces.
+;
+;        The 4 bytes after the extension (extent, S1 and record size) are
+; always zeroed.
+;
+;        Any character other than a letter before ":" gives an invalid drive,
+; as does a drive letter beyond the last drive.
+;
+; Entry:  HL = text to parse
+;         DE = FCB to fill
+;         A  = flags:
+;              bit 0 set: skip a separator before the file name.
+;              bit 1 set: leave the drive byte unchanged if no drive given
+;                         (else it is set to 0, the default drive).
+;              bit 2 set: leave the name unchanged if no name given.
+;              bit 3 set: leave the extension unchanged if none given.
+; Exit:   A  = 1 if the name or extension contain "?" or "*", 0 otherwise
+;         FCB drive byte = 0FFh if an invalid drive was given
+;         HL = first character after the file name
+; Corrupts: F, BC, DE
+;
+MAKEFCB: PUSH	DE
+	EX	DE,HL		; HL = FCB.
+	BIT	1,A		; Zero the drive unless bit 1 is set.
+	JR	NZ,MKF10
+	LD	(HL),0
+MKF10:	INC	HL
+	LD	BC,8		; Blank the name unless bit 2 is set (if it
+	BIT	2,A		;   is blanked, BC ends up being 0, and the
+	CALL	Z,BLANKC	;   ADD skips the name either way).
+	ADD	HL,BC
+	LD	C,3		; Same for the extension and bit 3.
+	BIT	3,A
+	CALL	Z,BLANKC
+	ADD	HL,BC
+	LD	(HL),B		; Zero extent, S1 and record size (B=0).
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	LD	(HL),B
+	EX	DE,HL		; DE = FCB, HL = text.
+	POP	DE
+;
+	BIT	0,A		; Skip blanks, and a separator if bit 0 is
+	JR	Z,MKF20		;   set.
+	CALL	SCANOFF
+	CALL	DELIM
+	JR	NZ,MKF30
+	INC	HL
+MKF20:	CALL	SCANOFF
+;
+MKF30:	CALL	GETLET		; No drive if the first character is a
+	JR	C,MKF70		;   terminator, or is not followed by ":".
+	JR	Z,MKF70
+	LD	C,A
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	CP	":"
+	LD	A,C
+	JR	NZ,MKF70
+	INC	HL		; Skip "X:".
+	INC	HL
+	SUB	"A"		; Drive number, checked against the number
+	JR	C,MKF40		;   of drives.
+	PUSH	HL
+	LD	HL,NUMDRV
+	CP	(HL)
+	POP	HL
+	JR	C,MKF50
+MKF40:	LD	A,0FFH		; Invalid drive.
+	JR	MKF60
+MKF50:	INC	A		; 1 = A:
+MKF60:	LD	(DE),A
+;
+MKF70:	INC	DE		; Parse the name, C will become 1 if any
+	LD	C,0		;   wildcard is found.
+	LD	B,8
+	CALL	GETFLD
+	LD	A,(HL)		; Parse the extension if there is a ".".
+	CP	"."
+	JR	NZ,MKF80
+	INC	HL
+	LD	B,3
+	CALL	FLDLP
+MKF80:	LD	A,C
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Parse a field (name or extension) of a file name into an FCB.
+; GETFLD leaves the field untouched if it is empty (the first character is
+; a terminator), while FLDLP fills an empty field with spaces.
+;
+; Entry:  HL = text
+;         DE = field in the FCB
+;         B  = size of the field
+;         C  = wildcards flag so far
+; Exit:   HL = first character after the field (a terminator)
+;         DE = end of the field in the FCB
+;         C  = 1 if "?" or "*" found, unchanged otherwise
+;         B  = 0
+; Corrupts: AF
+;
+GETFLD:	CALL	GETLET		; Empty field?
+	JR	C,FLD30
+	JR	Z,FLD30
+;
+FLDLP:	CALL	GETLET		; Terminator: end of field.
+	JR	Z,FLD40
+	JR	C,FLD40
+	INC	HL
+	INC	B		; Ignore the character if the field is
+	DEC	B		;   already full.
+	JR	Z,FLDLP
+	CP	"*"
+	JR	Z,FLD10
+	LD	(DE),A		; Store the character.
+	INC	DE
+	DEC	B
+	CP	"?"
+	JR	Z,FLD20
+	JR	FLDLP
+;
+FLD10:	CALL	WILDB		; "*": fill the rest of the field with "?".
+FLD20:	LD	C,1		; Wildcards found.
+	JR	FLDLP
+;
+FLD30:	LD	A,E		; Empty field: just skip it (DE += B).
+	ADD	A,B
+	LD	E,A
+	RET	NC
+	INC	D
+	RET
+;
+FLD40:	INC	B		; Fill the rest of the field with spaces.
+	DEC	B
+	RET	Z
+	LD	A," "
+	JR	FILLB
+;
+;------------------------------------------------------------------------------
+;
+;        Fill memory at DE with "?" (11 bytes for WILD11, B bytes for WILDB),
+; or with the character in A (B bytes, FILLB).
+;
+; Exit:   DE = end of the filled area
+;         B  = 0
+; Corrupts: AF (WILD11 and WILDB only)
+;
+WILD11:	LD	B,11
+WILDB:	LD	A,"?"
+FILLB:	LD	(DE),A
+	INC	DE
+	DJNZ	FILLB
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Fill memory at HL with C spaces.
+;
+; Exit:   HL = end of the filled area
+;         C  = 0
+; Corrupts: F
+;
+BLANKC:	LD	(HL)," "
+	INC	HL
+	DEC	C
+	JR	NZ,BLANKC
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Parse switches. Any number of "/x" switches are parsed, each one
+; optionally preceded by blanks and a separator ("=", ";" or ","), and the
+; bits corresponding to the known switches (SWLIST) are set. Unknown
+; switches are silently ignored.
+;
+; Entry:  HL = text
+; Exit:   A = C = switches found: 10h=/B, 08h=/A, 04h=/V, 02h=/P, 01h=/W
+;         HL = first character that is not part of a switch (after any
+;              blanks and separator)
+; Corrupts: F, B
+;
+SWITCH:	LD	C,0		; No switches yet.
+SWLOOP:	CALL	SCANOFF		; Skip blanks and a separator.
+	CALL	DELIM
+	JR	NZ,SWT10
+	INC	HL
+	CALL	SCANOFF
+SWT10:	CP	"/"		; Finished if not a switch.
+	JR	NZ,RETSW
+	INC	HL
+	CALL	GETLET		; Finished too if "/" is followed by a
+	JR	Z,RETSW		;   terminator.
+	JR	C,RETSW
+	INC	HL
+	PUSH	HL		; Search the switch letter in SWLIST, B is
+	LD	HL,SWLIST	;   the bit for each one in turn and becomes
+	LD	B,10H		;   zero (with Cy) when the list is
+SWT20:	CP	(HL)		;   exhausted.
+	JR	Z,SWT30
+	INC	HL
+	SRL	B
+	JR	NC,SWT20
+	POP	HL		; Not found: ignore it.
+	JR	SWLOOP
+SWT30:	LD	A,B		; Found: set its bit.
+	OR	C
+	LD	C,A
+	POP	HL
+	JR	SWLOOP
+;
+RETSW:	LD	A,C
+	RET
+;
+SWLIST:	DEFB	"BAVPW"		; Known switches, from bit 4 to bit 0.
+;
+;------------------------------------------------------------------------------
+;
+;        Print a prompt, read a line into DATBUF (up to 12 characters) and
+; parse a number from it, as SCANNUM. Used by DATE and TIME. The contents
+; of DATBUF before the call act as the template for BUFIN.
+;
+; Entry:  DE = prompt ("$" terminated)
+; Exit:   As SCANNUM, with HL pointing into the input line.
+;
+GETBUF:	LD	C,_STROUT
+	CALL	BDOS
+	LD	DE,DATBUF
+	LD	A,12		; Maximum line length.
+	LD	(DE),A
+	LD	C,_BUFIN
+	CALL	BDOS
+	CALL	OUTLF
+	LD	HL,DATBUF+2	; HL = text read.
+;
+;        Skip blanks and then parse a number, as GETNUM.
+;
+; Entry:  HL = text
+; Exit:   Z, NC if the end of the line (CR) was found instead
+;         Otherwise as GETNUM.
+;
+SCANNUM: CALL	SCANOFF
+	CP	CR
+	RET	Z
+;
+;------------------------------------------------------------------------------
+;
+;        Parse a decimal number of one or two digits.
+;
+; Entry:  HL = text
+; Exit:   Cy if there is no digit at HL
+;         Otherwise NC, NZ, A = number, HL = first character after it
+; Corrupts: C
+;
+GETNUM:	CALL	INDIG		; First digit.
+	RET	C
+	LD	C,A
+	CALL	INDIG		; Second digit, if any.
+	JR	C,OKRET
+	PUSH	AF		; A = first digit * 10 + second digit.
+	LD	A,C
+	ADD	A,A
+	ADD	A,A
+	ADD	A,C
+	ADD	A,A
+	LD	C,A
+	POP	AF
+	ADD	A,C
+	INC	C		; NZ (and NC from the ADD).
+	RET
+;
+OKRET:	OR	1		; Single digit: NZ, NC.
+	LD	A,C
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Get a decimal digit.
+;
+; Entry:  HL = text
+; Exit:   Cy if (HL) is not a digit
+;         Otherwise NC, A = digit value, HL incremented
+;
+INDIG:	LD	A,(HL)
+	SUB	"0"
+	RET	C
+	CP	10
+	CCF
+	RET	C
+	INC	HL
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Skip blanks (spaces and tabs).
+;
+; Entry:  HL = text
+; Exit:   HL = first non blank character, A = that character
+;         NZ, and Cy if it is a control character
+;
+SCANOFF: LD	A,(HL)
+	INC	HL
+	CALL	WHITE
+	JR	Z,SCANOFF
+	DEC	HL
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Get a character from a file name, converted to upper case, and
+; check whether it is a file name terminator. These are ":", ".", '"',
+; "[", "]", "_", "/", "+", and the separators recognized by DELIM. Note
+; that "_" is a terminator, so it can't be part of a file name typed in
+; the command line.
+;
+;        DELIM checks only for the separators "=", ";", ",", tab and space;
+; and WHITE checks only for tab and space.
+;
+; Entry:  HL = text (GETLET)
+;         A = character (DELIM, WHITE)
+; Exit:   A = character, converted to upper case (GETLET)
+;         Z if the character is a terminator (or separator, or blank)
+;         Otherwise NZ, and Cy if it is a control character
+;         HL is not modified.
+;
+GETLET:	LD	A,(HL)
+	CP	"a"
+	JR	C,GTL10
+	CP	"z"+1
+	JR	NC,GTL10
+	SUB	"a"-"A"
+GTL10:	CP	":"
+	RET	Z
+	CP	"."
+	RET	Z
+	CP	'"'
+	RET	Z
+	CP	"["
+	RET	Z
+	CP	"]"
+	RET	Z
+	CP	"_"
+	RET	Z
+	CP	"/"
+	RET	Z
+	CP	"+"
+	RET	Z
+;
+DELIM:	CP	"="
+	RET	Z
+	CP	";"
+	RET	Z
+	CP	","
+	RET	Z
+;
+WHITE:	CP	TAB
+	RET	Z
+	CP	" "
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Check the drive of the file name parsed into the default FCB. If it
+; is invalid, print "Invalid drive specification" and return to the
+; caller of the caller (that is, terminate the command being executed).
+;
+; Exit:   Only if the drive is valid.
+; Corrupts: AF
+;
+CHKDRV:	LD	A,(FCB+FCB_DRV)
+	INC	A
+	RET	NZ
+	POP	DE		; Discard the return address.
+	LD	DE,BADDRV$
+	JP	ERROR
+;
+;------------------------------------------------------------------------------
+;
+;        Search for a file matching the default FCB, leaving the result in
+; DIRBUF. SEARCHNEXT searches for the next one, but only if the name in
+; the FCB has wildcards; otherwise there can't be another match, and it
+; returns NZ directly.
+;
+; Entry:  C = _SFIRST or _SNEXT (SEARCH)
+; Exit:   Z if a file has been found
+; Corrupts: All
+;
+SEARCHNEXT: LD	HL,FCB+FCB_NAM
+	CALL	CHKAMB
+	DEC	A
+	RET	NZ
+	LD	C,_SNEXT
+SEARCH:	PUSH	BC
+	LD	DE,DIRBUF	; The search results go to DIRBUF.
+	LD	C,_SETDTA
+	CALL	BDOS
+	POP	BC
+	LD	DE,FCB
+	CALL	BDOS
+	OR	A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Check whether a file name (11 characters) has wildcards.
+;
+; Entry:  HL = file name
+; Exit:   A = 1 if it contains "?", 0 otherwise (Z in both cases)
+; Corrupts: B, HL
+;
+CHKAMB:	LD	B,11
+CKA10:	LD	A,"?"
+	CP	(HL)
+	INC	HL
+	LD	A,1
+	RET	Z
+	DJNZ	CKA10
+	DEC	A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Format a date as text in DATBUF, according to the date format in
+; COUNTRY: "YYYY-MM-DD" (0), "MM-DD-YYYY" (1) or "DD-MM-YYYY" (2), with a
+; leading zero replaced by a space (except in the first format). The text
+; is followed by a CR, and the number of characters (10) is stored in
+; DATBUF+1, so that the text acts as the template for a BUFIN call.
+;
+;        The text is first built by FMTNUM as four two digit fields with one
+; separator between them, and the year field is then joined with the
+; century.
+;
+; Entry:  HL = year
+;         D  = month
+;         E  = day
+; Exit:   HL = DATBUF+2 (the formatted text)
+; Corrupts: AF, BC, DE
+;
+FMTDATE: PUSH	DE
+	LD	DE,100		; D = century, E = year in the century.
+	LD	C,L
+	LD	B,H
+	CALL	DIV16
+	LD	E,L
+	LD	D,C
+	POP	BC		; B = month, C = day.
+	LD	A,(COUNTRY)
+	CP	1
+	JR	NC,FMD10
+;
+	PUSH	DE		; Y-M-D: build "CC?YY-MM?DD"...
+	LD	D,B
+	LD	E,C
+	POP	BC
+	CALL	FMTNUM
+	CALL	FMD30
+	PUSH	HL
+	LD	DE,DATBUF+4	; ...and shift "YY-MM?DD" one position to
+	LD	HL,DATBUF+5	;   the left, overwriting the separator
+	LD	BC,8		;   after the century...
+	LDIR
+	LD	A,"-"		; ...and put the separator between month
+	LD	(DATBUF+9),A	;   and day, and the final CR.
+	LD	A,CR
+	LD	(DATBUF+12),A
+	POP	HL
+	RET
+;
+FMD10:	JR	Z,FMD20		; D-M-Y: day first.
+	LD	A,B
+	LD	B,C
+	LD	C,A
+FMD20:	CALL	FMTNUM		; Build "MM?DD?CC?YY" (or "DD?MM...").
+	LD	HL,(DATBUF+11)	; Move the year field one position to the
+	LD	(DATBUF+10),HL	;   left, joining it to the century.
+	LD	A,CR
+	LD	(DATBUF+12),A
+FMD30:	LD	A,10		; Length of the text.
+	LD	(DATBUF+1),A
+	LD	A,"-"		; Separator.
+	JR	FMTSEP
+;
+;------------------------------------------------------------------------------
+;
+;        Format a time as text in DATBUF: "HH:MM:SS.CCa" (or "p"), with the
+; hours converted to the 12 hour format and a leading zero replaced by a
+; space. The number of characters stored in DATBUF+1 is 9 ("HH:MM:SS."),
+; so that this is what acts as the template for a BUFIN call; @TIME
+; changes this to "HH:MM:SSa".
+;
+; Entry:  H = hours
+;         L = minutes
+;         D = seconds
+;         E = hundredths of second
+; Exit:   HL = DATBUF+2 (the formatted text)
+; Corrupts: AF, BC
+;
+FMTTIME: LD	A,H		; "a" or "p".
+	CP	12
+	LD	A,"a"
+	JR	C,FMT10
+	LD	A,"p"
+FMT10:	LD	(DATBUF+13),A
+	LD	A,H		; Convert the hours: 13-23 become 1-11,
+	CP	13		;   and 0 becomes 12.
+	JR	NC,FMT20
+	OR	A
+	JR	NZ,FMT30
+	ADD	A,24
+FMT20:	SUB	12
+FMT30:	LD	C,L
+	LD	B,A
+	CALL	FMTNUM
+	LD	A,"."		; Separator before the hundredths.
+	LD	(DATBUF+10),A
+	LD	A,9		; Length of the template.
+	LD	(DATBUF+1),A
+	LD	A,":"		; Separator.
+;
+FMTSEP:	LD	(DATBUF+4),A	; Put the separator between the first and
+	LD	(DATBUF+7),A	;   second, and second and third fields.
+	LD	HL,DATBUF+2
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Format four numbers (0 to 99) as text at DATBUF+2, each one as two
+; digits followed by one unused position: "BB?CC?DD?EE?". A leading zero
+; in the first one is replaced by a space.
+;
+; Entry:  B, C, D, E = numbers
+; Exit:   HL = DATBUF+2
+; Corrupts: AF, B
+;
+FMTNUM:	LD	HL,DATBUF+2
+	LD	A,B
+	CALL	PUT2
+	LD	A,C
+	CALL	PUT2
+	LD	A,D
+	CALL	PUT2
+	LD	A,E
+	CALL	PUT2
+	LD	A,"0"		; Blank the leading zero.
+	LD	HL,DATBUF+2
+	CP	(HL)
+	RET	NZ
+	LD	(HL)," "
+	RET
+;
+;        Store A (0 to 99) at HL as two decimal digits, and leave HL
+; pointing three positions further.
+;
+; Corrupts: AF, B
+;
+PUT2:	LD	B,"0"-1		; Tens digit.
+PT210:	INC	B
+	SUB	10
+	JR	NC,PT210
+	ADD	A,"0"+10	; Units digit.
+	LD	(HL),B
+	INC	HL
+	LD	(HL),A
+	INC	HL
+	INC	HL
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        16 bit by 16 bit multiplication, with a 32 bit result.
+;
+; Entry:  BC, DE = numbers to multiply
+; Exit:   HL:BC = result (HL is the high word)
+; Corrupts: AF
+;
+MUL16:	LD	HL,0		; HL:AC holds the partial result and the
+	LD	A,B		;   multiplier being shifted out, which is
+	LD	B,17		;   shifted right 17 times: once to get the
+	JR	MUL30		;   first bit, and once per step.
+MUL10:	JR	NC,MUL20	; Add the multiplicand if the bit is 1.
+	ADD	HL,DE
+MUL20:	RR	H
+	RR	L
+MUL30:	RRA
+	RR	C
+	DJNZ	MUL10
+	LD	B,A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        16 bit division.
+;
+; Entry:  BC = dividend
+;         DE = divisor
+; Exit:   BC = quotient
+;         HL = remainder
+; Corrupts: AF
+;
+DIV16:	LD	HL,0		; AC is the dividend being shifted out and
+	LD	A,B		;   the quotient being shifted in, HL is
+	LD	B,16		;   the remainder.
+	RL	C
+	RLA
+DIV10:	RL	L
+	RL	H
+	JR	C,DIV40		; (Only possible with divisors > 7FFFh.)
+	SBC	HL,DE
+	JR	NC,DIV20
+	ADD	HL,DE		; Doesn't fit: restore, quotient bit is 0.
+DIV20:	CCF
+DIV30:	RL	C
+	RLA
+	DJNZ	DIV10
+	LD	B,A
+	RET
+;
+DIV40:	OR	A
+	SBC	HL,DE
+	JR	DIV30		; Here Cy=1 (quotient bit).
+;
+;------------------------------------------------------------------------------
+;
+;        Print a "$" terminated message, wait for a key (without echo) and
+; print CR+LF.
+;
+; Entry:  DE = message
+; Corrupts: All
+;
+WAITKEY: LD	C,_STROUT
+	CALL	BDOS
+	LD	C,_INNOE
+	CALL	BDOS
+	JP	CRLF
+;
+;------------------------------------------------------------------------------
+;
+;        Print the file name of a search result in DIRBUF, as "NAME     EXT".
+;
+; Corrupts: AF, B, HL
+;
+SHONAME: LD	HL,DIRBUF+FCB_NAM
+	LD	B,8
+	CALL	OUTCNT
+	CALL	ONESPC
+	LD	B,3
+;
+;        Print B characters from HL.
+;
+; Exit:   HL = after the last character printed
+;         B  = 0
+; Corrupts: AF
+;
+OUTCNT:	LD	A,(HL)
+	INC	HL
+	CALL	OUTCHR
+	DJNZ	OUTCNT
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Print the number of files in FILECNT (as an 8 character field)
+; followed by " file", plus "s" if the count is not 1.
+;
+; Corrupts: All
+;
+SHOCNT:	LD	A,(FILECNT)
+	LD	L,A
+	LD	H,0
+	LD	DE,0
+	CALL	DISP32BITS
+	LD	DE,FILMES$
+	LD	C,_STROUT
+	CALL	BDOS
+	LD	A,(FILECNT)
+	DEC	A
+	RET	Z
+	LD	A,"s"
+	JR	OUTCHR
+;
+;------------------------------------------------------------------------------
+;
+;        Print a 32 bit number in decimal, right aligned in a field of 8
+; characters (leading zeros are printed as spaces). The number is first
+; converted to 8 BCD digits in BCDBUF (least significant byte first) by
+; shifting it out bit by bit and doubling BCDBUF with DAA, so numbers above
+; 99999999 lose their highest digits.
+;
+; Entry:  DE:HL = number (DE is the high word)
+; Corrupts: All
+;
+DISP32BITS: LD	BC,0
+	LD	(BCDBUF),BC
+	LD	(BCDBUF+2),BC
+	LD	C,32		; Number of bits.
+CONVLP:	ADD	HL,HL		; Next bit of the number to Cy.
+	RL	E
+	RL	D
+	PUSH	HL
+	LD	HL,BCDBUF	; BCDBUF = BCDBUF*2 + Cy, in BCD.
+	LD	B,4
+CNV10:	LD	A,(HL)
+	ADC	A,A
+	DAA
+	LD	(HL),A
+	INC	HL
+	DJNZ	CNV10
+	POP	HL
+	DEC	C
+	JR	NZ,CONVLP
+;
+	LD	BC,4*256+("0"-" ") ; B = bytes to print, C = value to
+	LD	HL,BCDBUF+3	;   subtract from "0" to get a space; it
+PRBCD:	LD	A,(HL)		;   becomes 0 after the first non zero
+	RRA			;   digit, and before the last digit (so
+	RRA			;   that a zero value is printed as "0").
+	RRA
+	RRA
+	CALL	DIGIT		; High digit.
+	LD	A,1
+	SUB	B
+	JR	NZ,PRB10
+	LD	C,A
+PRB10:	LD	A,(HL)		; Low digit.
+	DEC	HL
+	CALL	DIGIT
+	DJNZ	PRBCD
+	RET
+;
+DIGIT:	AND	0FH
+	JR	Z,BLANKZER
+	LD	C,0		; Non zero digit: no more blanking.
+BLANKZER: OR	"0"
+	SUB	C
+	JR	OUTCHR
+;
+;------------------------------------------------------------------------------
+;
+;        Console output: CR+LF (CRLF), LF (OUTLF), a space (ONESPC) or the
+; character in A (OUTCHR).
+;
+; Corrupts: A (except OUTCHR, which preserves all the registers)
+;
+CRLF:	LD	A,CR
+	CALL	OUTCHR
+OUTLF:	LD	A,LF
+	JR	OUTCHR
+ONESPC:	LD	A," "
+OUTCHR:	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	E,A
+	LD	C,_CONOUT
+	CALL	BDOS
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Print a zero terminated string with direct console output, so that
+; control characters are sent as they are. Used for escape sequences.
+;
+; Entry:  DE = string
+; Exit:   DE = after the terminating zero
+; Corrupts: All others
+;
+PRESC:	LD	A,(DE)
+	INC	DE
+	OR	A
+	RET	Z
+	PUSH	DE
+	LD	E,A
+	LD	C,_DIRIO
+	CALL	BDOS
+	POP	DE
+	JR	PRESC

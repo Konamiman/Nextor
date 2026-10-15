@@ -43,7 +43,7 @@ a. Download the following files:
 
 * The Nextor kernel with the Sunrise IDE driver, from [the latest release of the Sunrise IDE driver repository in GitHub](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest). Please choose the file with _.SunriseIDE.blueMSX.ROM_ extension (the _.SunriseIDE.ROM_ version works but only recognizes the slave IDE device in blueMSX), if you are using another emulator or a physical Sunrise IDE (or compatible) controller hardware you can use the file with _.SunriseIDE.ROM_ extension instead.
 
-* The Nextor tools disk image (_tools.dsk.zip_), from [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest).
+* The Nextor tools disk image (_nextor.dsk_), from [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest).
 
 b. Run blueMSX and select the _Tools - Machine Editor_ menu.
 
@@ -69,15 +69,13 @@ If you want to follow the steps of this guide by using a real MSX computer with 
 
 * Download the Nextor kernel with Sunrise IDE driver (the file with extension _.SunriseIDE.ROM_) from [the latest release of the Sunrise IDE driver repository in GitHub](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest).
 
-* Copy the NEXTOR.SYS and COMMAND3.COM files and the Nextor tools to a floppy disk. You have two options:
+* Copy the NEXTOR.SYS and COMMAND3.COM files, the MSX-DOS 1 system files (MSXDOS.SYS and COMMAND.COM, necessary for the steps that involve booting in MSX-DOS 1 mode) and the Nextor tools to a floppy disk. You have two options:
 
     * Download the Nextor tools disk image file and transfer its contents to a floppy disk.
 
     * Download the Nextor tools ZIP file (_tools.zip_) and uncompress it to a floppy disk, keeping its directory structure (it has the same contents as the disk image).
 
 Note: NEXTOR.SYS and the Nextor tools are available as assets in [the latest release of Nextor in GitHub](https://github.com/Konamiman/Nextor/releases/latest); the Nextor kernel files with the Sunrise IDE driver are released in [the Sunrise IDE driver repository](https://github.com/Konamiman/SunriseIDE-Nextor-driver/releases/latest).
-
-* Copy the MSXDOS.SYS and COMMAND.COM files to the floppy disk, these are necessary for the steps that involve booting in MSX-DOS 1 mode. These files are included in the Nextor tools disk image file, but can be found on other places on Internet too (search for "MSXDOS.SYS" on any search engine).
 
 * Insert the floppy disk in the drive and attach an IDE device (hard disk or compact flash card) of at least 100MB to the Sunrise IDE controller as the master device, or to the first card slot if you are using a CF reader. The device should be completely blank, that is, it should not contain any partition or filesystem; otherwise you may get different results from those described in the next section until you repartition the device.
 
@@ -320,7 +318,7 @@ b. Execute the following command: `LOCK C: ON`
 
 c. Execute the following: `TYPE C:TEST`. You will see the contents of the text file you just created.
 
-d. Remove the floppy disk from the drive (if you are using blueMSX, select the `File - Disk Drive A - Eject: tools.dsk` menu option).
+d. Remove the floppy disk from the drive (if you are using blueMSX, select the `File - Disk Drive A - Eject: nextor.dsk` menu option).
 
 e. Execute `TYPE C:TEST` again. You will see the file contents again instead of getting a "Not Ready" error, even though the disk has been removed from the drive.
 

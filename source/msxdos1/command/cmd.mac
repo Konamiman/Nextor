@@ -1,0 +1,364 @@
+	SUBTTL	DIR, TYPE, PAUSE, REN, DEL and VERIFY commands
+;******************************************************************************
+;
+;        Internal commands DIR, TYPE, PAUSE, REN (RENAME), DEL (ERASE) and
+; VERIFY. They are called by DOCOM with the command tail in CMDLIN, the
+; first two parameters parsed in FCB and FCB2, and the switches in COMSW,
+; ARG1S and ARG2S; they return to the main loop.
+;
+;******************************************************************************
+;
+;        DIR [/W] [/P] [d:][filename]
+;
+;        Lists the files that match the given name ("*.*" if none). For each
+; file the name is shown, and unless /W is given, also "<DIR>" or the size,
+; and the date and time if not zero. Each of these is shown only if it fits
+; in the current line, so that on narrow screens the less important data
+; is just left out. With /W the names are shown in as many columns as fit,
+; separated by tabs. With /P the listing pauses every 23 lines. At the end
+; the number of files and the free space in the drive are shown.
+;
+;        Bit 7 of the drive byte of the FCB is set before searching, which
+; makes the kernel return all the directory entries regardless of their
+; attributes. Hidden and system files and the volume name are then skipped
+; here, but directories are shown.
+;
+@DIR:	CALL	CHKDRV
+	LD	DE,FCB+FCB_NAM	; Default file name: "*.*".
+	CALL	WILD11
+	LD	HL,CMDLIN+1	; Parse the file name again, after the
+	CALL	SWITCH		;   switches that may precede it, keeping
+	LD	DE,FCB		;   the default name and extension if not
+	LD	A,0DH		;   specified.
+	CALL	MAKEFCB
+	LD	A,(ARG1S)	; COMSW = all the switches.
+	LD	HL,COMSW
+	OR	(HL)
+	LD	(HL),A
+	AND	01H		; /W?
+	LD	A,1		; One entry per line if not.
+	JR	Z,DIR10
+	LD	A,(LINLEN)	; Else (screen width + 4) / 16 entries per
+	ADD	A,4		;   line (each entry is 12 characters plus
+	RRCA			;   a tab), but at least one.
+	RRCA
+	RRCA
+	RRCA
+	AND	0FH
+	JR	NZ,DIR10
+	INC	A
+DIR10:	LD	(PERLIN),A
+	LD	(LINCNT),A
+	LD	A,23		; Lines per page for /P.
+	LD	(FULLSCR),A
+	XOR	A
+	LD	(FILECNT),A
+	LD	A,(FCB)		; Search all the entries.
+	OR	80H
+	LD	(FCB),A
+	LD	C,_SFIRST
+	CALL	SEARCH
+;
+SHOWDIR: JP	NZ,CHKCNT	; No more entries found.
+	LD	A,(DIRBUF+FCB_S1) ; Skip hidden and system files and the
+	AND	ATR_HID+ATR_SYS+ATR_VOL ; volume name.
+	JP	NZ,SCROLL
+	LD	HL,FILECNT
+	INC	(HL)
+	CALL	SHONAME
+	LD	A,(COMSW)	; Only the name if /W.
+	AND	01H
+	JP	NZ,NEXENT
+	LD	A,(DIRBUF+FCB_S1) ; "<DIR>" for directories...
+	AND	ATR_DIR
+	JR	Z,DIR20
+	LD	DE,DIRTAG$
+	LD	C,_STROUT
+	CALL	BDOS
+	JR	DIR30
+;
+DIR20:	LD	A,(CSRX)	; ...else the size, if it fits in the line
+	DEC	A		;   (and if the name has not made the
+	JP	Z,NEXENT	;   cursor wrap to the next line).
+	ADD	A,7
+	LD	HL,LINLEN
+	CP	(HL)
+	JP	NC,NEXENT
+	LD	HL,(DIRBUF+SR_SIZ)
+	LD	DE,(DIRBUF+SR_SIZ+2)
+	CALL	DISP32BITS
+;
+DIR30:	LD	HL,(DIRBUF+SR_DAT) ; The date, if not zero and if it fits.
+	LD	A,L
+	OR	H
+	JR	Z,NEXENT
+	LD	A,(CSRX)
+	DEC	A
+	JR	Z,NEXENT
+	ADD	A,8
+	PUSH	HL
+	LD	HL,LINLEN
+	CP	(HL)
+	POP	HL
+	JR	NC,NEXENT
+	CALL	ONESPC
+	LD	A,L		; E = day.
+	AND	1FH
+	LD	E,A
+	LD	C,H
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,H		; D = month.
+	AND	0FH
+	LD	D,A
+	LD	B,0		; HL = year.
+	SRL	C
+	LD	HL,1980
+	ADD	HL,BC
+	CALL	FMTDATE		; HL = date as text, with a 4 digit year.
+	LD	A,(COUNTRY)	; Print it with a 2 digit year: for Y-M-D
+	OR	A		;   skip the first two digits, for the
+	LD	B,8		;   other formats skip the two digits
+	JR	Z,DIR40		;   after the second separator.
+	LD	B,6
+	CALL	OUTCNT
+	LD	B,2
+DIR40:	INC	HL
+	INC	HL
+	CALL	OUTCNT
+;
+	LD	HL,(DIRBUF+SR_TIM) ; The time, if not zero and if it fits.
+	LD	A,L
+	OR	H
+	JR	Z,NEXENT
+	LD	A,(CSRX)
+	DEC	A
+	JR	Z,NEXENT
+	ADD	A,6
+	PUSH	HL
+	LD	HL,LINLEN
+	CP	(HL)
+	POP	HL
+	JR	NC,NEXENT
+	CALL	ONESPC
+	LD	DE,0		; No seconds and hundredths.
+	LD	B,H		; H = hours.
+	SRL	B
+	SRL	B
+	SRL	B
+	ADD	HL,HL		; L = minutes.
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,H
+	AND	3FH
+	LD	L,A
+	LD	H,B
+	CALL	FMTTIME		; Print hours and minutes, and "a" or "p".
+	LD	B,5
+	CALL	OUTCNT
+	LD	A,(DATBUF+13)
+	CALL	OUTCHR
+;
+NEXENT:	LD	HL,LINCNT	; If the line is not complete, print a tab
+	DEC	(HL)		;   and go for the next entry.
+	JR	Z,NEXLIN
+	LD	A,TAB
+	CALL	OUTCHR
+	JR	SCROLL
+;
+NEXLIN:	LD	A,(PERLIN)	; Line complete: start a new one. If the
+	LD	(LINCNT),A	;   cursor is at the start of a line (the
+	LD	A,(CSRX)	;   line was full and the cursor wrapped),
+	DEC	A		;   move it up first so that there are no
+	JR	NZ,NXL10	;   empty lines between entries.
+	LD	DE,CURUP$
+	CALL	PRESC
+NXL10:	CALL	CRLF
+	LD	A,(COMSW)	; Pause if /P and the page is full.
+	AND	02H
+	JR	Z,SCROLL
+	LD	HL,FULLSCR
+	DEC	(HL)
+	JR	NZ,SCROLL
+	LD	(HL),23
+	CALL	@PAUSE
+;
+SCROLL:	CALL	SEARCHNEXT	; Next entry.
+	JP	SHOWDIR
+;
+;        No more entries: show the number of files found and the free space.
+; With a screen width of 34 or more characters both go in the same line.
+;
+CHKCNT:	LD	A,(FILECNT)
+	OR	A
+	LD	DE,NOTFND$
+	JP	Z,ERROR
+	LD	HL,(PERLIN)	; L = PERLIN, H = LINCNT. If they are not
+	LD	A,H		;   equal the last line is not finished.
+	CP	L
+	JR	Z,MESSAGE
+	CALL	CRLF
+MESSAGE: CALL	SHOCNT
+	LD	A,(LINLEN)
+	CP	34
+	PUSH	AF
+	CALL	NC,ONESPC
+	POP	AF
+	CALL	C,CRLF
+	LD	A,(FCB)		; Free space = free clusters * sectors per
+	AND	7FH		;   cluster * sector size.
+	LD	E,A
+	LD	C,_ALLOC
+	CALL	BDOS
+	PUSH	HL
+	LD	E,A
+	LD	D,0
+	CALL	MUL16
+	POP	DE
+	CALL	MUL16
+	EX	DE,HL
+	LD	L,C
+	LD	H,B
+	CALL	DISP32BITS
+	LD	DE,FREMES$	; " bytes free".
+	JP	ERROR
+;
+;------------------------------------------------------------------------------
+;
+;        TYPE [d:]filename
+;
+;        Prints the contents of a file, up to the end or to the first ^Z. The
+; file is read in blocks of up to TPASIZ bytes into the TPA.
+;
+@TYPE:	CALL	CHKDRV
+	LD	DE,TPA
+	LD	C,_SETDTA
+	CALL	BDOS
+	LD	DE,FCB
+	LD	C,_FOPEN
+	CALL	BDOS
+	OR	A
+	LD	DE,NOTFND$
+	JP	NZ,ERROR
+	LD	HL,0
+	LD	(FCB+FCB_RR),HL
+	LD	(FCB+FCB_RR+2),HL
+	INC	HL
+	LD	(FCB+FCB_RSZ),HL
+;
+TYPELP:	LD	DE,FCB		; Read a block.
+	LD	HL,TPASIZ
+	LD	C,_RDBLK
+	CALL	BDOS
+	LD	A,L		; HL = bytes read, finish if none.
+	OR	H
+	JR	Z,TYP10
+	LD	DE,TPA
+OUTLP:	LD	A,(DE)
+	INC	DE
+	CP	EOFCHR
+	JR	Z,TYP10
+	CALL	OUTCHR
+	DEC	HL
+	LD	A,L
+	OR	H
+	JR	NZ,OUTLP
+	JR	TYPELP
+;
+TYP10:	JP	CRLF
+;
+;------------------------------------------------------------------------------
+;
+;        PAUSE [comment]
+;
+;        Waits for a key. Also called by DIR /P.
+;
+@PAUSE:	LD	DE,PAUSMES$	; "Strike a key when ready".
+	JP	WAITKEY
+;
+;------------------------------------------------------------------------------
+;
+;        REN (or RENAME) [d:]filename filename
+;
+;        The kernel takes the new name from the second half of the FCB, which
+; is where the second parameter has been parsed (FCB2).
+;
+@REN:	CALL	CHKDRV
+	LD	DE,FCB
+	LD	C,_FREN
+	CALL	BDOS
+	OR	A
+	RET	Z
+	LD	DE,RENERR$
+	JP	ERROR
+;
+;------------------------------------------------------------------------------
+;
+;        DEL (or ERASE) [d:]filename
+;
+;        Asks for confirmation if the file name is "*.*".
+;
+@DEL:	CALL	CHKDRV
+	LD	B,11		; Check whether the name is all "?".
+	LD	HL,FCB+FCB_NAM
+	LD	A,"?"
+AMBSPEC: CP	(HL)
+	INC	HL
+	JR	NZ,NOPRMPT
+	DJNZ	AMBSPEC
+ASKAGN:	LD	DE,SUREMES$	; "Are you sure (Y/N)?"
+	LD	C,_STROUT
+	CALL	BDOS
+	LD	C,_CONIN
+	CALL	BDOS
+	PUSH	AF
+	CALL	CRLF
+	POP	AF
+	AND	5FH		; Convert to upper case.
+	CP	"N"
+	RET	Z
+	CP	"Y"
+	JR	NZ,ASKAGN
+;
+NOPRMPT: LD	DE,FCB
+	LD	C,_FDEL
+	CALL	BDOS
+	OR	A
+	RET	Z
+	LD	DE,NOTFND$
+	JP	ERROR
+;
+;------------------------------------------------------------------------------
+;
+;        VERIFY ON|OFF
+;
+;        The parameter is taken from FCB, where it has been parsed as a file
+; name. There is no way to get the current setting, so the parameter is
+; mandatory.
+;
+@VERIFY: LD	HL,FCB+FCB_NAM
+	LD	A,(HL)
+	CP	"O"
+	JR	NZ,VER20
+	INC	HL
+	LD	A,(HL)
+	CP	"N"
+	LD	E,1		; "ON": E=1.
+	JR	Z,VER10
+	CP	"F"
+	JR	NZ,VER20
+	INC	HL
+	CP	(HL)
+	JR	NZ,VER20
+	DEC	E		; "OFF": E=0.
+VER10:	INC	HL		; Nothing else allowed after it.
+	LD	A,(HL)
+	CP	" "
+	JR	NZ,VER20
+	LD	C,_VERIFY
+	CALL	BDOS
+	RET
+;
+VER20:	LD	DE,BADPARM$	; "Invalid parameter".
+	JP	ERROR

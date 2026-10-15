@@ -1,0 +1,94 @@
+	SUBTTL	Command table and messages
+;******************************************************************************
+;
+;        The table of internal commands, the messages, and other constant
+; data. This is the last part of the program that is included in the
+; checksum (see INIT).
+;
+;******************************************************************************
+;
+;        Internal commands table: 8 character name padded with spaces, and
+; address of the command routine. FINDCOM assumes 15 entries.
+;
+COMTAB:	DEFB	"DIR     "
+	DEFW	@DIR
+	DEFB	"COPY    "
+	DEFW	@COPY
+	DEFB	"TYPE    "
+	DEFW	@TYPE
+	DEFB	"REN     "
+	DEFW	@REN
+	DEFB	"DEL     "
+	DEFW	@DEL
+	DEFB	"DATE    "
+	DEFW	@DATE
+	DEFB	"TIME    "
+	DEFW	@TIME
+	DEFB	"RENAME  "
+	DEFW	@REN
+	DEFB	"ERASE   "
+	DEFW	@DEL
+	DEFB	"PAUSE   "
+	DEFW	@PAUSE
+	DEFB	"REM     "
+	DEFW	@REM
+	DEFB	"VERIFY  "
+	DEFW	@VERIFY
+	DEFB	"MODE    "
+	DEFW	@MODE
+	DEFB	"BASIC   "
+	DEFW	@BASIC
+	DEFB	"FORMAT  "
+	DEFW	@FORMAT
+;
+;------------------------------------------------------------------------------
+;
+;        Messages, "$" terminated.
+;
+NEEDBAT$: DEFB	CR,LF,"Insert disk with batch file"
+	DEFB	CR,LF,"and strike any key when ready $"
+PAUSMES$: DEFB	"Strike a key when ready $"
+BADDRV$: DEFB	"Invalid drive specification$"
+BADNAM$: DEFB	"Bad command or file name$"
+TOOBIG$: DEFB	"Program too big to fit in memory$"
+DIRTAG$: DEFB	"  <DIR> $"
+FILMES$: DEFB	" file$"
+FREMES$: DEFB	" bytes free$"
+NOTFND$: DEFB	"File not found$"
+SUREMES$: DEFB	"Are you sure (Y/N)? $"
+RENERR$: DEFB	"Rename error$"
+BADPARM$: DEFB	"Invalid parameter$"
+OVERWR$: DEFB	"File cannot be copied onto itself$"
+LOSTERR$: DEFB	"Content of destination lost before copy",CR,LF,"$"
+FULDIR$: DEFB	"File creation error$"
+WRTERR$: DEFB	"Write error$"
+NOSPACE$: DEFB	"Insufficient disk space$"
+COPIED$: DEFB	" copied$"
+CURDAT$: DEFB	"Current date is $"
+BADDAT$: DEFB	"Invalid date$"
+NEWDAT$: DEFB	CR,LF,"Enter new date: $"
+CURTIM$: DEFB	"Current time is $"
+BADTIM$: DEFB	"Invalid time$"
+NEWTIM$: DEFB	CR,LF,"Enter new time: $"
+;
+;------------------------------------------------------------------------------
+;
+;        Other constant data.
+;
+WEEKTAB: DEFB	"SunMonTueWedThuFriSat"
+COMEXT:	DEFB	"COM"
+BATEXT:	DEFB	"BAT"
+;
+;        Escape sequences, zero terminated (printed with PRESC).
+;
+CURON$:	DEFB	ESC,"y5",0	; Cursor always visible.
+CUROFF$: DEFB	ESC,"x5",0	; Cursor visible only while waiting for a key.
+CURUP$:	DEFB	ESC,"A",0	; Cursor up.
+;
+;        The size of the checksummed area (TCOMMAND to COMBUF) must be even,
+; since the checksum is calculated by words. There is an extra zero byte
+; here in the original file for this.
+;
+	IF	($-TCOMMAND) AND 1
+	 DEFB	0
+	ENDIF

@@ -14,7 +14,9 @@
 
 - **COMMAND3.COM**: the Nextor 3 command interpreter, an enhanced replacement for `COMMAND2.COM`.
 
-- **Tools**: the command line tools (`.COM` files to be run from the DOS prompt). The **Tools disk image** is a bootable disk with `NEXTOR.SYS`, `COMMAND3.COM`, all the tools and the help files; the **Tools ZIP file** contains just the tools. Each tool has also its own entry, listing the releases that contain that particular tool.
+- **MSX-DOS 1**: `MSXDOS.SYS` and `COMMAND.COM`, the MSX-DOS 1 system files, needed to boot to the DOS prompt when Nextor runs in MSX-DOS 1 mode.
+
+- **Tools**: the command line tools (`.COM` files to be run from the DOS prompt). The **Tools disk image** is a bootable disk with `NEXTOR.SYS`, `COMMAND3.COM`, the MSX-DOS 1 system files, all the tools and the help files; the **Tools ZIP file** has the same contents. Each tool has also its own entry, listing the releases that contain that particular tool.
 
 - **Build tools**: tools that run on a PC, not on the MSX. Currently just **mknexrom**, the tool that produces kernel ROMs from a kernel base file and a driver.
 

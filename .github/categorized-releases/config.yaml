@@ -5,7 +5,8 @@
 # by GitHub Pages from the docs directory.
 #
 # Nextor 3 publishes each component (kernel base, standalone drivers,
-# NEXTOR.SYS, COMMAND3.COM, the tools, mknexrom...) as a separate release,
+# NEXTOR.SYS, COMMAND3.COM, the MSX-DOS 1 system files, the tools,
+# mknexrom...) as a separate release,
 # so the flat releases list in GitHub is hard to navigate. This page groups
 # the releases by component, matching each release by the names of its
 # assets (not by tag or title), so a release shows up under every component
@@ -56,8 +57,8 @@ latest-page:
     The most recent release of every component. Switch to the **Assets** view
     to get a flat list of the latest version of every downloadable file. Note that
     `nextor.dsk` is a bootable disk image that contains NEXTOR.SYS, COMMAND3.COM,
-    all the tools' .COM files and the COMMAND3.COM help files, and `tools.zip`
-    contains the same files.
+    the MSX-DOS 1 system files (MSXDOS.SYS and COMMAND.COM), all the tools' .COM
+    files and the COMMAND3.COM help files, and `tools.zip` contains the same files.
 
 # Releases matching no category at all. Kept visible so that a release with
 # unexpected asset names doesn't silently disappear from the page.
@@ -137,6 +138,18 @@ categories:
       for the details.
     assets: '(^|\n)COMMAND3\.COM(\n|$)'
 
+  - name: "MSX-DOS 1"
+    tooltip: "MSXDOS.SYS and COMMAND.COM, the MSX-DOS 1 system files"
+    description: |
+      `MSXDOS.SYS` 1.03 and `COMMAND.COM` 1.11, the system file and the command interpreter of
+      MSX-DOS 1, needed to boot to the DOS prompt when Nextor runs in MSX-DOS 1 mode (otherwise
+      the system boots to Disk BASIC). Copy both files to the root directory of the boot drive.
+      These are built from source code reverse engineered from the original files, and are
+      functionally identical to them. See the
+      [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md#321-booting-in-dos-1-mode)
+      for the details on the MSX-DOS 1 mode.
+    assets: '(^|\n)(MSXDOS\.SYS|COMMAND\.COM)(\n|$)'
+
   - name: "Tools"
     tooltip: "The command line tools"
     description: |
@@ -151,16 +164,16 @@ categories:
         tooltip: "Bootable disk image with NEXTOR.SYS, COMMAND3.COM and all the tools"
         description: |
           A bootable 720K floppy disk image containing [NEXTOR.SYS](#nextorsys) (plus the Japanese variant as
-          `NEXTORJ.SYS`), [COMMAND3.COM](#command3com), all the command line tools and the `COMMAND3.COM`
-          help files. Use it to boot straight to the DOS prompt on a computer or emulator
-          with a Nextor kernel ROM.
+          `NEXTORJ.SYS`), [COMMAND3.COM](#command3com), the [MSX-DOS 1](#msx-dos-1) system files, all the
+          command line tools and the `COMMAND3.COM` help files. Use it to boot straight to the DOS prompt
+          on a computer or emulator with a Nextor kernel ROM, both in the normal mode and in MSX-DOS 1 mode.
         assets: '(^|\n)nextor[^\n]*\.dsk(\n|$)'
 
       - name: "Tools ZIP file"
         tooltip: "ZIP file with all the command line tools"
         description: |
-          A ZIP file with all the command line tools (without [NEXTOR.SYS](#nextorsys) and [COMMAND3.COM](#command3com)),
-          for copying the tools to an existing Nextor disk or device.
+          A ZIP file with the same contents as the [tools disk image](#tools/tools-disk-image), for copying
+          the tools (and optionally the system files) to an existing Nextor disk or device.
         assets: '(^|\n)tools[^\n]*\.zip(\n|$)'
 
       - name: "Individual tools"

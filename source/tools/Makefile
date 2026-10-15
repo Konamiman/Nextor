@@ -169,10 +169,14 @@ DATA.REL: \
 # The disk image and the zip archive (see below) have the same contents:
 #
 # - In the root directory: NEXTOR.SYS, NEXTOR.SYS.japanese (renamed to
-#   NEXTORJ.SYS), COMMAND3.COM, MSR.COM (it's for MSX-DOS 1, which can't
-#   access the TOOLS directory), an AUTOEXEC.BAT that points the HELP and
+#   NEXTORJ.SYS), COMMAND3.COM, the MSX-DOS 1 system files (MSXDOS.SYS and
+#   COMMAND.COM, see ../msxdos1), MSR.COM (it's for MSX-DOS 1, which can't
+#   access the TOOLS directory), an AUTOEXEC.BTM that points the HELP and
 #   PATH environment items to the HELP and TOOLS directories, and a
-#   README.TXT (sourced from tools-disk-readme.txt).
+#   README.TXT (sourced from tools-disk-readme.txt). The boot batch file is
+#   an AUTOEXEC.BTM, not an AUTOEXEC.BAT, so that only NEXTOR.SYS runs it:
+#   the COMMAND.COM of MSX-DOS 1 would execute an AUTOEXEC.BAT too, and it
+#   doesn't have the SET command.
 # - In a TOOLS directory: every other .COM file present in bin/tools.
 # - In a HELP directory: the COMMAND3.COM help files from
 #   ../commandcom/helpfiles.
@@ -190,15 +194,15 @@ DATA.REL: \
 # in C/Makefile).
 C_COMS := $(foreach n,$(notdir $(wildcard C/*.c)),$(call uc,$(patsubst %.c,%.com,$(n))))
 
-PACKAGE_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM $(COMS) $(C_COMS)
+PACKAGE_REQUIRED := NEXTOR.SYS NEXTOR.SYS.japanese COMMAND3.COM MSXDOS.SYS COMMAND.COM $(COMS) $(C_COMS)
 PACKAGE_MISSING = $(filter-out $(notdir $(wildcard $(addprefix $(BIN_TOOLS)/,$(PACKAGE_REQUIRED)))),$(PACKAGE_REQUIRED))
 
 # The .COM files for the TOOLS directory: every .COM file in bin/tools
-# except COMMAND3.COM and MSR.COM (in either letter case, in case the
-# filesystem preserved a lowercase copy). $(sort ...) also removes
-# duplicates, in case the filesystem is case-insensitive.
-TOOL_COMS = $(filter-out $(BIN_TOOLS)/COMMAND3.COM $(BIN_TOOLS)/command3.com $(BIN_TOOLS)/MSR.COM $(BIN_TOOLS)/msr.com,\
-	$(sort $(wildcard $(BIN_TOOLS)/*.COM) $(wildcard $(BIN_TOOLS)/*.com)))
+# except the ones that go in the root directory: COMMAND3.COM, COMMAND.COM
+# and MSR.COM.
+ROOT_COMS := COMMAND3.COM COMMAND.COM MSR.COM
+TOOL_COMS = $(filter-out $(addprefix $(BIN_TOOLS)/,$(ROOT_COMS)),\
+	$(sort $(wildcard $(BIN_TOOLS)/*.COM)))
 
 # The COMMAND3.COM help files, stored in the HELP directory.
 # JINDEX.HLP (the Japanese help index, shown by HELP with no arguments
@@ -224,8 +228,10 @@ define stage_package
 	@cp $(BIN_TOOLS)/NEXTOR.SYS $(1)/NEXTOR.SYS
 	@cp $(BIN_TOOLS)/NEXTOR.SYS.japanese $(1)/NEXTORJ.SYS
 	@cp $(BIN_TOOLS)/COMMAND3.COM $(1)/COMMAND3.COM
+	@cp $(BIN_TOOLS)/MSXDOS.SYS $(1)/MSXDOS.SYS
+	@cp $(BIN_TOOLS)/COMMAND.COM $(1)/COMMAND.COM
 	@cp $(BIN_TOOLS)/MSR.COM $(1)/MSR.COM
-	@sed 's/\r*$$/\r/' tools-disk-autoexec.bat > $(1)/AUTOEXEC.BAT
+	@sed 's/\r*$$/\r/' tools-disk-autoexec.btm > $(1)/AUTOEXEC.BTM
 	@sed 's/\r*$$/\r/' tools-disk-readme.txt > $(1)/README.TXT
 	@for f in $(TOOL_COMS); do \
 		cp "$$f" "$(1)/TOOLS/$$(basename $$f | tr a-z A-Z)" || exit 1; \
@@ -235,7 +241,7 @@ endef
 
 # The root directory files, in the order they are added to the disk and
 # the archive.
-PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM MSR.COM AUTOEXEC.BAT README.TXT
+PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM MSXDOS.SYS COMMAND.COM MSR.COM AUTOEXEC.BTM README.TXT
 
 # ---------------------------------------------------------------------------
 # Tools disk image.
@@ -250,18 +256,15 @@ PACKAGE_ROOT_FILES := NEXTOR.SYS NEXTORJ.SYS COMMAND3.COM MSR.COM AUTOEXEC.BAT R
 #
 # The image gets the same MSX-DOS 2.20 style boot sector that the kernel's
 # built-in FORMAT command creates (assembled standalone via
-# tools-disk-bootsect.mac), so it boots both in Nextor/MSX-DOS 2 mode
-# (straight to the DOS prompt) and in MSX-DOS 1 mode (loading MSXDOS.SYS
-# if present, or falling back to Disk BASIC).
+# tools-disk-bootsect.mac), so it boots to the DOS prompt both in
+# Nextor/MSX-DOS 2 mode (loading NEXTOR.SYS and COMMAND3.COM) and in
+# MSX-DOS 1 mode (loading MSXDOS.SYS and COMMAND.COM).
 #
 # Files that are not built by this repository can be added to the disk with
 # the EXTRA_FILES variable: a comma (or space) separated list of files, with
 # relative paths resolved against the current directory (the one make was
 # invoked from), stored in the disk with their names uppercased. Listed
-# files that don't exist make the build fail. Typical usage is
-# EXTRA_FILES=MSXDOS.SYS,COMMAND.COM for a disk that also boots to the DOS
-# prompt in MSX-DOS 1 mode (in Nextor/MSX-DOS 2 mode the disk is already
-# bootable thanks to the COMMAND3.COM built by this repository).
+# files that don't exist make the build fail.
 #
 # The current (invocation) directory is taken from the PWD environment
 # variable, which (unlike CURDIR) survives make -C. It does NOT survive the

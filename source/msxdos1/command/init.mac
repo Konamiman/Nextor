@@ -1,0 +1,79 @@
+	SUBTTL	Initialization
+;******************************************************************************
+;
+;        Initialization code, executed after each load from disk. It tells
+; MSXDOS.SYS how to check whether the program is still intact in memory,
+; and on the very first boot also prints the sign-on message and starts
+; AUTOEXEC.BAT (or asks for the date if there is no AUTOEXEC.BAT and no
+; clock chip).
+;
+;        This page is not needed any more after this, and it is used as part
+; of the COPY and TYPE buffer (see TPASIZ in command.mac).
+;
+;******************************************************************************
+;
+IMAGE:
+INIT:	LD	SP,STACK
+	LD	HL,TCOMMAND	; Tell MSXDOS.SYS the re-entry address,
+	LD	(CMDADR),HL	;   the number of words to checksum, and
+	LD	BC,COMBUF-TCOMMAND ; the checksum itself.
+	SRL	B
+	RR	C
+	LD	(CMDLEN),BC
+	LD	DE,0
+INI10:	LD	A,(HL)
+	INC	HL
+	ADD	A,E
+	LD	E,A
+	LD	A,(HL)
+	INC	HL
+	ADC	A,D
+	LD	D,A
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,INI10
+	LD	(CMDSUM),DE
+;
+	LD	A,(BOOTFLG)	; Nothing else to do if this is not the very
+	OR	A		;   first boot (or if this has already been
+	JP	NZ,TCOMMAND	;   done after it).
+	INC	A
+	LD	(BOOTFLG),A
+	LD	DE,BANNER$	; Print the sign-on message.
+	LD	C,_STROUT
+	CALL	BDOS
+;
+	LD	HL,AUTFCB	; Try to open AUTOEXEC.BAT.
+	LD	DE,BATFCB
+	LD	BC,13
+	LDIR
+	LD	DE,BATFCB
+	LD	C,_FOPEN
+	CALL	BDOS
+	OR	A
+	JR	NZ,INI20
+	LD	HL,0		; Found: set it as the current batch file,
+	LD	(BATFCB+FCB_RR),HL ; to be read one byte at a time from the
+	LD	(BATFCB+FCB_RR+2),HL ; start. There are no batch parameters
+	INC	HL		;   (BOOTFLG was zero, so PARMTAB is still
+	LD	(BATFCB+FCB_RSZ),HL ; as MSXDOS.SYS initialized it).
+	LD	A,1
+	LD	(BATFLG),A
+	JP	TCOMMAND
+;
+INI20:	LD	A,CR		; No AUTOEXEC.BAT: if there is no clock
+	LD	(CMDLIN+1),A	;   chip, ask for the date (with an empty
+	LD	A,(TIMFLG)	;   command line, so that @DATE asks for
+	AND	A		;   it).
+	JR	NZ,INI30
+	CALL	@DATE
+INI30:	JP	TCOMMAND
+;
+AUTFCB:	DEFB	0,"AUTOEXECBAT",0 ; Start of the AUTOEXEC.BAT FCB.
+;
+BANNER$: DEFB	CR,LF,"COMMAND version 1.11",CR,LF,"$"
+;
+;        Padding up to TCOMMAND.
+;
+	.ALIGN	100H

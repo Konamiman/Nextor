@@ -523,7 +523,7 @@ Nextor consists of the following components:
 
 **Note:** starting with Nextor 2.1.0, the `CALL SYSTEM2` command (see _[3.6.15. The CALL SYSTEM2 command](#3615-the-call-system2-command)_) can be used in BASIC to force a reboot in the DOS environment using `MSXDOS2.SYS`, even if `NEXTOR.SYS` exists.
 
-In order to boot in the MSX-DOS 1 prompt, you need the usual `MSXDOS.SYS` and `COMMAND.COM` files. Also, if you have just the kernel and no `NEXTOR.SYS` or `MSXDOS.SYS` files, Nextor will boot in the BASIC prompt (running `AUTOEXEC.BAS` if present).
+In order to boot in the MSX-DOS 1 prompt, you need the usual `MSXDOS.SYS` and `COMMAND.COM` files. These are supplied in the root directory of the Nextor tools disk image and the tools zip archive, so a disk prepared from any of these boots to the DOS prompt in MSX-DOS 1 mode too. Also, if you have just the kernel and no `NEXTOR.SYS` or `MSXDOS.SYS` files, Nextor will boot in the BASIC prompt (running `AUTOEXEC.BAS` if present).
 
 Therefore, in order to "install" Nextor, you have two options:
 

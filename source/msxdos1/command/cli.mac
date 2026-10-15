@@ -1,0 +1,461 @@
+	SUBTTL	Main loop
+;******************************************************************************
+;
+;        The main loop of the command interpreter: it gets a command line,
+; either from the keyboard or from the batch file being executed, and
+; executes it. Also the code that starts the execution of a batch file or a
+; .COM program.
+;
+;******************************************************************************
+;
+;        Entry point, jumped to by INIT and by MSXDOS.SYS whenever a
+; transient program terminates and COMMAND.COM is still intact in memory.
+;
+;        Escape sequence "ESC x5" makes the cursor visible only while waiting
+; for a key, "ESC y5" (see EXECUTE) makes it visible always.
+;
+TCOMMAND: LD	SP,STACK
+	LD	E,0FFH		; Get the number of drives (that's what
+	LD	C,_SELDSK	;   "select disk" returns, and drive 0FFh
+	CALL	BDOS		;   doesn't exist).
+	LD	(NUMDRV),A
+	CALL	CRLF
+	LD	DE,CUROFF$
+	CALL	PRESC
+;
+;------------------------------------------------------------------------------
+;
+;        Main loop. Prints the prompt (current drive letter and ">"), gets a
+; command line in COMBUF and executes it. The command routines are called
+; with GETCOM as return address, so they just return when done.
+;
+;        BUFIN uses the contents of the buffer as a template for editing the
+; new line, so COMBUF holds the previous command. If an empty line is
+; entered, the length and first byte of the previous command are put back
+; (see DOCOM), so that it is not lost as the template.
+;
+GETCOM:	LD	HL,GETCOM	; Return address for the commands.
+	PUSH	HL
+	LD	C,_CURDRV	; Print the prompt.
+	CALL	BDOS
+	LD	(CURDRV),A
+	ADD	A,"A"
+	CALL	OUTCHR
+	LD	A,">"
+	CALL	OUTCHR
+	LD	HL,(COMBUF+1)	; Save the template data.
+	LD	(SAVTPL),HL
+	LD	A,(BATFLG)	; Read the command line from the batch file
+	OR	A		;   if one is being executed.
+	JR	NZ,READBAT
+	LD	DE,COMBUF	; Read the command line from the keyboard.
+	LD	A,128
+	LD	(DE),A
+	LD	C,_BUFIN
+	CALL	BDOS
+	LD	A,(COMBUF+1)	; If the line is 128 characters long, cut it
+	CP	128		;   to 127 so that there is room for a CR
+	JR	C,GTC10		;   at the end.
+	LD	A,127
+	LD	(COMBUF+1),A
+	LD	A,CR
+	LD	(COMBUF+2+127),A
+GTC10:	JP	DOCOM
+;
+;------------------------------------------------------------------------------
+;
+;        Read a command line from the batch file being executed into COMBUF,
+; echoing it to the screen. "%0" to "%9" are replaced with the batch
+; parameters (nothing if the parameter doesn't exist), "%%" means "%",
+; and a "%" followed by anything else is removed together with the
+; following character. A line feed after the CR is skipped.
+;
+;        The batch file is opened again each time, in case the disk has been
+; changed. If it can't be opened the user is asked to insert the disk with
+; the batch file, and the main loop is restarted.
+;
+READBAT: LD	DE,BATFCB
+	LD	C,_FOPEN
+	CALL	BDOS
+	OR	A
+	LD	DE,NEEDBAT$	; "Insert disk with batch file..."
+	JP	NZ,WAITKEY
+	LD	HL,1		; Read one byte at a time, into BATBYT. The
+	LD	(BATFCB+FCB_RSZ),HL ; random record field keeps the position.
+	LD	DE,BATBYT
+	LD	C,_SETDTA
+	CALL	BDOS
+	LD	DE,COMBUF+2	; DE = where to store the next character.
+;
+RDBAT:	CALL	GETBATBYT
+	CP	"%"
+	JR	NZ,SAVBATBYT
+	CALL	GETBATBYT	; "%" found: check the next character.
+	CP	"%"
+	JR	Z,SAVBATBYT
+	CP	CR
+	JR	Z,SAVBATBYT
+	SUB	"0"
+	JR	C,RDBAT
+	CP	10
+	JR	NC,RDBAT
+	ADD	A,A		; HL = pointer to the parameter (the table
+	LD	HL,PARMTAB	;   doesn't cross a page boundary, so there's
+	ADD	A,L		;   no need to propagate the carry to H).
+	LD	L,A
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	OR	H		; Ignore if the parameter doesn't exist.
+	JR	Z,RDBAT
+RDPARM:	LD	A,(HL)		; Copy the parameter up to the first
+	INC	HL		;   separator or control character.
+	CALL	DELIM
+	JR	Z,RDBAT
+	JR	C,RDBAT
+	CALL	STOBYT
+	JR	RDPARM
+;
+SAVBATBYT: CALL	STOBYT
+	CP	CR
+	JR	NZ,RDBAT
+	LD	A,E		; End of line: set the length (excluding the
+	SUB	LOW (COMBUF+3)	;   CR; the buffer doesn't cross a page
+	LD	(COMBUF+1),A	;   boundary, so the low bytes are enough).
+	CALL	GETBATBYT	; Skip the line feed.
+	JP	DOCOM
+;
+;------------------------------------------------------------------------------
+;
+;        Get one byte from the batch file. At the end of the file (or on
+; error, or when a ^Z is found) the batch file execution ends and a CR is
+; returned.
+;
+; Exit:   A = byte read
+; Corrupts: F
+;
+GETBATBYT: PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	DE,BATFCB
+	LD	HL,1
+	LD	C,_RDBLK
+	CALL	BDOS
+	POP	BC
+	POP	DE
+	POP	HL
+	OR	A
+	JR	NZ,BATEOF
+	LD	A,(BATBYT)
+	CP	EOFCHR
+	RET	NZ
+BATEOF:	XOR	A
+	LD	(BATFLG),A
+	LD	A,CR
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Store a character in COMBUF and echo it. Only a CR is stored once
+; the buffer has 127 characters, so that the line is always terminated.
+;
+; Entry:  A = character
+;         DE = where to store it
+; Exit:   DE incremented if the character was stored
+;
+STOBYT:	PUSH	HL
+	LD	HL,COMBUF+2+126	; Store any character if there's room for
+	OR	A		;   it and the CR.
+	SBC	HL,DE
+	POP	HL
+	JR	NC,STB10
+	CP	CR		; Else only a CR.
+	RET	NZ
+STB10:	LD	(DE),A
+	INC	DE
+	JP	OUTCHR
+;
+;------------------------------------------------------------------------------
+;
+;        Execute the command line in COMBUF. Jumped to from the main loop
+; with GETCOM as the return address on the stack.
+;
+;        If the line is empty, the template data saved before reading it is
+; restored (see GETCOM).
+;
+DOCOM:	CALL	OUTLF
+	LD	A,(COMBUF+1)
+	OR	A
+	JR	NZ,DOC10
+	LD	HL,(SAVTPL)
+	LD	(COMBUF+1),HL
+@REM:	RET			; (The REM command does nothing.)
+;
+;------------------------------------------------------------------------------
+;
+;        Print a message followed by CR+LF. Used to report errors, often
+; jumped to with GETCOM as the return address on the stack.
+;
+; Entry:  DE = "$" terminated message
+;
+ERROR:	LD	C,_STROUT
+	CALL	BDOS
+	JP	CRLF
+;
+;        The line is not empty. Parse the command name into IDFCB and copy
+; the rest of the line (the command tail) to CMDLIN, with its length in
+; CMDLIN+0. Then parse the first two parameters into the default FCBs, as
+; CP/M does for transient programs, getting the switches after the command
+; name and after each parameter into COMSW, ARG1S and ARG2S.
+;
+DOC10:	LD	HL,COMBUF+2
+	LD	DE,IDFCB
+	XOR	A
+	CALL	MAKEFCB
+	PUSH	HL
+	LD	DE,CMDLIN+1
+	LD	B,0FFH		; (The CR is not counted.)
+COMTAIL: LD	A,(HL)
+	LD	(DE),A
+	INC	B
+	INC	HL
+	INC	DE
+	CP	CR
+	JR	NZ,COMTAIL
+	LD	A,B
+	LD	(CMDLIN),A
+	POP	HL
+	CALL	SWITCH
+	LD	(COMSW),A
+	LD	DE,FCB
+	LD	A,1		; Skip leading separators.
+	CALL	MAKEFCB
+	CALL	SWITCH
+	LD	(ARG1S),A
+	LD	DE,FCB2
+	LD	A,1
+	CALL	MAKEFCB
+	CALL	SWITCH
+	LD	(ARG2S),A
+	XOR	A		; Zero the current record of the first FCB
+	LD	(FCB+FCB_CR),A	;   (the second FCB overwrote it).
+;
+	LD	HL,IDFCB	; If a drive was specified, it's either a
+	LD	A,(HL)		;   change of the current drive or an
+	OR	A		;   external command.
+	JR	NZ,DRVCHK
+	INC	HL		; No command name: nothing to do.
+	LD	A,(HL)
+	CP	" "
+	RET	Z
+;
+;        Look for the command name in the internal commands table, and
+; jump to the command routine if found.
+;
+	LD	HL,COMTAB
+	LD	C,15		; Number of entries in the table.
+FINDCOM: LD	B,8
+	LD	DE,IDFCB+FCB_NAM
+FNC10:	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,FNC20
+	INC	HL
+	INC	DE
+	DJNZ	FNC10
+	LD	E,(HL)		; Found: jump to the command routine.
+	INC	HL
+	LD	D,(HL)
+	EX	DE,HL
+	JP	(HL)
+FNC20:	INC	HL		; Skip the rest of the entry.
+	DJNZ	FNC20
+	INC	HL
+	INC	HL
+	DEC	C
+	JR	NZ,FINDCOM
+	JR	EXTERNAL	; Not found: external command.
+;
+;        A drive was specified with the command. If there's just the drive,
+; change the current drive. Otherwise it's an external command.
+;
+DRVCHK:	CP	0FFH		; Invalid drive?
+	LD	DE,BADDRV$
+	JP	Z,ERROR
+	LD	E,A
+	DEC	E
+	INC	HL
+	LD	A,(HL)
+	CP	" "
+	JR	NZ,EXTERNAL
+	LD	C,_SELDSK
+	CALL	BDOS
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        External command: look for a .BAT or .COM file with the command
+; name. The extension is set to "???" and the directory entries found are
+; checked one by one, so if both the .BAT and the .COM files exist, the
+; one that comes first in the directory is used.
+;
+;        An extension can't be specified with the command name: it produces
+; a "Bad command or file name" error.
+;
+EXTERNAL: LD	A,(IDFCB+FCB_EXT)
+	CP	" "
+	JR	NZ,BADCOM
+	LD	DE,IDFCB+FCB_EXT
+	LD	B,3
+	CALL	WILDB
+	LD	DE,DIRBUF
+	LD	C,_SETDTA
+	CALL	BDOS
+	LD	C,_SFIRST
+EXT10:	LD	DE,IDFCB
+	CALL	BDOS
+	OR	A
+	JR	NZ,BADCOM
+	LD	HL,BATEXT
+	CALL	CHKEXT
+	JR	Z,BATCOM
+	LD	HL,COMEXT
+	CALL	CHKEXT
+	JR	Z,EXECUTE
+	LD	C,_SNEXT
+	JR	EXT10
+;
+BADCOM:	LD	DE,BADNAM$
+	JP	ERROR
+;
+;        Check the extension of the file found, and open it if it matches.
+;
+; Entry:  HL = extension to check
+; Exit:   Z if it matches, then the file is open (with DIRBUF as the FCB),
+;           with record size 1 and random record 0
+;
+CHKEXT:	LD	DE,DIRBUF+FCB_EXT
+	LD	B,3
+	CALL	COMPB
+	RET	NZ
+	LD	DE,DIRBUF
+	LD	C,_FOPEN
+	CALL	BDOS
+	LD	HL,0
+	LD	(DIRBUF+FCB_RR),HL
+	LD	(DIRBUF+FCB_RR+2),HL
+	INC	HL
+	LD	(DIRBUF+FCB_RSZ),HL
+	XOR	A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Start the execution of a batch file. The command line is copied to
+; BATLIN and PARMTAB is set to point to the parameters in it: %0 is the
+; batch file name itself, and %1 to %9 the following ones. Parameters are
+; separated by blanks or by one of "=", ";" or ",". The batch file FCB
+; (DIRBUF, already opened) is copied to BATFCB and the batch flag is set,
+; so that the main loop will read the commands from the file.
+;
+BATCOM:	LD	HL,PARMTAB	; Clear the parameter pointers.
+	LD	B,20
+	XOR	A
+BTC10:	LD	(HL),A
+	INC	HL
+	DJNZ	BTC10
+	LD	DE,BATLIN	; Copy the command line, including the CR.
+	LD	HL,COMBUF+1
+	LD	C,(HL)
+	LD	B,0
+	INC	BC
+	INC	HL
+	LDIR
+	LD	HL,BATLIN
+	LD	DE,PARMTAB
+	LD	B,10		; Up to 10 parameters.
+	JR	EACHPARM
+;
+MOVPARM: INC	HL		; Skip the current parameter.
+	LD	A,(HL)
+	CALL	DELIM
+	JR	C,HAVPARM	; End of line.
+	JR	NZ,MOVPARM
+	CALL	SCANOFF		; Skip the separator and the blanks.
+	CALL	DELIM
+	JR	NZ,EACHPARM
+	INC	HL
+EACHPARM: CALL	SCANOFF
+	JR	C,HAVPARM	; End of line.
+	EX	DE,HL		; Store the parameter pointer.
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	EX	DE,HL
+	DEC	HL
+	DJNZ	MOVPARM
+;
+HAVPARM: LD	HL,DIRBUF	; Set up the batch file FCB.
+	LD	DE,BATFCB
+	LD	BC,FCB_LEN
+	LDIR
+	LD	A,1
+	LD	(BATFLG),A
+	RET
+;
+;------------------------------------------------------------------------------
+;
+;        Execute a .COM program. The program is loaded at 100h by the
+; random block read function, but it can be as big as to overwrite all of
+; COMMAND.COM: the stub at EXESTUB and the program FCB are copied to the
+; very top of the stack area, and the stack pointer is set to just below
+; the stub. The stub begins with three return addresses: the read function
+; returns to the rest of the stub (EXEDMA), which sets the DMA address back
+; to 80h with the jump at 0005h; this one returns to the program at 100h,
+; and the program can terminate by returning to 0000h.
+;
+;        The program file (DIRBUF) is already open, with record size 1. The
+; cursor is set to be visible always while the program runs.
+;
+EXECUTE: LD	DE,CURON$
+	CALL	PRESC
+	LD	HL,(DIRBUF+FCB_SIZ+2) ; The program must fit below the stub
+	LD	A,L		;   (OR H resets Cy for the SBC below).
+	OR	H
+	JR	NZ,EXE10
+	LD	HL,(DIRBUF+FCB_SIZ)
+	LD	DE,EXESTK-TPA+1
+	SBC	HL,DE
+	JR	NC,EXE10
+;
+	LD	HL,EXESTK	; Set up the stack and the stub, and copy
+	LD	SP,HL		;   the FCB after it.
+	EX	DE,HL
+	LD	HL,EXESTUB
+	LD	BC,EXESIZ
+	LDIR
+	LD	HL,DIRBUF
+	LD	BC,FCB_LEN
+	LDIR
+	LD	DE,TPA		; Load the program.
+	LD	C,_SETDTA
+	CALL	BDOS
+	LD	HL,(DIRBUF+FCB_SIZ)
+	LD	DE,EXEFCB
+	LD	C,_RDBLK
+	JP	BDOS
+;
+EXE10:	LD	DE,TOOBIG$	; "Program too big to fit in memory".
+	JP	ERROR
+;
+;        The stub that is copied to EXESTK. EXEDMA is executed at its address
+; in the copy, so it must not contain absolute references to itself.
+;
+EXESTUB: DEFW	EXESTK+EXEDMA-EXESTUB ; Return address for the read.
+	DEFW	TPA		; Return address for _SETDTA: the program.
+	DEFW	JWBOOT		; Return address for the program.
+EXEDMA:	LD	DE,CMDLIN
+	LD	C,_SETDTA
+	JP	BDOS
+EXESIZ	EQU	$-EXESTUB
