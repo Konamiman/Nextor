@@ -421,15 +421,17 @@ dspace_end:
     ld (ix+10),b
 
     ;Cluster numbers 0 and 1 are invalid
+    ;(unsigned test, cluster numbers can be 8000h or higher in FAT16;
+    ;the upper bound is checked by FNDFAT)
 
-    dec de
-    dec de
-    xor a
-    bit 7,d
+    ld a,d
+    or a
+    jr nz,FGC_CLUSOK
+    ld a,e
+    cp 2
     ld a,.ICLUS##
-    ret nz
-    inc de
-    inc de
+    ret c
+FGC_CLUSOK:
 
     ;Get cluster info
 
