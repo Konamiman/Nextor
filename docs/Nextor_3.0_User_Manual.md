@@ -538,9 +538,29 @@ Also, you need to copy at least `NEXTOR.SYS` and `COMMAND3.COM` (or `COMMAND2.CO
 
 The Nextor booting procedure is similar to the one performed by MSX-DOS 2. However, things are a little different since it is necessary to perform a drive to device and partition mapping for all the drives attached to Nextor drivers (if you are using the standalone driver only, then the booting procedure is identical to MSX-DOS 2).
 
-At boot time, Nextor will perform a query to all the available Nextor drivers to find out how many devices are being controlled by these drivers, and will assign to each driver one drive per active partition found in each device controlled by the driver (if a device has no active partitions, it still gets one drive). If 5 is pressed at boot time, only one drive is assigned to each driver instead (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_).
+At boot time Nextor does the following, in this order:
 
-**Note:** An active partition is one that has the "active" partition flag set in its partition table entry (the most significant bit in the first byte of the partition table entry). This flag can be switched on and off for any existing partition using `FDISK`, see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_.
+1. It decides how many drives each Nextor driver gets, depending on the devices controlled by the driver.
+2. It maps each of these drives to a device, and possibly to a partition or to the entire device.
+3. It chooses the boot drive, that is, the drive from which the system files are loaded.
+
+**Drives per device.** Nextor examines the devices of each driver in device number order, and each one gets the drives shown in the table below, in a row. In this table a "valid partition" is a FAT12 or FAT16 partition (only FAT12 with three or less sectors per FAT when booting in MSX-DOS 1 mode) that actually holds a FAT filesystem; partitions of other types, and partitions that have been created but not formatted, are ignored.
+
+| The device... | Drives it gets, and what they are mapped to |
+|---|---|
+| has valid partitions with the "active" flag set<sup>1</sup> | One drive per active partition, mapped to these partitions in partition order. |
+| has valid partitions, but none of them is active<sup>1</sup> | One drive, mapped to the first valid partition. |
+| has no partition table, but holds a valid FAT filesystem at absolute sector 0 (for example a ROM disk, or a card formatted without partitions) | One drive, mapped to the whole device. |
+| doesn't hold any valid partition or filesystem (for example a brand new or not yet partitioned storage device) | One drive, attached to the device but with no partition mapped<sup>2</sup>. |
+| is offline and is removable (for example a card slot with no card inserted) | One drive, attached to the device but with no partition mapped<sup>2</sup>. |
+| is offline and is not removable | None. |
+| has the "don't use for automapping" flag set by the driver | None (drives can still be mapped to it explicitly, see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_). |
+
+_Notes:_
+
+<sup>1</sup>An active partition is one that has the "active" partition flag set in its partition table entry (the most significant bit in the first byte of the partition table entry). This flag can be switched on and off for any existing partition using `FDISK`, see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_.
+
+<sup>2</sup>A drive that is attached to a device with no partition mapped will search a partition again on the first access (so for example, a card inserted after booting, or a device partitioned after booting, can be accessed right away).
 
 For example, assume that you have two Nextor kernels attached. The kernel in slot 1 controls one device that has two active partitions, while the kernel in slot 2 controls three devices, each having either only one partition marked as active or no partitions marked as active. Then the initial drive assignment would be as follows:
 
@@ -560,15 +580,11 @@ C:, D: for the internal disk drive
 
 The internal disk drive would not have any drives attached if you pressed SHIFT while booting (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_) or if you have the SHIFT key set as inverted (see _[2.10.1. Boot key inverters](#2101-boot-key-inverters)_).
 
-After all drives have been assigned to drivers, a device and partition to drive automatic mapping procedure will be run for each of these drives. Each drive is mapped to a device partition that meets the following conditions:
+Since the devices get their drives in device number order, the drive letters of a device depend only on how many drives the devices with smaller numbers get, which in turn depends only on how many active partitions they have; not on whether they have a medium inserted, nor on what else they contain. For example, the drives for a driver controlling two card slots (devices 1 and 2) and a ROM disk (device 3) will always be A: for the first slot, B: for the second slot and C: for the ROM disk, regardless of which slots have a card inserted at boot time (as long as no card has more than one active partition).
 
-1. The device doesn't have the "don't use for automapping" flag set (this flag is set by the driver).
-2. Is a valid FAT12 or FAT16 partition (only FAT12 when booting in MSX-DOS 1 mode).
-3. Is an active partition.
+If 5 is pressed at boot time, each driver gets one single drive, and the device number order doesn't apply: this drive is mapped to the first active partition found in any device of the driver; if there's none, to the first valid partition or FAT filesystem at sector 0 found in any device; and if there's none either, it remains attached with no partition mapped to the first device that qualifies for that (an offline removable device, or an online device with no valid filesystem).
 
-If no partitions are found that meet all three conditions, then the search is started over, but this time skipping the "is active" check; devices that already have one of their partitions mapped to another drive are skipped in this second pass, so that a device never gets more drives than the ones reserved for it (one per active partition, with a minimum of one). If this fails again, absolute sector 0 of the device is checked (to see if the device doesn't have partitions but holds a valid FAT filesystem) as a last resort.
-
-If no suitable partition is found in any device, the drive remains attached to its device but with no partition assigned; a partition will then be searched again on the first access to the drive. This happens for devices that are offline at boot time (only if the driver declares them as removable), and for devices that are online but don't hold any valid filesystem (e.g. a brand new or not yet partitioned storage device, which this way keeps a drive attached so that it can be accessed right away after being partitioned).
+The same rules are used when a drive is remapped to its default state after booting (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_): the drive is mapped to the first device that can take it, in device number order, skipping the partitions that are already mapped to other drives (and the devices without active partitions that already have a drive).
 
 The automatic mapping procedure only supports devices with numbers 1 to 63: this is a current limitation of Nextor that could disappear in future versions. In the case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
 
@@ -580,13 +596,27 @@ After the automatic mapping is finished, the boot procedure will continue with t
 
 1.  If the "3" key is being pressed, the system displays the BASIC prompt.
 
-2.  Otherwise, if `NEXTOR.SYS` (or `NEXTOR3.SYS`, which takes precedence; see _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_) and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (the first drive that is mapped to an existing partition or to sector 0 of the device), the DOS prompt is shown after `AUTOEXEC.BTM` (or `AUTOEXEC.BAT`, when the former does not exist or when `COMMAND2.COM` is the interpreter loaded; see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_) is executed (if present). When both `NEXTOR3.SYS` and `NEXTOR.SYS` are missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
+2.  Otherwise, if `NEXTOR.SYS` (or `NEXTOR3.SYS`, which takes precedence; see _[3.2.2. Booting Nextor 2 and Nextor 3 from the same medium](#322-booting-nextor-2-and-nextor-3-from-the-same-medium)_) and a command interpreter (`COMMAND3.COM`, or `COMMAND2.COM` when the former is not found) are present in the boot drive (see below), the DOS prompt is shown after `AUTOEXEC.BTM` (or `AUTOEXEC.BAT`, when the former does not exist or when `COMMAND2.COM` is the interpreter loaded; see _[2.14. Enhanced NEXTOR.SYS](#214-enhanced-nextorsys)_) is executed (if present). When both `NEXTOR3.SYS` and `NEXTOR.SYS` are missing, `MSXDOS2.SYS` is loaded instead if present (see the note at the end of this section); in that case only `COMMAND2.COM` is searched for, since the `COMMAND3.COM` selection is performed by `NEXTOR.SYS` itself (and `COMMAND3.COM` would refuse to run without it anyway).
 
 3.  Otherwise, if the boot drive has an MSX-DOS 1 or MSX-DOS 2 boot sector, its boot code is executed as in the case of MSX-DOS: first in the BASIC environment with the carry flag reset, then in the DOS environment with the carry flag set. This will usually cause `MSXDOS.SYS` and `COMMAND.COM` to be loaded if present.
 
 4.  If the previous step returns, then the BASIC environment is activated, and `AUTOEXEC.BAS` is executed if present.
 
 Note that step 3 will not be done if the disk has a standard boot sector (not created by MSX-DOS 1 or MSX-DOS 2). The built-in disk partitioning tool will create MSX-DOS 2 boot sectors for all partitions of 32MB or less, and standard boot sectors for larger partitions.
+
+**Boot drive.** The boot drive is the first drive, in drive letter order, that has a valid boot sector (one that can be read and starts with a jump instruction, byte EBh or E9h) and that is one of these:
+
+* A drive mapped to a partition, or to a whole device, that holds a valid filesystem (as explained above: FAT12 or FAT16, only FAT12 with three or less sectors per FAT in MSX-DOS 1 mode).
+* A floppy disk drive controlled by a Nextor driver, regardless of what the disk holds. This way disks that don't have a filesystem, such as many games, can be booted.
+* A drive controlled by an MSX-DOS driver (not a Nextor driver), for example the internal floppy disk drive in most MSX computers, also regardless of what the disk holds.
+
+Drives that can't be read (for example a card slot with no card, or a floppy disk drive with no disk) are simply skipped, and ghost drives (see _[2.5.1. Ghost drives](#251-ghost-drives)_) are never tried. If no drive qualifies, the BASIC environment is activated (as in step 4 above) with A: as the current drive.
+
+Note that the "active" flag of the partitions plays no role here: it only decides how many drives a device gets (see the table above). Also, only the boot sector matters for choosing the boot drive: whether the drive holds `NEXTOR.SYS` or any other system file doesn't (if it doesn't, the boot procedure just continues with the steps that follow step 2 above, using that same drive).
+
+For example, with a driver controlling two card slots (devices 1 and 2) and a ROM disk (device 3), and an internal floppy disk drive controlled by an MSX-DOS driver, the drives would be A: for the first card slot, B: for the second card slot, C: for the ROM disk and D:, E: for the internal floppy disk drive. Then the system boots from the card in the first slot if there's one; otherwise from the card in the second slot if there's one; otherwise from the ROM disk. If the driver numbered the ROM disk as device 1 instead, it would get drive A: and the system would always boot from it.
+
+The boot drive becomes the current drive when the DOS prompt is shown, and `NEXTOR.SYS` passes it to `AUTOEXEC.BTM` or `AUTOEXEC.BAT` as `%1`.
 
 Starting with Nextor 2.1.0, the Nextor kernel will load `MSXDOS2.SYS` if present when `NEXTOR.SYS` is not found, thus allowing booting from old MSX-DOS 2 disks. Note however that in this case the Nextor command line tools won't work (`MSXDOS2.SYS` doesn't expose entry points for the new function calls added by Nextor).
 
@@ -606,7 +636,7 @@ The boot procedure for MSX-DOS 1 mode is the same as for the normal (MSX-DOS 2 c
 
 * After the automatic mapping procedure, the `NEXTOR.SYS` and command interpreter search step is omitted.
 
-* The boot sector step considers all the drives, not only drive A:, so the first drive (in drive letter order, skipping the ghost halves of ghost drive pairs, see _[2.5.1. Ghost drives](#251-ghost-drives)_) that holds a disk with a valid boot sector is booted, and it becomes the default drive, so that `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. The same search is performed when entering `CALL SYSTEM` from Disk BASIC. This is unlike the original MSX-DOS 1, which could boot only from drive A:, and mimics the behavior of the normal MSX-DOS 2 compatible mode.
+* The boot sector step considers all the drives, not only drive A:, with the same rules as in normal mode (see the boot drive explanation above); the boot drive becomes the default drive, so that `MSXDOS.SYS` and `COMMAND.COM` are loaded from it. The same search is performed when entering `CALL SYSTEM` from Disk BASIC. This is unlike the original MSX-DOS 1, which could boot only from drive A:, and mimics the behavior of the normal MSX-DOS 2 compatible mode.
 
 Partitions of 16MB or less created with the built-in disk partitioning tool will have three sectors per FAT or less, so these can be used in MSX-DOS 1 mode.
 

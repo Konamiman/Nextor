@@ -4595,56 +4595,51 @@ DRIVER_STAT:
 ;
 ; End of moved code.
 
-;	Subroutine	check if a drive is the ghost half of a ghost drive pair
-;			(see UD1_FIRST_ABSOLUTE_SECTOR in kvar.mac). Used by the
-;			bootsector scan in A5AE7: reading the ghost half would
-;			trigger the "insert disk" prompt and then re-read the
-;			same physical disk that its master half already provided.
+;	Subroutine	check if the bootsector scan in A5AE7 must skip a drive:
+;			the ghost half of a ghost drive pair (see
+;			UD1_FIRST_ABSOLUTE_SECTOR in kvar.mac), since reading it
+;			would trigger the "insert disk" prompt and then re-read
+;			the same physical disk that its master half already
+;			provided; or a Nextor drive that isn't a floppy disk drive
+;			and has no filesystem (unmapped, or no partition assigned).
 ;	Inputs		A = drive (0 based)
-;	Outputs		Cy set if the drive is the ghost half of a pair
-;	Remark		A preserved, corrupts DE and HL. Assumes that the drives
-;			in the KERNEX_DOS1 table are the first ones in the system
-;			(true when this kernel is the master disk ROM); drives
-;			past the table (other disk interfaces) are never ghosts.
+;	Outputs		Cy set if the drive must be skipped
+;	Remark		A preserved, corrupts DE, HL and IX.
 
-IS_GHOST:
+IS_SKIP:
+	call	GET_D1_ENTRY		; HL = UD1_RELATIVE_DRIVE of the drive
+	ccf
+	ret	nc			; not a Nextor drive
 	push	af
-	ld	e,a			; E = drive
-	ld	hl,(KERNEX_DOS1##)
-	ld	a,h
-	or	l
-	jr	z,ISGH_NO		; no table
-	bit	7,(hl)			; disk emulation mode?
-	jr	nz,ISGH_NO
-	ld	a,(hl)
-	and	3Fh			; number of entries in the table
-	ld	d,a
-	ld	a,e
-	cp	d
-	jr	nc,ISGH_NO		; not a Nextor drive
-	inc	hl			; skip the entries count byte
-	add	a,a
-	add	a,a
-	add	a,a
-	sub	e			; * 7 = UD1_SIZE
-	ld	e,a
-	ld	d,0
-	add	hl,de			; HL = entry for the drive
-	inc	hl			; HL = UD1_RELATIVE_DRIVE
 	bit	6,(hl)			; FDD?
-	jr	z,ISGH_NO
-	inc	hl
+	inc	hl			; HL = UD1_DEVICE_NUMBER
+	jr	z,ISK_NOFDD
 	inc	hl			; HL = UD1_FIRST_ABSOLUTE_SECTOR byte 0
 	ld	a,(hl)
 	and	3
 	cp	2			; 10 = ghost half of a pair
-	jr	nz,ISGH_NO
-	pop	af
-	scf
-	ret
-ISGH_NO:
+	jr	ISK_END
+ISK_NOFDD:
+	ld	a,(hl)
+	or	a
+	jr	z,ISK_END		; unmapped
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	and	(hl)
+	inc	hl
+	and	(hl)
+	inc	hl
+	and	(hl)
+	inc	a			; first sector -1 = no partition assigned
+ISK_END:
+	jr	z,ISK_SKIP
 	pop	af
 	or	a
+	ret
+ISK_SKIP:
+	pop	af
+	scf
 	ret
 
 	ALIGN	58A8h
@@ -4943,8 +4938,9 @@ A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 	JP	YC000+01EH		; start bootloader
 
 ;	Subroutine	read a bootsector and validate. All drives are scanned
-;	in order (skipping the ghost halves of ghost drive pairs, see
-;	IS_GHOST) and the first one holding a valid bootsector wins; that
+;	in order, skipping the ghost halves of ghost drive pairs and the
+;	Nextor drives that aren't floppy disk drives and have no filesystem
+;	(see IS_SKIP); the first one holding a valid bootsector wins; that
 ;	drive becomes the default drive, so that the bootsector code (see
 ;	bank2/bootsect.mac) loads MSXDOS.SYS from it. Originally only
 ;	drive 0 was tried, which prevented booting in MSX-DOS 1 mode
@@ -4952,7 +4948,7 @@ A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 ;	where unlike in MSX-DOS the internal FDD isn't necessarily drive 0).
 ;
 ;	The routine doesn't fit in the room of the original one, so it
-;	continues at BSCAN_READ_DONE, past the last ALIGN.
+;	continues at BSCAN, past the last ALIGN.
 ;
 ;	Inputs		________________________
 ;	Outputs		Cy reset: bootsector copied to YC000, A = nonzero,
@@ -4961,25 +4957,7 @@ A5ADB:	LD	HL,YF323		; address diskerror handler pointer
 
 A5AE7:	call	TO_BASIC_REQUIRED	; also flags the dirsector buffer invalid
 	ret	c
-
-	xor	a			; start scanning at drive 0
-BSCAN_LOOP:
-	call	IS_GHOST		; ghost half of a ghost drive pair?
-	jp	c,BSCAN_SKIP		; yep: same physical drive as its master, skip it
-	call	A609A			; invalidate FAT buffer of the drive
-					;  (its disk may have been changed)
-	push	af
-	LD	A,(DEFDPB##+1)
-	LD	C,A			; default mediadescriptor
-	pop	af
-	push	af			; save the drive
-	LD	B,1			; 1 sector
-	ld	de,0			; sector 0
-	LD	HL,(YF351)		; use the dir sectorbuffer
-	PUSH	HL
-	or	a			; read
-	CALL	PHYDIO			; read sector
-	jp	BSCAN_READ_DONE
+	jp	BSCAN
 
 	ALIGN	5B0Fh
 
@@ -8941,24 +8919,18 @@ gfm_clamp_loop:
 ; Second part of the bootsector scan of A5AE7, moved here so that the
 ; addresses that follow A5AE7 keep their original values.
 
-BSCAN_READ_DONE:
-	POP	HL
-	jr	c,BSCAN_NEXT		; error, try next drive
-	LD	A,(HL)
-	LD	DE,YC000
-	LD	BC,256
-	LDIR				; copy bootloader to C000
-	CP	0EBH
-	jr	z,BSCAN_OK		; valid bootloader, quit
-	CP	0E9H
-	jr	z,BSCAN_OK		; valid bootloader, quit
-BSCAN_NEXT:
+BSCAN:
+	xor	a			; start scanning at drive 0
+BSCAN_LOOP:
+	push	af			; save the drive
+	call	IS_SKIP			; must the drive be skipped?
+	call	nc,BSCAN_READ		; no: try it
+	jr	nc,BSCAN_OK		; got a valid bootsector
 	pop	af
-BSCAN_SKIP:
 	inc	a
 	ld	hl,YF347
 	cp	(hl)			; more drives to try?
-	jp	c,BSCAN_LOOP
+	jr	c,BSCAN_LOOP
 	scf				; no bootable disk found
 	ret
 
@@ -8967,6 +8939,146 @@ BSCAN_OK:
 	LD	(YF247),a		; boot drive becomes the default drive
 	ld	a,(YC000)
 	or	a			; Cy reset, A nonzero (as the old code did)
+	ret
+
+;	Read the bootsector of drive A to YC000 and check it,
+;	return Cy reset if it's valid. Corrupts AF, BC, DE, HL.
+;	The "Insert diskette" prompt of the phantom drives is suppressed
+;	while reading, as the DOS 2 mode boot scan does: the PROMPT hook
+;	temporarily holds "ex (sp),hl / pop hl / ret", which returns to
+;	the caller of PROMPT (this works for the PROMPT routine of any
+;	disk ROM, since the code is in the hook itself), so a drive that
+;	would need a disk change is just read as is (and usually fails).
+
+BSCAN_READ:
+	call	A609A			; invalidate FAT buffer of the drive
+					;  (its disk may have been changed)
+	ld	hl,(XF24F)
+	push	hl			; save the first four bytes
+	ld	hl,(XF24F+2)		;  of the PROMPT hook
+	push	hl
+	ld	hl,0E1E3h		; ex (sp),hl / pop hl
+	ld	(XF24F),hl
+	ld	l,0C9h			; ret (fourth byte unchanged)
+	ld	(XF24F+2),hl
+	LD	HL,(DEFDPB##+1)
+	LD	C,L			; default mediadescriptor
+	LD	B,1			; 1 sector
+	ld	de,0			; sector 0
+	LD	HL,(YF351)		; use the dir sectorbuffer
+	PUSH	HL
+	or	a			; read
+	CALL	PHYDIO			; read sector
+	POP	HL
+	pop	de			; restore the PROMPT hook
+	ld	(XF24F+2),de		;  (flags preserved)
+	pop	de
+	ld	(XF24F),de
+	ret	c			; error
+	LD	A,(HL)
+	LD	DE,YC000
+	LD	BC,256
+	LDIR				; copy bootloader to C000
+	CP	0EBH
+	ret	z			; valid bootloader (Cy reset)
+	CP	0E9H
+	ret	z			; valid bootloader (Cy reset)
+	scf
+	ret
+
+;	Subroutine	get the entry of a drive in the KERNEX_DOS1 table.
+;	Inputs		A = drive (0 based)
+;	Outputs		Cy reset and HL = UD1_RELATIVE_DRIVE field of the entry,
+;			Cy set if it's not a Nextor drive or we are in
+;			disk emulation mode
+;	Remark		A preserved, corrupts DE and IX. The table holds the
+;			drives of the Nextor drivers in DRVTBL order (see
+;			AUTODRV_DOS1 in bank 4), so DRVTBL is walked to find the
+;			driver of the drive and its relative drive; a DRVTBL
+;			entry is a Nextor driver if its slot is the one of the
+;			next table entry not yet consumed.
+
+GET_D1_ENTRY:
+	push	af
+	push	bc
+	ld	e,a			; E = drive
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	jr	z,GDE_NO		; no table
+	bit	7,(hl)			; disk emulation mode?
+	jr	nz,GDE_NO
+	ld	a,(hl)
+	and	3Fh			; number of entries in the table
+	ld	d,a			; D = entries not yet consumed
+	inc	hl			; HL = first entry not yet consumed
+	ld	ix,YFB21		; DRVTBL
+	ld	b,4
+GDE_LOOP:
+	ld	c,0			; C = 0: not a Nextor driver
+	ld	a,d
+	or	a
+	jr	z,GDE_ISNXT		; no entries left
+	ld	a,(ix+1)		; driver slot
+	cp	(hl)			; UD1_SLOT of the entry
+	jr	nz,GDE_ISNXT
+	dec	c			; C = FFh: Nextor driver
+GDE_ISNXT:
+	ld	a,e
+	sub	(ix+0)
+	jr	c,GDE_FOUND		; the drive belongs to this driver
+	ld	e,a
+	inc	c
+	jr	nz,GDE_NEXT		; not a Nextor driver
+	ld	a,(ix+0)
+	call	GDE_SKIP		; skip the entries of its drives
+	jr	c,GDE_NO
+GDE_NEXT:
+	inc	ix
+	inc	ix
+	djnz	GDE_LOOP
+	jr	GDE_NO			; drive not in DRVTBL
+
+GDE_FOUND:
+	inc	c
+	jr	nz,GDE_NO		; not a Nextor driver
+	ld	a,e			; E = relative drive in the driver:
+	call	GDE_SKIP		; skip the entries of the previous ones
+	jr	c,GDE_NO
+	ld	a,d
+	or	a
+	jr	z,GDE_NO		; no entry for the drive
+	inc	hl			; HL = UD1_RELATIVE_DRIVE
+	pop	bc
+	pop	af
+	or	a
+	ret
+GDE_NO:
+	pop	bc
+	pop	af
+	scf
+	ret
+
+;	Skip A entries of the KERNEX_DOS1 table: HL += A * UD1_SIZE, D -= A.
+;	Cy set if there aren't so many entries left.
+
+GDE_SKIP:
+	push	bc
+	ld	c,a
+	ld	a,d
+	sub	c
+	jr	c,GDE_SKIP_END
+	ld	d,a
+	ld	a,c
+	add	a,a
+	add	a,a
+	add	a,a
+	sub	c			; * 7 = UD1_SIZE
+	ld	c,a
+	ld	b,0
+	add	hl,bc			; (resets Cy)
+GDE_SKIP_END:
+	pop	bc
 	ret
 
 ; Entry point for non DOS 1 function call

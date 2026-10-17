@@ -282,11 +282,11 @@ h. Copy the `NEXTOR.SYS` and `COMMAND3.COM` files to drive B:.
 
 i. Go to BASIC, run FDISK and remove the "active" flag of partition 1 (50M) in the master device; also set it again in partition 1 (85M) of the slave device.
 
-j. Reset your computer and issue a `DIR` command, then a `DIR B:` command. Notice that the mapping is reversed relative to the previous case (A: is mapped to the 85M partition on slave device, B: is mapped to the 50M partition on master device):
+j. Reset your computer and issue a `DIR` command, then a `DIR B:` command. You'll see the exact same result as before: A: holds the 50M partition of the master device and B: holds the 85M partition of the slave device. Notice also that the prompt is still `A:\>`:
 
-![DIR and DIR B: showing the reversed mapping, 85M free on drive A: and 50M free on drive B:](img/gsg/DirAAndDirBReversed.png)
+![DIR and DIR B: showing 50M free on drive A: and 85M free on drive B:](img/gsg/DirAAndDirB.png)
 
-***What has happened?*** The rule "give priority to partitions having the 'active' flag set during the automatic drive to device and partition assignment at boot time" applies to all partitions on all devices, not only to the first device. Taking into account both the master and the slave devices, the only partition having the "active" flag set is the first partition on the slave device, and therefore this one is assigned to drive A: (and since we copied the Nextor system files to it, the system has booted from it). Drive B: has then been mapped to the first suitable partition still unassigned, which is the 50M one on the master device.
+***What has happened?*** The drives of a driver are mapped to its devices in device number order, so the "active" flag doesn't change which device gets which drive: the master device still gets A: and the slave device still gets B: (a device with one single active partition gets one single drive, same as a device with no active partitions). The "active" flag doesn't decide either which drive the system boots from: the system boots from the first drive that holds a bootable partition or disk, and that's still drive A:, even though drive B: holds the system files too.
 
 k. Map partition 2 of slave device to drive B: (`MAPDRV B: 2 2 0`). Copy the MSXDOS.SYS and COMMAND.COM files to drive B: (remember that the floppy holding these files is now mapped in C:).
  
@@ -300,9 +300,9 @@ m. Reset the computer while keeping pressed the "1" key. You will boot in MSX-DO
 
 n. Go to BASIC, run FDISK and remove the "active" flag of partition 3 (16M) in the master device.
 
-o. Reset the computer while keeping pressed the "1" key. Once in the `COMMAND.COM` prompt, issue a `DIR` command, then a `DIR B:` command. Notice that the mapping is reversed relative to the previous case: A: is mapped to the 15M partition on the slave device, and B: is mapped to the 16M partition on the master device.
+o. Reset the computer while keeping pressed the "1" key. Once in the `COMMAND.COM` prompt, issue a `DIR` command, then a `DIR B:` command: the result is the same as in the previous case, A: is mapped to the 16M partition on the master device, and B: is mapped to the 15M partition on the slave device.
 
-***What has happened?*** You should have guessed it already: the only active MSX-DOS 1 compatible partition is now the 15M one on the slave device, so it has been given priority and mapped to drive A:; drive B: has then been mapped to the first suitable partition still unassigned, the 16M one on the master device.
+***What has happened?*** You should have guessed it already: the master device has no active MSX-DOS 1 compatible partitions now, so it gets one single drive mapped to its first MSX-DOS 1 compatible partition, which is the same 16M one; and the system has booted from it, since it's in drive A:.
 
 p. Go to BASIC, run FDISK and remove the "active" flag from partitions 1 and 2 of the slave device, so that none of the partitions in either device has the flag set.
 
