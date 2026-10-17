@@ -326,6 +326,17 @@ size	macro	name
     ;the "0" option is worth showing. It goes last so that the address of
     ;everything above, BOOTKEYS in particular, stays put.
     field  1,PS_EMU_PRESENT
+
+    ;Drives that can be the boot drive in DOS 2 mode, bit 0 = A: to bit 7 = H:.
+    ;KINIT builds it after the automatic mapping procedure, READ_BOOT_SEC
+    ;tries these drives in order: all the drives except the ghost ones (reading
+    ;them would prompt for a disk change and then read the same physical drive
+    ;as their master), and the ones of Nextor drivers that aren't floppy disk
+    ;drives and have no filesystem (no partition assigned, or unmapped).
+    ;Note that the BOOT_TMP area must end before F9F5h: it lives in the
+    ;first music queue of BASIC (VOICAQ, F975h-F9F4h), which is only written
+    ;by the PLAY statement.
+    field  1,BOOT_DRVS
 ;
 ;-----------------------------------------------------------------------------
 ;

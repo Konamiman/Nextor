@@ -87,6 +87,12 @@ init_drv_loop:	ld	a,(hl)			;A := number of drives
 		ld	ix,SETUP_GHOST_DOS2##
 		call	CALBNK##
 
+	;--- Get the drives that can be the boot drive.
+	;    This is done now since the ghost drive setup may have shifted
+	;    the drives.
+
+		call	SET_BOOT_DRVS
+
 		pop	iy
 
 ;
@@ -202,6 +208,43 @@ DEV_LIST:	db	0FFh				;List of devices for
 		db	10100000b, "AUX     ","   "
 ;
 		db	0
+;
+;
+;------------------------------------------------------------------------------
+;
+SET_BOOT_DRVS:
+;
+;   Builds BOOT_DRVS (see kvar.mac) from the unit descriptors set up by
+; AUTODRV: all the drives except the ghost ones, and the ones of Nextor drivers
+; that aren't floppy disk drives and don't have a filesystem (because they have
+; no partition assigned or are unmapped).
+;
+		ld	c,0			;C = drives that can be the boot drive
+		ld	hl,UNIT_TAB##+2
+		ld	b,MAX_UNITS
+boot_drvs_loop:	ld	e,(hl)
+		inc	hl
+		ld	d,(hl)
+		inc	hl
+		ld	a,d
+		or	e
+		jr	z,boot_drvs_set	;No unit descriptor (Cy=0)
+		push	de
+		pop	ix
+		ld	a,(ix+UD_DFLAGS##)
+		bit	UF_GHO,a
+		jr	nz,boot_drvs_no	;Ghost drive
+		and	UFM_DB+UFM_FD+UFM_FO
+		cp	UFM_DB
+		jr	z,boot_drvs_no	;Nextor driver, not a floppy disk drive, no filesystem
+		scf
+		jr	boot_drvs_set
+boot_drvs_no:	or	a
+boot_drvs_set:	rr	c			;The bit for drive A: ends up in bit 0
+		djnz	boot_drvs_loop
+		ld	a,c
+		ld	(BOOT_DRVS##),a
+		ret
 ;
 ;
 ;------------------------------------------------------------------------------

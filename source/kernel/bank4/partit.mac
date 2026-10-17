@@ -493,7 +493,8 @@ GDRV_OK_ROM:
 ; another one for DOS 2, since the processing done in both cases is
 ; quite different.
 ;
-; In both DOS 1 and DOS 2 modes AUTO_ASSIGN (or AUTO_ASPART) is called with A=1.
+; In both DOS 1 and DOS 2 modes AUTO_ASSIGN (or AUTO_ASPART) is called with
+; the "enter disk emulation mode" flag set (see AA_BOOT_FLAGS).
 ; This causes the root directory of primary partitions to be scanned
 ; for a file named NEXT_DSK.DAT (only if the current controller is the
 ; primary controller); if found and its contents are valid, the whole
@@ -630,7 +631,7 @@ AUTODRV_DRVLOOP:
 	push ix
 	pop hl
 
-	ld	d,1
+	call	AA_BOOT_FLAGS
 	call	AUTO_ASSIGN
 	cp	2			;Did we enter disk emulation mode?
 	jr	z,AUTOD_EMU	;Yes: discard everything else and return
@@ -718,7 +719,7 @@ AUTOD_OKNEX:
 
 	push	ix
 	pop	hl
-	ld	d,1
+	call	AA_BOOT_FLAGS
 	call	AUTO_ASSIGN
 
 	cp	2			;Did we enter disk emulation mode?
@@ -756,6 +757,23 @@ AUTOD_OK:
 AUTOD_EMU:
     ld	hl,(SPSAVE##)	;(note that we'll enter DOS 1 mode after returning)
 	ld	sp,hl
+	ret
+
+	;--- Get in D the AUTO_ASSIGN flags for the boot time drive assignment:
+	;    always try to enter disk emulation mode, and if only one drive
+	;    is assigned per driver ("5" key pressed) use the global scan,
+	;    so that this drive gets the best partition of all the devices.
+	;    Modifies: AF, D
+
+AA_BOOT_FLAGS:
+	ld	a,(BOOTKEYS##)
+	and	00100000b	;"5" key (reduced drive count) at bit 5...
+	rrca
+	rrca
+	rrca
+	rrca			;...goes to bit 1 = AAFLAG_GLOBAL_SCAN
+	or	1 SHL AAFLAG_ENTER_EMU_MODE
+	ld	d,a
 	ret
 
 ;-----------------------------------------------------------------------------
@@ -808,21 +826,33 @@ SETNUMD_NOUD:
 ; are checked to ensure that the same device is not assigned
 ; to more than one drive.
 ;
-; If there is a device having a partition that is properly formatted in FAT12
-; or FAT16 and has the "active" flag set (the MSB of the first byte
-; of the partition table entry), then this device and that partition will be assigned
-; regardless of the device number. If there are more than one devices matching this,
-; the one with the smallest device number will be assigned. If there are multiple
-; active partitions in the same device, the first one found will be assigned.
+; The devices are examined in device number order, and the drive is assigned
+; to the first one that can take it, as follows:
 ;
-; If no device with a suitable partition is found, the drive is attached to
-; a fallback device, if one was found during the scan, with no partition
-; assigned (UF_FOK not set in DOS 2 mode, first absolute sector -1 in DOS 1
-; mode); a partition will then be searched on the first access to the drive.
-; A fallback device is one that is either offline and removable, or online
-; but without any valid filesystem on it (this honors the drive that
-; GET_BOOT_DRIVES_COUNT reserves for such devices). If there are multiple
-; fallback devices, the one with the smallest device number is chosen.
+; - If the device has a partition properly formatted in FAT12 or FAT16 that
+;   has the "active" flag set (the MSB of the first byte of the partition table
+;   entry) and isn't mapped to another drive yet, then the first such partition
+;   is assigned.
+; - Otherwise, if no valid partition of the device is mapped to another drive
+;   yet (so the device hasn't consumed the drive that GET_BOOT_DRIVES_COUNT
+;   reserves for it), the first partition properly formatted in FAT12 or FAT16
+;   is assigned; if there's none, absolute sector 0 is assigned if it holds
+;   a FAT filesystem (device without partition table).
+; - Otherwise, if the device is either offline and removable, or online but
+;   without any valid filesystem on it, and it isn't attached to another drive
+;   yet, the drive is attached to the device with no partition assigned
+;   (UF_FOK not set in DOS 2 mode, first absolute sector -1 in DOS 1 mode);
+;   a partition will then be searched on the first access to the drive.
+;
+; This way each device gets its drives in a row, and the drive letters of
+; a device don't depend on the contents of the devices with smaller numbers
+; (other than in the number of active partitions that these have).
+;
+; If the AAFLAG_GLOBAL_SCAN flag is set (used at boot time when only one drive
+; is assigned per driver), the search goes instead through all the devices
+; before deciding: the first suitable active partition of any device wins,
+; then the first suitable partition of any device, then the first device
+; that qualifies for an assignment with no partition.
 ;
 ; There is also a second entry point, AUTO_ASPART.
 ; The difference is that this one searches for a suitable partition,
@@ -839,8 +869,11 @@ SETNUMD_NOUD:
 ;              DOS 1 mode: 
 ;                  Address of entry in Nextor drives table, must have UD_SLOT set
 ;         B = Device number (AUTO_ASPART only)
-;         D  = 0: Do NOT try to enter disk emulation mode
-;              1: Enter disk emulation mode if possible 
+;         D  = Flags:
+;              bit 0 (AAFLAG_ENTER_EMU_MODE): Enter disk emulation mode if possible;
+;                    set only at boot time
+;              bit 1 (AAFLAG_GLOBAL_SCAN): Search all the devices before deciding
+;                    (see above; ignored by AUTO_ASPART)
 ;
 ; Output: A  = Error code
 ;              0: Ok
@@ -873,6 +906,7 @@ AAD_EXT_SLOT equ 22 ;Primary partition number of the extended partition being ex
 AAD_SIZE equ 23
 
 AAFLAG_ENTER_EMU_MODE equ 0
+AAFLAG_GLOBAL_SCAN equ 1 ;AA_BOOT_FLAGS assumes that this is bit 1
 AAFLAG_IS_AUTOASPART equ 7
 
 	PROC	AUTO_ASPART
@@ -1284,12 +1318,24 @@ AA_LLOOP_NEXT:
 	bit AAFLAG_IS_AUTOASPART,(ix+AAD_FLAGS)
 	jr nz,AA_LLOOP_END
 
+	;Unless a global scan was requested, the drive goes to the first
+	;device that can take it: if a candidate partition or a fallback
+	;device was recorded, it belongs to the device that was just
+	;examined, so assign it right away.
+
+	bit	AAFLAG_GLOBAL_SCAN,(ix+AAD_FLAGS)
+	jr	nz,AA_LLOOP_NEXT_DEV
+	ld	a,(ix+AAD_CAND_PART_DEVNUM)
+	or	(ix+AAD_FALLBACK_DEVNUM)
+	jr	nz,AA_LLOOP_END
+AA_LLOOP_NEXT_DEV:
+
 	ld	a,(ix+AAD_LOOP_DEVICE_NUMBER)
 	cp  (ix+AAD_MAX_DEVICE_NUM)
 	jp	nz,AA_DLOOP
 AA_LLOOP_END:
 
-	;--- No more devices found:
+	;--- No more devices to examine (or the examined device can take the drive):
 	;    If a candidate device was identified, use it;
 	;    otherwise, if a fallback device was recorded, attach it
 	;    to the drive with no partition assigned;
@@ -6148,6 +6194,8 @@ COUNTDEVS_PARAMS_OK:
 	ld bc,7
 	add hl,bc
 	ld a,(hl)
+	bit 3,a
+	jr nz,COUNTDEVS_DEV_NOT_FOUND	;"Don't use for automapping": AUTO_ASSIGN skips it
 	and 1
 	ld e,a			;E = removable flag
 
