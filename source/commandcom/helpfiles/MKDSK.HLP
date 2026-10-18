@@ -29,7 +29,10 @@ Use:         A file of the specified size is created, containing an
         with the default root directory size).  Thus FAT16 is not
         possible for the floppy disk images.
 
-             The cluster size is chosen automatically.  For FAT12
+             The cluster size is chosen automatically.  S, D and H
+        have the cluster sizes of the real floppy disks (1K for S
+        and D, 512 bytes for H; the FAT of H takes nine sectors, so
+        it can't be used in MSX-DOS 1 mode).  For other FAT12
         filesystems up to 16M the smallest cluster size that keeps
         each copy of the FAT in three sectors is used, so that the
         image can be used in MSX-DOS 1 mode; for bigger FAT12
