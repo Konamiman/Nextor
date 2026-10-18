@@ -124,6 +124,10 @@ READ_BOOT_SEC::
 ; logical drive number in A.  Also the default drive will be set to this drive
 ; number.
 ;
+;    Only the drives in BOOT_DRVS (set by KINIT) are tried: all the drives
+; except the ghost ones, and the ones of Nextor drivers that aren't floppy
+; disk drives and have no filesystem.
+;
 ; Entry:     None
 ; Returns:   A = drive number for boot sector, 0 => none.
 ; Corrupts:  AF,BC,DE,HL
@@ -135,9 +139,13 @@ READ_BOOT_SEC::
 		ld	c,_SETDTA##		; for reading the boot
 		call	BOOT_BDOS		; sector in.
 ;
+		ld	a,(BOOT_DRVS##)		;Bit 0 = A:
 		ld	c,1			;Start at drive "A:"
 		ld	b,MAX_UNITS		;Try all drives
-try_boot_loop:	push	bc
+try_boot_loop:	rrca				;Skip the drive if its
+		jr	nc,try_boot_next	; bit is not set.
+		push	af
+		push	bc
 		ld	a,c
 		dec	a			;Adjust drive for 0=A:
 		ld	b,1			;Attempt to read the
@@ -148,19 +156,20 @@ try_boot_loop:	push	bc
 		call	BOOT_BDOS
 		call	PPAT2
 		pop	bc			;Jump if we managed to
-		jr	nz,try_boot_next	; read the boot sector OK
+		jr	nz,try_boot_fail	; read the boot sector OK
 		ld	hl,($SECBUF##)		; and the first byte of it has
 		ld	a,(hl)			; an 8086 jump instruction.
 		or	0EBh xor 0E9h
 		cp	0EBh
-		jr	z,read_boot_ok
+		jr	z,try_boot_ok
+try_boot_fail:	pop	af
 try_boot_next:
 		inc	c
 		djnz	try_boot_loop		;Loop to try next drive and
 		xor	a			; return with A=0 if we
 		ret				; have tried them all.
 ;
-;
+try_boot_ok:	pop	af
 read_boot_ok:	ld	a,c			;Set current drive to the
 		ld	(CUR_DRV##),a		; one we loaded from.
 ;

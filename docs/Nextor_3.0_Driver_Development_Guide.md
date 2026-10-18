@@ -393,7 +393,17 @@ Note that [the source code of a dummy driver](https://github.com/Konamiman/Nexto
 
 Nextor 2 allowed two styles of drivers: "drive-based" and "device-based", each having a different structure. In Nextor 3 there's only one possible structure, which is equivalent to what was earlier called "device-based".
 
-Another important difference is that a Nextor 3 driver can tell apart devices that don't exist (reported as `RESULT_INVALID_DEVICE`) from devices that exist but are not available at the moment, for example a card slot with no card inserted (see _[4.6.3. Device query 3: Get device status](#463-device-query-3-get-device-status)_ and _[4.6.4. Device query 4: Get device availability](#464-device-query-4-get-device-availability)_). Nextor 2 drivers couldn't express this difference, and the `DRV_CONFIG` routine existed as a workaround: drivers explicitly announced how many drives they wanted assigned at boot time. In Nextor 3 mapping drives is exclusively the kernel's business, so that routine is gone without a replacement.
+Another important difference is that a Nextor 3 driver can tell apart devices that don't exist (reported as `RESULT_INVALID_DEVICE`) from devices that exist but are not available at the moment, for example a card slot with no card inserted (see _[4.6.3. Device query 3: Get device status](#463-device-query-3-get-device-status)_ and _[4.6.4. Device query 4: Get device availability](#464-device-query-4-get-device-availability)_). Nextor 2 drivers couldn't express this difference, and the `DRV_CONFIG` routine existed as a workaround: drivers explicitly announced how many drives they wanted assigned at boot time, and which device each drive should be mapped to. In Nextor 3 mapping drives is exclusively the kernel's business, so that routine is gone without a replacement.
+
+What the driver still decides is the device numbering, and that matters: at boot time the kernel maps the drives of a driver to its devices in device number order, each device getting its drives in a row (one per active partition, or just one if it has no active partitions, is offline and removable, or holds no valid filesystem). So the drive letters of a device depend on how many drives the devices with smaller numbers take, and these are the guidelines for numbering devices in a way that gives users predictable drive letters:
+
+* Number first the devices that are always present (a ROM disk, built-in flash memory, the master device of an IDE bus), then the removable media slots. A removable media slot takes one drive when empty but as many as active partitions the inserted medium has, so placing these slots last means that inserting or removing media never changes the drive letters of the always present devices.
+* Within each group, follow the physical order of the devices: slot 1 before slot 2, master before slave, and so on.
+* Floppy disk drives can be placed anywhere, since they always get exactly one drive (they have no partitions).
+* Devices that are fixed (not removable) but may be missing at boot time, such as an IDE slave device that may or may not be connected, are better placed after the ones that are always present: an offline fixed device gets no drive at all, and thus shifts the drive letters of the devices that come after it. Don't declare such a device as removable just to have a drive reserved for it, since that changes how the kernel handles media changes for it.
+* Once the numbering is published, try to keep it in later versions of the driver, so that when users update the driver they don't see a change in how drives are mapped at boot time.
+
+See _[3.2. Booting Nextor](Nextor_3.0_User_Manual.md#32-booting-nextor)_ in the user manual for the complete automatic mapping rules.
 
 ### 4.2. Page 0 routines and data
 
@@ -870,7 +880,7 @@ Drivers can use this routine to inform the kernel about the highest device numbe
 
 Note that the returned value is just an upper bound for the scan, not a device count: it isn't required that every device number up to the maximum corresponds to an existing device. For example, a driver could report a maximum device number of 10 while only devices 8, 9 and 10 actually exist; not recommended, but perfectly legal (the driver must return `RESULT_INVALID_DEVICE` for the device numbers that don't exist, as usual). This query has no effect on how drives are mapped to the devices at boot time.
 
-There is one real limit on device numbers, though: the automatic partition search (the procedure that maps drives to partitions at boot time, and again on the first access to a drive that is attached to a device with no partition assigned) only supports device numbers 1 to 63 (internally, the two high bits of the device number are used as temporary flags during the search). Devices with higher numbers work normally in every other way, including having drives explicitly mapped to their partitions, but they can't take part in the automatic search; therefore drivers are advised to simply number their devices sequentially starting at 1.
+There is one real limit on device numbers, though: the automatic partition search (the procedure that maps drives to partitions at boot time, and again on the first access to a drive that is attached to a device with no partition assigned) only supports device numbers 1 to 63 (internally, the two high bits of the device number are used as temporary flags during the search). Devices with higher numbers work normally in every other way, including having drives explicitly mapped to their partitions, but they can't take part in the automatic search; therefore drivers are advised to simply number their devices sequentially starting at 1 (see _[4.1. One single driver model](#41-one-single-driver-model)_ for some guidelines about the order).
 
 Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and B=4.
 
@@ -990,6 +1000,8 @@ This query returns detailed invariant information about a given device. Returnin
 "Block devices" are all devices that can be read and written via access to logical sectors. This includes floppy disks, hard disks, pendrives, multimedia cards, etc. Block devices must be readable and optionally writable via [the `READ_WRITE` routine](#449-read_write-4128h).
 
 In the current version Nextor will refuse to work with a device that is reported as a non-block device or having a sector size different from 512 bytes.
+
+A device having the "don't use for automapping" flag set doesn't get any drive at boot time (it isn't taken into account either when deciding how many drives the driver gets), and it's skipped when a drive is mapped to its default state; drives can still be mapped to it explicitly, for example with the `MAPDRV` tool.
 
 The information about cylinders, heads and sectors per track applies only to floppy disks and hard disks; for other device types, or when this information is not available for whatever reason, these fields should be returned with value zero. This information is not used by the Nextor kernel, but can be used by device partitioning tools in order to properly align partitions on the disk (in the current version of Nextor this information is not used by the built-in partitioning tool).
 
