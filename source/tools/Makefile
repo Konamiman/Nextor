@@ -29,11 +29,11 @@ endef
 
 uc = $(shell echo $(1) | tr a-z A-Z)
 
-COMS := CHKDSK.COM CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM FIXDISK.COM KMODE.COM LOCK.COM MAPDRV.COM MSR.COM NSYSVER.COM RALLOC.COM UNDEL.COM Z80MODE.COM
+COMS := CHKDSK.COM CONCLUS.COM DELALL.COM DEVINFO.COM DRIVERS.COM DRVINFO.COM FASTOUT.COM FIXDISK.COM KMODE.COM LOCK.COM MAPDRV.COM MKDSK.COM MSR.COM NSYSVER.COM RALLOC.COM UNDEL.COM Z80MODE.COM
 
 # Tools with their own link rule (see below), excluded from the generic
 # one-MAC-per-COM rule.
-SPECIAL_COMS := CHKDSK.COM UNDEL.COM MSR.COM
+SPECIAL_COMS := CHKDSK.COM UNDEL.COM MSR.COM MKDSK.COM
 GENERIC_COMS := $(filter-out $(SPECIAL_COMS),$(COMS))
 INCS := ../kernel/macros.inc ../kernel/const.inc
 SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
@@ -95,6 +95,43 @@ CHKDSK.COM: CHKDSK.MAC $(SDK_RELS)
 UNDEL.COM: UNDEL.MAC $(SDK_RELS)
 	$(call assemble,UNDEL.MAC)
 	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) UNDEL.REL
+
+# The MSX-DOS 2 boot sector code, assembled standalone from the kernel
+# source (see tools-disk-bootsect.mac) and linked at 0C01Eh, where boot
+# sector code runs. DOS_CALLS.REL and DATA.REL provide the kernel symbols
+# it references. It's used by the tools-disk target and by MKDSK.
+BOOTSECT_BIN := tools-disk-bootsect.bin
+
+$(BOOTSECT_BIN): \
+	tools-disk-bootsect.mac \
+	../kernel/bank2/bootsect.mac \
+	$(INCS) \
+	DOS_CALLS.REL \
+	DATA.REL
+
+	$(call assemble,tools-disk-bootsect.mac)
+	@$(LK80) --output-file $@ --code 0C01Eh DOS_CALLS.REL DATA.REL TOOLS-DISK-BOOTSECT.REL
+
+# The MSX-DOS 1 boot sector code for MKDSK: the same source assembled with
+# the DOS1_BOOT_SECTOR symbol defined, which leaves out the VOL_ID block.
+MKDSK_BOOT1_BIN := mkdsk-boot1.bin
+
+$(MKDSK_BOOT1_BIN): \
+	tools-disk-bootsect.mac \
+	../kernel/bank2/bootsect.mac \
+	$(INCS) \
+	DOS_CALLS.REL \
+	DATA.REL
+
+	$(call assemble_as,tools-disk-bootsect.mac,MKDSK-BOOT1.REL,--define-symbols DOS1_BOOT_SECTOR)
+	@$(LK80) --output-file $@ --code 0C01Eh DOS_CALLS.REL DATA.REL MKDSK-BOOT1.REL
+
+# MKDSK includes the two boot sector code binaries (with INCBIN) and keeps
+# its buffers right after the end of the program, so it's linked alone,
+# without the SDK shared routine modules.
+MKDSK.COM: MKDSK.MAC $(SDK_RELS) $(BOOTSECT_BIN) $(MKDSK_BOOT1_BIN)
+	$(call assemble,MKDSK.MAC)
+	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) MKDSK.REL
 
 # MSR is built mostly from kernel code (see the header of MSR.MAC):
 #
@@ -283,20 +320,8 @@ EXTRA_MISSING = $(filter-out $(wildcard $(EXTRA_FILES_ABS)),$(EXTRA_FILES_ABS))
 
 MTOOLS := mformat mmd mcopy
 
-# The boot sector code, assembled standalone from the kernel source (see
-# tools-disk-bootsect.mac) and linked at 0C01Eh, where boot sector code runs.
-# DOS_CALLS.REL and DATA.REL provide the kernel symbols it references.
-BOOTSECT_BIN := tools-disk-bootsect.bin
-
-$(BOOTSECT_BIN): \
-	tools-disk-bootsect.mac \
-	../kernel/bank2/bootsect.mac \
-	$(INCS) \
-	DOS_CALLS.REL \
-	DATA.REL
-
-	$(call assemble,tools-disk-bootsect.mac)
-	@$(LK80) --output-file $@ --code 0C01Eh DOS_CALLS.REL DATA.REL TOOLS-DISK-BOOTSECT.REL
+# The boot sector code (BOOTSECT_BIN) is built near the top of this file,
+# since MKDSK uses it too.
 
 .PHONY: tools-disk
 

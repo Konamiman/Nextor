@@ -62,6 +62,7 @@ HELP  command name
 | [`MEM`](MEM.md) | displays a compact memory mapper listing |
 | [`MEMORY`](MEMORY.md) | displays the amount and status of system RAM |
 | [`MKDIR`](MKDIR.md) | creates a new sub-directory |
+| [`MKDSK`](MKDSK.md) | creates an empty disk image file |
 | [`MODE`](MODE.md) | changes the screen mode |
 | [`MOVE`](MOVE.md) | moves files on a disk |
 | [`MVDIR`](MVDIR.md) | moves sub-directories |

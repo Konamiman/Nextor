@@ -1,0 +1,1475 @@
+; MKDSK - Create an empty disk image file
+;
+; Based on NestorDiskImageCreator (NDIC.COM) 1.0 by Konamiman, 1999.
+;
+; Creates a file of the requested size holding an empty FAT12 or FAT16
+; filesystem: a boot sector, two copies of the FAT and the root directory.
+; The file is created by seeking to its last byte and writing it, so the
+; data area holds whatever the host disk had in those clusters before;
+; that's fine, since the FAT marks all the clusters as free.
+;
+; Works under MSX-DOS 2 and under Nextor (any version), nothing in it is
+; Nextor specific.
+;
+; Usage: MKDSK <file>[.DSK] S|D|H|<size>[K|M] [/R <entries>]
+;              [/F12|/F16] [/B1|/B2|/BS]
+;
+; The layout of the filesystem is decided as follows:
+;
+; - S, D and H create the standard 360K (1DD), 720K (2DD) and 1.44M (2HD)
+;   floppy disk layouts (media ID F8h, F9h and F0h, with the matching
+;   cluster size, sectors per track and number of sides). The options
+;   are honored for these too (e.g. /R gives a non-standard root
+;   directory size), except that FAT16 is impossible on them (see below).
+;
+; - For other sizes the media ID is F0h and the sectors per track and
+;   number of sides fields are zero. The default filesystem is FAT12 up to
+;   16M and FAT16 above that. FAT12 is limited to 32M, and FAT16 needs at
+;   least 4085 clusters (that's how the kernel tells FAT16 from FAT12,
+;   see bank6/upb.mac), which with one sector per cluster means about 2M.
+;
+; - FAT12 up to 16M: the smallest cluster size that keeps the number of
+;   clusters at about 1024, so that each FAT copy fits in 3 sectors, as
+;   needed for MSX-DOS 1 (Nextor's FDISK does the same for partitions up
+;   to 16M); e.g. a custom 720K image gets the same layout as a real 2DD
+;   disk. If the result still needs more than 1021 clusters, the
+;   filesystem is cut to 1021 clusters (and so it's a bit smaller than
+;   the file).
+;
+; - FAT12 over 16M: the smallest cluster size that keeps the number of
+;   clusters at about 4096 (8K clusters), cut to 4084 clusters if needed.
+;
+; - FAT16: the usual sizes for FAT16 volumes (as in FDISK): 2K clusters up
+;   to 128M, doubling with each doubling of the size, up to 64K clusters
+;   over 2G; cut to 65524 clusters if needed. If that gives less than 4085
+;   clusters (only possible for sizes under 16M with /F16), the cluster
+;   size is halved until there are enough clusters.
+;
+; - Root directory: the number of entries given with /R rounded up to a
+;   multiple of 16 (a full sector), up to 240 for FAT12 (so that it fits
+;   in the one byte that the MSX disk parameter block has for it, which
+;   is what MSX-DOS 1 uses) and 4080 for FAT16 (the kernel stores the root
+;   directory size as a one byte sectors count). The default is 512 for
+;   FAT16 and, for FAT12: 64 under 360K, 112 under 1440K, 224 under 2880K
+;   and 240 otherwise (the classic sizes of floppy disks).
+;
+; - Boot sector: /B1 = MSX-DOS 1 boot sector (the MSX-DOS 1 boot code,
+;   no volume id; Nextor switches to MSX-DOS 1 mode when booting from such
+;   a disk), /B2 = MSX-DOS 2 boot sector (the MSX-DOS 1 boot code behind a
+;   VOL_ID block with a volume id, as the built-in FORMAT command
+;   creates), /BS = standard boot sector (extended boot signature with a
+;   volume id, label and filesystem type). /B1 and /B2 are for FAT12 only.
+;   The default is /B2 for S and D, /BS otherwise. The boot code is the
+;   one of the kernel (bank2/bootsect.mac), see the MKDSK rules in the
+;   Makefile.
+;
+; An existing file with the same name is overwritten. The file is deleted
+; if an error happens (or the program is aborted) while creating it.
+
+	.z80
+
+	jp	START
+
+	;	-------------------------------------------------------
+
+	db	13
+USAGE_TEXT:
+	db	"MKDSK - Create an empty disk image file",13,10
+	db	13,10
+	db	"Usage: MKDSK <file>[.DSK] S|D|H|<size>[K|M] [/R <entries>]",13,10
+	db	"             [/F12|/F16] [/B1|/B2|/BS]",13,10
+	db	13,10
+	db	"S: 360K single sided floppy disk (1DD)",13,10
+	db	"D: 720K double sided floppy disk (2DD)",13,10
+	db	"H: 1.44M high density floppy disk (2HD)",13,10
+	db	"<size>: 1 to 65535, in K (no suffix or K) or in M (M suffix),",13,10
+	db	"        the allowed range is 10K to 4096M",13,10
+	db	13,10
+	db	"/R: number of root directory entries, rounded up to a multiple",13,10
+	db	"    of 16. Default: 512 for FAT16; for FAT12, 64 if under 360K,",13,10
+	db	"    112 if under 1440K, 224 if under 2880K, 240 otherwise.",13,10
+	db	"    Maximum: 240 for FAT12, 4080 for FAT16.",13,10
+	db	"/F12, /F16: create a FAT12 (up to 32M) or FAT16 (from about 2M)",13,10
+	db	"    filesystem. Default: FAT12 up to 16M, FAT16 otherwise.",13,10
+	db	"/B1, /B2, /BS: write a MSX-DOS 1, MSX-DOS 2 or standard boot",13,10
+	db	"    sector (/B1 and /B2 are for FAT12 only). Default: MSX-DOS 2",13,10
+	db	"    for S and D, standard otherwise.",13,10
+	db	13,10
+	db	"An existing file with the same name is overwritten.",13,10
+	db	1Ah
+
+	;	-------------------------------------------------------
+
+MSX_DOS	equ	5
+
+TAB	equ	09h
+LF	equ	0Ah
+CR	equ	0Dh
+ESC	equ	1Bh
+
+ZBUF_SECS	equ	16	;Size of the zeros buffer, in sectors
+
+;	Values of FMT
+
+FMT_S	equ	1
+FMT_D	equ	2
+FMT_H	equ	3
+
+;	Values of FAT_REQ
+
+FAT_12	equ	1
+FAT_16	equ	2
+
+;	Values of BOOT_REQ and BOOT_TYPE
+
+BOOT_1	equ	1
+BOOT_2	equ	2
+BOOT_S	equ	3
+
+;	Cluster limits
+
+MAXCLUS_DOS1	equ	1021	;FAT12 with 3 sectors per FAT
+MAXCLUS_FAT12	equ	4084
+MAXCLUS_FAT16	equ	65524
+MINCLUS_FAT16	equ	MAXCLUS_FAT12+1
+
+;******************************************************************************
+
+START:
+	ld	c,_DOSVER##	;Check that we are in MSX-DOS 2 or Nextor.
+	call	MSX_DOS
+	or	a
+	jr	nz,WRONG_VER
+	ld	a,b
+	cp	2
+	jr	nc,DOS_OK
+WRONG_VER:
+	ld	de,WVER_MSG	;MSX-DOS 1 doesn't have _TERM, hence the
+	ld	c,_STROUT##	; final rst 0.
+	call	MSX_DOS
+	ld	b,1
+	ld	c,_TERM##
+	call	MSX_DOS
+	rst	0
+DOS_OK:
+
+	ld	hl,SECBUF	;Zero the sector and zeros buffers
+	ld	de,SECBUF+1	; and the file name.
+	ld	bc,FILENAME+FILENAME_LEN-SECBUF-1
+	ld	(hl),0
+	ldir
+
+	ld	de,ABORT_RTN	;Delete the file if the program is
+	ld	c,_DEFAB##	; aborted while it's being created.
+	call	MSX_DOS
+
+	call	PARSE
+	call	LAYOUT
+	call	BUILD_BOOT
+	call	CREATE
+	call	PRINT_SUMMARY
+
+	ld	b,0
+	ld	c,_TERM##
+	jp	MSX_DOS
+
+;******************************************************************************
+;
+;	PARSE: Decode the command line, setting FILENAME, FMT, SIZE_K,
+;	ROOT_REQ/ROOT_SET, FAT_REQ and BOOT_REQ. A ".DSK" extension is
+;	added to the file name if it has none. With no arguments the usage
+;	text is shown and the program exits.
+;
+PARSE:
+	ld	a,(80h)		;Zero-terminate the command line.
+	ld	c,a
+	ld	b,0
+	ld	hl,81h
+	add	hl,bc
+	ld	(hl),0
+	ld	hl,81h
+
+PARSE_LOOP:
+	call	SKIP_SPACES
+	jp	z,PARSE_END
+	cp	'/'
+	jr	z,PARSE_OPTION
+
+	ld	a,(FILENAME)	;First positional argument: file name.
+	or	a
+	jr	nz,PARSE_SIZE
+	ld	de,FILENAME
+PARSE_FNAME:
+	ld	a,(hl)
+	call	IS_SEP
+	jr	z,PARSE_LOOP	;FILENAME is zeroed, no need to terminate it.
+	ld	(de),a
+	inc	hl
+	inc	de
+	jr	PARSE_FNAME
+
+PARSE_SIZE:
+	ld	a,(SIZE_SET)	;Second positional argument: size.
+	or	a		; A third one is an error.
+	jp	nz,IPARM_EXIT
+	inc	a
+	ld	(SIZE_SET),a
+	call	PARSE_SIZE_ARG
+	jr	PARSE_LOOP
+
+PARSE_OPTION:
+	inc	hl
+	ld	a,(hl)
+	call	UPCASE
+	inc	hl
+	cp	'R'
+	jr	z,OPT_R
+	cp	'F'
+	jr	z,OPT_F
+	cp	'B'
+	jr	z,OPT_B
+	jp	IPARM_EXIT
+
+	;--- /R <entries> (the number can come right after the R)
+
+OPT_R:
+	ld	a,(hl)
+	call	IS_SEP
+	jr	nz,OPT_R_NUM
+	call	SKIP_SPACES
+OPT_R_NUM:
+	call	PARSE_NUM
+	jp	c,ROOT_ERR
+	ld	a,(hl)
+	call	IS_SEP
+	jp	nz,ROOT_ERR
+	ld	(ROOT_REQ),de
+	ld	a,1
+	ld	(ROOT_SET),a
+	jr	PARSE_LOOP
+
+	;--- /F12, /F16
+
+OPT_F:
+	ld	a,(hl)
+	inc	hl
+	cp	'1'
+	jp	nz,IPARM_EXIT
+	ld	a,(hl)
+	inc	hl
+	ld	b,FAT_12
+	cp	'2'
+	jr	z,OPT_F_OK
+	inc	b
+	cp	'6'
+	jp	nz,IPARM_EXIT
+OPT_F_OK:
+	ld	a,b
+	ld	(FAT_REQ),a
+	jr	OPT_END
+
+	;--- /B1, /B2, /BS
+
+OPT_B:
+	ld	a,(hl)
+	inc	hl
+	call	UPCASE
+	ld	b,BOOT_1
+	cp	'1'
+	jr	z,OPT_B_OK
+	inc	b
+	cp	'2'
+	jr	z,OPT_B_OK
+	inc	b
+	cp	'S'
+	jp	nz,IPARM_EXIT
+OPT_B_OK:
+	ld	a,b
+	ld	(BOOT_REQ),a
+
+OPT_END:
+	ld	a,(hl)		;The option must end here.
+	call	IS_SEP
+	jp	nz,IPARM_EXIT
+	jp	PARSE_LOOP
+
+PARSE_END:
+	ld	a,(FILENAME)	;No arguments: show usage.
+	or	a
+	jp	z,SHOW_USAGE
+
+	ld	a,(SIZE_SET)
+	or	a
+	ld	de,NOSIZE_MSG
+	jp	z,ERR_EXIT
+
+	ld	de,FILENAME	;Add the ".DSK" extension if the file
+	ld	b,0		; name has none (and there is a file
+	ld	c,_PARSE##	; name, otherwise let _CREATE complain).
+	call	MSX_DOS
+	jp	nz,DOS_ERROR
+	bit	3,b
+	ret	z
+	bit	4,b
+	ret	nz
+	ld	hl,DSK_EXT
+	ld	bc,DSK_EXT_LEN
+	ldir
+	ret
+
+	;--- Size argument: S, D, H, or a number with optional K or M suffix
+
+PARSE_SIZE_ARG:
+	ld	a,(hl)
+	call	UPCASE
+	ld	b,FMT_S
+	ld	de,360
+	cp	'S'
+	jr	z,PSA_FIXED
+	inc	b
+	ld	de,720
+	cp	'D'
+	jr	z,PSA_FIXED
+	inc	b
+	ld	de,1440
+	cp	'H'
+	jr	nz,PSA_NUM
+PSA_FIXED:
+	inc	hl
+	ld	a,(hl)
+	call	IS_SEP
+	jp	nz,SIZE_ERR
+	ld	a,b
+	ld	(FMT),a
+	ld	(SIZE_K),de
+	ret
+
+PSA_NUM:
+	call	PARSE_NUM
+	jp	c,SIZE_ERR
+	ld	a,(hl)
+	call	UPCASE
+	cp	'M'
+	jr	z,PSA_MEGA
+	cp	'K'
+	jr	nz,PSA_KILO
+	inc	hl
+PSA_KILO:
+	ld	a,(hl)		;Size in K: 10 to 65535.
+	call	IS_SEP
+	jp	nz,SIZE_ERR
+	ld	a,d
+	or	a
+	jr	nz,PSA_KILO_OK
+	ld	a,e
+	cp	10
+	jp	c,SIZE_ERR
+PSA_KILO_OK:
+	ld	(SIZE_K),de
+	ret
+
+PSA_MEGA:
+	inc	hl		;Size in M: 1 to 4096.
+	ld	a,(hl)
+	call	IS_SEP
+	jp	nz,SIZE_ERR
+	ld	a,d
+	or	e
+	jp	z,SIZE_ERR
+	push	hl
+	ld	hl,4096
+	or	a
+	sbc	hl,de
+	ex	de,hl		;HL = size in M
+	ld	de,0
+	jp	c,SIZE_ERR
+	ld	a,10
+	call	SHL32
+	ld	(SIZE_K),hl
+	ld	(SIZE_K+2),de
+	pop	hl
+	ret
+
+;******************************************************************************
+;
+;	LAYOUT: Decide the filesystem layout (see the header of the file).
+;
+LAYOUT:
+	ld	hl,(SIZE_K)	;T32 = size of the file in sectors.
+	ld	de,(SIZE_K+2)
+	add	hl,hl
+	rl	e
+	rl	d
+	ld	(T32),hl
+	ld	(T32+2),de
+
+	;--- FAT type
+
+	ld	a,(FAT_REQ)
+	or	a
+	jr	nz,LY_FAT_OK
+	ld	de,16384+1	;Default: FAT12 up to 16M.
+	call	SIZEK_LT
+	ld	a,FAT_12
+	jr	c,LY_FAT_OK
+	inc	a
+LY_FAT_OK:
+	sub	FAT_12		;IS_F16 = 0 or 1.
+	ld	(IS_F16),a
+	jr	nz,LY_FAT_CHECKED
+	ld	de,32768+1	;FAT12 is limited to 32M.
+	call	SIZEK_LT
+	ld	de,F12BIG_MSG
+	jp	nc,ERR_EXIT
+LY_FAT_CHECKED:
+
+	;--- Root directory entries
+
+	ld	a,(IS_F16)
+	or	a
+	ld	de,512
+	jr	nz,LY_ROOT_DEF
+	ld	de,360
+	call	SIZEK_LT
+	ld	de,64
+	jr	c,LY_ROOT_DEF
+	ld	de,1440
+	call	SIZEK_LT
+	ld	de,112
+	jr	c,LY_ROOT_DEF
+	ld	de,2880
+	call	SIZEK_LT
+	ld	de,224
+	jr	c,LY_ROOT_DEF
+	ld	de,240
+LY_ROOT_DEF:
+	ld	a,(ROOT_SET)
+	or	a
+	jr	z,LY_ROOT_OK
+
+	ld	hl,(ROOT_REQ)	;Requested value: 1 to 4080 (first check,
+	ld	a,h		; this one prevents the rounding from
+	or	l		; overflowing), rounded up to a multiple
+	jp	z,ROOT_ERR	; of 16, then 240 max for FAT12.
+	ld	de,4080+1
+	or	a
+	sbc	hl,de
+	jp	nc,ROOT_ERR
+	add	hl,de
+	ld	de,15
+	add	hl,de
+	ld	a,l
+	and	0F0h
+	ld	l,a
+	ld	a,(IS_F16)
+	or	a
+	jr	nz,LY_ROOT_REQ_OK
+	ld	de,240+1
+	or	a
+	sbc	hl,de
+	jp	nc,ROOT_ERR
+	add	hl,de
+LY_ROOT_REQ_OK:
+	ex	de,hl
+LY_ROOT_OK:
+	ld	(ROOT_ENT),de
+	ld	a,e		;ROOT_SECS = entries / 16
+	srl	d
+	rra
+	srl	d
+	rra
+	srl	d
+	rra
+	srl	d
+	rra
+	ld	(ROOT_SECS),a
+
+	;--- Cluster size (as a shift: sectors per cluster = 1 << SHIFT)
+	;    and limits for the number of clusters and FAT sectors
+
+	ld	a,(IS_F16)
+	or	a
+	ld	hl,MAXCLUS_FAT16
+	ld	de,256
+	jr	nz,LY_LIMITS_OK
+	ld	a,(FMT)		;FAT12, fixed formats and over 16M: just
+	or	a		; the FAT12 limit; FAT12 up to 16M: the
+	jr	nz,LY_LIMITS_12	; MSX-DOS 1 friendly limit.
+	ld	de,16384+1
+	call	SIZEK_LT
+	ld	hl,MAXCLUS_DOS1
+	ld	de,3
+	jr	c,LY_LIMITS_OK
+LY_LIMITS_12:
+	ld	hl,MAXCLUS_FAT12
+	ld	de,12
+LY_LIMITS_OK:
+	ld	(MAXC),hl
+	ld	(FMAX),de
+
+	ld	a,(FMT)
+	or	a
+	jr	z,LY_SHIFT_CALC
+	cp	FMT_H		;Fixed formats: 1 sector per cluster
+	ld	a,0		; for H, 2 for S and D.
+	jr	z,LY_SHIFT_OK
+	inc	a
+	jr	LY_SHIFT_OK
+
+	;Other sizes: SHIFT is the number of significant bits of
+	;(T32-1) >> B, with B = 10 for FAT12 up to 16M (about 1024 clusters),
+	;12 for FAT12 over 16M (about 4096 clusters) and 16 for FAT16
+	;(about 65536 clusters, with a minimum of 2K clusters).
+
+LY_SHIFT_CALC:
+	ld	a,(IS_F16)
+	or	a
+	ld	b,16
+	jr	nz,LY_SHIFT_B
+	ld	hl,(MAXC)
+	ld	de,MAXCLUS_DOS1
+	or	a
+	sbc	hl,de
+	ld	b,10
+	jr	z,LY_SHIFT_B
+	ld	b,12
+LY_SHIFT_B:
+	push	bc
+	ld	hl,(T32)
+	ld	de,(T32+2)
+	call	DEC32
+	pop	af		;A = B
+	call	SHR32
+	ld	c,0
+LY_SHIFT_LOOP:
+	ld	a,h
+	or	l
+	or	d
+	or	e
+	jr	z,LY_SHIFT_END
+	inc	c
+	ld	a,1
+	call	SHR32
+	jr	LY_SHIFT_LOOP
+LY_SHIFT_END:
+	ld	a,(IS_F16)
+	or	a
+	ld	a,c
+	jr	z,LY_SHIFT_OK
+	cp	2
+	jr	nc,LY_SHIFT_OK
+	ld	a,2
+LY_SHIFT_OK:
+	ld	(SHIFT),a
+
+	;--- Now calculate the layout for the cluster size
+
+LY_TRY:
+	ld	hl,(T32)	;D0 = data + FAT sectors
+	ld	de,(T32+2)	;   = T32 - boot sector - root directory
+	ld	a,(ROOT_SECS)
+	ld	c,a
+	ld	b,0
+	inc	bc
+	call	SUB32_BC
+	jp	c,TOO_SMALL
+	ld	(D0),hl
+	ld	(D0+2),de
+
+	ld	a,(SHIFT)	;FAT sectors needed for D0 >> SHIFT
+	call	SHR32		; clusters (a bit more than needed,
+	call	FAT_SECTORS	; since some of them will hold the
+	ld	de,(FMAX)	; FATs), but not more than FMAX.
+	call	MIN_HL_DE
+	ld	(FATSECS),hl
+
+	add	hl,hl		;Clusters = (D0 - FAT sectors) >> SHIFT
+	ld	b,h
+	ld	c,l
+	ld	hl,(D0)
+	ld	de,(D0+2)
+	call	SUB32_BC
+	jp	c,TOO_SMALL
+	ld	a,(SHIFT)
+	call	SHR32
+
+	xor	a		;More than MAXC clusters? Then cut the
+	ld	(CAPPED),a	; filesystem to MAXC clusters.
+	ld	a,d
+	or	e
+	jr	nz,LY_CAP
+	ld	bc,(MAXC)
+	push	hl
+	or	a
+	sbc	hl,bc
+	pop	hl
+	jr	z,LY_NOCAP
+	jr	c,LY_NOCAP
+LY_CAP:
+	ld	hl,(MAXC)
+	ld	a,1
+	ld	(CAPPED),a
+LY_NOCAP:
+	ld	(CLUS),hl
+
+	ld	a,(IS_F16)	;FAT12: at least one cluster.
+	or	a
+	jr	nz,LY_CHECK16
+	ld	a,h
+	or	l
+	jp	z,TOO_SMALL
+	jr	LY_VALID
+LY_CHECK16:
+	ld	de,MINCLUS_FAT16 ;FAT16: at least 4085 clusters, try
+	or	a		 ; with smaller clusters if possible
+	sbc	hl,de		 ; (not for the fixed formats).
+	jr	nc,LY_VALID
+	ld	a,(FMT)
+	or	a
+	jp	nz,TOO_SMALL
+	ld	a,(SHIFT)
+	or	a
+	jp	z,TOO_SMALL
+	dec	a
+	ld	(SHIFT),a
+	jp	LY_TRY
+LY_VALID:
+
+	;--- Total sectors of the filesystem: the whole file,
+	;    or less if the clusters count was cut.
+
+	ld	hl,(T32)
+	ld	de,(T32+2)
+	ld	a,(CAPPED)
+	or	a
+	jr	z,LY_TS_OK
+	ld	hl,(CLUS)	;Boot sector + FATs + root dir + clusters
+	ld	de,0
+	ld	a,(SHIFT)
+	call	SHL32
+	ld	bc,(FATSECS)
+	call	ADD32_BC
+	call	ADD32_BC
+	ld	a,(ROOT_SECS)
+	ld	c,a
+	ld	b,0
+	inc	bc
+	call	ADD32_BC
+LY_TS_OK:
+	ld	(TS),hl
+	ld	(TS+2),de
+
+	;--- Boot sector type
+
+	ld	a,(BOOT_REQ)
+	or	a
+	jr	nz,LY_BOOT_OK
+	ld	a,(FMT)		;Default: MSX-DOS 2 for S and D,
+	cp	FMT_S		; standard for anything else.
+	jr	z,LY_BOOT_2
+	cp	FMT_D
+	jr	z,LY_BOOT_2
+	ld	a,BOOT_S
+	jr	LY_BOOT_OK
+LY_BOOT_2:
+	ld	a,BOOT_2
+LY_BOOT_OK:
+	ld	(BOOT_TYPE),a
+	cp	BOOT_S
+	ret	z
+	ld	a,(IS_F16)	;MSX-DOS 1 and 2 boot sectors are for
+	or	a		; FAT12 only (and FAT12 always fits in a
+	ret	z		; 16 bit sectors count).
+	ld	de,BOOTF12_MSG
+	jp	ERR_EXIT
+
+TOO_SMALL:
+	ld	a,(IS_F16)
+	or	a
+	ld	de,SMALL_MSG
+	jp	z,ERR_EXIT
+	ld	de,F16SMALL_MSG
+	jp	ERR_EXIT
+
+;	FAT_SECTORS: Calculate the number of FAT sectors for a number of
+;	clusters.
+;	Input: DEHL = number of clusters
+;	Output: HL = number of FAT sectors (FFFFh if it doesn't fit)
+
+FAT_SECTORS:
+	ld	bc,2		;Two reserved FAT entries.
+	call	ADD32_BC
+	ld	a,(IS_F16)
+	or	a
+	jr	z,FS_12
+
+	ld	bc,255		;FAT16: (n*2 + 511) / 512 = (n + 255) / 256
+	call	ADD32_BC
+	ld	a,8
+	call	SHR32
+	ld	a,d
+	or	e
+	ret	z
+FS_SAT:
+	ld	hl,0FFFFh
+	ret
+
+FS_12:
+	ld	a,d		;FAT12: (n*3/2 + 511) / 512 = (n*3 + 1023) / 1024.
+	or	e		;The number of clusters is at most about
+	jr	nz,FS_SAT	; 4096 here (see LY_SHIFT_CALC), or 2880
+	ld	b,h		; for the H format, so n*3 fits in 16 bits.
+	ld	c,l
+	add	hl,hl
+	add	hl,bc
+	ld	bc,1023
+	add	hl,bc
+	ld	a,h
+	srl	a
+	srl	a
+	ld	l,a
+	ld	h,0
+	ret
+
+;	SIZEK_LT: Cy = 1 if SIZE_K < DE. Corrupts AF, HL.
+
+SIZEK_LT:
+	ld	hl,(SIZE_K+2)
+	ld	a,h
+	or	l		;Clears Cy
+	ret	nz
+	ld	hl,(SIZE_K)
+	sbc	hl,de
+	ret
+
+;	MIN_HL_DE: HL = min(HL,DE). Corrupts AF.
+
+MIN_HL_DE:
+	or	a
+	sbc	hl,de
+	add	hl,de
+	ret	c
+	ex	de,hl
+	ret
+
+;******************************************************************************
+;
+;	BUILD_BOOT: Build the boot sector in SECBUF (which is all zeros).
+;
+BUILD_BOOT:
+	ld	hl,BOOT_HDR
+	ld	de,SECBUF
+	ld	bc,BOOT_HDR_LEN
+	ldir
+
+	ld	ix,SECBUF
+	ld	(ix+0Ch),2	;512 bytes per sector
+	ld	a,(SHIFT)
+	ld	b,a
+	inc	b
+	ld	a,1
+	jr	BB_SPC_NEXT
+BB_SPC_LOOP:
+	add	a,a
+BB_SPC_NEXT:
+	djnz	BB_SPC_LOOP
+	ld	(ix+0Dh),a	;Sectors per cluster
+	ld	(ix+0Eh),1	;Reserved sectors
+	ld	(ix+10h),2	;Number of FATs
+	ld	hl,(ROOT_ENT)
+	ld	(ix+11h),l	;Root directory entries
+	ld	(ix+12h),h
+	ld	hl,(TS+2)	;Total sectors (if it fits in 16 bits)
+	ld	a,h
+	or	l
+	jr	nz,BB_BIG_COUNT
+	ld	hl,(TS)
+	ld	(ix+13h),l
+	ld	(ix+14h),h
+BB_BIG_COUNT:
+
+	ld	a,(FMT)		;Media ID, sectors per track
+	ld	c,a		; and number of sides
+	add	a,a
+	add	a,c
+	ld	c,a
+	ld	b,0
+	ld	hl,FMT_TABLE
+	add	hl,bc
+	ld	a,(hl)
+	ld	(ix+15h),a
+	ld	(MEDIA),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+18h),a
+	inc	hl
+	ld	a,(hl)
+	ld	(ix+1Ah),a
+
+	ld	hl,(FATSECS)	;Sectors per FAT
+	ld	(ix+16h),l
+	ld	(ix+17h),h
+
+	ld	a,(BOOT_TYPE)
+	cp	BOOT_2
+	jr	z,BB_BOOT_2
+	jr	nc,BB_BOOT_S
+
+	;--- MSX-DOS 1 boot sector: just the boot code after the parameters
+
+	ld	hl,BOOT1_CODE
+	ld	de,SECBUF+1Eh
+	ld	bc,BOOT1_LEN
+	ldir
+	ret
+
+	;--- MSX-DOS 2 boot sector: VOL_ID block + boot code, with volume id
+
+BB_BOOT_2:
+	ld	hl,BOOT2_CODE
+	ld	de,SECBUF+1Eh
+	ld	bc,BOOT2_LEN
+	ldir
+	ld	hl,SECBUF+27h
+	jr	GEN_VOLID
+
+	;--- Standard boot sector: 32 bit total sectors count if it
+	;    doesn't fit in 16 bits, extended block, boot signature
+
+BB_BOOT_S:
+	ld	a,(ix+13h)
+	or	(ix+14h)
+	jr	nz,BB_SMALL_COUNT
+	ld	hl,(TS)
+	ld	(ix+20h),l
+	ld	(ix+21h),h
+	ld	hl,(TS+2)
+	ld	(ix+22h),l
+	ld	(ix+23h),h
+BB_SMALL_COUNT:
+	ld	(ix+26h),29h	;Extended boot signature
+	ld	hl,STD_LABEL	;Volume label and filesystem type
+	ld	de,SECBUF+2Bh
+	ld	bc,STD_LABEL_LEN
+	ldir
+	ld	a,(IS_F16)
+	or	a
+	jr	z,BB_FAT12
+	ld	a,'6'
+	ld	(SECBUF+36h+4),a
+BB_FAT12:
+	ld	a,55h
+	ld	(SECBUF+1FEh),a
+	ld	a,0AAh
+	ld	(SECBUF+1FFh),a
+	ld	hl,SECBUF+27h
+	;jr	GEN_VOLID
+
+;	GEN_VOLID: Generate a random volume id (four bytes in the 00h-7Fh
+;	range, like the kernel's FORMAT does) at HL. The seed is the date
+;	and time, mixed with the R register.
+
+GEN_VOLID:
+	push	hl
+	ld	c,_GDATE##	;HL = year, D = month, E = day
+	call	MSX_DOS
+	ld	a,e
+	add	a,d
+	add	a,l
+	ld	b,a
+	push	bc
+	ld	c,_GTIME##	;H = hour, L = minute, D = second
+	call	MSX_DOS
+	pop	bc
+	ld	a,d
+	add	a,l
+	add	a,h
+	add	a,b
+	ld	e,a
+	pop	hl
+	ld	b,4
+GV_LOOP:
+	ld	a,r
+	xor	e
+	rlca
+	ld	e,a
+	and	7Fh
+	ld	(hl),a
+	inc	hl
+	push	bc		;Wait a variable time
+	ld	b,a		; before the next byte.
+	inc	b
+GV_DELAY:
+	djnz	GV_DELAY
+	pop	bc
+	djnz	GV_LOOP
+	ret
+
+;******************************************************************************
+;
+;	CREATE: Create the file and write the filesystem structures.
+;
+CREATE:
+	ld	de,CREATING_MSG
+	call	PRINT
+
+	ld	de,FILENAME	;Create the file (an existing one is
+	xor	a		; overwritten).
+	ld	b,a
+	ld	c,_CREATE##
+	call	MSX_DOS
+	jp	nz,DOS_ERROR
+	ld	a,b
+	ld	(FH),a
+
+	ld	hl,(SIZE_K)	;Write a byte at the last position of the
+	ld	de,(SIZE_K+2)	; file to give it its size (4096M = 2^32
+	ld	a,10		; bytes: the offset wraps around to 0,
+	call	SHL32		; then -1 = FFFFFFFFh, which is fine: the
+	call	DEC32		; host disk can't have room for the file
+	call	SEEK		; anyway).
+	ld	de,ZBUF
+	ld	hl,1
+	call	WRITE
+
+	ld	hl,0		;Back to the start of the file.
+	ld	de,0
+	call	SEEK
+
+	ld	de,WRITING_MSG
+	call	PRINT
+
+	ld	de,SECBUF	;Boot sector.
+	ld	hl,512
+	call	WRITE
+
+	ld	hl,SECBUF	;First FAT sector: media ID + FFh,
+	ld	de,SECBUF+1	; FFh (+ FFh for FAT16) + zeros.
+	ld	bc,512-1
+	ld	(hl),0
+	ldir
+	ld	a,(MEDIA)
+	ld	(SECBUF),a
+	ld	a,0FFh
+	ld	(SECBUF+1),a
+	ld	(SECBUF+2),a
+	ld	a,(IS_F16)
+	or	a
+	jr	z,CR_FAT_OK
+	ld	a,0FFh
+	ld	(SECBUF+3),a
+CR_FAT_OK:
+
+	ld	b,2		;Two copies of the FAT.
+CR_FAT_LOOP:
+	push	bc
+	ld	de,SECBUF
+	ld	hl,512
+	call	WRITE
+	ld	hl,(FATSECS)
+	dec	hl
+	call	WRITE_ZEROS
+	pop	bc
+	djnz	CR_FAT_LOOP
+
+	ld	a,(ROOT_SECS)	;Root directory.
+	ld	l,a
+	ld	h,0
+	call	WRITE_ZEROS
+
+	ld	a,(FH)
+	ld	b,a
+	ld	c,_CLOSE##
+	call	MSX_DOS
+	jp	nz,DOS_ERROR
+	ld	a,0FFh
+	ld	(FH),a
+	ret
+
+;	WRITE_ZEROS: Write HL sectors of zeros to the file.
+
+WRITE_ZEROS:
+	ld	a,h
+	or	l
+	ret	z
+	ld	bc,ZBUF_SECS
+	push	hl
+	or	a
+	sbc	hl,bc
+	pop	hl
+	jr	nc,WZ_FULL
+	ld	c,l		;Less than a full buffer left.
+WZ_FULL:
+	or	a
+	sbc	hl,bc
+	push	hl
+	ld	h,c		;Bytes = sectors * 512
+	ld	l,0
+	add	hl,hl
+	ld	de,ZBUF
+	call	WRITE
+	pop	hl
+	jr	WRITE_ZEROS
+
+;	SEEK: Set the file pointer to DEHL.
+
+SEEK:
+	ld	a,(FH)
+	ld	b,a
+	xor	a
+	ld	c,_SEEK##
+	call	MSX_DOS
+	jp	nz,DOS_ERROR
+	ret
+
+;	WRITE: Write HL bytes from DE to the file.
+
+WRITE:
+	ld	a,(FH)
+	ld	b,a
+	ld	c,_WRITE##
+	call	MSX_DOS
+	jp	nz,DOS_ERROR
+	ret
+
+;******************************************************************************
+;
+;	PRINT_SUMMARY: Print the details of the created filesystem.
+;
+PRINT_SUMMARY:
+	ld	de,DONE_MSG
+	call	PRINT
+	ld	a,(IS_F16)
+	or	a
+	ld	a,'2'
+	jr	z,PS_FAT
+	ld	a,'6'
+PS_FAT:
+	call	PUTCHAR
+	ld	de,CLUS_MSG
+	call	PRINT
+	ld	hl,(CLUS)
+	call	PRINT_DEC
+	ld	de,CLUSOF_MSG
+	call	PRINT
+	ld	a,(SHIFT)	;Cluster size: "512 bytes" or "<n>K".
+	or	a
+	ld	de,BYTES512_MSG
+	jr	z,PS_CLUS_SIZE
+	ld	b,a
+	ld	hl,1
+	jr	PS_KB_NEXT
+PS_KB_LOOP:
+	add	hl,hl
+PS_KB_NEXT:
+	djnz	PS_KB_LOOP
+	call	PRINT_DEC
+	ld	de,K_MSG
+PS_CLUS_SIZE:
+	call	PRINT
+	ld	de,CRLF2_MSG
+	call	PRINT
+	ld	hl,(ROOT_ENT)
+	call	PRINT_DEC
+	ld	de,ROOT_MSG
+	call	PRINT
+	ld	a,(BOOT_TYPE)
+	ld	de,BOOT1_MSG
+	cp	BOOT_1
+	jr	z,PS_BOOT
+	ld	de,BOOT2_MSG
+	cp	BOOT_2
+	jr	z,PS_BOOT
+	ld	de,BOOTS_MSG
+PS_BOOT:
+	jp	PRINT
+
+;******************************************************************************
+;
+;	Termination and error handling
+;
+
+;	Show the usage text and terminate.
+
+SHOW_USAGE:
+	ld	hl,USAGE_TEXT
+SU_LOOP:
+	ld	a,(hl)
+	cp	1Ah
+	jr	z,SU_END
+	call	PUTCHAR
+	inc	hl
+	jr	SU_LOOP
+SU_END:
+	ld	b,0
+	ld	c,_TERM##
+	jp	MSX_DOS
+
+;	Terminate with "Invalid parameter".
+
+IPARM_EXIT:
+	ld	a,.IPARM##
+	;jr	DOS_ERROR
+
+;	Terminate with the error code in A (the shell prints the message),
+;	deleting the file if it was created.
+
+DOS_ERROR:
+	push	af
+	ld	de,CLRLINE_MSG	;Clear the progress message.
+	call	PRINT
+	call	DEL_FILE
+	pop	af
+	ld	b,a
+	ld	c,_TERM##
+	jp	MSX_DOS
+
+;	Errors with our own messages.
+
+SIZE_ERR:
+	ld	de,SIZE_MSG
+	jr	ERR_EXIT
+ROOT_ERR:
+	ld	de,ROOT_MSG_ERR
+	;jr	ERR_EXIT
+
+;	Print the message at DE and terminate with error code 1
+;	(user error: the shell prints nothing).
+
+ERR_EXIT:
+	call	PRINT
+	ld	b,1
+	ld	c,_TERM##
+	jp	MSX_DOS
+
+;	The abort routine, called whenever the program terminates.
+;	Deletes the file if it's still open: that is, if the program
+;	was aborted while the file was being created.
+
+ABORT_RTN:
+	push	af
+	push	bc
+	call	DEL_FILE
+	pop	bc
+	pop	af
+	ret
+
+;	DEL_FILE: Delete the file, if it's open (_HDELETE closes the handle
+;	too, even on error).
+
+DEL_FILE:
+	ld	a,(FH)
+	cp	0FFh
+	ret	z
+	ld	b,a
+	ld	a,0FFh		;Mark it as closed first, to prevent
+	ld	(FH),a		; recursion if this causes an abort.
+	ld	c,_HDELETE##	;Errors are ignored.
+	jp	MSX_DOS
+
+;******************************************************************************
+;
+;	Command line helpers
+;
+
+;	SKIP_SPACES: Skip spaces and tabs at HL. Returns the next character
+;	in A, with Z set if it's the end of the line.
+
+SKIP_SPACES:
+	ld	a,(hl)
+	cp	' '
+	jr	z,SS_NEXT
+	cp	TAB
+	jr	z,SS_NEXT
+	or	a
+	ret
+SS_NEXT:
+	inc	hl
+	jr	SKIP_SPACES
+
+;	IS_SEP: Z set if A is a space, a tab, a slash (start of the next
+;	option) or the end of the line.
+
+IS_SEP:
+	cp	' '
+	ret	z
+	cp	TAB
+	ret	z
+	cp	'/'
+	ret	z
+	or	a
+	ret
+
+;	UPCASE: Uppercase the character in A.
+
+UPCASE:
+	cp	'a'
+	ret	c
+	cp	'z'+1
+	ret	nc
+	and	0DFh
+	ret
+
+;	PARSE_NUM: Parse a decimal number at HL.
+;	Output: DE = number, HL = pointer past the digits,
+;	        Cy = 1 if there are no digits or the number is over 65535.
+
+PARSE_NUM:
+	ld	de,0
+	ld	b,0		;Count of digits
+PN_LOOP:
+	ld	a,(hl)
+	sub	'0'
+	jr	c,PN_END
+	cp	10
+	jr	nc,PN_END
+	push	hl
+	ld	h,d		;DE = DE*10 + A
+	ld	l,e
+	add	hl,hl
+	jr	c,PN_OVER
+	add	hl,hl
+	jr	c,PN_OVER
+	add	hl,de
+	jr	c,PN_OVER
+	add	hl,hl
+	jr	c,PN_OVER
+	ld	e,a
+	ld	d,0
+	add	hl,de
+	jr	c,PN_OVER
+	ex	de,hl
+	pop	hl
+	inc	hl
+	inc	b
+	jr	PN_LOOP
+PN_OVER:
+	pop	hl
+	scf
+	ret
+PN_END:
+	ld	a,b
+	cp	1		;Cy if no digits
+	ret
+
+;******************************************************************************
+;
+;	Arithmetic and output helpers
+;
+
+;	SHR32: DEHL = DEHL >> A. Corrupts AF, B.
+
+SHR32:
+	or	a
+	ret	z
+	ld	b,a
+SHR32_LOOP:
+	srl	d
+	rr	e
+	rr	h
+	rr	l
+	djnz	SHR32_LOOP
+	ret
+
+;	SHL32: DEHL = DEHL << A. Corrupts AF, B.
+
+SHL32:
+	or	a
+	ret	z
+	ld	b,a
+SHL32_LOOP:
+	add	hl,hl
+	rl	e
+	rl	d
+	djnz	SHL32_LOOP
+	ret
+
+;	DEC32: DEHL = DEHL - 1. Corrupts AF.
+
+DEC32:
+	ld	a,h
+	or	l
+	dec	hl
+	ret	nz
+	dec	de
+	ret
+
+;	SUB32_BC: DEHL = DEHL - BC, Cy = 1 on borrow. Corrupts AF.
+
+SUB32_BC:
+	or	a
+	sbc	hl,bc
+	ret	nc
+	ld	a,d
+	or	e
+	scf
+	ret	z
+	dec	de
+	or	a
+	ret
+
+;	ADD32_BC: DEHL = DEHL + BC. Corrupts AF.
+
+ADD32_BC:
+	add	hl,bc
+	ret	nc
+	inc	de
+	ret
+
+;	PRINT_DEC: Print the number in HL in decimal, with no leading zeros.
+
+PRINT_DEC:
+	ld	d,0		;No digits printed yet
+	ld	bc,-10000
+	call	PD_DIGIT
+	ld	bc,-1000
+	call	PD_DIGIT
+	ld	bc,-100
+	call	PD_DIGIT
+	ld	bc,-10
+	call	PD_DIGIT
+	ld	a,l
+	add	a,'0'
+	jr	PUTCHAR
+PD_DIGIT:
+	ld	a,'0'-1
+PD_LOOP:
+	inc	a
+	add	hl,bc
+	jr	c,PD_LOOP
+	sbc	hl,bc
+	cp	'0'
+	jr	nz,PD_PRINT
+	inc	d
+	dec	d
+	ret	z
+PD_PRINT:
+	ld	d,1
+	;jr	PUTCHAR
+
+;	PUTCHAR: Print the character in A. Corrupts AF.
+
+PUTCHAR:
+	push	bc
+	push	de
+	push	hl
+	ld	e,a
+	ld	c,_CONOUT##
+	call	MSX_DOS
+	pop	hl
+	pop	de
+	pop	bc
+	ret
+
+;	PRINT: Print the "$" terminated string at DE.
+
+PRINT:
+	ld	c,_STROUT##
+	jp	MSX_DOS
+
+;******************************************************************************
+;
+;	Data
+;
+
+;	Start of the boot sector: jump, OEM name (the same as the kernel's
+;	FORMAT command and FDISK write).
+
+BOOT_HDR:
+	db	0EBh,0FEh,090h
+	db	"NEXTOR20"
+BOOT_HDR_LEN	equ	$-BOOT_HDR
+
+;	Volume label and filesystem type of the standard boot sector.
+
+STD_LABEL:
+	db	"NO NAME    "
+	db	"FAT12   "
+STD_LABEL_LEN	equ	$-STD_LABEL
+
+;	Media ID, sectors per track and number of sides for each FMT value.
+
+FMT_TABLE:
+	db	0F0h,0,0	;Other sizes
+	db	0F8h,9,1	;S
+	db	0F9h,9,2	;D
+	db	0F0h,18,2	;H
+
+;	Boot code for the MSX-DOS 1 and MSX-DOS 2 boot sectors, starting at
+;	offset 1Eh of the sector. See the MKDSK rules in the Makefile.
+
+BOOT1_CODE:
+	incbin	mkdsk-boot1.bin
+BOOT1_LEN	equ	$-BOOT1_CODE
+
+BOOT2_CODE:
+	incbin	tools-disk-bootsect.bin
+BOOT2_LEN	equ	$-BOOT2_CODE
+
+DSK_EXT:
+	db	".DSK",0
+DSK_EXT_LEN	equ	$-DSK_EXT
+
+;	Messages
+
+WVER_MSG:	db	"*** MSX-DOS 2 required",CR,LF,"$"
+NOSIZE_MSG:	db	"*** Disk size not specified",CR,LF,"$"
+SIZE_MSG:	db	"*** Invalid disk size (allowed range is 10K to 4096M)",CR,LF,"$"
+ROOT_MSG_ERR:	db	"*** Invalid number of root directory entries",CR,LF
+		db	"    (maximum is 240 for FAT12, 4080 for FAT16)",CR,LF,"$"
+F12BIG_MSG:	db	"*** FAT12 is limited to 32M",CR,LF,"$"
+F16SMALL_MSG:	db	"*** Disk size too small for FAT16",CR,LF,"$"
+SMALL_MSG:	db	"*** Disk size too small",CR,LF,"$"
+BOOTF12_MSG:	db	"*** MSX-DOS 1 and 2 boot sectors are for FAT12 only",CR,LF,"$"
+
+CREATING_MSG:	db	"Creating file...",CR,"$"
+WRITING_MSG:	db	ESC,"K","Writing filesystem...",CR,"$"
+CLRLINE_MSG:	db	CR,ESC,"K","$"
+
+DONE_MSG:	db	ESC,"K","Disk image file created:",CR,LF
+		db	"  FAT1$"
+CLUS_MSG:	db	" filesystem, $"
+CLUSOF_MSG:	db	" clusters of $"
+BYTES512_MSG:	db	"512 bytes$"
+K_MSG:		db	"K$"
+CRLF2_MSG:	db	CR,LF,"  $"
+ROOT_MSG:	db	" root directory entries",CR,LF,"$"
+BOOT1_MSG:	db	"  MSX-DOS 1 boot sector",CR,LF,"$"
+BOOT2_MSG:	db	"  MSX-DOS 2 boot sector",CR,LF,"$"
+BOOTS_MSG:	db	"  Standard boot sector",CR,LF,"$"
+
+;	Variables
+
+FH:		db	0FFh	;File handle, FFh if the file isn't open
+FMT:		db	0	;0 = custom size, or FMT_S/D/H
+SIZE_SET:	db	0	;1 if the size argument was given
+SIZE_K:		dw	0,0	;Size of the file in K (32 bit)
+ROOT_SET:	db	0	;1 if /R was given
+ROOT_REQ:	dw	0	;Value given with /R
+FAT_REQ:	db	0	;FAT type requested (0 = default)
+BOOT_REQ:	db	0	;Boot sector type requested (0 = default)
+
+T32:		dw	0,0	;Size of the file in sectors (32 bit)
+IS_F16:		db	0	;1 for FAT16
+ROOT_ENT:	dw	0	;Root directory entries
+ROOT_SECS:	db	0	;Root directory sectors
+MAXC:		dw	0	;Maximum number of clusters
+FMAX:		dw	0	;Maximum number of FAT sectors
+SHIFT:		db	0	;Sectors per cluster = 1 << SHIFT
+D0:		dw	0,0	;Sectors for FATs and data (32 bit)
+FATSECS:	dw	0	;Sectors per FAT
+CLUS:		dw	0	;Number of clusters
+CAPPED:		db	0	;1 if the clusters count was cut
+TS:		dw	0,0	;Total sectors of the filesystem (32 bit)
+MEDIA:		db	0	;Media ID
+BOOT_TYPE:	db	0	;Boot sector type
+
+;	Buffers, after the end of the program (the program is linked
+;	alone, see the Makefile).
+
+SECBUF		equ	$			;Boot sector / first FAT sector
+ZBUF		equ	SECBUF+512		;Zeros
+FILENAME	equ	ZBUF+ZBUF_SECS*512	;File name (up to 127 chars
+FILENAME_LEN	equ	136			; plus ".DSK" and the zero)
+
+	end

@@ -56,6 +56,7 @@ MD ....... see MKDIR
 MEM ...... displays a compact memory mapper listing
 MEMORY ... displays the amount and status of system RAM
 MKDIR .... creates a new sub-directory
+MKDSK .... creates an empty disk image file
 MODE ..... changes the screen mode
 MOVE ..... moves files on a disk
 MVDIR .... moves sub-directories

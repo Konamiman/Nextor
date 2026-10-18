@@ -11,6 +11,10 @@
 ;that follow it being zero, which is also what FORMAT does).
 ;
 ;This is what makes the disk image bootable in MSX-DOS 1 mode too.
+;
+;The MKDSK tool includes the resulting binary for the MSX-DOS 2 boot
+;sectors that it creates, and another build of this file with the
+;DOS1_BOOT_SECTOR symbol defined (no VOL_ID block) for the MSX-DOS 1 ones.
 
 	name('tdboot')
 
