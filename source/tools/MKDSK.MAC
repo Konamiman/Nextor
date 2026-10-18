@@ -59,7 +59,12 @@
 ;   VOL_ID block with a volume id, as the built-in FORMAT command
 ;   creates), /BS = standard boot sector (extended boot signature with a
 ;   volume id, label and filesystem type). /B1 and /B2 are for FAT12 only.
-;   The default is /B2 for S and D, /BS otherwise. The boot code is the
+;   The default is /B2 for FAT12 with up to 3 sectors per FAT (S, D and
+;   the default layout up to 16M), /BS otherwise. That's because the
+;   images that MSX-DOS 1 mode can use must have a MSX-DOS boot sector:
+;   booting in MSX-DOS 1 mode (which is always the case in disk emulation
+;   mode) runs the boot sector code at offset 1Eh, which in a standard
+;   boot sector is BPB data, and the computer hangs. The boot code is the
 ;   one of the kernel (bank2/bootsect.mac), see the MKDSK rules in the
 ;   Makefile.
 ;
@@ -93,7 +98,7 @@ USAGE_TEXT:
 	db	"    filesystem. Default: FAT12 up to 16M, FAT16 otherwise.",13,10
 	db	"/B1, /B2, /BS: write a MSX-DOS 1, MSX-DOS 2 or standard boot",13,10
 	db	"    sector (/B1 and /B2 are for FAT12 only). Default: MSX-DOS 2",13,10
-	db	"    for S and D, standard otherwise.",13,10
+	db	"    for FAT12 up to 16M (except H), standard otherwise.",13,10
 	db	13,10
 	db	"An existing file with the same name is overwritten.",13,10
 	db	1Ah
@@ -664,15 +669,17 @@ LY_TS_OK:
 	ld	a,(BOOT_REQ)
 	or	a
 	jr	nz,LY_BOOT_OK
-	ld	a,(FMT)		;Default: MSX-DOS 2 for S and D,
-	cp	FMT_S		; standard for anything else.
-	jr	z,LY_BOOT_2
-	cp	FMT_D
-	jr	z,LY_BOOT_2
-	ld	a,BOOT_S
-	jr	LY_BOOT_OK
-LY_BOOT_2:
+	ld	a,(IS_F16)	;Default: MSX-DOS 2 for FAT12 with up to
+	or	a		; 3 sectors per FAT (the ones that
+	jr	nz,LY_BOOT_S	; MSX-DOS 1 mode can use: booting from
+	ld	hl,(FATSECS)	; a standard boot sector would hang
+	ld	de,3+1		; there), standard for anything else.
+	or	a
+	sbc	hl,de
 	ld	a,BOOT_2
+	jr	c,LY_BOOT_OK
+LY_BOOT_S:
+	ld	a,BOOT_S
 LY_BOOT_OK:
 	ld	(BOOT_TYPE),a
 	cp	BOOT_S

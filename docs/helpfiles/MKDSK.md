@@ -15,7 +15,7 @@ Creates an empty disk image file.
 
 ## Use
 
-A file of the specified size is created, containing an empty FAT12 or FAT16 filesystem (a boot sector, two copies of the FAT and an empty root directory), ready to be mounted with `MAPDRV` (Nextor can mount images of up to 32M only) or used with `EMUFILE`. If the file name has no extension, `.DSK` is added. An existing file with the same name is overwritten.
+A file of the specified size is created, containing an empty FAT12 or FAT16 filesystem (a boot sector, two copies of the FAT and an empty root directory), ready to be mounted with `MAPDRV` (Nextor can mount images of up to 32M only) or used in disk emulation mode with `EMUFILE` (see the requirements below). If the file name has no extension, `.DSK` is added. An existing file with the same name is overwritten.
 
 `S`, `D` and `H` create a standard floppy disk image: 360K single sided (1DD), 720K double sided (2DD) or 1.44M high density (2HD) respectively. Otherwise, the size of the file is given as a number from 1 to 65535, in kilobytes if it has no suffix or a `K` suffix, or in megabytes if it has an `M` suffix. The allowed sizes are 10K to 4096M.
 
@@ -29,9 +29,11 @@ The cluster size is chosen automatically. For FAT12 filesystems up to 16M the sm
 
 * `/B1`: An MSX-DOS 1 boot sector, with the MSX-DOS 1 boot code. When Nextor boots from a disk with this boot sector it switches to MSX-DOS 1 mode. Undeletion is not supported since the boot sector has no volume id.
 * `/B2`: An MSX-DOS 2 boot sector, the same that the `FORMAT` command creates on floppy disks: the MSX-DOS 1 boot code plus a volume id. These disks boot MSX-DOS 2 (or Nextor) normally, and MSX-DOS 1 in MSX-DOS 1 mode.
-* `/BS`: A standard boot sector (as in PC disks), with a volume id. These disks boot MSX-DOS 2 (or Nextor) only.
+* `/BS`: A standard boot sector (as in PC disks), with a volume id. These disks boot MSX-DOS 2 (or Nextor) only: booting from them in MSX-DOS 1 mode hangs the computer.
 
-`/B1` and `/B2` are available for FAT12 only. The default is `/B2` for the `S` and `D` floppy disk images and `/BS` for any other image, including `H`.
+`/B1` and `/B2` are available for FAT12 only. The default is `/B2` for the FAT12 images with three or less sectors per FAT (`S`, `D` and the other FAT12 images up to 16M), and `/BS` for any other image, including `H`.
+
+Disk emulation mode always runs in MSX-DOS 1 mode, so the images used with `EMUFILE` must be FAT12 with three or less sectors per FAT, and have an MSX-DOS 1 or MSX-DOS 2 boot sector. The images created with the default options meet these requirements for sizes up to 16M, except `H` (it has nine sectors per FAT).
 
 `S`, `D` and `H` can be combined with the other options to create non-standard floppy disk images, for example with a smaller root directory; note however that the floppy disk drives of MSX-DOS 1 identify the disk format by the media ID only, so they will misread such disks.
 
