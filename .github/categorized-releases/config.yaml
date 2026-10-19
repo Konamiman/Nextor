@@ -251,6 +251,10 @@ categories:
             description: "Maps a drive letter to a partition on a device controlled by a Nextor driver."
             assets: '(^|\n)MAPDRV\.COM(\n|$)'
 
+          - name: "MKDSK"
+            description: "Creates disk image files containing an empty FAT12 or FAT16 filesystem."
+            assets: '(^|\n)MKDSK\.COM(\n|$)'
+
           - name: "MSR"
             description: "Installs the MSX-DOS 2 mapper support routines and an UNAPI RAM helper in MSX-DOS 1 (Nextor's MSX-DOS 1 mode included), and frees the RAM segments left allocated in user mode."
             assets: '(^|\n)MSR\.COM(\n|$)'

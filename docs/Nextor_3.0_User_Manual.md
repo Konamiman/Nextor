@@ -102,6 +102,8 @@
 
 [3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)
 
+[3.4.17. MKDSK: the disk image creation tool](#3417-mkdsk-the-disk-image-creation-tool)
+
 [3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)
 
 [3.6. Extensions to BASIC](#36-extensions-to-basic)
@@ -1025,6 +1027,23 @@ The tool refuses to install the routines if mapper support routines are already 
 
 `MSR.COM` is in the root directory of the tools disk and of the tools zip archive, not in the `TOOLS` directory, since MSX-DOS 1 can't access directories.
 
+#### 3.4.17. MKDSK: the disk image creation tool
+
+`MKDSK.COM` creates disk image files containing an empty FAT12 or FAT16 filesystem, ready to be mounted (see _[3.8. Mounting files](#38-mounting-files)_) or used in disk emulation mode (see _[3.9. Disk emulation mode](#39-disk-emulation-mode)_). The usage syntax is:
+
+```
+MKDSK <file>[.DSK] S|D|H|<size>[K|M] [/R <entries>] [/F12|/F16] [/B1|/B2|/BS]
+```
+
+* `S`, `D` and `H` create a standard 360K single sided (1DD), 720K double sided (2DD) or 1.44M high density (2HD) floppy disk image. Otherwise, the size is a number from 1 to 65535 in kilobytes (no suffix or `K` suffix) or in megabytes (`M` suffix), and the allowed range is 10K to 4096M (but in practice 4096M will always fail, since that's also the maximum size of the FAT16 filesystem that would hold the file).
+* `/R` sets the number of root directory entries, rounded up to a multiple of 16. The default depends on the filesystem type and size (512 for FAT16, between 64 and 240 for FAT12), and the maximum is 240 for FAT12 and 4080 for FAT16.
+* `/F12` and `/F16` force the filesystem type: by default it's FAT12 for sizes up to 16M and FAT16 for bigger sizes. FAT12 is possible for sizes up to 32M, and FAT16 for sizes of about 2M or more.
+* `/B1`, `/B2` and `/BS` select the type of boot sector: MSX-DOS 1 (Nextor switches to MSX-DOS 1 mode when booting from it), MSX-DOS 2 (the same that the `FORMAT` command creates on floppy disks) or standard. `/B1` and `/B2` are available for FAT12 only. The default is `/B2` for the FAT12 images with three or less sectors per FAT (`S`, `D` and the other FAT12 images up to 16M) and `/BS` for anything else; booting from a standard boot sector in MSX-DOS 1 mode hangs the computer.
+
+The cluster size is chosen automatically. `S`, `D` and `H` have the cluster sizes of the real floppy disks (the FAT of `H` takes nine sectors, so it can't be used in MSX-DOS 1 mode); for other FAT12 filesystems up to 16M the cluster size is chosen so that each copy of the FAT takes at most three sectors, so that the image can be used in MSX-DOS 1 mode. An existing file with the same name is overwritten, and the file is deleted if an error occurs while creating it. The tool works in MSX-DOS 2 too.
+
+Note that Nextor can mount disk image files of up to 32M only, and that the images used in disk emulation mode must be FAT12 with three or less sectors per FAT and have an MSX-DOS 1 or MSX-DOS 2 boot sector, since that mode always runs in MSX-DOS 1 mode: the images created with the default options meet these requirements for sizes up to 16M, except `H`. The full details are in the help file of the tool, `HELP MKDSK` from the command prompt (also available [in Markdown format](helpfiles/MKDSK.md)).
+
 
 ### 3.5. The built-in partitioning tool
 
@@ -1471,7 +1490,7 @@ This feature has some restrictions:
 
 * The file must be stored across consecutive sectors in its host filesystem (since Nextor 2.1.1). You can use the `CONCLUS.COM` tool to check if that's the case for a given file (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_).
 
-* The file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. 
+* The file is expected to contain a proper FAT filesystem already, it is not possible to apply the FORMAT command on a mounted drive. An empty disk image file can be created with the `MKDSK` tool (see _[3.4.17. MKDSK: the disk image creation tool](#3417-mkdsk-the-disk-image-creation-tool)_).
 
 * The file cannot contain partitions, the contained filesystem is expected to start right at the beginning of the file.
 
@@ -1564,7 +1583,7 @@ The following rules and restrictions apply to the disk emulation mode:
 
 - The emulation data file stores information about absolute device sectors, therefore it will be unusable if the disk image files are moved and file renames will have no effect. It is recommended to either generate the file immediately before using it, or have a partition reserved only for disk image files and their corresponding emulation data files (that is, a partition where you usually don't create or move files around).
 
-- The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem (the `FORMAT` command will not work in disk emulation mode).
+- The disk image files must have a size of at least 512 bytes and at most 32 MBytes, must not contain partitions (the contained filesystem is expected to start right at the beginning of the file), and must contain a proper FAT12 filesystem with three or less sectors per FAT (the `FORMAT` command will not work in disk emulation mode). Also, since disk emulation mode always runs in MSX-DOS 1 mode, they must have an MSX-DOS 1 or MSX-DOS 2 boot sector: booting from a standard boot sector (as created by PC tools) in MSX-DOS 1 mode hangs the computer. The `MKDSK` tool creates suitable images (see _[3.4.17. MKDSK: the disk image creation tool](#3417-mkdsk-the-disk-image-creation-tool)_).
 
 - The disk image files must not be fragmented, that is, their contents must be placed across consecutive sectors in the device.
 

@@ -16,14 +16,20 @@
 ;Requirements for standalone assembly: CR, LF and ?????? must be textually
 ;available (const.inc, macros.inc), and KBUF, BDOS and the _* DOS function
 ;call numbers must be provided at link time (data.mac, dos_calls.inc).
+;
+;If the DOS1_BOOT_SECTOR symbol is defined, the VOL_ID block is left out,
+;leaving just the boot code: that's an MSX-DOS 1 style boot sector, which
+;the MKDSK tool creates with its /B1 option (see source/tools/Makefile).
 
 	.phase	0C01Eh
 ;
+	ifndef	DOS1_BOOT_SECTOR
 		jr	BOOT_BODY		;Skip over VOL_ID's etc.
 ;
 		defb	"VOL_ID"		;Validity checking string
 		defb	0,0FFh,0FFh,0FFh,0FFh	;Dirty flag and vol_id
 		defs	5,0			;Reserved for future expansion
+	endif
 ;
 BOOT_BODY:	ret	nc			;If not called to invoke
 						; MSXDOS, just return.
