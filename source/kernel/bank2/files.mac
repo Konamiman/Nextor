@@ -584,10 +584,19 @@ START_RW:
 		dec	hl			; and zero otherwise.
 not_zero_sz:	adc	hl,de
 		ex	de,hl			;DE := high word of end byte
-		bit	7,d			;Jump for special handling if
-		jr	nz,new_size_zero	; file being truncated to
-						; zero length.
-		pop	hl		   ;LV2	;Get unit descriptor back
+		jr	nc,end_ptr_nc
+		bit	RF_SIZE,(iy+@RW_FLAGS##);Carry: if RF_SIZE is not set
+		jr	nz,end_ptr_ok		; then the transfer goes past
+		ld	a,.FILE##		; 4G, return an error (one
+		or	a			; whose last byte is at
+		jp	ret_err_2		; 0FFFFFFFFh is rejected by
+						; DECODE_PTR).
+end_ptr_nc:	bit	RF_SIZE,(iy+@RW_FLAGS##);No carry: jump for special
+		jp	nz,new_size_zero	; handling if file being
+						; truncated to zero length
+						; (RF_SIZE set: pointer is 0).
+;
+end_ptr_ok:	pop	hl		   ;LV2	;Get unit descriptor back
 ;
 		push	de		   ;LV2	;Save (end_pointer-1) for end
 		push	bc		   ;LV3	; of file testing.
@@ -621,15 +630,20 @@ no_dec32_carry:	push	de		   ;LV5	;Save (file_size-1) for end
 		exx				; stack.  Results are as below.
 		pop	bc		   ;LV4
 ret_err_3_nz:	jr	nz,ret_err_3		;(Error if DECODE_PTR failed)
+		ld	a,d
+		and	e			;A := 0FFh if DE = -1 (null
+		add	a,1			; file), 0 otherwise.
+		sbc	a,a
 		exx
 		pop	bc		   ;LV3	;BC = end of operation cluster
-		xor	a			;DE = end of file cluster
+		or	a			;DE = end of file cluster
 		sbc	hl,bc			;DE':BC' = end_pointer - 1
 		ex	(sp),hl		   ;LV2	;HL':(SP) = file_size - end_ptr
 		ex	de,hl			;Carry'= from subtraction
-		sbc	hl,de			; Zero'= NZ if DE -ve, Z if +ve
-		exx				;    A'= 0
-		bit	7,d
+		sbc	hl,de			; Zero'= NZ if DE = -1, Z if not
+		exx				;    A'= 0FFh if DE = -1, 0 if not
+		inc	a
+		dec	a
 		ex	af,af'
 ;
 ;
@@ -722,7 +736,18 @@ extend_done:	set	AC_MOD,(ix+FAB_ACCESS_MODE##)	;Set the "written to" flag
 		exx
 		ex	af,af'			;If file size has not increased
 		jr	nz,do_enlarge		; at all then don't alter size.
-		jr	nc,no_enlarge		; (NZ tests for old null file)
+		jr	c,do_enlarge		; (NZ tests for old null file)
+;
+		pop	bc		   ;LV2	;WRITE WITHIN THE FILE.
+		pop	de			;Clean up stack
+		ld	a,b			;HL:BC = (file_size-1) - end_ptr
+		or	c			;RW_OVER is 1 if the write
+		or	h			; stops at the last byte of
+		or	l			; the file (HL:BC = 0), and
+		ld	hl,0			; zero if it stops short of
+		jr	nz,got_overrun		; it.  This used to be tested
+		inc	hl			; with bit 31 of HL:BC-1, but
+		jr	got_overrun		; that fails for files >2G.
 ;
 do_enlarge:	inc	bc			;If end_pointer is bigger
 		ld	a,b			; then file_size then must set
@@ -734,16 +759,14 @@ no_inc32_carry:	ld	(ix+FAB_FILE_SIZE##),c	;Note the 32 bit increment
 		ld	(ix+FAB_FILE_SIZE##+2),e	; byte pointer, rather than
 		ld	(ix+FAB_FILE_SIZE##+3),d	; the next byte pointer.
 ;
-no_enlarge:	pop	bc		   ;LV2	;CALCULATE OVERFLOW PAST EOF
+		pop	bc		   ;LV2	;CALCULATE OVERFLOW PAST EOF
 		pop	de			;Clean up stack
-		ld	a,b			;HL:BC = overrun size
-		or	c			;Decrement 32 bit overrun
-		dec	bc			; size so it will be zero if
-		jr	nz,no_over_cy		; the write stops one byte
-		dec	hl			; short of EOF.
+		ld	a,b			;HL:BC = overrun size, which
+		or	c			; is negative here: decrement
+		dec	bc			; it to get minus (the amount
+		jr	nz,no_over_cy		; of bytes past EOF + 1).
+		dec	hl
 no_over_cy:
-		bit	7,h			;If write stops short of EOF
-		jr	z,zero_overrun		; then set RW_OVER to zero.
 		ld	a,h
 		and	l			;If write stops more than
 		inc	a			; 64k beyond EOF then set
@@ -753,9 +776,8 @@ no_over_cy:
 		sbc	hl,bc			; bytes past EOF then set
 		jr	nz,got_overrun		; RW_OVER to this amount + 1.
 		dec	hl			;Fiddle if transfer stops
-		jr	got_overrun		; exactly 0FFFFh bytes past EOF
+						; exactly 0FFFFh bytes past EOF
 ;
-zero_overrun:	ld	hl,0
 got_overrun:	ld	(RW_OVER##),hl		;Record over-run for RW_SECTOR
 ;
 		exx
@@ -796,7 +818,8 @@ DECODE_PTR:
 ; sector number within the cluster and byte offset  within  the  sector.   The
 ; decoding  is  controlled  by  the cluster mask and cluster shift in the unit
 ; descriptor.  An error is returned if the relative cluster  number  will  not
-; fit  into  15  bits (so its to bit must be zero).  The variable "RW_MSEC" is
+; fit into 16 bits or is 0FFFFh (which "START_RW" uses for "null file"),  so
+; the file pointer 0FFFFFFFFh is always rejected.  The variable  "RW_MSEC"  is
 ; set up to the number of sectors in a cluster for later use in deciding  when
 ; to step on to a new cluster.
 ;
@@ -805,7 +828,7 @@ DECODE_PTR:
 ; Returns:          A = If Z-flag clear (NZ) - Error code (.FILE)
 ;			   Z-flag set (Z) - Sector within cluster (0..UD_CLUSTER_MASK)
 ;		   BC = Byte offset within sector (0...1FFh)
-;		   DE = Logical cluster number (0...07FFFh)
+;		   DE = Logical cluster number (0...0FFFEh)
 ; Corrupts:   AF,BC,DE
 ;
 ; Assumes:    UD_CLUSTER_SHIFT=UD_CLUSTER_MASK+1
@@ -839,11 +862,15 @@ cshft_loop:	srl	d
 		rr	e			;Shift logical sector number
 		rra				; right enough times to get
 cshft_lp_start:	djnz	cshft_loop		; the logical cluster number.
+		ld	b,a
+		and	e			;If the cluster number is
+		inc	a			; 65535 (that's "null file"
+		ld	a,b			; for START_RW) then force an
+		jr	nz,not_ffff		; error below.
 		inc	d
+not_ffff:	inc	d
 		dec	d			;Jump to return error if
 		jr	nz,file_error_nz	; cluster greater than 65535
-		bit	7,e
-		jr	nz,file_error_nz	;Also error if > 32767
 ;
 		ld	d,e			;DE := logical cluster number
 		ld	e,a

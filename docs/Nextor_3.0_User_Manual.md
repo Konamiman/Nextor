@@ -232,7 +232,9 @@ This section overviews the features that actually make Nextor an enhanced versio
 
 ### 2.1. FAT16 filesystem support
 
-Nextor provides built-in support for the FAT16 filesystem. There is no need to install any patch, and it is perfectly possible to boot the system from a FAT16 volume. Volumes up to 4GB in size can be used.
+Nextor provides built-in support for the FAT16 filesystem. There is no need to install any patch, and it is perfectly possible to boot the system from a FAT16 volume. Volumes up to 4GB in size can be used, and the maximum file size supported is 4GB as well (strictly speaking, 4GB minus one byte, the maximum allowed by the FAT filesystem). Files can use all the clusters of the volume: the limit of 32768 clusters per file of MSX-DOS 2 and older Nextor versions doesn't exist anymore.
+
+The 4GB maximum applies to programs that use the file handle functions, which is the case of most programs made for MSX-DOS 2 and Nextor. Programs that use the old FCB functions (most programs made for MSX-DOS 1) keep the limits of the record numbering of these functions, which comes from CP/M: 1GB for sequential access, and 2GB for random record access and for the file size function. The random block functions can reach the whole 4GB when the record size is smaller than 64 bytes or is 256 bytes or bigger.
 
 Additionally, standard boot sectors (those present in factory-formatted or partitioned devices, or in devices formatted or partitioned by PC computers) are fully supported as well. In contrast, MSX-DOS 2 treated all disks not formatted by itself as MSX-DOS 1 disks.
 

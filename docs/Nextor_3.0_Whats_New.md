@@ -42,6 +42,8 @@
 
 [2.18. The MSX-DOS 1 system files are included](#218-the-msx-dos-1-system-files-are-included)
 
+[2.19. Files are no longer limited to 32768 clusters](#219-files-are-no-longer-limited-to-32768-clusters)
+
 [3. Information for application developers](#3-information-for-application-developers)
 
 [3.1. New function call: driver operations (_DRVRO, 7Fh)](#31-new-function-call-driver-operations-_drvro-7fh)
@@ -225,6 +227,18 @@ When the extended partition is primary partition K, the partition numbers accept
 ### 2.18. The MSX-DOS 1 system files are included
 
 Booting to the DOS prompt in MSX-DOS 1 mode requires `MSXDOS.SYS` and `COMMAND.COM`, the system files of MSX-DOS 1, which previously had to be obtained separately. Nextor 3 includes them: `MSXDOS.SYS` 1.03 and `COMMAND.COM` 1.11 are built from source code reverse engineered from the original files (and functionally identical to them), and are supplied in the root directory of the Nextor tools disk image and the tools zip archive, so that the tools disk boots to the DOS prompt both in the normal mode and in MSX-DOS 1 mode. The batch file that sets the `PATH` and `HELP` environment items in the tools disk is now `AUTOEXEC.BTM` instead of `AUTOEXEC.BAT`, so that it's executed only by `NEXTOR.SYS` (see _[2.14. Enhanced NEXTOR.SYS](Nextor_3.0_User_Manual.md#214-enhanced-nextorsys)_ in the user manual). See _[3.1. Installing Nextor](Nextor_3.0_User_Manual.md#31-installing-nextor)_ in the user manual.
+
+### 2.19. Files are no longer limited to 32768 clusters
+
+In MSX-DOS 2 and Nextor 2 a file can't have more than 32768 clusters: any read or write involving a position past that point fails with a "File allocation error", even when there's plenty of free space in the drive. For example, on a drive with 2K clusters files can't be bigger than 64M. And since the position of the last byte of the file is checked on every access, a bigger file copied to the drive from another computer can't be read at all, not even its first byte.
+
+Nextor 3 removes this limitation: files can now use all the clusters of the drive, and the maximum file size supported is 4G (strictly speaking, 4G minus one byte, the maximum allowed by the FAT filesystem), which is reachable on drives with 64K clusters (FAT16 partitions bigger than 2G). In Nextor 2 the maximum was 2G even on these drives, since 32768 clusters of 64K are 2G. See _[2.1. FAT16 filesystem support](Nextor_3.0_User_Manual.md#21-fat16-filesystem-support)_ in the user manual.
+
+Additionally, a bug that could cause data loss on drives with 64K clusters has been fixed: a write operation on a file crossing the 2G position (starting right before it and ending after it) failed, but not before freeing all the clusters of the file and leaving its directory entry inconsistent (pointing to no clusters but with a size of 2G).
+
+The 4G maximum applies to the file handle functions. The FCB functions keep the limits that come from their CP/M style record numbering, which are not new: 1G for the sequential read and write functions (16 bit extent numbers, 16K per extent), and 2G for the random record functions and the file size function (three byte numbers of 128 byte records). The random block functions can reach the whole 4G when the record size is smaller than 64 bytes (the four bytes of the random record field are used) or is 256 bytes or bigger.
+
+Note that application programs that handle file sizes or file pointers as signed 32 bit numbers may not work properly with files bigger than 2G.
 
 ## 3. Information for application developers
 
