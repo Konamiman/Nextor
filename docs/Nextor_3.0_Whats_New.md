@@ -166,6 +166,8 @@ The original MSX-DOS 1 kernel only ever tried to boot from drive A:, so if the d
 
 * The `EMUFILE` tool gains the `-8` option, which boots the emulation session in R800-ROM mode on an MSX turbo R (like `-5`/`-6`, it can be stored in the data file and works for both the one-time and persistent variants), the `-f` option, which disables the built-in software of the computer as the new 7 boot key does (see _[2.15. Built-in software that interferes with the boot can be disabled](#215-built-in-software-that-interferes-with-the-boot-can-be-disabled)_), and the `-x` option for the `set` syntax, which makes the tool ignore all the flags stored in the emulation data file and apply only the ones given in the command line. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
 
+* The `EMUFILE` tool gains the `-m[<size>]` option, for files that are concatenations of several disk images of the same size (720K by default): each disk image contained in the file is registered as a separate image file, so you can switch between them during the emulation session as usual. See _[3.4.12. EMUFILE: the disk emulation mode tool](Nextor_3.0_User_Manual.md#3412-emufile-the-disk-emulation-mode-tool)_ in the user manual.
+
 ### 2.12. The new COMMAND3.COM command interpreter
 
 Nextor 3 introduces its own command interpreter: `COMMAND3.COM`. It is based on COMMAND 2.44 (so everything you know from it applies: internal commands, aliases, command line editing and history, batch file enhancements, the HELP command, etc.) but adds new features specific to Nextor 3:

@@ -65,6 +65,12 @@ typedef struct {
 
 #define MaxFilesToProcess 32
 
+#define DefaultImageSizeInK 720
+#define MaxImageSizeInK 32767
+
+/* "X -> " + 8.3 filename + " (NN)" + CRLF */
+#define MaxFileNameInfoLength (5 + 12 + 5 + 2)
+
 #define SetupRAMAddress ((byte*)0xA000)
 
 
@@ -97,6 +103,8 @@ const char* strHelp=
     "-a <address>: Page 3 address for the 16 byte work area.\r\n"
     "              Must be a hexadecimal number between C000 and FFEF.\r\n"
     "              If missing or 0, the work area is allocated at boot time.\r\n"
+    "-m[<size>]: The files are concatenations of disk images of <size> KBytes\r\n"
+    "            each (default: 720), register each one as a separate image.\r\n"
     "-p : Print filenames and associated keys after creating the data file.\r\n"
     "-5 : Force the screen to 50Hz when the emulation session starts.\r\n"
     "-6 : Force the screen to 60Hz when the emulation session starts.\r\n"
@@ -182,6 +190,8 @@ bool bootR800;
 bool skipFirmware;
 bool resetFileFlags;
 byte fileFlags;
+uint concatenatedImageSizeInSectors;
+char* imageDisplayName;
 
 /* Some handy code defines */
 
@@ -198,7 +208,8 @@ bool ProcessArguments(char** argv, int argc);
 void ProcessCreateFileArguments(char** argv, int argc);
 void ProcessSetupFileArguments(char** argv, int argc);
 void ProcessSetupVariantArgument(char* arg);
-int ProcessOption(char optionLetter, char* optionValue);
+int ProcessOption(char* option, char* optionValue);
+void ProcessConcatenatedImagesOption(char* sizeString);
 bool IsHzOption(char optionLetter);
 void ProcessHzOption(char optionLetter);
 char* HzFlagsToString();
@@ -218,9 +229,9 @@ void GetDriveInfoForFileInFib();
 void CheckControllerForFileInFib();
 void CheckConsecutiveClustersForFileInFib();
 ulong GetFirstFileSectorForFileInFib();
-void AddFileInFibToFilesTable(ulong sector);
+void AddImageToFilesTable(ulong sector, uint sizeInSectors);
 void SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
-void AddFileInFibToFilenamesInfo();
+void AddImageToFilenamesInfo();
 void GenerateFile();
 void ConvertDirectoryToFilename(char* fileOrDirectoryName);
 void AddFileExtension(char* fileName);
@@ -233,6 +244,7 @@ void print(char* s);
 void CheckDosVersion();
 void* malloc(int size);
 uint ParseHex(char* hexString);
+ulong ParseDecimal(char* decimalString, ulong maxValue);
 void DoDosCall(byte functionCode);
 void SetupFile();
 void PsLoad();
@@ -262,7 +274,7 @@ int main(char** argv, int argc)
         SetDeviceIndexesOfFilesTableToZeroIfAllInSameDeviceAsDataFile();
         GenerateFile();
         printf(
-            "%s%s successfully generated!\r\n%i disk image file(s) registered\r\n",
+            "%s%s successfully generated!\r\n%i disk image(s) registered\r\n",
             printFilenames ? "\r\n" : "", outputFileName, totalFilesProcessed);
         if(hzFlags != 0) {
             printf("Screen mode forced to %s\r\n", HzFlagsToString());
@@ -325,8 +337,9 @@ void Initialize()
 	fileContentsBase = malloc(
         sizeof(GeneratedFileHeader) +
         (sizeof(GeneratedFileTableEntry) * MaxFilesToProcess));
-    fileNamesBase = malloc(19 * MaxFilesToProcess);
+    fileNamesBase = malloc(MaxFileNameInfoLength * MaxFilesToProcess);
     fileNamesAppendAddress = fileNamesBase;
+    imageDisplayName = malloc(12 + 5 + 1);
     
     fileHandle = 0;
 	bootFileIndex = 1;
@@ -340,6 +353,7 @@ void Initialize()
     skipFirmware = false;
     resetFileFlags = false;
     fileFlags = 0;
+    concatenatedImageSizeInSectors = 0;
 }
 
 bool ProcessArguments(char** argv, int argc) 
@@ -380,7 +394,7 @@ void ProcessCreateFileArguments(char** argv, int argc)
 	    currentArg = argv[i];
 		if(currentArg[0] == '-') {
             if(processingOptions) {
-		        i += ProcessOption(currentArg[1], argv[i+1]);
+		        i += ProcessOption(currentArg, argv[i+1]);
             } else {
                 Terminate("Can't process more options after filenames");
             }
@@ -459,9 +473,11 @@ void ProcessSetupVariantArgument(char* arg)
     }
 }
 
-int ProcessOption(char optionLetter, char* optionValue)
+int ProcessOption(char* option, char* optionValue)
 {
-    optionLetter |= 32;
+    char optionLetter;
+
+    optionLetter = option[1] | 32;
 
 	if(optionLetter == 'b') {
 	    ProcessBootIndexOption(optionValue);
@@ -503,8 +519,28 @@ int ProcessOption(char optionLetter, char* optionValue)
         return 0;
     }
 
+    if(optionLetter == 'm') {
+        ProcessConcatenatedImagesOption(option + 2);
+        return 0;
+    }
+
 	InvalidParameter();
 	return 0;
+}
+
+/* The size goes right after the "m" ("-m360"), not in the next argument:
+   "-m 360" would take "360" as the output file name. */
+
+void ProcessConcatenatedImagesOption(char* sizeString)
+{
+    uint sizeInK;
+
+    sizeInK = *sizeString == '\0' ? DefaultImageSizeInK : (uint)ParseDecimal(sizeString, MaxImageSizeInK);
+    if(sizeInK == 0) {
+        InvalidParameter();
+    }
+
+    concatenatedImageSizeInSectors = sizeInK * 2;
 }
 
 /* Only the character right after the "-" matters, so that
@@ -680,7 +716,7 @@ void ProcessFilename(char* fileName)
 
 void TooManyFiles()
 {
-    printf("*** Too many files specified, maximum is %i\r\n", MaxFilesToProcess);
+    printf("*** Too many disk images specified, maximum is %i\r\n", MaxFilesToProcess);
     Terminate(null);
 }
 
@@ -708,34 +744,67 @@ bool DirectoryExists(char* dirName)
     return (fib->attributes & ATTR_SUB_DIR) != 0;
 }
 
+/* With -m the file is a concatenation of disk images of the same size,
+   each one gets its own entry in the files table (all of them pointing
+   to the same file, at different offsets). The kernel just sees them
+   as different disk image files. */
+
 void ProcessFileFound()
 {
     char key;
 	ulong sector;
+    ulong imageSizeInBytes;
+    ulong imagesCount;
+    uint imageSizeInSectors;
+    int i;
 
 	GetDriveInfoForFileInFib();
     CheckControllerForFileInFib();
     CheckConsecutiveClustersForFileInFib();
-    
+
     if(fib->fileSize < 512) {
         printf("*** %s is too small (< 512 bytes) or empty - skipped\r\n", fib->filename);
         return;
     }
-    
-    if(fib->fileSize >= (32768 * 1024)) {
-        printf("*** %s is too big (> 32 MBytes) - skipped\r\n", fib->filename);
-        return;
-    }
-    
-	sector = driveInfo->firstSectorNumber + GetFirstFileSectorForFileInFib();
-	AddFileInFibToFilesTable(sector);
-	AddFileInFibToFilenamesInfo();
-	
-    totalFilesProcessed++;
 
-    if(printFilenames) {
-        key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
-        printf("%c -> %s\r\n", key, fib->filename);
+    if(concatenatedImageSizeInSectors == 0) {
+        if(fib->fileSize >= (32768 * 1024)) {
+            printf("*** %s is too big (> 32 MBytes) - skipped\r\n", fib->filename);
+            return;
+        }
+        imagesCount = 1;
+        imageSizeInSectors = (uint)(fib->fileSize >> 9);
+    } else {
+        imageSizeInBytes = (ulong)concatenatedImageSizeInSectors << 9;
+        if((fib->fileSize % imageSizeInBytes) != 0) {
+            printf("*** The size of %s is not a multiple of %iK\r\n", fib->filename, concatenatedImageSizeInSectors >> 1);
+            Terminate(null);
+        }
+        imagesCount = fib->fileSize / imageSizeInBytes;
+        if(imagesCount > (ulong)(MaxFilesToProcess - totalFilesProcessed)) {
+            TooManyFiles();
+        }
+        imageSizeInSectors = concatenatedImageSizeInSectors;
+    }
+
+	sector = driveInfo->firstSectorNumber + GetFirstFileSectorForFileInFib();
+
+    for(i = 0; i < (int)imagesCount; i++) {
+        strcpy(imageDisplayName, fib->filename);
+        if(imagesCount > 1) {
+            sprintf(imageDisplayName + strlen(imageDisplayName), " (%i)", i + 1);
+        }
+
+        AddImageToFilesTable(sector, imageSizeInSectors);
+        AddImageToFilenamesInfo();
+        sector += imageSizeInSectors;
+
+        totalFilesProcessed++;
+
+        if(printFilenames) {
+            key = totalFilesProcessed < 10 ? totalFilesProcessed + '0' : totalFilesProcessed - 10 + 'A';
+            printf("%c -> %s\r\n", key, imageDisplayName);
+        }
     }
 }
 
@@ -802,7 +871,7 @@ ulong GetFirstFileSectorForFileInFib()
         ((ulong)(fib->startCluster - 2) * (ulong)sectorsPerCluster);
 }
 
-void AddFileInFibToFilesTable(ulong sector)
+void AddImageToFilesTable(ulong sector, uint sizeInSectors)
 {
     GeneratedFileTableEntry* tableEntry;
     
@@ -815,17 +884,17 @@ void AddFileInFibToFilesTable(ulong sector)
     tableEntry->deviceIndex = driveInfo->deviceIndex;
     tableEntry->logicalUnitNumber = driveInfo->logicalUnitNumber;
     tableEntry->firstFileSector = sector;
-    tableEntry->fileSizeInSector = (uint)(fib->fileSize >> 9);
+    tableEntry->fileSizeInSector = sizeInSectors;
 }
 
-void AddFileInFibToFilenamesInfo()
+void AddImageToFilenamesInfo()
 {
     int fileIndex = totalFilesProcessed + 1;
-    
+
     sprintf(fileNamesAppendAddress, "%c -> ", fileIndex <= 9 ? fileIndex + '0' : fileIndex - 10 + 'A');
     fileNamesAppendAddress += 5;
-    strcpy(fileNamesAppendAddress, fib->filename);
-    fileNamesAppendAddress += strlen(fib->filename);
+    strcpy(fileNamesAppendAddress, imageDisplayName);
+    fileNamesAppendAddress += strlen(imageDisplayName);
     *fileNamesAppendAddress++ = '\r';
     *fileNamesAppendAddress++ = '\n';
 }
@@ -1132,6 +1201,26 @@ uint ParseHex(char* hexString)
         hexString++;
     }
     
+    return result;
+}
+
+ulong ParseDecimal(char* decimalString, ulong maxValue)
+{
+    ulong result;
+    char digit;
+
+    result = 0;
+    while((digit = *decimalString) != 0) {
+        if(digit < '0' || digit > '9') {
+            InvalidParameter();
+        }
+        result = (result * 10) + (digit - '0');
+        if(result > maxValue) {
+            InvalidParameter();
+        }
+        decimalString++;
+    }
+
     return result;
 }
 
