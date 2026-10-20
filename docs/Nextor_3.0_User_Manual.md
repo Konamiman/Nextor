@@ -912,6 +912,8 @@ EMUFILE [<options>] <output file> <files> [<files> ...]
 
 `<output file>` is the name of the emulation data file that will be created (default extension is .EMU), and `<files>` are the disk image files that will be used for the emulation (these can contain wildcards). Numbers (for disk change) are assigned to the disk image files in the same order as they are specified; when using wildcards, in the order they are found in the storage device that contains them (the same order that you see when you run the DIR command).
 
+The `-m[<size>]` option tells `EMUFILE.COM` that the files are concatenations of several disk images of the same size, `<size>` KBytes each (720 if omitted), as distributed for some multi-disk games: each disk image contained in a file is registered as a separate image file, with its own number. For example `EMUFILE -m game.emu game.dsk` registers the three disk images contained in a 2160K `game.dsk` file as images 1, 2 and 3, and `EMUFILE -m360 game.emu game.dsk` would register six 360K images instead. The size goes right after the `m` (`-m360`, not `-m 360`) and must be between 1 and 32767. The option applies to all the specified files, so a file containing just one disk image of that size is registered as usual; but the size of all the files must be a multiple of the specified size, otherwise `EMUFILE.COM` will fail. The limit of 32 image files applies to the total number of disk images registered.
+
 The `-b <number>` option allows you to specify the number of the disk image file that will be used to boot when the emulation session starts, default is 1.
 
 The `-a <address>` option allows you to specify the page 3 address that Nextor will use as work area (about 16 bytes) during the emulation session, must be a hexadecimal number in page 3 (C000 or higher). If not specified, this area will be allocated by Nextor before starting the emulation session.
@@ -1562,7 +1564,7 @@ Both variants of disk emulation mode can be entered by using the `EMUFILE.COM` t
 
 #### 3.9.2. Changing the image file
 
-Up to 32 disk image files can be specified for an emulation session, but only one of them is active at a given time. In order to switch to a different file, you must press the appropriate key while the computer is trying to read the file; this will emulate a disk change. The keys are 1-9 for the first nine image files, then A-W for the rest, in alphabetical order.
+Up to 32 disk image files can be specified for an emulation session, but only one of them is active at a given time. In order to switch to a different file, you must press the appropriate key while the computer is trying to read the file; this will emulate a disk change. The keys are 1-9 for the first nine image files, then A-W for the rest, in alphabetical order. A file containing several concatenated disk images can be used too, with the `-m` option of `EMUFILE.COM`: each of the disk images gets its own key (see _[3.4.12. EMUFILE: the disk emulation mode tool](#3412-emufile-the-disk-emulation-mode-tool)_).
 
 For example, assume that you are playing a two-disk game. You boot with disk 1 and at some point the game asks you to insert disk 2 and press the space key. Just press 2 (the key assigned to the second image file) and the space key at the same time and you're good to go.
 
