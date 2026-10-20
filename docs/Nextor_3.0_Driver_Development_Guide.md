@@ -880,7 +880,7 @@ Drivers can use this routine to inform the kernel about the highest device numbe
 
 Note that the returned value is just an upper bound for the scan, not a device count: it isn't required that every device number up to the maximum corresponds to an existing device. For example, a driver could report a maximum device number of 10 while only devices 8, 9 and 10 actually exist; not recommended, but perfectly legal (the driver must return `RESULT_INVALID_DEVICE` for the device numbers that don't exist, as usual). This query has no effect on how drives are mapped to the devices at boot time.
 
-There is one real limit on device numbers, though: the automatic partition search (the procedure that maps drives to partitions at boot time, and again on the first access to a drive that is attached to a device with no partition assigned) only supports device numbers 1 to 63 (internally, the two high bits of the device number are used as temporary flags during the search). Devices with higher numbers work normally in every other way, including having drives explicitly mapped to their partitions, but they can't take part in the automatic search; therefore drivers are advised to simply number their devices sequentially starting at 1 (see _[4.1. One single driver model](#41-one-single-driver-model)_ for some guidelines about the order).
+Any device number from 1 to 255 can be used, but drivers are advised to simply number their devices sequentially starting at 1 so that these scans are as short as possible (see _[4.1. One single driver model](#41-one-single-driver-model)_ for some guidelines about the order).
 
 Returning `RESULT_NOT_IMPLEMENTED` is equivalent to returning `RESULT_OK` and B=4.
 

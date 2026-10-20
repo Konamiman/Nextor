@@ -590,8 +590,6 @@ If 5 is pressed at boot time, each driver gets one single drive, and the device 
 
 The same rules are used when a drive is remapped to its default state after booting (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_): the drive is mapped to the first device that can take it, in device number order, skipping the partitions that are already mapped to other drives (and the devices without active partitions that already have a drive).
 
-The automatic mapping procedure only supports devices with numbers 1 to 63: this is a current limitation of Nextor that could disappear in future versions. In the case of a driver exposing devices with higher numbers, drives can be mapped to their partitions explicitly (see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), but these devices won't get drives automatically.
-
 The partitions of each device are scanned in this order: first the primary partitions (empty entries in the partition table are skipped), until an extended one is found; then, if an extended partition was found (it can be any of the primary partitions), the logical partitions inside it. Primary partitions placed after the extended partition in the partition table are ignored.
 
 Note that in order to speed up the booting procedure, only the first 9 partitions of each device are scanned during this procedure; consequently, FDISK (see _[3.5. The built-in partitioning tool](#35-the-built-in-partitioning-tool)_) allows changing the "active" flag on these first 9 partitions only.
