@@ -127,6 +127,7 @@ CHGF3:
 	push	bc
 
 	ld	a,(ix+EMU_FILE_DEVICE_NUMBER##) ;data file dev index
+	and	01111111b	;Remove the file changed flag
 
 	ld	l,(ix+EMU_FILE_FIRST_SECTOR##)
 	ld	h,(ix+EMU_FILE_FIRST_SECTOR##+1)
