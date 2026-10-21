@@ -283,7 +283,7 @@ The procedure for creating the complete Nextor kernel ROM file consists basicall
 
 In order to manually create a complete Nextor ROM file, the following recipe must be followed. The file positions mentioned are zero based.
 
-1.  Create a copy of the kernel base file, `Nextor-3.x.x-beta1.base.dat` or its `NO_UNDOC` variant, `Nextor-3.x.x-beta1.base.NO_UNDOC.dat`.
+1.  Create a copy of the kernel base file, `Nextor-3.x.x.base.dat` or its `NO_UNDOC` variant, `Nextor-3.x.x.base.NO_UNDOC.dat`.
 
 2.  Append the page 0 code at the end of the file. This code can be simply copied from the first 255 bytes of the kernel base file itself.
 
