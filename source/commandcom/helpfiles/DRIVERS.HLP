@@ -13,7 +13,7 @@ Use:         For every disk driver: its name and version (or  'Legacy
         that were assigned to it at boot time.
 
              The same function is provided by the DRIVERS.COM  exter-
-        nal tool, which also works on older Nextor versions.
+        nal tool, which also works with COMMAND2.COM.
 
 Examples:
 

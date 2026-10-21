@@ -28,7 +28,7 @@ Use:         The slot argument selects the Nextor driver  to  query:
         driver' is reported for a legacy MSX-DOS one.
 
              The same function is provided by the DEVINFO.COM exter-
-        nal tool, which also works on older Nextor versions.
+        nal tool, which also works with COMMAND2.COM.
 
 Examples:
 

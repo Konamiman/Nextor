@@ -6,11 +6,16 @@ FIB	equ	3000h
 PT_EXT: equ 5
 PT_EXT_LBA: equ 15
 
+	;Configuration file (/F) limits. The command line passed by DOS at 80h
+	;starts with a space, so 126 characters is what it can actually hold.
+MAX_FILE_SIZE: equ 4096
+MAX_LINE_LEN: equ 126
+
 	jp	START
 
       ; -------------------------------------------------------------------------------
 	db	13
-	db	"MAPDRV v1.4 - map a drive to a driver, device and partition,",13,10
+	db	"MAPDRV v1.5 - map a drive to a driver, device and partition,",13,10
 	db      "         or mount a file on a drive"
 	db	13,10
 	db	"Usage:",13,10
@@ -18,6 +23,7 @@ PT_EXT_LBA: equ 15
 	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<seg>]]",13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [0]",13,10
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
+	db	"MAPDRV /F <file> [/K]",13,10
 	db	13,10
 	db	"Maps the drive to the specified partition of the specified device",13,10
 	db	"of the driver in the specified slot (must be a Nextor driver).",13,10
@@ -54,6 +60,11 @@ PT_EXT_LBA: equ 15
 	db  "mapped to the drive. A file cannot be mapped to its own drive, or to a drive",13,10
 	db  "that contains a file that has been mapped. Prepend the filename with '/'",13,10
 	db	"if the first character of its name is a digit.",13,10
+	db	13,10
+	db	"/F runs the MAPDRV command lines contained in a text file, one per line,",13,10
+	db	"in order. Blank lines and lines starting with '#' or ';' are ignored.",13,10
+	db	"Processing stops at the first line that fails, unless /K is specified.",13,10
+	db	"Lines can be up to 126 characters long, and the file up to 4096 bytes.",13,10
 	db	1Ah
 
 USAGE_S:
@@ -63,6 +74,7 @@ USAGE_S:
 	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [<slot>[-<subslot>][:<seg>]]",13,10
 	db	"MAPDRV [/L] <drive>: <partition>|d|u|s [<device>] [0]",13,10
 	db  "MAPDRV <drive>: [/]<filename> [/ro]",13,10
+	db	"MAPDRV /F <file> [/K]",13,10
 	db	13,10
 	db	"TYPE MAPDRV.COM for more details.",13,10
 	db	0
@@ -74,7 +86,7 @@ START:
 	ld	a,1
 	call	EXTPAR##
 	jr	nz,FOUND_PARAMS
-	
+
 	ld	de,USAGE_S
 	ld	c,_ZSTROUT##
 	call	5
@@ -82,6 +94,29 @@ START:
 	ld	c,_TERM##
 	jp	5
 FOUND_PARAMS:
+
+	ld	hl,BUF
+	ld	c,'f'
+	call	IS_SWITCH
+	jp	z,FILE_MODE
+
+
+	;--- Process the command line. Also run once per line of a configuration
+	;    file, then the line is at 80h as if it was the command line.
+	;    Input: first parameter in BUF
+	;    Ends by jumping to TERM.
+
+DO_LINE:
+
+	;* Reset the work variables, a previous line may have changed them
+
+	ld	hl,PARTITION
+	ld	de,PARTITION+1
+	ld	bc,VARS_END-PARTITION-1
+	ld	(hl),0
+	ldir
+	ld	hl,-1
+	ld	(SLOT),hl	;Also SEGMENT
 
 	;--- Get parameters
 
@@ -105,8 +140,7 @@ FOUND_PARAMS:
 	ld	a,2
 	call	EXTPAR##
 	ld	b,.NOPAR##
-	ld	c,_TERM##
-	jp	c,5
+	jp	c,TERM
 
 	inc	iy
 NO_LOCK:
@@ -114,7 +148,9 @@ NO_LOCK:
 	;* Drive letter
 
 	ld	hl,BUF
-	call	CHKLET##
+	call	CHKLET_NOTERM##
+	cp	.IPARM##
+	jp	z,IPARM_TERM
 	dec	a
 	ld	(DRIVE),a
 
@@ -122,8 +158,7 @@ NO_LOCK:
 
 	call	GET_NEXT_PARAM
 	ld	b,.NOPAR##
-	ld	c,_TERM##
-	jp	c,5
+	jp	c,TERM
 
 	ld	a,(de)
 	cp	"/"
@@ -177,7 +212,8 @@ IS_PART2:
 	jp	c,DO_MAP
 
 	ld	hl,BUF
-	call	GETSLOT##
+	call	GETSLOT_NOTERM##
+	jp	c,IPARM_TERM
 	or	a
 	jr	nz,NO_MAIN
 	ld	a,(0F348h)
@@ -197,8 +233,7 @@ DO_MAP_DU:
 	ld	c,_MAPDRV##
 	call	5
 	ld	b,a
-	ld	c,_TERM##
-	jp	5
+	jp	TERM
 
 
 	;--- Do the mapping to partition and device
@@ -216,14 +251,12 @@ DO_MAP:
 	ld	c,_GDLI##
 	call	5
 	ld	b,a
-	ld	c,_TERM##
-	jp	nz,5
+	jp	nz,TERM
 
 	ld	a,(BUF_LETTER)
 	cp	1
 	ld	b,.IDRV##
-	ld	c,_TERM##
-	jp	nz,5		;Error if not assigned to a block device
+	jp	nz,TERM		;Error if not assigned to a block device
 
 	ld	a,(DEVICE)
 	or	a
@@ -241,14 +274,12 @@ OK_DEVICE:
 	ld	c,_GDRVR##
 	call	5
 	ld	b,a
-	ld	c,_TERM##
-	jp	nz,5
+	jp	nz,TERM
 
 	ld	a,(BUF_DRIVER+4)
 	and	1
 	ld	b,.IDRVR##
-	ld	c,_TERM##
-	jp	z,5		;Error if not assigned to a Nextor driver
+	jp	z,TERM		;Error if not assigned to a Nextor driver
 
 	ld	a,(BUF_DRIVER)
 	ld	(SLOT),a
@@ -307,9 +338,8 @@ FIND_EXT_LOOP:
 	jr	z,FIND_EXT_NEXT	;Empty primary partition: keep searching
 	ld	h,b
 	ld	b,a
-	ld	c,_TERM##
 	or	a
-	jp	nz,5
+	jp	nz,TERM
 
 	ld	a,h
 	cp	PT_EXT	;Is extended?
@@ -357,8 +387,7 @@ OK_ADJUST_PARTITION::
 	ld	c,_GPART##
 	call	5
 	ld	b,a
-	ld	c,_TERM##
-	jp	nz,5
+	jp	nz,TERM
 OK_PARTINFO:
 
 
@@ -387,8 +416,7 @@ OK_PARTINFO:
 	ld	b,a
 DO_LOCK_OK:
 
-	ld	c,_TERM##
-	jp	5
+	jp	TERM
 
 	;--- Do the mapping to a file.
 	;    FIB is appropriately filled already.
@@ -401,8 +429,6 @@ IS_FILE_DE:
 	ld	ix,FIB
 	call	5
 	jp	nz,DO_TERM
-
-	call	CHKNEX21
 
 	; * First, extract "/ro" parameter if present
 
@@ -435,21 +461,354 @@ DO_FILE:
 	call	5
 DO_TERM:
 	ld	b,a
-	ld	c,_TERM##
-	jp	5
+	jp	TERM
 
-EXTNUM_TERM:
-	call	EXT8##
-	ret	nc
 IPARM_TERM:
 	ld	b,.IPARM##
+
+	;--- Finish processing the command line with error code B (0 = success):
+	;    terminate the program, or go on with the next line of the
+	;    configuration file in /F mode.
+
+TERM:
+	ld	a,(IN_FILE_MODE)
+	or	a
+	jp	nz,LINE_DONE
 	ld	c,_TERM##
 	jp	5
 
-NOPARM_TERM:
+
+	;--- /F: run the lines of a configuration file
+
+FILE_MODE:
+
+	;* Get the file name and the optional /K
+
+	ld	de,BUF
+	ld	a,2
+	call	EXTPAR##	;Also A = number of parameters
 	ld	b,.NOPAR##
+	jp	c,FILE_TERM
+	cp	3+1
+	ld	b,.INP##
+	jp	nc,FILE_TERM
+	cp	3
+	jr	c,OK_FILE_PARAMS
+
+	ld	de,FIB
+	ld	a,3
+	call	EXTPAR##
+	ld	hl,FIB
+	ld	c,'k'
+	call	IS_SWITCH
+	ld	b,.IPARM##
+	jp	nz,FILE_TERM
+	ld	a,-1
+	ld	(KEEP_GOING),a
+OK_FILE_PARAMS:
+
+	;* Read the whole file and close it before running any line,
+	;  since a line could remap the drive that contains it.
+	;  Reading one extra byte tells if it is too big.
+
+	ld	de,BUF
+	ld	a,1		;Open for reading only
+	ld	c,_OPEN##
+	call	5
+	or	a
+	jr	z,OK_OPEN
+	ld	b,a
+	jp	FILE_TERM
+OK_OPEN:
+
+	push	bc
+	ld	de,FILE_BUF
+	ld	hl,MAX_FILE_SIZE+1
+	ld	c,_READ##
+	call	5
+	cp	.EOF##
+	jr	nz,OK_READ
+	xor	a		;Empty file
+	ld	h,a
+	ld	l,a
+OK_READ:
+	pop	bc
+	push	af
+	push	hl
+	ld	c,_CLOSE##
+	call	5
+	pop	hl
+	pop	af
+	ld	b,a
+	or	a
+	jp	nz,FILE_TERM
+
+	ld	de,MAX_FILE_SIZE+1
+	push	hl
+	sbc	hl,de
+	pop	hl
+	ld	b,.BFSZ##
+	jp	nc,FILE_TERM
+	ld	de,FILE_BUF
+	add	hl,de
+	ld	(hl),1Ah	;End of file mark
+
+	;* Set up the line by line processing
+
+	ld	hl,FILE_BUF
+	ld	(LINE_PTR),hl
+	ld	(SAVED_SP),sp
+	ld	a,-1
+	ld	(IN_FILE_MODE),a
+	ld	de,ABORT_RTN
+	ld	c,_DEFAB##
+	call	5
+	jr	NEXT_LINE
+
+	;* A line has been processed, with error code B (0 = success).
+	;  Print the line number and contents when it has failed; the error
+	;  message is printed later, so that the last one can be printed
+	;  by the command interpreter when terminating with its error code.
+
+LINE_DONE:
+	ld	sp,(SAVED_SP)
+	ld	a,b
+	or	a
+	jr	z,NEXT_LINE
+
+	push	bc
+	call	FLUSH_ERROR
+	ld	de,LINE_ERR_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	hl,(LINE_NUM)
+	call	PRINT_NUM
+	ld	de,COLON_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,81h
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,CRLF_S
+	ld	c,_ZSTROUT##
+	call	5
+	pop	bc
+
+	ld	a,b
+	ld	(PENDING_ERR),a
+	ld	a,(KEEP_GOING)
+	or	a
+	jp	z,FILE_END
+
+	;* Get the next line from the file, put it at 80h as a command line
+
+NEXT_LINE:
+	ld	hl,(LINE_NUM)
+	inc	hl
+	ld	(LINE_NUM),hl
+
+	ld	hl,(LINE_PTR)
+	ld	a,(hl)
+	cp	1Ah
+	jp	z,FILE_END
+
+SKIP_BLANKS:
+	ld	a,(hl)
+	cp	' '
+	jr	z,SKIP_BLANK
+	cp	9
+	jr	nz,SKIP_BLANKS_END
+SKIP_BLANK:
+	inc	hl
+	jr	SKIP_BLANKS
+SKIP_BLANKS_END:
+
+	;  Copy the line converting tabs to spaces, since EXTPAR only
+	;  separates parameters with spaces. B = length, C = .BUFUL if the
+	;  line is too long; spaces past the maximum length are ignored.
+
+	ld	de,81h
+	ld	bc,0
+COPY_LINE:
+	ld	a,(hl)
+	cp	13
+	jr	z,COPY_LINE_END
+	cp	10
+	jr	z,COPY_LINE_END
+	cp	1Ah
+	jr	z,COPY_LINE_END
+	inc	hl
+	cp	9
+	jr	nz,COPY_NO_TAB
+	ld	a,' '
+COPY_NO_TAB:
+	push	af
+	ld	a,b
+	cp	MAX_LINE_LEN
+	jr	c,COPY_CHAR
+	pop	af
+	cp	' '
+	jr	z,COPY_LINE
+	ld	c,.BUFUL##
+	jr	COPY_LINE
+COPY_CHAR:
+	pop	af
+	ld	(de),a
+	inc	de
+	inc	b
+	jr	COPY_LINE
+
+	;  Skip the line terminator: CR, LF or CR+LF
+	;  (the end of file mark is left for the next round)
+
+COPY_LINE_END:
+	cp	1Ah
+	jr	z,OK_LINE_TERM
+	inc	hl
+	cp	13
+	jr	nz,OK_LINE_TERM
+	ld	a,(hl)
+	cp	10
+	jr	nz,OK_LINE_TERM
+	inc	hl
+OK_LINE_TERM:
+	ld	(LINE_PTR),hl
+
+	xor	a
+	ld	(de),a
+	ld	a,b
+	ld	(80h),a
+
+	;  Skip blank lines and comments, then process the line
+
+	or	a
+	jr	z,NEXT_LINE
+	ld	a,(81h)
+	cp	'#'
+	jr	z,NEXT_LINE
+	cp	';'
+	jr	z,NEXT_LINE
+
+	ld	b,c
+	ld	a,c
+	or	a
+	jp	nz,LINE_DONE
+
+	ld	de,BUF
+	ld	a,1
+	call	EXTPAR##
+	ld	hl,BUF
+	ld	c,'f'
+	call	IS_SWITCH
+	jp	nz,DO_LINE
+	jp	IPARM_TERM	;No recursion
+
+	;* End of file, or a line failed without /K
+
+FILE_END:
+	ld	a,(PENDING_ERR)
+	ld	b,a
+	xor	a
+	ld	(PENDING_ERR),a	;COMMAND will print it, not ABORT_RTN
+FILE_TERM:
 	ld	c,_TERM##
 	jp	5
+
+
+	;--- Abort routine for /F mode: the program can terminate early
+	;    (e.g. Ctrl-STOP, or abort after a disk error), don't lose
+	;    the pending error message then.
+
+ABORT_RTN:
+	push	af
+	push	bc
+	call	FLUSH_ERROR
+	pop	bc
+	pop	af
+	ret
+
+
+	;--- Print the message of the pending error, if any,
+	;    with the same layout used by the command interpreter
+
+FLUSH_ERROR:
+	ld	a,(PENDING_ERR)
+	or	a
+	ret	z
+	ld	b,a
+	xor	a
+	ld	(PENDING_ERR),a
+	ld	de,BUF
+	ld	c,_EXPLAIN##
+	call	5
+	ld	de,STARS_S
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,BUF
+	ld	c,_ZSTROUT##
+	call	5
+	ld	de,MSG_END_S
+	ld	c,_ZSTROUT##
+	jp	5
+
+
+	;--- Print a number in decimal
+	;    Input: HL = Number
+
+PRINT_NUM:
+	ld	d,0		;D<>0 once a digit has been printed
+	ld	bc,-10000
+	call	PRINT_DIGIT
+	ld	bc,-1000
+	call	PRINT_DIGIT
+	ld	bc,-100
+	call	PRINT_DIGIT
+	ld	bc,-10
+	call	PRINT_DIGIT
+	ld	d,1
+	ld	bc,-1
+PRINT_DIGIT:
+	ld	a,'0'-1
+PRINT_DIGIT_LOOP:
+	inc	a
+	add	hl,bc
+	jr	c,PRINT_DIGIT_LOOP
+	sbc	hl,bc
+	cp	'0'
+	jr	nz,PRINT_DIGIT_DO
+	inc	d
+	dec	d
+	ret	z		;Skip leading zeros
+PRINT_DIGIT_DO:
+	ld	d,1
+	ld	e,a
+	push	de
+	push	hl
+	ld	c,_CONOUT##
+	call	5
+	pop	hl
+	pop	de
+	ret
+
+
+	;Check if a parameter is a given switch.
+	;Input:   HL = Parameter address, C = Switch letter (lowercase)
+	;Output:  Z if the parameter is "/<letter>" (any case)
+	;Corrupts: A, HL
+
+IS_SWITCH:
+	ld	a,(hl)
+	cp	'/'
+	ret	nz
+	inc	hl
+	ld	a,(hl)
+	or	32
+	cp	c
+	ret	nz
+	inc	hl
+	ld	a,(hl)
+	or	a
+	ret
 
 
 	;Get the next command-line parameter.
@@ -466,43 +825,21 @@ GET_NEXT_PARAM:
 	jp	EXTPAR##
 
 
-CHKNEX21:
-	ld	b,05Ah
-	ld	hl,01234h
-	ld	de,0ABCDh
-	ld	c,_DOSVER##
-	ld	ix,0
-	call	5
+LINE_ERR_S:	db	"Error in line ",0
+COLON_S:	db	": ",0
+STARS_S:	db	13,10,"*** ",0
+MSG_END_S:	db	13,10
+CRLF_S:	db	13,10,0
 
-	ld	a,b
-	cp	2
-	jr	c,CHK21_ERR
-	push	ix
-	pop	bc
-	ld	a,b
-	cp	1	;NEXTOR_ID
-	jr	nz,CHK21_ERR
-	ld	a,c
-	cp	2
-	jr	c,CHK21_ERR
-	ret	nz	;Nextor 3 or later
+	;Configuration file processing (not reset per line)
+IN_FILE_MODE:	db	0
+KEEP_GOING:	db	0
+PENDING_ERR:	db	0
+LINE_NUM:	dw	0
+LINE_PTR:	dw	0
+SAVED_SP:	dw	0
 
-	push	iy	;Nextor 2: require 2.1+
-	pop	bc
-	ld	a,b
-	or	a
-	ret	nz
-
-CHK21_ERR:
-	ld	de,BADKER21_MSG
-	ld	c,_STROUT##
-	call	5
-	ld	c,_TERM0##
-	jp	5
-
-BADKER21_MSG:
-	db	"*** File mounting requires Nextor 2.1 or later",13,10,"$"
-
+	;Command line processing (reset per line)
 PARTITION:	db	0
 SKIP_PART:	db	0
 DO_LOCK:	db	0
@@ -513,9 +850,12 @@ SLOT:	db	-1
 SEGMENT:	db	255
 DEVICE:	db	0
 FILE_FLAGS:	db	0
+SECTOR:	ds	4	;Written at SLOT+4 for _MAPDRV
+VARS_END:
 
 BUF: equ 2000h
 BUF_DRIVER: equ BUF
 BUF_LETTER: equ BUF
+FILE_BUF: equ 4000h
 
 	end

@@ -37,7 +37,7 @@ SPECIAL_COMS := CHKDSK.COM UNDEL.COM MSR.COM MKDSK.COM
 GENERIC_COMS := $(filter-out $(SPECIAL_COMS),$(COMS))
 INCS := ../kernel/macros.inc ../kernel/const.inc
 SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
-SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot
+SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot getslot_noterm
 SHARED_RELS  := $(foreach n,$(SHARED_NAMES),$(call uc,$(n)).REL)
 RELS := $(SDK_RELS) DATA.REL $(SHARED_RELS)
 

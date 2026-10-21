@@ -698,7 +698,7 @@ All the tools rely on the new function calls provided by Nextor for its behavior
 
 Please note that none of these tools work in MSX-DOS 1 mode (except `MSR`, which is intended for MSX-DOS 1, see _[3.4.16. MSR: the mapper support routines installer for MSX-DOS 1](#3416-msr-the-mapper-support-routines-installer-for-msx-dos-1)_); however, there are BASIC CALL commands that provide equivalent functionality for most of the tools.
 
-Note also that when `COMMAND3.COM` is the command interpreter, the `MAPDRV`, `DRIVERS`, `DEVINFO`, `DRVINFO`, `LOCK`, `RALLOC` and `Z80MODE` tools are available as internal commands with the same names, syntax and behavior, so the `.COM` files are not needed: typing the bare command name runs the internal version, as with any internal command (see _[3.10.2. The new internal commands](#3102-the-new-internal-commands)_). The `.COM` tools are still supplied because they also work with `COMMAND2.COM` and with older Nextor versions.
+Note also that when `COMMAND3.COM` is the command interpreter, the `MAPDRV`, `DRIVERS`, `DEVINFO`, `DRVINFO`, `LOCK`, `RALLOC` and `Z80MODE` tools are available as internal commands with the same names, syntax and behavior (except for the `/F` option of `MAPDRV`, see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_), so the `.COM` files are not needed: typing the bare command name runs the internal version, as with any internal command (see _[3.10.2. The new internal commands](#3102-the-new-internal-commands)_). The `.COM` tools are still supplied because they also work with `COMMAND2.COM`.
 
 Some of the tools admit a `<driver location>` parameter. The actual syntax for this parameter is `<slot>[-<subslot>][:<segment>]|0`, with the following meaning:
 
@@ -755,6 +755,30 @@ MAPDRV <drive> <file> [/ro]
 The `/ro` parameter will cause the file to be mounted in read-only mode. However, if the file has the read-only attribute set, it will always be mounted in read-only mode, even if no `/ro` parameter is supplied.
 
 There are some restrictions in place when mounting files to drives. See _[3.8. Mounting files](#38-mounting-files)_ for details.
+
+MAPDRV can also run several mappings in one go, reading them from a configuration file:
+
+```
+MAPDRV /F <file> [/K]
+```
+
+The configuration file is a text file in which each line is processed exactly as if it were the command line passed to MAPDRV (any of the syntaxes explained above can be used, except `/F` itself), in the order in which the lines appear in the file. Blank lines and lines starting with `#` or `;` (after any spaces or tabs) are ignored; tabs can be used to separate the parameters. Lines can be up to 126 characters long (the most that fits in a command line), and the file can be up to 4096 bytes long.
+
+When a line fails, its line number and contents are displayed together with the error message. Processing stops at the first line that fails, unless `/K` is specified: then the remaining lines are processed anyway, and MAPDRV terminates with the error code of the last line that failed.
+
+For example, the following configuration file maps three partitions of the device 1 of the primary Nextor controller (locking the last one) and mounts a disk image file:
+
+```
+# Partitions of the main device
+E: 2 1 0
+F: 3 1 0
+/L G: 4 1 0
+
+; Games disk
+H: A:\DISKS\GAMES.DSK /ro
+```
+
+This is useful mainly when `COMMAND2.COM` is the command interpreter, since each execution of MAPDRV.COM implies loading it from disk (and then reloading the command interpreter). The `/F` option isn't available in the `MAPDRV` internal command of `COMMAND3.COM`; with that interpreter, type the extension (e.g. `MAPDRV.COM /F MAPDRV.INI`) to run the tool instead of the internal command, or write the `MAPDRV` commands in a batch file instead.
 
 
 #### 3.4.2. DRIVERS: the driver information tool
