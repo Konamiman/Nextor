@@ -53,7 +53,13 @@ Use:         The first form maps the drive to the given partition  of
         tion number; /RO mounts the file in read only mode.
 
              The same function is provided by the MAPDRV.COM external
-        tool, which also works on older Nextor versions.
+        tool, which also works with COMMAND2.COM.
+
+             The  MAPDRV.COM  tool  also has a /F file [/K] form, not
+        available in this command, that runs the MAPDRV command lines
+        contained  in  a text file (see TYPE MAPDRV.COM for details).
+        Include the extension, as in MAPDRV.COM /F MAPDRV.INI, to run
+        the tool instead of this command.
 
 Examples:
 
