@@ -308,7 +308,7 @@ Recipes (and you) can rely on these being set inside the container:
 
 | Variable | Value | Use |
 |---|---|---|
-| `NEXTOR_VERSION` | e.g. `3.0.0-beta1` | the kernel version baked in |
+| `NEXTOR_VERSION` | e.g. `3.0.0` | the kernel version baked in |
 | `NEXTOR_BASE` | `.../kernel_base/kernel_base.dat` | default base file for `mknexrom` |
 | `NEXTOR_KERNEL_BASE_DIR` | `.../kernel_base` | directory of the base files |
 | `NEXTOR_SDK` | `.../sdk` | SDK root (pass to N80 as `--include-directory`) |
@@ -426,7 +426,7 @@ The official publish is the **`Publish image`** workflow (`.github/workflows/pub
 
 To avoid corrupting a build, the run **fails if the pinned `<version>-<rev>` tag already exists** unless you tick the **overwrite** checkbox, so re-running with the same revision is a deliberate choice, while bumping the revision (or moving the always-advancing `latest` / `major.minor` tags) is unaffected.
 
-For a throwaway build - say, trying a toolchain bump from a branch before committing to a real revision - tick the **test** checkbox. The run then pushes **only** `<version>-<rev>-test` (e.g. `3.0.0-beta1-r2-test`): no moving tags are touched, the immutability guard is skipped so a re-run simply overwrites the previous test image, and the baked-in image revision (`manifest.json`, labels) reads `r2-test` so the image identifies itself as a test build. Note that the workflow builds whatever branch or tag you select in the *Run workflow* dialog, so this is how to publish from a feature branch.
+For a throwaway build - say, trying a toolchain bump from a branch before committing to a real revision - tick the **test** checkbox. The run then pushes **only** `<version>-<rev>-test` (e.g. `3.0.0-r2-test`): no moving tags are touched, the immutability guard is skipped so a re-run simply overwrites the previous test image, and the baked-in image revision (`manifest.json`, labels) reads `r2-test` so the image identifies itself as a test build. Note that the workflow builds whatever branch or tag you select in the *Run workflow* dialog, so this is how to publish from a feature branch.
 
 **Note:** The first publish creates a **private** package; flip it to public once in the package's settings on GitHub if others should be able to pull it.
 

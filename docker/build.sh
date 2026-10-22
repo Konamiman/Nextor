@@ -8,7 +8,7 @@
 # With no -t/--tag the image is tagged 'nextor-dev'. Any extra arguments pass
 # straight through to 'docker build', for example:
 #   docker/build.sh
-#   docker/build.sh -t ghcr.io/me/nextor-dev:3.0.0-beta1
+#   docker/build.sh -t ghcr.io/me/nextor-dev:3.0.0
 #   docker/build.sh --no-cache --build-arg SDCC_VERSION=4.4.0
 set -eu
 

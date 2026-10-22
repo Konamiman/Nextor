@@ -40,6 +40,7 @@ PH_SKIP:
 ;   2: 80 columns: skip spaces (no leading space). 40 columns: print new line.
 ;   3: 80 columns: nothing. 40 columns: print "Press any key to continue...",
 ;      wait for key, erase the message line, then continue printing.
+;   4: Same as 3 but in both 40 and 80 columns.
 ;
 ; Input: HL = pointer to string.
 ; Modifies: AF, HL
@@ -57,10 +58,12 @@ PCH_80:
 	inc	hl
 	or	a
 	ret	z
-	cp	4
+	cp	5
 	jr	nc,PCH_80DO
 	cp	3
 	jr	z,PCH_80	;Code 3: no-op in 80-col
+	cp	4
+	jr	z,PCH_80_PAUSE
 	cp	1
 	ld	a,' '
 	call	z,0018h
@@ -75,15 +78,19 @@ PCH_80DO:
 	rst	18h
 	jr	PCH_80
 
+PCH_80_PAUSE:
+	call	PCH_PAUSE
+	jr	PCH_80
+
 PCH_40:
 	ld	a,(hl)
 	inc	hl
 	or	a
 	ret	z
-	cp	4
+	cp	5
 	jr	nc,PCH_40_DO
 	cp	3
-	jr	z,PCH_40_PAUSE
+	jr	nc,PCH_40_PAUSE	;Codes 3 and 4
 	;Codes 1 and 2: new line
 	ld	a,13
 	rst	18h
@@ -93,16 +100,20 @@ PCH_40_DO:
 	jr	PCH_40
 
 PCH_40_PAUSE:
+	call	PCH_PAUSE
+	jr	PCH_40
+
+PCH_PAUSE:
 	push	hl		;Save string pointer
 	ld	hl,PCH_PAUSE_MSG
-PCH_40_PMSG:
+PCH_PMSG:
 	ld	a,(hl)
 	or	a
-	jr	z,PCH_40_WAIT
+	jr	z,PCH_WAIT
 	rst	18h
 	inc	hl
-	jr	PCH_40_PMSG
-PCH_40_WAIT:
+	jr	PCH_PMSG
+PCH_WAIT:
 	call	CHGET		;Wait for key press
 	;Erase the message: CR + ESC K (VT52 erase to end of line)
 	ld	a,13
@@ -112,14 +123,14 @@ PCH_40_WAIT:
 	ld	a,"K"
 	rst	18h
 	pop	hl		;Restore string pointer
-	jr	PCH_40
+	ret
 
 PCH_PAUSE_MSG:
 	db "Press any key to continue...",0
 
 ;
 ; The texts, zero-terminated and in the order of the HLP_xxx numbers.
-; See PRINT_TEXT for the meaning of the codes 1 to 3.
+; See PRINT_TEXT for the meaning of the codes 1 to 4.
 ;
 HELP_TEXTS:
 ;HLP_MAPDRV (0)
@@ -263,7 +274,7 @@ HELP_TEXTS:
 	db	"Commands with * are not available",1
 	db	"in MSX-DOS 1 mode.",13,10
 	db	13,10
-	db  3 ;Pause and ask for key press
+	db  4 ;Pause and ask for key press, also in 80 columns
 	db	"Commands with () accept parameters.",13,10
 	db	"Invoke them without parameters",1
 	db	"for parameter usage information."
