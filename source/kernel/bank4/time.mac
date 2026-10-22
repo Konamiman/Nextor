@@ -248,10 +248,39 @@ bad_time:	ld	c,0FFh			;Return an error if the
 ;
 ;    This routine is called at initialisation time to set up the clock chip.
 ;
+;    First it checks that the chip is present the same way as the  MSX-DOS 1
+; kernel  does:  register 0 of block 2 is changed to every other value and
+; read back.  TIMFLG is set to FFh only if all the read-backs match.  If not,
+; the  chip  is not accessed any more:  the date is kept in RAM_DATE  (set to
+; 1-Jan-1984 here) and the time is always 00:00:00.
+;
 ; Entry:     None
 ; Returns:   None
-; Corrupts:   AF
+; Corrupts:   AF, BC, DE, HL
 ;
+;
+		CLKIN	0Dh
+		and	0100b			;leave alarm bit,
+		or	1010b			; timer enabled, block 2
+		out	(CLOCK_DATA),a
+		xor	a
+		out	(CLOCK_ADDR),a		;Register 0
+		ld	b,0Fh
+clk_probe:	in	a,(CLOCK_DATA)
+		and	0Fh
+		xor	b			;Change the value
+		out	(CLOCK_DATA),a
+		ld	c,a
+		in	a,(CLOCK_DATA)
+		and	0Fh
+		cp	c			;Read back correctly?
+		jr	nz,no_clock
+		xor	b			;Restore the original value
+		out	(CLOCK_DATA),a
+		djnz	clk_probe
+;
+		ld	a,0FFh			;The clock chip is present
+		ld	(TIMFLG##),a
 ;
 		CLKIN	0Dh			;leave alarm bit
 		and	0100b			;
@@ -282,6 +311,13 @@ CLK_END:	CLKIN	0Dh
 		ret
 ;
 ;
+no_clock:	xor	a			;No clock chip
+		ld	(TIMFLG##),a
+		ld	hl,1 + (1 SHL 5) + ((1984-1980) SHL 9)
+		ld	(RAM_DATE##),hl		;1-Jan-1984
+		ret
+;
+;
 CLK_START:	CLKIN	0Dh
 		and	04h
 		out	(CLOCK_DATA),a
@@ -293,7 +329,8 @@ CLK_START:	CLKIN	0Dh
 	PROC	GT_DATE_TIME
 ;
 ;    This routine gets the current date and time from the clock/calander chip.
-; The results are all returned in registers.
+; The results are all returned in registers.  If there is no clock chip then
+; the date comes from RAM_DATE and the time is 00:00:00.
 ;
 ; Entry:      None
 ; Returns:     E = Seconds
@@ -303,6 +340,10 @@ CLK_START:	CLKIN	0Dh
 ;              H = Month
 ;              D = Year
 ;
+;
+		ld	a,(TIMFLG##)
+		or	a
+		jr	z,get_ram_date
 ;
 		call	CLK_START
 		ld	e,0Dh
@@ -321,6 +362,27 @@ CLK_START:	CLKIN	0Dh
 		call	CLK_GET_BYTE
 		ld	e,a			;E := seconds
 		jp	CLK_END
+;
+;
+get_ram_date:	ld	hl,(RAM_DATE##)		;HL := yyyyyyym mmmddddd
+		ld	a,h
+		srl	a
+		ld	d,a			;D := year
+		ld	a,l
+		and	1Fh
+		ld	e,a
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		ld	a,h
+		and	0Fh
+		ld	h,a			;H := month
+		ld	l,e			;L := day of month
+		xor	a
+		ld	b,a			;Time is 00:00:00
+		ld	c,a
+		ld	e,a
+		ret
 ;
 ;
 ;
@@ -356,8 +418,15 @@ CLK_GET_NYBBLE:	dec	e
 ;              H = Month           >  only for SET_DATE
 ;              D = Year           /
 ;
+;    If there is no clock chip then SET_DATE stores the date in RAM_DATE  and
+; SET_TIME does nothing.
 ;
-SET_TIME:	ld	l,e
+;
+SET_TIME:	ld	a,(TIMFLG##)
+		or	a
+		ret	z
+;
+		ld	l,e
 		ld	h,c
 		ld	d,b
 		call	CLK_START
@@ -365,7 +434,10 @@ SET_TIME:	ld	l,e
 		ld	e,0
 		jr	set_date_time
 ;
-SET_DATE:
+SET_DATE:	ld	a,(TIMFLG##)
+		or	a
+		jr	z,set_ram_date
+;
 		call	CLK_START
 		or	0001b			;select alarm bank
 		out	(CLOCK_DATA),a		;
@@ -381,6 +453,24 @@ set_date_time:	ld	a,l
 		ld	a,d
 		call	CLK_PUT_BYTE
 		jp	CLK_END
+;
+;
+set_ram_date:	ld	a,l			;A := day of month
+		ld	l,h
+		ld	h,0
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl			;HL := month SHL 5
+		or	l
+		ld	l,a
+		ld	a,d
+		add	a,a
+		or	h
+		ld	h,a			;H |= year SHL 1
+		ld	(RAM_DATE##),hl
+		ret
 ;
 ;
 ;

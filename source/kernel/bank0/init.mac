@@ -29,6 +29,7 @@ ESC	equ	1Bh
 OUTDO	equ	0018h		;output a character
 ID_BYTE	equ	002Bh
 VERSION	equ	002Dh
+MSXVER	equ	002Dh
 CHAR_16	equ	0034h
 SNSMAT	equ	0141h		;sense key matrix
 PHYDIO	equ	0144h		;physical disk read/write
@@ -1574,15 +1575,6 @@ FILAUX:	ld	(hl),0C9h
 	ld	hl,DOS1_GO##
 	ld	($DOS1##),hl
 ;
-
-MSXVER	equ	002Dh
-
-	ld	a,(MSXVER)
-	or	a
-	jr	z,NOCLOCK
-	ld	a,-1		;say clock IC is present
-	ld	(TIMFLG##),a
-NOCLOCK:
 ;
 	ld	hl,DPBSIZE	;Allocate DPB for RAM disk
 	call	PALLOC
