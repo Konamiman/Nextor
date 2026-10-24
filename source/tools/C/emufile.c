@@ -78,8 +78,8 @@ typedef struct {
 /* Strings */
 
 const char* strTitle=
-    "Disk image emulation tool for Nextor v3.0\r\n"
-    "By Konamiman, 9/2026\r\n"
+    "Disk image emulation tool for Nextor v3.0.1\r\n"
+    "By Konamiman, 11/2026\r\n"
     "\r\n";
 
 const char* strUsage=
