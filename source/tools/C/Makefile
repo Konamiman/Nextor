@@ -66,6 +66,10 @@ EXTRA_RELS =
 EMUFILE.COM NEXBOOT.COM: EXTRA_RELS = persistent_storage.rel
 EMUFILE.COM NEXBOOT.COM: persistent_storage.rel
 
+# This Makefile decides what gets linked into each tool (and where, see
+# --code-loc), so a change in it must rebuild them all.
+$(COMS) $(SPECIAL_COMS): Makefile
+
 # The banner crt0s place the whole startup code, banner included, in an
 # absolute area starting at 0x100, and the C code is linked right after
 # it (--code-loc).  The linker does NOT detect an overlap between the

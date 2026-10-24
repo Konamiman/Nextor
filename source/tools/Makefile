@@ -51,6 +51,10 @@ BIN_COMS := $(addprefix $(BIN_TOOLS)/,$(COMS))
 
 asm-tools: $(BIN_COMS)
 
+# This Makefile decides what gets linked into each tool (and where), so a
+# change in it must relink them all.
+$(COMS): Makefile
+
 # The bin/tools copies are targets of their own (not a side effect of the
 # link recipes), so they get re-created when bin/tools is missing or empty
 # even if the .COM files in this directory are up to date. The directory

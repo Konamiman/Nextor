@@ -98,6 +98,20 @@ $(JRELS): \
 
 	$(call assemble,$(patsubst %.rel,%.mac,$@))
 
+# Files INCLUDEd by sys.mac and reloc.mac, besides INCS.
+sys.rel sysj.rel: \
+	version_string.mac \
+	../../sdk/asm/constants/dos_calls.inc \
+	../../sdk/asm/constants/dos_errors.inc \
+	../../sdk/asm/constants/msx_workarea.inc \
+	../kernel/do_strout.inc
+
+reloc.rel: \
+	version_string.mac \
+	../../sdk/asm/constants/dos_calls.inc \
+	../../sdk/asm/constants/msx_bios.inc \
+	../../sdk/asm/constants/msx_workarea.inc
+
 dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 

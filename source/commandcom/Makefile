@@ -102,6 +102,9 @@ $(RELS): \
 
 	$(call assemble,$(patsubst %.rel,%.mac,$@))
 
+# Modules that INCLUDE version.inc (the version shown by VER and at startup).
+start.rel cmd.rel: version.inc
+
 dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
