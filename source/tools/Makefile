@@ -37,9 +37,15 @@ SPECIAL_COMS := CHKDSK.COM UNDEL.COM MSR.COM MKDSK.COM
 GENERIC_COMS := $(filter-out $(SPECIAL_COMS),$(COMS))
 INCS := ../kernel/macros.inc ../kernel/const.inc
 SDK_RELS := DOS_CALLS.REL DOS_ERRORS.REL DOS_FILE_HANDLES.REL
-SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot getslot_noterm
+SHARED_NAMES := byte2asc extpar chk_nextor chkonoff chklet chklet_noterm prslot prpad ext8 extnum getslot
 SHARED_RELS  := $(foreach n,$(SHARED_NAMES),$(call uc,$(n)).REL)
 RELS := $(SDK_RELS) DATA.REL $(SHARED_RELS)
+
+# SDK routines used by just one tool, linked into that tool only (every
+# module in SHARED_RELS ends up in every generic tool, used or not):
+# EXTRA_RELS_<tool>.COM lists them for each tool.
+EXTRA_NAMES := getslot_noterm
+EXTRA_RELS_MAPDRV.COM := GETSLOT_NOTERM.REL
 
 BIN_COMS := $(addprefix $(BIN_TOOLS)/,$(COMS))
 
@@ -76,10 +82,11 @@ $(GENERIC_COMS): \
 	$(INCS) \
 	$(SDK_RELS) \
 	DATA.REL \
-	$(SHARED_RELS)
+	$(SHARED_RELS) \
+	$$(EXTRA_RELS_$$@)
 
 	$(call assemble,$(patsubst %.COM,%.MAC,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
-	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) DATA.REL $(patsubst %.COM,%.REL,$@) $(SHARED_RELS)
+	@$(LK80) --output-file $@ --code 0100h $(SDK_RELS) DATA.REL $(patsubst %.COM,%.REL,$@) $(SHARED_RELS) $(EXTRA_RELS_$@)
 
 # CHKDSK is self-contained (it carries its own Nextor version check instead
 # of using CHK_NEXTOR, since it must run on Nextor 2.1) and its runtime data
@@ -183,7 +190,7 @@ $(2).REL: ../../sdk/asm/code/$(1).asm
 	$$(call assemble_as,../../sdk/asm/code/$(1).asm,$(2).REL,--define-symbols GENERATE_PUBLIC_SYMBOLS --define-symbols COM_FILE)
 endef
 
-$(foreach n,$(SHARED_NAMES),$(eval $(call shared_rel_rule,$(n),$(call uc,$(n)))))
+$(foreach n,$(SHARED_NAMES) $(EXTRA_NAMES),$(eval $(call shared_rel_rule,$(n),$(call uc,$(n)))))
 
 DOS_CALLS.REL: ../../sdk/asm/constants/dos_calls.inc ../../sdk/asm/macros/const.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,DOS_CALLS.REL,--define-symbols GENERATE_PUBLIC_SYMBOLS)
