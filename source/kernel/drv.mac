@@ -353,7 +353,7 @@ DIOEN_ISEMU:
 	jr	z,DIOCHGFOK
 	pop	bc
 	ld	b,0
-	ret
+	jp	CONV_ERR	;Return the error with Cy set, as a DSKIO error code
 DIOCHGFOK:
 
 	; Moan if sector number + sector count > dsk file size
@@ -633,7 +633,7 @@ CHG_ENTRY::
 	jp	nz,DISKERR	;Drive number must be 0
 
 	call	CHGFILE
-	ret	nz
+	jp	nz,CONV_ERR
 
 	xor	a
 	ld	ix,(KERNEX_DOS1##)
@@ -676,7 +676,7 @@ DPB_ENTRY::
 	;jp	nz,DISKERR	;Drive number must be 0
 
 	call	CHGFILE
-	ret	nz
+	jp	nz,CONV_ERR
 
 	jr	DPBEN2
 
