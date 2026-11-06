@@ -13,6 +13,7 @@ These are the known device drivers available for Nextor 3:
 | FlashJacks | FlashJacks IDE interface | [Flashjacks-Nextor-driver](https://github.com/Konamiman/Flashjacks-Nextor-driver) |
 | MSX Turbo-R FDD | The floppy disk controller built into the MSX Turbo-R computers (Panasonic FS-A1GT and FS-A1ST); can be built as a ROM kernel or as a RAM-loadable driver | [TurboR-FDD-Nextor-driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) |
 | OCM | 1chipMSX and other similar FPGA-based machines | [KdL Index!](https://gnogni.altervista.org/) |
+| MEGA-SCSI | MEGA-SCSI SCSI cartridges by ESE Artists' Factory (normal model and the model with SCC, "WAVE-SCSI"); the ROM image is written to the cartridge's SRAM with the NXMGINST installer | [John Doe's Reports](https://miyashu.github.io/johndoe/#nxmg) |
 
 Additionally, the Nextor repository itself contains [the standalone ROM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/standalone-rom-driver.asm) (a dummy driver that doesn't handle any real hardware, used to build the standalone Nextor ROMs) and [an example RAM-loadable driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm); both are useful as reference code when developing a new driver.
 
