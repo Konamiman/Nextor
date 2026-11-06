@@ -145,6 +145,12 @@ EXECUTABLE EXTENSIONS
         one  of  these directories,  then the  complete pathname  is
         added to the alias value.
 
+             If the filename has wildcards but the extension doesn't
+        (e.g. *.MUS),  it is  added to  the alias value as typed, so
+        the command  can process all the matching files, as long as
+        it supports wildcards. If the extension has wildcards too or
+        is not given, then the first matching file found is added.
+
 Examples:
 
         ALIAS .TXT = A:\TED\TED
@@ -167,6 +173,16 @@ Examples:
         directories, then the full path is added. For example:
 
         A:\TED\TED B:\TEXTS\INFO\INFO.TXT
+
+        ALIAS .MUS = A:\PROGS\MUSPROG
+        *.MUS
+
+             The filename  has a wildcard but the extension doesn't,
+        so the command:
+
+        A:\PROGS\MUSPROG *.MUS
+
+        will be executed.
 
              When no  extension is  given, then the first file found
         that  has an executable extension, is executed. For example,

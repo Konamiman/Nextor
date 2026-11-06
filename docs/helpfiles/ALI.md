@@ -119,6 +119,8 @@ Unlike normal aliases, any parameters specified after an executable filename, in
 
 When the specified file is not found in the current directory, then the directories specified by the `PATH` environment variable are searched. If the file is found in one of these directories, then the complete pathname is added to the alias value.
 
+If the filename has wildcards but the extension doesn't (e.g. `*.MUS`), it is added to the alias value as typed, so the command can process all the matching files, as long as it supports wildcards. If the extension has wildcards too or is not given, then the first matching file found is added.
+
 ### Examples
 
 ```
@@ -144,6 +146,19 @@ When the file `INFO.TXT` is not found in the current directory, then the directo
 ```
 A:\TED\TED B:\TEXTS\INFO\INFO.TXT
 ```
+
+```
+ALIAS .MUS = A:\PROGS\MUSPROG
+*.MUS
+```
+
+The filename has a wildcard but the extension doesn't, so the command:
+
+```
+A:\PROGS\MUSPROG *.MUS
+```
+
+will be executed.
 
 When no extension is given, then the first file found that has an executable extension, is executed. For example, there are three files in the current directory called `INFO.TXT`, `INFO.COM` and `INFO.BAT`.
 
