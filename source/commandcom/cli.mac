@@ -1965,6 +1965,13 @@ FCMD10:	CALL	BDOS	; Search for file.
 ; .COM/.BAT/.BTM always win: COMBAT checks them first, so those
 ; extensions cannot be overridden by an alias.
 ;
+;        If the name has wildcards but the extension is literal (*.MUS,
+; A?.MUS), the name as typed goes in the command instead of <found
+; filename>, so that the alias target gets to process all the matching
+; files. If the extension has wildcards too (*.M*, or A* which got a
+; .* appended) the matches could belong to different aliases, so the
+; first found file is used.
+;
 GOTFIL:	LD	DE,FIB1##+1	; DE -> filename just found.
 	CALL	COMBAT	; Check for .COM, .BAT or .BTM:
 	RET	Z	;   return with its flags if so.
@@ -2007,11 +2014,21 @@ GOT30:	EX	DE,HL
 	INC	DE
 	PUSH	DE	; Save the append position.
 	LD	DE,ENVNAME##	; Parse the search path in ENVNAME
-	PUSH	DE	;   and cut it at the start of the
-	LD	BC,_PARSE##	;   last item, leaving just the
-	CALL	BDOS	;   drive/path part (HL from _PARSE
-	LD	(HL),#00	;   -> start of last item).
-	POP	HL
+	PUSH	DE	;   (HL from _PARSE -> start of last
+	LD	BC,_PARSE##	;   item, DE -> its end, B = flags).
+	CALL	BDOS
+	BIT	5,B	; Last item not ambiguous: use the
+	JR	Z,GOT34	;   found name.
+GOT32:	DEC	DE	; Ambiguous: scan it backwards. It has
+	LD	A,(DE)	;   a wildcard, so this always stops.
+	CP	"."	; Dot before any wildcard: the
+	JR	Z,GOT80	;   extension is literal.
+	CP	"*"
+	JR	Z,GOT34
+	CP	"?"
+	JR	NZ,GOT32
+GOT34:	LD	(HL),#00	; Cut ENVNAME at the start of the last
+	POP	HL	;   item, leaving just the drive/path.
 	POP	DE
 	CALL	NCOPY##	; Append the drive/path,
 	DEC	DE
@@ -2046,6 +2063,12 @@ GOT70:	EXX	; Append the parameters of the
 	POP	HL	; Drop FNDCMD's return address and
 	LD	HL,BUFFER1##	;   dispatch the rebuilt command.
 	JP	DO_CMD
+
+GOT80:	POP	HL	; Wildcard name, literal extension:
+	POP	DE	;   append ENVNAME whole (drive/path
+	CALL	NCOPY##	;   and the name as typed) instead of
+	DEC	DE	;   the found file name.
+	JR	GOT70
 
 ;        Checks whether or not the filename at (DE) has an extension of
 ; .COM, .BAT or .BTM. This is done by parsing the filename into an 11
