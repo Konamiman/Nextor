@@ -148,8 +148,10 @@ EXECUTABLE EXTENSIONS
              If the filename has wildcards but the extension doesn't
         (e.g. *.MUS),  it is  added to  the alias value as typed, so
         the command  can process all the matching files, as long as
-        it supports wildcards. If the extension has wildcards too or
-        is not given, then the first matching file found is added.
+        it supports  wildcards. When the match is found through the
+        PATH, the directory goes in front of it (B:\MUSIC\*.MUS). If
+        the extension  has wildcards too or is not given,  then the
+        first matching file found is added.
 
 Examples:
 

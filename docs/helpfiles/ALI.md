@@ -119,7 +119,7 @@ Unlike normal aliases, any parameters specified after an executable filename, in
 
 When the specified file is not found in the current directory, then the directories specified by the `PATH` environment variable are searched. If the file is found in one of these directories, then the complete pathname is added to the alias value.
 
-If the filename has wildcards but the extension doesn't (e.g. `*.MUS`), it is added to the alias value as typed, so the command can process all the matching files, as long as it supports wildcards. If the extension has wildcards too or is not given, then the first matching file found is added.
+If the filename has wildcards but the extension doesn't (e.g. `*.MUS`), it is added to the alias value as typed, so the command can process all the matching files, as long as it supports wildcards. When the match is found through the `PATH`, the directory goes in front of it (e.g. `B:\MUSIC\*.MUS`). If the extension has wildcards too or is not given, then the first matching file found is added.
 
 ### Examples
 
