@@ -40,6 +40,7 @@ VAR_OFFSET DEFL	0
 	VAR	LANG, 1	; NZ => use the Japanese messages.
 	VAR	HINTMSG, 1	; Message to print after an error, 0 = none.
 	VAR	YENFLAG, 1	; NZ => YENSLASH is ON (see GETYEN in io.mac).
+	VAR	BUFINSF, 1	; NZ => BUFINSERT is ON (see GETBUFI in io.mac).
 	VAR	PIPEADDR, 2
 	VAR	NEXTADDR, 2
 	VAR	INHNDL, 1
@@ -63,9 +64,8 @@ VAR_OFFSET DEFL	0
 	VAR	BATLINADDR, 2
 	VAR	REDIRID, 1
 	VAR	ENDTPA, 2
-	VAR	DIRBUF, 3	; Was initialised to "A:\" (never relied upon)
-	VAR	BUFINSF, 1	; NZ => BUFINSERT is ON (see GETBUFI in io.mac).
-	VAR	UNUSED1, 63
+	VAR	DIRBUF, 67	; Directory for CD - and CDD -: "A:\" plus the 64 bytes
+			;   of a _GETCD path, stored at DIRBUF+3 (CHD30 in files.mac).
 	VAR	LINEBUF, 256
 	VAR	BUFFER2, 131
 	VAR	BUFFER1, 131
@@ -136,4 +136,4 @@ VAR_OFFSET DEFL	0
 	VAR	DIRKSFX, 3	; The suffix for the K figures ("K" or as DIRK).
 	VAR	DIRKTMP, 4	; Work area for the rounded K figure.
 ;
-; Total: 2884 bytes (keep MAX_COM_SIZE in the Makefile in sync)
+; Total: 2885 bytes (keep MAX_COM_SIZE in the Makefile in sync)
