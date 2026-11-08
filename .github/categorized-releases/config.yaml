@@ -45,8 +45,12 @@ defaults:
 # Nextor 2 releases (tagged v2.x) never belong to this page, whatever their
 # date: they are all-in-one releases that would otherwise show up under
 # every category. The main page links to them in GitHub.
+# Neither does the dev build (tag "dev-build", see
+# .github/workflows/dev-build.yaml): its assets would make it the newest
+# release of most categories, and of the Latest page. The main page links
+# to it in GitHub too.
 exclude:
-  tag: '^v2\.'
+  tag: '^(v2\.|dev-build$)'
 
 # Aggregated "Latest" page: the newest release of every category, with an
 # assets view that works as a one-stop download list for Nextor 3.

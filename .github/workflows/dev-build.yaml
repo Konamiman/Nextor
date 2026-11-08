@@ -1,0 +1,207 @@
+name: Dev build
+
+# Manually-triggered build of the development code of the master branch,
+# published as the "dev-build" release so that new features and fixes can be
+# tested before they get into an official release (Actions > Dev build > Run
+# workflow). The release contains the kernel base files, the standalone ROMs,
+# the example RAM driver, the tools disk image and the tools zip file, and
+# its description lists the changes (pull requests, and commits pushed
+# without a pull request) that aren't included in any official release yet.
+#
+# .github/dev-build/dev-build.py decides what to do, see the comments there
+# for the details:
+#
+# - If there are unreleased changes, builds the head of master and publishes
+#   it as the dev build.
+# - If there are none (everything is included in official releases), deletes
+#   the dev build release and its tag, so that it doesn't offer older code
+#   than the official releases do. Nothing does this automatically: run this
+#   workflow after publishing an official release.
+#
+# The dev build is a single rolling release with the tag "dev-build", updated
+# in place: the tag is moved to the newly built commit and the assets are
+# replaced. It's a prerelease and is never marked as "Latest", and the
+# categorized releases page ignores it (.github/categorized-releases/config.yaml).
+# Since it's published with GITHUB_TOKEN it doesn't raise release events that
+# would run other workflows (the releases page workflow in particular).
+#
+# The built kernel shows "Dev build <date> (<commit>)" when booting (see
+# DEV_BUILD in source/kernel/Makefile), and the asset names contain
+# "dev-<date>", <date> being the date of the built commit.
+#
+# Tick "dry run" to build without publishing or deleting anything (the assets
+# and the release notes are attached to the run as an artifact instead). A
+# dry run can be started from any branch (and in forks), other runs only
+# from master.
+#
+# To generate the same files locally, without publishing anything, run
+# .github/dev-build/build.sh. Keep its build commands in sync with the
+# "Build" step below.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build, but don't publish (the assets and the release notes are attached to the run instead)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # To create, update and delete the release and its tag
+
+concurrency:
+  group: dev-build
+  cancel-in-progress: false
+
+env:
+  DEV_TAG: dev-build
+  BASE_BRANCH: master
+
+jobs:
+  dev-build:
+    name: Dev build
+    # Publishing only in the main repository, not in forks
+    if: github.repository == 'Konamiman/Nextor' || inputs.dry_run
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      # Where dev-build.py leaves the release notes and the assets list, and
+      # where the assets are collected (the runner context isn't available
+      # in the job env).
+      - name: Set the work directory
+        run: echo "PLAN_DIR=$RUNNER_TEMP/dev-build-plan" >> "$GITHUB_ENV"
+
+      - name: Check the branch
+        if: ${{ !inputs.dry_run && github.ref != 'refs/heads/master' }}
+        run: |
+          echo "::error::The dev build can only be published from master (this run is for ${GITHUB_REF#refs/heads/}). Tick 'dry run' to build from another branch." >&2
+          exit 1
+
+      # The full history and the tags are needed to find out which changes are
+      # included in which releases.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide what to do
+        id: plan
+        run: |
+          python3 -I .github/dev-build/dev-build.py --repo "$GITHUB_REPOSITORY" --base "$BASE_BRANCH" \
+            --head HEAD --tag "$DEV_TAG" --out-dir "$PLAN_DIR"
+
+      - name: Set up the build toolchain
+        if: steps.plan.outputs.action == 'build'
+        uses: ./.github/actions/setup-toolchain
+
+      - name: Build
+        if: steps.plan.outputs.action == 'build'
+        env:
+          BUILD_ID: ${{ steps.plan.outputs.build_id }}
+        run: |
+          set -eu
+          # Both kernel variants and both standalone ROMs of each, NEXTOR.SYS,
+          # COMMAND3.COM, the MSX-DOS 1 files and all the tools
+          make -C source everything DEV_BUILD="$BUILD_ID"
+          # The example RAM driver is not built by "everything"
+          make -C source/drivers ram-example
+          # The tools disk image and zip file
+          make -C source tools-all
+
+      - name: Collect the assets
+        if: steps.plan.outputs.action == 'build'
+        run: |
+          set -eu
+          mkdir -p "$PLAN_DIR/assets"
+          count=0
+          while IFS=$'\t' read -r src name; do
+            if [ ! -f "$src" ]; then
+              echo "::error::Expected build output not found: $src" >&2
+              exit 1
+            fi
+            cp "$src" "$PLAN_DIR/assets/$name"
+            count=$((count + 1))
+          done < "$PLAN_DIR/assets.tsv"
+          echo "Collected $count assets:"
+          ls -l "$PLAN_DIR/assets"
+
+      - name: Publish the dev build release
+        if: steps.plan.outputs.action == 'build' && env.DRY_RUN != 'true'
+        env:
+          TARGET: ${{ steps.plan.outputs.target }}
+          TITLE: ${{ steps.plan.outputs.title }}
+        run: |
+          set -eu
+          notes="$PLAN_DIR/notes.md"
+          assets=("$PLAN_DIR"/assets/*)
+
+          create_release() {
+            # A tag left behind without its release would make the release
+            # point to the old commit (--target only applies to new tags).
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$DEV_TAG" >/dev/null 2>&1 || true
+            gh release create "$DEV_TAG" "${assets[@]}" --target "$TARGET" \
+              --title "$TITLE" --notes-file "$notes" --prerelease --latest=false
+          }
+
+          if ! gh release view "$DEV_TAG" >/dev/null 2>&1; then
+            create_release
+          elif gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$DEV_TAG" \
+                 -f sha="$TARGET" -F force=true >/dev/null; then
+            # Update the existing release in place: watchers aren't notified
+            # again, and the release URL stays the same.
+            gh release upload "$DEV_TAG" "${assets[@]}" --clobber
+            for name in $(gh release view "$DEV_TAG" --json assets --jq '.assets[].name'); do
+              if [ ! -f "$PLAN_DIR/assets/$name" ]; then
+                gh release delete-asset "$DEV_TAG" "$name" --yes
+              fi
+            done
+            gh release edit "$DEV_TAG" --title "$TITLE" --notes-file "$notes" --prerelease --latest=false
+          else
+            # GitHub can refuse to move the tag (e.g. GITHUB_TOKEN may not
+            # update refs to commits that change workflow files): start over.
+            echo "::warning::Could not move the $DEV_TAG tag, re-creating the release instead."
+            gh release delete "$DEV_TAG" --yes
+            create_release
+          fi
+
+      - name: Delete the dev build release
+        if: steps.plan.outputs.action == 'delete' && env.DRY_RUN != 'true'
+        run: |
+          set -eu
+          gh release delete "$DEV_TAG" --cleanup-tag --yes
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$DEV_TAG" >/dev/null 2>&1 || true
+
+      - name: Attach the dry run results to the run
+        if: steps.plan.outputs.action == 'build' && env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-build-dry-run
+          path: |
+            ${{ env.PLAN_DIR }}/assets
+            ${{ env.PLAN_DIR }}/notes.md
+
+      - name: Summary
+        if: always() && steps.plan.outcome == 'success'
+        env:
+          ACTION: ${{ steps.plan.outputs.action }}
+          REASON: ${{ steps.plan.outputs.reason }}
+          TITLE: ${{ steps.plan.outputs.title }}
+        run: |
+          {
+            case "$ACTION" in
+              build)  what="Built **$TITLE**" ;;
+              delete) what="Deleted the dev build release" ;;
+              *)      what="Nothing to do" ;;
+            esac
+            if [ "$DRY_RUN" = "true" ]; then what="$what (DRY RUN: nothing was published or deleted)"; fi
+            echo "### $what"
+            echo
+            echo "Reason: $REASON"
+            if [ "$ACTION" = "build" ]; then
+              echo
+              echo "---"
+              echo
+              cat "$PLAN_DIR/notes.md"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

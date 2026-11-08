@@ -24,6 +24,10 @@
 
 This repository doesn't contain drivers for specific storage devices: only the standalone ROMs (whose driver is a dummy one that handles no devices) and the example RAM driver. Drivers for actual devices (Sunrise IDE, MegaFlashROM SCC+ SD, and others) are developed and released in their own repositories; see the [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md) document for the list and where to get each one.
 
+## Development builds
+
+The latest development code is occasionally published as [the dev build](https://github.com/Konamiman/Nextor/releases/tag/dev-build), with the kernel base files, the standalone ROMs, the example RAM driver and the tools disk image and ZIP file, so that new features and fixes can be tested before they make it into an official release. It isn't an official release (it may contain bugs) and isn't listed in this page. Its description lists the changes it contains that hadn't been released yet when it was built. It doesn't exist while all the changes are included in official releases, so the link will be broken at times.
+
 ## Looking for Nextor 2?
 
 This page lists Nextor 3 releases only. The Nextor 2 releases (which include the kernel ROMs for all the drivers that used to live in this repository) are available directly in GitHub: [Nextor 2 releases](https://github.com/Konamiman/Nextor/releases?q=v2.&expanded=true). The latest Nextor 2 version is [v2.1.4](https://github.com/Konamiman/Nextor/releases/tag/v2.1.4).
