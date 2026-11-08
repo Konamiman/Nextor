@@ -1,0 +1,70 @@
+name: Set up the Nextor build toolchain
+description: >
+  Installs everything needed to build Nextor (kernel, drivers, NEXTOR.SYS,
+  COMMAND3.COM, the MSX-DOS 1 files, the tools, the tools disk image and the
+  tools zip file): binutils, gcc, make, mtools, zip, SDCC, the Nestor80 tools
+  and mknexrom. Used by the CI and dev build workflows. The repository
+  must be checked out first (the Nestor80 versions are read from
+  docker/Dockerfile and mknexrom is built from buildtools/sources).
+
+runs:
+  using: composite
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        set -eu
+        sudo apt update
+        sudo apt install -y binutils gcc make curl mtools zip
+
+        # SDCC 4.2.0. This is the one toolchain version that is NOT read from
+        # docker/Dockerfile (see the next step): the Docker image installs
+        # Debian's "sdcc" apt package, whose version is whatever Debian ships
+        # (SDCC_VERSION in the Dockerfile is only a label), while this job
+        # needs a specific upstream tarball because the Ubuntu runner's apt
+        # package is a different version. Keep both at 4.2.0 by hand.
+        cd "$RUNNER_TEMP"
+        curl -Lo sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.2.0/sdcc-4.2.0-amd64-unknown-linux2.5.tar.bz2/download
+        mkdir sdcc
+        tar xjf sdcc.tar.bz2 -C sdcc
+        sudo cp -r sdcc/sdcc-4.2.0/* /usr/local/
+        rm -rf sdcc sdcc.tar.bz2
+        sdcc -v
+
+    # The Nestor80 tool versions are defined ONCE, as the ARG defaults in
+    # docker/Dockerfile (the Docker image is the primary consumer). Read them
+    # from there so that the workflows always build with the same tools as
+    # the image.
+    - name: Read toolchain versions from docker/Dockerfile
+      shell: bash
+      run: |
+        for v in N80_VERSION LK80_VERSION LB80_VERSION; do
+          val="$(sed -nE "s/^ARG $v=(.+)$/\1/p" docker/Dockerfile)"
+          if [ -z "$val" ]; then
+            echo "::error::$v not found in docker/Dockerfile (expected a line 'ARG $v=<version>')" >&2
+            exit 1
+          fi
+          echo "$v=$val" >> "$GITHUB_ENV"
+          echo "$v=$val"
+        done
+
+    - name: Install Nestor80
+      shell: bash
+      run: |
+        set -eu
+        cd "$RUNNER_TEMP"
+        for tool in N80:n80:$N80_VERSION LK80:lk80:$LK80_VERSION LB80:lb80:$LB80_VERSION; do
+          IFS=: read -r name tag ver <<< "$tool"
+          curl -Lo "$tag.zip" "https://github.com/Konamiman/Nestor80/releases/download/$tag-v$ver/${name}_${ver}_SelfContained_linux-x64.zip"
+          unzip -o "$tag.zip" "$name"
+          sudo install -v "$name" /usr/local/bin
+          rm "$name" "$tag.zip"
+        done
+
+    - name: Build and install mknexrom
+      shell: bash
+      run: |
+        set -eu
+        gcc -O2 -o "$RUNNER_TEMP/mknexrom" buildtools/sources/mknexrom.c
+        sudo install -v "$RUNNER_TEMP/mknexrom" /usr/local/bin
+        rm "$RUNNER_TEMP/mknexrom"

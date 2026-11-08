@@ -28,4 +28,4 @@ This documentation is available [as a GitHub pages site](https://konamiman.githu
 
 ## Downloads
 
-The binaries are published as [releases of the Nextor repository](https://github.com/Konamiman/Nextor/releases). Since each component (kernel base, standalone ROMs, NEXTOR.SYS, COMMAND3.COM, the tools...) is released separately, the [categorized releases page](https://konamiman.github.io/Nextor/releases/) is the easiest way to find the latest version of each one.
+The binaries are published as [releases of the Nextor repository](https://github.com/Konamiman/Nextor/releases). Since each component (kernel base, standalone ROMs, NEXTOR.SYS, COMMAND3.COM, the tools...) is released separately, the [categorized releases page](https://konamiman.github.io/Nextor/releases/) is the easiest way to find the latest version of each one. There may also be [a dev build](https://github.com/Konamiman/Nextor/releases/tag/dev-build) of the latest development code available, for testing new features and fixes before they make it into an official release.

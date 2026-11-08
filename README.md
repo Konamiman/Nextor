@@ -8,6 +8,8 @@ The source code of Nextor is published with permission from the MSX Licensing Co
 
 Please visit either [the categorized releases page](https://konamiman.github.io/Nextor/releases/index.html) (recommended) or [the standard releases section](https://github.com/Konamiman/Nextor/releases) for binaries.
 
+If you want to test new features and fixes before they make it into an official release, there may be [a dev build](https://github.com/Konamiman/Nextor/releases/tag/dev-build) of the latest development code available. It's not an official release and may contain bugs; it doesn't exist while all the changes are already included in official releases.
+
 ## Looking for the drivers?
 
 As of Nextor 3.0 this repository no longer contains Nextor drivers for specific hardware. Drivers that were part of the repository in Nextor 2 now live in their own separate repositories; other drivers are distributed by their developers in whatever way they choose. See [the known drivers document](docs/Nextor_3.0_Known_Drivers.md) for the list of available drivers and where to get each of them.
@@ -39,6 +41,8 @@ Note that additionally to the `master` branch there are `v2.0` and `v2.1` branch
 * [**docker**](/docker): The infrastructure to create the Nextor development [Docker](https://www.docker.com/) image.
 
 * [**categorized releases**](.github/categorized-releases): The infrastructure to create [the categorized releases page](https://konamiman.github.io/Nextor/releases/).
+
+* [**dev build**](.github/workflows/dev-build.yaml): The workflow that publishes [the dev build](https://github.com/Konamiman/Nextor/releases/tag/dev-build) (see the comments at the beginning of the file), with its helper script in [.github/dev-build](.github/dev-build).
 
 ## How to build Nextor
 
@@ -96,5 +100,11 @@ Additionally, an "umbrella" makefile in `source` invokes the other makefiles in 
 Note that the example RAM driver is the one thing no umbrella target builds: it is always an explicit `make ram-example` in `source/drivers`.
 
 Every makefile (the umbrella one included) also supports a `clean` target that removes the intermediate files from the source directories, and the umbrella makefile adds `distclean`, which additionally deletes the generated `bin/kernel-base`, `bin/drivers` and `bin/tools` directories.
+
+### Generating a dev build locally
+
+To generate the same files that are published as [the dev build](https://github.com/Konamiman/Nextor/releases/tag/dev-build), run `.github/dev-build/build.sh` (from any directory; it needs `git` in addition to the tools listed above). It builds both variants of the kernel base files and the standalone ROMs, the example RAM driver, the tools disk image and the tools zip file, and leaves them in `bin/kernel-base`, `bin/drivers` and `bin/tools` with their usual names.
+
+The kernel built this way shows an extra `Dev build <date> (<commit>)` line under the version number when booting and in the output of `CALL NEXTOR`, with the date (in UTC) and the hash of the last commit. Changes that aren't committed yet get built, but aren't reflected in that line. A later regular build removes the line.
 
 
