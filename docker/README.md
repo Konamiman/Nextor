@@ -345,7 +345,7 @@ Use the wrapper (runnable from anywhere - it locates the repo itself):
 ```sh
 docker/build.sh                       # tags 'nextor-dev'
 docker/build.sh -t my-nextor:test     # pass your own tag and/or build flags
-docker/build.sh --no-cache --build-arg N80_VERSION=1.3.7
+docker/build.sh --no-cache --build-arg N80_VERSION=1.3.8
 ```
 
 **Note:** `docker/build.sh` builds a **single-arch** image for your host (handy for local work). The multi-arch (amd64 + arm64) build lives in the publish workflow - see *Publishing*.
@@ -370,16 +370,16 @@ Override with `--build-arg NAME=value`:
 |---|---|---|
 | `NEXTOR_VERSION` | `unknown` | kernel version stamped into the image |
 | `NEXTOR_IMAGE_REVISION` | `dev` | image build revision (`rN`); CI sets the real value |
-| `N80_VERSION` | `1.3.6` | Nestor80 assembler release |
+| `N80_VERSION` | `1.3.7` | Nestor80 assembler release |
 | `LK80_VERSION` | `1.1.1` | Linkstor80 linker release |
 | `LB80_VERSION` | `1.0` | Libstor80 library manager release |
 | `SDCC_VERSION` | `4.2.0` | recorded in the manifest/labels; `sdcc` itself comes from Debian apt (also 4.2.0), so this only relabels |
 | `MKNEXROM_VERSION` | `1.2` | recorded in the manifest; `mknexrom` is compiled from source |
 | `DOTNET_TAG` | `8.0-bookworm-slim` | `dotnet/runtime` base image tag |
 
-The three Nestor80 tools are fetched from GitHub releases tagged `<tool>-v<version>` (`n80-v1.3.6`, `lk80-v1.1.1`, `lb80-v1.0`), so the version alone determines the download.
+The three Nestor80 tools are fetched from GitHub releases tagged `<tool>-v<version>` (`n80-v1.3.7`, `lk80-v1.1.1`, `lb80-v1.0`), so the version alone determines the download.
 
-Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.7`; the new version automatically flows into `manifest.json` and the labels. (`sdcc` is the apt package, so `SDCC_VERSION` only changes the recorded label, not the installed compiler.)
+Bumping a tool is a one-line change, e.g. `--build-arg N80_VERSION=1.3.8`; the new version automatically flows into `manifest.json` and the labels. (`sdcc` is the apt package, so `SDCC_VERSION` only changes the recorded label, not the installed compiler.)
 
 ---
 
