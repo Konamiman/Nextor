@@ -14,11 +14,12 @@ These are the known device drivers available for Nextor 3:
 | MSX Turbo-R FDD | The floppy disk controller built into the MSX Turbo-R computers (Panasonic FS-A1GT and FS-A1ST); can be built as a ROM kernel or as a RAM-loadable driver | [TurboR-FDD-Nextor-driver](https://github.com/Konamiman/Turbo-R-FDD-Nextor-driver) |
 | OCM | 1chipMSX and other similar FPGA-based machines | [KdL Index!](https://gnogni.altervista.org/) |
 | MEGA-SCSI | MEGA-SCSI SCSI cartridges by ESE Artists' Factory (normal model and the model with SCC, "WAVE-SCSI"); the ROM image is written to the cartridge's SRAM with the NXMGINST installer | [John Doe's Reports](https://miyashu.github.io/johndoe/#nxmg) |
+| SD Mapper v1 | FBLabs SD Mapper v1 (SD/SDHC card interface with mapper and MegaRAM) | [polileco/SDMapperV1-Nextor-driver](https://github.com/polileco/SDMapperV1-Nextor-driver) |
 
 Additionally, the Nextor repository itself contains [the standalone ROM driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/standalone-rom-driver.asm) (a dummy driver that doesn't handle any real hardware, used to build the standalone Nextor ROMs) and [an example RAM-loadable driver](https://github.com/Konamiman/Nextor/blob/HEAD/source/drivers/ram-driver-example.asm); both are useful as reference code when developing a new driver.
 
 Notes:
 
-* The Nextor 2 versions of these drivers (except the Turbo-R FDD driver, which is new in Nextor 3) remain available in [the v2.1 branch](https://github.com/Konamiman/Nextor/tree/v2.1/source/kernel/drivers) of the Nextor repository. Remember that Nextor 2 drivers don't work with Nextor 3 and vice versa; see [the Nextor 3.0 Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md) for how to adapt a Nextor 2 driver to Nextor 3.
+* The Nextor 2 versions of some of these drivers remain available in [the v2.1 branch](https://github.com/Konamiman/Nextor/tree/v2.1/source/kernel/drivers) of the Nextor repository. Remember that Nextor 2 drivers don't work with Nextor 3 and vice versa; see [the Nextor 3.0 Driver Migration Guide](Nextor_3.0_Driver_Migration_Guide.md) for how to adapt a Nextor 2 driver to Nextor 3.
 
 If you have developed a driver for Nextor 3 and want it listed here (no matter how you distribute it: a git repository, a dedicated web site, plain downloadable binaries...), please open an issue or a pull request in [the Nextor repository](https://github.com/Konamiman/Nextor).
