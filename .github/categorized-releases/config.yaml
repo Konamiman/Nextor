@@ -81,11 +81,9 @@ categories:
       [Known Drivers](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_Known_Drivers.md)
       list.
 
-      Each release contains two variants, encoded in the file name:
-
-      - No suffix: the default build.
-      - `NO_UNDOC`: built without undocumented Z80 instructions, so that the kernel also works
-        on machines with a Z180 processor.
+      The kernel doesn't use undocumented Z80 instructions, so it also works on machines with a
+      Z180 processor. In older releases this was true only for a separate variant of the kernel,
+      having `NO_UNDOC` in the file name (and thus these releases contain two files).
 
       It is possible to invert boot keys in the ROM by using the `/k` option of mknexrom. See the
       [User Manual](https://github.com/Konamiman/Nextor/blob/master/docs/Nextor_3.0_User_Manual.md#2101-boot-key-inverters)
@@ -110,8 +108,8 @@ categories:
           computer or emulator where all the storage devices are handled by other ROMs
           (you still get the Nextor features, such as FAT16 support, on those devices), or
           for testing drivers loaded in RAM. Each ROM is built from the kernel base file of
-          the same version, and the same variants are available: see [Kernel base](#kernel-base)
-          for an explanation of the `NO_UNDOC` suffix.
+          the same version: see [Kernel base](#kernel-base) for an explanation of the `NO_UNDOC`
+          suffix that some older ROMs have.
         assets: '(^|\n)Nextor-[^\n]*\.Standalone(ASCII8|ASCII16)[^\n]*\.ROM(\n|$)'
 
       - name: "Example RAM driver"

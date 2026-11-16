@@ -6,31 +6,11 @@
 # driver live in source/drivers; third-party drivers (Sunrise IDE,
 # MegaFlash ROM SCC+ SD...) have their own dedicated repositories.
 #
-# The build is controlled by one external variable (set via env or on
-# the make command line). When non-empty it both defines a symbol that
-# gets passed to N80 via --define-symbols, and adds a fragment to the
-# output-filename suffix:
+# The generated base file is copied to ../../bin/kernel-base.
 #
-#   NO_UNDOC_CPU_INSTRUCTIONS  -> defines NO_UNDOC_CPU_INSTRUCTIONS,
-#                                 suffix fragment ".NO_UNDOC". Replaces
-#                                 undocumented Z80 opcodes (ixh/ixl/iyh/
-#                                 iyl) with documented equivalents, for
-#                                 compatibility with Z180-based MSX
-#                                 machines.
-#
-# Example: `NO_UNDOC_CPU_INSTRUCTIONS=1 make` produces
-# Nextor-$(NEXTOR_KERNEL_VERSION).base.NO_UNDOC.dat.
-#
-#
-# A single variant-specific stamp file (its filename encodes the active
-# variant signature) is listed as a prereq of every assembled .rel, so
-# switching variants forces a full reassembly and previously built .rels
-# from a different variant are never silently reused.
-#
-# `make everything` invokes make twice to build the kernel base file for
-# both variants: default and NO_UNDOC.
-#
-# The generated base files are copied to ../../bin/kernel-base.
+# The kernel must not contain undocumented Z80 instructions, so that it also
+# works on Z180-based MSX machines: use the macros in
+# ../../sdk/asm/macros/undoc.inc instead. A CI check verifies this.
 #
 # The N80 and LK80 binaries to use can be overriden with environment
 # variables, e.g.:
@@ -57,25 +37,12 @@ endif
 
 export LB80_ARGS=--no-show-banner --verbosity 0
 
-_VARIANT_DEFINES :=
-_VARIANT_SUFFIX :=
+_DEFINES :=
 
-ifneq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
-_VARIANT_DEFINES += NO_UNDOC_CPU_INSTRUCTIONS
-_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).NO_UNDOC
-endif
-
-# Not a build variant (the output file names don't change), see the dev
-# build marker rule below.
+# See the dev build marker rule below.
 ifneq ($(strip $(DEV_BUILD)),)
-_VARIANT_DEFINES += DEV_BUILD
+_DEFINES += DEV_BUILD
 endif
-
-UNDOC_MODE_STAMP := .build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
-
-$(UNDOC_MODE_STAMP):
-	@rm -f .build-variant*
-	@touch $@
 
 define SymToEqus
     $(eval REGEX:=([0-9A-F]{4}) ($(3)))
@@ -87,18 +54,18 @@ define hex2bin
 endef
 
 # The generated kernel base file is published to bin/kernel-base under a
-# name that encodes the kernel version and the build variant.
+# name that encodes the kernel version.
 BIN_KERNEL_BASE := ../../bin/kernel-base
-PUBLISHED_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
+PUBLISHED_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base.dat
 
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $$ $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
+	@$(N80) $(1) $$ $(2) $(foreach def,$(_DEFINES),--define-symbols $(def))
 endef
 
 define assemble_as
 	@printf "\n\033[0;36mAssembling %s as %s\033[0m\n\n" $(1) $(2)
-	@$(N80) $(1) $(2) $(3) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
+	@$(N80) $(1) $(2) $(3) $(foreach def,$(_DEFINES),--define-symbols $(def))
 endef
 
 define print_linking
@@ -113,30 +80,6 @@ endef
 .PHONY: all base
 
 all: base ../../sdk/nextor-kernel-version.txt
-
-# `everything` builds the kernel base file for both variants: default and
-# NO_UNDOC. Each variant runs as a recursive make invocation with the
-# corresponding env var set, so the variant stamp inside the sub-make is
-# correctly tracked.
-#
-# Sub-makes within a single variant are incremental, but switching
-# variants between sub-makes forces a full reassembly (intrinsic to the
-# single-stamp mechanism). The default variant is built last so the
-# on-disk intermediate file (nextor_base.dat) is left as the undoc
-# kernel that downstream consumers (source/drivers) pick up by default.
-#
-# Sub-make failures don't abort the matrix — the loop collects the worst
-# exit code and exits with it at the end, so CI / release scripts see a
-# failure if either variant broke while still attempting both.
-.PHONY: everything
-everything:
-	@status=0; \
-	for args in \
-	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
-	    ""; do \
-	    $(MAKE) --no-print-directory --keep-going all $$args || status=$$?; \
-	done; \
-	exit $$status
 
 TOOLS := $(N80) $(LK80) $(LB80) objcopy sdcc dd
 
@@ -227,8 +170,8 @@ lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(s
 
 .SECONDEXPANSION:
 $(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
-	$(UNDOC_MODE_STAMP) \
 	macros.inc \
+	../../sdk/asm/macros/undoc.inc \
 	const.inc \
 	condasm.inc \
 	$$(patsubst %.rel,%.mac,$$@)
@@ -236,13 +179,13 @@ $(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) 
 	$(call assemble,$(patsubst %.rel,%.mac,$@),--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
-dos_calls.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_calls.inc
+dos_calls.rel: ../../sdk/asm/constants/dos_calls.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_calls.inc,dos_calls.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_errors.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_errors.inc
+dos_errors.rel: ../../sdk/asm/constants/dos_errors.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_errors.inc,dos_errors.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
-dos_file_handles.rel: $(UNDOC_MODE_STAMP) ../../sdk/asm/constants/dos_file_handles.inc
+dos_file_handles.rel: ../../sdk/asm/constants/dos_file_handles.inc
 	$(call assemble_as,../../sdk/asm/constants/dos_file_handles.inc,dos_file_handles.rel,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 
@@ -346,7 +289,6 @@ bank0/b0lab_b6.inc: \
 ###  Bank 1
 
 bank1/b1.rel: \
-	$(UNDOC_MODE_STAMP) \
 	bank1/b1.mac \
 	bank0/b0labels.inc \
 	bank2/b2labels.inc
@@ -372,7 +314,6 @@ bank1/B1.BIN: \
 ###  Bank 2
 
 bank2/b2.rel: \
-	$(UNDOC_MODE_STAMP) \
 	bank2/b2.mac \
 	bank0/b0labels.inc
 
@@ -402,7 +343,6 @@ bank2/b2labels.inc: \
 ###  Bank 3
 
 bank3/b3.rel: \
-	$(UNDOC_MODE_STAMP) \
 	bank3/b3.mac \
 	bank0/b0lab_b3.inc
 
@@ -426,7 +366,6 @@ bank3/B3.BIN: \
 ###  Bank 4
 
 bank4/b4.rel: \
-	$(UNDOC_MODE_STAMP) \
 	bank.inc \
 	bank4/b4.mac \
 	bank2/b2labels.inc
@@ -434,7 +373,6 @@ bank4/b4.rel: \
 	$(call assemble,bank4/b4.mac,--define-symbols GENERATE_PUBLIC_SYMBOLS)
 
 bank4/partit.rel: \
-	$(UNDOC_MODE_STAMP) \
 	bank4/partit.mac \
 	bank0/b0labels.inc
 
@@ -532,4 +470,3 @@ clean:
 	rm -f bank0/b0lab*.inc
 	rm -f bank2/b2labels.inc
 	rm -f bank6/devbuild.inc bank6/devbuild.inc.tmp
-	rm -f .build-variant*

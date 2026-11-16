@@ -128,9 +128,9 @@ The Nextor repository no longer contains the drivers for specific hardware, and 
 
 The drivers that were part of Nextor 2 now live in their own git repositories, but driver developers are free to distribute their work in any other way (a dedicated web site, plain downloadable binaries, etc.). The list of known drivers and where to get each of them is maintained in _[Nextor 3.0 Known Drivers](Nextor_3.0_Known_Drivers.md)_.
 
-### 2.8. Z180-compatible builds
+### 2.8. Z180 compatibility
 
-The kernel can now be built with the `NO_UNDOC_CPU_INSTRUCTIONS` option, which avoids all the undocumented Z80 instructions so that the resulting kernel also works on machines with a Z180 processor. See [the main README file](https://github.com/Konamiman/Nextor/blob/HEAD/README.md) for how to build the kernel.
+The kernel no longer uses undocumented Z80 instructions, so it also works on machines with a Z180 processor.
 
 ### 2.9. Better boot error messages
 

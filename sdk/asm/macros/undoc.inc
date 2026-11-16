@@ -1,18 +1,15 @@
 ;-----------------------------------------------------------------------------
 ;
-; Macros that replace the undocumented Z80 instructions which operate on
-; the high or low halves of the IX and IY registers (ixh, ixl, iyh, iyl).
+; Macros that do the same as the undocumented Z80 instructions which operate
+; on the high or low halves of the IX and IY registers (ixh, ixl, iyh, iyl),
+; but using only documented instructions.
 ;
-; When the symbol NO_UNDOC_CPU_INSTRUCTIONS is defined at assembly time
-; (e.g. via N80's `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS` flag), each
-; macro expands to a sequence of documented instructions that has the same
-; effect on registers AND flags as the original undocumented opcode.
-; Otherwise the macro expands to the original undocumented opcode.
+; Each macro expands to a sequence of documented instructions that has the
+; same effect on registers AND flags as the undocumented instruction.
 ;
-; This allows a single source tree to produce ROMs that run on the
-; original Z80 (where the undocumented opcodes are smaller and faster) and
-; on Z180-based MSX machines (e.g. Victor HC-95) that do not support them,
-; just by toggling a build flag.
+; Nextor doesn't use undocumented instructions so that it also works on
+; Z180-based MSX machines (e.g. Victor HC-95), which don't support them:
+; use these macros instead, a CI check verifies that this rule is followed.
 ;
 ; Supported macros and operand combinations:
 ;
@@ -119,50 +116,34 @@ ld_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	a,h
-	   pop	hl
-	  else
-	   ld	a,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	a,l
-	   pop	hl
-	  else
-	   ld	a,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	a,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	a,h
-	   pop	hl
-	  else
-	   ld	a,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	a,l
-	   pop	hl
-	  else
-	   ld	a,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	a,l
+	  pop	hl
 	 endif
 
 	endif
@@ -173,50 +154,34 @@ ld_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	b,h
-	   pop	hl
-	  else
-	   ld	b,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	b,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	b,l
-	   pop	hl
-	  else
-	   ld	b,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	b,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	b,h
-	   pop	hl
-	  else
-	   ld	b,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	b,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	b,l
-	   pop	hl
-	  else
-	   ld	b,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	b,l
+	  pop	hl
 	 endif
 
 	endif
@@ -227,50 +192,34 @@ ld_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	c,h
-	   pop	hl
-	  else
-	   ld	c,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	c,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	c,l
-	   pop	hl
-	  else
-	   ld	c,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	c,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	c,h
-	   pop	hl
-	  else
-	   ld	c,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	c,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	c,l
-	   pop	hl
-	  else
-	   ld	c,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	c,l
+	  pop	hl
 	 endif
 
 	endif
@@ -281,50 +230,34 @@ ld_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	d,h
-	   pop	hl
-	  else
-	   ld	d,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	d,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	d,l
-	   pop	hl
-	  else
-	   ld	d,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	d,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	d,h
-	   pop	hl
-	  else
-	   ld	d,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	d,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	d,l
-	   pop	hl
-	  else
-	   ld	d,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	d,l
+	  pop	hl
 	 endif
 
 	endif
@@ -335,50 +268,34 @@ ld_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	e,h
-	   pop	hl
-	  else
-	   ld	e,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	e,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	e,l
-	   pop	hl
-	  else
-	   ld	e,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	e,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	e,h
-	   pop	hl
-	  else
-	   ld	e,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	e,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	e,l
-	   pop	hl
-	  else
-	   ld	e,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	e,l
+	  pop	hl
 	 endif
 
 	endif
@@ -394,80 +311,56 @@ ld_ macro dest,src
 
 	 ifidni <src>,<a>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,a
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,a
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,a
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<b>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,b
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,b
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,b
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<c>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,c
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,c
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,c
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<d>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,d
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,d
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,d
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<e>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,e
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,e
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,e
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 if _undoc_ld_ok eq 0  ;; assume immediate
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	h,src
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixh,src
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	h,src
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	endif
@@ -476,80 +369,56 @@ ld_ macro dest,src
 
 	 ifidni <src>,<a>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,a
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,a
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,a
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<b>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,b
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,b
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,b
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<c>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,c
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,c
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,c
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<d>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,d
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,d
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,d
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 ifidni <src>,<e>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,e
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,e
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,e
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	 if _undoc_ld_ok eq 0  ;; assume immediate
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   ld	l,src
-	   ex	(sp),hl
-	   pop	ix
-	  else
-	   ld	ixl,src
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  ld	l,src
+	  ex	(sp),hl
+	  pop	ix
 	 endif
 
 	endif
@@ -558,80 +427,56 @@ ld_ macro dest,src
 
 	 ifidni <src>,<a>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,a
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,a
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,a
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<b>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,b
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,b
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,b
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<c>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,c
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,c
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,c
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<d>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,d
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,d
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,d
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<e>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,e
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,e
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,e
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 if _undoc_ld_ok eq 0  ;; assume immediate
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	h,src
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyh,src
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	h,src
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	endif
@@ -640,80 +485,56 @@ ld_ macro dest,src
 
 	 ifidni <src>,<a>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,a
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,a
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,a
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<b>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,b
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,b
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,b
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<c>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,c
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,c
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,c
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<d>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,d
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,d
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,d
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 ifidni <src>,<e>
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,e
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,e
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,e
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	 if _undoc_ld_ok eq 0  ;; assume immediate
 	  _undoc_ld_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   ld	l,src
-	   ex	(sp),hl
-	   pop	iy
-	  else
-	   ld	iyl,src
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  ld	l,src
+	  ex	(sp),hl
+	  pop	iy
 	 endif
 
 	endif
@@ -757,50 +578,34 @@ cp_ macro src
 
 	ifidni <src>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  cp	h
-	  pop	hl
-	 else
-	  cp	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 cp	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  cp	l
-	  pop	hl
-	 else
-	  cp	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 cp	l
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  cp	h
-	  pop	hl
-	 else
-	  cp	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 cp	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  cp	l
-	  pop	hl
-	 else
-	  cp	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 cp	l
+	 pop	hl
 	endif
 
 	if _undoc_op_ok eq 0
@@ -823,50 +628,34 @@ or_ macro src
 
 	ifidni <src>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  or	h
-	  pop	hl
-	 else
-	  or	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 or	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  or	l
-	  pop	hl
-	 else
-	  or	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 or	l
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  or	h
-	  pop	hl
-	 else
-	  or	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 or	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  or	l
-	  pop	hl
-	 else
-	  or	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 or	l
+	 pop	hl
 	endif
 
 	if _undoc_op_ok eq 0
@@ -879,50 +668,34 @@ and_ macro src
 
 	ifidni <src>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  and	h
-	  pop	hl
-	 else
-	  and	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 and	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  and	l
-	  pop	hl
-	 else
-	  and	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 and	l
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  and	h
-	  pop	hl
-	 else
-	  and	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 and	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  and	l
-	  pop	hl
-	 else
-	  and	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 and	l
+	 pop	hl
 	endif
 
 	if _undoc_op_ok eq 0
@@ -935,50 +708,34 @@ xor_ macro src
 
 	ifidni <src>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  xor	h
-	  pop	hl
-	 else
-	  xor	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 xor	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  xor	l
-	  pop	hl
-	 else
-	  xor	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 xor	l
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  xor	h
-	  pop	hl
-	 else
-	  xor	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 xor	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  xor	l
-	  pop	hl
-	 else
-	  xor	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 xor	l
+	 pop	hl
 	endif
 
 	if _undoc_op_ok eq 0
@@ -991,50 +748,34 @@ sub_ macro src
 
 	ifidni <src>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  sub	h
-	  pop	hl
-	 else
-	  sub	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 sub	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  sub	l
-	  pop	hl
-	 else
-	  sub	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 sub	l
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  sub	h
-	  pop	hl
-	 else
-	  sub	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 sub	h
+	 pop	hl
 	endif
 
 	ifidni <src>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  sub	l
-	  pop	hl
-	 else
-	  sub	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 sub	l
+	 pop	hl
 	endif
 
 	if _undoc_op_ok eq 0
@@ -1054,50 +795,34 @@ add_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   add	a,h
-	   pop	hl
-	  else
-	   add	a,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  add	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   add	a,l
-	   pop	hl
-	  else
-	   add	a,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  add	a,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   add	a,h
-	   pop	hl
-	  else
-	   add	a,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  add	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   add	a,l
-	   pop	hl
-	  else
-	   add	a,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  add	a,l
+	  pop	hl
 	 endif
 
 	endif
@@ -1114,50 +839,34 @@ adc_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   adc	a,h
-	   pop	hl
-	  else
-	   adc	a,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  adc	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   adc	a,l
-	   pop	hl
-	  else
-	   adc	a,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  adc	a,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   adc	a,h
-	   pop	hl
-	  else
-	   adc	a,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  adc	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   adc	a,l
-	   pop	hl
-	  else
-	   adc	a,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  adc	a,l
+	  pop	hl
 	 endif
 
 	endif
@@ -1174,50 +883,34 @@ sbc_ macro dest,src
 
 	 ifidni <src>,<ixh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   sbc	a,h
-	   pop	hl
-	  else
-	   sbc	a,ixh
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  sbc	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<ixl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	ix
-	   ex	(sp),hl
-	   sbc	a,l
-	   pop	hl
-	  else
-	   sbc	a,ixl
-	  endif
+	  push	ix
+	  ex	(sp),hl
+	  sbc	a,l
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyh>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   sbc	a,h
-	   pop	hl
-	  else
-	   sbc	a,iyh
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  sbc	a,h
+	  pop	hl
 	 endif
 
 	 ifidni <src>,<iyl>
 	  _undoc_op_ok defl 1
-	  ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	   push	iy
-	   ex	(sp),hl
-	   sbc	a,l
-	   pop	hl
-	  else
-	   sbc	a,iyl
-	  endif
+	  push	iy
+	  ex	(sp),hl
+	  sbc	a,l
+	  pop	hl
 	 endif
 
 	endif
@@ -1242,54 +935,38 @@ inc_ macro reg
 
 	ifidni <reg>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  inc	h
-	  ex	(sp),hl
-	  pop	ix
-	 else
-	  inc	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 inc	h
+	 ex	(sp),hl
+	 pop	ix
 	endif
 
 	ifidni <reg>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  inc	l
-	  ex	(sp),hl
-	  pop	ix
-	 else
-	  inc	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 inc	l
+	 ex	(sp),hl
+	 pop	ix
 	endif
 
 	ifidni <reg>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  inc	h
-	  ex	(sp),hl
-	  pop	iy
-	 else
-	  inc	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 inc	h
+	 ex	(sp),hl
+	 pop	iy
 	endif
 
 	ifidni <reg>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  inc	l
-	  ex	(sp),hl
-	  pop	iy
-	 else
-	  inc	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 inc	l
+	 ex	(sp),hl
+	 pop	iy
 	endif
 
 	if _undoc_op_ok eq 0
@@ -1302,54 +979,38 @@ dec_ macro reg
 
 	ifidni <reg>,<ixh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  dec	h
-	  ex	(sp),hl
-	  pop	ix
-	 else
-	  dec	ixh
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 dec	h
+	 ex	(sp),hl
+	 pop	ix
 	endif
 
 	ifidni <reg>,<ixl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	ix
-	  ex	(sp),hl
-	  dec	l
-	  ex	(sp),hl
-	  pop	ix
-	 else
-	  dec	ixl
-	 endif
+	 push	ix
+	 ex	(sp),hl
+	 dec	l
+	 ex	(sp),hl
+	 pop	ix
 	endif
 
 	ifidni <reg>,<iyh>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  dec	h
-	  ex	(sp),hl
-	  pop	iy
-	 else
-	  dec	iyh
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 dec	h
+	 ex	(sp),hl
+	 pop	iy
 	endif
 
 	ifidni <reg>,<iyl>
 	 _undoc_op_ok defl 1
-	 ifdef NO_UNDOC_CPU_INSTRUCTIONS
-	  push	iy
-	  ex	(sp),hl
-	  dec	l
-	  ex	(sp),hl
-	  pop	iy
-	 else
-	  dec	iyl
-	 endif
+	 push	iy
+	 ex	(sp),hl
+	 dec	l
+	 ex	(sp),hl
+	 pop	iy
 	endif
 
 	if _undoc_op_ok eq 0

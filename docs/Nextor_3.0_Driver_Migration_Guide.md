@@ -136,7 +136,7 @@ Notes:
 
 * The two query index files are wrapped in modules because both define constants with the same names (e.g. `GET_STRING`); they become available as `DRIVER_QUERY.GET_STRING`, `DEVICE_QUERY.GET_PARAMS`, etc.
 
-* `undoc.inc` is optional: it provides macros that replace the undocumented Z80 instructions (those operating on IXh/IXl/IYh/IYl) with documented equivalents when the `NO_UNDOC_CPU_INSTRUCTIONS` symbol is defined, for Z180 compatibility.
+* `undoc.inc` is optional: it provides macros that do the same as the undocumented Z80 instructions operating on IXh/IXl/IYh/IYl using only documented instructions, for Z180 compatibility.
 
 Additionally, replace the block of hand-copied kernel entry point `EQU`s that every Nextor 2 driver carried (`GSLOT1 equ 402Dh`, `CALBNK equ 4042h`, `GWORK equ 4045h`, etc.) with:
 
@@ -561,7 +561,7 @@ Notes:
 
 * The space available for the driver in each bank is the same as in Nextor 2: 4100h to 7FD0h, i.e. 3ED0h (16080) bytes. Pad the binary to that size with a `ds` directive (e.g. the SDK driver template ends with `ds 7FD0h-$,0FFh`), which has the nice side effect of making the assembly fail if the driver outgrows the bank.
 
-* To support Z180-based MSX machines, assemble with `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS` (this activates the documented-instructions variants of the `undoc.inc` macros) and pair the result with a `.NO_UNDOC.` variant of the kernel base file.
+* To support Z180-based MSX machines, don't use undocumented Z80 instructions in your driver (the kernel doesn't use them either); the `undoc.inc` macros can be used instead of those operating on IXh/IXl/IYh/IYl.
 
 * Instead of installing a local toolchain you can build inside [the Nextor development Docker image](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md) (see _[8.2. The Docker development image](Nextor_3.0_Programmers_Reference.md#82-the-docker-development-image)_), which provides N80, `mknexrom`, the SDK and the kernel base files. The migrated driver repositories include a `docker-build.sh` wrapper that does exactly this.
 

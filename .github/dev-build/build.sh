@@ -8,8 +8,8 @@
 # The files are generated in the usual places under bin/ and with the usual
 # names (the workflow is what adds "dev-<date>" to the names when publishing):
 #
-#   bin/kernel-base   The kernel base files, both variants
-#   bin/drivers       The standalone ROMs, both variants, and the example RAM driver
+#   bin/kernel-base   The kernel base file
+#   bin/drivers       The standalone ROMs and the example RAM driver
 #   bin/tools         The tools disk image (nextor.dsk) and zip file (tools.zip)
 #
 # Requires git and the tools needed to build Nextor (see "How to build Nextor"
@@ -24,8 +24,8 @@ cd "$repo_root"
 build_id="$(TZ=UTC git log -1 --abbrev=7 --date=format-local:%Y-%m-%d --format='%cd (%h)')"
 echo "Building dev build $build_id"
 
-make -C source everything DEV_BUILD="$build_id"
-make -C source/drivers ram-example   # Not built by "everything"
+make -C source DEV_BUILD="$build_id"
+make -C source/drivers ram-example   # Not built by default
 make -C source tools-all             # The tools disk image and zip file
 
 echo

@@ -67,35 +67,30 @@ There are a number of makefiles that will take care of building the different co
 | What do you want to build? | Makefile directory | Target | Result |
 | --- | --- | --- | --- |
 | Kernel base file (the input for `mknexrom` to produce complete kernel ROMs) | `source/kernel` | none | `bin/kernel-base/Nextor-<version>.base.dat` |
-| Kernel base file, both build variants¹ | `source/kernel` | `everything` | `bin/kernel-base/Nextor-<version>.base[.<variant>].dat`, two files |
-| Standalone ROMs² (ASCII8 and ASCII16) | `source/drivers` | none | `bin/drivers/Nextor-<version>.StandaloneASCII8.ROM` and `...ASCII16.ROM` |
-| Standalone ROMs², both build variants¹ | `source/drivers` | `everything` | `bin/drivers/Nextor-<version>.StandaloneASCII{8,16}[.<variant>].ROM`, four files |
+| Standalone ROMs¹ (ASCII8 and ASCII16) | `source/drivers` | none | `bin/drivers/Nextor-<version>.StandaloneASCII8.ROM` and `...ASCII16.ROM` |
 | Example RAM-loadable driver | `source/drivers` | `ram-example` | `bin/drivers/ram-driver-example.drv` |
 | `NEXTOR.SYS`, plus its Japanese-messages variant | `source/nextor_sys` | none | `bin/tools/NEXTOR.SYS` and `bin/tools/NEXTOR.SYS.japanese` |
 | `COMMAND3.COM`, the command interpreter | `source/commandcom` | none | `bin/tools/COMMAND3.COM` |
 | `MSXDOS.SYS` and `COMMAND.COM`, the MSX-DOS 1 system files | `source/msxdos1` | none | `bin/tools/MSXDOS.SYS` and `bin/tools/COMMAND.COM` |
 | Command line tools written in assembler | `source/tools` | none | `bin/tools`, one `.COM` file per tool |
 | Command line tools written in C | `source/tools/C` | none | `bin/tools`, one `.COM` file per tool |
-| Tools disk image³ | `source/tools` | `tools-disk` | `bin/tools/nextor.dsk` |
-| Tools zip archive⁴ | `source/tools` | `tools-zip` | `bin/tools/tools.zip` |
+| Tools disk image² | `source/tools` | `tools-disk` | `bin/tools/nextor.dsk` |
+| Tools zip archive³ | `source/tools` | `tools-zip` | `bin/tools/tools.zip` |
 
-¹ The two variants are: default, and `NO_UNDOC_CPU_INSTRUCTIONS` (no undocumented Z80 opcodes, for compatibility with Z180-based MSX machines). See the comments at the beginning of the kernel makefile for the details.
+¹ A standalone ROM is a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware. The `source/drivers` makefile builds the kernel base file too (by recursing into `source/kernel`), unless the `NEXTOR_BASE` variable points it to a pre-built one.
 
-² A standalone ROM is a full usable ROM containing the Nextor kernel and a dummy driver that doesn't handle any hardware. The `source/drivers` makefile builds the kernel base file too (by recursing into `source/kernel`), unless the `NEXTOR_BASE` variable points it to a pre-built one.
+² The disk image is a 720K FAT12 image containing `NEXTOR.SYS` (plus the Japanese-messages variant, renamed to `NEXTORJ.SYS`), `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM`, `MSR.COM`, an `AUTOEXEC.BTM` file that sets the `PATH` and `HELP` environment items (a `.BTM` file and not a `.BAT` one, so that it isn't executed in MSX-DOS 1 mode), and a `README.TXT` file in the root directory; every other `.COM` file present in `bin/tools` (all the command line tools) in a `TOOLS` directory; and the `COMMAND3.COM` help files in a `HELP` directory. It boots straight to the DOS prompt on a computer with a Nextor kernel ROM, both in the normal mode and in MSX-DOS 1 mode. Files not built by this repository can be added through the `EXTRA_FILES` variable; relative paths are resolved against the current directory, the one you run `make` from. This target requires the mtools package, and expects all the files to be already built: use the `tools-disk` umbrella target (below) to build them and create the image in one go.
 
-³ The disk image is a 720K FAT12 image containing `NEXTOR.SYS` (plus the Japanese-messages variant, renamed to `NEXTORJ.SYS`), `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM`, `MSR.COM`, an `AUTOEXEC.BTM` file that sets the `PATH` and `HELP` environment items (a `.BTM` file and not a `.BAT` one, so that it isn't executed in MSX-DOS 1 mode), and a `README.TXT` file in the root directory; every other `.COM` file present in `bin/tools` (all the command line tools) in a `TOOLS` directory; and the `COMMAND3.COM` help files in a `HELP` directory. It boots straight to the DOS prompt on a computer with a Nextor kernel ROM, both in the normal mode and in MSX-DOS 1 mode. Files not built by this repository can be added through the `EXTRA_FILES` variable; relative paths are resolved against the current directory, the one you run `make` from. This target requires the mtools package, and expects all the files to be already built: use the `tools-disk` umbrella target (below) to build them and create the image in one go.
-
-⁴ The zip archive has the same contents (and directory structure) as the disk image, except for the `EXTRA_FILES`. This target requires the `zip` tool and, like `tools-disk`, expects all the files to be already built: the `tools-zip` umbrella target (below) builds them and creates the archive in one go.
+³ The zip archive has the same contents (and directory structure) as the disk image, except for the `EXTRA_FILES`. This target requires the `zip` tool and, like `tools-disk`, expects all the files to be already built: the `tools-zip` umbrella target (below) builds them and creates the archive in one go.
 
 Additionally, an "umbrella" makefile in `source` invokes the other makefiles in the right order, so the common combinations are a single `make` command run from the `source` directory. The same rule applies: plain `make` builds the first row only, every other combination needs its target spelled out.
 
 | What do you want to build? | Target | Result |
 | --- | --- | --- |
 | Everything with a default target above: kernel base file, standalone ROMs, `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools | none | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
-| The same, but with the kernel base file and the standalone ROMs in both variants¹ | `everything` | `bin/kernel-base`, `bin/drivers`, `bin/tools` |
-| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then the disk image³ | `tools-disk` | `bin/tools`, including `nextor.dsk` |
-| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then the zip archive⁴ | `tools-zip` | `bin/tools`, including `tools.zip` |
-| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then both the disk image³ and the zip archive⁴ | `tools-all` | `bin/tools`, including `nextor.dsk` and `tools.zip` |
+| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then the disk image² | `tools-disk` | `bin/tools`, including `nextor.dsk` |
+| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then the zip archive³ | `tools-zip` | `bin/tools`, including `tools.zip` |
+| `NEXTOR.SYS`, `COMMAND3.COM`, `MSXDOS.SYS`, `COMMAND.COM` and all the command line tools, then both the disk image² and the zip archive³ | `tools-all` | `bin/tools`, including `nextor.dsk` and `tools.zip` |
 
 Note that the example RAM driver is the one thing no umbrella target builds: it is always an explicit `make ram-example` in `source/drivers`.
 
