@@ -208,11 +208,8 @@ def asset_map(version, date):
     vn = f"Nextor-{version}-{suffix}"
     return [
         (f"bin/kernel-base/{v}.base.dat", f"{vn}.base.dat"),
-        (f"bin/kernel-base/{v}.base.NO_UNDOC.dat", f"{vn}.base.NO_UNDOC.dat"),
         (f"bin/drivers/{v}.StandaloneASCII8.ROM", f"{vn}.StandaloneASCII8.ROM"),
-        (f"bin/drivers/{v}.StandaloneASCII8.NO_UNDOC.ROM", f"{vn}.StandaloneASCII8.NO_UNDOC.ROM"),
         (f"bin/drivers/{v}.StandaloneASCII16.ROM", f"{vn}.StandaloneASCII16.ROM"),
-        (f"bin/drivers/{v}.StandaloneASCII16.NO_UNDOC.ROM", f"{vn}.StandaloneASCII16.NO_UNDOC.ROM"),
         ("bin/drivers/ram-driver-example.drv", f"ram-driver-example-{suffix}.drv"),
         ("bin/tools/nextor.dsk", f"nextor-{suffix}.dsk"),
         ("bin/tools/tools.zip", f"tools-{suffix}.zip"),
@@ -238,14 +235,12 @@ def make_notes(repo, target, date_iso, build_id, version, date, changes):
         "",
         "## Assets",
         "",
-        f"- `{names[0]}`, `{names[1]}`: the kernel base files, to be combined with a driver using mknexrom.",
-        f"- `{names[2]}`, `{names[3]}`, `{names[4]}`, `{names[5]}`: the standalone kernel ROMs"
+        f"- `{names[0]}`: the kernel base file, to be combined with a driver using mknexrom.",
+        f"- `{names[1]}`, `{names[2]}`: the standalone kernel ROMs"
         " (with a dummy driver that handles no devices).",
-        f"- `{names[6]}`: the example RAM driver.",
-        f"- `{names[7]}`, `{names[8]}`: the tools disk image and ZIP file, with NEXTOR.SYS, COMMAND3.COM,"
+        f"- `{names[3]}`: the example RAM driver.",
+        f"- `{names[4]}`, `{names[5]}`: the tools disk image and ZIP file, with NEXTOR.SYS, COMMAND3.COM,"
         " the MSX-DOS 1 system files, all the command line tools and the COMMAND3.COM help files.",
-        "",
-        "Files with `NO_UNDOC` in their name don't use undocumented Z80 instructions, so they work on Z180 based machines.",
         "",
         "## Changes not included in any official release yet",
         "",

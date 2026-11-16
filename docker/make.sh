@@ -12,16 +12,13 @@ $prog - build a Nextor source part inside the dev image (repo root mounted).
 
 Usage: $prog <part> [make-args...]
 
-  $prog kernel              build the default kernel base file
-  $prog kernel everything   both kernel variants
+  $prog kernel              build the kernel base file
   $prog drivers             the standalone ROMs (ASCII8 + ASCII16)
   $prog drivers ram-example the opt-in example RAM disk driver (.drv)
   $prog nextor_sys          build NEXTOR.SYS
   $prog tools               all command-line tools (assembler + C)
   $prog tools/C             just the C tools
-  $prog all                 one variant of every part (umbrella Makefile)
-  $prog all everything      the FULL matrix: every kernel + standalone-ROM
-                            variant, plus NEXTOR.SYS and all tools
+  $prog all                 every part (umbrella Makefile)
   $prog all tools-disk      NEXTOR.SYS + all tools, packed into the
                             bin/tools/nextor.dsk disk image
   $prog all tools-zip       NEXTOR.SYS + all tools, packed into the
@@ -33,7 +30,7 @@ Usage: $prog <part> [make-args...]
 
 Parts (dirs under source/): kernel, drivers, nextor_sys, tools, tools/C.
 'tools' builds source/tools AND source/tools/C; 'tools/C' builds only the latter.
-'all' is the umbrella; pass it a target ('everything', 'tools-disk',
+'all' is the umbrella; pass it a target ('tools-disk',
 'tools-zip', 'tools-all', 'clean', 'distclean').
 Outputs are written back as your user (via --user), not root.
 
@@ -78,11 +75,7 @@ fi
 echo "$prog: using image '$image'" >&2
 # The image bakes NEXTOR_BASE (its own kernel base) for driver/tool users.
 # UNSET it for from-source builds so the drivers build the kernel base from the
-# mounted sources. It must be *unset*, not merely emptied: an empty environment
-# NEXTOR_BASE still has make origin "environment", so the drivers Makefile's
-# internal `NEXTOR_BASE := <variant base>` gets re-exported to its per-variant
-# sub-makes and breaks the matrix. Unsetting makes it origin "undefined", which
-# make does not export. (Docker has no --unset-env, hence the sh wrapper.)
+# mounted sources. (Docker has no --unset-env, hence the sh wrapper.)
 for d in $dirs; do
 	docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work "$image" \
 		sh -c 'unset NEXTOR_BASE; exec make -C "$0" "$@"' "$d" "$@"

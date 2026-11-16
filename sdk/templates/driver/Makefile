@@ -34,15 +34,6 @@ MKNEXROM    ?= mknexrom
 
 N80_FLAGS := --no-string-escapes --no-show-banner --verbosity 0 --include-directory $(NEXTOR_SDK)
 
-# NO_UNDOC=1 -> assemble undoc-free (the undoc.inc macros expand to documented
-# instruction sequences, safe on Z180-based machines). Match this to a
-# .NO_UNDOC. kernel base file:
-#
-#   make NO_UNDOC=1 NEXTOR_BASE=<path to a .NO_UNDOC. base file>
-ifeq ($(NO_UNDOC),1)
-N80_FLAGS += --define-symbols NO_UNDOC_CPU_INSTRUCTIONS
-endif
-
 .PHONY: all clean
 all: $(ROM)
 

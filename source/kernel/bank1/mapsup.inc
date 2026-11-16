@@ -181,14 +181,10 @@ _U_CALLRAM2:
         inc     sp
         inc     sp
 
-        ;The NO_UNDOC variants of `ld_ iyl,e` and `ld_ iyh,a` above
-        ;expand by 5 bytes each, pushing the target out of jr range.
+        ;Not a `jr`: the `ld_ iyl,e` and `ld_ iyh,a` macros above take 5 bytes
+        ;more than the equivalent instructions, pushing the target out of range.
 
-        ifdef	NO_UNDOC_CPU_INSTRUCTIONS
 ...	      < jp      _U_CALLRAM >
-        else
-        jr      _U_CALLRAM
-        endif
 ;
 ;-----------------------------------------------------------------------------
 ;

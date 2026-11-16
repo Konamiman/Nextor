@@ -195,7 +195,7 @@ Key points:
 
 - **`mknexrom <base> <out> /d:<driver.bin> /m:<chgbnk.bin>`** is the combine step. `/d:` is your assembled driver (which must begin with 256 dummy bytes - the template's `driver.asm` does this with `org 4000h` + `ds 4100h-$,0`), `/m:` is the bank-switching module for your cartridge's mapper.
 - **`--include-directory $(NEXTOR_SDK)`** lets sources write `INCLUDE asm/constants/...` instead of long relative paths.
-- **Variants:** point `NEXTOR_BASE` at another base file to target a different kernel. For a `.NO_UNDOC.` base, also assemble the driver undoc-free (`make NO_UNDOC=1 NEXTOR_BASE=.../kernel_base.NO_UNDOC.dat`); the template wires `NO_UNDOC=1` to `--define-symbols NO_UNDOC_CPU_INSTRUCTIONS`.
+- **Other kernels:** point `NEXTOR_BASE` at another base file to target a different kernel.
 
 A **tool** Makefile is simpler - `tool.asm` uses `org 0100h`, so `N80` emits a ready-to-run `.COM` directly; there is no `mknexrom` step.
 
@@ -223,30 +223,28 @@ The easiest way is the **`docker/make.sh`** wrapper: it mounts the root for you,
 ```sh
 git clone https://github.com/Konamiman/Nextor && cd Nextor
 
-docker/make.sh kernel              # build the default kernel base file
-docker/make.sh kernel everything   # both kernel variants
+docker/make.sh kernel              # build the kernel base file
 docker/make.sh kernel clean
 docker/make.sh nextor_sys          # build NEXTOR.SYS
-docker/make.sh all                 # one variant of every part
-docker/make.sh all everything      # the FULL matrix (see below)
+docker/make.sh all                 # every part
 docker/make.sh all tools-disk      # NEXTOR.SYS + all tools, packed in a disk image
 docker/make.sh all tools-zip       # NEXTOR.SYS + all tools, packed in a zip archive
 docker/make.sh all tools-all       # tools + disk image + zip archive in one go
 docker/make.sh all distclean       # remove every build artifact, incl. bin/
 ```
 
-`<part>` is any directory under `source/`; extra arguments (`everything`, `clean`, a target, `-j`, ...) pass straight through to `make`:
+`<part>` is any directory under `source/`; extra arguments (`clean`, a target, `-j`, ...) pass straight through to `make`:
 
 | `docker/make.sh ...` | Builds |
 |---|---|
-| `kernel` | the kernel base file(s) → `bin/kernel-base/Nextor-<version>.base[<suffix>].dat`; `everything` = both variants |
+| `kernel` | the kernel base file → `bin/kernel-base/Nextor-<version>.base.dat` |
 | `nextor_sys` | `NEXTOR.SYS` (+ `.japanese`) |
 | `tools` | all command-line `.COM` utilities - both the assembler tools (`source/tools`) and the C tools (`source/tools/C`) |
 | `tools/C` | just the C tools |
-| `drivers` | the standalone ROMs (ASCII8 + ASCII16) → `bin/drivers/`; `everything` = both variants of each; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/drivers/`) |
-| `all` | the umbrella Makefile: bare = one variant of every part; `everything` = all kernel + standalone-ROM variants + NEXTOR.SYS + all tools; `tools-disk` = the tools disk image; `tools-zip` = the tools zip archive; `tools-all` = both; `clean` / `distclean` |
+| `drivers` | the standalone ROMs (ASCII8 + ASCII16) → `bin/drivers/`; `ram-example` = the opt-in example RAM disk driver (`.drv` → `bin/drivers/`) |
+| `all` | the umbrella Makefile: bare = every part; `tools-disk` = the tools disk image; `tools-zip` = the tools zip archive; `tools-all` = both; `clean` / `distclean` |
 
-`make.sh all everything` builds the complete release matrix: both kernel base variants, both standalone ROMs (ASCII8/ASCII16) for each of them, NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of that plus the source-tree intermediates.
+`make.sh all` builds the kernel base file, both standalone ROMs (ASCII8/ASCII16), NEXTOR.SYS, and every command-line tool. `make.sh all distclean` removes all of that plus the source-tree intermediates.
 
 `make.sh all tools-disk` builds NEXTOR.SYS, COMMAND3.COM, the MSX-DOS 1 system files (MSXDOS.SYS and COMMAND.COM) and all the command line tools, then packs them into `bin/tools/nextor.dsk`, a 720K FAT12 disk image created with `mformat`/`mcopy`, carrying the same MSX-DOS 2 style boot sector that the built-in FORMAT command creates. The disk boots straight to the DOS prompt on a computer with a Nextor kernel ROM, both in the normal mode and in MSX-DOS 1 mode. Files not built by this repository can be added with the `EXTRA_FILES` variable; relative paths are resolved against the repository root (see the `tools-disk` target in `source/tools/Makefile` for the details).
 
@@ -293,8 +291,7 @@ Everything lives under `/opt/nextor`:
 │                   (sdcc and the mtools utilities are Debian apt
 │                   packages, at /usr/bin)
 ├── kernel_base/
-│   ├── kernel_base.dat                       default variant
-│   └── kernel_base.NO_UNDOC.dat              no undocumented Z80 opcodes
+│   └── kernel_base.dat
 ├── sdk/            asm/ (constants, macros, code, chgbnk), C/ (includes, code)
 │                   and templates/ (the driver/ and tool/ project templates)
 └── manifest.json   every baked-in component version (JSON)
@@ -315,16 +312,11 @@ Recipes (and you) can rely on these being set inside the container:
 | `NEXTOR_SDK_ASM` / `NEXTOR_SDK_C` | `.../sdk/asm`, `.../sdk/C` | asm / C subtrees |
 | `N80` `LK80` `LB80` `MKNEXROM` `SDCC` | absolute tool paths | for Makefiles that prefer explicit paths |
 
-### Variants
+### Kernel base file
 
-There are two base file **variants**:
+There is one single base file, which doesn't use undocumented Z80 instructions and so is safe on Z180-based MSX (e.g. Victor HC-95).
 
-| Suffix | Meaning |
-|---|---|
-| *(none)* | undocumented Z80 opcodes allowed |
-| `.NO_UNDOC` | no undocumented opcodes - safe on Z180-based MSX (e.g. Victor HC-95) |
-
-**Note:** earlier revisions of this image also shipped `.SHIFT_INV`, `.CTRL_INV` and `.KANJI_INV` variants, with the corresponding boot key inverted. They are gone because Nextor 3 keeps the inverted boot keys in the persistent storage, where they can be changed at any time with `CALL BOOTKEYS` or `NEXBOOT /p`. Inverting a key in the ROM itself is still possible: `mknexrom` flips the boot key bytes at ROM-assembly time with `/k:<hex>` (LSB = byte 0, MSB = byte 1; e.g. `/k:1002` inverts SHIFT and "1", `/k:0040` inverts "6"). The `NO_UNDOC` variant is different: it changes the assembled code, so it genuinely requires its own base file.
+**Note:** earlier revisions of this image also shipped `.NO_UNDOC`, `.SHIFT_INV`, `.CTRL_INV` and `.KANJI_INV` variants. The first one is gone because the kernel never uses undocumented instructions now, and the others (having the corresponding boot key inverted) because Nextor 3 keeps the inverted boot keys in the persistent storage, where they can be changed at any time with `CALL BOOTKEYS` or `NEXBOOT /p`. Inverting a key in the ROM itself is still possible: `mknexrom` flips the boot key bytes at ROM-assembly time with `/k:<hex>` (LSB = byte 0, MSB = byte 1; e.g. `/k:1002` inverts SHIFT and "1", `/k:0040` inverts "6").
 
 ### Naming conventions
 
@@ -360,7 +352,7 @@ docker build -f docker/Dockerfile \
 
 Why pass `NEXTOR_VERSION` at all? It stamps the version into the **[OCI labels](https://github.com/opencontainers/image-spec/blob/main/annotations.md)** (standardised key-value metadata baked into the image and readable later with `docker inspect`) and the baked **`NEXTOR_VERSION`** env var. Those are `LABEL`/`ENV` instructions, which accept only literals or build args - they can't `cat` the file the way a `RUN` can (`manifest.json` *is* written by a `RUN`, and the SDK's `nextor-kernel-version.txt` is produced by the kernel build). That's the whole reason the value is injected from outside, and why the wrapper exists. It defaults to `unknown` if omitted.
 
-The build is fully reproducible from source: it downloads pinned Nestor80 releases (per target arch), installs SDCC 4.2.0 from Debian's apt, compiles `mknexrom` from `buildtools/sources`, and builds both kernel base files via `make -C source/kernel everything`.
+The build is fully reproducible from source: it downloads pinned Nestor80 releases (per target arch), installs SDCC 4.2.0 from Debian's apt, compiles `mknexrom` from `buildtools/sources`, and builds the kernel base file via `make -C source/kernel`.
 
 ### Build arguments
 
@@ -394,7 +386,7 @@ docker/test.sh                 # local 'nextor-dev' build, else the official lat
 docker/test.sh my-other-tag    # or any explicit tag
 ```
 
-`test.sh` runs inside the container as a login shell and checks: every tool runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), both base variants are present, the baked `NEXTOR_VERSION` matches the built kernel and `manifest.json`, and both project templates (`driver`, `tool`) build end-to-end when copied verbatim. It exits non-zero on any failure, so it doubles as a CI gate - and indeed the **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this (`build.sh` → `test.sh`, no push) on every pull request that touches an image input, so the build and the 16 checks are verified before merge.
+`test.sh` runs inside the container as a login shell and checks: every tool runs (incl. a real N80→LK80 link and an `sdcc -mz80` compile), the kernel base file is present, the baked `NEXTOR_VERSION` matches the built kernel and `manifest.json`, and both project templates (`driver`, `tool`) build end-to-end when copied verbatim. It exits non-zero on any failure, so it doubles as a CI gate - and indeed the **`Image CI`** workflow (`.github/workflows/image-ci.yaml`) runs exactly this (`build.sh` → `test.sh`, no push) on every pull request that touches an image input, so the build and the 16 checks are verified before merge.
 
 **2. Move it to another machine** without a registry, via a tarball:
 

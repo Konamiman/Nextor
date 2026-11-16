@@ -153,18 +153,6 @@ MKDSK.COM: MKDSK.MAC $(SDK_RELS) $(BOOTSECT_BIN) $(MKDSK_BOOT1_BIN)
 # - The page-3 resident routines (bank1/mapsup.inc) and the relocation
 #   macros (bank1/p3reloc.inc) are included by MSR.MAC.
 # - The mapper detection routine (bank1/maptest.mac) is linked.
-#
-# The resident routines use undocumented Z80 instructions (like the kernel,
-# whose code they are): pass NO_UNDOC_CPU_INSTRUCTIONS=1 to build a Z180
-# compatible MSR.COM.
-MSR_DEFINES := $(if $(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),--define-symbols NO_UNDOC_CPU_INSTRUCTIONS)
-
-# Switching the variant rebuilds MSR.COM: the stamp file name depends on it.
-MSR_UNDOC_STAMP := MSR-UNDOC-$(if $(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),NO,YES).stamp
-
-$(MSR_UNDOC_STAMP):
-	@rm -f MSR-UNDOC-*.stamp
-	@touch $@
 
 SEG.REL: ../kernel/bank4/seg.mac $(INCS)
 	$(call assemble_as,../kernel/bank4/seg.mac,SEG.REL)
@@ -178,14 +166,13 @@ MSRSEG.BIN: MSRSEG.MAC SEG.REL DATA.REL
 
 MSR.COM: \
 	MSR.MAC \
-	$(MSR_UNDOC_STAMP) \
 	MSRSEG.BIN \
 	MAPTEST.REL \
 	../kernel/bank1/p3reloc.inc \
 	../kernel/bank1/mapsup.inc \
 	../../sdk/asm/macros/undoc.inc
 
-	$(call assemble,MSR.MAC,$(MSR_DEFINES))
+	$(call assemble,MSR.MAC)
 	@$(LK80) --output-file $@ --code 0100h MSR.REL MAPTEST.REL
 
 # Build rules for each individual SDK shared routine .asm file (one per public routine).

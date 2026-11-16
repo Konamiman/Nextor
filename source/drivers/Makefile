@@ -1,7 +1,7 @@
 # Makefile for the Nextor standalone ROM drivers and example RAM driver.
 #
 # Default target builds:
-#   - The kernel base file (Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat).
+#   - The kernel base file (Nextor-$(NEXTOR_KERNEL_VERSION).base.dat).
 #   - The Standalone ASCII8 ROM.
 #   - The Standalone ASCII16 ROM.
 #
@@ -10,13 +10,6 @@
 #
 # The example RAM driver (ram-driver-example.asm) is opt-in via the
 # `ram-example` target.
-#
-# Build variants: the same single knob as the kernel Makefile. When
-# non-empty it both defines a symbol passed to N80 via --define-symbols
-# and adds a fragment to the output-filename suffix.
-#
-#   NO_UNDOC_CPU_INSTRUCTIONS  -> defines NO_UNDOC_CPU_INSTRUCTIONS,
-#                                 suffix fragment ".NO_UNDOC"
 #
 # All generated files (standalone ROMs, RAM drivers and the assembly
 # intermediates) go to <repo>/bin/drivers; nothing is left in this
@@ -48,23 +41,9 @@ export N80_ARGS=--no-show-banner --verbosity 0
 BIN_DRIVERS := ../../bin/drivers
 BIN_KERNEL_BASE := ../../bin/kernel-base
 
-_VARIANT_DEFINES :=
-_VARIANT_SUFFIX :=
-
-ifneq ($(strip $(NO_UNDOC_CPU_INSTRUCTIONS)),)
-_VARIANT_DEFINES += NO_UNDOC_CPU_INSTRUCTIONS
-_VARIANT_SUFFIX := $(_VARIANT_SUFFIX).NO_UNDOC
-endif
-
-UNDOC_MODE_STAMP := $(BIN_DRIVERS)/.build-variant$(if $(_VARIANT_SUFFIX),$(_VARIANT_SUFFIX),.default)
-
-$(UNDOC_MODE_STAMP): | $(BIN_DRIVERS)
-	@rm -f $(BIN_DRIVERS)/.build-variant*
-	@touch $@
-
 define assemble
 	@printf "\n\033[0;36mAssembling %s\033[0m\n\n" $(1)
-	@$(N80) $(1) $(BIN_DRIVERS) $(2) $(foreach def,$(_VARIANT_DEFINES),--define-symbols $(def))
+	@$(N80) $(1) $(BIN_DRIVERS) $(2)
 endef
 
 # $(1)=output ROM, $(2)=driver bin, $(3)=mapper (chgbnk) bin
@@ -88,26 +67,6 @@ endef
 all: base ascii8 ascii16
 
 FORCE:
-
-# `everything` builds the kernel base file and both standalone ROMs for
-# both variants: NO_UNDOC and default. Each variant runs as a recursive
-# make invocation with the corresponding env var set. The default variant
-# is built last so the on-disk intermediate files are left in the undoc
-# state.
-#
-# Sub-make failures don't abort the matrix — the loop collects the worst
-# exit code and exits with it at the end, so CI / release scripts see a
-# failure if any variant broke while still attempting both.
-.PHONY: everything
-everything:
-	@status=0; \
-	for args in \
-	    "NO_UNDOC_CPU_INSTRUCTIONS=1" \
-	    ""; do \
-	    $(MAKE) --no-print-directory --keep-going all $$args || status=$$?; \
-	done; \
-	exit $$status
-
 
 ###################
 ###  TOOLCHECK  ###
@@ -138,11 +97,11 @@ $(BIN_DRIVERS):
 
 # Path to the kernel base file used as input by MKNEXROM. If NEXTOR_BASE
 # is set, use it as-is. Otherwise build it via the kernel Makefile, whose
-# `base` target publishes the variant-named copy to bin/kernel-base.
+# `base` target publishes the versioned copy to bin/kernel-base.
 
 ifeq ($(strip $(NEXTOR_BASE)),)
 
-LOCAL_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base$(_VARIANT_SUFFIX).dat
+LOCAL_BASE := $(BIN_KERNEL_BASE)/Nextor-$(NEXTOR_KERNEL_VERSION).base.dat
 
 base: $(LOCAL_BASE)
 
@@ -151,8 +110,7 @@ base: $(LOCAL_BASE)
 # if something there actually changed; that file's mtime drives whether
 # the ROMs that depend on it need to rebuild.
 $(LOCAL_BASE): FORCE
-	@$(MAKE) --no-print-directory -C ../kernel base \
-	    NO_UNDOC_CPU_INSTRUCTIONS=$(NO_UNDOC_CPU_INSTRUCTIONS)
+	@$(MAKE) --no-print-directory -C ../kernel base
 
 NEXTOR_BASE := $(LOCAL_BASE)
 
@@ -168,28 +126,25 @@ endif
 ###  STANDALONE ROMS ###
 ########################
 
-ROM_ASCII8  := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII8$(_VARIANT_SUFFIX).ROM
-ROM_ASCII16 := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII16$(_VARIANT_SUFFIX).ROM
+ROM_ASCII8  := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII8.ROM
+ROM_ASCII16 := $(BIN_DRIVERS)/Nextor-$(NEXTOR_KERNEL_VERSION).StandaloneASCII16.ROM
 
 ascii8:  $(ROM_ASCII8)
 ascii16: $(ROM_ASCII16)
 
 $(BIN_DRIVERS)/standalone-rom-driver.bin: \
-	$(UNDOC_MODE_STAMP) \
 	standalone-rom-driver.asm \
 	| $(BIN_DRIVERS)
 
 	$(call assemble,standalone-rom-driver.asm,--build-type abs --output-file-extension bin)
 
 $(BIN_DRIVERS)/chgbnk-ascii8.bin: \
-	$(UNDOC_MODE_STAMP) \
 	chgbnk-ascii8.asm \
 	| $(BIN_DRIVERS)
 
 	$(call assemble,chgbnk-ascii8.asm,--build-type abs --output-file-extension bin)
 
 $(BIN_DRIVERS)/chgbnk-ascii16.bin: \
-	$(UNDOC_MODE_STAMP) \
 	chgbnk-ascii16.asm \
 	| $(BIN_DRIVERS)
 
@@ -232,7 +187,6 @@ $(ROM_ASCII16): \
 ram-example: $(BIN_DRIVERS)/ram-driver-example.drv
 
 $(BIN_DRIVERS)/ram-driver-example.drv: \
-	$(UNDOC_MODE_STAMP) \
 	ram-driver-example.asm \
 	| $(BIN_DRIVERS)
 
@@ -248,4 +202,4 @@ $(BIN_DRIVERS)/256.bytes: | $(BIN_DRIVERS)
 
 clean:
 	rm -f $(BIN_DRIVERS)/*.bin $(BIN_DRIVERS)/*.drv $(BIN_DRIVERS)/*.ROM \
-	    $(BIN_DRIVERS)/256.bytes $(BIN_DRIVERS)/.build-variant*
+	    $(BIN_DRIVERS)/256.bytes

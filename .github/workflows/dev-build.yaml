@@ -101,10 +101,10 @@ jobs:
           BUILD_ID: ${{ steps.plan.outputs.build_id }}
         run: |
           set -eu
-          # Both kernel variants and both standalone ROMs of each, NEXTOR.SYS,
+          # The kernel base file, the standalone ROMs, NEXTOR.SYS,
           # COMMAND3.COM, the MSX-DOS 1 files and all the tools
-          make -C source everything DEV_BUILD="$BUILD_ID"
-          # The example RAM driver is not built by "everything"
+          make -C source DEV_BUILD="$BUILD_ID"
+          # The example RAM driver is not built by default
           make -C source/drivers ram-example
           # The tools disk image and zip file
           make -C source tools-all

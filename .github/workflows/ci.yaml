@@ -8,6 +8,7 @@ on:
       - 'buildtools/**'
       - '.github/workflows/**'
       - '.github/actions/**'
+      - '.github/undoc-check/**'
       - 'docker/Dockerfile'   # defines the Nestor80 tool versions this job installs
   push:
     paths:
@@ -16,6 +17,7 @@ on:
       - 'buildtools/**'
       - '.github/workflows/**'
       - '.github/actions/**'
+      - '.github/undoc-check/**'
       - 'docker/Dockerfile'   # defines the Nestor80 tool versions this job installs
     branches:
       - 'v**'
@@ -23,6 +25,14 @@ on:
       - 'v**'
 
 jobs:
+  undocumented-instructions:
+    name: No undocumented Z80 instructions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the sources
+        run: python3 .github/undoc-check/check-undoc.py
+
   build:
     name: Build
     runs-on: ubuntu-latest

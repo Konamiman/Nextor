@@ -51,13 +51,6 @@ The jump table near the top of `driver.asm` is the driver's ABI: the kernel call
 
 The constants and helper routines you'll need are in the SDK: `asm/constants/driver_*.inc`, `asm/constants/dos_*.inc`, and ready-made snippets under `asm/code/`. The full contract is in the **Nextor Driver Development Guide** (`docs/` in the Nextor repository).
 
-## Kernel variants
+## Undocumented Z80 instructions
 
-`NEXTOR_BASE` selects which kernel your driver is fused with. There are two base-file variants (in the dev image they live in `/opt/nextor/kernel_base/`; the repository build names them `Nextor-X.Y.Z.base[<suffix>].dat`):
-
-```text
-kernel_base.dat                    (default)
-kernel_base.NO_UNDOC.dat           (Z180-safe, no undocumented opcodes)
-```
-
-For a `.NO_UNDOC.` base, build with `make NO_UNDOC=1 NEXTOR_BASE=...` so the driver stays undoc-free too. Use the `ld_`, `cp_`, `or_`, ... macros from `undoc.inc` (already included) anywhere you'd otherwise touch `ixh/ixl/iyh/iyl`.
+The Nextor kernel doesn't use undocumented Z80 instructions, so that it also works on Z180-based machines. To keep your driver compatible with these machines, use the `ld_`, `cp_`, `or_`, ... macros from `undoc.inc` (already included) anywhere you'd otherwise touch `ixh/ixl/iyh/iyl`.

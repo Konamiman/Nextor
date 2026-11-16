@@ -79,15 +79,12 @@ RUN set -eux; \
 
 COPY source /src/source
 COPY sdk    /src/sdk
-RUN make -C /src/source/kernel everything
+RUN make -C /src/source/kernel
 
-# Stage the kernel_base/ layout: Nextor-<ver>.base<suffix>.dat -> kernel_base<suffix>.dat.
+# Stage the kernel_base/ layout: Nextor-<ver>.base.dat -> kernel_base.dat.
 RUN set -eux; \
     mkdir -p /staging/kernel_base; \
-    for f in /src/bin/kernel-base/Nextor-*.base*.dat; do \
-        s="$(basename "$f")"; s="${s#Nextor-*.base}"; \
-        cp "$f" "/staging/kernel_base/kernel_base${s}"; \
-    done; \
+    cp /src/bin/kernel-base/Nextor-*.base.dat /staging/kernel_base/kernel_base.dat; \
     ls -la /staging/kernel_base
 
 # ---------------------------------------------------------------------------
@@ -164,8 +161,7 @@ RUN cat <<EOF > /opt/nextor/manifest.json
     "LB80": "${LB80_VERSION}",
     "sdcc": "${SDCC_VERSION}",
     "mknexrom": "${MKNEXROM_VERSION}"
-  },
-  "base_variants": ["default", "NO_UNDOC"]
+  }
 }
 EOF
 
@@ -192,8 +188,7 @@ LABEL org.opencontainers.image.title="Nextor dev" \
       org.nextor.tool.lk80="${LK80_VERSION}" \
       org.nextor.tool.lb80="${LB80_VERSION}" \
       org.nextor.tool.sdcc="${SDCC_VERSION}" \
-      org.nextor.tool.mknexrom="${MKNEXROM_VERSION}" \
-      org.nextor.base-variants="default,NO_UNDOC"
+      org.nextor.tool.mknexrom="${MKNEXROM_VERSION}"
 
 WORKDIR /work
 CMD ["bash"]
