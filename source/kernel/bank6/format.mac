@@ -245,8 +245,7 @@ fformat_dos_do_format:
 	pop	hl		;HL = buffer address
 	push	de
 	pop	bc		;BC = buffer size
-	ld	a,(BUF+100)
-	ld_	iyh,a		;IYh = driver slot
+	ld	iy,(BUF+100-1)	;IYh = driver slot
 	ld	a,(BUF+102)
 	ld	d,a		;D = relative drive (0-based)
 	ld	a,(BUF+103)	;A = choice (1-9)
@@ -385,8 +384,7 @@ fpc_msxdos:
 	;--- MSX-DOS driver: call CHOICE in driver ROM
 
 	push	hl		;Save buffer destination
-	ld	a,(BUF+100)
-	ld_	iyh,a
+	ld	iy,(BUF+100-1)	;IYh = driver slot
 	ld	a,c		;A = drive number within driver
 	ld	ix,4019h	;CHOICE entry point
 	call	001Ch		;CALSLT -> HL = ROM choice string
@@ -563,21 +561,20 @@ CDQ_ROM:
 
 	;--- ROM driver: inter-slot call to CALDRV → bank switch → DEVICE_QUERY
 	push	hl		;Save buffer address
-	push	af		;Save query number
 	ld	hl,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	(BK4_ADD##),hl	;Store routine address for CALDRV
-	ld	a,(BUF+100)
-	ld_	iyh,a		;IYh = driver slot
+	ld	iy,(BUF+100-1)	;IYh = driver slot
 	ld	ix,CALDRV##	;IX = CALDRV entry (doshead)
-	pop	af		;A = query number
 	pop	hl		;HL = buffer address
 	jp	001Ch		;CALSLT → CALDRV → DEVICE_QUERY
 
 CDQ_RAM:
 	;--- RAM driver: call DEVICE_QUERY via CALL_MAP
-	ld_	iyl,a		;IYl = segment (A still has BUF+106 value)
-	ld	a,(BUF+100)
-	ld_	iyh,a		;IYh = slot
+	push	hl
+	ld	hl,(BUF+100-1)	;H = slot
+	ld	l,a		;L = segment (A still has BUF+106 value)
+	ex	(sp),hl
+	pop	iy		;IY = slot:segment
 	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	pop	af		;A = query number
 	jp	CALL_MAP##
@@ -653,10 +650,7 @@ dcb_msxdos:
 	;           Stack: buffer address, buffer size (on top)
 
 dcb_msxdos_choice:
-	ld	c,a
-	ld	a,(BUF+100)
-	ld_	iyh,a		;IYh = driver slot for CALSLT
-	ld	a,c		;A = relative drive number for CHOICE
+	ld	iy,(BUF+100-1)	;IYh = driver slot for CALSLT
 	ld	ix,4019h	;CHOICE entry point
 	call	001Ch		;CALSLT -> HL = ROM choice string addr
 
@@ -863,19 +857,28 @@ MAP_USER_BUF:
 	call	GET_P2##
 	ld	(BUF+104),a	;Save original page 2 segment
 
-	;Determine which page the buffer is in from top 2 bits of IXh
-	ld_	a,ixh
-	and	11000000b
-	cp	0C0h
-	jr	z,mub_page3	;Page 3: no remapping
-
-	;A = 00h (page 0), 40h (page 1), or 80h (page 2)
-	;Convert to index 0, 1, or 2
-	rlca
-	rlca			;A = 0, 1, or 2
-
 	push	hl
 	push	de
+	push	ix
+	pop	de		;DE = buffer address
+
+	;Determine which page the buffer is in from top 2 bits of the address
+	ld	a,d
+	cp	0C0h
+	jr	nc,mub_page3_pop	;Page 3: no remapping
+
+	;Convert the address to page 2 range: clear top 2 bits, set bit 7
+	res	6,d
+	set	7,d
+	push	de
+	pop	ix
+
+	;A = 00h-3Fh (page 0), 40h-7Fh (page 1), or 80h-BFh (page 2)
+	;Convert to index 0, 1, or 2
+	rlca
+	rlca
+	and	11b		;A = 0, 1, or 2
+
 	ld	e,a
 	ld	d,0
 	ld	hl,P0_TPA##
@@ -890,15 +893,12 @@ MAP_USER_BUF:
 
 	pop	de
 	pop	hl
-
-	;Convert IX to page 2 range: clear top 2 bits, set bit 7
-	ld_	a,ixh
-	and	00111111b
-	or	10000000b
-	ld_	ixh,a
 	or	a		;Clear carry (remapping done)
 	ret
 
+mub_page3_pop:
+	pop	de
+	pop	hl
 mub_page3:
 	scf			;Set carry (no remapping)
 	ret
@@ -929,22 +929,23 @@ RESTORE_PAGE2:
 ;
 ;    Input:  IX = destination pointer (just incremented)
 ;            BUF+105 = next TPA segment
-;    Corrupts: A (only if boundary crossed)
+;    Corrupts: AF
 ;
 CHECK_IX_BOUNDARY:
-	ld_	a,ixh
-	cp	0C0h
-	ret	nz		;High byte not C0h: not at boundary
-	ld_	a,ixl
-	or	a
-	ret	nz		;Low byte not 00h: not at boundary
+	push	ix
+	ex	(sp),hl
+	ld	a,h
+	xor	0C0h
+	or	l
+	pop	hl
+	ret	nz		;Not at boundary
 	;IX = C000h exactly: crossed from BFFFh to C000h
 	ld	a,(DOS_VER##)
 	or	a
 	ret	z		;DOS 1: no remapping (see MAP_USER_BUF)
 	ld	a,(BUF+105)
 	call	PUT_P2##
-	ld_	ixh,80h		;Wrap to start of page 2 (IXl already 0)
+	ld	ix,8000h	;Wrap to start of page 2
 	ret
 
 ;-----------------------------------------------------------------------------

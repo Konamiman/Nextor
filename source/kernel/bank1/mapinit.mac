@@ -601,9 +601,9 @@ MAPBDO_FOUND:
 		ld	a,DV_BANK##
 		call	DH_CABNK##
 		ex	af,af'		;Save driver's AF
-		ld_	a,iyl
-		or	a
-		jr	nz,MAPBIO2
+		push	iy
+		pop	af		;Cy = IYl bit 0
+		jr	c,MAPBIO2
 		ex	af,af'		;Restore driver's AF
 		ret
 MAPBDO_SKIP:
@@ -613,9 +613,9 @@ MAPBIO2:
 MAPBDO_SK2:
 		call	EXB_NEX
 		ex	af,af'
-		ld_	a,iyl
-		or	a
-		jr	nz,MAPBIO22
+		push	iy
+		pop	af		;Cy = IYl bit 0
+		jr	c,MAPBIO22
 		ex	af,af'
 		ret
 MAPBIO22:
@@ -631,9 +631,9 @@ MAPBIO22:
 
 		call	EXB_RAM_DRV
 		ex	af,af'		;Save driver's AF
-		ld_	a,iyl
-		or	a
-		jr	nz,MAPBIO3
+		push	iy
+		pop	af		;Cy = IYl bit 0
+		jr	c,MAPBIO3
 ;
 MAPB22_STOP:
 		ex	af,af'		;Restore driver's AF
@@ -649,9 +649,9 @@ MAPBIO3:
 		push	af
 		call	CHK_DEV
 		ex af,af'
-		ld_	a,iyl
-		or	a
-		jr	z,MAPB_DONT_CALL_OLD
+		push	iy
+		pop	af		;Cy = IYl bit 0
+		jr	nc,MAPB_DONT_CALL_OLD
 
 		ex af,af'	;IYl=0 at return: must call old hook with original registers
 		pop	af
@@ -1015,12 +1015,12 @@ ERAMX_ENT:
 	push	af
 	pop	hl
 	ld	(EXB_RAM_SAVE##),hl
-	;Check IYl (A is free since results already saved)
-	ld_	a,iyl
-	bit	0,a
+	;Check IYl (AF is free since results already saved)
+	push	iy
+	pop	af			;Cy = IYl bit 0
 	pop	bc
 	pop	hl
-	jr	z,ERAMX_FOUND		;IYl bit 0 = 0: driver consumed it
+	jr	nc,ERAMX_FOUND		;IYl bit 0 = 0: driver consumed it
 ;
 ERAMX_NXT:
 	inc	hl

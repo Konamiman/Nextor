@@ -1378,7 +1378,8 @@ PS_CALL_DRV:
 	push	ix
 	push	af
 	ld	a,(ix+PSC_SLOT)
-	ld_	iyh,a
+	push	af
+	pop	iy		;IYh = driver slot
 	pop	af
 	ld	ix,CALDRV##
 	call	CALSLT

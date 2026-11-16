@@ -9,8 +9,7 @@
 # The generated base file is copied to ../../bin/kernel-base.
 #
 # The kernel must not contain undocumented Z80 instructions, so that it also
-# works on Z180-based MSX machines: use the macros in
-# ../../sdk/asm/macros/undoc.inc instead. A CI check verifies this.
+# works on Z180-based MSX machines. A CI check verifies this.
 #
 # The N80 and LK80 binaries to use can be overriden with environment
 # variables, e.g.:
@@ -171,7 +170,6 @@ lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(s
 .SECONDEXPANSION:
 $(filter-out $(SDK_COMRELS),$(COMRELS)) $(B0RELS) $(B1RELS) $(B2RELS) $(B3RELS) $(B4RELS) partit.rel $(B5RELS) $(B6RELS) print_call_help.rel drv.rel rel.rel: \
 	macros.inc \
-	../../sdk/asm/macros/undoc.inc \
 	const.inc \
 	condasm.inc \
 	$$(patsubst %.rel,%.mac,$$@)
