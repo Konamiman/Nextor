@@ -173,12 +173,30 @@ C_ASM_END = "__endasm"
 C_STRING = re.compile(r'" *"')
 
 
+def splice_c_lines(lines):
+    """
+    The lines of a C source file with the ones ending with a backslash joined to the next
+    one, as the C preprocessor does, as (number of the first line, text) tuples.
+    """
+    start, spliced = None, ""
+    for number, line in enumerate(lines, 1):
+        if start is None:
+            start = number
+        if line.endswith("\\"):
+            spliced += line[:-1]
+            continue
+        yield start, spliced + line
+        start, spliced = None, ""
+    if start is not None:
+        yield start, spliced
+
+
 def c_asm_lines(lines):
     """The assembler code of a C source file, as (line number, text) tuples."""
     in_comment = False
     in_block = False
     string_pieces = None  # (number, contents) of the strings of an unfinished __asm__(
-    for number, line in enumerate(lines, 1):
+    for number, line in splice_c_lines(lines):
         if in_block:
             end = line.find(C_ASM_END)
             if end == -1:
