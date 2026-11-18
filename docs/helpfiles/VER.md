@@ -20,9 +20,9 @@ The version numbers of the three main components of the Nextor disk system are d
 
 ```
 VER
-Nextor kernel version 3.0.0
-NEXTOR.SYS version 3.00
-Nextor command interpreter 3.0
+Nextor kernel version 3.0.1
+NEXTOR.SYS version 3.0
+Nextor command interpreter 3.0.1
 
 TYPE COMMAND3.COM for more details
 ```

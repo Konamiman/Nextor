@@ -448,11 +448,11 @@ The advertised tag is the **kernel version**; image-only changes (a tool bump) r
 
 | Tag | Meaning |
 |---|---|
-| `3.0.0` | an exact kernel version (moves to the newest revision of that kernel) |
+| `3.0.1` | an exact kernel version (moves to the newest revision of that kernel) |
 | `3.0` | newest `3.0.x` |
 | `latest` | newest stable |
-| `3.0.0-r2` | a specific image revision (the kernel base files are byte-identical across `-rN` of the same kernel; only tools differ) |
-| `3.0.0-r2-test` | a throwaway test publish (workflow run with **test** ticked); freely overwritten, never referenced by a moving tag |
+| `3.0.1-r1` | a specific image revision (the kernel base files are byte-identical across `-rN` of the same kernel; only tools differ) |
+| `3.0.1-r1-test` | a throwaway test publish (workflow run with **test** ticked); freely overwritten, never referenced by a moving tag |
 
 Every component version is recorded in `manifest.json` and in OCI labels, so a moving tag is still fully traceable:
 
