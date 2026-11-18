@@ -792,9 +792,13 @@ GET_KERNEX_DOS1_PNT:
 	or	a
 	jr	nz,IS_NOT_DVB
 
-	ld	iy,(KERNEX_DOS1##)
-	ld_ a,iyh
-	or_ iyl
+	push	hl
+	ld	hl,(KERNEX_DOS1##)
+	ld	a,h
+	or	l
+	push	hl
+	pop	iy
+	pop	hl
 	jr	z,IS_NOT_DVB
 
 	ld	a,(iy)

@@ -21,7 +21,6 @@
 	INCLUDE ../../../sdk/asm/constants/msx_bios.inc
 	INCLUDE ../../../sdk/asm/constants/msx_workarea.inc
 	INCLUDE ../../../sdk/asm/constants/msx_basic.inc
-	INCLUDE ../../../sdk/asm/macros/undoc.inc
 
 PRINTL	macro	NAME,VALUE
 	if2
@@ -5655,7 +5654,8 @@ FMT_CHOOSE_D1:
 	call	A609A			; mark FAT buffer as invalid
 	call	A6086		; get diskdriverparameters
 	ld	c,a		;C = device number
-	ld_	a,iyh
+	push	iy
+	pop	af		;A = IYh = driver slot
 	ld	(BUF+100),a	;Slot for the bank 6 routine
 	ld	hl,FMT_PRINT_AND_CHOOSE##+8000h	;Bit 15 = call bank 6
 	ld	(BK4_ADD##),hl

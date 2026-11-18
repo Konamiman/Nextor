@@ -117,8 +117,6 @@ Alternatively you can keep `org 4100h` and prepend 256 zero bytes to the assembl
 Add these includes at the top of the file (the paths are relative to the root of [the Nextor SDK](https://github.com/Konamiman/Nextor/blob/HEAD/sdk/README.md); you will pass the SDK location to the assembler in step _[3.10. Set up the new build](#310-set-up-the-new-build)_):
 
 ```
-    INCLUDE asm/macros/undoc.inc
-
     INCLUDE asm/constants/driver_result_codes.inc
 
     module DRIVER_QUERY
@@ -135,8 +133,6 @@ Notes:
 * `driver_result_codes.inc` defines the `RESULT_*` codes used by all the adapter code in this guide.
 
 * The two query index files are wrapped in modules because both define constants with the same names (e.g. `GET_STRING`); they become available as `DRIVER_QUERY.GET_STRING`, `DEVICE_QUERY.GET_PARAMS`, etc.
-
-* `undoc.inc` is optional: it provides macros that do the same as the undocumented Z80 instructions operating on IXh/IXl/IYh/IYl using only documented instructions, for Z180 compatibility.
 
 Additionally, replace the block of hand-copied kernel entry point `EQU`s that every Nextor 2 driver carried (`GSLOT1 equ 402Dh`, `CALBNK equ 4042h`, `GWORK equ 4045h`, etc.) with:
 
@@ -561,7 +557,7 @@ Notes:
 
 * The space available for the driver in each bank is the same as in Nextor 2: 4100h to 7FD0h, i.e. 3ED0h (16080) bytes. Pad the binary to that size with a `ds` directive (e.g. the SDK driver template ends with `ds 7FD0h-$,0FFh`), which has the nice side effect of making the assembly fail if the driver outgrows the bank.
 
-* To support Z180-based MSX machines, don't use undocumented Z80 instructions in your driver (the kernel doesn't use them either); the `undoc.inc` macros can be used instead of those operating on IXh/IXl/IYh/IYl.
+* To support Z180-based MSX machines, don't use undocumented Z80 instructions in your driver (the kernel doesn't use them either), such as the ones operating on IXh/IXl/IYh/IYl. The SDK of Nextor 3.0.0 had a `asm/macros/undoc.inc` file with macros that emulated these using documented instructions, but it has been removed since then; if your driver uses these macros, replace them with documented code (or keep a copy of the file in your own driver repository).
 
 * Instead of installing a local toolchain you can build inside [the Nextor development Docker image](https://github.com/Konamiman/Nextor/blob/HEAD/docker/README.md) (see _[8.2. The Docker development image](Nextor_3.0_Programmers_Reference.md#82-the-docker-development-image)_), which provides N80, `mknexrom`, the SDK and the kernel base files. The migrated driver repositories include a `docker-build.sh` wrapper that does exactly this.
 

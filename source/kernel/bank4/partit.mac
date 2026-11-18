@@ -185,16 +185,14 @@ DO_EXTPAR:
 	call IS_EXT_PART
 	jp	nz,UNEX_PART
 
-	ld	a,(ix+POFF_PSTART)	;Save the start sector number of the outer extended partition
-	ld_ iyl,a			;(the one that includes all other extended partitions).
-	ld	a,(ix+POFF_PSTART+1)	;We need it to calculate the offsets of the inner
-	ld_ iyh,a			;extended partitions.
-	push	iy
-	ld	a,(ix+POFF_PSTART+2)
-	ld_ iyl,a
-	ld	a,(ix+POFF_PSTART+3)
-	ld_ iyh,a
-	push	iy
+	push	hl			;Save the start sector number of the outer extended partition
+	ld	l,(ix+POFF_PSTART)	;(the one that includes all other extended partitions).
+	ld	h,(ix+POFF_PSTART+1)	;We need it to calculate the offsets of the inner
+	ex	(sp),hl			;extended partitions.
+	push	hl
+	ld	l,(ix+POFF_PSTART+2)
+	ld	h,(ix+POFF_PSTART+3)
+	ex	(sp),hl
 
 	;=== Loop for extended partition search ===
 	;Input: L=Extended partitions left to skip, plus one
@@ -618,11 +616,10 @@ AUTODRV_DRVLOOP:
 	;      B  = Remaining drives for this driver
 	;      A  = Relative drive for the driver
 
-	ld	c,a
-	ld_ a,iyl
-	ld	(ix+UD1_SLOT##),a		;Set slot number in table entry
-	ld	a,c
-    ld  (ix+UD1_RELATIVE_DRIVE##),a    
+	push	iy
+	pop	hl
+	ld	(ix+UD1_SLOT##),l		;Set slot number in table entry
+    ld  (ix+UD1_RELATIVE_DRIVE##),a
 	push	af
 	push	bc
 	push	iy
@@ -696,10 +693,7 @@ AUTOD_UDFND:
 
 	;--- Check if it is assigned to a device based driver
 
-	ld	a,(ix+UD_SLOT##)
-	ld_ iyh,a
-
-	ld	e,a
+	ld	e,(ix+UD_SLOT##)
 	push	bc
 	push	hl
 	call	IS_NEXTOR_KER
@@ -1639,8 +1633,10 @@ AA_CALLDRV:
 AA_CALLDRV2:
 	push	ix
 	push	af
-	ld_	a,iyl
-	cp	0FFh
+	push	iy
+	ex	(sp),hl
+	inc	l		;Z if IYl = FFh
+	pop	hl
 	jr	nz,AA_CALLDRV_RAM
 	pop	af		;ROM driver: CALSLT -> CALDRV.
 	ld	ix,CALDRV##
@@ -2640,8 +2636,11 @@ F_CDRVR_GO:
 	ret	nz
 
 	ld	(BK4_ADD##),de	;Routine address (read by CALDRV for ROM drivers)
-	ld_	iyh,c		;IY = slot:segment
-	ld_	iyl,b
+	ld	a,c
+	ld	c,b
+	ld	b,a
+	push	bc
+	pop	iy		;IY = slot:segment
 
 	;--- In DOS 2 mode we need to restore TPA segments so that the driver
 	;    can see any possible user supplied data.
@@ -2703,8 +2702,10 @@ CDRV_CALL:
 	ld	l,(ix+6)
 	ld	h,(ix+7)
 
-	ld_	a,iyl
-	inc	a
+	push	iy
+	ex	(sp),hl
+	inc	l		;Z if IYl = FFh
+	pop	hl
 	jr	z,CDRV_ROM
 
 	;--- RAM driver
@@ -2767,10 +2768,12 @@ UNMAP_LOOP:
 	inc	hl
 	ld	h,(hl)
 	ld	l,a
-	cp_ iyl
+	push	iy
+	pop	de
+	cp	e
 	jr	nz,UNMAP_OK1
 	ld	a,h
-	cp_ iyh
+	cp	d
 	jr	z,UNMAP_NEXT2	;It is the unit not to be unassigned
 UNMAP_OK1:
 
@@ -4149,7 +4152,8 @@ MAPDOS1_NODEF:
 	ld	a,(iy)
 	ld	c,(iy+2)
 	ld	b,(iy+3)
-	ld_ iyh,a
+	push	af
+	pop	iy		;IYh = driver slot
 	ld	hl,($SECBUF##)
 	ld	ix,CALDRV##
 	ld a,DEVICE_QUERY.GET_PARAMS##
@@ -6457,12 +6461,11 @@ CMIU1_LOOP:
 	push	de
 	push	ix
 	pop	de
-	ld_	a,iyl
-	sub	e
-	jr	nz,CMIU1_NOTSELF
-	ld_	a,iyh
-	sub	d
-CMIU1_NOTSELF:
+	push	iy
+	ex	(sp),hl
+	or	a
+	sbc	hl,de		;Z if IY = IX
+	pop	hl
 	pop	de
 	jr	z,CMIU1_NEXT
 

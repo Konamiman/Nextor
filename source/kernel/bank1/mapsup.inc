@@ -63,7 +63,10 @@ _U_CALLRAM:
         ex      af,af
 ...	      < call	_GET_P1 >
         push    af
-        ld_ a,iyl
+        push    iy
+        ex      (sp),hl
+        ld      a,l     ;A = IYl = segment
+        pop     hl
 ...	      < call	_PUT_P1 >
         ex      af,af
         call    CALSLT
@@ -150,7 +153,6 @@ _U_CALLRAM2:
         dec     ix
         dec     ix
         push    ix
-        ld_ iyl,e
 
         ld      a,d
         and     00111111b
@@ -173,18 +175,15 @@ _U_CALLRAM2:
         ld      b,0
         p3var   <ld      hl,(MAP_TAB)>
         add     hl,bc
-        ld      a,(hl)  ;A = Slot to call
-        ld_ iyh,a
+        ld      d,(hl)  ;D = Slot to call
+        push    de
+        pop     iy      ;IYh = slot, IYl = segment
 
         ex      af,af'
         exx
         inc     sp
         inc     sp
-
-        ;Not a `jr`: the `ld_ iyl,e` and `ld_ iyh,a` macros above take 5 bytes
-        ;more than the equivalent instructions, pushing the target out of range.
-
-...	      < jp      _U_CALLRAM >
+        jr      _U_CALLRAM
 ;
 ;-----------------------------------------------------------------------------
 ;

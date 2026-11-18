@@ -48,4 +48,4 @@ Check the items that apply (put an "x" between the brackets) and fill in the one
 - [ ] Tested in real hardware (computer and storage device):
 - [ ] The documentation in `docs/` has been updated to reflect the changes.
 - [ ] The help texts (`CALL` commands help in the kernel, help texts embedded in the `.COM` tools, help files in `source/commandcom/helpfiles` and their Markdown mirror in `docs/helpfiles`) have been updated to reflect the changes.
-- [ ] New Z80 code doesn't use undocumented instructions, so that Nextor still works on Z180-based machines: the macros in `sdk/asm/macros/undoc.inc` are used instead (CI verifies this).
+- [ ] New Z80 code doesn't use undocumented instructions (e.g. the ones operating on IXh/IXl/IYh/IYl), so that Nextor still works on Z180-based machines (CI verifies this).

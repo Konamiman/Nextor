@@ -291,8 +291,8 @@ UDRV_OK:
 
 	public	?CIDRIVER
 
-IDRV_SLOT	equ	PROCNM
-IDRV_SEG	equ	PROCNM+1
+IDRV_SEG	equ	PROCNM		;Segment and slot in this order,
+IDRV_SLOT	equ	PROCNM+1	;to load both in IY at once
 IDRV_HANDLE	equ	PROCNM+2
 IDRV_OFFSET	equ	PROCNM+3	;2 bytes
 IDRV_INITLEN	equ	PROCNM+5	;1 byte: length of init data
@@ -791,10 +791,7 @@ UDRV_OK_MSG:
 
 	;--- Step 1: Get max device number
 
-	ld	a,(IDRV_SLOT)
-	ld_	iyh,a
-	ld	a,(IDRV_SEG)
-	ld_	iyl,a
+	ld	iy,(IDRV_SEG)	;IYh = slot, IYl = segment
 	ld	ix,DRIVER.DRIVER_QUERY_ENTRY##
 	ld	a,DRIVER_QUERY.GET_MAX_DEVICE##
 	call	CALL_MAP##
@@ -814,10 +811,7 @@ IAM_GOTMAX:
 IAM_DEVLOOP:
 	push	bc
 
-	ld	a,(IDRV_SLOT)
-	ld_	iyh,a
-	ld	a,(IDRV_SEG)
-	ld_	iyl,a
+	ld	iy,(IDRV_SEG)	;IYh = slot, IYl = segment
 	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	a,DEVICE_QUERY.GET_PARAMS##
 	ld	hl,($SECBUF##)
@@ -937,10 +931,7 @@ IAM_UTFOUND:
 	ld	a,(BUF+11)
 	ld	c,a		;C = device number for GET_STRING query
 
-	ld	a,(IDRV_SLOT)
-	ld_	iyh,a
-	ld	a,(IDRV_SEG)
-	ld_	iyl,a
+	ld	iy,(IDRV_SEG)	;IYh = slot, IYl = segment
 	ld	ix,DRIVER.DEVICE_QUERY_ENTRY##
 	ld	a,DEVICE_QUERY.GET_STRING##
 	ld	b,4		;B = string type 4 (device name)

@@ -48,7 +48,6 @@
 
 	.z80
 
-	include	../../sdk/asm/macros/undoc.inc
 	include	../../sdk/asm/constants/msx_bios.inc
 	include	../../sdk/asm/constants/msx_workarea.inc
 	include	../../sdk/asm/constants/dos_calls.inc
@@ -441,10 +440,7 @@ COUNT_USER_END:
 
 	;--- Free them by calling the code in the segment via CALL_MAP
 
-	ld	a,(PRIMARY_SLOT)
-	ld_	iyh,a
-	ld	a,(CODE_SEGMENT)
-	ld_	iyl,a
+	ld	iy,(CODE_SEGMENT)	;IYh = PRIMARY_SLOT, IYl = CODE_SEGMENT
 	ld	ix,4006h	;Free all the user segments
 	ld	hl,(JUMP_TABLE)
 	ld	bc,RH_JUMP-MSR_JUMP	;CALL_MAP
@@ -996,10 +992,11 @@ _ALLFRE:
 	ex	af,af'
 
 	push	af
-...	<ld	a,(MAPRECS)>	;Slot number of primary mapper
-	ld_	iyh,a
+...	<ld	hl,(MAPRECS-1)>	;H = slot number of primary mapper
 ...	<ld	a,(CODE_SEG)>
-	ld_	iyl,a
+	ld	l,a
+	push	hl
+	pop	iy
 	pop	af
 ...	<call	_U_CALLRAM>
 
@@ -1047,11 +1044,11 @@ P3_ADJUST_TAB:
 
 RESERVED_SEGS:	db	0	;Segments reserved at the end of the primary mapper
 CODE_SEGMENT:	db	0
+PRIMARY_SLOT:	db	0	;Must follow CODE_SEGMENT, both are loaded in IY at once
 NUM_RECORDS:	db	0
 RECORDS_SIZE:	dw	0
 RECORD_PNT:	dw	0
 JUMP_TABLE:	dw	0
-PRIMARY_SLOT:	db	0
 FREED_COUNT:	dw	0
 
 NOMSR_S:

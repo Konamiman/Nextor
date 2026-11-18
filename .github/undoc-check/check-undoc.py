@@ -4,8 +4,8 @@ Verifies that the Nextor sources don't use undocumented Z80 instructions.
 
 Nextor must also work on Z180-based MSX machines, which don't support them.
 Code that needs the effect of an instruction operating on ixh, ixl, iyh or iyl
-must use the macros in sdk/asm/macros/undoc.inc, which expand to documented
-instructions.
+must get it with documented instructions (e.g. "push iy / pop af" to get IYh
+in A, or "ld iy,(nn)" to load the two halves at once).
 
 The sources are checked and not the generated binaries, since code and data
 are mixed in those and telling them apart isn't feasible (for example the
@@ -14,7 +14,7 @@ are mixed in those and telling them apart isn't feasible (for example the
 These are checked, in the assembler sources and in the inline assembler code
 of the C sources (__asm ... __endasm and __asm__("...")):
 
-- The ixh, ixl, iyh and iyl registers (except as arguments for the macros).
+- The ixh, ixl, iyh and iyl registers.
 - The sll instruction.
 - The forms of in and out having no equivalent documented instruction:
   in f,(c), in (c), out (c),0 and out (c),f.
@@ -34,13 +34,6 @@ SCAN_DIRS = ("source", "sdk")
 ASM_EXTENSIONS = (".mac", ".asm", ".inc", ".s", ".z80")
 C_EXTENSIONS = (".c", ".h")
 SDCC_OPTION = "--allow-undocumented-instructions"
-
-# The macros in undoc.inc, whose arguments are precisely the index register halves,
-# plus the assembler statements that can be used to implement these macros.
-HALVES_ALLOWED = {
-    "ld_", "cp_", "or_", "and_", "xor_", "add_", "adc_", "sub_", "sbc_", "inc_", "dec_",
-    "ifidn", "ifidni", "ifdif", "ifdifi", "_undoc_err",
-}
 
 # Optional label, optional "..." (the page 3 relocation macro) and optional opening
 # angle bracket (the argument of that macro), then the statement itself.
@@ -91,8 +84,8 @@ def check_asm_line(line):
     operands = match.group(2).strip().rstrip(">").strip()
 
     halves = HALVES.search(code)
-    if halves and mnemonic not in HALVES_ALLOWED:
-        return f"{halves.group(1)} register (use the macros in sdk/asm/macros/undoc.inc)"
+    if halves:
+        return f"{halves.group(1)} register"
 
     for mnemonics, pattern, description in CHECKS:
         if mnemonic in ((mnemonics,) if isinstance(mnemonics, str) else mnemonics) and pattern.search(operands):

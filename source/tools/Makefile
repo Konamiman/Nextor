@@ -169,8 +169,7 @@ MSR.COM: \
 	MSRSEG.BIN \
 	MAPTEST.REL \
 	../kernel/bank1/p3reloc.inc \
-	../kernel/bank1/mapsup.inc \
-	../../sdk/asm/macros/undoc.inc
+	../kernel/bank1/mapsup.inc
 
 	$(call assemble,MSR.MAC)
 	@$(LK80) --output-file $@ --code 0100h MSR.REL MAPTEST.REL

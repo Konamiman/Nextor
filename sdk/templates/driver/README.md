@@ -53,4 +53,4 @@ The constants and helper routines you'll need are in the SDK: `asm/constants/dri
 
 ## Undocumented Z80 instructions
 
-The Nextor kernel doesn't use undocumented Z80 instructions, so that it also works on Z180-based machines. To keep your driver compatible with these machines, use the `ld_`, `cp_`, `or_`, ... macros from `undoc.inc` (already included) anywhere you'd otherwise touch `ixh/ixl/iyh/iyl`.
+The Nextor kernel doesn't use undocumented Z80 instructions, so that it also works on Z180-based machines. To keep your driver compatible with these machines, don't use them either; in particular, don't touch `ixh/ixl/iyh/iyl` directly. Documented alternatives are usually easy to find: for example `push iy` + `pop af` gets IYh in A, `push af` + `pop iy` sets IYh from A (when the value of IYl doesn't matter, as in the slot number for `CALSLT`), and `ld iy,(nn)` loads both halves at once from two consecutive bytes in memory.

@@ -8,7 +8,6 @@
 RAM_DRIVER: equ 0
 
 	;Note that these file paths are relative to the root of the Nextor SDK.
-	INCLUDE asm/macros/undoc.inc	;Use these instead of undocumented Z80 instructions
 	INCLUDE asm/constants/driver_result_codes.inc
 	INCLUDE asm/constants/dos_errors.inc
 	INCLUDE asm/constants/rom_bank_header.inc
