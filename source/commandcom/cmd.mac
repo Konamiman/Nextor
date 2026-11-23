@@ -167,12 +167,7 @@ IDRV:	LD	A,.IDRV##
 	LD	A,(SHRAMFL##)	; No segment to tidy up when SHELLRAM
 	OR	A	;   is OFF.
 	JR	NZ,BAS10
-	LD	HL,VAREND	; Release variable memory
-	LD	A,#FF	;   (reset VAREND to BFFFh, the
-	CALL	WRCHR##	;   segment top: nothing swapped).
-	INC	HL
-	LD	A,#BF
-	CALL	WRCHR##
+	CALL	RSTVAR##	; Release variable memory.
 BAS10:	LD	SP,#F51F
 	CALL	#F368
 	JP	#4022

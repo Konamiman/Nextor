@@ -693,7 +693,24 @@ FINDSEG::	LD	A,(RTYCNT)
 	JR	NZ,FSG10
 	LD	A,(RTYCNT)
 	LD	(MAPPAGE##),A
-	OR	A	; NC: adopted as it is.
+
+;        Any variable images still on the swap stack are stale unless some
+; shell is running a transient, which means it has forked: the current
+; process id (_FORK returns it in B, _JOIN B undoes the fork) is then 2 or
+; more. At 1 drop the stale images: a program that rebooted DOS via CALL
+; SYSTEM (as MGSDRV does) never came back to pop the image its shell
+; pushed. Nested shells keep the images of their outer shells.
+;
+	LD	C,_FORK##
+	CALL	BDOS
+	JR	NZ,FSG05
+	PUSH	BC
+	LD	C,_JOIN##
+	CALL	BDOS
+	POP	BC
+	DEC	B
+	CALL	Z,RSTVAR
+FSG05:	OR	A	; NC: adopted.
 	RET
 
 FSG10:	LD	B,#00	; Allocate a system segment from
@@ -725,14 +742,19 @@ FSG10:	LD	B,#00	; Allocate a system segment from
 	CALL	WRCHR##
 	INC	HL
 	CALL	WRCHR##
-	LD	HL,VAREND
+	CALL	RSTVAR
+	OR	A	; NC: freshly initialised.
+	RET
+
+;        Empty the variable swap stack of the mapper segment (VAREND =
+; BFFFh, the segment top: nothing swapped). Corrupts AF and HL.
+;
+RSTVAR::	LD	HL,VAREND
 	LD	A,#FF
 	CALL	WRCHR##
 	INC	HL
 	LD	A,#BF
-	CALL	WRCHR##
-	OR	A	; NC: freshly initialised.
-	RET
+	JP	WRCHR##
 
 ;        Bring everything that depends on the SHELLRAM state in sync with a
 ; freshly changed SHRAMFL (called by the SHELLRAM command): the stub's own
