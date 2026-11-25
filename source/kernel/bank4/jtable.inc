@@ -33,7 +33,7 @@
 	jentry	F_MAPDRV
 	jentry	F_Z80MODE
 
-	jentry	UNMAPALL
+	jentry	REMAPALL
 
 	jentry	DOSV1
 

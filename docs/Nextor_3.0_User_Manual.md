@@ -670,17 +670,27 @@ As a bonus, since Nextor 3 executes `AUTOEXEC.BTM` instead of `AUTOEXEC.BAT` whe
 
 Before trying to read or write data from a device, MSX-DOS asks the device driver if the media has changed, in order to update its internal information about the accessed filesystem. Nextor does the same, but if the drive being accessed is mapped to a Nextor driver, things get a little trickier because disk partitioning is involved.
 
-When Nextor detects a media change in a drive mapped to a removable device on a Nextor driver, the following procedure is performed:
+When Nextor detects a media change in a drive mapped to a removable device on a Nextor driver, the drives that were mapped to that device (the one being accessed and any other one) are mapped again to the new medium, following the same rules used at boot time: one drive per active partition (see _[3.2. Booting Nextor](#32-booting-nextor)_). More precisely:
 
-* The drive is mapped to the first available valid primary partition found on the device. Valid partitions are FAT12 and FAT16 partitions that aren't already mapped to other drives. If no suitable partition is found, the absolute sector zero of the device is tried as a last resort, and the drive is mapped to it if it holds a valid FAT12 or FAT16 filesystem. Otherwise the drive is left with no partition assigned: the access fails, and a new partition search is performed on each subsequent access to the drive.
+* All the other drives mapped to the same device are unmapped.
 
-* All the other drives mapped to other partitions of the same device will be left unmapped.
+* The drives that were mapped to the device are then processed in drive letter order, each one getting the next FAT12 or FAT16 partition that has the active flag set and isn't mapped to another drive yet. When there are no more active partitions available, the remaining drives are left unmapped.
+
+* The exception is the drive being accessed, which is never left unmapped: if no active partition is left for it, it's mapped to the first FAT12 or FAT16 partition that isn't already mapped to another drive, whether active or not. If there's none, the absolute sector zero of the device is tried as a last resort, and the drive is mapped to it if it holds a valid FAT12 or FAT16 filesystem. Otherwise the drive is left with no partition assigned: the access fails, and a new partition search is performed on each subsequent access to the drive.
+
+Only the drive letters that the device had are used, so a medium with more active partitions than the previous one won't get more drives (but you can map the extra partitions manually with `MAPDRV`, see _[3.4.1. MAPDRV: the drive mapping tool](#341-mapdrv-the-drive-mapping-tool)_). On the other hand, if the medium hasn't actually changed (or has been replaced by an identical one), the drives end up mapped to the same partitions they had at boot time.
+
+For example, assume that a device has a medium with four active partitions mapped to drives A: to D:, and it's replaced by another medium where only the second and fourth partitions are active. Then A: and B: get mapped to the second and fourth partitions respectively. If the change is detected while accessing A: or B:, then C: and D: are left unmapped; but if it's detected while accessing D: (or C:), then that drive gets mapped to the first partition (it's not active, but it's the first one that is still available) and the other one is left unmapped.
+
+Note that any drive mapping that you had changed manually for the drives of the device (for example with `MAPDRV`) is lost when a media change is detected, and so are any open files on these drives.
+
+Also note that the above applies only when the media change is detected while accessing a drive. When you map a drive to a device with `MAPDRV` or `CALL MAPDRV` and the driver reports that the device medium has changed, the other drives that were mapped to the same device are simply unmapped.
 
 The device driver may also reply "not sure" when asked for device change status. In that case, the procedure is as follows:
 
 * When Nextor first reads the boot sector of a drive mapped to a device on a Nextor driver, it calculates a 16 bit checksum of the boot sector contents and stores it together with the rest of the disk parameters.
 
-* When Nextor asks the driver for device change status and the reply is "not sure", it re-reads the boot sector of the drive and calculates the checksum again. If it matches the previously stored checksum, Nextor assumes that the device has not been changed. Otherwise, it assumes that the device has changed and it performs the same mapping procedure as when the driver reports a device change.
+* When Nextor asks the driver for device change status and the reply is "not sure", it re-reads the boot sector of the drive and calculates the checksum again. If it matches the previously stored checksum, Nextor assumes that the device has not been changed. Otherwise, it assumes that the device has changed and it performs the same remapping procedure as when the driver reports a device change.
 
 It is recommended to lock drives mapped to removable devices in order to avoid unnecessary media checks (and unnecessary boot sector reads and checksum calculations).
 

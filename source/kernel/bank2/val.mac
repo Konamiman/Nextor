@@ -702,14 +702,15 @@ fat_str:	db	"FAT1"
 ;
 ;------------------------------------------------------------------------------
 ;
-; When a media change is detected, and if the drive is mapped to a 
-; Nextor driver, unmap all the other drives that were attached
-; to the same controller and device (this is done by UNMAPALL routine
-; in the kernel ROM page 4). Then reset the UF_FOK flag and jump to
-; BUILD_UPB in order to search for the first partition of the new media.
+; When a media change is detected, and if the drive is mapped to a
+; Nextor driver, reset the UF_FOK flag and reassign all the drives
+; that were attached to the same controller and device, one per active
+; partition as it's done at boot time (this is done by REMAPALL routine
+; in the kernel ROM page 4). Then jump to BUILD_UPB, which will search
+; for a partition of the new media if the drive didn't get one.
 ;
 ; A partition assignment pending (UF_PAP) is a special case: we skip the
-; entire unmapping procedure since there was no real media change.
+; entire remapping procedure since there was no real media change.
 
 DO_MEDIA_CHANGE:
 	push	ix
@@ -718,8 +719,9 @@ DO_MEDIA_CHANGE:
 	pop	ix
 	bit	UF_DBD,(ix+UD_DFLAGS##)
 	jr	z,POPIX_BUILD_UPB
+	res	UF_FOK,(ix+UD_DFLAGS##)
     bit UF_PAP,(ix+UD_DFLAGS##)
-	jr	nz,RESFOK_BUILD_UPB
+	jr	nz,POPIX_BUILD_UPB
 
 	push	af
 	push	bc
@@ -729,21 +731,13 @@ DO_MEDIA_CHANGE:
 	ld	b,(ix+UD_SLOT##)
 	ld	c,(ix+UD_RAM_SEGMENT##)
 	ld	d,(ix+UD_DEVICE_NUMBER##)
-	ld	ix,UNMAPALL##
+	ld	ix,REMAPALL##
 	call CALL4_PRESERVE_ALT
 
 	pop	hl
 	pop	de
 	pop	bc
 	pop	af
-
-	push	hl
-	pop	ix
-RESFOK_BUILD_UPB:    
-	res	UF_FOK,(ix+UD_DFLAGS##)
-	pop	ix
-
-	jr	BUILD_UPB
 
 POPIX_BUILD_UPB:
 	pop	ix

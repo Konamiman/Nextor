@@ -864,6 +864,9 @@ SETNUMD_NOUD:
 ;                    set only at boot time
 ;              bit 1 (AAFLAG_GLOBAL_SCAN): Search all the devices before deciding
 ;                    (see above; ignored by AUTO_ASPART)
+;              bit 2 (AAFLAG_ACTIVE_ONLY): Assign only partitions that have
+;                    the active flag set (no inactive partition, no MBR,
+;                    no fallback device)
 ;
 ; Output: A  = Error code
 ;              0: Ok
@@ -902,6 +905,7 @@ AAD_SIZE equ 26
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_GLOBAL_SCAN equ 1 ;AA_BOOT_FLAGS assumes that this is bit 1
+AAFLAG_ACTIVE_ONLY equ 2
 AAFLAG_IS_AUTOASPART equ 7
 
 	PROC	AUTO_ASPART
@@ -1230,6 +1234,9 @@ AA_CHECK_BOOT:
 	jp	AA_DO_ASSIGN
 
 AA_NOT_ACTIVE:
+	bit	AAFLAG_ACTIVE_ONLY,(ix+AAD_FLAGS)
+	jp	nz,AA_PLOOP_NEXT	;Only active partitions requested
+
 	ld	a,(ix+AAD_CAND_PART_DEVNUM)
 	or	a
 	jp	nz,AA_PLOOP_NEXT
@@ -2739,7 +2746,150 @@ CDRV_END:
 
 ;-----------------------------------------------------------------------------
 ;
-	PROC	UNMAPALL
+	PROC	REMAPALL
+;
+; Handle a media change in a drive mapped to a Nextor driver (DOS 2 only):
+; the drives mapped to the same driver and device are reassigned as it's done
+; at boot time, that is, one drive per active partition. More precisely:
+;
+; 1. All the other drives mapped to the device are unmapped (UNMAPALL).
+; 2. The drives that were mapped to the device (including the one that
+;    detected the media change) are processed in drive letter order,
+;    each one gets the next active partition not yet mapped to a drive.
+;    When no more active partitions are available, the remaining drives are
+;    left unmapped, except the drive that detected the media change:
+;    it's left without partition (UF_FOK reset), so that BUILD_UPB will
+;    search a partition for it as usual (an inactive one, or the MBR,
+;    are valid at this point).
+;
+; Thus a "changed" status for a media that hasn't actually changed leaves
+; the drives mapped as they were at boot time.
+;
+; Floppy devices have no partitions, for these only step 1 is performed.
+;
+; Input: HL = Address of unit descriptor of the drive that detected
+;             the media change, it must have UF_FOK reset
+;        D = Device number
+;        B = Driver slot
+;        C = Driver segment
+
+	push	hl
+	pop	ix
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	jp	nz,UNMAPALL
+
+	;CHECK_MAP_IN_USE doesn't care about UF_FOK, so set an impossible
+	;partition start sector so that the partition the drive was
+	;mapped to can be assigned to a drive with a lower letter.
+
+	ld	a,0FFh
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
+
+	push	hl
+	push	de
+	call	UNMAPALL
+	pop	de	;D = Device number
+	pop	iy	;IY = Unit descriptor of the drive that detected the change
+
+	ld	hl,UNIT_TAB##+2
+	ld	c,0	;Drive number
+REMAP_LOOP:
+	srl	a
+	jr	nc,REMAP_NEXT
+
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	iy
+	call	REMAP_DRIVE
+	pop	iy
+	pop	hl
+	pop	de
+	pop	bc
+	jr	nz,REMAP_END	;No more active partitions
+	pop	af
+
+REMAP_NEXT:
+	inc	hl
+	inc	hl
+	inc	c
+	or	a
+	jr	nz,REMAP_LOOP
+	jp	SETNUMDRV
+
+REMAP_END:
+	pop	af
+	jp	SETNUMDRV
+
+
+;Assign the next available active partition of a device to a drive.
+;Input:  HL = Address of pointer to unit descriptor in UNIT_TAB
+;        C  = Drive number
+;        D  = Device number
+;        IY = Unit descriptor of the drive that detected the media change
+;             (the only drive mapped to the device at this point)
+;Output: Z if assigned, NZ if no more active partitions available
+;        (or no memory for the unit descriptor); in this case
+;        the drive is left unmapped, unless it's the one in IY.
+
+REMAP_DRIVE:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	jr	z,REMAP_NEW_UD
+
+	ld	a,(hl)	;It's the drive that detected the media change
+	dec	hl
+	ld	l,(hl)
+	ld	h,a
+	jr	REMAP_ASSIGN
+
+REMAP_NEW_UD:
+	dec	hl
+	push	bc
+	push	de
+	push	hl
+	call	CREATE_UD	;Cy=0 here
+	pop	hl
+	pop	de
+	pop	bc
+	ret	nz
+
+	ld	a,(iy+UD_SLOT##)
+	ld	(ix+UD_SLOT##),a
+	ld	a,(iy+UD_RAM_SEGMENT##)
+	ld	(ix+UD_RAM_SEGMENT##),a
+	ld	(ix+UD_DFLAGS##),UFM_DB	;AA_DO_ASSIGN sets the removable flag
+
+	push	bc
+	push	hl
+	push	ix
+	pop	hl
+	call	REMAP_ASSIGN
+	pop	hl
+	pop	bc
+	ret	z
+
+	ld	b,0	;No partition found: destroy the new unit descriptor
+	call	F_MAPDRV
+	or	1
+	ret
+
+	;HL = Unit descriptor, D = Device number
+
+REMAP_ASSIGN:
+	ld	b,d
+	ld	d,1 SHL AAFLAG_ACTIVE_ONLY
+	call	AUTO_ASPART
+	or	a
+	ret
+
+
+;-----------------------------------------------------------------------------
 ;
 ; Unmap all the drives that are assigned to a given driver and device,
 ; except the unit whose descriptor is passed in HL.
@@ -2747,13 +2897,16 @@ CDRV_END:
 ;        D = Device number
 ;        B = Driver slot
 ;        C = Driver segment
+; Output: A = Bitmask of the drives that were mapped to the device
+;             (bit 0 = A:, etc), including the drive of the unit in HL
 
+UNMAPALL:
 	push	bc
 	push	de
 	exx
 	pop	de
 	pop	hl
-	ld	c,0
+	ld	bc,0	;B' = Drives bitmask, C' = Drive number
 	exx
 
 	push	hl
@@ -2774,20 +2927,21 @@ UNMAP_LOOP:
 	jr	nz,UNMAP_OK1
 	ld	a,h
 	cp	d
+	scf
 	jr	z,UNMAP_NEXT2	;It is the unit not to be unassigned
 UNMAP_OK1:
 
 	ld	a,h
 	or	l
-	jr	z,UNMAP_NEXT2	;Drive is unassigned
+	jr	z,UNMAP_NEXT2	;Drive is unassigned (Cy=0 here)
 
 	push	hl
 	pop	ix
-	
+
 	ld	a,(ix+UD_DFLAGS##)
 	and	UFM_DB+UFM_GH+UFM_GL
 	cp	UFM_DB
-	jr	nz,UNMAP_NEXT2	;Not Nextor driver, or ghost pair member
+	jr	nz,UNMAP_NOT_OURS	;Not Nextor driver, or ghost pair member
 
 	exx
 	ld	a,(ix+UD_SLOT##)
@@ -2805,22 +2959,31 @@ UNMAP_OK1:
 	push	hl
 	ld	b,0
 	call	F_MAPDRV
+	cp	1	;Cy=1 only if unmapped (it fails if it hosts a mounted file)
 	pop	hl
 	pop	de
 	pop	bc
+	exx
+	jr	UNMAP_NEXT2
 
 UNMAP_NEXT:
 	exx
+UNMAP_NOT_OURS:
+	or	a
 UNMAP_NEXT2:
 	pop	bc
 	pop	hl
 	inc	hl
 	inc	hl
 	exx
-	inc	c
+	rr	b	;Drive bit goes in from the left: after MAX_UNITS (8)
+	inc	c	;iterations bit 0 is drive A:
 	exx
 	djnz	UNMAP_LOOP
 
+	exx
+	ld	a,b
+	exx
 	ret
 
 
