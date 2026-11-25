@@ -465,10 +465,10 @@ MCHK0:
 
 		push	hl
 		ex	(sp),ix
-		ld	a,(ix+UD_DFLAGS##)
-		ex	(sp),ix
+		ld	a,(ix+UD_FLAGS##)
+		bit	UF_DBD,(ix+UD_DFLAGS##)
+		ex	(sp),ix		;EX and POP don't change the flags
 		pop	hl
-		bit	UF_DBD,a
 		jr	nz,MCHECK2
 		ld	a,1	;Return C & NZ (not sure, assume changed) if not a Nextor driver
 		or	a
@@ -476,7 +476,7 @@ MCHK0:
 		ret
 
 MCHECK2:
-		bit	5,a	;Valid checksum?
+		bit	UF_CHK,a	;Valid checksum? (A = UD_FLAGS)
 		scf
 		ccf
 		ret	z	;No: return not changed, as we haven't had the opportunity to build a UPB yet

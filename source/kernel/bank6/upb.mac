@@ -72,7 +72,7 @@ NUPBL:	ld	e,(ix)
 		push	ix
 		ld	(ix+UD_CHKSUM##),l
 		ld	(ix+UD_CHKSUM##+1),h
-		set	5,(ix+UD_DFLAGS##)
+		set	UF_CHK,(ix+UD_FLAGS##)	;Checksum is valid (_NEW_UPB has cleared the flag)
 
 		pop	hl
 		pop	ix

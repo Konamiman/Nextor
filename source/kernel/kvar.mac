@@ -155,6 +155,7 @@ size	macro	name
 				;        bit 4: unit is locked
 				;	     bit 5: unit needs to be accessed in Z80 mode
 				;        bit 6: unit is mounted to a file
+				;        bit 7: value at UD_CHKSUM is valid (Nextor drivers only)
 	field	1,UD_DFLAGS	;More flags for the unit:
 				;        bit 0: unit is associated to a device in a Nextor driver
 				;               (if zero, all other bits are meaningless)
