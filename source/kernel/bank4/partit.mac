@@ -864,6 +864,9 @@ SETNUMD_NOUD:
 ;                    set only at boot time
 ;              bit 1 (AAFLAG_GLOBAL_SCAN): Search all the devices before deciding
 ;                    (see above; ignored by AUTO_ASPART)
+;              bit 2 (AAFLAG_ACTIVE_ONLY): Assign only partitions that have
+;                    the active flag set (no inactive partition, no MBR,
+;                    no fallback device)
 ;
 ; Output: A  = Error code
 ;              0: Ok
@@ -902,6 +905,7 @@ AAD_SIZE equ 26
 
 AAFLAG_ENTER_EMU_MODE equ 0
 AAFLAG_GLOBAL_SCAN equ 1 ;AA_BOOT_FLAGS assumes that this is bit 1
+AAFLAG_ACTIVE_ONLY equ 2
 AAFLAG_IS_AUTOASPART equ 7
 
 	PROC	AUTO_ASPART
@@ -1230,6 +1234,9 @@ AA_CHECK_BOOT:
 	jp	AA_DO_ASSIGN
 
 AA_NOT_ACTIVE:
+	bit	AAFLAG_ACTIVE_ONLY,(ix+AAD_FLAGS)
+	jp	nz,AA_PLOOP_NEXT	;Only active partitions requested
+
 	ld	a,(ix+AAD_CAND_PART_DEVNUM)
 	or	a
 	jp	nz,AA_PLOOP_NEXT
@@ -1348,6 +1355,9 @@ AA_LLOOP_END:
 	;    BUILD_UPB will search for a partition on the first access to the drive.
 
 AA_TRY_FALLBACK:
+	bit	AAFLAG_ACTIVE_ONLY,(ix+AAD_FLAGS)
+	jr	nz,AA_END_NOFOUND	;Only active partitions requested
+
 	ld	a,(ix+AAD_FALLBACK_DEVNUM)
 	or	a
 	jr	z,AA_END_NOFOUND
@@ -2739,7 +2749,229 @@ CDRV_END:
 
 ;-----------------------------------------------------------------------------
 ;
-	PROC	UNMAPALL
+	PROC	REMAPALL
+;
+; Handle a media change in a drive mapped to a Nextor driver (DOS 2 only):
+; the drives mapped to the same driver and device are reassigned as it's done
+; at boot time, that is, one drive per active partition. More precisely:
+;
+; 1. All the other drives mapped to the device are unmapped (UNMAPALL).
+; 2. The drives that were mapped to the device (including the one that
+;    detected the media change) are processed in drive letter order,
+;    each one gets the next active partition not yet mapped to a drive.
+;    When no more active partitions are available, the remaining drives are
+;    left unmapped, except the drive that detected the media change:
+;    it's left without partition (UF_FOK reset), so that BUILD_UPB will
+;    search a partition for it as usual (an inactive one, or the MBR,
+;    are valid at this point).
+;
+; Thus a "changed" status for a media that hasn't actually changed leaves
+; the drives mapped as they were at boot time.
+;
+; Drives that host a mounted file keep their partition and are not part of
+; the remapping, this includes the drive that detected the media change.
+;
+; Floppy devices have no partitions, for these only step 1 is performed.
+;
+; Input: HL = Address of unit descriptor of the drive that detected
+;             the media change, it must have UF_FOK reset
+;        D = Device number
+;        B = Driver slot
+;        C = Driver segment
+
+	push	hl
+	pop	ix
+	bit	UF_FDD,(ix+UD_DFLAGS##)
+	jp	nz,UNMAPALL
+
+	;If the drive hosts a mounted file it keeps its partition
+	;(as the other drives of the device that host a mounted file do,
+	;since these can't be unmapped), otherwise the mounted file
+	;would point to the wrong sectors.
+
+	push	bc
+	ld	c,(ix+UD_PHYSICAL_UNIT##)
+	dec	c	;C = Drive number
+	call	HOSTS_MOUNT
+	pop	bc
+	push	af	;NZ = Drive hosts a mounted file
+	jr	z,REMAP_NOT_HOST
+
+	set	UF_FOK,(ix+UD_DFLAGS##)
+	jr	REMAP_UNMAP
+
+REMAP_NOT_HOST:
+
+	;CHECK_MAP_IN_USE doesn't care about UF_FOK, so set an impossible
+	;partition start sector so that the partition the drive was
+	;mapped to can be assigned to a drive with a lower letter.
+
+	ld	a,0FFh
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+1),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),a
+	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
+
+REMAP_UNMAP:
+	push	hl
+	push	de
+	call	UNMAPALL
+	pop	de	;D = Device number
+	pop	iy	;IY = Unit descriptor of the drive that detected the change
+	pop	bc	;C = Flags returned by HOSTS_MOUNT
+	bit	6,c	;Z flag
+	jr	nz,REMAP_START
+
+	;The drive keeps its partition: remove it from the drives bitmask
+
+	ld	c,a
+	ld	b,(iy+UD_PHYSICAL_UNIT##)	;Drive number + 1
+	ld	a,80h
+REMAP_DRVBIT:
+	rlca
+	djnz	REMAP_DRVBIT
+	cpl
+	and	c
+
+REMAP_START:
+	ld	hl,UNIT_TAB##+2
+	ld	c,0	;Drive number
+REMAP_LOOP:
+	srl	a
+	jr	nc,REMAP_NEXT
+
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	iy
+	call	REMAP_DRIVE
+	pop	iy
+	pop	hl
+	pop	de
+	pop	bc
+	jr	nz,REMAP_END	;No more active partitions
+	pop	af
+
+REMAP_NEXT:
+	inc	hl
+	inc	hl
+	inc	c
+	or	a
+	jr	nz,REMAP_LOOP
+	jp	SETNUMDRV
+
+REMAP_END:
+	pop	af
+	jp	SETNUMDRV
+
+
+;Assign the next available active partition of a device to a drive.
+;Input:  HL = Address of pointer to unit descriptor in UNIT_TAB
+;        C  = Drive number
+;        D  = Device number
+;        IY = Unit descriptor of the drive that detected the media change
+;             (the only drive mapped to the device at this point)
+;Output: Z if assigned, NZ if no more active partitions available
+;        (or no memory for the unit descriptor); in this case
+;        the drive is left unmapped, unless it's the one in IY.
+
+REMAP_DRIVE:
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	jr	z,REMAP_NEW_UD
+
+	ld	a,(hl)	;It's the drive that detected the media change
+	dec	hl
+	ld	l,(hl)
+	ld	h,a
+	jr	REMAP_ASSIGN
+
+REMAP_NEW_UD:
+	dec	hl
+	push	bc
+	push	de
+	push	hl
+	call	CREATE_UD	;Cy=0 here
+	pop	hl
+	pop	de
+	pop	bc
+	ret	nz
+
+	ld	a,(iy+UD_SLOT##)
+	ld	(ix+UD_SLOT##),a
+	ld	a,(iy+UD_RAM_SEGMENT##)
+	ld	(ix+UD_RAM_SEGMENT##),a
+	ld	(ix+UD_DFLAGS##),UFM_DB	;AA_DO_ASSIGN sets the removable flag
+
+	push	bc
+	push	hl
+	push	ix
+	pop	hl
+	call	REMAP_ASSIGN
+	pop	hl
+	pop	bc
+	ret	z
+
+	ld	b,0	;No partition found: destroy the new unit descriptor
+	call	F_MAPDRV
+	or	1
+	ret
+
+	;HL = Unit descriptor, D = Device number
+
+REMAP_ASSIGN:
+	ld	b,d
+	ld	d,1 SHL AAFLAG_ACTIVE_ONLY
+	call	AUTO_ASPART
+	or	a
+	ret
+
+
+;Check if a file hosted in a given drive is mounted.
+;Input:  C = Drive number (0 = A:, etc)
+;Output: NZ if a file hosted in the drive is mounted, Z otherwise
+;Preserves BC, DE, HL, IX, IY
+
+HOSTS_MOUNT:
+	push	hl
+	push	bc
+	push	iy
+	ld	hl,UNIT_TAB##+2
+	ld	b,MAX_UNITS
+HMNT_LOOP:
+	ld	a,(hl)
+	inc	hl
+	push	hl
+	ld	h,(hl)
+	ld	l,a
+	or	h
+	jr	z,HMNT_NEXT	;Drive is unassigned
+	push	hl
+	pop	iy
+	bit	UF_MNT,(iy+UD_FLAGS##)
+	jr	z,HMNT_NEXT
+	ld	a,(iy+UD_MOUNT_DRIVE##)
+	xor	c
+	jr	z,HMNT_FOUND
+HMNT_NEXT:
+	pop	hl
+	inc	hl
+	djnz	HMNT_LOOP
+	xor	a	;Z: no mounted file
+	jr	HMNT_END
+HMNT_FOUND:
+	pop	hl
+	inc	a	;NZ: mounted file found (A was 0)
+HMNT_END:
+	pop	iy
+	pop	bc
+	pop	hl
+	ret
+
+
+;-----------------------------------------------------------------------------
 ;
 ; Unmap all the drives that are assigned to a given driver and device,
 ; except the unit whose descriptor is passed in HL.
@@ -2747,13 +2979,16 @@ CDRV_END:
 ;        D = Device number
 ;        B = Driver slot
 ;        C = Driver segment
+; Output: A = Bitmask of the drives that were mapped to the device
+;             (bit 0 = A:, etc), including the drive of the unit in HL
 
+UNMAPALL:
 	push	bc
 	push	de
 	exx
 	pop	de
 	pop	hl
-	ld	c,0
+	ld	bc,0	;B' = Drives bitmask, C' = Drive number
 	exx
 
 	push	hl
@@ -2774,20 +3009,21 @@ UNMAP_LOOP:
 	jr	nz,UNMAP_OK1
 	ld	a,h
 	cp	d
+	scf
 	jr	z,UNMAP_NEXT2	;It is the unit not to be unassigned
 UNMAP_OK1:
 
 	ld	a,h
 	or	l
-	jr	z,UNMAP_NEXT2	;Drive is unassigned
+	jr	z,UNMAP_NEXT2	;Drive is unassigned (Cy=0 here)
 
 	push	hl
 	pop	ix
-	
+
 	ld	a,(ix+UD_DFLAGS##)
 	and	UFM_DB+UFM_GH+UFM_GL
 	cp	UFM_DB
-	jr	nz,UNMAP_NEXT2	;Not Nextor driver, or ghost pair member
+	jr	nz,UNMAP_NOT_OURS	;Not Nextor driver, or ghost pair member
 
 	exx
 	ld	a,(ix+UD_SLOT##)
@@ -2805,22 +3041,31 @@ UNMAP_OK1:
 	push	hl
 	ld	b,0
 	call	F_MAPDRV
+	cp	1	;Cy=1 only if unmapped (it fails if it hosts a mounted file)
 	pop	hl
 	pop	de
 	pop	bc
+	exx
+	jr	UNMAP_NEXT2
 
 UNMAP_NEXT:
 	exx
+UNMAP_NOT_OURS:
+	or	a
 UNMAP_NEXT2:
 	pop	bc
 	pop	hl
 	inc	hl
 	inc	hl
 	exx
-	inc	c
+	rr	b	;Drive bit goes in from the left: after MAX_UNITS (8)
+	inc	c	;iterations bit 0 is drive A:
 	exx
 	djnz	UNMAP_LOOP
 
+	exx
+	ld	a,b
+	exx
 	ret
 
 
@@ -2910,43 +3155,9 @@ MAP_NORDISK:
 
 	;Check if any file hosted in this drive is mounted
 
-	push	hl
-	push	bc
-	push	ix
-	push	iy
-	ld	ix,UNIT_TAB##+2
-	ld	b,8
-ISMNT:
-	ld	l,(ix)
-	ld	h,(ix+1)
-	ld	a,h
-	or	l
-	jr	z,ISMNT_NEXT
-	push	hl
-	pop	iy
-	bit	UF_MNT,(iy+UD_FLAGS##)
-	jr	z,ISMNT_NEXT
-	ld	a,(iy+UD_MOUNT_DRIVE##)
-	cp	c
-	jr	nz,ISMNT_NEXT
-
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	hl
+	call	HOSTS_MOUNT
 	ld	a,.FMNT##
-	ret
-
-ISMNT_NEXT:
-	inc	ix
-	inc	ix
-	djnz	ISMNT
-
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	hl
-	;
+	ret	nz
 
 	ld	e,c
 	push	de

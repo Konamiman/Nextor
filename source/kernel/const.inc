@@ -234,6 +234,7 @@ UF_RALL	equ	3	;Set => reduced allocation information mode
 UF_LCK	equ	4	;Set => drive is locked
 UF_Z80	equ	5	;Set => drive needs Z80 mode
 UF_MNT	equ	6	;Set => a file is mounted in the drive
+UF_CHK	equ	7	;Set => value at UD_CHKSUM is valid (Nextor drivers only)
 ;
 ;
 ;         MASKS FOR "UD_FLAGS" BITS
@@ -245,6 +246,7 @@ UFM_RA  equ     (1 SHL UF_RALL)
 UFM_LK  equ     (1 SHL UF_LCK)
 UFM_Z8	equ		(1 SHL UF_Z80)
 UFM_MT	equ		(1 SHL UF_MNT)
+UFM_CK	equ		(1 SHL UF_CHK)
 ;
 ;
 ;                 BITS IN "UD_DFLAGS" VARIABLE
