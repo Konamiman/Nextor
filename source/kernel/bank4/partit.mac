@@ -1355,6 +1355,9 @@ AA_LLOOP_END:
 	;    BUILD_UPB will search for a partition on the first access to the drive.
 
 AA_TRY_FALLBACK:
+	bit	AAFLAG_ACTIVE_ONLY,(ix+AAD_FLAGS)
+	jr	nz,AA_END_NOFOUND	;Only active partitions requested
+
 	ld	a,(ix+AAD_FALLBACK_DEVNUM)
 	or	a
 	jr	z,AA_END_NOFOUND

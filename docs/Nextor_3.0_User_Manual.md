@@ -688,6 +688,8 @@ The exception is a drive that hosts a mounted file (see _[3.8. Mounting files](#
 
 Also note that the above applies only when the media change is detected while accessing a drive. When you map a drive to a device with `MAPDRV` or `CALL MAPDRV` and the driver reports that the device medium has changed, the other drives that were mapped to the same device are simply unmapped.
 
+Floppy disk drives controlled by Nextor drivers have no partitions, so there's nothing to remap for these: the drive being accessed just reads the new disk. If other drives had been mapped to the same floppy disk drive with `MAPDRV`, these are unmapped; ghost drives are not affected.
+
 The device driver may also reply "not sure" when asked for device change status. In that case, the procedure is as follows:
 
 * When Nextor first reads the boot sector of a drive mapped to a device on a Nextor driver, it calculates a 16 bit checksum of the boot sector contents and stores it together with the rest of the disk parameters.
