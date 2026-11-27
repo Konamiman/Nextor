@@ -684,6 +684,8 @@ For example, assume that a device has a medium with four active partitions mappe
 
 Note that any drive mapping that you had changed manually for the drives of the device (for example with `MAPDRV`) is lost when a media change is detected, and so are any open files on these drives.
 
+The exception is a drive that hosts a mounted file (see _[3.8. Mounting files](#38-mounting-files)_): it keeps the partition it had and isn't remapped, whether it's the drive being accessed or another one, so that the mounted file is still usable if the medium hasn't actually changed. Its partition isn't given to any other drive during the remapping.
+
 Also note that the above applies only when the media change is detected while accessing a drive. When you map a drive to a device with `MAPDRV` or `CALL MAPDRV` and the driver reports that the device medium has changed, the other drives that were mapped to the same device are simply unmapped.
 
 The device driver may also reply "not sure" when asked for device change status. In that case, the procedure is as follows:

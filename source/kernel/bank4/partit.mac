@@ -2765,6 +2765,9 @@ CDRV_END:
 ; Thus a "changed" status for a media that hasn't actually changed leaves
 ; the drives mapped as they were at boot time.
 ;
+; Drives that host a mounted file keep their partition and are not part of
+; the remapping, this includes the drive that detected the media change.
+;
 ; Floppy devices have no partitions, for these only step 1 is performed.
 ;
 ; Input: HL = Address of unit descriptor of the drive that detected
@@ -2778,6 +2781,24 @@ CDRV_END:
 	bit	UF_FDD,(ix+UD_DFLAGS##)
 	jp	nz,UNMAPALL
 
+	;If the drive hosts a mounted file it keeps its partition
+	;(as the other drives of the device that host a mounted file do,
+	;since these can't be unmapped), otherwise the mounted file
+	;would point to the wrong sectors.
+
+	push	bc
+	ld	c,(ix+UD_PHYSICAL_UNIT##)
+	dec	c	;C = Drive number
+	call	HOSTS_MOUNT
+	pop	bc
+	push	af	;NZ = Drive hosts a mounted file
+	jr	z,REMAP_NOT_HOST
+
+	set	UF_FOK,(ix+UD_DFLAGS##)
+	jr	REMAP_UNMAP
+
+REMAP_NOT_HOST:
+
 	;CHECK_MAP_IN_USE doesn't care about UF_FOK, so set an impossible
 	;partition start sector so that the partition the drive was
 	;mapped to can be assigned to a drive with a lower letter.
@@ -2788,12 +2809,28 @@ CDRV_END:
 	ld	(ix+UD_FIRST_DEVICE_SECTOR##+2),a
 	ld	(ix+UD_FIRST_DEVICE_SECTOR##+3),a
 
+REMAP_UNMAP:
 	push	hl
 	push	de
 	call	UNMAPALL
 	pop	de	;D = Device number
 	pop	iy	;IY = Unit descriptor of the drive that detected the change
+	pop	bc	;C = Flags returned by HOSTS_MOUNT
+	bit	6,c	;Z flag
+	jr	nz,REMAP_START
 
+	;The drive keeps its partition: remove it from the drives bitmask
+
+	ld	c,a
+	ld	b,(iy+UD_PHYSICAL_UNIT##)	;Drive number + 1
+	ld	a,80h
+REMAP_DRVBIT:
+	rlca
+	djnz	REMAP_DRVBIT
+	cpl
+	and	c
+
+REMAP_START:
 	ld	hl,UNIT_TAB##+2
 	ld	c,0	;Drive number
 REMAP_LOOP:
@@ -2886,6 +2923,48 @@ REMAP_ASSIGN:
 	ld	d,1 SHL AAFLAG_ACTIVE_ONLY
 	call	AUTO_ASPART
 	or	a
+	ret
+
+
+;Check if a file hosted in a given drive is mounted.
+;Input:  C = Drive number (0 = A:, etc)
+;Output: NZ if a file hosted in the drive is mounted, Z otherwise
+;Preserves BC, DE, HL, IX, IY
+
+HOSTS_MOUNT:
+	push	hl
+	push	bc
+	push	iy
+	ld	hl,UNIT_TAB##+2
+	ld	b,MAX_UNITS
+HMNT_LOOP:
+	ld	a,(hl)
+	inc	hl
+	push	hl
+	ld	h,(hl)
+	ld	l,a
+	or	h
+	jr	z,HMNT_NEXT	;Drive is unassigned
+	push	hl
+	pop	iy
+	bit	UF_MNT,(iy+UD_FLAGS##)
+	jr	z,HMNT_NEXT
+	ld	a,(iy+UD_MOUNT_DRIVE##)
+	xor	c
+	jr	z,HMNT_FOUND
+HMNT_NEXT:
+	pop	hl
+	inc	hl
+	djnz	HMNT_LOOP
+	xor	a	;Z: no mounted file
+	jr	HMNT_END
+HMNT_FOUND:
+	pop	hl
+	inc	a	;NZ: mounted file found (A was 0)
+HMNT_END:
+	pop	iy
+	pop	bc
+	pop	hl
 	ret
 
 
@@ -3073,43 +3152,9 @@ MAP_NORDISK:
 
 	;Check if any file hosted in this drive is mounted
 
-	push	hl
-	push	bc
-	push	ix
-	push	iy
-	ld	ix,UNIT_TAB##+2
-	ld	b,8
-ISMNT:
-	ld	l,(ix)
-	ld	h,(ix+1)
-	ld	a,h
-	or	l
-	jr	z,ISMNT_NEXT
-	push	hl
-	pop	iy
-	bit	UF_MNT,(iy+UD_FLAGS##)
-	jr	z,ISMNT_NEXT
-	ld	a,(iy+UD_MOUNT_DRIVE##)
-	cp	c
-	jr	nz,ISMNT_NEXT
-
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	hl
+	call	HOSTS_MOUNT
 	ld	a,.FMNT##
-	ret
-
-ISMNT_NEXT:
-	inc	ix
-	inc	ix
-	djnz	ISMNT
-
-	pop	iy
-	pop	ix
-	pop	bc
-	pop	hl
-	;
+	ret	nz
 
 	ld	e,c
 	push	de
