@@ -1150,6 +1150,10 @@ The one-time boot keys mechanism (see _[2.10.2. One-time boot keys](Nextor_3.0_U
 
 Note that currently not all keys are actually used by Nextor at boot time (e.g. numbers 8 and 9); but if any future version of Nextor makes use of any of the currently unused keys in the table, the key status will be expected to be at the position defined in this table when using the one-time boot keys mechanism.
 
+The N key is ignored when the keys come from RAM: it doesn't show the boot menu, and unlike in Nextor 2.1, it doesn't disable all the Nextor kernels either. To disable all of them, set the slot keys of all the slots (UIOP, QWER, ASDF and ZXCV, see _[2.10. Boot keys and the boot menu](Nextor_3.0_User_Manual.md#210-boot-keys-and-the-boot-menu)_ in the user manual), as the boot menu does.
+
+Each Nextor kernel that gets disabled this way clears its own slot key bit, and the first Nextor kernel that boots normally erases the signature. If no Nextor kernel boots, the signature stays in RAM with the remaining bits, so it is used again in the next boot.
+
 ### 7.2. Disk emulation mode
 
 This section explains some details about the disk emulation mode (see _[3.9. Disk emulation mode](Nextor_3.0_User_Manual.md#39-disk-emulation-mode)_ in the user manual).
