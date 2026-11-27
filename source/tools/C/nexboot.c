@@ -24,16 +24,14 @@
 /* Defines */
 
 #define RamKeysAddress ((byte*)0xA100)
-#define DisableAllKernelsKeyOffset 2
-#define DisableAllKernelsBitMask 0x80
 
 /* Strings */
 
 const char* strTitle=
-    "Boot keys configuration tool for Nextor v3.0\r\n"
-    "By Konamiman, 9/2026\r\n"
+    "Boot keys configuration tool for Nextor v3.0.1\r\n"
+    "By Konamiman, 11/2026\r\n"
     "\r\n";
-    
+
 const char* strUsage=
     "Usage: nexboot <keys>|. [*|<slot> [<slot> ...]]\r\n"
     "       nexboot /p <keys>|.\r\n"
@@ -41,12 +39,12 @@ const char* strUsage=
     "       nexboot /i\r\n"
     "\r\n"
     "<keys>: keys considered as pressed in next boot, all of them in ONE\r\n"
-    "single argument: the numbers 1 to 9, C (for CTRL), S (for SHIFT); e.g.\r\n"
+    "single argument: the numbers 0 to 7, C (for CTRL), S (for SHIFT); e.g.\r\n"
     "1C. Or '.' for no key at all (if you only want to disable kernels).\r\n"
     "\r\n"
     "<slot>s: slot numbers of the Nextor kernels to disable in the next boot.\r\n"
     "They can be followed by a subslot number, e.g. 13 for slot 1, subslot 3.\r\n"
-    "Or * to disable all the Nextor kernels (being v2.1 or newer).\r\n"
+    "Or * to disable all the Nextor kernels (<keys> must be '.' then).\r\n"
     "The computer will reset after successfully setting these keys.\r\n"
     "\r\n"
     "/p <keys>: store in the persistent storage the keys whose meaning is\r\n"
@@ -101,6 +99,7 @@ byte keysBySlot[16*2] = {
 /* Function prototypes */
 
 void GetSlotDisableKeys(int count, char** slots);
+void SetSlotDisableKey(byte slotNumber);
 void GetNumericBits(char* keys);
 void SetKeysInRam();
 void Terminate(const char* errorMessage);
@@ -164,11 +163,13 @@ void GetNumericBits(char* keys)
     for(i=0; i<keysCount; i++) {
         currentKey = keys[i] | 32;
 
-        if(currentKey >= '1' && currentKey <= '7') {
-            keyFlags[0] |= (1 << currentKey-'0');
+        if(currentKey >= '0' && currentKey <= '7') {
+            keyFlags[0] |= (1 << (currentKey-'0'));
         }
         else if(currentKey == '8' || currentKey == '9') {
-            keyFlags[1] |= (1 << currentKey-'8');
+            /* They have no meaning at boot time: in the boot menu they
+               toggle CTRL and SHIFT only because these can't be typed. */
+            Terminate("8 and 9 aren't boot keys, use C for CTRL and S for SHIFT");
         }
         else if(currentKey == 's') {
             keyFlags[4] |= 0x10;
@@ -191,8 +192,20 @@ void GetSlotDisableKeys(int count, char** slots)
     for(i=0; i<count; i++) {
         slot = slots[i];
 
-        if(slot[0] == '*') {
-            keyFlags[DisableAllKernelsKeyOffset] |= DisableAllKernelsBitMask;
+        /* Nextor 3 kernels ignore the N key when the keys come from RAM
+           (in Nextor 2.1 it disabled all the kernels), so the way to
+           disable all of them is to set the disable key of every slot,
+           as the "N. Disable all" option of the boot menu does. */
+        if(slot[0] == '*' && slot[1] == '\0') {
+            /* No Nextor kernel would use the keys in this boot, and since
+               no master kernel erases the keys from RAM, they would be
+               applied in the next boot instead. */
+            if(keyFlags[0] != 0 || (keyFlags[4] & 0x30) != 0) {
+                Terminate("Use '.' as keys with *, no Nextor kernel would use them");
+            }
+            for(slotNumber=0; slotNumber<16; slotNumber++) {
+                SetSlotDisableKey(slotNumber);
+            }
             continue;
         }
 
@@ -203,15 +216,22 @@ void GetSlotDisableKeys(int count, char** slots)
         slotNumber = slot[0] - '0';
 
         if(slot[1] != '\0') {
-            if(slot[1] < '0' || slot[1] > '3') {
+            if(slot[1] < '0' || slot[1] > '3' || slot[2] != '\0') {
                Terminate(strInvSlot);
             }
 
             slotNumber |= (slot[1] - '0') << 2;
         }
 
-        keyFlags[keysBySlot[slotNumber*2]] |= keysBySlot[(slotNumber*2)+1];
+        SetSlotDisableKey(slotNumber);
     }
+}
+
+/* slotNumber = 0000SSPP */
+
+void SetSlotDisableKey(byte slotNumber)
+{
+    keyFlags[keysBySlot[slotNumber*2]] |= keysBySlot[(slotNumber*2)+1];
 }
 
 void SetKeysInRam()
@@ -282,7 +302,7 @@ void GetPersistentBits(char* keys)
         else if(currentKey == 'c') {
             keyFlags[4] |= 0x20;
         }
-        else if(currentKey == '8' || currentKey == '9') {
+        else if(currentKey == '0' || currentKey == '8' || currentKey == '9') {
             Terminate("Only the keys 1 to 7, C and S can be inverted");
         }
         else {

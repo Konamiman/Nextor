@@ -902,9 +902,9 @@ The `NEXBOOT.COM` tool allows you to easily configure the keys to be used as one
 NEXBOOT <boot keys>|. [*|<slot> [<slot>... ]]
 ```
 
-where the boot keys are the numeric keys, C for CTRL and S for SHIFT, and `<slot>` are the slot numbers of the Nextor kernels to be disabled. The specified keys will be considered as pressed in the next boot. For example `NEXBOOT 1C` will make the 1 and CTRL keys be considered as pressed, `NEXBOOT S 1 23` will make the SHIFT key be considered as pressed and will disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
+where the boot keys are the numeric keys 0 to 7, C for CTRL and S for SHIFT (see _[2.10. Boot keys and the boot menu](#210-boot-keys-and-the-boot-menu)_), and `<slot>` are the slot numbers of the Nextor kernels to be disabled. The specified keys will be considered as pressed in the next boot. For example `NEXBOOT 1C` will make the 1 and CTRL keys be considered as pressed, `NEXBOOT S 1 23` will make the SHIFT key be considered as pressed and will disable the Nextor kernels in slots 1 and 2-3, and `NEXBOOT . 2` will just disable the Nextor kernel in slot 2.
 
-When using version 1.1 or newer of NEXBOOT.COM you can also specify `*` to disable all the Nextor kernels, this is equivalent to pressing `N` in the boot menu. Note however that this will only work with Nextor kernels whose version is 2.1 or newer.
+You can also specify `*` to disable all the Nextor kernels, this is equivalent to the "Disable all and boot" option of the boot menu. The keys must be `.` in this case (e.g. `NEXBOOT . *`), since no Nextor kernel would boot to make use of them.
 
 In all cases, the tool resets the computer immediately after appropriately setting the keys information in RAM.
 
